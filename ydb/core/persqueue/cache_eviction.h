@@ -70,7 +70,7 @@ namespace NPQ {
 
         THolder<TEvKeyValue::TEvRequest> MakeKvRequest() const
         {
-            THolder<TEvKeyValue::TEvRequest> request = MakeHolder<TEvKeyValue::TEvRequest>();
+            auto request = MakeHolder<TEvKeyValue::TEvRequest>();
             for (auto& blob : Blobs) {
                 if (blob.Value.empty()) {
                     // add reading command
@@ -234,7 +234,7 @@ namespace NPQ {
         {
             ui32 fromCache = GetBlobs(ctx, kvReq);
 
-            THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TabletId);
+            auto reqData = MakeHolder<TCacheL2Request>(TabletId);
 
             for (const auto& blob : kvReq.Blobs) {
                 // Touching blobs in L2. We don't need data here
@@ -242,14 +242,14 @@ namespace NPQ {
                 blobs.emplace_back(kvReq.Partition, blob.Offset, blob.PartNo, nullptr);
             }
 
-            THolder<TEvPqCache::TEvCacheL2Request> l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
+            auto l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
             ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
             return fromCache;
         }
 
         void SaveHeadBlobs(const TActorContext& ctx, const TKvRequest& kvReq)
         {
-            THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TabletId);
+            auto reqData = MakeHolder<TCacheL2Request>(TabletId);
 
             for (const TRequestedBlob& reqBlob : kvReq.Blobs) {
                 TBlobId blob(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
@@ -273,7 +273,7 @@ namespace NPQ {
                     << " size " << reqBlob.Value.size() << " actorID " << ctx.SelfID);
             }
 
-            THolder<TEvPqCache::TEvCacheL2Request> l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
+            auto l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
             ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
         }
 
@@ -281,7 +281,7 @@ namespace NPQ {
         {
             Y_ABORT_UNLESS(store.size() == kvReq.Blobs.size());
 
-            THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TabletId);
+            auto reqData = MakeHolder<TCacheL2Request>(TabletId);
 
             bool haveSome = false;
             for (ui32 i = 0; i < kvReq.Blobs.size(); ++i) {
@@ -312,7 +312,7 @@ namespace NPQ {
             }
 
             if (haveSome) {
-                THolder<TEvPqCache::TEvCacheL2Request> l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
+                auto l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
                 ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
             }
         }
@@ -344,12 +344,12 @@ namespace NPQ {
             RemoveEvicted();
 
             if (L1Strategy) {
-                THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TabletId);
+                auto reqData = MakeHolder<TCacheL2Request>(TabletId);
 
                 TDeque<TBlobId> needTouch = L1Strategy->BlobsToTouch();
                 PrepareTouch(ctx, reqData, needTouch);
 
-                THolder<TEvPqCache::TEvCacheL2Request> l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
+                auto l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
                 ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
             }
         }

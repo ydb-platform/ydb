@@ -160,6 +160,28 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             {NLs::HasRight("+U:user2"), NLs::HasEffectiveRight("+U:user2")});
     }
 
+    Y_UNIT_TEST(RemoveLogin_NonExisting) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        
+        for (bool missingOk : { false, true}) {
+            auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
+            auto transaction = modifyTx->Record.AddTransaction();
+            transaction->SetWorkingDir("/MyRoot");
+            transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
+
+            auto removeUser = transaction->MutableAlterLogin()->MutableRemoveUser();
+            removeUser->SetUser("user1");
+            removeUser->SetMissingOk(missingOk);
+
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
+            TestModificationResults(runtime, txId, TVector<TExpectedResult>{{
+                missingOk ? NKikimrScheme::StatusSuccess : NKikimrScheme::StatusPreconditionFailed
+            }});
+        }
+    }
+
     Y_UNIT_TEST(RemoveLogin_Owner) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

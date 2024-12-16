@@ -187,8 +187,15 @@ public:
 
     NLogin::TLoginProvider::TBasicResponse RemoveUser(TOperationContext& context, const NKikimrSchemeOp::TLoginRemoveUser& removeUser, NIceDb::TNiceDb& db) {
         const TString& user = removeUser.GetUser();
+
+        if (!context.SS->LoginProvider.CheckUserExists(user)) {
+            if (removeUser.GetMissingOk()) {
+                return {}; // success
+            }
+            return {.Error = "User not found"};
+        }
+
         auto subTree = context.SS->ListSubTree(context.SS->RootPathId(), context.Ctx);
-        
         for (auto pathId : subTree) {
             TPathElement::TPtr path = context.SS->PathsById.at(pathId);
             if (path->Owner == user) {
@@ -198,10 +205,7 @@ public:
             }
         }
 
-        auto removeUserResponse = context.SS->LoginProvider.RemoveUser({
-            .User = user,
-            .MissingOk = removeUser.GetMissingOk()
-        });
+        auto removeUserResponse = context.SS->LoginProvider.RemoveUser(user);
         if (removeUserResponse.Error) {
             return removeUserResponse;
         }

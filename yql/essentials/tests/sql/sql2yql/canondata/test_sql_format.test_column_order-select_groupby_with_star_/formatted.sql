@@ -24,7 +24,7 @@ GROUP BY
     value,
     key
 HAVING
-    key == "150"
+    key == '150'
 ;
 
 SELECT
@@ -33,7 +33,7 @@ FROM
     Input
 GROUP BY
     subkey,
-    key || "x" AS key
+    key || 'x' AS key
 ORDER BY
     subkey,
     key

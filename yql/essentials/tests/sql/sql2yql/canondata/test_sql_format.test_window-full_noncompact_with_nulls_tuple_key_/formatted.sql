@@ -10,13 +10,13 @@ $input = (
     UNION ALL
     SELECT
         NULL AS key,
-        "9" AS subkey,
-        "000" AS value
+        '9' AS subkey,
+        '000' AS value
     UNION ALL
     SELECT
         NULL AS key,
-        "9" AS subkey,
-        "001" AS value
+        '9' AS subkey,
+        '001' AS value
 );
 
 SELECT

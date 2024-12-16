@@ -4,7 +4,6 @@ ALLOCATOR(J)
 
 SRCS(
     yqlrun.cpp
-    gateway_spec.cpp
 )
 
 IF (OS_LINUX)
@@ -14,36 +13,37 @@ IF (OS_LINUX)
 ENDIF()
 
 PEERDIR(
-    contrib/libs/protobuf
-    library/cpp/getopt
-    library/cpp/yson
-    library/cpp/svnversion
-    yql/essentials/sql/pg
-    yql/essentials/core/cbo/simple
-    yql/essentials/core/facade
-    yql/essentials/core/file_storage
-    yql/essentials/core/file_storage/proto
-    yql/essentials/core/file_storage/http_download
-    yql/essentials/core/pg_ext
-    yql/essentials/core/services/mounts
-    yql/essentials/minikql/comp_nodes/llvm14
-    yql/essentials/protos
-    yql/essentials/public/udf/service/exception_policy
-    yql/essentials/utils/backtrace
-    yql/essentials/core
-    yql/essentials/sql/v1/format
-    yql/essentials/providers/common/codec
-    yql/essentials/providers/common/comp_nodes
-    yql/essentials/providers/common/proto
+    yql/tools/yqlrun/http
+    yql/tools/yqlrun/lib
+
+    yt/yql/providers/yt/comp_nodes/llvm14
+    yt/yql/providers/yt/codec/codegen
+
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/udf_resolve
-    yt/yql/providers/yt/gateway/file
-    yt/yql/providers/yt/codec/codegen
-    yt/yql/providers/yt/comp_nodes/llvm14
-    yql/essentials/core/url_preprocessing
-    yql/tools/yqlrun/http
+    yql/essentials/minikql/invoke_builtins
+    yql/essentials/minikql/invoke_builtins/llvm14
+    yql/essentials/minikql/comp_nodes/llvm14
     yql/essentials/parser/pg_wrapper
-    yql/essentials/public/result_format
+    yql/essentials/parser/pg_catalog
+    yql/essentials/core/services/mounts
+    yql/essentials/core/facade
+    yql/essentials/core/pg_ext
+    yql/essentials/core/file_storage
+    yql/essentials/core/file_storage/proto
+    yql/essentials/core
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/utils/backtrace
+    yql/essentials/utils/log
+    yql/essentials/minikql
+    yql/essentials/protos
+    yql/essentials/ast
+    yql/essentials/sql/pg
+
+    library/cpp/getopt
+    library/cpp/logger
+
+    contrib/libs/protobuf
 )
 
 YQL_LAST_ABI_VERSION()

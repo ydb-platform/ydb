@@ -1,4 +1,4 @@
-/* custom error:Unsupported column type: String*/
+/* custom error: Expected numeric type, but got String */
 
 USE plato;
 

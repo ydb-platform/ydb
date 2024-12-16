@@ -4,7 +4,7 @@
     FROM
         plato.Input
     WHERE
-        key < "100"
+        key < '100'
     LIMIT 2
 )
 UNION ALL
@@ -14,6 +14,6 @@ UNION ALL
     FROM
         plato.Input
     WHERE
-        key > "100"
+        key > '100'
     LIMIT 2
 );

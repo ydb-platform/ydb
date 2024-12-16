@@ -23,7 +23,7 @@ $filtered = (
     FROM
         $input
     WHERE
-        key IN ("023", "037", "075")
+        key IN ('023', '037', '075')
 );
 
 $filtered_cnt = (

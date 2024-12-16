@@ -2,9 +2,9 @@ PRAGMA DisableSimpleColumns;
 
 USE plato;
 
-PRAGMA yt.JoinMergeTablesLimit = "10";
-PRAGMA yt.JoinAllowColumnRenames = "true";
-PRAGMA yt.JoinMergeUseSmallAsPrimary = "true";
+PRAGMA yt.JoinMergeTablesLimit = '10';
+PRAGMA yt.JoinAllowColumnRenames = 'true';
+PRAGMA yt.JoinMergeUseSmallAsPrimary = 'true';
 
 -- Input2 is smaller than Input1
 SELECT

@@ -1,9 +1,9 @@
 PRAGMA SeqMode;
 
-$a =
+$a = (
     SELECT
         1
-;
+);
 
 SELECT
     *

@@ -3,20 +3,20 @@ SELECT
     1 / 2
 ;
 
-PRAGMA ClassicDivision("false");
+PRAGMA ClassicDivision('false');
 
 SELECT
     3 / 4
 ;
 
-PRAGMA ClassicDivision("true");
+PRAGMA ClassicDivision('true');
 
 SELECT
     5 / 6
 ;
 
 DEFINE ACTION $div_8_by_value($value) AS
-    PRAGMA ClassicDivision("false");
+    PRAGMA ClassicDivision('false');
 
     SELECT
         8 / $value

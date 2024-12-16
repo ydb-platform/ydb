@@ -7,11 +7,11 @@ FROM (
     FROM (
         SELECT
             1 AS key,
-            "foo" AS subkey
+            'foo' AS subkey
         UNION ALL
         SELECT
             2 AS key,
-            "bar" AS subkey
+            'bar' AS subkey
         UNION ALL
         SELECT
             3 AS key,
@@ -30,11 +30,11 @@ FROM (
     FROM (
         SELECT
             4 AS key,
-            "baz" AS subkey
+            'baz' AS subkey
         UNION ALL
         SELECT
             5 AS key,
-            "goo" AS subkey
+            'goo' AS subkey
         UNION ALL
         SELECT
             6 AS key,

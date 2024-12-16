@@ -2,29 +2,29 @@
 /* postgres can not */
 USE plato;
 
-$src =
+$src = (
     SELECT
         NULL AS key,
         value
     FROM
         Input
-;
+);
 
-$src_opt =
+$src_opt = (
     SELECT
         NULL AS key,
         Just(value) AS value
     FROM
         Input
-;
+);
 
-$src_null =
+$src_null = (
     SELECT
         NULL AS key,
         NULL AS value
     FROM
         Input
-;
+);
 
 SELECT
     min_by(value, key)

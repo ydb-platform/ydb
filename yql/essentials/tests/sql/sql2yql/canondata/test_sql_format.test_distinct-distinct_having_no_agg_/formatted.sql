@@ -1,5 +1,5 @@
 /* syntax version 1 */
-PRAGMA warning("disable", "4526");
+PRAGMA warning('disable', '4526');
 
 USE plato;
 

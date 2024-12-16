@@ -15,6 +15,8 @@
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
+#include <library/cpp/testing/gtest_protobuf/matcher.h>
+
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
@@ -2832,6 +2834,155 @@ TEST(TYsonToProtobufTest, ForceSnakeCaseNames)
         EXPECT_TRUE(NYTree::AreNodesEqual(originalNode, newNode))
             << "Expected: " << ysonString.AsStringBuf() << "\n\n"
             << "Actual: " << newYsonString << "\n\n";
+    }
+}
+
+TEST(TStrictEnumValueCheckTest, DeserializeSerializeUnknownUnchecked)
+{
+    auto config = New<TProtobufInteropConfig>();
+    config->DefaultEnumYsonStorageType = EEnumYsonStorageType::Int;
+    SetProtobufInteropConfig(config);
+
+    NProto::TAnotherMessageWithEnumsV2 message;
+
+    message.set_enum_not_strictly_checked(NProto::TAnotherMessageWithEnumsV2::VALUE2);
+
+    // Proto message to yson via old descriptor.
+    TString resultedYson;
+    {
+        TString protobufString;
+        Y_UNUSED(message.SerializeToString(&protobufString));
+        TStringOutput ysonOutputStream(resultedYson);
+        TYsonWriter ysonWriter(&ysonOutputStream, EYsonFormat::Pretty);
+        ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+
+        EXPECT_NO_THROW(ParseProtobuf(
+            &ysonWriter,
+            &protobufInput,
+            ReflectProtobufMessageType<NProto::TAnotherMessageWithEnums>()));
+    }
+
+    // Check enum values in yson.
+    {
+        auto expectedYson = BuildYsonStringFluently(EYsonFormat::Pretty)
+            .BeginMap()
+                .Item("enum_not_strictly_checked").Value(2)
+            .EndMap()
+            .ToString();
+        EXPECT_EQ(resultedYson, expectedYson);
+    }
+
+    // Yson to proto message via old descriptor.
+    {
+        TString protobufString;
+        google::protobuf::io::StringOutputStream protobufOutput(&protobufString);
+        auto protobufWriter = NYson::CreateProtobufWriter(
+            &protobufOutput,
+            NYson::ReflectProtobufMessageType<NProto::TAnotherMessageWithEnums>());
+        ParseYsonStringBuffer(resultedYson, EYsonType::Node, protobufWriter.get());
+
+        NProto::TAnotherMessageWithEnumsV2 resultedMessage;
+        resultedMessage.ParseFromStringOrThrow(protobufString);
+
+        // Check that original message is equal to its deserialized + serialized via old descriptor version.
+        EXPECT_THAT(resultedMessage, NGTest::EqualsProto(message));
+    }
+}
+
+TEST(TStrictEnumValueCheckTest, YsonToProtoUnknownChecked)
+{
+    auto config = New<TProtobufInteropConfig>();
+    config->DefaultEnumYsonStorageType = EEnumYsonStorageType::Int;
+    SetProtobufInteropConfig(config);
+    auto checkedFields = std::to_array({
+        "enum_strictly_checked",
+        "enum_unspecified",
+    });
+
+    for (const auto& field : checkedFields) {
+        auto yson = BuildYsonStringFluently(EYsonFormat::Pretty)
+            .BeginMap()
+                .Item(field).Value(2)
+            .EndMap()
+            .ToString();
+
+        TString protobufString;
+        google::protobuf::io::StringOutputStream protobufOutput(&protobufString);
+        auto protobufWriter = NYson::CreateProtobufWriter(
+            &protobufOutput,
+            NYson::ReflectProtobufMessageType<NProto::TAnotherMessageWithEnums>());
+        EXPECT_THROW(
+            ParseYsonStringBuffer(yson, EYsonType::Node, protobufWriter.get()),
+            TErrorException)
+            << "Unknown enum value for " << field << " should throw";
+    }
+}
+
+TEST(TStrictEnumValueCheckTest, YsonToProtoUnknownStringChecked)
+{
+    auto config = New<TProtobufInteropConfig>();
+    config->DefaultEnumYsonStorageType = EEnumYsonStorageType::Int;
+    SetProtobufInteropConfig(config);
+    auto checkedFields = std::to_array({
+        "enum_strict_string",
+        "enum_non_strict_string",
+    });
+
+    for (const auto& field : checkedFields) {
+        auto yson = BuildYsonStringFluently(EYsonFormat::Pretty)
+            .BeginMap()
+                .Item(field).Value("VALUE2")
+            .EndMap()
+            .ToString();
+
+        TString protobufString;
+        google::protobuf::io::StringOutputStream protobufOutput(&protobufString);
+        auto protobufWriter = NYson::CreateProtobufWriter(
+            &protobufOutput,
+            NYson::ReflectProtobufMessageType<NProto::TAnotherMessageWithEnums>());
+        EXPECT_THROW(
+            ParseYsonStringBuffer(yson, EYsonType::Node, protobufWriter.get()),
+            TErrorException)
+            << "Unknown enum value for " << field << " should throw";
+    }
+}
+
+TEST(TStrictEnumValueCheckTest, ProtoToYsonUnknownChecked)
+{
+    auto config = New<TProtobufInteropConfig>();
+    config->DefaultEnumYsonStorageType = EEnumYsonStorageType::Int;
+    SetProtobufInteropConfig(config);
+    auto checkedFieldSetters = std::to_array<std::function<void(NProto::TAnotherMessageWithEnumsV2*)>>({
+        [] (auto* proto) {
+            proto->set_enum_strictly_checked(NProto::TAnotherMessageWithEnumsV2::VALUE2);
+        },
+        [] (auto* proto) {
+            proto->set_enum_unspecified(NProto::TAnotherMessageWithEnumsV2::VALUE2);
+        },
+        [] (auto* proto) {
+            proto->set_enum_strict_string(NProto::TAnotherMessageWithEnumsV2::VALUE2);
+        },
+        [] (auto* proto) {
+            proto->set_enum_non_strict_string(NProto::TAnotherMessageWithEnumsV2::VALUE2);
+        },
+    });
+
+    for (const auto& setter : checkedFieldSetters) {
+        NProto::TAnotherMessageWithEnumsV2 message;
+        setter(&message);
+
+        TString resultedYson;
+        TString protobufString;
+        Y_UNUSED(message.SerializeToString(&protobufString));
+        TStringOutput ysonOutputStream(resultedYson);
+        TYsonWriter ysonWriter(&ysonOutputStream, EYsonFormat::Pretty);
+        ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+
+        EXPECT_THROW(ParseProtobuf(
+            &ysonWriter,
+            &protobufInput,
+            ReflectProtobufMessageType<NProto::TAnotherMessageWithEnums>()),
+            TErrorException);
     }
 }
 

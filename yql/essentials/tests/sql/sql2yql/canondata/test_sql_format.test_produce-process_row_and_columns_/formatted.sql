@@ -19,7 +19,7 @@ $data = (
         plato.Input0
 );
 
-$separator = "|";
+$separator = '|';
 
 PROCESS $data
 USING $udf(TableRow(), Tag, $separator);

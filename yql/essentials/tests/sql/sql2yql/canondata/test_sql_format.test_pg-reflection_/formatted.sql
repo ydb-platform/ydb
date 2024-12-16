@@ -1,4 +1,4 @@
 SELECT
-    FormatType(PgTypeHandle("text")),
+    FormatType(PgTypeHandle('text')),
     PgTypeName(TypeHandle(_pgint4))
 ;

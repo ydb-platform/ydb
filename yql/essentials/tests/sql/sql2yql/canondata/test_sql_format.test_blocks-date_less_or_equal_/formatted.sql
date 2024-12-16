@@ -1,6 +1,6 @@
 USE plato;
 
-PRAGMA yt.DisableOptimizers = "OutHorizontalJoin,HorizontalJoin,MultiHorizontalJoin,FuseMultiOutsWithOuterMaps";
+PRAGMA yt.DisableOptimizers = 'OutHorizontalJoin,HorizontalJoin,MultiHorizontalJoin,FuseMultiOutsWithOuterMaps';
 
 SELECT
     a.na <= b.na,

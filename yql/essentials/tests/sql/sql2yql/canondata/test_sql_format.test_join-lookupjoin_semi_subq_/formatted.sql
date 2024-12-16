@@ -2,8 +2,8 @@ PRAGMA DisableSimpleColumns;
 
 USE plato;
 
-PRAGMA yt.LookupJoinLimit = "64k";
-PRAGMA yt.LookupJoinMaxRows = "100";
+PRAGMA yt.LookupJoinLimit = '64k';
+PRAGMA yt.LookupJoinMaxRows = '100';
 
 -- prefix of sort keys
 SELECT
@@ -16,7 +16,7 @@ LEFT SEMI JOIN (
     FROM
         Input2
     WHERE
-        k2 != "ccc"
+        k2 != 'ccc'
 ) AS b
 ON
     a.k1 == b.k2

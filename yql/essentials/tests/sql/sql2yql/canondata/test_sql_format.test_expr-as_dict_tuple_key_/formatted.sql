@@ -1,7 +1,7 @@
 /* postgres can not */
 $d = AsDict(
-    AsTuple(AsTuple(), "foo"),
-    AsTuple(AsTuple(), "bar")
+    AsTuple(AsTuple(), 'foo'),
+    AsTuple(AsTuple(), 'bar')
 );
 
 SELECT
@@ -19,8 +19,8 @@ SELECT
 ;
 
 $d = AsDict(
-    AsTuple(AsTuple(1), "foo"),
-    AsTuple(AsTuple(2), "bar")
+    AsTuple(AsTuple(1), 'foo'),
+    AsTuple(AsTuple(2), 'bar')
 );
 
 SELECT
@@ -40,8 +40,8 @@ SELECT
 ;
 
 $d = AsDict(
-    AsTuple(AsTuple(1, 2), "foo"),
-    AsTuple(AsTuple(1, 3), "bar")
+    AsTuple(AsTuple(1, 2), 'foo'),
+    AsTuple(AsTuple(1, 3), 'bar')
 );
 
 SELECT

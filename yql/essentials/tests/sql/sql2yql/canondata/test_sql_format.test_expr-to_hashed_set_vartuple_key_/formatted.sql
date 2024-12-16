@@ -7,10 +7,10 @@ $second = ($x) -> {
     RETURN $x.1;
 };
 
-$vt = ParseType("Variant<Int32,Uint32>");
-$v1 = VARIANT (1, "0", $vt);
-$v2 = VARIANT (2u, "1", $vt);
-$v3 = VARIANT (2, "0", $vt);
+$vt = ParseType('Variant<Int32,Uint32>');
+$v1 = VARIANT (1, '0', $vt);
+$v2 = VARIANT (2u, '1', $vt);
+$v3 = VARIANT (2, '0', $vt);
 
 $l = AsList(
     AsTuple($v1, Void()),
@@ -36,7 +36,7 @@ SELECT
     DictContains($d, $v3)
 ;
 
-$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom("Compact"), AsAtom("Hashed"), AsAtom("One")));
+$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom('Compact'), AsAtom('Hashed'), AsAtom('One')));
 
 SELECT
     ListSort(DictItems($d)),

@@ -20,5 +20,5 @@ SELECT
 FROM
     $in
 WHERE
-    value LIKE "a%"
+    value LIKE 'a%'
 ;

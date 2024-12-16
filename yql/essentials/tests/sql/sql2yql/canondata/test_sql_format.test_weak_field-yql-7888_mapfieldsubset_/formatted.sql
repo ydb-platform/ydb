@@ -5,15 +5,15 @@ USE plato;
 DEFINE SUBQUERY $input() AS
     SELECT
         value,
-        WeakField(strongest_id, "String") AS strongest_id,
-        WeakField(video_position_sec, "String") AS video_position_sec,
+        WeakField(strongest_id, 'String') AS strongest_id,
+        WeakField(video_position_sec, 'String') AS video_position_sec,
         key,
         subkey
     FROM
         concat(Input, Input)
     WHERE
-        key IN ("heartbeat", "show", "click")
-        AND subkey IN ("native", "gif")
+        key IN ('heartbeat', 'show', 'click')
+        AND subkey IN ('native', 'gif')
     ;
 END DEFINE;
 
@@ -26,8 +26,8 @@ DEFINE SUBQUERY $native_show_and_clicks($input) AS
     FROM
         $input()
     WHERE
-        subkey == "native"
-        AND key IN ("click", "show")
+        subkey == 'native'
+        AND key IN ('click', 'show')
     ;
 END DEFINE;
 
@@ -42,5 +42,5 @@ SELECT
 FROM
     $native_show_and_clicks($input)
 WHERE
-    key == "click"
+    key == 'click'
 ;

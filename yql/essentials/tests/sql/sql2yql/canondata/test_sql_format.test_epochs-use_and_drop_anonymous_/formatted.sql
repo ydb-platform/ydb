@@ -8,7 +8,7 @@ SELECT
 FROM
     Input
 WHERE
-    key > "100"
+    key > '100'
 ;
 
 COMMIT;
@@ -19,7 +19,7 @@ SELECT
 FROM
     @tmp
 WHERE
-    key != "150"
+    key != '150'
 ;
 
 DROP TABLE @tmp;
@@ -32,7 +32,7 @@ SELECT
 FROM
     Input
 WHERE
-    key > "200"
+    key > '200'
 ;
 
 COMMIT;
@@ -43,7 +43,7 @@ SELECT
 FROM
     @tmp
 WHERE
-    key != "150"
+    key != '150'
 ;
 
 DROP TABLE @tmp;

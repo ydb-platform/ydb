@@ -18,7 +18,7 @@ DISCARD SELECT
 FROM
     Input
 WHERE
-    key < "foo"
+    key < 'foo'
 ;
 
 DISCARD SELECT
@@ -46,13 +46,13 @@ DISCARD SELECT
     *
 FROM (
     SELECT
-        key || "a" || "b" AS key
+        key || 'a' || 'b' AS key
     FROM
         Input
 ) AS a
 JOIN (
     SELECT
-        key || "ab" AS key
+        key || 'ab' AS key
     FROM
         Input
 ) AS b

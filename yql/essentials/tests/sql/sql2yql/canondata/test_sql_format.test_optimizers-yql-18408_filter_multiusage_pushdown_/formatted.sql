@@ -1,9 +1,9 @@
 USE plato;
 
 PRAGMA AnsiOptionalAs;
-PRAGMA config.flags("OptimizerFlags", "FieldSubsetEnableMultiusage", "FilterPushdownEnableMultiusage", "EarlyExpandSkipNull");
+PRAGMA config.flags('OptimizerFlags', 'FieldSubsetEnableMultiusage', 'FilterPushdownEnableMultiusage', 'EarlyExpandSkipNull');
 
-$date_dim =
+$date_dim = (
     SELECT
         *
     FROM
@@ -15,20 +15,20 @@ $date_dim =
             <|d_year: Just(2000), d_date_sk: Just(10002)|>,
             <|d_year: Just(2000), d_date_sk: Just(10003)|>,
         ])
-;
+);
 
-$customer =
+$customer = (
     SELECT
         *
     FROM
         as_table([
-            <|c_customer_sk: Just(1), c_customer_id: Just(1), c_first_name: Just("Vasya"), c_last_name: Just("Ivanov"), c_preferred_cust_flag: Just("aaa"), c_birth_country: Just("RU"), c_login: Just("ivanov"), c_email_address: Just("foo@bar.com")|>,
-            <|c_customer_sk: Just(2), c_customer_id: Just(2), c_first_name: Just("Petya"), c_last_name: Just("Ivanov"), c_preferred_cust_flag: Just("bbb"), c_birth_country: Just("RU"), c_login: Just("ivanov1"), c_email_address: Just("foo1@bar.com")|>,
-            <|c_customer_sk: Just(3), c_customer_id: NULL, c_first_name: NULL, c_last_name: NULL, c_preferred_cust_flag: NULL, c_birth_country: NULL, c_login: Just("ivanov1"), c_email_address: Just("foo2@bar.com")|>,
+            <|c_customer_sk: Just(1), c_customer_id: Just(1), c_first_name: Just('Vasya'), c_last_name: Just('Ivanov'), c_preferred_cust_flag: Just('aaa'), c_birth_country: Just('RU'), c_login: Just('ivanov'), c_email_address: Just('foo@bar.com')|>,
+            <|c_customer_sk: Just(2), c_customer_id: Just(2), c_first_name: Just('Petya'), c_last_name: Just('Ivanov'), c_preferred_cust_flag: Just('bbb'), c_birth_country: Just('RU'), c_login: Just('ivanov1'), c_email_address: Just('foo1@bar.com')|>,
+            <|c_customer_sk: Just(3), c_customer_id: NULL, c_first_name: NULL, c_last_name: NULL, c_preferred_cust_flag: NULL, c_birth_country: NULL, c_login: Just('ivanov1'), c_email_address: Just('foo2@bar.com')|>,
         ])
-;
+);
 
-$store_sales =
+$store_sales = (
     SELECT
         *
     FROM
@@ -37,7 +37,7 @@ $store_sales =
             <|ss_sold_date_sk: Just(10002), ss_customer_sk: Just(2), ss_ext_list_price: Just(12346), ss_ext_discount_amt: Just(123)|>,
             <|ss_sold_date_sk: Just(10003), ss_customer_sk: Just(3), ss_ext_list_price: Just(12347), ss_ext_discount_amt: Just(1235)|>,
         ])
-;
+);
 
 INSERT INTO @date_dim
 SELECT

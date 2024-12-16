@@ -27,6 +27,6 @@ PROCESS plato.Input0, (
     FROM
         plato.Input0
     WHERE
-        key > "100"
+        key > '100'
 )
 USING $udf(TableRows());

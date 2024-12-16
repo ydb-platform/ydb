@@ -9,7 +9,7 @@ $sorted = ($world, $input, $orderByColumns, $asc) -> {
             $items = ListMap(
                 $orderByColumns,
                 ($x) -> {
-                    RETURN FuncCode("Member", $row, AtomCode($x));
+                    RETURN FuncCode('Member', $row, AtomCode($x));
                 }
             );
             RETURN ListCode($items);
@@ -19,7 +19,7 @@ $sorted = ($world, $input, $orderByColumns, $asc) -> {
         LambdaCode(
             ($x) -> {
                 RETURN FuncCode(
-                    "Sort",
+                    'Sort',
                     $x,
                     ListCode(ListReplicate(ReprCode($asc), $n)),
                     $keySelector
@@ -34,8 +34,8 @@ DEFINE SUBQUERY $source() AS
     PROCESS Input0;
 END DEFINE;
 
-PROCESS $sorted($source, AsList("key", "subkey"), TRUE);
+PROCESS $sorted($source, AsList('key', 'subkey'), TRUE);
 
-PROCESS $sorted($source, AsList("value"), TRUE);
+PROCESS $sorted($source, AsList('value'), TRUE);
 
-PROCESS $sorted($source, ListCreate(TypeOf("")), TRUE);
+PROCESS $sorted($source, ListCreate(TypeOf('')), TRUE);

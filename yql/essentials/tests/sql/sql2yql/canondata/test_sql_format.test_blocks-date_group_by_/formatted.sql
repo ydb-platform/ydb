@@ -1,7 +1,7 @@
 USE plato;
 
 PRAGMA yt.UseNativeDescSort;
-PRAGMA yt.UsePartitionsByKeysForFinalAgg = "false";
+PRAGMA yt.UsePartitionsByKeysForFinalAgg = 'false';
 
 SELECT
     count(*),

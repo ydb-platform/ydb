@@ -12,13 +12,13 @@ LIMIT 1;
 
 COMMIT;
 
-$last_key =
+$last_key = (
     SELECT
         key
     FROM
         @temp
     LIMIT 1
-;
+);
 
 SELECT
     *

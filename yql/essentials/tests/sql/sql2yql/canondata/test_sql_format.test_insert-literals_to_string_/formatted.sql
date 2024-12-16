@@ -6,5 +6,5 @@ INSERT INTO plato.Output (
     value
 )
 VALUES
-    (YQL::ToString(1), YQL::ToString(2), "3")
+    (YQL::ToString(1), YQL::ToString(2), '3')
 ;

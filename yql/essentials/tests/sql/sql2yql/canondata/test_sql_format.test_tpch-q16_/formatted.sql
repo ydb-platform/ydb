@@ -12,7 +12,7 @@ $join = (
     ON
         w.s_suppkey == ps.ps_suppkey
     WHERE
-        NOT (s_comment LIKE "%Customer%Complaints%")
+        NOT (s_comment LIKE '%Customer%Complaints%')
 );
 
 SELECT

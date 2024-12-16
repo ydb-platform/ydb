@@ -2,16 +2,16 @@
 USE plato;
 
 PRAGMA DisableSimpleColumns;
-PRAGMA yt.JoinMergeTablesLimit = "10";
+PRAGMA yt.JoinMergeTablesLimit = '10';
 
-$i =
+$i = (
     SELECT
         *
     FROM
         concat(Input2, Input3)
     WHERE
-        value != "1"
-;
+        value != '1'
+);
 
 SELECT
     b.key,

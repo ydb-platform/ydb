@@ -1598,7 +1598,7 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
     }
 
     TStringStream out;
-    NYson::TYsonWriter writer(&out);
+    NYson::TYsonWriter writer(&out, OutputFormat_);
     // Header
     writer.OnBeginMap();
     writer.OnKeyedItem("ExecutionStatistics");
@@ -1677,7 +1677,7 @@ TMaybe<TString> TProgram::GetDiscoveredData() {
     }
 
     TStringStream out;
-    NYson::TYsonWriter writer(&out);
+    NYson::TYsonWriter writer(&out, OutputFormat_);
     writer.OnBeginMap();
     for (auto& datasource: TypeCtx_->DataSources) {
         TStringStream providerOut;

@@ -40,7 +40,7 @@ namespace NPQ {
         ui64 SaveKvRequest(TKvRequest&& kvRequest)
         {
             ui64 cookie = Cookie++;
-            auto savedRequest = KvRequests.insert({cookie, std::move(kvRequest)});
+            auto savedRequest = KvRequests.emplace(cookie, std::move(kvRequest));
             Y_ABORT_UNLESS(savedRequest.second);
             return cookie;
         }
@@ -164,7 +164,7 @@ namespace NPQ {
 
         void OnKvReadResult(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx, TKvRequest& kvReq)
         {
-            auto resp = ev->Get()->Record;
+            auto& resp = ev->Get()->Record;
             TVector<TRequestedBlob>& outBlobs = kvReq.Blobs;
 
             ui32 cachedCount = std::accumulate(outBlobs.begin(), outBlobs.end(), 0u, [](ui32 sum, const TRequestedBlob& blob) {
@@ -187,7 +187,7 @@ namespace NPQ {
                 TVector<bool> kvBlobs(outBlobs.size(), false);
                 ui32 pos = 0;
                 for (ui32 i = 0; i < resp.ReadResultSize(); ++i, ++pos) {
-                    auto r = resp.MutableReadResult(i);
+                    auto* r = resp.MutableReadResult(i);
                     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Got results. result " << i << " from KV. Status " << r->GetStatus());
                     if (r->GetStatus() == NKikimrProto::OVERRUN) { //this blob and next are not readed at all. Return as answer only previous blobs
                         Y_ABORT_UNLESS(i > 0, "OVERRUN in first read request");
@@ -288,9 +288,10 @@ namespace NPQ {
 
             ui64 cookie = SaveKvRequest(std::move(kvReq));
 
-            THolder<TEvKeyValue::TEvRequest> request = MakeHolder<TEvKeyValue::TEvRequest>();
+            auto request = MakeHolder<TEvKeyValue::TEvRequest>();
             request->Record = std::move(srcRequest);
             request->Record.SetCookie(cookie);
+
             ctx.Send(Tablet, request.Release()); // -> KV
         }
 
@@ -356,7 +357,7 @@ namespace NPQ {
             if (now < CountersUpdateTime + TDuration::Seconds(UPDATE_TIMEOUT_S))
                 return;
 
-            THolder<TEvPQ::TEvTabletCacheCounters> event = MakeHolder<TEvPQ::TEvTabletCacheCounters>();
+            auto event = MakeHolder<TEvPQ::TEvTabletCacheCounters>();
             event->Counters.CacheSizeBytes = Cache.GetCounters().SizeBytes;
             event->Counters.CacheSizeBlobs = Cache.GetSize();
             event->Counters.CachedOnRead = Cache.GetCounters().CachedOnRead;

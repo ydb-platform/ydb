@@ -180,4 +180,5 @@ message TFeatureFlags {
     optional bool EnableReleaseNodeNameOnGracefulShutdown = 155 [default = false];
     optional bool ForceDistconfDisable = 156 [default = false];
     optional bool EnableScaleRecommender = 157 [default = false];
+    optional bool EnableVDiskThrottling = 158 [default = false];
 }

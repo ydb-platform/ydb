@@ -1112,4 +1112,81 @@ Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
     }
 
 }
+
+Y_UNIT_TEST_SUITE(ReadOnlyPDisk) {
+    Y_UNIT_TEST(SimpleRestartReadOnly) {
+        TActorTestContext testCtx{{}};
+
+        auto cfg = testCtx.GetPDiskConfig();
+        cfg->ReadOnly = true;
+        testCtx.UpdateConfigRecreatePDisk(cfg);
+    }
+
+    Y_UNIT_TEST(StartReadOnlyUnformattedShouldFail) {
+        TActorTestContext testCtx{{
+            .ReadOnly = true,
+        }};
+        auto res = testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+                new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, (void*)(&testCtx.MainKey)),
+                NKikimrProto::CORRUPTED);
+
+        UNIT_ASSERT_STRING_CONTAINS(res->ErrorReason, "Magic sector is not present on disk");
+    }
+
+    Y_UNIT_TEST(StartReadOnlyZeroedShouldFail) {
+        TActorTestContext testCtx{{
+            .ReadOnly = true,
+            .InitiallyZeroed = true,
+        }};
+        auto res = testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+                new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, (void*)(&testCtx.MainKey)),
+                NKikimrProto::CORRUPTED);
+
+        UNIT_ASSERT_STRING_CONTAINS(res->ErrorReason, "PDisk is in read-only mode");
+    }
+
+    Y_UNIT_TEST(VDiskStartsOnReadOnlyPDisk) {
+        TActorTestContext testCtx{{}};
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+
+        auto cfg = testCtx.GetPDiskConfig();
+        cfg->ReadOnly = true;
+        testCtx.UpdateConfigRecreatePDisk(cfg);
+
+        vdisk.Init(); // Should start ok.
+        vdisk.ReadLog(); // Should be able to read log.
+        {
+            // Should fail on writing log.
+            auto evLog = MakeHolder<NPDisk::TEvLog>(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(1)),
+                TLsnSeg(), nullptr);
+            auto res = testCtx.TestResponse<NPDisk::TEvLogResult>(evLog.Release(), NKikimrProto::CORRUPTED);
+                
+            UNIT_ASSERT_STRING_CONTAINS(res->ErrorReason, "PDisk is in read-only mode");
+        }
+        {
+            // Should fail on reserving chunk.
+            auto res = testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(
+                new NPDisk::TEvChunkReserve(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 1),
+                NKikimrProto::CORRUPTED);
+
+            UNIT_ASSERT_STRING_CONTAINS(res->ErrorReason, "PDisk is in read-only mode");
+        }
+        {
+            // Should fail on writing chunk.
+            TString chunkWriteData = PrepareData(1);
+            auto counter = MakeIntrusive<::NMonitoring::TCounterForPtr>();
+            TMemoryConsumer consumer(counter);
+            TTrackableBuffer buffer(std::move(consumer), chunkWriteData.data(), chunkWriteData.size());
+            auto res = testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+                new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                    0, 0, new NPDisk::TEvChunkWrite::TBufBackedUpParts(std::move(buffer)), nullptr, false, 0),
+                NKikimrProto::CORRUPTED); 
+
+            UNIT_ASSERT_STRING_CONTAINS(res->ErrorReason, "PDisk is in read-only mode");
+        }
+    }
+}
+
 } // namespace NKikimr

@@ -155,6 +155,8 @@ struct TPDiskConfig : public TThrRefBase {
 
     NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
+    bool ReadOnly = false;
+
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
     {}

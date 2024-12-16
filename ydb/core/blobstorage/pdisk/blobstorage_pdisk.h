@@ -451,6 +451,9 @@ struct TEvReadLogResult : public TEventLocal<TEvReadLogResult, TEvBlobStorage::E
     TLogPosition Position;
     TLogPosition NextPosition;
     bool IsEndOfLog;
+    ui32 LastGoodChunkIdx = 0;
+    ui64 LastGoodSectorIdx = 0;
+
     TStatusFlags StatusFlags;
     TString ErrorReason;
     TOwner Owner;

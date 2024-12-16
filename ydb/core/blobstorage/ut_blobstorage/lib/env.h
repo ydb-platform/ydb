@@ -70,7 +70,7 @@ struct TEnvironmentSetup {
             TIntrusivePtr<TPDiskMockState>& state = Env.PDiskMockStates[key];
             if (!state) {
                 state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, ui64(10) << 40, cfg->ChunkSize,
-                        Env.Settings.DiskType));
+                        cfg->ReadOnly, Env.Settings.DiskType));
             }
             const TActorId& actorId = ctx.Register(CreatePDiskMockActor(state), TMailboxType::HTSwap, poolId);
             const TActorId& serviceId = MakeBlobStoragePDiskID(nodeId, pdiskId);

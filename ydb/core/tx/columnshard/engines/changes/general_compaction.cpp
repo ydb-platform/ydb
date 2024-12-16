@@ -12,7 +12,7 @@ namespace NKikimr::NOlap::NCompaction {
 
 std::shared_ptr<NArrow::TColumnFilter> TGeneralCompactColumnEngineChanges::BuildPortionFilter(
     const std::optional<NKikimr::NOlap::TGranuleShardingInfo>& shardingActual, const std::shared_ptr<NArrow::TGeneralContainer>& batch,
-    const TPortionInfo& pInfo, const THashSet<ui64>& portionsInUsage, const ISnapshotSchema::TPtr& resultSchema) const {
+    const TPortionInfo& pInfo, const THashSet<ui64>& portionsInUsage, const ISnapshotSchema::TPtr& /* resultSchema */) const {
     std::shared_ptr<NArrow::TColumnFilter> filter;
     if (shardingActual && pInfo.NeedShardingFilter(*shardingActual)) {
         std::set<std::string> fieldNames;

@@ -19,18 +19,20 @@ class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecrets
         std::vector<TString> secretValues;
         secretValues.reserve(SecretIds.size());
         for (const auto& secretId: SecretIds) {
-            TString secretValue;
-            const bool isFound = snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretId), secretValue);
-            if (!isFound) {
-                if (!AskSent) {
-                    AskSent = true;
-                    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvAskSnapshot(GetSecretsSnapshotParser()));
-                } else {
-                    CompleteAndPassAway(TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret with name '" + secretId.GetSecretId() + "' not found") }));
-                }
-                return;
+            auto secretValue = snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretId));
+            if (secretValue.IsSuccess()) {
+                secretValues.push_back(secretValue.DetachResult());
+                continue;
             }
-            secretValues.push_back(secretValue);
+
+
+            if (!AskSent) {
+                AskSent = true;
+                Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvAskSnapshot(GetSecretsSnapshotParser()));
+            } else {
+                CompleteAndPassAway(TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret with name '" + secretId.GetSecretId() + "' not found") }));
+            }
+            return;
         }
 
         CompleteAndPassAway(TEvDescribeSecretsResponse::TDescription(secretValues));

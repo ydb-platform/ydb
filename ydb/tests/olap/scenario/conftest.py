@@ -29,6 +29,7 @@ class YdbClusterInstance():
         if endpoint is not None:
             self._endpoint = endpoint
             self._database = database
+            self._mon_port = 8765
         else:
             config = KikimrConfigGenerator()
             cluster = KiKiMR(configurator=config)
@@ -36,6 +37,7 @@ class YdbClusterInstance():
             node = cluster.nodes[1]
             self._endpoint = "grpc://%s:%d" % (node.host, node.port)
             self._database = config.domain_name
+            self._mon_port = node.mon_port
             self._temp_ydb_cluster = cluster
         LOGGER.info(f'Using YDB, endpoint:{self._endpoint}, database:{self._database}')
 
@@ -44,6 +46,9 @@ class YdbClusterInstance():
 
     def database(self):
         return self._database
+
+    def mon_port(self):
+        return self._mon_port
 
     def stop(self):
         if self._temp_ydb_cluster is not None:
@@ -61,7 +66,7 @@ class BaseTestSet:
         ydb_endpoint = get_external_param('ydb-endpoint', None)
         ydb_database = get_external_param('ydb-db', "").lstrip('/')
         cls._ydb_instance = YdbClusterInstance(ydb_endpoint, ydb_database)
-        YdbCluster.reset(cls._ydb_instance.endpoint(), cls._ydb_instance.database())
+        YdbCluster.reset(cls._ydb_instance.endpoint(), cls._ydb_instance.database(), cls._ydb_instance.mon_port())
         if not external_param_is_true('reuse-tables'):
             ScenarioTestHelper(None).remove_path(cls.get_suite_name())
 

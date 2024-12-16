@@ -6712,7 +6712,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     `/Root/table` AS `/Root/replica`
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
-                    CONSISTENCY_MODE = "FOO"
+                    CONSISTENCY_LEVEL = "FOO"
                 );
             )";
 
@@ -6727,7 +6727,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     `/Root/table` AS `/Root/replica`
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
-                    CONSISTENCY_MODE = "ROW",
+                    CONSISTENCY_LEVEL = "ROW",
                     COMMIT_INTERVAL = Interval("PT10S")
                 );
             )";

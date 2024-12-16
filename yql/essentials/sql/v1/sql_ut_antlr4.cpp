@@ -3086,11 +3086,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         {
             auto req = R"(
                 USE plato;
-                ALTER ASYNC REPLICATION MyReplication SET (CONSISTENCY_MODE = "STRONG");
+                ALTER ASYNC REPLICATION MyReplication SET (CONSISTENCY_LEVEL = "GLOBAL");
             )";
             auto res = SqlToYql(req);
             UNIT_ASSERT(!res.Root);
-            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:79: Error: CONSISTENCY_MODE is not supported in ALTER\n");
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:80: Error: CONSISTENCY_LEVEL is not supported in ALTER\n");
         }
         {
             auto req = R"(
@@ -5036,6 +5036,45 @@ select FormatType($f());
             )
         )";
         ExpectFailWithError(query, "<main>:2:33: Error: Aggregation function Min requires exactly 1 argument(s), given: 2\n");
+    }
+
+    Y_UNIT_TEST(ScalarContextUsage1) {
+        TString query = R"(
+            $a = (select 1 as x, 2 as y);
+            select 1 + $a;
+        )";
+        ExpectFailWithError(query, "<main>:2:39: Error: Source used in expression should contain one concrete column\n"
+            "<main>:3:24: Error: Source is used here\n");
+    }
+
+    Y_UNIT_TEST(ScalarContextUsage2) {
+        TString query = R"(
+            use plato;
+            $a = (select 1 as x, 2 as y);
+            select * from concat($a);
+        )";
+        ExpectFailWithError(query, "<main>:3:39: Error: Source used in expression should contain one concrete column\n"
+            "<main>:4:34: Error: Source is used here\n");
+    }
+
+    Y_UNIT_TEST(ScalarContextUsage3) {
+        TString query = R"(
+            use plato;
+            $a = (select 1 as x, 2 as y);
+            select * from range($a);
+        )";
+        ExpectFailWithError(query, "<main>:3:39: Error: Source used in expression should contain one concrete column\n"
+            "<main>:4:33: Error: Source is used here\n");
+    }
+
+    Y_UNIT_TEST(ScalarContextUsage4) {
+        TString query = R"(
+            use plato;
+            $a = (select 1 as x, 2 as y);
+            insert into $a select 1;
+        )";
+        ExpectFailWithError(query, "<main>:3:39: Error: Source used in expression should contain one concrete column\n"
+            "<main>:4:25: Error: Source is used here\n");
     }
 }
 

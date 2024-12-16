@@ -276,6 +276,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     NFq::NRowDispatcher::IActorFactory::TPtr ActorFactory;
     const ::NMonitoring::TDynamicCounterPtr YqCounters;
     const ::NMonitoring::TDynamicCounterPtr UtilsCounters;
+    const ::NMonitoring::TDynamicCounterPtr CountersRoot;
     TRowDispatcherMetrics Metrics;
     TUserPoolMetrics UserPoolMetrics;
     NYql::IPqGateway::TPtr PqGateway;
@@ -360,6 +361,7 @@ public:
         const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
         const ::NMonitoring::TDynamicCounterPtr& yqCounters,
         const ::NMonitoring::TDynamicCounterPtr& utilsCounters,
+        const ::NMonitoring::TDynamicCounterPtr& countersRoot,
         const NYql::IPqGateway::TPtr& pqGateway,
         NActors::TMon* monitoring = nullptr);
 
@@ -439,6 +441,7 @@ TRowDispatcher::TRowDispatcher(
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
     const ::NMonitoring::TDynamicCounterPtr& yqCounters,
     const ::NMonitoring::TDynamicCounterPtr& utilsCounters,
+    const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
     NActors::TMon* monitoring)
     : Config(config)
@@ -452,6 +455,7 @@ TRowDispatcher::TRowDispatcher(
     , UtilsCounters(utilsCounters)
     , Metrics(yqCounters)
     , UserPoolMetrics(utilsCounters)
+    , CountersRoot(countersRoot)
     , PqGateway(pqGateway)
     , Monitoring(monitoring)
 {
@@ -804,6 +808,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                     ev->Get()->Record.GetToken(),
                     source.GetAddBearerToToken()),
                 YqCounters,
+                CountersRoot,
                 PqGateway,
                 MaxSessionBufferSizeBytes
                 );
@@ -1110,6 +1115,8 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
     const ::NMonitoring::TDynamicCounterPtr& yqCounters,
     const ::NMonitoring::TDynamicCounterPtr& utilsCounters,
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
     NActors::TMon* monitoring)
 {
@@ -1122,6 +1129,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
         actorFactory,
         yqCounters,
         utilsCounters,
+        countersRoot,
         pqGateway,
         monitoring));
 }

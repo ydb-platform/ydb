@@ -28,6 +28,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
     const ::NMonitoring::TDynamicCounterPtr& yqCounters,
     const ::NMonitoring::TDynamicCounterPtr& utilsCounters,
     const NYql::IPqGateway::TPtr& pqGateway,
-    NActors::TMon* monitoring = nullptr);
+    NActors::TMon* monitoring = nullptr,
+    ::NMonitoring::TDynamicCounterPtr countersRoot = MakeIntrusive<::NMonitoring::TDynamicCounters>());
 
 } // namespace NFq

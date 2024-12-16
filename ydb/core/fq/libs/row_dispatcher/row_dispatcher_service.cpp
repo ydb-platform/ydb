@@ -18,7 +18,8 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
     const ::NMonitoring::TDynamicCounterPtr& yqCounters,
     const ::NMonitoring::TDynamicCounterPtr& utilsCounters,
     const NYql::IPqGateway::TPtr& pqGateway,
-    NActors::TMon* monitoring)
+    NActors::TMon* monitoring,
+    ::NMonitoring::TDynamicCounterPtr countersRoot)
 {
     return NewRowDispatcher(
         config,
@@ -29,6 +30,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
         NFq::NRowDispatcher::CreateActorFactory(),
         yqCounters,
         utilsCounters,
+        countersRoot,
         pqGateway,
         monitoring);
 }

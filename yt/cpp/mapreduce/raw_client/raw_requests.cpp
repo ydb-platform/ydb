@@ -173,9 +173,10 @@ TNodeId CopyWithoutRetries(
     const TCopyOptions& options)
 {
     THttpHeader header("POST", "copy");
+    TMutationId mutationId;
     header.AddMutationId();
     header.MergeParameters(SerializeParamsForCopy(transactionId, context.Config->Prefix, sourcePath, destinationPath, options));
-    return ParseGuidFromResponse(RequestWithoutRetry(context, header).Response);
+    return ParseGuidFromResponse(RequestWithoutRetry(context, mutationId, header).Response);
 }
 
 TNodeId CopyInsideMasterCell(
@@ -204,9 +205,10 @@ TNodeId MoveWithoutRetries(
     const TMoveOptions& options)
 {
     THttpHeader header("POST", "move");
+    TMutationId mutationId;
     header.AddMutationId();
     header.MergeParameters(SerializeParamsForMove(transactionId, context.Config->Prefix, sourcePath, destinationPath, options));
-    return ParseGuidFromResponse(RequestWithoutRetry( context, header).Response);
+    return ParseGuidFromResponse(RequestWithoutRetry(context, mutationId, header).Response);
 }
 
 TNodeId MoveInsideMasterCell(
@@ -309,9 +311,10 @@ void Concatenate(
     const TConcatenateOptions& options)
 {
     THttpHeader header("POST", "concatenate");
+    TMutationId mutationId;
     header.AddMutationId();
     header.MergeParameters(SerializeParamsForConcatenate(transactionId, context.Config->Prefix, sourcePaths, destinationPath, options));
-    RequestWithoutRetry(context, header);
+    RequestWithoutRetry(context, mutationId, header);
 }
 
 void PingTx(

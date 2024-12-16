@@ -206,7 +206,8 @@ void Init(
             yqCounters->GetSubgroup("subsystem", "row_dispatcher"),
             appData->Counters->GetSubgroup("counters", "utils"),
             CreatePqNativeGateway(pqServices),
-            appData->Mon);
+            appData->Mon,
+            appData->Counters);
         actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
     }
 

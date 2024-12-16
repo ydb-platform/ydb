@@ -295,6 +295,9 @@ message TBlobStorageConfig {
 
         // generation of the distconf section; when set, one can automatically apply in-filesystem config
         optional uint64 Generation = 8;
+
+        // internally-used field with initial config.yaml loaded on the start
+        optional bytes InitialConfigYaml = 10;
     }
 
     optional TAutoconfigSettings AutoconfigSettings = 6;

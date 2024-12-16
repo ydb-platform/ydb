@@ -1022,7 +1022,7 @@ TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::T
 void FillInputIndices(const TExprNode::TPtr& from, const TExprNode::TPtr& finalExtTypes,
     TUsedColumns& usedColumns, TOptimizeContext& optCtx) {
     for (auto& x : usedColumns) {
-        TStringBuf alias;
+        TString alias;
         TStringBuf column = NTypeAnnImpl::RemoveAlias(x.first, alias);
 
         bool foundColumn = false;

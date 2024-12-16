@@ -105,7 +105,6 @@ namespace NPQ {
         void Handle(TEvPQ::TEvBlobRequest::TPtr& ev, const TActorContext& ctx)
         {
             const TPartitionId& partition = ev->Get()->Partition;
-            Cache.SetUserOffset(ctx, ev->Get()->User, partition, ev->Get()->ReadOffset);
 
             TKvRequest kvReq(TKvRequest::TypeRead, ev->Sender, ev->Get()->Cookie, partition);
             kvReq.Blobs = std::move(ev->Get()->Blobs);

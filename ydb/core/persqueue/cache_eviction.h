@@ -123,7 +123,6 @@ namespace NPQ {
         {}
 
         virtual void SaveHeadBlob(const TBlobId& blob) = 0;
-        virtual void SaveUserOffset(TString client, const TPartitionId& partition, ui64 offset) = 0;
         virtual TDeque<TBlobId> BlobsToTouch() const = 0;
     };
 
@@ -141,16 +140,6 @@ namespace NPQ {
             Head.push_back(blob);
             if (Head.size() > HeadBlobsCount)
                 Head.pop_front();
-        }
-
-        virtual void SaveUserOffset(TString client, const TPartitionId& partition, ui64 offset) override
-        {
-            Y_UNUSED(client);
-            Y_UNUSED(partition);
-            Y_UNUSED(offset);
-#if 0 // TODO: prevent unlimited memory growth
-            UserOffset[std::make_pair(partition, client)] = offset;
-#endif
         }
 
         virtual TDeque<TBlobId> BlobsToTouch() const override
@@ -239,15 +228,6 @@ namespace NPQ {
         const TMapType& CachedMap() const { return Cache; }
         ui64 GetSize() const { return Cache.size(); }
         const TCounters& GetCounters() const { return Counters; }
-
-        void SetUserOffset(const TActorContext& ctx, TString client, const TPartitionId& partition, ui64 offset)
-        {
-            if (L1Strategy) {
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Setting reader offset. User: "
-                    << client << " Partition: " << partition << " offset " << offset);
-                L1Strategy->SaveUserOffset(client, partition, offset);
-            }
-        }
 
         /// @return count of cached blobs
         ui32 RequestBlobs(const TActorContext& ctx, TKvRequest& kvReq)

@@ -25,5 +25,3 @@ items:
   href: balancing_load.md
 - name: Освобождение места на физических устройствах
   href: disk_end_space.md
-- name: Работа с метриками производительности BlobStorage
-  href: performance_metrics.md

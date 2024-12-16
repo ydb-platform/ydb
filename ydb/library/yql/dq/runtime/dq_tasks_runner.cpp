@@ -261,7 +261,7 @@ public:
     }
 
     const TDqMeteringStats* GetMeteringStats() const override {
-        return &BillingStats;
+        return &MeteringStats;
     }
 
     ui64 GetTaskId() const override {
@@ -521,7 +521,10 @@ public:
 
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
             auto& inputDesc = task.GetInputs(i);
-            auto& inputStats = BillingStats.AddInputs();
+            TDqMeteringStats::TInputStats* inputStats = nullptr; 
+            if (task.EnableMetering()) {
+                inputStats = &MeteringStats.AddInputs();
+            }
 
             TVector<IDqInput::TPtr> inputs{Reserve(std::max<ui64>(inputDesc.ChannelsSize(), 1))}; // 1 is for "source" type of input.
             TInputTransformInfo* transform = nullptr;
@@ -584,11 +587,11 @@ public:
                 inputs.emplace_back(transform->TransformOutput);
                 entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
                     CreateInputUnionValue(transform->TransformOutput->GetInputType(), std::move(inputs), holderFactory,
-                        {&inputStats, transform->TransformOutputType}));
+                        {inputStats, transform->TransformOutputType}));
             } else {
                 entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
                     DqBuildInputValue(inputDesc, entry->InputItemTypes[i], std::move(inputs), holderFactory,
-                        {&inputStats, entry->InputItemTypes[i]}));
+                        {inputStats, entry->InputItemTypes[i]}));
             }
         }
 
@@ -998,7 +1001,7 @@ private:
     bool TaskHasEffects = false;
 
     std::unique_ptr<TDqTaskRunnerStats> Stats;
-    TDqMeteringStats BillingStats;
+    TDqMeteringStats MeteringStats;
     TDuration RunComputeTime;
 
 private:

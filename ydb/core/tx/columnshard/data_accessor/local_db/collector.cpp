@@ -4,7 +4,7 @@
 namespace NKikimr::NOlap::NDataAccessorControl::NLocalDB {
 
 THashMap<ui64, TPortionDataAccessor> TCollector::DoAskData(
-    const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& callback) {
+    const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& callback, const TString& consumer) {
     THashMap<ui64, TPortionDataAccessor> accessors;
     THashMap<ui64, TPortionInfo::TConstPtr> portionsToDirectAsk;
     for (auto&& p : portions) {
@@ -17,7 +17,7 @@ THashMap<ui64, TPortionDataAccessor> TCollector::DoAskData(
     }
     if (portionsToDirectAsk.size()) {
         NActors::TActivationContext::Send(
-            TabletActorId, std::make_unique<NDataAccessorControl::TEvAskTabletDataAccessors>(portionsToDirectAsk, callback));
+            TabletActorId, std::make_unique<NDataAccessorControl::TEvAskTabletDataAccessors>(portionsToDirectAsk, callback, consumer));
     }
     return accessors;
 }

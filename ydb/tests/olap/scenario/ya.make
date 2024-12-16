@@ -1,7 +1,5 @@
 PY3TEST()
 
-    TAG(ya:manual)
-
     PY_SRCS (
         conftest.py
     )
@@ -13,6 +11,11 @@ PY3TEST()
         test_insert.py
     )
 
+    ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+    DEPENDS(
+        ydb/apps/ydbd
+    )
+
     PEERDIR(
         contrib/python/allure-pytest
         contrib/python/allure-python-commons
@@ -22,8 +25,11 @@ PY3TEST()
         ydb/public/sdk/python
         ydb/public/sdk/python/enable_v3_new_behavior
         ydb/tests/olap/lib
+        ydb/tests/library
         ydb/tests/olap/scenario/helpers
         library/python/testing/yatest_common
     )
+
+    SIZE(MEDIUM)
 
 END()

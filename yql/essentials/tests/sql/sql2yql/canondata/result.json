@@ -11213,6 +11213,13 @@
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_match_recognize-alerts_without_order_/sql.yql"
         }
     ],
+    "test_sql2yql.test[match_recognize-all_rows_per_match]": [
+        {
+            "checksum": "31a940b1bbcea146ae9383e278326c7a",
+            "size": 6729,
+            "uri": "https://{canondata_backend}/1889210/954e2f1656d98697ece5794c59acf75dd1d40612/resource.tar.gz#test_sql2yql.test_match_recognize-all_rows_per_match_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[match_recognize-greedy_quantifiers]": [
         {
             "checksum": "41e90a3a986f9b2a7a36a83b918667cc",
@@ -27999,6 +28006,11 @@
     "test_sql_format.test[match_recognize-alerts_without_order]": [
         {
             "uri": "file://test_sql_format.test_match_recognize-alerts_without_order_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[match_recognize-all_rows_per_match]": [
+        {
+            "uri": "file://test_sql_format.test_match_recognize-all_rows_per_match_/formatted.sql"
         }
     ],
     "test_sql_format.test[match_recognize-greedy_quantifiers]": [

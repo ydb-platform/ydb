@@ -562,7 +562,6 @@ runs:
         fi
 
     - name: copy coverage reports to public dir
-      if: inputs.build_preset == 'relwithdebinfo' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
       shell: bash
       continue-on-error: true
       run: |

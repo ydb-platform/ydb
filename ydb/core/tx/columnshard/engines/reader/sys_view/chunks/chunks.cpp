@@ -177,7 +177,7 @@ TConclusionStatus TStatsIterator::Start() {
     for (auto&& i : IndexGranules) {
         GroupGuards.emplace_back(NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildGroupGuard(ReadMetadata->GetTxId(), 1));
         for (auto&& p : i.GetPortions()) {
-            std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>();
+            std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>("SYS_VIEW::CHUNKS");
             request->AddPortion(p);
             auto allocation = std::make_shared<TFetchingAccessorAllocation>(request, p->PredictMetadataMemorySize(columnsCount), Context);
             request->RegisterSubscriber(allocation);

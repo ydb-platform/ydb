@@ -44,6 +44,7 @@ public:
     const std::pair<TDuration, TDuration> GetPingInterval() const;
     const TClientContext GetContext() const;
 
+    void Ping() const;
     void Commit();
     void Abort();
     void Detach();

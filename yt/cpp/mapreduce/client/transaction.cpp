@@ -118,12 +118,19 @@ const TTransactionId TPingableTransaction::GetId() const
     return TransactionId_;
 }
 
-const std::pair<TDuration, TDuration> TPingableTransaction::GetPingInterval() const {
+const std::pair<TDuration, TDuration> TPingableTransaction::GetPingInterval() const
+{
     return {MinPingInterval_, MaxPingInterval_};
 }
 
-const TClientContext TPingableTransaction::GetContext() const {
+const TClientContext TPingableTransaction::GetContext() const
+{
     return Context_;
+}
+
+void TPingableTransaction::Ping() const
+{
+    RawClient_->PingTx(TransactionId_);
 }
 
 void TPingableTransaction::Commit()

@@ -1,6 +1,5 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/testlib/cs_helper.h>
-#include <ydb/core/tx/tiering/external_data.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
@@ -27,8 +26,6 @@
 #include <util/system/type_name.h>
 
 namespace NKikimr {
-
-using namespace NColumnShard;
 
 Y_UNIT_TEST_SUITE(Initializer) {
 

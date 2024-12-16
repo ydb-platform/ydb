@@ -10,13 +10,15 @@ void TTierPreparationActor::StartChecker() {
         return;
     }
     auto g = PassAwayGuard();
-    for (auto&& tier : Objects) {
-        if (!Secrets->CheckSecretAccess(tier.GetAccessKey(), Context.GetExternalData().GetUserToken())) {
-            Controller->OnPreparationProblem("no access for secret: " + tier.GetAccessKey().DebugString());
-            return;
-        } else if (!Secrets->CheckSecretAccess(tier.GetSecretKey(), Context.GetExternalData().GetUserToken())) {
-            Controller->OnPreparationProblem("no access for secret: " + tier.GetSecretKey().DebugString());
-            return;
+    if (const auto& userToken = Context.GetExternalData().GetUserToken()) {
+        for (auto&& tier : Objects) {
+            if (!Secrets->CheckSecretAccess(tier.GetAccessKey(), *userToken)) {
+                Controller->OnPreparationProblem("no access for secret: " + tier.GetAccessKey().DebugString());
+                return;
+            } else if (!Secrets->CheckSecretAccess(tier.GetSecretKey(), *userToken)) {
+                Controller->OnPreparationProblem("no access for secret: " + tier.GetSecretKey().DebugString());
+                return;
+            }
         }
     }
     Controller->OnPreparationFinished(std::move(Objects));

@@ -708,6 +708,15 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
 
     TExprNode::TPtr aggWideFlow;
     if (hashed) {
+
+        // Static assert to ensure backward compatible change: if the
+        // constant below is true, both input and output types of
+        // WideFromBlocks callable have to be WideStream; otherwise,
+        // both input and output types have to be WideFlow.
+        // FIXME: When all spots using WideFromBlocks are adjusted
+        // to work with WideStream, drop the assertion below.
+        static_assert(!NYql::NBlockStreamIO::WideFromBlocks);
+
         aggWideFlow = Ctx.Builder(Node->Pos())
             .Callable("WideFromBlocks")
                 .Callable(0, "ToFlow")
@@ -2929,6 +2938,14 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
             .Seal()
             .Build();
     }
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // WideFromBlocks callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using WideFromBlocks are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::WideFromBlocks);
 
     auto aggWideFlow = Ctx.NewCallable(Node->Pos(), "WideFromBlocks", { aggBlocks });
     auto finalFlow = MakeNarrowMap(Node->Pos(), outputColumns, aggWideFlow, Ctx);

@@ -136,7 +136,7 @@ void TWriteOperation::AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::T
         owner.InsertTable->Abort(dbTable, writeIds);
     } else {
         for (auto&& i : InsertWriteIds) {
-            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).AbortPortionOnExecute(txc, i);
+            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).AbortPortionOnExecute(txc, i, owner.GetCurrentSnapshotForInternalModification());
         }
     }
 }

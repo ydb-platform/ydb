@@ -57,6 +57,7 @@ target_sources(yql-dq-runtime PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_input_producer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_output_channel.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_output_consumer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_tasks_counters.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_tasks_runner.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_transport.cpp
 )

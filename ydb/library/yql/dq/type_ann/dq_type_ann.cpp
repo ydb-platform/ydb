@@ -503,30 +503,28 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         ? join.RightLabel().Cast<TCoAtom>().Value()
         : TStringBuf("");
 
-    if (input->ChildrenSize() > TDqJoin::idx_Options) {
+    if (input->ChildrenSize() > TDqJoin::idx_JoinAlgoOptions) {
         const auto& joinAlgo = *input->Child(TDqJoin::idx_JoinAlgo);
         if (!EnsureAtom(joinAlgo, ctx)) {
             return nullptr;
         }
-        if (input->ChildrenSize() > TDqJoin::idx_Options) {
-            auto& options = *input->Child(TDqJoin::idx_Options);
-            for (ui32 i = 0; i < options.ChildrenSize(); ++i) {
-                auto& option = *options.Child(i);
-                if (!EnsureTupleOfAtoms(option, ctx) || !EnsureTupleMinSize(option, 1, ctx)) {
-                    return nullptr;
-                }
-                auto& name = *option.Child(TCoNameValueTuple::idx_Name);
-                if (joinAlgo.IsAtom("StreamLookupJoin")) {
-                    if (name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows"})) {
-                       if (!EnsureTupleSize(option, 2, ctx)) {
-                           return nullptr;
-                       }
-                       continue;
-                    }
-                }
-                ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), TStringBuilder() << "DqJoin: Unsupported DQ join option: " << name.Content()));
+        auto& joinAlgoOptions = *input->Child(TDqJoin::idx_JoinAlgoOptions);
+        for (ui32 i = 0; i < joinAlgoOptions.ChildrenSize(); ++i) {
+            auto& joinAlgoOption = *joinAlgoOptions.Child(i);
+            if (!EnsureTupleOfAtoms(joinAlgoOption, ctx) || !EnsureTupleMinSize(joinAlgoOption, 1, ctx)) {
                 return nullptr;
             }
+            auto& name = *joinAlgoOption.Child(TCoNameValueTuple::idx_Name);
+            if (joinAlgo.IsAtom("StreamLookupJoin")) {
+                if (name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows"})) {
+                   if (!EnsureTupleSize(joinAlgoOption, 2, ctx)) {
+                       return nullptr;
+                   }
+                   continue;
+                }
+            }
+            ctx.AddError(TIssue(ctx.GetPosition(joinAlgoOption.Pos()), TStringBuilder() << "DqJoin: Unsupported DQ join option: " << name.Content()));
+            return nullptr;
         }
     }
 

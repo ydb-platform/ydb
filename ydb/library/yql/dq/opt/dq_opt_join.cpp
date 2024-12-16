@@ -266,9 +266,9 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
         if (rightAny)
             flags.emplace_back(ctx.NewAtom(joinTuple.Pos(), "RightAny", TNodeFlags::Default));
 
-        TVector<TCoNameValueTuple> options;
+        TVector<TCoNameValueTuple> joinAlgoOptions;
         for (ui32 i = 0; i + 1 < linkSettings.JoinAlgoOptions.size(); i += 2) {
-            options.push_back(
+            joinAlgoOptions.push_back(
                     Build<TCoNameValueTuple>(ctx, joinTuple.Pos())
                         .Name().Build(linkSettings.JoinAlgoOptions[i])
                         .Value<TCoAtom>().Build(linkSettings.JoinAlgoOptions[i + 1])
@@ -290,8 +290,8 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
                 .Build()
             .JoinAlgo(joinAlgo)
             .Flags().Add(std::move(flags)).Build();
-        if (!options.empty()) {
-            dqJoin.Options().Add(std::move(options)).Build();
+        if (!joinAlgoOptions.empty()) {
+            dqJoin.JoinAlgoOptions().Add(std::move(joinAlgoOptions)).Build();
         }
         return TJoinInputDesc(Nothing(), dqJoin.Done(), std::move(resultKeys));
     }

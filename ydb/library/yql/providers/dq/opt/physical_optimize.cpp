@@ -283,7 +283,7 @@ protected:
         TExprNode::TPtr ttl;
         TExprNode::TPtr maxCachedRows;
         TExprNode::TPtr maxDelayedRows;
-        if (const auto maybeOptions = join.Options()) {
+        if (const auto maybeOptions = join.JoinAlgoOptions()) {
             for (auto&& option: maybeOptions.Cast()) {
                 auto&& name = option.Name().Value();
                 if (name == "TTL"sv) {

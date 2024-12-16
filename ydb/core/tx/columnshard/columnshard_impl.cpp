@@ -1348,6 +1348,18 @@ public:
         : PortionInfo(portionInfo) {
     }
 
+    bool IsReady() const {
+        return HasRecords() && HasIndexes();
+    }
+
+    bool HasRecords() const {
+        return !!Records;
+    }
+
+    bool HasIndexes() const {
+        return !!Indexes;
+    }
+
     void SetRecords(NOlap::TColumnChunkLoadContextV2&& records) {
         AFL_VERIFY(!Records);
         Records = std::move(records);
@@ -1431,39 +1443,40 @@ public:
             for (auto&& p : i.second) {
                 auto itPortionConstructor = Constructors.find(p->GetAddress());
                 if (itPortionConstructor == Constructors.end()) {
+                    TPortionConstructorV2 constructor(p);
+                    itPortionConstructor = Constructors.emplace(p->GetAddress(), std::move(constructor)).first;
+                } else if (itPortionConstructor->second.IsReady()) {
+                    continue;
+                }
+                if (!itPortionConstructor->second.HasRecords()) {
                     auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(p->GetPathId(), p->GetPortionId()).Select();
                     if (!rowset.IsReady()) {
                         reask = true;
                     } else {
-                        TPortionConstructorV2 constructor(p);
                         AFL_VERIFY(!rowset.EndOfSet())("path_id", p->GetPathId())("portion_id", p->GetPortionId())(
                             "debug", p->DebugString(true));
                         NOlap::TColumnChunkLoadContextV2 info(rowset);
-                        constructor.SetRecords(std::move(info));
-                        itPortionConstructor = Constructors.emplace(p->GetAddress(), std::move(constructor)).first;
+                        itPortionConstructor->second.SetRecords(std::move(info));
                     }
                 }
-                if (!p->GetSchema(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex())->GetIndexesCount()) {
-                    continue;
-                }
-                {
-                    auto rowset = db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
-                    if (!rowset.IsReady()) {
-                        reask = true;
+                if (!itPortionConstructor->second.HasIndexes()) {
+                    if (!p->GetSchema(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex())->GetIndexesCount()) {
+                        itPortionConstructor->second.SetIndexes({});
                     } else {
-                        std::vector<NOlap::TIndexChunkLoadContext> indexes;
-                        bool localReask = false;
-                        while (!localReask && !rowset.EndOfSet()) {
-                            indexes.emplace_back(NOlap::TIndexChunkLoadContext(rowset, &selector));
-                            if (!rowset.Next()) {
-                                reask = true;
-                                localReask = true;
+                        auto rowset = db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
+                        if (!rowset.IsReady()) {
+                            reask = true;
+                        } else {
+                            std::vector<NOlap::TIndexChunkLoadContext> indexes;
+                            bool localReask = false;
+                            while (!localReask && !rowset.EndOfSet()) {
+                                indexes.emplace_back(NOlap::TIndexChunkLoadContext(rowset, &selector));
+                                if (!rowset.Next()) {
+                                    reask = true;
+                                    localReask = true;
+                                }
                             }
-                        }
-                        if (!localReask) {
                             itPortionConstructor->second.SetIndexes(std::move(indexes));
-                            FetchedAccessors.emplace_back(std::move(itPortionConstructor->second));
-                            Constructors.erase(itPortionConstructor);
                         }
                     }
                 }
@@ -1471,6 +1484,10 @@ public:
         }
         if (reask) {
             return false;
+        }
+
+        for (auto&& i : Constructors) {
+            FetchedAccessors.emplace_back(std::move(i.second));
         }
 
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("stage", "finished");

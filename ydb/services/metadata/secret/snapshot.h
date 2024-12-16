@@ -18,8 +18,8 @@ private:
 private:
     void BuildIndex();
 protected:
-    virtual bool DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawData);
-    virtual TString DoSerializeToString() const;
+    virtual bool DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawData) override;
+    virtual TString DoSerializeToString() const override;
 public:
     using TBase::TBase;
     bool CheckSecretAccess(const TSecretIdOrValue& sIdOrValue, const NACLib::TUserToken& userToken) const;

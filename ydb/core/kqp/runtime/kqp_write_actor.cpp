@@ -109,6 +109,23 @@ namespace {
             *protoLocks->AddLocks() = lock;
         }
     }
+
+    void FillTopicsCommit(NKikimrPQ::TDataTransaction& transaction, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager) {
+        transaction.SetOp(NKikimrPQ::TDataTransaction::Commit);
+        const auto prepareSettings = txManager->GetPrepareTransactionInfo();
+
+        if (!prepareSettings.ArbiterColumnShard) {
+            for (const ui64 sendingShardId : prepareSettings.SendingShards) {
+                transaction.AddSendingShards(sendingShardId);
+            }
+            for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
+                transaction.AddReceivingShards(receivingShardId);
+            }
+        } else {
+            transaction.AddSendingShards(*prepareSettings.ArbiterColumnShard);
+            transaction.AddReceivingShards(*prepareSettings.ArbiterColumnShard);
+        }
+    }
 }
 
 
@@ -1594,7 +1611,7 @@ public:
         Close();
         Process();
         SendToExternalShards(false);
-        SendToTopics();
+        SendToTopics(false);
     }
 
     void ImmediateCommit() {
@@ -1613,6 +1630,7 @@ public:
         }
         Close();
         Process();
+        SendToTopics(true);
     }
 
     void DistributedCommit() {
@@ -1640,6 +1658,7 @@ public:
         CA_LOG_D("Start rollback");
         State = EState::ROLLINGBACK;
         SendToExternalShards(true);
+        SendToTopics(true);
     }
 
     void SendToExternalShards(bool isRollback) {
@@ -1692,7 +1711,7 @@ public:
         }
     }
 
-    void SendToTopics() {
+    void SendToTopics(bool isImmediateCommit) {
         if (!TxManager->HasTopics()) {
             return;
         }
@@ -1707,29 +1726,19 @@ public:
 
         for (auto& [tabletId, t] : topicTxs) {
             auto& transaction = t.tx;
-            transaction.SetOp(NKikimrPQ::TDataTransaction::Commit);
-
-            const auto prepareSettings = TxManager->GetPrepareTransactionInfo();
-            if (!prepareSettings.ArbiterColumnShard) {
-                for (const ui64 sendingShardId : prepareSettings.SendingShards) {
-                    transaction.AddSendingShards(sendingShardId);
-                }
-                for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
-                    transaction.AddReceivingShards(receivingShardId);
-                }
-            } else {
-                transaction.AddSendingShards(*prepareSettings.ArbiterColumnShard);
-                transaction.AddReceivingShards(*prepareSettings.ArbiterColumnShard);
+            
+            if (!isImmediateCommit) {
+                FillTopicsCommit(transaction, TxManager);
             }
-
-            auto ev = std::make_unique<TEvPersQueue::TEvProposeTransactionBuilder>();
 
             if (t.hasWrite && writeId.Defined()) {
                 auto* w = transaction.MutableWriteId();
                 w->SetNodeId(SelfId().NodeId());
                 w->SetKeyId(*writeId);
             }
-            transaction.SetImmediate(false);
+            transaction.SetImmediate(isImmediateCommit);
+
+            auto ev = std::make_unique<TEvPersQueue::TEvProposeTransactionBuilder>();
 
             ActorIdToProto(SelfId(), ev->Record.MutableSourceActor());
             ev->Record.MutableData()->Swap(&transaction);
@@ -1738,7 +1747,8 @@ public:
             SendTime[tabletId] = TInstant::Now();
             auto traceId = BufferWriteActor.GetTraceId();
 
-            CA_LOG_D("Preparing KQP transaction on topic tablet: " << tabletId << ", writeId: " << writeId);
+            CA_LOG_D("Executing KQP transaction on topic tablet: " << tabletId
+            << ", writeId: " << writeId << ", isImmediateCommit: " << isImmediateCommit);
 
             Send(
                 MakePipePerNodeCacheID(false),
@@ -1962,7 +1972,7 @@ public:
             Rollback();
             State = EState::FINISHED;
             Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
-        } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && !WriteInfos.empty() && !TxManager->HasTopics()) {
+        } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && (!WriteInfos.empty() || TxManager->HasTopics())) {
             TxManager->StartExecute();
             ImmediateCommit();
         } else {

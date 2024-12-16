@@ -68,6 +68,7 @@ namespace NKikimr::NPersQueueTests {
                 NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PQ_METACACHE}
             );
             PrepareForGrpcNoDC(*server.AnnoyingClient);
+            server.AnnoyingClient->GrantConnect("topic1@" BUILTIN_ACL_DOMAIN);            
 
             TPQDataWriter writer("source1", server, DEFAULT_TOPIC_PATH);
 
@@ -100,6 +101,8 @@ namespace NKikimr::NPersQueueTests {
             NYdb::TDriverConfig driverCfg;
 
             driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort).SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)).SetDatabase("/Root");
+
+            server.AnnoyingClient->GrantConnect("user1@" BUILTIN_ACL_DOMAIN);
 
             auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
             auto persQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver);
@@ -354,7 +357,7 @@ namespace NKikimr::NPersQueueTests {
                                                                                     {{"folder_id", folderId},
                                                                                      {"cloud_id", cloudId},
                                                                                      {"database_id", databaseId}}));
-
+                server.AnnoyingClient->GrantConnect(consumerName);
                 server.AnnoyingClient->SetNoConfigMode();
                 server.AnnoyingClient->FullInit();
                 server.AnnoyingClient->InitUserRegistry();
@@ -440,8 +443,9 @@ namespace NKikimr::NPersQueueTests {
                 }
 
                 static constexpr auto userAgent = "test-client/v0.1 ' ?*'\"`| (some build info (codename); os 1.0)";
-
                 {
+                    server.AnnoyingClient->GrantConnect("user@builtin");
+    
                     auto newDriverCfg = driverCfg;
                     newDriverCfg.SetAuthToken("user@builtin");
 
@@ -629,6 +633,7 @@ namespace NKikimr::NPersQueueTests {
                     };
 
                 {
+                    server.AnnoyingClient->GrantConnect("user@builtin");
                     NYdb::NScheme::TSchemeClient schemeClient(*ydbDriver);
                     NYdb::NScheme::TPermissions permissions("user@builtin", {"ydb.generic.read", "ydb.generic.write"});
 

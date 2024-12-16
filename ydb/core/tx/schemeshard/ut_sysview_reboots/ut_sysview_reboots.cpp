@@ -1,34 +1,15 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
-namespace NKikimr::NSchemeShard {
-    extern bool isSysDirCreateAllowed;
-}
 
-namespace {
-
-    using namespace NSchemeShardUT_Private;
-    using NKikimrScheme::EStatus;
-
-    class TSysDirCreateGuard : public TNonCopyable {
-    public:
-        TSysDirCreateGuard() {
-            NKikimr::NSchemeShard::isSysDirCreateAllowed = true;
-        }
-
-        ~TSysDirCreateGuard() {
-            NKikimr::NSchemeShard::isSysDirCreateAllowed = false;
-        }
-    };
-
-}
+using namespace NSchemeShardUT_Private;  // for helpers.h's Test*() methods
 
 Y_UNIT_TEST_SUITE(TSchemeShardSysViewTestReboots) {
     Y_UNIT_TEST(CreateSysViewWithReboots) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableSystemNamesProtection(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
-                TSysDirCreateGuard sysDirCreateGuard;
                 TestMkDir(runtime, ++t.TxId, "/MyRoot", ".sys");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
@@ -50,10 +31,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTestReboots) {
 
     Y_UNIT_TEST(DropSysViewWithReboots) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableSystemNamesProtection(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
-                TSysDirCreateGuard sysDirCreateGuard;
                 TestMkDir(runtime, ++t.TxId, "/MyRoot", ".sys");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
                 TestCreateSysView(runtime, ++t.TxId, "/MyRoot/.sys",

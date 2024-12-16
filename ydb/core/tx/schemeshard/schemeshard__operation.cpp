@@ -855,10 +855,6 @@ bool CreateDirs(const TTxTransaction& tx, const TPath& parentPath, TPath path, T
                 .NotResolved();
         }
 
-        if (checks) {
-            checks.IsValidLeafName();
-        }
-
         if (!checks) {
             result.Status = checks.GetStatus();
             result.Reason = checks.GetError();
@@ -949,10 +945,6 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
                 checks
                     .NotEmpty()
                     .NotResolved();
-            }
-
-            if (checks && !exists) {
-                checks.IsValidLeafName();
             }
 
             if (!checks) {

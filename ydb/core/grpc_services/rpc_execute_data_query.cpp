@@ -146,9 +146,7 @@ public:
             req->collect_stats(),
             req->has_query_cache_policy() ? &req->query_cache_policy() : nullptr,
             req->has_operation_params() ? &req->operation_params() : nullptr,
-            NKqp::NPrivateEvents::TQueryRequestSettings(),
-            "",
-            req->Getcollect_full_diagnostics());
+            NKqp::NPrivateEvents::TQueryRequestSettings().SetCollectFullDiagnostics(req->Getcollect_full_diagnostics()));
 
         ReportCostInfo_ = req->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED;
 

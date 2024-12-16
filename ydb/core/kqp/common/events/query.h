@@ -45,11 +45,17 @@ struct TQueryRequestSettings {
         return *this;
     }
 
+    TQueryRequestSettings& SetCollectFullDiagnostics(bool flag) {
+        CollectFullDiagnostics = flag;
+        return *this;
+    }
+
     ui64 OutputChunkMaxSize = 0;
     bool KeepSession = false;
     bool UseCancelAfter = true;
     ::Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
     bool SupportsStreamTrailingResult = false;
+    bool CollectFullDiagnostics = false;
 };
 
 struct TEvQueryRequest: public NActors::TEventLocal<TEvQueryRequest, TKqpEvents::EvQueryRequest> {
@@ -68,8 +74,7 @@ public:
         const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
         const ::Ydb::Operations::OperationParams* operationParams,
         const TQueryRequestSettings& querySettings = TQueryRequestSettings(),
-        const TString& poolId = "",
-        std::optional<bool> collectFullDiagnostics = std::nullopt);
+        const TString& poolId = "");
 
     TEvQueryRequest() {
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
@@ -283,7 +288,7 @@ public:
     }
 
     bool GetCollectDiagnostics() const {
-        return CollectFullDiagnostics.has_value() ? CollectFullDiagnostics.value() : Record.GetRequest().GetCollectDiagnostics();
+        return QuerySettings.CollectFullDiagnostics;
     }
 
     ui32 CalculateSerializedSize() const override {
@@ -396,7 +401,6 @@ private:
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     TDuration ProgressStatsPeriod;
     std::optional<NResourcePool::TPoolSettings> PoolConfig;
-    std::optional<bool> CollectFullDiagnostics = std::nullopt;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

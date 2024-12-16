@@ -953,6 +953,15 @@ protected:
             if (!settings.GetInconsistentTx() && !settings.GetIsOlap()) {
                 ActorIdToProto(BufferActorId, settings.MutableBufferActorId());
             }
+            if (Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
+                YQL_ENSURE(GetSnapshot().IsValid());
+                settings.MutableMvccSnapshot()->SetStep(GetSnapshot().Step);
+                settings.MutableMvccSnapshot()->SetTxId(GetSnapshot().TxId);
+                settings.SetLockMode(NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT);
+            } else if (!settings.GetInconsistentTx()) {
+                settings.SetLockMode(NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE);
+            }
+
             output.SinkSettings.ConstructInPlace();
             output.SinkSettings->PackFrom(settings);
         } else {

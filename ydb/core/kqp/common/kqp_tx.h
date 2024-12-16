@@ -264,6 +264,11 @@ public:
                 Readonly = true;
                 break;
 
+            case Ydb::Table::TransactionSettings::kSnapshotReadWrite:
+                EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW;
+                Readonly = true;
+                break;
+
             case Ydb::Table::TransactionSettings::TX_MODE_NOT_SET:
                 YQL_ENSURE(false, "tx_mode not set, settings: " << settings);
                 break;

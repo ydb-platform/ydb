@@ -549,6 +549,7 @@ message TEvProposeTransaction {
     optional uint64 SubDomainPathId = 9; // LocalPathId (SchemeShardId is the OwnerId)
     optional NKikimrDataEvents.TMvccSnapshot MvccSnapshot = 10;
     optional bool MvccSnapshotRepeatable = 11 [default = true];
+    optional NKikimrDataEvents.ELockMode LockMode = 12;
 }
 
 message TEvCancelTransactionProposal {

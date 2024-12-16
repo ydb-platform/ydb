@@ -64,6 +64,7 @@ enum EIsolationLevel {
     ISOLATION_LEVEL_READ_UNCOMMITTED = 3;
     ISOLATION_LEVEL_READ_STALE = 4;
     ISOLATION_LEVEL_SNAPSHOT_RO = 5;
+    ISOLATION_LEVEL_SNAPSHOT_RW = 6;
 };
 
 message TTopicOperationsRequest {
@@ -735,6 +736,8 @@ message TKqpTableSinkSettings {
     optional int64 Priority = 11;
     optional bool IsOlap = 12;
     repeated uint32 WriteIndexes = 13;
+    optional NKikimrDataEvents.TMvccSnapshot MvccSnapshot = 14;
+    optional NKikimrDataEvents.ELockMode LockMode = 15;
 }
 
 message TKqpStreamLookupSettings {

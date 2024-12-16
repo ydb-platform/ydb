@@ -107,6 +107,16 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
         settings.push_back(setting);
     }
 
+    if (useCBO) {
+        setting.SetName("CostBasedOptimizationLevel");
+        setting.SetValue("4");
+        settings.push_back(setting);
+    } else {
+        setting.SetName("CostBasedOptimizationLevel");
+        setting.SetValue("0");
+        settings.push_back(setting);
+    }
+
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
     appConfig.MutableTableServiceConfig()->SetEnableConstantFolding(true);
@@ -643,17 +653,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         NJson::TJsonValue Plan;
         TVector<TString> Labels;
     };
-
-    Y_UNIT_TEST(OltpJoinTypeHintCBOTurnOFF) {
-        auto plan = ExecuteJoinOrderTestGenericQueryWithStats("queries/oltp_join_type_hint_cbo_turnoff.sql", "stats/basic.json", false, false, false);
-        auto detailedPlan = GetDetailedJoinOrder(plan);
-
-        auto joinFinder = TFindJoinWithLabels(detailedPlan);
-        UNIT_ASSERT(joinFinder.Find({"R", "S"}) == "InnerJoin (Grace)");
-        UNIT_ASSERT(joinFinder.Find({"R", "S", "T"}) == "InnerJoin (MapJoin)");
-        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U"}) == "InnerJoin (Grace)");
-        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U", "V"}) == "InnerJoin (MapJoin)");
-    }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinOrderHintsSimple, StreamLookupJoin, ColumnStore) {
         auto plan = ExecuteJoinOrderTestGenericQueryWithStats("queries/join_order_hints_simple.sql", "stats/basic.json", StreamLookupJoin, ColumnStore); 

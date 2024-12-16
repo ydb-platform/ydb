@@ -337,7 +337,7 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
     const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
-    
+
     if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST,
             TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());

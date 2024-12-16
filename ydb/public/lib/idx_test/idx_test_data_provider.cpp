@@ -63,6 +63,9 @@ NYdb::TValue CreateOptionalValue(const TColumn& column, const TRandomValueProvid
                 value.OptionalJson(TString(sb));
             }
             break;
+        case EPrimitiveType::Uuid:
+            value.OptionalUuid(TUuidValue(rvp.RandomUi64(), rvp.RandomUi64()));
+            break;
         default:
                 Y_ABORT_UNLESS(false, "unimplemented");
     }

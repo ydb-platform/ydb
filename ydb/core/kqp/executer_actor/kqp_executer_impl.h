@@ -378,7 +378,7 @@ protected:
         this->Send(channelComputeActorId, ackEv.Release(), /* TODO: undelivery */ 0, /* cookie */ channelId);
     }
 
-    bool HandleComputeStats(NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {
+    void HandleComputeStats(NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {
         TActorId computeActor = ev->Sender;
         auto& state = ev->Get()->Record;
         ui64 taskId = state.GetTaskId();
@@ -407,42 +407,7 @@ protected:
         }
 
         YQL_ENSURE(Planner);
-        bool ack = Planner->AcknowledgeCA(taskId, computeActor, &state);
-
-        switch (state.GetState()) {
-            case NYql::NDqProto::COMPUTE_STATE_FAILURE:
-            case NYql::NDqProto::COMPUTE_STATE_FINISHED:
-                // Don't finalize stats twice.
-                if (Planner->CompletedCA(taskId, computeActor)) {
-                    auto& extraData = ExtraData[computeActor];
-                    extraData.TaskId = taskId;
-                    extraData.Data.Swap(state.MutableExtraData());
-
-
-                    if (Stats) {
-                        Stats->AddComputeActorStats(
-                            computeActor.NodeId(),
-                            std::move(*state.MutableStats()),
-                            TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs())
-                        );
-                    }
-
-                    LastTaskId = taskId;
-                    LastComputeActorId = computeActor.ToString();
-                }
-            default:
-                ; // ignore all other states.
-        }
-
-        return ack;
-    }
-
-    void HandleComputeState(NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {
-        TActorId computeActor = ev->Sender;
-        auto& state = ev->Get()->Record;
-        ui64 taskId = state.GetTaskId();
-
-        bool populateChannels = HandleComputeStats(ev);
+        bool populateChannels = Planner->AcknowledgeCA(taskId, computeActor, &state);
 
         switch (state.GetState()) {
             case NYql::NDqProto::COMPUTE_STATE_UNKNOWN: {
@@ -460,8 +425,24 @@ protected:
                 break;
             }
 
-            default:
-                ; // ignore all other states.
+            case NYql::NDqProto::COMPUTE_STATE_FAILURE:
+            case NYql::NDqProto::COMPUTE_STATE_FINISHED: {
+                auto& extraData = ExtraData[computeActor];
+                extraData.TaskId = taskId;
+                extraData.Data.Swap(state.MutableExtraData());
+                if (Stats) {
+                    Stats->AddComputeActorStats(
+                        computeActor.NodeId(),
+                        std::move(*state.MutableStats()),
+                        TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs())
+                    );
+                }
+
+                LastTaskId = taskId;
+                LastComputeActorId = computeActor.ToString();
+                YQL_ENSURE(Planner);
+                Planner->CompletedCA(taskId, computeActor);
+            }
         }
 
         if (state.GetState() == NYql::NDqProto::COMPUTE_STATE_FAILURE) {
@@ -1851,9 +1832,6 @@ protected:
 
     void PassAway() override {
         YQL_ENSURE(AlreadyReplied && ResponseEv);
-
-        // Actualize stats with the last stats from terminated CAs, but keep the status.
-        FillResponseStats(ResponseEv->Record.GetResponse().GetStatus());
         this->Send(Target, ResponseEv.release());
 
         for (auto channelPair: ResultChannelProxies) {

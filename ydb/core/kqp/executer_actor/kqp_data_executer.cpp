@@ -547,7 +547,7 @@ private:
         if (ev->Get()->Record.GetState() == NDqProto::COMPUTE_STATE_FAILURE) {
             CancelProposal(0);
         }
-        HandleComputeState(ev);
+        HandleComputeStats(ev);
     }
 
     void HandlePrepare(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -1016,7 +1016,7 @@ private:
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, HandleExecute);
-                hFunc(TEvDqCompute::TEvState, HandleComputeState);
+                hFunc(TEvDqCompute::TEvState, HandleComputeStats);
                 hFunc(NYql::NDq::TEvDqCompute::TEvChannelData, HandleChannelData);
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvKqp::TEvAbortExecution, HandleExecute);
@@ -2258,7 +2258,7 @@ private:
             // Volatile transactions must always use generic readsets
             VolatileTx ||
             // Transactions with topics must always use generic readsets
-            !topicTxs.empty() || 
+            !topicTxs.empty() ||
             // HTAP transactions always use generic readsets
             !evWriteTxs.empty());
 
@@ -2644,8 +2644,7 @@ private:
             } else {
                 this->Become(&TThis::WaitShutdownState);
                 LOG_I("Waiting for shutdown of " << Planner->GetPendingComputeTasks().size() << " tasks and "
-                                                 << Planner->GetPendingComputeActors().size() << " compute actors");
-                // TODO(ilezhankin): the CA awaiting timeout should be configurable.
+                    << Planner->GetPendingComputeActors().size() << " compute actors");
                 TActivationContext::Schedule(TDuration::Seconds(10), new IEventHandle(SelfId(), SelfId(), new TEvents::TEvPoison));
             }
         } else {
@@ -2681,10 +2680,17 @@ private:
     }
 
     void HandleShutdown(TEvDqCompute::TEvState::TPtr& ev) {
-        HandleComputeStats(ev);
+        if (ev->Get()->Record.GetState() == NDqProto::COMPUTE_STATE_FAILURE) {
+            YQL_ENSURE(Planner);
 
-        if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
-            PassAway();
+            TActorId actor = ev->Sender;
+            ui64 taskId = ev->Get()->Record.GetTaskId();
+
+            Planner->CompletedCA(taskId, actor);
+
+            if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
+                PassAway();
+            }
         }
     }
 

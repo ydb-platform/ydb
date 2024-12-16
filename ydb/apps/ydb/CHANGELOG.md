@@ -8,7 +8,7 @@
 * Fixed a bug in TPC-H tables schema where the `partsupp` table had incorrect list of key columns
 * Enhanced parallelism of data restoring in `ydb tools restore`
 * Fixed a bug where `ydb tools restore` was failing with `Too much data` if `--upload-batch-bytes` option value was set exactly to it's maximum possible value (16MiB)
-* _awaiting release ydb server 24.4_ Added `ydb debug ping` command for performance and connectivity debugging
+* _awaiting release ydb server 25.1_ Added `ydb debug ping` command for performance and connectivity debugging
 
 ## 2.16.0 ##
 

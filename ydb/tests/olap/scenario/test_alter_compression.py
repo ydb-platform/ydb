@@ -10,6 +10,7 @@ from ydb.tests.olap.scenario.helpers import (
     DropTable,
     DropTableStore,
     AlterColumnFamily,
+    AlterCompression,
     AlterCompressionLevel,
     AddColumnFamily,
     AlterColumn,
@@ -64,7 +65,7 @@ class TestAlterCompression(BaseTestSet):
             # assert sth.get_table_rows_count(table_path) == rows_written
 
     def _loop_alter_table(
-        self, ctx: TestContext, action: AlterTableLikeObject, duration: timedelta
+        self, ctx: TestContext, action: AlterTableLikeObject, table: str, column_families: list[str], duration: timedelta
     ):
         data_types = [
             PrimitiveType.Double,
@@ -76,6 +77,8 @@ class TestAlterCompression(BaseTestSet):
         ]
         deadline = datetime.now() + duration
         sth = ScenarioTestHelper(ctx)
+        compressions: list = list(ScenarioTestHelper.Compression)
+        column_names: list[str] = [column.name for column in self.schema1.columns]
         while datetime.now() < deadline:
             column_name = f"tmp_column_{threading.get_ident()}_" + "".join(
                 random.choice(ascii_lowercase) for _ in range(8)
@@ -90,6 +93,33 @@ class TestAlterCompression(BaseTestSet):
                 copy.deepcopy(action).drop_column(column_name), retries=10
             )
 
+            column_name: str = random.choice(column_names)
+            family: str = random.choice(column_families)
+            index_compression_type: int = random.randint(0, len(compressions) - 1)
+            compression: ScenarioTestHelper.Compression = compressions[index_compression_type]
+            sth.execute_scheme_query(AlterTable(table).action(AlterColumnFamily(family, AlterCompression(compression))))
+            if compression == ScenarioTestHelper.Compression.ZSTD:
+                compression_level: int = random.randint(0, 10)
+                sth.execute_scheme_query(AlterTable(table).action(AlterColumnFamily(family, AlterCompressionLevel(compression_level))))
+            sth.execute_scheme_query(AlterTable(table).action(AlterColumn(column_name, AlterFamily(family))))
+
+    def _loop_alter_compression(
+        self, ctx: TestContext, table: str, column_families: list[str], duration: timedelta):
+        deadline = datetime.now() + duration
+        sth = ScenarioTestHelper(ctx)
+        compressions: list = list(ScenarioTestHelper.Compression)
+        column_names: list[str] = ["Key", "Field", "Doub"]
+        while datetime.now() < deadline:
+            column_name: str = random.choice(column_names)
+            family: str = random.choice(column_families)
+            index_compression_type: int = random.randint(0, len(compressions) - 1)
+            compression: ScenarioTestHelper.Compression = compressions[index_compression_type]
+            sth.execute_scheme_query(AlterTable(table).action(AlterColumnFamily(family, AlterCompression(compression))))
+            if compression == ScenarioTestHelper.Compression.ZSTD:
+                compression_level: int = random.randint(0, 10)
+                sth.execute_scheme_query(AlterTable(table).action(AlterColumnFamily(family, AlterCompressionLevel(compression_level))))
+            sth.execute_scheme_query(AlterTable(table).action(AlterColumn(column_name, AlterFamily(family))))
+
     def _upsert_and_alter(
         self,
         ctx: TestContext,
@@ -98,6 +128,7 @@ class TestAlterCompression(BaseTestSet):
         tables: list[str],
         count_rows: int,
         duration: timedelta,
+        column_families: list[str]
     ):
         sth = ScenarioTestHelper(ctx)
         threads = []
@@ -115,7 +146,7 @@ class TestAlterCompression(BaseTestSet):
                 threads.append(
                     TestThread(
                         target=self._loop_alter_table,
-                        args=[ctx, AlterTable(table), duration],
+                        args=[ctx, AlterTable(table), table, column_families, duration],
                     )
                 )
             threads.append(
@@ -124,6 +155,8 @@ class TestAlterCompression(BaseTestSet):
                     args=[ctx, table, start_index, count_rows, duration],
                 )
             )
+            # Error: path is under operation
+            # threads.append(TestThread(target=self._loop_alter_compression, args=[ctx, table, column_families, duration]))
 
         for thread in threads:
             thread.start()
@@ -182,8 +215,8 @@ class TestAlterCompression(BaseTestSet):
         self,
         ctx: TestContext,
         tables: list[str],
-        column_names: list[str],
         alter_action: AlterTable,
+        column_family_names: list[str]
     ):
         sth = ScenarioTestHelper(ctx)
         self._upsert_and_alter(
@@ -193,8 +226,10 @@ class TestAlterCompression(BaseTestSet):
             tables=tables,
             count_rows=self.count_rows_for_bulk_upsert,
             duration=self.duration_alter_and_insert,
+            column_families=column_family_names
         )
-        self._read_data(ctx=ctx, tables=tables, column_names=column_names)
+        column_names: list[str] = [column.name for column in self.schema1.columns]
+        assert self._read_data(ctx=ctx, tables=tables, column_names=column_names)
         # prev_volumes: dict[str, dict[str, tuple[int, int]]] = self._volumes_columns(ctx=ctx, tables=tables, column_names=column_names)
         sth.execute_scheme_query(alter_action)
         # current_volumes: dict[str, dict[str, tuple[int, int]]] = self._volumes_columns(ctx=ctx, tables=tables, column_names=column_names)
@@ -244,10 +279,16 @@ class TestAlterCompression(BaseTestSet):
             ),
         ]
 
-        add_family_action = AlterTable(table_name)
+        column_family_names: list[str] = []
+        column_family_names.append("default")
         for family in column_families:
-            add_family_action.action(AddColumnFamily(family))
-        sth.execute_scheme_query(add_family_action)
+            column_family_names.append(family.name)
+
+        for table_name in tables:
+            add_family_action = AlterTable(table_name)
+            for family in column_families:
+                add_family_action.action(AddColumnFamily(family))
+            sth.execute_scheme_query(add_family_action)
 
         assert self._read_data(ctx=ctx, tables=tables, column_names=column_names)
 
@@ -258,47 +299,49 @@ class TestAlterCompression(BaseTestSet):
                 self._scenario(
                     ctx=ctx,
                     tables=tables,
-                    column_names=column_names,
                     alter_action=AlterTable(table_name).action(
                         AlterColumn(column_name, AlterFamily(family.name))
                     ),
+                    column_family_names=column_family_names
                 )
 
             self._scenario(
                 ctx=ctx,
                 tables=tables,
-                column_names=column_names,
-                alter_action=AlterTable(table_name).action(
+                alter_action=AlterTable(table_name).action(AlterColumnFamily(
+                        column_families[-1].name, AlterCompression(column_families[-1].compression)
+                    )).action(
                     AlterColumnFamily(
                         column_families[-1].name, AlterCompressionLevel(9)
                     )
                 ),
+                column_family_names=column_family_names
             )
 
             self._scenario(
                 ctx=ctx,
                 tables=tables,
-                column_names=column_names,
-                alter_action=AlterTable(table_name).action(
+                alter_action=AlterTable(table_name).action(AlterColumnFamily(
+                        column_families[-1].name, AlterCompression(column_families[-1].compression)
+                    )).action(
                     AlterColumnFamily(
                         column_families[-1].name, AlterCompressionLevel(0)
                     )
                 ),
+                column_family_names=column_family_names
             )
 
             self._scenario(
                 ctx=ctx,
                 tables=tables,
-                column_names=column_names,
-                alter_action=AlterTable(table_name).action(
+                alter_action=AlterTable(table_name).action(AlterColumnFamily(
+                        column_families[-1].name, AlterCompression(column_families[-1].compression)
+                    )).action(
                     AlterColumnFamily(
                         column_families[-1].name,
                         AlterCompressionLevel(prev_compression_level),
                     )
                 ),
+                column_family_names=column_family_names
             )
 
-        for table in tables:
-            sth.execute_scheme_query(DropTable(table))
-        if not self.is_standalone_tables:
-            sth.execute_scheme_query(DropTableStore(self.table_store))

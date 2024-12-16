@@ -39,7 +39,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[Arg.t1.j,Arg.t1.i]"
                                             },
                                             {
                                                 "Condition": "t1.j = t2.k",

@@ -736,6 +736,41 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         }
 
         inputNode = stage->StatsNode->GetValueByPath("Input");
+
+        if (auto* operatorNode = stage->StatsNode->GetValueByPath("Operator")) {
+            TStringBuilder builder;
+            bool first = true;
+            for (const auto& subNode : operatorNode->GetArray()) {
+                TString id = "UNKNOWN_ID";
+                if (auto* idNode = subNode.GetValueByPath("Id")) {
+                    id = idNode->GetStringSafe();
+                }
+                TString type = "UNKNOWN_TYPE";
+                if (auto* typeNode = subNode.GetValueByPath("Type")) {
+                    type = typeNode->GetStringSafe();
+                }
+                if (first) {
+                    first = false;
+                } else {
+                    builder << "; ";
+                }
+                builder << type << ':' << id;
+                ui64 rows = 0;
+                ui64 bytes = 0;
+                if (auto* rowsSumNode = subNode.GetValueByPath("Rows.Sum")) {
+                    rows = rowsSumNode->GetIntegerSafe();
+                    builder << ", Rows: \u2211" << FormatIntegerValue(rows);
+                }
+                if (auto* bytesSumNode = subNode.GetValueByPath("Bytes.Sum")) {
+                    bytes = bytesSumNode->GetIntegerSafe();
+                    builder << ", Bytes: \u2211" << FormatBytes(bytes);
+                }
+                if (rows && bytes) {
+                    builder << ", Width: " << FormatBytes(bytes / rows);
+                }
+            }
+            stage->OperatorInfo = builder;
+        }
     }
 
     if (auto* subNode = node.GetValueByPath("Plans")) {
@@ -890,7 +925,7 @@ void TPlan::LoadSource(std::shared_ptr<TSource> source, const NJson::TJsonValue&
             }
             builder << ")";
             source->Info.push_back(builder);
- 
+
             auto est = GetEstimation(subNode);
             if (est) {
                 source->Info.push_back(est);
@@ -1140,6 +1175,11 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
                 << "' width='" << INDENT_X << "' height='" << s->IndentY - y
                 << "' stroke-width='0' fill='" << Config.Palette.StageMain << "'/>" << Endl;
         }
+
+        if (s->OperatorInfo) {
+        background
+            << "<g><title>" << s->OperatorInfo << "</title>" << Endl;
+        }
         background
             << "<circle cx='" << s->IndentX + INTERNAL_WIDTH / 2
             << "' cy='" << s->OffsetY + s->Height / 2 + offsetY
@@ -1149,6 +1189,10 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
             << "px' fill='" << Config.Palette.StageText << "' x='" << s->IndentX + INTERNAL_WIDTH / 2
             << "' y='" << s->OffsetY + s->Height / 2 + offsetY + INTERNAL_TEXT_HEIGHT / 2
             << "'>" << ToString(s->PhysicalStageId) << "</text>" << Endl;
+        if (s->OperatorInfo) {
+        background
+            << "</g>" << Endl;
+        }
 
         {
             ui32 y0 = s->OffsetY + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 + offsetY;
@@ -1645,7 +1689,7 @@ TString TPlanVisualizer::PrintSvg() {
     for (auto& p : Plans) {
         offsetY += GAP_Y;
         canvas
-            << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText 
+            << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText
             << "' x='" << 0 << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>"
             << p.NodeType << "</text>" << Endl;
 
@@ -1763,7 +1807,7 @@ TString TPlanVisualizer::PrintSvg() {
             auto timeLabel = Sprintf("%lu:%.2lu", t / 60, t % 60);
             for (auto& p : Plans) {
                 svg
-                    << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText 
+                    << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText
                     << "' x='" << x + x1 + 2 << "' y='" << p.OffsetY - INTERNAL_HEIGHT - (TIME_HEIGHT - INTERNAL_TEXT_HEIGHT) << "'>"
                     << timeLabel << "</text>" << Endl;
             }

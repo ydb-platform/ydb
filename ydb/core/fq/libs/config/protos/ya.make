@@ -34,6 +34,10 @@ PEERDIR(
     ydb/library/yql/providers/s3/proto
 )
 
-EXCLUDE_TAGS(GO_PROTO)
+ONLY_TAGS(
+    CPP_PROTO
+    PY_PROTO
+    PY3_PROTO
+)
 
 END()

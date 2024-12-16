@@ -27,7 +27,7 @@ namespace NYql::NDq {
         CredentialsProvider_ = credentialsProviderFactory->CreateProvider();
     }
 
-    TString TGenericTokenProvider::MaybeFillToken(NConnector::NApi::TDataSourceInstance& dsi) const {
+    TString TGenericTokenProvider::MaybeFillToken(NYql::TGenericDataSourceInstance& dsi) const {
         // 1. Don't need tokens if basic auth is set
         if (dsi.credentials().has_basic()) {
             return {};

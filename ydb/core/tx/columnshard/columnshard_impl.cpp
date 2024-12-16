@@ -1406,7 +1406,7 @@ private:
     THashMap<ui64, std::vector<NOlap::TPortionInfo::TConstPtr>> PortionsByPath;
     std::vector<TPortionConstructorV2> FetchedAccessors;
     const TString Consumer;
-    THashMap<TPortionAddress, TPortionConstructorV2> Constructors;
+    THashMap<NOlap::TPortionAddress, TPortionConstructorV2> Constructors;
 
 public:
     TTxAskPortionChunks(TColumnShard* self, const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& fetchCallback,
@@ -1440,7 +1440,7 @@ public:
                             "debug", p->DebugString(true));
                         NOlap::TColumnChunkLoadContextV2 info(rowset);
                         constructor.SetRecords(std::move(info));
-                        itPortionConstructor = Constructors.emplace(p->GetPortionId(), std::move(constructor)).first;
+                        itPortionConstructor = Constructors.emplace(p->GetAddress(), std::move(constructor)).first;
                     }
                 }
                 if (!p->GetSchema(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex())->GetIndexesCount()) {

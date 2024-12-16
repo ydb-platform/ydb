@@ -37,6 +37,8 @@ common:
     to: /postgresql/import.md
   - from: /concepts/column-table.md
     to: /concepts/datamodel/table.md
+  - from: /concepts/auth.md
+    to: /concepts/security/authentication.md
 
 # DevOps-related redirects
   - from: /getting_started/kubernetes.md

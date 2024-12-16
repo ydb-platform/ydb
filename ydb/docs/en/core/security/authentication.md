@@ -8,6 +8,12 @@ The following authentication modes are supported:
 * [Authentication through a third-party IAM provider](#iam), for example, [Yandex Identity and Access Management]{% if lang == "en" %}(https://cloud.yandex.com/en/docs/iam/){% endif %}{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/){% endif %}.
 * Authentication by [username and password](#static-credentials).
 
+## Anonymous authentication
+
+Anonymous authentication allows you to connect to YDB without specifying a username and password. This type of access should be used only for informational purposes for internal local databases that do not have access over the network.
+
+To enable anonymous authentication, use `false` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../reference/configuration/index.md#auth).
+
 ## Authentication through a third-party IAM provider {#iam}
 
 * **Anonymous**: Empty token passed in a request.
@@ -35,23 +41,20 @@ The token to specify in request parameters can be obtained in the IAM system tha
 
 When using modes in which the {{ ydb-short-name }} client accesses the IAM system, the IAM URL that provides an API for issuing tokens can be set additionally. By default, existing SDKs and CLIs attempt to access the {{ yandex-cloud }} IAM API hosted at `iam.api.cloud.yandex.net:443`.
 
-{% include [overlay/auth_choose.md](_includes/connect_overlay/auth_choose.md) %}
-
 ## Authenticating by username and password {#static-credentials}
+
+This type of access implies that each database user has a username and password.
+You can only use lower case Latin letters and digits in usernames. No restrictions apply to passwords (empty passwords can be used).
+
+The username and hashed password are stored in the table inside the authentication component. The password is hashed by the [Argon2]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Argon2){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Argon2){% endif %} method. In authentication mode, only the system administrator can use a username/password pair to access the table.
+
+A token is returned in response to the username and password.  Tokens have a default lifetime of 12 hours. To rotate tokens, the client, for example, the SDK, independently accesses the authentication service. Tokens accelerate authentication and strengthen security.
 
 Authentication by username and password includes the following steps:
 
 1. The client accesses the database and presents their username and password to the {{ ydb-short-name }} authentication service.
-
-   You can only use lower case Latin letters and digits in usernames. No restrictions apply to passwords (empty passwords can be used).
-
 1. The authentication service passes authentication data to the {{ ydb-short-name }} authentication component.
 1. The component validates authentication data. If the data matches, it generates a token and returns it to the authentication service.
-
-   Tokens accelerate authentication and strengthen security. Tokens have a default lifetime of 12 hours. YDB SDK rotates tokens by accessing the authentication service.
-
-   The username and hashed password are stored in the table inside the authentication component. The password is hashed by the [Argon2]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Argon2){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Argon2){% endif %} method. In authentication mode, only the system administrator can use a username/password pair to access the table.
-
 1. The authentication system returns the token to the client.
 1. The client accesses the database, presenting their token as authentication data.
 

@@ -1,6 +1,6 @@
 USE plato;
 
-PRAGMA yt.JoinCollectColumnarStatistics = "async";
+PRAGMA yt.JoinCollectColumnarStatistics = 'async';
 
 INSERT INTO @yang_ids
 SELECT
@@ -8,7 +8,7 @@ SELECT
 FROM
     Input
 WHERE
-    subkey <= "3"
+    subkey <= '3'
 LIMIT 100;
 
 COMMIT;

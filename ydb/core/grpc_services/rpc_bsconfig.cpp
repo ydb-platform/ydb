@@ -7,6 +7,7 @@
 #include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/mind/local.h>
 #include <ydb/core/protos/local.pb.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -16,6 +17,9 @@ using TEvReplaceStorageConfigRequest =
 using TEvFetchStorageConfigRequest =
     TGrpcRequestOperationCall<Ydb::BSConfig::FetchStorageConfigRequest,
         Ydb::BSConfig::FetchStorageConfigResponse>;
+using TEvBootstrapClusterRequest =
+    TGrpcRequestOperationCall<Ydb::BSConfig::BootstrapClusterRequest,
+        Ydb::BSConfig::BootstrapClusterResponse>;
 
 using namespace NActors;
 using namespace Ydb;
@@ -88,6 +92,15 @@ public:
     NACLib::EAccessRights GetRequiredAccessRights() const {
         return NACLib::GenericManage;
     }
+
+    void FillDistconfQuery(NStorage::TEvNodeConfigInvokeOnRoot& ev) {
+        auto *cmd = ev.Record.MutableReplaceStorageConfig();
+        cmd->SetYAML(GetProtoRequest()->yaml_config());
+    }
+
+    void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,
+            Ydb::BSConfig::ReplaceStorageConfigResult& /*result*/)
+    {}
 };
 
 class TFetchStorageConfigRequest : public TBSConfigRequestGrpc<TFetchStorageConfigRequest, TEvFetchStorageConfigRequest,
@@ -102,6 +115,15 @@ public:
     NACLib::EAccessRights GetRequiredAccessRights() const {
         return NACLib::GenericManage;
     }
+
+    void FillDistconfQuery(NStorage::TEvNodeConfigInvokeOnRoot& ev) const {
+        ev.Record.MutableFetchStorageConfig();
+    }
+
+    void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& record,
+            Ydb::BSConfig::FetchStorageConfigResult& result) {
+        result.set_yaml_config(record.GetFetchStorageConfig().GetYAML());
+    }
 };
 
 void DoReplaceBSConfig(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
@@ -112,5 +134,50 @@ void DoFetchBSConfig(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&)
     TActivationContext::AsActorContext().Register(new TFetchStorageConfigRequest(p.release()));
 }
 
+void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    class TBootstrapClusterRequest : public TRpcOperationRequestActor<TBootstrapClusterRequest, TEvBootstrapClusterRequest> {
+        using TBase = TRpcOperationRequestActor<TBootstrapClusterRequest, TEvBootstrapClusterRequest>;
+
+    public:
+        using TBase::TBase;
+
+        void Bootstrap(const TActorContext& ctx) {
+            TBase::Bootstrap(ctx);
+            Become(&TBootstrapClusterRequest::StateFunc);
+
+            const auto& request = *GetProtoRequest();
+
+            auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            auto& record = ev->Record;
+            auto *cmd = record.MutableBootstrapCluster();
+            cmd->SetSelfAssemblyUUID(request.self_assembly_uuid());
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
+        }
+
+        void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev, const TActorContext& ctx) {
+            auto& record = ev->Get()->Record;
+            switch (record.GetStatus()) {
+                case NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK:
+                    Reply(Ydb::StatusIds::SUCCESS, ctx);
+                    break;
+
+                default:
+                    Reply(Ydb::StatusIds::GENERIC_ERROR, record.GetErrorReason(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+                    break;
+            }
+        }
+
+    protected:
+        STFUNC(StateFunc) {
+            switch (ev->GetTypeRewrite()) {
+                HFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
+                default:
+                    return TBase::StateFuncBase(ev);
+            }
+        }
+    };
+
+    TActivationContext::Register(new TBootstrapClusterRequest(p.release()));
+}
 
 } // namespace NKikimr::NGRpcService

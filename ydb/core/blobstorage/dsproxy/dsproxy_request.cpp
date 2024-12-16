@@ -448,7 +448,7 @@ namespace NKikimr {
                     .ExecutionRelay = ev->Get()->ExecutionRelay
                 }
             }),
-            TInstant::Max()
+            ev->Get()->Deadline
         );
     }
 

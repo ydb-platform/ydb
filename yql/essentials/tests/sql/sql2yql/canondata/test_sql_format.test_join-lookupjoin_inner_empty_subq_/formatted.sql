@@ -2,8 +2,8 @@ PRAGMA DisableSimpleColumns;
 
 USE plato;
 
-PRAGMA yt.LookupJoinLimit = "64k";
-PRAGMA yt.LookupJoinMaxRows = "100";
+PRAGMA yt.LookupJoinLimit = '64k';
+PRAGMA yt.LookupJoinMaxRows = '100';
 
 SELECT
     *
@@ -15,7 +15,7 @@ INNER JOIN (
     FROM
         Input2
     WHERE
-        k2 == "not_existent"
+        k2 == 'not_existent'
 ) AS b
 ON
     a.k1 == b.k2

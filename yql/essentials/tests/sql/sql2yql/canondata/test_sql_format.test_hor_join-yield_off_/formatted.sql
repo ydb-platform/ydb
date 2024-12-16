@@ -2,7 +2,7 @@
 /* postgres can not */
 USE plato;
 
-PRAGMA config.flags("UdfSupportsYield", "false");
+PRAGMA config.flags('UdfSupportsYield', 'false');
 
 $s = @@
 import yql

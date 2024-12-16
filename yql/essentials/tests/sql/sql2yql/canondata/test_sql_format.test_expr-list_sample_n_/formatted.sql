@@ -12,10 +12,10 @@ $test = ($n, $dependsOn) -> {
 
 SELECT
     ListSampleN(NULL, 1ul) IS NULL AS mustBeTrue1,
-    ListSampleN(Nothing(OptionalType(ListType(DataType("Uint64")))), 1ul) IS NULL AS mustBeTrue2,
+    ListSampleN(Nothing(OptionalType(ListType(DataType('Uint64')))), 1ul) IS NULL AS mustBeTrue2,
     ListSampleN([], 1ul) == [] AS mustBeTrue3,
     ListSampleN($list, NULL) == $list AS mustBeTrue4,
-    ListSampleN($list, Nothing(OptionalType(DataType("Uint64")))) == $list AS mustBeTrue5,
+    ListSampleN($list, Nothing(OptionalType(DataType('Uint64')))) == $list AS mustBeTrue5,
     ListSampleN($list, 25ul, 123) == ListSampleN($list, 25ul, 123) AS mustBeTrue6,
     $test(5ul, 1) AS result1,
     $test(10ul, 2) AS result2,

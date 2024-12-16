@@ -4,6 +4,7 @@ from collections import defaultdict
 import copy
 import datetime
 from gzip import GzipFile
+from typing import Mapping
 from sys import platform
 
 import docker
@@ -15,7 +16,6 @@ import os
 import json
 import re
 import zipfile
-import uuid
 import tarfile
 import calendar
 import threading
@@ -25,15 +25,17 @@ import requests.exceptions
 from moto.awslambda.policy import Policy
 from moto.core import BaseBackend, BaseModel, CloudFormationModel
 from moto.core.exceptions import RESTError
-from moto.iam.models import iam_backend
-from moto.iam.exceptions import IAMNotFoundException
 from moto.core.utils import unix_time_millis, BackendDict
-from moto.s3.models import s3_backend
+from moto.iam.models import iam_backends
+from moto.iam.exceptions import IAMNotFoundException
 from moto.logs.models import logs_backends
+from moto.moto_api._internal import mock_random as random
+from moto.s3.models import s3_backends
 from moto.s3.exceptions import MissingBucket, MissingKey
 from moto import settings
 from .exceptions import (
     CrossAccountNotAllowed,
+    FunctionUrlConfigNotFound,
     InvalidRoleFormat,
     InvalidParameterValueException,
     UnknownLayerException,
@@ -50,10 +52,8 @@ from .utils import (
 from moto.sqs import sqs_backends
 from moto.dynamodb import dynamodb_backends
 from moto.dynamodbstreams import dynamodbstreams_backends
-from moto.core import get_account_id
 from moto.utilities.docker_utilities import DockerModel, parse_image_ref
 from tempfile import TemporaryDirectory
-from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
@@ -157,13 +157,11 @@ class _DockerDataVolumeContext:
                     raise  # multiple processes trying to use same volume?
 
 
-def _zipfile_content(zipfile):
-    # more hackery to handle unicode/bytes/str in python3 and python2 -
-    # argh!
+def _zipfile_content(zipfile_content):
     try:
-        to_unzip_code = base64.b64decode(bytes(zipfile, "utf-8"))
+        to_unzip_code = base64.b64decode(bytes(zipfile_content, "utf-8"))
     except Exception:
-        to_unzip_code = base64.b64decode(zipfile)
+        to_unzip_code = base64.b64decode(zipfile_content)
 
     sha_code = hashlib.sha256(to_unzip_code)
     base64ed_sha = base64.b64encode(sha_code.digest()).decode("utf-8")
@@ -178,11 +176,13 @@ def _s3_content(key):
     return key.value, key.size, base64ed_sha, sha_hex_digest
 
 
-def _validate_s3_bucket_and_key(data):
+def _validate_s3_bucket_and_key(account_id, data):
     key = None
     try:
         # FIXME: does not validate bucket region
-        key = s3_backend.get_object(data["S3Bucket"], data["S3Key"])
+        key = s3_backends[account_id]["global"].get_object(
+            data["S3Bucket"], data["S3Key"]
+        )
     except MissingBucket:
         if do_validate_s3():
             raise InvalidParameterValueException(
@@ -211,18 +211,19 @@ class Permission(CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
         properties = cloudformation_json["Properties"]
-        backend = lambda_backends[region_name]
+        backend = lambda_backends[account_id][region_name]
         fn = backend.get_function(properties["FunctionName"])
         fn.policy.add_statement(raw=json.dumps(properties))
         return Permission(region=region_name)
 
 
 class LayerVersion(CloudFormationModel):
-    def __init__(self, spec, region):
+    def __init__(self, spec, account_id, region):
         # required
+        self.account_id = account_id
         self.region = region
         self.name = spec["LayerName"]
         self.content = spec["Content"]
@@ -247,7 +248,7 @@ class LayerVersion(CloudFormationModel):
                 self.code_digest,
             ) = _zipfile_content(self.content["ZipFile"])
         else:
-            key = _validate_s3_bucket_and_key(self.content)
+            key = _validate_s3_bucket_and_key(account_id, data=self.content)
             if key:
                 (
                     self.code_bytes,
@@ -260,7 +261,7 @@ class LayerVersion(CloudFormationModel):
     def arn(self):
         if self.version:
             return make_layer_ver_arn(
-                self.region, get_account_id(), self.name, self.version
+                self.region, self.account_id, self.name, self.version
             )
         raise ValueError("Layer version is not set")
 
@@ -296,7 +297,7 @@ class LayerVersion(CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
         properties = cloudformation_json["Properties"]
         optional_properties = ("Description", "CompatibleRuntimes", "LicenseInfo")
@@ -310,21 +311,30 @@ class LayerVersion(CloudFormationModel):
             if prop in properties:
                 spec[prop] = properties[prop]
 
-        backend = lambda_backends[region_name]
+        backend = lambda_backends[account_id][region_name]
         layer_version = backend.publish_layer_version(spec)
         return layer_version
 
 
 class LambdaAlias(BaseModel):
     def __init__(
-        self, region, name, function_name, function_version, description, routing_config
+        self,
+        account_id,
+        region,
+        name,
+        function_name,
+        function_version,
+        description,
+        routing_config,
     ):
-        self.arn = f"arn:aws:lambda:{region}:{get_account_id()}:function:{function_name}:{name}"
+        self.arn = (
+            f"arn:aws:lambda:{region}:{account_id}:function:{function_name}:{name}"
+        )
         self.name = name
         self.function_version = function_version
         self.description = description
         self.routing_config = routing_config
-        self.revision_id = str(uuid4())
+        self.revision_id = str(random.uuid4())
 
     def update(self, description, function_version, routing_config):
         if description is not None:
@@ -346,11 +356,13 @@ class LambdaAlias(BaseModel):
 
 
 class Layer(object):
-    def __init__(self, name, region):
-        self.region = region
-        self.name = name
+    def __init__(self, layer_version: LayerVersion):
+        self.region = layer_version.region
+        self.name = layer_version.name
 
-        self.layer_arn = make_layer_arn(region, get_account_id(), self.name)
+        self.layer_arn = make_layer_arn(
+            self.region, layer_version.account_id, self.name
+        )
         self._latest_version = 0
         self.layer_versions = {}
 
@@ -363,28 +375,34 @@ class Layer(object):
         self.layer_versions.pop(str(layer_version), None)
 
     def to_dict(self):
+        if not self.layer_versions:
+            return {}
+
+        last_key = sorted(self.layer_versions.keys(), key=lambda version: int(version))[
+            -1
+        ]
         return {
             "LayerName": self.name,
             "LayerArn": self.layer_arn,
-            "LatestMatchingVersion": self.layer_versions[
-                str(self._latest_version)
-            ].get_layer_version(),
+            "LatestMatchingVersion": self.layer_versions[last_key].get_layer_version(),
         }
 
 
 class LambdaFunction(CloudFormationModel, DockerModel):
-    def __init__(self, spec, region, version=1):
+    def __init__(self, account_id, spec, region, version=1):
         DockerModel.__init__(self)
         # required
+        self.account_id = account_id
         self.region = region
         self.code = spec["Code"]
         self.function_name = spec["FunctionName"]
-        self.handler = spec["Handler"]
+        self.handler = spec.get("Handler")
         self.role = spec["Role"]
-        self.run_time = spec["Runtime"]
-        self.logs_backend = logs_backends[self.region]
+        self.run_time = spec.get("Runtime")
+        self.logs_backend = logs_backends[account_id][self.region]
         self.environment_vars = spec.get("Environment", {}).get("Variables", {})
         self.policy = None
+        self.url_config = None
         self.state = "Active"
         self.reserved_concurrency = spec.get("ReservedConcurrentExecutions", None)
 
@@ -420,10 +438,10 @@ class LambdaFunction(CloudFormationModel, DockerModel):
             ) = _zipfile_content(self.code["ZipFile"])
 
             # TODO: we should be putting this in a lambda bucket
-            self.code["UUID"] = str(uuid.uuid4())
+            self.code["UUID"] = str(random.uuid4())
             self.code["S3Key"] = "{}-{}".format(self.function_name, self.code["UUID"])
-        else:
-            key = _validate_s3_bucket_and_key(self.code)
+        elif "S3Bucket" in self.code:
+            key = _validate_s3_bucket_and_key(self.account_id, data=self.code)
             if key:
                 (
                     self.code_bytes,
@@ -435,9 +453,14 @@ class LambdaFunction(CloudFormationModel, DockerModel):
                 self.code_bytes = ""
                 self.code_size = 0
                 self.code_sha_256 = ""
+        elif "ImageUri" in self.code:
+            self.code_sha_256 = hashlib.sha256(
+                self.code["ImageUri"].encode("utf-8")
+            ).hexdigest()
+            self.code_size = 0
 
         self.function_arn = make_function_arn(
-            self.region, get_account_id(), self.function_name
+            self.region, self.account_id, self.function_name
         )
 
         if spec.get("Tags"):
@@ -449,7 +472,7 @@ class LambdaFunction(CloudFormationModel, DockerModel):
 
     def set_version(self, version):
         self.function_arn = make_function_ver_arn(
-            self.region, get_account_id(), self.function_name, version
+            self.region, self.account_id, self.function_name, version
         )
         self.version = version
         self.last_modified = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
@@ -469,7 +492,7 @@ class LambdaFunction(CloudFormationModel, DockerModel):
         return json.dumps(self.get_configuration())
 
     def _get_layers_data(self, layers_versions_arns):
-        backend = lambda_backends[self.region]
+        backend = lambda_backends[self.account_id][self.region]
         layer_versions = [
             backend.layers_versions_by_arn(layer_version)
             for layer_version in layers_versions_arns
@@ -520,26 +543,33 @@ class LambdaFunction(CloudFormationModel, DockerModel):
         return config
 
     def get_code(self):
-        code = {
-            "Code": {
+        resp = {"Configuration": self.get_configuration()}
+        if "S3Key" in self.code:
+            resp["Code"] = {
                 "Location": "s3://awslambda-{0}-tasks.s3-{0}.amazonaws.com/{1}".format(
                     self.region, self.code["S3Key"]
                 ),
                 "RepositoryType": "S3",
-            },
-            "Configuration": self.get_configuration(),
-        }
+            }
+        elif "ImageUri" in self.code:
+            resp["Code"] = {
+                "RepositoryType": "ECR",
+                "ImageUri": self.code.get("ImageUri"),
+                "ResolvedImageUri": self.code.get("ImageUri").split(":")[0]
+                + "@sha256:"
+                + self.code_sha_256,
+            }
         if self.tags:
-            code["Tags"] = self.tags
+            resp["Tags"] = self.tags
         if self.reserved_concurrency:
-            code.update(
+            resp.update(
                 {
                     "Concurrency": {
                         "ReservedConcurrentExecutions": self.reserved_concurrency
                     }
                 }
             )
-        return code
+        return resp
 
     def update_configuration(self, config_updates):
         for key, value in config_updates.items():
@@ -579,13 +609,13 @@ class LambdaFunction(CloudFormationModel, DockerModel):
             ) = _zipfile_content(updated_spec["ZipFile"])
 
             # TODO: we should be putting this in a lambda bucket
-            self.code["UUID"] = str(uuid.uuid4())
+            self.code["UUID"] = str(random.uuid4())
             self.code["S3Key"] = "{}-{}".format(self.function_name, self.code["UUID"])
         elif "S3Bucket" in updated_spec and "S3Key" in updated_spec:
             key = None
             try:
                 # FIXME: does not validate bucket region
-                key = s3_backend.get_object(
+                key = s3_backends[self.account_id]["global"].get_object(
                     updated_spec["S3Bucket"], updated_spec["S3Key"]
                 )
             except MissingBucket:
@@ -726,7 +756,7 @@ class LambdaFunction(CloudFormationModel, DockerModel):
 
     def save_logs(self, output):
         # Send output to "logs" backend
-        invoke_id = uuid.uuid4().hex
+        invoke_id = random.uuid4().hex
         log_stream_name = (
             "{date.year}/{date.month:02d}/{date.day:02d}/[{version}]{invoke_id}".format(
                 date=datetime.datetime.utcnow(),
@@ -744,7 +774,6 @@ class LambdaFunction(CloudFormationModel, DockerModel):
         )
 
     def invoke(self, body, request_headers, response_headers):
-
         if body:
             body = json.loads(body)
         else:
@@ -775,7 +804,7 @@ class LambdaFunction(CloudFormationModel, DockerModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
         properties = cloudformation_json["Properties"]
         optional_properties = (
@@ -811,7 +840,7 @@ class LambdaFunction(CloudFormationModel, DockerModel):
                 cls._create_zipfile_from_plaintext_code(spec["Code"]["ZipFile"])
             )
 
-        backend = lambda_backends[region_name]
+        backend = lambda_backends[account_id][region_name]
         fn = backend.create_function(spec)
         return fn
 
@@ -823,12 +852,17 @@ class LambdaFunction(CloudFormationModel, DockerModel):
         from moto.cloudformation.exceptions import UnformattedGetAttTemplateException
 
         if attribute_name == "Arn":
-            return make_function_arn(self.region, get_account_id(), self.function_name)
+            return make_function_arn(self.region, self.account_id, self.function_name)
         raise UnformattedGetAttTemplateException()
 
     @classmethod
     def update_from_cloudformation_json(
-        cls, original_resource, new_resource_name, cloudformation_json, region_name
+        cls,
+        original_resource,
+        new_resource_name,
+        cloudformation_json,
+        account_id,
+        region_name,
     ):
         updated_props = cloudformation_json["Properties"]
         original_resource.update_configuration(updated_props)
@@ -849,8 +883,8 @@ class LambdaFunction(CloudFormationModel, DockerModel):
         zip_output.seek(0)
         return zip_output.read()
 
-    def delete(self, region):
-        lambda_backends[region].delete_function(self.function_name)
+    def delete(self, account_id, region):
+        lambda_backends[account_id][region].delete_function(self.function_name)
 
     def delete_alias(self, name):
         self._aliases.pop(name, None)
@@ -858,11 +892,18 @@ class LambdaFunction(CloudFormationModel, DockerModel):
     def get_alias(self, name):
         if name in self._aliases:
             return self._aliases[name]
-        arn = f"arn:aws:lambda:{self.region}:{get_account_id()}:function:{self.function_name}:{name}"
+        arn = f"arn:aws:lambda:{self.region}:{self.account_id}:function:{self.function_name}:{name}"
         raise UnknownAliasException(arn)
+
+    def has_alias(self, alias_name) -> bool:
+        try:
+            return self.get_alias(alias_name) is not None
+        except UnknownAliasException:
+            return False
 
     def put_alias(self, name, description, function_version, routing_config):
         alias = LambdaAlias(
+            account_id=self.account_id,
             region=self.region,
             name=name,
             function_name=self.function_name,
@@ -878,6 +919,48 @@ class LambdaFunction(CloudFormationModel, DockerModel):
         alias.update(description, function_version, routing_config)
         return alias
 
+    def create_url_config(self, config):
+        self.url_config = FunctionUrlConfig(function=self, config=config)
+        return self.url_config
+
+    def delete_url_config(self):
+        self.url_config = None
+
+    def get_url_config(self):
+        if not self.url_config:
+            raise FunctionUrlConfigNotFound()
+        return self.url_config
+
+    def update_url_config(self, config):
+        self.url_config.update(config)
+        return self.url_config
+
+
+class FunctionUrlConfig:
+    def __init__(self, function: LambdaFunction, config):
+        self.function = function
+        self.config = config
+        self.url = f"https://{random.uuid4().hex}.lambda-url.{function.region}.on.aws"
+        self.created = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+        self.last_modified = self.created
+
+    def to_dict(self):
+        return {
+            "FunctionUrl": self.url,
+            "FunctionArn": self.function.function_arn,
+            "AuthType": self.config.get("AuthType"),
+            "Cors": self.config.get("Cors"),
+            "CreationTime": self.created,
+            "LastModifiedTime": self.last_modified,
+        }
+
+    def update(self, new_config):
+        if new_config.get("Cors"):
+            self.config["Cors"] = new_config["Cors"]
+        if new_config.get("AuthType"):
+            self.config["AuthType"] = new_config["AuthType"]
+        self.last_modified = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+
 
 class EventSourceMapping(CloudFormationModel):
     def __init__(self, spec):
@@ -892,7 +975,7 @@ class EventSourceMapping(CloudFormationModel):
         self.starting_position_timestamp = spec.get("StartingPositionTimestamp", None)
 
         self.function_arn = spec["FunctionArn"]
-        self.uuid = str(uuid.uuid4())
+        self.uuid = str(random.uuid4())
         self.last_modified = time.mktime(datetime.datetime.utcnow().timetuple())
 
     def _get_service_source_from_arn(self, event_source_arn):
@@ -952,8 +1035,8 @@ class EventSourceMapping(CloudFormationModel):
             "StateTransitionReason": "User initiated",
         }
 
-    def delete(self, region_name):
-        lambda_backend = lambda_backends[region_name]
+    def delete(self, account_id, region_name):
+        lambda_backend = lambda_backends[account_id][region_name]
         lambda_backend.delete_event_source_mapping(self.uuid)
 
     @staticmethod
@@ -967,27 +1050,32 @@ class EventSourceMapping(CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
         properties = cloudformation_json["Properties"]
-        lambda_backend = lambda_backends[region_name]
+        lambda_backend = lambda_backends[account_id][region_name]
         return lambda_backend.create_event_source_mapping(properties)
 
     @classmethod
     def update_from_cloudformation_json(
-        cls, original_resource, new_resource_name, cloudformation_json, region_name
+        cls,
+        original_resource,
+        new_resource_name,
+        cloudformation_json,
+        account_id,
+        region_name,
     ):
         properties = cloudformation_json["Properties"]
         event_source_uuid = original_resource.uuid
-        lambda_backend = lambda_backends[region_name]
+        lambda_backend = lambda_backends[account_id][region_name]
         return lambda_backend.update_event_source_mapping(event_source_uuid, properties)
 
     @classmethod
     def delete_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name
+        cls, resource_name, cloudformation_json, account_id, region_name
     ):
         properties = cloudformation_json["Properties"]
-        lambda_backend = lambda_backends[region_name]
+        lambda_backend = lambda_backends[account_id][region_name]
         esms = lambda_backend.list_event_source_mappings(
             event_source_arn=properties["EventSourceArn"],
             function_name=properties["FunctionName"],
@@ -995,7 +1083,7 @@ class EventSourceMapping(CloudFormationModel):
 
         for esm in esms:
             if esm.uuid == resource_name:
-                esm.delete(region_name)
+                esm.delete(account_id, region_name)
 
     @property
     def physical_resource_id(self):
@@ -1020,33 +1108,31 @@ class LambdaVersion(CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
         properties = cloudformation_json["Properties"]
         function_name = properties["FunctionName"]
-        func = lambda_backends[region_name].publish_function(function_name)
+        func = lambda_backends[account_id][region_name].publish_function(function_name)
         spec = {"Version": func.version}
         return LambdaVersion(spec)
 
 
 class LambdaStorage(object):
-    def __init__(self, region_name):
+    def __init__(self, region_name, account_id):
         # Format 'func_name' {'versions': []}
         self._functions = {}
-        self._aliases = dict()
         self._arns = weakref.WeakValueDictionary()
         self.region_name = region_name
+        self.account_id = account_id
 
     def _get_latest(self, name):
         return self._functions[name]["latest"]
 
-    def _get_version(self, name, version):
-        index = version - 1
-
-        try:
-            return self._functions[name]["versions"][index]
-        except IndexError:
-            return None
+    def _get_version(self, name: str, version: str):
+        for config in self._functions[name]["versions"]:
+            if str(config.version) == version or config.has_alias(version):
+                return config
+        return None
 
     def delete_alias(self, name, function_name):
         fn = self.get_function_by_name_or_arn(function_name)
@@ -1075,10 +1161,10 @@ class LambdaStorage(object):
         if qualifier is None:
             return self._get_latest(name)
 
-        try:
-            return self._get_version(name, int(qualifier))
-        except ValueError:
+        if qualifier.lower() == "$latest":
             return self._functions[name]["latest"]
+
+        return self._get_version(name, qualifier)
 
     def list_versions_by_function(self, name):
         if name not in self._functions:
@@ -1096,7 +1182,9 @@ class LambdaStorage(object):
             arn = ":".join(arn.split(":")[0:-1])
         return self._arns.get(arn, None)
 
-    def get_function_by_name_or_arn(self, name_or_arn, qualifier=None):
+    def get_function_by_name_or_arn(
+        self, name_or_arn, qualifier=None
+    ) -> LambdaFunction:
         fn = self.get_function_by_name(name_or_arn, qualifier) or self.get_arn(
             name_or_arn
         )
@@ -1104,7 +1192,7 @@ class LambdaStorage(object):
             if name_or_arn.startswith("arn:aws"):
                 arn = name_or_arn
             else:
-                arn = make_function_arn(self.region_name, get_account_id(), name_or_arn)
+                arn = make_function_arn(self.region_name, self.account_id, name_or_arn)
             if qualifier:
                 arn = f"{arn}:{qualifier}"
             raise UnknownFunctionException(arn)
@@ -1118,9 +1206,10 @@ class LambdaStorage(object):
         valid_role = re.match(InvalidRoleFormat.pattern, fn.role)
         if valid_role:
             account = valid_role.group(2)
-            if account != get_account_id():
+            if account != self.account_id:
                 raise CrossAccountNotAllowed()
             try:
+                iam_backend = iam_backends[self.account_id]["global"]
                 iam_backend.get_role_by_arn(fn.role)
             except IAMNotFoundException:
                 raise InvalidParameterValueException(
@@ -1224,13 +1313,13 @@ class LayerStorage(object):
         :param layer_version: LayerVersion
         """
         if layer_version.name not in self._layers:
-            self._layers[layer_version.name] = Layer(
-                layer_version.name, layer_version.region
-            )
+            self._layers[layer_version.name] = Layer(layer_version)
         self._layers[layer_version.name].attach_version(layer_version)
 
     def list_layers(self):
-        return [layer.to_dict() for layer in self._layers.values()]
+        return [
+            layer.to_dict() for layer in self._layers.values() if layer.layer_versions
+        ]
 
     def delete_layer_version(self, layer_name, layer_version):
         self._layers[layer_name].delete_version(layer_version)
@@ -1310,7 +1399,7 @@ class LambdaBackend(BaseBackend):
 
     def __init__(self, region_name, account_id):
         super().__init__(region_name, account_id)
-        self._lambdas = LambdaStorage(region_name=region_name)
+        self._lambdas = LambdaStorage(region_name=region_name, account_id=account_id)
         self._event_source_mappings = {}
         self._layers = LayerStorage()
 
@@ -1349,7 +1438,12 @@ class LambdaBackend(BaseBackend):
         if function_name is None:
             raise RESTError("InvalidParameterValueException", "Missing FunctionName")
 
-        fn = LambdaFunction(spec, self.region_name, version="$LATEST")
+        fn = LambdaFunction(
+            account_id=self.account_id,
+            spec=spec,
+            region=self.region_name,
+            version="$LATEST",
+        )
 
         self._lambdas.put_function(fn)
 
@@ -1360,6 +1454,37 @@ class LambdaBackend(BaseBackend):
             )  # We don't want to change the actual version - just the return value
             fn.version = ver.version
         return fn
+
+    def create_function_url_config(self, name_or_arn, config):
+        """
+        The Qualifier-parameter is not yet implemented.
+        Function URLs are not yet mocked, so invoking them will fail
+        """
+        function = self._lambdas.get_function_by_name_or_arn(name_or_arn)
+        return function.create_url_config(config)
+
+    def delete_function_url_config(self, name_or_arn):
+        """
+        The Qualifier-parameter is not yet implemented
+        """
+        function = self._lambdas.get_function_by_name_or_arn(name_or_arn)
+        function.delete_url_config()
+
+    def get_function_url_config(self, name_or_arn):
+        """
+        The Qualifier-parameter is not yet implemented
+        """
+        function = self._lambdas.get_function_by_name_or_arn(name_or_arn)
+        if not function:
+            raise UnknownFunctionException(arn=name_or_arn)
+        return function.get_url_config()
+
+    def update_function_url_config(self, name_or_arn, config):
+        """
+        The Qualifier-parameter is not yet implemented
+        """
+        function = self._lambdas.get_function_by_name_or_arn(name_or_arn)
+        return function.update_url_config(config)
 
     def create_event_source_mapping(self, spec):
         required = ["EventSourceArn", "FunctionName"]
@@ -1375,7 +1500,8 @@ class LambdaBackend(BaseBackend):
             raise RESTError("ResourceNotFoundException", "Invalid FunctionName")
 
         # Validate queue
-        for queue in sqs_backends[self.region_name].queues.values():
+        sqs_backend = sqs_backends[self.account_id][self.region_name]
+        for queue in sqs_backend.queues.values():
             if queue.queue_arn == spec["EventSourceArn"]:
                 if queue.lambda_event_source_mappings.get("func.function_arn"):
                     # TODO: Correct exception?
@@ -1396,15 +1522,15 @@ class LambdaBackend(BaseBackend):
                     queue.lambda_event_source_mappings[esm.function_arn] = esm
 
                     return esm
-        for stream in json.loads(
-            dynamodbstreams_backends[self.region_name].list_streams()
-        )["Streams"]:
+        ddbstream_backend = dynamodbstreams_backends[self.account_id][self.region_name]
+        ddb_backend = dynamodb_backends[self.account_id][self.region_name]
+        for stream in json.loads(ddbstream_backend.list_streams())["Streams"]:
             if stream["StreamArn"] == spec["EventSourceArn"]:
                 spec.update({"FunctionArn": func.function_arn})
                 esm = EventSourceMapping(spec)
                 self._event_source_mappings[esm.uuid] = esm
                 table_name = stream["TableName"]
-                table = dynamodb_backends[self.region_name].get_table(table_name)
+                table = ddb_backend.get_table(table_name)
                 table.lambda_event_source_mappings[esm.function_arn] = esm
                 return esm
         raise RESTError("ResourceNotFoundException", "Invalid EventSourceArn")
@@ -1414,7 +1540,9 @@ class LambdaBackend(BaseBackend):
         for param in required:
             if not spec.get(param):
                 raise InvalidParameterValueException("Missing {}".format(param))
-        layer_version = LayerVersion(spec, self.region_name)
+        layer_version = LayerVersion(
+            spec, account_id=self.account_id, region=self.region_name
+        )
         self._layers.put_layer_version(layer_version)
         return layer_version
 
@@ -1574,7 +1702,7 @@ class LambdaBackend(BaseBackend):
     ):
         data = {
             "messageType": "DATA_MESSAGE",
-            "owner": get_account_id(),
+            "owner": self.account_id,
             "logGroup": log_group_name,
             "logStream": log_stream_name,
             "subscriptionFilters": [filter_name],
@@ -1605,7 +1733,7 @@ class LambdaBackend(BaseBackend):
 
     def add_permission(self, function_name, qualifier, raw):
         fn = self.get_function(function_name, qualifier)
-        fn.policy.add_statement(raw, qualifier)
+        return fn.policy.add_statement(raw, qualifier)
 
     def remove_permission(self, function_name, sid, revision=""):
         fn = self.get_function(function_name)
@@ -1639,6 +1767,9 @@ class LambdaBackend(BaseBackend):
         return fn.update_configuration(body) if fn else None
 
     def invoke(self, function_name, qualifier, body, headers, response_headers):
+        """
+        Invoking a Function with PackageType=Image is not yet supported.
+        """
         fn = self.get_function(function_name, qualifier)
         if fn:
             payload = fn.invoke(body, headers, response_headers)
@@ -1666,4 +1797,4 @@ def do_validate_s3():
     return os.environ.get("VALIDATE_LAMBDA_S3", "") in ["", "1", "true"]
 
 
-lambda_backends = BackendDict(LambdaBackend, "lambda")
+lambda_backends: Mapping[str, LambdaBackend] = BackendDict(LambdaBackend, "lambda")

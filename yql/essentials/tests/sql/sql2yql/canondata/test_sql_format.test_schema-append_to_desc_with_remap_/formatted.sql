@@ -7,7 +7,7 @@ SELECT
 FROM
     Input
 WHERE
-    key > "000"
+    key > '000'
 ORDER BY
     key DESC,
     subkey DESC

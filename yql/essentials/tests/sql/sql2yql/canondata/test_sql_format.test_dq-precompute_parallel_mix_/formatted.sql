@@ -1,6 +1,6 @@
 USE plato;
 
-$a =
+$a = (
     SELECT
         key
     FROM
@@ -8,9 +8,9 @@ $a =
     ORDER BY
         key
     LIMIT 1
-;
+);
 
-$b =
+$b = (
     SELECT
         key
     FROM
@@ -18,7 +18,7 @@ $b =
     ORDER BY
         key
     LIMIT 1 OFFSET 1
-;
+);
 
 INSERT INTO Output1
 SELECT

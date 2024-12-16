@@ -141,7 +141,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[row.col2,row.col4,row.col5,row.col6,row.col3,row.col7,row.col1]"
                                             },
                                             {
                                                 "Inputs": [

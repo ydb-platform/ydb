@@ -1,6 +1,6 @@
 USE plato;
 
-PRAGMA yt.MapJoinLimit = "1M";
+PRAGMA yt.MapJoinLimit = '1M';
 
 $t = (
     SELECT
@@ -21,5 +21,5 @@ FROM
 LEFT JOIN
     Input3 AS r
 ON
-    l.key == coalesce("" || r.key, "")
+    l.key == coalesce('' || r.key, '')
 ;

@@ -18,6 +18,7 @@ class TRetryfulWriterV2
 {
 public:
     TRetryfulWriterV2(
+        const IRawClientPtr& rawClient,
         IClientRetryPolicyPtr clientRetryPolicy,
         ITransactionPingerPtr transactionPinger,
         const TClientContext& context,

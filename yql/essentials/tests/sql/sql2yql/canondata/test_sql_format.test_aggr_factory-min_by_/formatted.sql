@@ -5,13 +5,13 @@ $t = AsList(
     AsStruct(2 AS key, 100 AS value)
 );
 
-$f = AGGREGATION_FACTORY("minby");
+$f = AGGREGATION_FACTORY('minby');
 
 SELECT
     Yql::Aggregate(
         $t, AsTuple(), AsTuple(
             AsTuple(
-                AsAtom("res"),
+                AsAtom('res'),
                 $f(
                     ListItemType(TypeOf($t)), ($z) -> {
                         RETURN AsTuple($z.value, $z.key);
@@ -22,13 +22,13 @@ SELECT
     )
 ;
 
-$f = AGGREGATION_FACTORY("minby", 10);
+$f = AGGREGATION_FACTORY('minby', 10);
 
 SELECT
     Yql::Aggregate(
         $t, AsTuple(), AsTuple(
             AsTuple(
-                AsAtom("res"),
+                AsAtom('res'),
                 $f(
                     ListItemType(TypeOf($t)), ($z) -> {
                         RETURN AsTuple($z.value, $z.key);

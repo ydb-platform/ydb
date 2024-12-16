@@ -1,7 +1,7 @@
 USE plato;
 
 $v = ($x) -> {
-    RETURN ListFilter(["a", "b"], ($y) -> ($y == $x));
+    RETURN ListFilter(['a', 'b'], ($y) -> ($y == $x));
 };
 
 $k = ($x) -> {

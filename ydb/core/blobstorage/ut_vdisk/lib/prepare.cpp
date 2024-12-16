@@ -163,6 +163,7 @@ void TAllPDisks::ActorSetupCmd(NActors::TActorSystemSetup *setup, ui32 node,
                                            TPDiskCategory(deviceType, 0).GetRaw()));
         pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
+        pDiskConfig->ReadOnly = inst.ReadOnly;
         const NPDisk::TMainKey mainKey{ .Keys = { NPDisk::YdbDefaultPDiskSequence }, .IsInitialized = true };
         TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(),
                     mainKey, counters), TMailboxType::Revolving, 0);
@@ -250,7 +251,7 @@ bool TDefaultVDiskSetup::SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pd
 
     NKikimr::TVDiskConfig::TBaseInfo baseInfo(vdisk.VDiskID, pdisk.PDiskActorID, pdisk.PDiskGuid,
             pdisk.PDiskID, NKikimr::NPDisk::DEVICE_TYPE_ROT, slotId,
-            NKikimrBlobStorage::TVDiskKind::Default, initOwnerRound, {});
+            NKikimrBlobStorage::TVDiskKind::Default, initOwnerRound, {}, false, {}, 0, 0, pdisk.ReadOnly);
     vdisk.Cfg = MakeIntrusive<NKikimr::TVDiskConfig>(baseInfo);
 
     for (auto &modifier : ConfigModifiers) {

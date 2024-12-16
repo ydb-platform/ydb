@@ -1,20 +1,20 @@
 USE plato;
 
-$ou =
+$ou = (
     SELECT
         *
     FROM
         Input
-;
+);
 
-$a =
+$a = (
     SELECT
         key
     FROM
         $ou
     WHERE
         key > '0'
-;
+);
 
 INSERT INTO @a
 SELECT
@@ -30,7 +30,7 @@ SELECT
 FROM
     $ou
 WHERE
-    subkey > "0"
+    subkey > '0'
     AND key != $a
 ORDER BY
     key

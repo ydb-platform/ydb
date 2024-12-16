@@ -1,7 +1,7 @@
 USE plato;
 
 PRAGMA DisableSimpleColumns;
-PRAGMA yt.JoinMergeTablesLimit = "100";
+PRAGMA yt.JoinMergeTablesLimit = '100';
 
 SELECT
     *
@@ -11,7 +11,7 @@ FROM (
     FROM
         Input
     WHERE
-        key < "020"
+        key < '020'
 ) AS a
 LEFT ONLY JOIN (
     SELECT
@@ -19,7 +19,7 @@ LEFT ONLY JOIN (
     FROM
         Input
     WHERE
-        key < "010"
+        key < '010'
 ) AS b
 ON
     a.subkey == b.subkey

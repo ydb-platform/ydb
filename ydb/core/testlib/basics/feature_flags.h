@@ -19,7 +19,6 @@ public:
 
     FEATURE_FLAG_SETTER(AllowYdbRequestsWithoutDatabase)
     FEATURE_FLAG_SETTER(EnableSystemViews)
-    FEATURE_FLAG_SETTER(CheckDatabaseAccessPermission)
     FEATURE_FLAG_SETTER(EnablePersistentQueryStats)
     FEATURE_FLAG_SETTER(EnablePersistentPartitionStats)
     FEATURE_FLAG_SETTER(AllowUpdateChannelsBindingOfSolomonPartitions)

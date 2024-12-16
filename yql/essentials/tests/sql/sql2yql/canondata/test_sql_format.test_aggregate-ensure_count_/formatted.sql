@@ -1,5 +1,5 @@
 SELECT
-    Ensure(COUNT(*), COUNT(*) > 3U, "WTF?")
+    Ensure(COUNT(*), COUNT(*) > 3U, 'WTF?')
 FROM
     plato.Input
 ;

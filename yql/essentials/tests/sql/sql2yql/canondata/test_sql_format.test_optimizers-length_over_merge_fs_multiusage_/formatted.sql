@@ -1,5 +1,5 @@
 /* postgres can not */
-PRAGMA config.flags("OptimizerFlags", "FieldSubsetEnableMultiusage");
+PRAGMA config.flags('OptimizerFlags', 'FieldSubsetEnableMultiusage');
 
 USE plato;
 
@@ -25,7 +25,7 @@ $filtered = (
     FROM
         $input
     WHERE
-        key IN ("023", "037", "075")
+        key IN ('023', '037', '075')
 );
 
 $filtered_cnt = (

@@ -39,7 +39,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[Arg.c,Arg.d]"
                                             }
                                         ],
                                         "PlanNodeId": 2,

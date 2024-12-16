@@ -117,6 +117,9 @@ namespace NKikimr::NBsController {
                     case NBsController::TPDiskMood::EValue::Restarting:
                         pdisk->SetEntityStatus(NKikimrBlobStorage::RESTART);
                         break;
+                    case NBsController::TPDiskMood::EValue::ReadOnly:
+                        pdisk->SetReadOnly(true);
+                        break;
                 }
 
                 return pdisk;

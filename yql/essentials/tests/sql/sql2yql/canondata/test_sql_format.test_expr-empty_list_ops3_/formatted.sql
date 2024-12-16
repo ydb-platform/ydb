@@ -5,12 +5,12 @@ $pred = ($x) -> {
 };
 
 SELECT
-    ListExtract([], "a"),
+    ListExtract([], 'a'),
     ListTakeWhile([], $pred),
     ListSkipWhile([], $pred),
     ListTakeWhileInclusive([], $pred),
     ListSkipWhileInclusive([], $pred),
-    ListAggregate([], AGGREGATION_FACTORY("Sum")),
+    ListAggregate([], AGGREGATION_FACTORY('Sum')),
     ToDict([]),
     ToMultiDict([]),
     ToSet([]),
@@ -41,12 +41,12 @@ SELECT
         }
     ),
     Yql::LazyList([]),
-    ListExtract(Just([]), "a"),
+    ListExtract(Just([]), 'a'),
     ListTakeWhile(Just([]), $pred),
     ListSkipWhile(Just([]), $pred),
     ListTakeWhileInclusive(Just([]), $pred),
     ListSkipWhileInclusive(Just([]), $pred),
-    ListAggregate(Just([]), AGGREGATION_FACTORY("Sum")),
+    ListAggregate(Just([]), AGGREGATION_FACTORY('Sum')),
     ToDict(Just([])),
     ToMultiDict(Just([])),
     ToSet(Just([])),

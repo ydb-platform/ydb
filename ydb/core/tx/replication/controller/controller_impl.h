@@ -175,6 +175,7 @@ private:
 
     TReplication::TPtr Find(ui64 id) const;
     TReplication::TPtr Find(const TPathId& pathId) const;
+    TReplication::TPtr GetSingle() const;
     void Remove(ui64 id);
 
 private:

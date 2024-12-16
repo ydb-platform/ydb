@@ -114,6 +114,8 @@ struct THeaders {
     TStringBuf Get(TStringBuf name) const; // raw
     size_t Parse(TStringBuf headers);
     TString Render() const;
+
+    bool IsChunkedEncoding() const;
 };
 
 struct THeadersBuilder : THeaders {
@@ -141,7 +143,7 @@ public:
         return true;
     }
 
-    // non-destructive variant of AsString
+    // non-destructive version of AsString
     TString AsString() const {
         return TString(Data(), Size());
     }
@@ -171,6 +173,8 @@ public:
     static TStringBuf GetName();
     void Clear();
     TString GetURL() const;
+    TString GetURI() const;
+    TUrlParameters GetParameters() const;
 };
 
 class THttpResponse {
@@ -437,7 +441,35 @@ public:
         return IsReady() || IsError();
     }
 
-    bool HaveBody() const;
+    bool HasBody() const;
+    bool ExpectedBody() const;
+
+    bool HasHeaders() const {
+        switch (Stage) {
+        case EParseStage::Header:
+        case EParseStage::Body:
+        case EParseStage::ChunkLength:
+        case EParseStage::ChunkData:
+        case EParseStage::Done:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    bool HasCompletedHeaders() const {
+        switch (Stage) {
+        case EParseStage::Body:
+        case EParseStage::ChunkLength:
+        case EParseStage::ChunkData:
+        case EParseStage::Done:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    bool HaveBody() const { return HasBody(); } // deprecated, use HasBody() instead
 
     bool EnsureEnoughSpaceAvailable(size_t need = BufferType::BUFFER_MIN_STEP) {
         bool result = BufferType::EnsureEnoughSpaceAvailable(need);
@@ -596,7 +628,7 @@ public:
         return Stage == ERenderStage::Done;
     }
 
-    void Finish() {
+    void Finish() { // do not use when initiating chunked transfer
         switch (Stage) {
         case ERenderStage::Header:
             FinishHeader();
@@ -699,6 +731,48 @@ protected:
     {}
 };
 
+template<typename BufferType>
+class THttpDataChunk : public BufferType {
+public:
+    bool EndOfData = false;
+
+    THttpDataChunk(TStringBuf data) {
+        SetData(data);
+    }
+
+    bool EnsureEnoughSpaceAvailable(size_t need = BufferType::BUFFER_MIN_STEP) {
+        return BufferType::EnsureEnoughSpaceAvailable(need);
+    }
+
+    void Append(TStringBuf text) {
+        EnsureEnoughSpaceAvailable(text.size());
+        BufferType::Append(text.data(), text.size());
+    }
+
+    void SetData(TStringBuf data) {
+        EnsureEnoughSpaceAvailable(data.size() + 4/*crlfcrlf*/ + 16);
+        std::ostringstream header;
+        header << std::hex << data.size() << "\r\n";
+        Append(header.str());
+        Append(TStringBuf(data));
+        Append("\r\n");
+    }
+
+    void SetEndOfData() {
+        if (!IsEndOfData()) {
+            Append("0\r\n\r\n");
+            EndOfData = true;
+        }
+    }
+
+    bool IsEndOfData() const {
+        return EndOfData;
+    }
+};
+
+class THttpOutgoingDataChunk;
+using THttpOutgoingDataChunkPtr = TIntrusivePtr<THttpOutgoingDataChunk>;
+
 class THttpIncomingRequest;
 using THttpIncomingRequestPtr = TIntrusivePtr<THttpIncomingRequest>;
 
@@ -707,6 +781,9 @@ using THttpOutgoingResponsePtr = TIntrusivePtr<THttpOutgoingResponse>;
 
 class THttpOutgoingRequest;
 using THttpOutgoingRequestPtr = TIntrusivePtr<THttpOutgoingRequest>;
+
+class THttpIncomingResponse;
+using THttpIncomingResponsePtr = TIntrusivePtr<THttpIncomingResponse>;
 
 class THttpIncomingRequest :
         public THttpParser<THttpRequest, TSocketBuffer>,
@@ -758,6 +835,7 @@ public:
     THttpOutgoingResponsePtr CreateResponseTooManyRequests(TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html"); // 429
     THttpOutgoingResponsePtr CreateResponseServiceUnavailable(TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html"); // 503
     THttpOutgoingResponsePtr CreateResponseGatewayTimeout(TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html"); // 504
+    THttpOutgoingResponsePtr CreateResponseTemporaryRedirect(TStringBuf location); // 307
     THttpOutgoingResponsePtr CreateResponse(TStringBuf status, TStringBuf message);
     THttpOutgoingResponsePtr CreateResponse(TStringBuf status, TStringBuf message, const THeaders& headers);
     THttpOutgoingResponsePtr CreateResponse(TStringBuf status, TStringBuf message, const THeaders& headers, TStringBuf body);
@@ -778,9 +856,6 @@ private:
     THttpOutgoingResponsePtr ConstructResponse(TStringBuf status, TStringBuf message);
     void FinishResponse(THttpOutgoingResponsePtr& response, TStringBuf body = TStringBuf());
 };
-
-class THttpIncomingResponse;
-using THttpIncomingResponsePtr = TIntrusivePtr<THttpIncomingResponse>;
 
 class THttpIncomingResponse :
         public THttpParser<THttpResponse, TSocketBuffer>,
@@ -882,11 +957,34 @@ public:
     }
 
     THttpOutgoingResponsePtr Duplicate(THttpIncomingRequestPtr request);
+    THttpOutgoingDataChunkPtr CreateDataChunk(TStringBuf data = {}); // empty chunk means end of data
+
+    TSocketBuffer* GetActiveBuffer();
+    void AddDataChunk(THttpOutgoingDataChunkPtr dataChunk);
 
 // it's temporary accessible for cleanup
 //protected:
     THttpIncomingRequestPtr Request;
+    std::deque<THttpOutgoingDataChunkPtr> DataChunks;
     std::unique_ptr<TSensors> Sensors;
+};
+
+class THttpOutgoingDataChunk :
+        public THttpDataChunk<TSocketBuffer>,
+        public TRefCounted<THttpOutgoingDataChunk, TAtomicCounter> {
+public:
+    THttpOutgoingDataChunk(THttpOutgoingResponsePtr response, TStringBuf data);
+
+    THttpOutgoingResponsePtr GetResponse() const {
+        return Response;
+    }
+
+    THttpIncomingRequestPtr GetRequest() const {
+        return Response->GetRequest();
+    }
+
+protected:
+    THttpOutgoingResponsePtr Response;
 };
 
 }

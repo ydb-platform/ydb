@@ -322,7 +322,6 @@
             "Unicode-DFS-2016",
             "Unicode-Icu-58",
             "Unicode-Mappings",
-            "Unittest-Permissive-License",
             "Unlicense",
             "Unrar",
             "UPL-1.0",
@@ -335,7 +334,6 @@
             "X11-XConsortium-Veillard",
             "YandexOpen",
             "Zlib",
-            "zlib-acknowledgement",
             "ZPL-2.1"
         ]
     },
@@ -369,6 +367,7 @@
             "Service-Default-License",
             "Service-Dll-Harness",
             "Service-Py23-Proxy",
+            "Service-Sourceless-Library",
             "Service-Unknown-License-Java"
         ]
     },

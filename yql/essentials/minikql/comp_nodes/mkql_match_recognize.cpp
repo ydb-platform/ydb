@@ -54,7 +54,7 @@ public:
     )
     : PartitionKey(std::move(partitionKey))
     , Parameters(parameters)
-    , Nfa(nfaTransitions, parameters.MatchedVarsArg, parameters.Defines)
+    , Nfa(nfaTransitions, parameters.MatchedVarsArg, parameters.Defines, parameters.SkipTo)
     , Cache(cache)
     {
     }
@@ -72,10 +72,10 @@ public:
 
     NUdf::TUnboxedValue GetOutputIfReady(TComputationContext& ctx) {
         auto match = Nfa.GetMatched();
-        if (!match.has_value()) {
+        if (!match) {
             return NUdf::TUnboxedValue{};
         }
-        Parameters.MatchedVarsArg->SetValue(ctx, ctx.HolderFactory.Create<TMatchedVarsValue<TRange>>(ctx.HolderFactory, match.value()));
+        Parameters.MatchedVarsArg->SetValue(ctx, ctx.HolderFactory.Create<TMatchedVarsValue<TRange>>(ctx.HolderFactory, match->Vars));
         Parameters.MeasureInputDataArg->SetValue(ctx, ctx.HolderFactory.Create<TMeasureInputDataValue>(
             ctx.HolderFactory.Create<TListValue<TSparseList>>(Rows),
             Parameters.MeasureInputColumnOrder,
@@ -95,9 +95,7 @@ public:
                     break;
             }
         }
-        if (EAfterMatchSkipTo::PastLastRow == Parameters.SkipTo.To) {
-            Nfa.Clear();
-        }
+        Nfa.AfterMatchSkip(*match);
         return result;
     }
     bool ProcessEndOfData(TComputationContext& ctx) {

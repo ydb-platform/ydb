@@ -1,5 +1,5 @@
 /* postgres can not */
-$regexp = Pire::Match("q.*");
+$regexp = Pire::Match('q.*');
 
 SELECT
     *

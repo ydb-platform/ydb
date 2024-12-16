@@ -196,13 +196,11 @@ void RegisterCustomProtobufConverter(
     const google::protobuf::Descriptor* descriptor,
     const TProtobufMessageConverter& converter);
 
-#define REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION(ProtoType, Type)                        \
-    YT_ATTRIBUTE_USED static const void* PP_ANONYMOUS_VARIABLE(RegisterIntermediateProtoInteropRepresentation) = \
-        NYson::DoRegisterIntermediateProtoInteropRepresentation<ProtoType, Type, false>();
+#define REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION(ProtoType, Type) \
+    YT_STATIC_INITIALIZER(::NYT::NYson::DoRegisterIntermediateProtoInteropRepresentation<ProtoType, Type, false>());
 
-#define REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION_WITH_OPTIONS(ProtoType, Type)            \
-    YT_ATTRIBUTE_USED static const void* PP_ANONYMOUS_VARIABLE(RegisterIntermediateProtoInteropRepresentationWithOptions) =  \
-        NYson::DoRegisterIntermediateProtoInteropRepresentation<ProtoType, Type, true>();
+#define REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION_WITH_OPTIONS(ProtoType, Type) \
+    YT_STATIC_INITIALIZER(::NYT::NYson::DoRegisterIntermediateProtoInteropRepresentation<ProtoType, Type, true>());
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -219,10 +217,10 @@ void RegisterCustomProtobufBytesFieldConverter(
     const TProtobufMessageBytesFieldConverter& converter);
 
 #define REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(ProtoType, FieldNumber, Type)             \
-    static const void* PP_ANONYMOUS_VARIABLE(RegisterIntermediateProtoInterpBytesFieldRepresentation) = [] {     \
-        NYT::NYson::AddProtobufConverterRegisterAction([] {                                                      \
+    YT_STATIC_INITIALIZER(                                                                                       \
+        ::NYT::NYson::AddProtobufConverterRegisterAction([] {                                                    \
             const auto* descriptor = ProtoType::default_instance().GetDescriptor();                              \
-            NYT::NYson::TProtobufMessageBytesFieldConverter converter;                                           \
+            ::NYT::NYson::TProtobufMessageBytesFieldConverter converter;                                         \
             converter.Serializer = [] (NYT::NYson::IYsonConsumer* consumer, TStringBuf bytes) {                  \
                 Type value;                                                                                      \
                 FromBytes(&value, bytes);                                                                        \
@@ -233,10 +231,8 @@ void RegisterCustomProtobufBytesFieldConverter(
                 Deserialize(value, node);                                                                        \
                 ToBytes(bytes, value);                                                                           \
             };                                                                                                   \
-            NYT::NYson::RegisterCustomProtobufBytesFieldConverter(descriptor, FieldNumber, converter);           \
-        });                                                                                                      \
-        return nullptr;                                                                                          \
-    } ();
+            ::NYT::NYson::RegisterCustomProtobufBytesFieldConverter(descriptor, FieldNumber, converter);         \
+        }));
 
 ////////////////////////////////////////////////////////////////////////////////
 

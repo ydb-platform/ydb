@@ -3,8 +3,8 @@
 /* dq can not */
 /* dqfile can not */
 /* yt can not */
-PRAGMA warning("disable", "4510");
-PRAGMA warning("disable", "1108");
+PRAGMA warning('disable', '4510');
+PRAGMA warning('disable', '1108');
 
 $lst = ListExtend(
     ListFromRange(0, 5000),
@@ -29,8 +29,8 @@ SELECT
             ) ?? FALSE
         ),
         AsTuple(
-            AsAtom("a"),
-            AsAtom("b"),
+            AsAtom('a'),
+            AsAtom('b'),
         )
     )
 ;

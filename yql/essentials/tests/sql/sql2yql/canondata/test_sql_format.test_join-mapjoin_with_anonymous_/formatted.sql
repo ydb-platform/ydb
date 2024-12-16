@@ -3,7 +3,7 @@
 USE plato;
 
 PRAGMA DisableSimpleColumns;
-PRAGMA yt.MapJoinLimit = "1m";
+PRAGMA yt.MapJoinLimit = '1m';
 
 INSERT INTO @tmp
 SELECT
@@ -11,7 +11,7 @@ SELECT
 FROM
     Input
 WHERE
-    key > "100"
+    key > '100'
 ;
 
 COMMIT;

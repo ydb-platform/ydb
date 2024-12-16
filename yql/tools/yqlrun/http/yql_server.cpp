@@ -1,7 +1,5 @@
 #include "yql_server.h"
 
-#include <yql/tools/yqlrun/gateway_spec.h>
-
 #include <yql/essentials/core/cbo/simple/cbo_simple.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
@@ -108,6 +106,7 @@ public:
         pipeline->Add(CreateYtWideFlowTransformer(nullptr), "WideFlow");
         pipeline->Add(CreateYtBlockInputTransformer(nullptr), "BlockInput");
         pipeline->Add(MakePeepholeOptimization(pipeline->GetTypeAnnotationContext()), "PeepHole");
+        pipeline->Add(CreateYtBlockOutputTransformer(nullptr), "BlockOutput");
     }
 };
 
@@ -188,8 +187,6 @@ TProgramPtr MakeFileProgram(const TString& program, TYqlServer& yqlServer,
 
     dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, MakeSimpleCBOOptimizerFactory(), {}));
     dataProvidersInit.push_back(GetPgDataProviderInitializer());
-
-    ExtProviderSpecific(yqlServer.FunctionRegistry, dataProvidersInit, rtmrTableAttributes);
 
     TProgramFactory programFactory(
         true,

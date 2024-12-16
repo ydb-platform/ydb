@@ -29,7 +29,6 @@ public:
 private:
     TMaybeNode<TExprBase> TryTransformMap(TExprBase node, TExprContext& ctx) const {
         auto map = node.Cast<TYtMap>();
-
         if (
             NYql::HasSetting(map.Settings().Ref(), EYtSettingType::BlockInputApplied)
             || !NYql::HasSetting(map.Settings().Ref(), EYtSettingType::BlockInputReady)
@@ -37,7 +36,7 @@ private:
         ) {
             return map;
         }
-        
+
         YQL_CLOG(INFO, ProviderYt) << "Rewrite YtMap with block input";
 
         auto settings = RemoveSetting(map.Settings().Ref(), EYtSettingType::BlockInputReady, ctx);

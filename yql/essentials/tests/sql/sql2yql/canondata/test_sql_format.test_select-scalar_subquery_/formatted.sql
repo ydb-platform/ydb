@@ -9,5 +9,5 @@ $query = (
 );
 
 SELECT
-    $query ?? AsTuple(0, "") AS cnt
+    $query ?? AsTuple(0, '') AS cnt
 ;

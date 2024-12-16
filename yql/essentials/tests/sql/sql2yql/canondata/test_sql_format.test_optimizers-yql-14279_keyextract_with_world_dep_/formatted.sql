@@ -1,19 +1,19 @@
 /* postgres can not */
 USE plato;
 
-$input =
+$input = (
     SELECT
         *
     FROM
-        range("", "Input1", "Input2")
-;
+        range('', 'Input1', 'Input2')
+);
 
-$key =
+$key = (
     SELECT
         min(key)
     FROM
         $input
-;
+);
 
 SELECT
     key,

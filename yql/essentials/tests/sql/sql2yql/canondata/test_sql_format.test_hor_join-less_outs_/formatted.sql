@@ -1,14 +1,14 @@
 /* syntax version 1 */
 /* postgres can not */
-$i1 =
+$i1 = (
     SELECT
         CAST(key AS Int32) ?? 0 AS key,
         '' AS value
     FROM
         plato.Input1
-;
+);
 
-$i2 =
+$i2 = (
     SELECT
         0 AS key,
         value
@@ -20,7 +20,7 @@ $i2 =
         value
     FROM
         plato.Input3
-;
+);
 
 $i3 = (
     SELECT

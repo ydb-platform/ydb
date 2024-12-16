@@ -286,7 +286,7 @@ message TBlobStorageConfig {
         optional NKikimrBlobStorage.EPDiskType PDiskType = 7;
 
         // some extra settings
-        optional bool AutomaticBoxManagement = 4; // invoke BSC DefineHostConfig/DefineBox automatically
+        optional bool AutomaticBoxManagement = 4; // invoke BSC DefineHostConfig/DefineBox automatically (true when unset)
         optional bool AutomaticBootstrap = 9; // whether bootstrap should be performed automatically; PROHIBITED for production
 
         // filled in by config parser, not by user; required for automatic static group creation
@@ -295,6 +295,9 @@ message TBlobStorageConfig {
 
         // generation of the distconf section; when set, one can automatically apply in-filesystem config
         optional uint64 Generation = 8;
+
+        // internally-used field with initial config.yaml loaded on the start
+        optional bytes InitialConfigYaml = 10;
     }
 
     optional TAutoconfigSettings AutoconfigSettings = 6;

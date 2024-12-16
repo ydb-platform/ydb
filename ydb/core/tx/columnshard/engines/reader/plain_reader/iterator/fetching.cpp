@@ -222,6 +222,7 @@ TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(const std::shared_ptr<ID
         }
         size += sizeLocal;
     }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TAllocateMemoryStep::DoExecuteInplace")("source", source->GetSourceIdx())("memory", size);
 
     auto allocation = std::make_shared<TFetchingStepAllocation>(source, size, step, StageIndex);
     NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(source->GetContext()->GetProcessMemoryControlId(),

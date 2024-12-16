@@ -3,15 +3,15 @@
 /* postgres can not */
 USE plato;
 
-PRAGMA yt.UseNativeYtTypes = "1";
-PRAGMA yt.NativeYtTypeCompatibility = "complex";
-PRAGMA yt.MaxInputTables = "2";
+PRAGMA yt.UseNativeYtTypes = '1';
+PRAGMA yt.NativeYtTypeCompatibility = 'complex';
+PRAGMA yt.MaxInputTables = '2';
 
 INSERT INTO Output WITH truncate
 SELECT
     key
 FROM
-    range("")
+    range('')
 WHERE
-    key > "000"
+    key > '000'
 ;

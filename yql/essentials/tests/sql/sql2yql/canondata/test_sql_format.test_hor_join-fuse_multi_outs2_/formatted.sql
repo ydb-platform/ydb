@@ -37,7 +37,7 @@ SELECT
 FROM
     $i
 WHERE
-    key > "100"
+    key > '100'
 ORDER BY
     key
 ;
@@ -55,5 +55,5 @@ SELECT
 FROM
     $j
 WHERE
-    key > "200"
+    key > '200'
 ;

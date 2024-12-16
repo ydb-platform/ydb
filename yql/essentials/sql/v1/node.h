@@ -140,6 +140,8 @@ namespace NSQLTranslationV1 {
         void SetLabel(const TString& label, TMaybe<TPosition> pos = {});
         bool IsImplicitLabel() const;
         void MarkImplicitLabel(bool isImplicitLabel);
+        void SetRefPos(TPosition pos);
+        TMaybe<TPosition> GetRefPos() const;
 
         void SetCountHint(bool isCount);
         bool GetCountHint() const;
@@ -276,6 +278,7 @@ namespace NSQLTranslationV1 {
         TString Label;
         TMaybe<TPosition> LabelPos;
         bool ImplicitLabel = false;
+        TMaybe<TPosition> RefPos;
         mutable TNodeState State;
         bool AsInner = false;
         bool DisableSort_ = false;
@@ -1232,7 +1235,7 @@ namespace NSQLTranslationV1 {
         TNodePtr Format;
         TNodePtr InitialScan;
         TNodePtr VirtualTimestamps;
-        TNodePtr ResolvedTimestamps;
+        TNodePtr BarriersInterval;
         TNodePtr RetentionPeriod;
         TNodePtr TopicAutoPartitioning;
         TNodePtr TopicPartitions;

@@ -84,7 +84,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[row.col4,row.col2,row.col3,row.col1]"
                                             }
                                         ],
                                         "PlanNodeId": 2,

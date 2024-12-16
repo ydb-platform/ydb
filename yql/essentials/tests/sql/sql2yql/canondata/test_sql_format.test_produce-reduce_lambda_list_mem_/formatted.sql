@@ -9,8 +9,8 @@ $udf = YQL::@@(lambda '(key stream) (AsStruct
 $res = (
     REDUCE (
         SELECT
-            AsList("foo") AS key,
-            "123" AS value
+            AsList('foo') AS key,
+            '123' AS value
     )
     ON
         key

@@ -8,7 +8,7 @@ $out = (
     FROM
         `Input`
     WHERE
-        value != "111"
+        value != '111'
 );
 
 $row_count = (

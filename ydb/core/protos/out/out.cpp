@@ -218,8 +218,8 @@ Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode,
     stream << NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode_Name(value);
 }
 
-Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::TTableReplicationConfig::EConsistency, stream, value) {
-    stream << NKikimrSchemeOp::TTableReplicationConfig::EConsistency_Name(value);
+Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::TTableReplicationConfig::EConsistencyLevel, stream, value) {
+    stream << NKikimrSchemeOp::TTableReplicationConfig::EConsistencyLevel_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrSubDomains::EServerlessComputeResourcesMode, stream, value) {

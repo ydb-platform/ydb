@@ -1282,9 +1282,9 @@ std::tuple<TVector<ui64>, TTableId> CreateShardedTable(
         desc->MutableReplicationConfig()->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
     }
 
-    if (opts.ReplicationConsistency_) {
-        desc->MutableReplicationConfig()->SetConsistency(
-            static_cast<NKikimrSchemeOp::TTableReplicationConfig::EConsistency>(*opts.ReplicationConsistency_));
+    if (opts.ReplicationConsistencyLevel_) {
+        desc->MutableReplicationConfig()->SetConsistencyLevel(
+            static_cast<NKikimrSchemeOp::TTableReplicationConfig::EConsistencyLevel>(*opts.ReplicationConsistencyLevel_));
     }
 
     WaitTxNotification(server, sender, RunSchemeTx(*server->GetRuntime(), std::move(request), sender));

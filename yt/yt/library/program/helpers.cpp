@@ -12,7 +12,7 @@
 
 #include <yt/yt/library/tracing/jaeger/tracer.h>
 
-#include <yt/yt/library/profiling/perf/counters.h>
+#include <yt/yt/library/profiling/perf/event_counter_profiler.h>
 
 #include <yt/yt/library/profiling/resource_tracker/resource_tracker.h>
 
@@ -76,7 +76,7 @@ void ConfigureSingletons(const TSingletonsConfigPtr& config)
 
     NTracing::SetGlobalTracer(New<NTracing::TJaegerTracer>(config->Jaeger));
 
-    NProfiling::EnablePerfCounters();
+    NProfiling::EnablePerfEventCounterProfiling();
 
     NTCMalloc::TTCMallocManager::Configure(config->TCMalloc);
 

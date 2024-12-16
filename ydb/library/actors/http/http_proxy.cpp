@@ -181,9 +181,9 @@ protected:
                     } else {
                         ctx.Send(event->Sender,
                             new TEvHttpProxy::TEvResolveHostResponse(
-                                TStringBuilder() 
-                                    << "Resolution failed and no stale cached value has been found to fallback.\n" 
-                                    << "Resolution error: " 
+                                TStringBuilder()
+                                    << "Resolution failed and no stale cached value has been found to fallback.\n"
+                                    << "Resolution error: "
                                     << e.what()
                             )
                         );

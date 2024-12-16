@@ -5,7 +5,7 @@ PRAGMA DisableSimpleColumns;
 /* ignore yt detailed plan diff */
 USE plato;
 
-PRAGMA yt.MapJoinLimit = "10M";
+PRAGMA yt.MapJoinLimit = '10M';
 
 $sizes = (
     SELECT

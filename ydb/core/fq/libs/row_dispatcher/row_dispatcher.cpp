@@ -280,6 +280,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     TString Tenant;
     NFq::NRowDispatcher::IActorFactory::TPtr ActorFactory;
     const ::NMonitoring::TDynamicCounterPtr Counters;
+    const ::NMonitoring::TDynamicCounterPtr CountersRoot;
     TRowDispatcherMetrics Metrics;
     NYql::IPqGateway::TPtr PqGateway;
     NActors::TMon* Monitoring;
@@ -358,6 +359,7 @@ public:
         const TString& tenant,
         const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
+        const ::NMonitoring::TDynamicCounterPtr& countersRoot,
         const NYql::IPqGateway::TPtr& pqGateway,
         NActors::TMon* monitoring = nullptr);
 
@@ -435,6 +437,7 @@ TRowDispatcher::TRowDispatcher(
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
+    const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
     NActors::TMon* monitoring)
     : Config(config)
@@ -445,6 +448,7 @@ TRowDispatcher::TRowDispatcher(
     , Tenant(tenant)
     , ActorFactory(actorFactory)
     , Counters(counters)
+    , CountersRoot(countersRoot)
     , Metrics(counters)
     , PqGateway(pqGateway)
     , Monitoring(monitoring)
@@ -788,6 +792,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 ev->Get()->Record.GetToken(),
                 source.GetAddBearerToToken()),
             Counters,
+            CountersRoot,
             PqGateway,
             MaxSessionBufferSizeBytes
             );
@@ -1055,6 +1060,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
+    const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
     NActors::TMon* monitoring)
 {
@@ -1066,6 +1072,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
         tenant,
         actorFactory,
         counters,
+        countersRoot,
         pqGateway,
         monitoring));
 }

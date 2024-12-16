@@ -3,7 +3,7 @@ USE plato;
 /* postgres can not */
 /* kikimr can not */
 PRAGMA DisableSimpleColumns;
-PRAGMA yt.MapJoinLimit = "1m";
+PRAGMA yt.MapJoinLimit = '1m';
 
 SELECT
     *

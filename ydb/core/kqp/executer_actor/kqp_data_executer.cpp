@@ -338,7 +338,12 @@ public:
         }
     }
 
-    void HandleFinalize(TEvKqpBuffer::TEvResult::TPtr&) {
+    void HandleFinalize(TEvKqpBuffer::TEvResult::TPtr& ev) {
+        if (ev->Get()->Stats) {
+            if (Stats) {
+                Stats->AddBufferStats(std::move(*ev->Get()->Stats));
+            }
+        }
         MakeResponseAndPassAway();
     }
 
@@ -1537,7 +1542,12 @@ private:
 
 private:
     bool IsReadOnlyTx() const {
-        if (Request.TopicOperations.HasOperations()) {
+        if (BufferActorId && TxManager->GetTopicOperations().HasOperations()) {
+            YQL_ENSURE(!Request.UseImmediateEffects);
+            return false;
+        }
+
+        if (!BufferActorId && Request.TopicOperations.HasOperations()) {
             YQL_ENSURE(!Request.UseImmediateEffects);
             return false;
         }
@@ -2107,7 +2117,8 @@ private:
         }
 
         // Single-shard datashard transactions are always immediate
-        ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount) <= 1
+        auto topicSize = (BufferActorId) ? TxManager->GetTopicOperations().GetSize() : Request.TopicOperations.GetSize();
+        ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + topicSize + sourceScanPartitionsCount) <= 1
                     && !UnknownAffectedShardCount
                     && evWriteTxs.empty()
                     && !HasOlapTable;
@@ -2387,6 +2398,7 @@ private:
             }
         }
 
+        YQL_ENSURE(!TxManager);
         Request.TopicOperations.BuildTopicTxs(topicTxs);
 
         const bool needRollback = Request.LocksOp == ELocksOp::Rollback;
@@ -2423,8 +2435,8 @@ private:
             // HTAP transactions always use generic readsets
             !evWriteTxs.empty());
 
-        if (!locksMap.empty() || VolatileTx ||
-            Request.TopicOperations.HasReadOperations() || Request.TopicOperations.HasWriteOperations())
+        if (!locksMap.empty() || VolatileTx || Request.TopicOperations.HasReadOperations()
+            || Request.TopicOperations.HasWriteOperations())
         {
             YQL_ENSURE(Request.LocksOp == ELocksOp::Commit || Request.LocksOp == ELocksOp::Rollback || VolatileTx);
 
@@ -2771,6 +2783,7 @@ private:
     void ExecuteTopicTabletTransactions(TTopicTabletTxs& topicTxs) {
         YQL_ENSURE(!TxManager);
         TMaybe<ui64> writeId;
+
         if (Request.TopicOperations.HasWriteId()) {
             writeId = Request.TopicOperations.GetWriteId();
         }

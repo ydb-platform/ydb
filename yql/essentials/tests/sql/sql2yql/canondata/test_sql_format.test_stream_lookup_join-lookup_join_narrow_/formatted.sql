@@ -1,4 +1,4 @@
-PRAGMA dq.UseWideChannels = "false";
+PRAGMA dq.UseWideChannels = 'false';
 
 USE plato;
 

@@ -4,7 +4,7 @@ USE plato;
 --INSERT INTO Output
 SELECT
     odd,
-    sum(WeakField(data3, "int32") + WeakField(datahole3, "uint32", 999)) AS score
+    sum(WeakField(data3, 'int32') + WeakField(datahole3, 'uint32', 999)) AS score
 FROM
     Input4
 GROUP BY

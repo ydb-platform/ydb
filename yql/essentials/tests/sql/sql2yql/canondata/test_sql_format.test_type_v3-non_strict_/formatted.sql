@@ -3,8 +3,8 @@
 /* postgres can not */
 USE plato;
 
-PRAGMA yt.UseNativeYtTypes = "1";
-PRAGMA yt.NativeYtTypeCompatibility = "complex";
+PRAGMA yt.UseNativeYtTypes = '1';
+PRAGMA yt.NativeYtTypeCompatibility = 'complex';
 
 INSERT INTO Output
 SELECT

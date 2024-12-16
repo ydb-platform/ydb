@@ -3,13 +3,13 @@
 USE plato;
 
 -- add non-optional partition key
-$src =
+$src = (
     SELECT
         t.*,
-        user ?? "u0" AS user_nonopt
+        user ?? 'u0' AS user_nonopt
     FROM
         Input AS t
-;
+);
 
 SELECT
     user,

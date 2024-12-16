@@ -234,7 +234,7 @@ class YQLRun(object):
             for name in self.tables:
                 cmd += '--table=yt.%s@%s ' % (name, self.tables[name].yqlrun_file)
 
-        if "--lineage" not in self.extra_args:
+        if "--lineage" not in self.extra_args and "--peephole" not in self.extra_args:
             if optimize_only:
                 cmd += '-O '
             else:

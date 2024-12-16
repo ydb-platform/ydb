@@ -197,12 +197,15 @@ namespace Tests {
         app.SetChangesQueueBytesLimit(Settings->ChangesQueueBytesLimit);
         app.SetAwsRegion(Settings->AwsRegion);
         app.CompactionConfig = Settings->CompactionConfig;
-        app.FeatureFlags = Settings->FeatureFlags;
         app.ImmediateControlsConfig = Settings->Controls;
         app.InitIcb(StaticNodes() + DynamicNodes());
         if (Settings->AppConfig->HasResourceBrokerConfig()) {
             app.ResourceBrokerConfig = Settings->AppConfig->GetResourceBrokerConfig();
         }
+
+        // forcibly turn on some feature flags
+        app.FeatureFlags = Settings->FeatureFlags;
+        app.FeatureFlags.SetCheckDatabaseAccessPermission(true);
 
         if (!Settings->UseRealThreads)
             Runtime->SetRegistrationObserverFunc([](TTestActorRuntimeBase& runtime, const TActorId&, const TActorId& actorId) {
@@ -2131,6 +2134,16 @@ namespace Tests {
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
     }
+
+    void TClient::Grant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights) {
+        NACLib::TDiffACL acl;
+        acl.AddAccess(NACLib::EAccessType::Allow, rights, subject);
+        ModifyACL(parent, name, acl.SerializeAsString());
+    }
+
+    void TClient::GrantConnect(const TString& subject) {
+        Grant("/", DomainName, subject, NACLib::EAccessRights::ConnectDatabase);
+    } 
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type,
                                                                const TVector<ui32>& allowed_node_ids,

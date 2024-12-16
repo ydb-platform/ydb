@@ -3,7 +3,7 @@ USE plato;
 INSERT INTO Output
 SELECT
     1 AS key,
-    Just(Just("x")) AS subkey,
+    Just(Just('x')) AS subkey,
 UNION ALL
 SELECT
     2 AS key,

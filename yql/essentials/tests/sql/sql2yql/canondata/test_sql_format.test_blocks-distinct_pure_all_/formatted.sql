@@ -1,4 +1,4 @@
-PRAGMA yt.UsePartitionsByKeysForFinalAgg = "false";
+PRAGMA yt.UsePartitionsByKeysForFinalAgg = 'false';
 
 USE plato;
 

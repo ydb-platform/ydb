@@ -375,6 +375,7 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
 
     response.Token = TString(encoded_token);
     response.SanitizedToken = SanitizeJwtToken(response.Token);
+    response.Status = TLoginUserResponse::EStatus::SUCCESS;
 
     return response;
 }

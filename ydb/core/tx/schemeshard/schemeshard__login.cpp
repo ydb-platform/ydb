@@ -108,7 +108,8 @@ private:
         }
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD:
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_USER:
-        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::UNAVAILABLE_KEY: {
+        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::UNAVAILABLE_KEY:
+        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::UNSPECIFIED: {
             Result->Record.SetError(loginResponse.Error);
             break;
         }
@@ -153,7 +154,8 @@ private:
             break;
         }
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_USER:
-        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::UNAVAILABLE_KEY: {
+        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::UNAVAILABLE_KEY:
+        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::UNSPECIFIED: {
             Result->Record.SetError(loginResponse.Error);
             break;
         }

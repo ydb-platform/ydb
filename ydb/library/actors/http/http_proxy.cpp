@@ -17,6 +17,7 @@ public:
     IActor* AddOutgoingConnection(bool secure, const NActors::TActorContext& ctx) {
         IActor* connectionSocket = CreateOutgoingConnectionActor(ctx.SelfID, secure, Poller);
         TActorId connectionId = ctx.Register(connectionSocket);
+        ALOG_DEBUG(HttpLog, "Connection created " << connectionId);
         Connections.emplace(connectionId);
         return connectionSocket;
     }
@@ -42,7 +43,8 @@ protected:
             HFunc(TEvHttpProxy::TEvHttpIncomingResponse, Handle);
             HFunc(TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
             HFunc(TEvHttpProxy::TEvHttpAcceptorClosed, Handle);
-            HFunc(TEvHttpProxy::TEvHttpConnectionClosed, Handle);
+            HFunc(TEvHttpProxy::TEvHttpOutgoingConnectionAvailable, Handle);
+            HFunc(TEvHttpProxy::TEvHttpOutgoingConnectionClosed, Handle);
             HFunc(TEvHttpProxy::TEvResolveHostRequest, Handle);
             HFunc(TEvHttpProxy::TEvReportSensors, Handle);
             HFunc(NActors::TEvents::TEvPoison, Handle);
@@ -97,6 +99,19 @@ protected:
     }
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event, const NActors::TActorContext& ctx) {
+        if (event->Get()->AllowConnectionReuse) {
+            auto destination = event->Get()->Request->GetDestination();
+            auto itAvailableConnection = AvailableConnections.find(destination);
+            if (itAvailableConnection != AvailableConnections.end()) {
+                TActorId availableConnection = itAvailableConnection->second;
+                ALOG_DEBUG(HttpLog, "Reusing connection " << availableConnection << " for destination " << destination);
+                AvailableConnections.erase(itAvailableConnection);
+                ctx.Send(event->Forward(availableConnection));
+                return;
+            } else {
+                ALOG_DEBUG(HttpLog, "Creating a new connection for destination " << destination);
+            }
+        }
         bool secure(event->Get()->Request->Secure);
         NActors::IActor* actor = AddOutgoingConnection(secure, ctx);
         ctx.Send(event->Forward(actor->SelfId()));
@@ -115,8 +130,21 @@ protected:
         }
     }
 
-    void Handle(TEvHttpProxy::TEvHttpConnectionClosed::TPtr event, const NActors::TActorContext&) {
+    void Handle(TEvHttpProxy::TEvHttpOutgoingConnectionAvailable::TPtr event, const NActors::TActorContext&) {
+        ALOG_DEBUG(HttpLog, "Connection " << event->Get()->ConnectionID << " available for destination " << event->Get()->Destination);
+        AvailableConnections.emplace(event->Get()->Destination, event->Get()->ConnectionID);
+    }
+
+    void Handle(TEvHttpProxy::TEvHttpOutgoingConnectionClosed::TPtr event, const NActors::TActorContext&) {
+        ALOG_DEBUG(HttpLog, "Connection closed " << event->Get()->ConnectionID);
         Connections.erase(event->Get()->ConnectionID);
+        auto range = AvailableConnections.equal_range(event->Get()->Destination);
+        for (auto it = range.first; it != range.second; ++it) {
+            if (it->second == event->Get()->ConnectionID) {
+                AvailableConnections.erase(it);
+                break;
+            }
+        }
     }
 
     void Handle(TEvHttpProxy::TEvRegisterHandler::TPtr event, const NActors::TActorContext& ctx) {
@@ -258,6 +286,7 @@ protected:
     THashMap<TString, THostEntry> Hosts;
     THashMap<TString, TActorId> Handlers;
     THashSet<TActorId> Connections; // outgoing
+    std::unordered_multimap<TString, TActorId> AvailableConnections;
     std::weak_ptr<NMonitoring::TMetricRegistry> Registry;
 };
 

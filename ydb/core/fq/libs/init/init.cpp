@@ -204,7 +204,6 @@ void Init(
             credentialsFactory,
             tenant,
             yqCounters->GetSubgroup("subsystem", "row_dispatcher"),
-            appData->Counters->GetSubgroup("counters", "utils"),
             CreatePqNativeGateway(pqServices),
             appData->Mon,
             appData->Counters);

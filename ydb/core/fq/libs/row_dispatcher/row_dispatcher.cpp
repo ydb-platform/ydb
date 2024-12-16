@@ -274,8 +274,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     ui64 NextEventQueueId = 0;
     TString Tenant;
     NFq::NRowDispatcher::IActorFactory::TPtr ActorFactory;
-    const ::NMonitoring::TDynamicCounterPtr YqCounters;
-    const ::NMonitoring::TDynamicCounterPtr UtilsCounters;
+    const ::NMonitoring::TDynamicCounterPtr Counters;
     const ::NMonitoring::TDynamicCounterPtr CountersRoot;
     TRowDispatcherMetrics Metrics;
     TUserPoolMetrics UserPoolMetrics;
@@ -359,8 +358,7 @@ public:
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         const TString& tenant,
         const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
-        const ::NMonitoring::TDynamicCounterPtr& yqCounters,
-        const ::NMonitoring::TDynamicCounterPtr& utilsCounters,
+        const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
         const NYql::IPqGateway::TPtr& pqGateway,
         NActors::TMon* monitoring = nullptr);
@@ -439,8 +437,7 @@ TRowDispatcher::TRowDispatcher(
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
-    const ::NMonitoring::TDynamicCounterPtr& yqCounters,
-    const ::NMonitoring::TDynamicCounterPtr& utilsCounters,
+    const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
     NActors::TMon* monitoring)
@@ -451,11 +448,10 @@ TRowDispatcher::TRowDispatcher(
     , LogPrefix("RowDispatcher: ")
     , Tenant(tenant)
     , ActorFactory(actorFactory)
-    , YqCounters(yqCounters)
-    , UtilsCounters(utilsCounters)
-    , Metrics(yqCounters)
-    , UserPoolMetrics(utilsCounters)
+    , Counters(counters)
     , CountersRoot(countersRoot)
+    , Metrics(counters)
+    , UserPoolMetrics(countersRoot->GetSubgroup("counters", "utils"))
     , PqGateway(pqGateway)
     , Monitoring(monitoring)
 {
@@ -466,8 +462,8 @@ void TRowDispatcher::Bootstrap() {
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped row dispatcher, id " << SelfId() << ", tenant " << Tenant);
 
     const auto& config = Config.GetCoordinator();
-    auto coordinatorId = Register(NewCoordinator(SelfId(), config, YqSharedResources, Tenant, YqCounters).release());
-    Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, YqSharedResources, Tenant, YqCounters).release());
+    auto coordinatorId = Register(NewCoordinator(SelfId(), config, YqSharedResources, Tenant, Counters).release());
+    Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, YqSharedResources, Tenant, Counters).release());
 
     CompileServiceActorId = Register(NRowDispatcher::CreatePurecalcCompileService());
 
@@ -807,7 +803,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                     CredentialsFactory,
                     ev->Get()->Record.GetToken(),
                     source.GetAddBearerToToken()),
-                YqCounters,
+                Counters,
                 CountersRoot,
                 PqGateway,
                 MaxSessionBufferSizeBytes
@@ -1113,8 +1109,6 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
-    const ::NMonitoring::TDynamicCounterPtr& yqCounters,
-    const ::NMonitoring::TDynamicCounterPtr& utilsCounters,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
@@ -1127,8 +1121,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
         credentialsFactory,
         tenant,
         actorFactory,
-        yqCounters,
-        utilsCounters,
+        counters,
         countersRoot,
         pqGateway,
         monitoring));

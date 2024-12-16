@@ -512,13 +512,15 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
             auto& options = *input->Child(TDqJoin::idx_Options);
             for (ui32 i = 0; i < options.ChildrenSize(); ++i) {
                 auto& option = *options.Child(i);
-                if (!EnsureTupleOfAtoms(option, ctx) || !EnsureTupleMinSize(option, 1, ctx))
+                if (!EnsureTupleOfAtoms(option, ctx) || !EnsureTupleMinSize(option, 1, ctx)) {
                     return nullptr;
+                }
                 auto& name = *option.Child(TCoNameValueTuple::idx_Name);
                 if (joinAlgo.IsAtom("StreamLookupJoin")) {
                     if (name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows"})) {
-                       if (!EnsureTupleSize(option, 2, ctx))
+                       if (!EnsureTupleSize(option, 2, ctx)) {
                            return nullptr;
+                       }
                        continue;
                     }
                 }
@@ -626,18 +628,18 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
     );
     auto validateIntParam = [&ctx=ctx](auto&& value) {
         // matches dq_tasks.proto
-        if (!TryFromString<ui64>(value.StringValue())) {
-            ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder() << "Expected integer, but got: " << value.StringValue()));
+        auto&& stringValue = value.StringValue();
+        if (!TryFromString<ui64>(stringValue)) {
+            ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder() << "Expected integer, but got: " << stringValue));
             return false;
         }
         return true;
     };
-    if (!validateIntParam(cnStreamLookup.MaxCachedRows()))
+    if (!(validateIntParam(cnStreamLookup.MaxCachedRows()) &&
+          validateIntParam(cnStreamLookup.TTL()) &&
+          validateIntParam(cnStreamLookup.MaxDelayedRows()))) {
         return TStatus::Error;
-    if (!validateIntParam(cnStreamLookup.TTL()))
-        return TStatus::Error;
-    if (!validateIntParam(cnStreamLookup.MaxDelayedRows()))
-        return TStatus::Error;
+    }
     input->SetTypeAnn(ctx.MakeType<TStreamExprType>(outputRowType));
     return TStatus::Ok;
 }

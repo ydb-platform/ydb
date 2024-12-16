@@ -267,12 +267,13 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
             flags.emplace_back(ctx.NewAtom(joinTuple.Pos(), "RightAny", TNodeFlags::Default));
 
         TVector<TCoNameValueTuple> options;
-        for (ui32 i = 0; i + 1 < linkSettings.JoinAlgoOptions.size(); i += 2)
+        for (ui32 i = 0; i + 1 < linkSettings.JoinAlgoOptions.size(); i += 2) {
             options.push_back(
                     Build<TCoNameValueTuple>(ctx, joinTuple.Pos())
                         .Name().Build(linkSettings.JoinAlgoOptions[i])
                         .Value<TCoAtom>().Build(linkSettings.JoinAlgoOptions[i + 1])
                         .Done());
+        }
 
         auto dqJoin = Build<TDqJoin>(ctx, joinTuple.Pos())
             .LeftInput(BuildDqJoinInput(ctx, joinTuple.Pos(), left->Input, leftJoinKeys, false))

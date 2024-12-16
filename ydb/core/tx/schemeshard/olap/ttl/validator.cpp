@@ -18,7 +18,7 @@ static inline NScheme::TTypeInfo GetType(const TOlapColumnsDescription::TColumn&
 
 }
 
-bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& ttl, const TOlapIndexesDescription& indexes, const THashMap<ui32, TOlapColumnsDescription::TColumn>& sourceColumns, const THashMap<ui32, TOlapColumnsDescription::TColumn>& alterColumns, const THashMap<TString, ui32>& colName2Id, TSchemeShard* ctx, IErrorCollector& errors) {
+bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& ttl, const TOlapIndexesDescription& indexes, const THashMap<ui32, TOlapColumnsDescription::TColumn>& sourceColumns, const THashMap<ui32, TOlapColumnsDescription::TColumn>& alterColumns, const THashMap<TString, ui32>& colName2Id, const TOperationContext& context, IErrorCollector& errors) {
     const TString colName = ttl.GetColumnName();
 
     auto it = colName2Id.find(colName);
@@ -100,7 +100,7 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
             continue;
         }
         const TString& tierPathString = tier.GetEvictToExternalStorage().GetStorageName();
-        TPath tierPath = TPath::Resolve(tierPathString, ctx);
+        TPath tierPath = TPath::Resolve(tierPathString, context.SS);
         if (!tierPath.IsResolved() || tierPath.IsDeleted() || tierPath.IsUnderDeleting()) {
             errors.AddError("Object not found: " + tierPathString);
             return false;
@@ -110,7 +110,7 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
             return false;
         }
         {
-            auto* findExternalDataSource = ctx->ExternalDataSources.FindPtr(tierPath->PathId);
+            auto* findExternalDataSource = context.SS->ExternalDataSources.FindPtr(tierPath->PathId);
             AFL_VERIFY(findExternalDataSource);
             NKikimrSchemeOp::TExternalDataSourceDescription proto;
             (*findExternalDataSource)->FillProto(proto);

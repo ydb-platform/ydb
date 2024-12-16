@@ -9,6 +9,10 @@
 #include <ydb/core/tx/schemeshard/olap/options/schema.h>
 
 namespace NKikimr::NSchemeShard {
+struct TOperationContext;
+}
+
+namespace NKikimr::NSchemeShard {
 
     class TOlapSchema {
     private:
@@ -27,7 +31,7 @@ namespace NKikimr::NSchemeShard {
         void ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);
         void Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const;
         bool Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
-        bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings, TSchemeShard* ctx, IErrorCollector& errors) const;
+        bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings, const TOperationContext& context, IErrorCollector& errors) const;
     };
 
     class TOlapStoreSchemaPreset: public TOlapSchema {

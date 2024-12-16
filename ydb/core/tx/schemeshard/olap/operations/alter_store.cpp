@@ -533,7 +533,7 @@ public:
             }
             auto it = alterData->SchemaPresets.find(table->Description.GetSchemaPresetId());
             AFL_VERIFY(it != alterData->SchemaPresets.end())("preset_info", table->Description.DebugString());
-            if (!it->second.ValidateTtlSettings(table->Description.GetTtlSettings(), context.SS, errors)) {
+            if (!it->second.ValidateTtlSettings(table->Description.GetTtlSettings(), context, errors)) {
                 return result;
             }
         }

@@ -5,7 +5,8 @@
 
 namespace NKikimr::NSchemeShard {
 
-bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl, TSchemeShard* ctx, IErrorCollector& errors) const {
+bool TOlapSchema::ValidateTtlSettings(
+    const NKikimrSchemeOp::TColumnDataLifeCycle& ttl, const TOperationContext& context, IErrorCollector& errors) const {
     using TTtlProto = NKikimrSchemeOp::TColumnDataLifeCycle;
     switch (ttl.GetStatusCase()) {
         case TTtlProto::kEnabled: 
@@ -15,7 +16,7 @@ bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycl
                 errors.AddError("Incorrect ttl column - not found in scheme");
                 return false;
             }
-            return TTTLValidator::ValidateColumnTableTtl(ttl.GetEnabled(), Indexes, {}, Columns.GetColumns(), Columns.GetColumnsByName(), ctx, errors);
+            return TTTLValidator::ValidateColumnTableTtl(ttl.GetEnabled(), Indexes, {}, Columns.GetColumns(), Columns.GetColumnsByName(), context, errors);
         }
         case TTtlProto::kDisabled:
         default:

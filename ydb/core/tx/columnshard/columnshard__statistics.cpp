@@ -179,7 +179,7 @@ public:
             return;
         }
         Result->AddWaitingTask();
-        std::shared_ptr<NOlap::TDataAccessorsRequest> request = std::make_shared<NOlap::TDataAccessorsRequest>();
+        std::shared_ptr<NOlap::TDataAccessorsRequest> request = std::make_shared<NOlap::TDataAccessorsRequest>("STATISTICS_FLUSH");
         for (auto&& i : Portions) {
             request->AddPortion(i);
         }
@@ -227,7 +227,7 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
         columnTagsRequested = std::set<ui32>(allColumnIds.begin(), allColumnIds.end());
     }
 
-    NOlap::TDataAccessorsRequest request;
+    NOlap::TDataAccessorsRequest request("STATISTICS");
     std::shared_ptr<TResultAccumulator> resultAccumulator =
         std::make_shared<TResultAccumulator>(columnTagsRequested, ev->Sender, ev->Cookie, std::move(response));
     auto versionedIndex = std::make_shared<NOlap::TVersionedIndex>(index.GetVersionedIndex());

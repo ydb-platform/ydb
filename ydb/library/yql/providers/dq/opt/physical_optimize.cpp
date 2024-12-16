@@ -287,11 +287,11 @@ protected:
             for (auto&& option: maybeOptions.Cast()) {
                 auto&& name = option.Name().Value();
                 if (name == "TTL"sv) {
-                    ttl = option.Ref().Child(1);
+                    ttl = option.Value().Cast().Ptr();
                 } else if (name == "MaxCachedRows"sv) {
-                    maxCachedRows = option.Ref().Child(1);
+                    maxCachedRows = option.Value().Cast().Ptr();
                 } else if (name == "MaxDelayedRows"sv) {
-                   maxDelayedRows = option.Ref().Child(1);
+                    maxDelayedRows = option.Value().Cast().Ptr();
                 }
             }
         }

@@ -390,9 +390,8 @@ bool TACL::RemoveAccess(const NACLib::TSID& sid) {
         return false;
     }
     
-    while (newEnd != ACL->end()) {
-        ACL->RemoveLast();
-    }
+    ACL->erase(newEnd, ACL->end());
+    
     return true;
 }
 

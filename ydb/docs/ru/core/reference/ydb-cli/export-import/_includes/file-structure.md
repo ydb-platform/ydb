@@ -25,6 +25,7 @@
 ## Примеры {#example}
 
 ### Таблицы {#example-table}
+
 При выгрузке таблиц, созданных в разделе [{#T}]({{ quickstart-path }}) Начала работы, будет создана следующая файловая структура:
 
 ```
@@ -96,9 +97,10 @@ column_families {
 ```
 
 ### Директории {#example-directory}
+
 При выгрузке пустой директории `directory` будет создана следующая структура файлов:
 
-```
+```markdown
 └── directory
     ├── permissions.pb
     └── empty_dir
@@ -106,7 +108,7 @@ column_families {
 
 При выгрузке директории `directory` с вложенной таблицей `table` будет создана следующая структура файлов:
 
-```
+```markdown
 └── directory
     ├── permissions.pb
     └── table

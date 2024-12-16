@@ -100,7 +100,7 @@ column_families {
 
 When you export an empty directory `directory`, the system will create the following file structure:
 
-```
+```markdown
 └── directory
     ├── permissions.pb
     └── empty_dir
@@ -108,7 +108,7 @@ When you export an empty directory `directory`, the system will create the follo
 
 When you export a directory `directory` with the nested table `table`, the system will create the following file structure:
 
-```
+```markdown
 └── directory
     ├── permissions.pb
     └── table

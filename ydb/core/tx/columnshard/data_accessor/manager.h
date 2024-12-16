@@ -115,7 +115,7 @@ private:
                 if (portionsAsk.empty()) {
                     continue;
                 }
-                auto accessors = it->second->AskData(portionsAsk, AccessorCallback);
+                auto accessors = it->second->AskData(portionsAsk, AccessorCallback, request->GetConsumer());
                 for (auto&& p : portionsAsk) {
                     auto itAccessor = accessors.find(p->GetPortionId());
                     if (itAccessor == accessors.end()) {

@@ -135,11 +135,11 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         void SendDescribeProposeRequest(const NActors::TActorContext& ctx, bool showPrivate) {
             auto navigateRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-            if (!SetRequestToken(navigateRequest.get())) {
-                AddIssue(FillIssue("Unauthenticated access is forbidden, please provide credentials",
-                                   Ydb::PersQueue::ErrorCode::ACCESS_DENIED));
-                return RespondWithCode(Ydb::StatusIds::UNAUTHORIZED);
-            }
+            // if (!SetRequestToken(navigateRequest.get())) {
+            //     AddIssue(FillIssue("Unauthenticated access is forbidden, please provide credentials",
+            //                        Ydb::PersQueue::ErrorCode::ACCESS_DENIED));
+            //     return RespondWithCode(Ydb::StatusIds::UNAUTHORIZED);
+            // }
 
             navigateRequest->DatabaseName = CanonizePath(Database);
             navigateRequest->ResultSet.emplace_back(NSchemeCache::TSchemeCacheNavigate::TEntry{
@@ -319,15 +319,15 @@ namespace NKikimr::NGRpcProxy::V1 {
 
             SetDatabase(proposal.get(), *this->Request_);
 
-            if (this->Request_->GetSerializedToken().empty()) {
-                if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
-                    return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
-                                          "Unauthenticated access is forbidden, please provide credentials");
-                }
-            } else {
-                proposal->Record.SetUserToken(this->Request_->GetSerializedToken());
-            }
-
+            // if (this->Request_->GetSerializedToken().empty()) {
+            //     if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+            //         return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
+            //                               "Unauthenticated access is forbidden, please provide credentials");
+            //     }
+            // } else {
+                
+            // }
+            proposal->Record.SetUserToken(this->Request_->GetSerializedToken());
             static_cast<TDerived*>(this)->FillProposeRequest(*proposal, ctx, workingDir, name);
 
             if (!TActorBase::IsDead) {

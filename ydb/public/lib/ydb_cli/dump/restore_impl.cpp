@@ -37,7 +37,7 @@ bool IsFileExists(const TFsPath& path) {
 }
 
 template <typename TProtoType>
-TProtoType ReadProtoFromFile(const TFsPath& fsDirPath, const TLog* log, const NDump::NFiles::TFileInfo fileInfo) {
+TProtoType ReadProtoFromFile(const TFsPath& fsDirPath, const TLog* log, const NDump::NFiles::TFileInfo& fileInfo) {
     LOG_IMPL(log, ELogPriority::TLOG_DEBUG, "Read " << fileInfo.LogObjectType << " from " << fsDirPath.GetPath().Quote());
     TProtoType proto;
     Y_ENSURE(google::protobuf::TextFormat::ParseFromString(TFileInput(fsDirPath.Child(fileInfo.FileName)).ReadAll(), &proto));
@@ -333,58 +333,10 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
     return RestorePermissions(fsPath, dbPath, settings, oldEntries);
 }
 
-TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const TVector<NTopic::TConsumer>& consumers) {
-    for (auto& consumer : consumers) {
-        auto createResult = TopicClient.AlterTopic(topicPath,
-            NTopic::TAlterTopicSettings()
-                                .BeginAddConsumer()
-                                .ConsumerName(consumer.GetConsumerName())
-                                .Important(consumer.GetImportant())
-                                .ReadFrom(consumer.GetReadFrom())
-                                .Attributes(consumer.GetAttributes())
-                                .EndAddConsumer()
-        ).GetValueSync();
-        if (createResult.IsSuccess()) {
-            LOG_D("Created consumer " << consumer.GetConsumerName() << " for " << topicPath);
-        } else {
-            LOG_E("Failed to create " << consumer.GetConsumerName() << " for " << topicPath);
-            return Result<TRestoreResult>(topicPath, std::move(createResult));
-        }
-    }
-    return Result<TRestoreResult>();
-}
-
-TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const TString& dbPath) {
-    LOG_D("Process " << fsPath.GetPath().Quote());
-    if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
-        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
-            TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
-    }
-
-    auto changefeedProto = ReadChangefeedDescription(fsPath, Log.get());
-    auto topicProto = ReadTopicDescription(fsPath, Log.get());
-
-    auto changefeedDesc = ChangefeedDescriptionFromProto(changefeedProto);
-    auto topicDesc = TopicDescriptionFromProto(std::move(topicProto));
-
-    changefeedDesc = changefeedDesc.WithRetentionPeriod(topicDesc.GetRetentionPeriod());
-
-    auto createResult = TableClient.RetryOperationSync([&changefeedDesc, &dbPath](TSession session) {
-        return session.AlterTable(dbPath, TAlterTableSettings().AppendAddChangefeeds(changefeedDesc)).GetValueSync();
-    });
-    if (createResult.IsSuccess()) {
-        LOG_D("Created " << fsPath.GetPath().Quote());
-    } else {
-        LOG_E("Failed to create " << fsPath.GetPath().Quote());
-        return Result<TRestoreResult>(fsPath.GetPath(), std::move(createResult));
-    }
-
-    return RestoreConsumers(Join("/", dbPath, fsPath.GetName()), topicDesc.GetConsumers());;
-}
-
 TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString& dbPath,
     const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
 {   
+    LOG_D("Process " << fsPath.GetPath().Quote());
     if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST,
             TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
@@ -437,9 +389,9 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
     if (settings.RestoreChangefeeds_) {
         TVector<TFsPath> children;
         fsPath.List(children);
-        for (auto fsChildPath : children) {
-            bool isChangefeedDIr = IsFileExists(fsChildPath.Child(NFiles::Changefeed().FileName));
-            if (isChangefeedDIr) {
+        for (const auto& fsChildPath : children) {
+            const bool isChangefeedDir = IsFileExists(fsChildPath.Child(NFiles::Changefeed().FileName));
+            if (isChangefeedDir) {
                 auto result = RestoreChangefeeds(fsChildPath, dbPath);
                 if (!result.IsSuccess()) {
                     return result;
@@ -711,6 +663,54 @@ TRestoreResult TRestoreClient::RestoreIndexes(const TString& dbPath, const TTabl
     }
 
     return Result<TRestoreResult>();
+}
+
+TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const TVector<NTopic::TConsumer>& consumers) {
+    for (const auto& consumer : consumers) {
+        auto createResult = TopicClient.AlterTopic(topicPath,
+            NTopic::TAlterTopicSettings()
+                .BeginAddConsumer()
+                    .ConsumerName(consumer.GetConsumerName())
+                    .Important(consumer.GetImportant())
+                    .Attributes(consumer.GetAttributes())
+                .EndAddConsumer()
+        ).GetValueSync();
+        if (createResult.IsSuccess()) {
+            LOG_D("Created consumer " << consumer.GetConsumerName().Quote() << " for " << topicPath.Quote());
+        } else {
+            LOG_E("Failed to create " << consumer.GetConsumerName().Quote() << " for " << topicPath.Quote());
+            return Result<TRestoreResult>(topicPath, std::move(createResult));
+        }
+    }
+    return Result<TRestoreResult>();
+}
+
+TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const TString& dbPath) {
+    LOG_D("Process " << fsPath.GetPath().Quote());
+    if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
+        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
+            TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
+    }
+
+    auto changefeedProto = ReadChangefeedDescription(fsPath, Log.get());
+    auto topicProto = ReadTopicDescription(fsPath, Log.get());
+
+    auto changefeedDesc = ChangefeedDescriptionFromProto(changefeedProto);
+    auto topicDesc = TopicDescriptionFromProto(std::move(topicProto));
+
+    changefeedDesc = changefeedDesc.WithRetentionPeriod(topicDesc.GetRetentionPeriod());
+
+    auto createResult = TableClient.RetryOperationSync([&changefeedDesc, &dbPath](TSession session) {
+        return session.AlterTable(dbPath, TAlterTableSettings().AppendAddChangefeeds(changefeedDesc)).GetValueSync();
+    });
+    if (createResult.IsSuccess()) {
+        LOG_D("Created " << fsPath.GetPath().Quote());
+    } else {
+        LOG_E("Failed to create " << fsPath.GetPath().Quote());
+        return Result<TRestoreResult>(fsPath.GetPath(), std::move(createResult));
+    }
+
+    return RestoreConsumers(Join("/", dbPath, fsPath.GetName()), topicDesc.GetConsumers());;
 }
 
 TRestoreResult TRestoreClient::RestorePermissions(const TFsPath& fsPath, const TString& dbPath,

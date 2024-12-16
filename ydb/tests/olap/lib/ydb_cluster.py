@@ -153,7 +153,7 @@ class YdbCluster:
             )
             raise
 
-    @classmethod 
+    @classmethod
     def reset(cls, ydb_endpoint, ydb_database):
         cls.ydb_endpoint = ydb_endpoint
         cls.ydb_database = ydb_database

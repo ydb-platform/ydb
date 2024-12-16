@@ -198,7 +198,7 @@ void TBlobStorageController::ApplyStorageConfig() {
     }
     const auto& autoconfigSettings = bsConfig.GetAutoconfigSettings();
 
-    if (!autoconfigSettings.GetAutomaticBoxManagement()) {
+    if (autoconfigSettings.HasAutomaticBoxManagement() && !autoconfigSettings.GetAutomaticBoxManagement()) {
         return;
     }
 

@@ -513,85 +513,78 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    if (record.GetOperations().size() != 1) {
-        Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
-        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
-            TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "only single operation is supported");
-        ctx.Send(source, result.release(), 0, cookie);
-        return;
+    for(auto &operation: record.GetOperations()) {
+        const std::optional<NEvWrite::EModificationType> mType =
+            TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(operation.GetType());
+        if (!mType) {
+            sendError("operation " + NKikimrDataEvents::TEvWrite::TOperation::EOperationType_Name(operation.GetType()) + " is not supported",
+                NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            return;
+        }
+
+        if (!operation.GetTableId().HasSchemaVersion()) {
+            sendError("schema version not set", NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            return;
+        }
+
+        auto schema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaOptional(operation.GetTableId().GetSchemaVersion());
+        if (!schema) {
+            sendError("unknown schema version", NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            return;
+        }
+
+        const auto pathId = operation.GetTableId().GetTableId();
+
+        if (!TablesManager.IsReadyForWrite(pathId)) {
+            sendError("table not writable", NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR);
+            return;
+        }
+
+        Counters.GetColumnTablesCounters()->GetPathIdCounter(pathId)->OnWriteEvent();
+
+        auto arrowData = std::make_shared<TArrowData>(schema);
+        if (!arrowData->Parse(operation, NEvWrite::TPayloadReader<NEvents::TDataEvents::TEvWrite>(*ev->Get()))) {
+            sendError("parsing data error", NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            return;
+        }
+
+        auto overloadStatus = CheckOverloaded(pathId);
+        if (overloadStatus != EOverloadStatus::None) {
+            std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(
+                TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
+            OverloadWriteFail(overloadStatus, NEvWrite::TWriteMeta(0, pathId, source, {}), arrowData->GetSize(), cookie, std::move(result), ctx);
+            return;
+        }
+
+        Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize());
+
+        std::optional<ui32> granuleShardingVersionId;
+        if (record.HasGranuleShardingVersionId()) {
+            granuleShardingVersionId = record.GetGranuleShardingVersionId();
+        }
+
+        ui64 lockId = 0;
+        if (behaviour == EOperationBehaviour::NoTxWrite) {
+            lockId = BuildEphemeralTxId();
+        } else {
+            lockId = record.GetLockTxId();
+        }
+
+        if (!AppDataVerified().ColumnShardConfig.GetWritingEnabled()) {
+            sendError("writing disabled", NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
+            return;
+        }
+
+        OperationsManager->RegisterLock(lockId, Generation());
+        auto writeOperation = OperationsManager->RegisterOperation(
+            pathId, lockId, cookie, granuleShardingVersionId, *mType, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
+        Y_ABORT_UNLESS(writeOperation);
+        writeOperation->SetBehaviour(behaviour);
+        NOlap::TWritingContext wContext(pathId, SelfId(), schema, StoragesManager, Counters.GetIndexationCounters().SplitterCounters,
+            Counters.GetCSCounters().WritingCounters, NOlap::TSnapshot::Max());
+        arrowData->SetSeparationPoints(GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(pathId)->GetBucketPositions());
+        writeOperation->Start(*this, arrowData, source, wContext);
     }
-
-    const auto& operation = record.GetOperations()[0];
-    const std::optional<NEvWrite::EModificationType> mType =
-        TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(operation.GetType());
-    if (!mType) {
-        sendError("operation " + NKikimrDataEvents::TEvWrite::TOperation::EOperationType_Name(operation.GetType()) + " is not supported",
-            NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-        return;
-    }
-
-    if (!operation.GetTableId().HasSchemaVersion()) {
-        sendError("schema version not set", NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-        return;
-    }
-
-    auto schema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaOptional(operation.GetTableId().GetSchemaVersion());
-    if (!schema) {
-        sendError("unknown schema version", NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-        return;
-    }
-
-    const auto pathId = operation.GetTableId().GetTableId();
-
-    if (!TablesManager.IsReadyForWrite(pathId)) {
-        sendError("table not writable", NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR);
-        return;
-    }
-
-    Counters.GetColumnTablesCounters()->GetPathIdCounter(pathId)->OnWriteEvent();
-
-    auto arrowData = std::make_shared<TArrowData>(schema);
-    if (!arrowData->Parse(operation, NEvWrite::TPayloadReader<NEvents::TDataEvents::TEvWrite>(*ev->Get()))) {
-        sendError("parsing data error", NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-        return;
-    }
-
-    auto overloadStatus = CheckOverloaded(pathId);
-    if (overloadStatus != EOverloadStatus::None) {
-        std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(
-            TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
-        OverloadWriteFail(overloadStatus, NEvWrite::TWriteMeta(0, pathId, source, {}), arrowData->GetSize(), cookie, std::move(result), ctx);
-        return;
-    }
-
-    Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize());
-
-    std::optional<ui32> granuleShardingVersionId;
-    if (record.HasGranuleShardingVersionId()) {
-        granuleShardingVersionId = record.GetGranuleShardingVersionId();
-    }
-
-    ui64 lockId = 0;
-    if (behaviour == EOperationBehaviour::NoTxWrite) {
-        lockId = BuildEphemeralTxId();
-    } else {
-        lockId = record.GetLockTxId();
-    }
-
-    if (!AppDataVerified().ColumnShardConfig.GetWritingEnabled()) {
-        sendError("writing disabled", NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
-        return;
-    }
-
-    OperationsManager->RegisterLock(lockId, Generation());
-    auto writeOperation = OperationsManager->RegisterOperation(
-        pathId, lockId, cookie, granuleShardingVersionId, *mType, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
-    Y_ABORT_UNLESS(writeOperation);
-    writeOperation->SetBehaviour(behaviour);
-    NOlap::TWritingContext wContext(pathId, SelfId(), schema, StoragesManager, Counters.GetIndexationCounters().SplitterCounters,
-        Counters.GetCSCounters().WritingCounters, NOlap::TSnapshot::Max());
-    arrowData->SetSeparationPoints(GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(pathId)->GetBucketPositions());
-    writeOperation->Start(*this, arrowData, source, wContext);
 }
 
 }   // namespace NKikimr::NColumnShard

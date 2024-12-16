@@ -58,14 +58,9 @@ protected:
             return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "There was an error during table query");
         }
 
-        struct SplitInfo {
-            ui64 tableId;
-            ui64 schemaVersion;
-            NEvWrite::IShardsSplitter::IShardInfo::TPtr shardInfo;
-        };
+        std::unordered_map<ui64, std::vector<NEvWrite::TWriteInfo>> splits;
 
-        std::unordered_map<ui64, std::vector<SplitInfo>> splits;
-
+        // TODO: GetSize ignores slices, so I temporary use it here to get the size of the full batch 
         InFlightSize += ExtractDataAccessor(0)->GetSize();
 
         const i64 sizeInFlight = MemoryInFlight.Add(InFlightSize);
@@ -114,11 +109,11 @@ protected:
 
             for (auto& [shard, infos] : splittedData.GetShardsInfo()) {
                 for (auto&& shardInfo : infos) {
-                    SplitInfo split;
-                    split.tableId = tableId;
-                    split.schemaVersion = shardsSplitter->GetSchemaVersion();
-                    split.shardInfo = shardInfo;
-                    splits[shard].push_back(split);
+                    NEvWrite::TWriteInfo writeInfo;
+                    writeInfo.TableId = tableId;
+                    writeInfo.SchemaVersion = shardsSplitter->GetSchemaVersion();
+                    writeInfo.Data = shardInfo;
+                    splits[shard].push_back(writeInfo);
                 }
             }
 
@@ -127,22 +122,15 @@ protected:
 
         ui64 writeIdx = 0;
 
-        ui64 writesCount = 0;
-        for(auto &[shard, infos]: splits) {
-            writesCount += infos.size();
-        }
-
         InternalController =
-                std::make_shared<NEvWrite::TWritersController>(writesCount, this->SelfId(), LongTxId, NoTxWrite);
+                std::make_shared<NEvWrite::TWritersController>(splits.size(), this->SelfId(), LongTxId, NoTxWrite);
 
         InternalController->GetCounters()->OnSplitByShards(splits.size());
 
         for(auto &[shard, infos]: splits) {
-            for(auto &info: infos) {
-                this->Register(
-                    new NEvWrite::TShardWriter(shard, info.tableId, info.schemaVersion, DedupId, info.shardInfo,
-                        ActorSpan, InternalController, writeIdx++, NEvWrite::EModificationType::Replace, NoTxWrite, TDuration::Seconds(20)));
-            }
+            this->Register(
+                new NEvWrite::TShardWriter(shard, std::move(infos), DedupId,
+                    ActorSpan, InternalController, writeIdx++, NEvWrite::EModificationType::Replace, NoTxWrite, TDuration::Seconds(20)));
         }
 
         // pSpan.Attribute("affected_shards_count", (long)splittedData.GetShardsInfo().size());

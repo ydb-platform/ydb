@@ -162,6 +162,14 @@ public:
     void OnFail(const Ydb::StatusIds::StatusCode code, const TString& message);
 };
 
+struct TWriteInfo {
+    ui64 TableId;
+    ui64 SchemaVersion;
+    IShardsSplitter::IShardInfo::TPtr Data;
+
+    void Serialize(NEvents::TDataEvents::TEvWrite &ev);
+};
+
 class TShardWriter: public NActors::TActorBootstrapped<TShardWriter> {
 private:
     using TBase = NActors::TActorBootstrapped<TShardWriter>;
@@ -171,15 +179,12 @@ private:
 
     const ui64 ShardId;
     const ui64 WritePartIdx;
-    const ui64 TableId;
-    const ui64 SchemaVersion;
+    std::vector<TWriteInfo> WriteInfos;
     const TString DedupId;
-    const IShardInfo::TPtr DataForShard;
     ui32 NumRetries = 0;
     TWritersController::TPtr ExternalController;
     const TActorId LeaderPipeCache;
     NWilson::TProfileSpan ActorSpan;
-    EModificationType ModificationType;
     const bool ImmediateWrite = false;
     const std::optional<TDuration> Timeout;
 
@@ -197,7 +202,7 @@ private:
     }
 
 public:
-    TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
+    TShardWriter(const ui64 shardId, std::vector<TWriteInfo> &&writes, const TString& dedupId,
         const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx,
         const EModificationType mType, const bool immediateWrite, const std::optional<TDuration> timeout = std::nullopt);
 

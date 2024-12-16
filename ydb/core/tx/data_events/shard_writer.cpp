@@ -41,20 +41,21 @@ namespace NKikimr::NEvWrite {
         }
     }
 
-    TShardWriter::TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
+    void TWriteInfo::Serialize(NEvents::TDataEvents::TEvWrite &ev) {
+        Data->Serialize(ev, TableId, SchemaVersion);
+    }
+
+    TShardWriter::TShardWriter(const ui64 shardId, std::vector<TWriteInfo> &&writes, const TString& dedupId,
         const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx, const EModificationType mType, const bool immediateWrite,
         const std::optional<TDuration> timeout
     )
         : ShardId(shardId)
         , WritePartIdx(writePartIdx)
-        , TableId(tableId)
-        , SchemaVersion(schemaVersion)
+        , WriteInfos(std::move(writes))
         , DedupId(dedupId)
-        , DataForShard(data)
         , ExternalController(externalController)
         , LeaderPipeCache(MakePipePerNodeCacheID(false))
         , ActorSpan(parentSpan.BuildChildrenSpan("ShardWriter"))
-        , ModificationType(mType)
         , ImmediateWrite(immediateWrite)
         , Timeout(timeout)
     {
@@ -63,12 +64,15 @@ namespace NKikimr::NEvWrite {
     void TShardWriter::SendWriteRequest() {
         if (ImmediateWrite) {
             auto ev = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-            DataForShard->Serialize(*ev, TableId, SchemaVersion);
+            for(auto &write: WriteInfos) {
+                write.Serialize(*ev);
+            }
             SendToTablet(std::move(ev));
         } else {
-            auto ev = MakeHolder<TEvColumnShard::TEvWrite>(SelfId(), ExternalController->GetLongTxId(), TableId, DedupId, "", WritePartIdx, ModificationType);
-            DataForShard->Serialize(*ev);
-            SendToTablet(std::move(ev));
+            AFL_VERIFY(false);
+            // auto ev = MakeHolder<TEvColumnShard::TEvWrite>(SelfId(), ExternalController->GetLongTxId(), TableId, DedupId, "", WritePartIdx, ModificationType);
+            // DataForShard->Serialize(*ev);
+            // SendToTablet(std::move(ev));
         }
     }
 
@@ -95,7 +99,7 @@ namespace NKikimr::NEvWrite {
         if (ydbStatus != NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
             auto statusInfo = NEvWrite::NErrorCodes::TOperator::GetStatusInfo(ydbStatus).DetachResult();
             ExternalController->OnFail(statusInfo.GetYdbStatusCode(),
-                TStringBuilder() << "Cannot write data into shard(" << statusInfo.GetIssueGeneralText() << ") " << ShardId << " in longTx " <<
+                TStringBuilder() << "Cannot write data into shard(" << msg->GetError() << ") " << ShardId << " in longTx " <<
                 ExternalController->GetLongTxId().ToString());
             return;
         }

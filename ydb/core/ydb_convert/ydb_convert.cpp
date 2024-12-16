@@ -1032,6 +1032,14 @@ void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::
 void ConvertDirectoryEntry(const NKikimrSchemeOp::TPathDescription& from, Ydb::Scheme::Entry* to, bool processAcl) {
     ConvertDirectoryEntry(from.GetSelf(), to, processAcl);
 
+
+    // if(from.has_columntabledescription()) {
+    //     auto &desc = from.GetColumnTableDescription();
+    //     const auto& sharding = desc.GetSharding();
+    //     sharding.
+
+    // }
+
     switch (from.GetSelf().GetPathType()) {
     case NKikimrSchemeOp::EPathTypeTable:
         to->set_size_bytes(from.GetTableStats().GetDataSize() + from.GetTableStats().GetIndexSize());

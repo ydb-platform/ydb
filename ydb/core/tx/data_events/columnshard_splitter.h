@@ -52,7 +52,7 @@ class TColumnShardShardsSplitter: public IShardsSplitter {
             operation->SetPayloadSchema(SchemaData);
             operation->SetType(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE);
             operation->SetPayloadFormat(NKikimrDataEvents::FORMAT_ARROW);
-            operation->SetPayloadIndex(0);
+            operation->SetPayloadIndex(evWrite.Record.operations_size() - 1);
             operation->MutableTableId()->SetTableId(tableId);
             operation->MutableTableId()->SetSchemaVersion(schemaVersion);
         }

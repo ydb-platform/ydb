@@ -439,8 +439,8 @@ namespace NKikimr::NHttpProxy {
                         << " CloudId: " << ev->Get()->CloudId
                         << " UserSid: " << ev->Get()->Sid;
                     );
-                    FolderId = ev->Get()->FolderId;
-                    CloudId = ev->Get()->CloudId;
+                    HttpContext.FolderId = FolderId = ev->Get()->FolderId;
+                    HttpContext.CloudId = CloudId = ev->Get()->CloudId;
                     UserSid = ev->Get()->Sid;
                     SendGrpcRequestNoDriver(ctx);
                 } else {
@@ -1251,8 +1251,7 @@ namespace NKikimr::NHttpProxy {
             ResponseData.DumpBody(ContentType)
         );
 
-        bool isPrivateRequest = false;  // TODO Are there private requests in JSON API?
-        if (ResponseData.IsYmq && ServiceConfig.GetHttpConfig().GetYandexCloudMode() && !isPrivateRequest) {
+        if (ResponseData.IsYmq && ServiceConfig.GetHttpConfig().GetYandexCloudMode()) {
             // Send request attributes to the metering actor
             auto reportRequestAttributes = MakeHolder<NSQS::TSqsEvents::TEvReportProcessedRequestAttributes>();
 

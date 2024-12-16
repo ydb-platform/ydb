@@ -181,6 +181,21 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         });
     }
 
+    Y_UNIT_TEST_F(BillingRecordsForJsonApi, THttpProxyTestMockWithMetering) {
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        json = SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "MessageBody-0"}
+        });
+
+        // TODO:
+        // Sleep(TDuration::Seconds(500));
+        // TVector<NSc::TValue> records = LoadBillingRecords(sqsConfig.GetMeteringLogFilePath());
+        // CheckBillingRecord(records, expectedRecords);
+    }
+
     Y_UNIT_TEST_F(TestSendMessageEmptyQueueUrl, THttpProxyTestMockForSQS) {
         // We had a bug that crashed the server if QueueUrl was empty in a request.
         SendMessage({

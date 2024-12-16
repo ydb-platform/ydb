@@ -319,15 +319,15 @@ namespace NKikimr::NGRpcProxy::V1 {
 
             SetDatabase(proposal.get(), *this->Request_);
 
-            // if (this->Request_->GetSerializedToken().empty()) {
-            //     if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
-            //         return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
-            //                               "Unauthenticated access is forbidden, please provide credentials");
-            //     }
-            // } else {
-                
-            // }
-            proposal->Record.SetUserToken(this->Request_->GetSerializedToken());
+            if (this->Request_->GetSerializedToken().empty()) {
+                if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+                    return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
+                                          "Unauthenticated access is forbidden, please provide credentials");
+                }
+            } else {
+                proposal->Record.SetUserToken(this->Request_->GetSerializedToken());
+            }
+            
             static_cast<TDerived*>(this)->FillProposeRequest(*proposal, ctx, workingDir, name);
 
             if (!TActorBase::IsDead) {

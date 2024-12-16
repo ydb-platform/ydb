@@ -230,13 +230,13 @@ void TBlobStorageController::ApplyStorageConfig() {
     auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
     auto& r = ev->Record;
     auto *request = r.MutableRequest();
-    for (const auto& hostConfig : autoconfigSettings.GetDefineHostConfig()) {
+    for (const auto& hostConfig : bsConfig.GetDefineHostConfig()) {
         auto *cmd = request->AddCommand();
         cmd->MutableDefineHostConfig()->CopyFrom(hostConfig);
     }
     auto *cmd = request->AddCommand();
     auto *defineBox = cmd->MutableDefineBox();
-    defineBox->CopyFrom(autoconfigSettings.GetDefineBox());
+    defineBox->CopyFrom(bsConfig.GetDefineBox());
     defineBox->SetBoxId(1);
     for (auto& host : *defineBox->MutableHost()) {
         const ui32 nodeId = host.GetEnforcedNodeId();

@@ -178,7 +178,7 @@ protected:
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         auto *self = Self();
-        if (ev->Get()->Config->GetGeneration()) { // distconf
+        if (ev->Get()->Config->GetGeneration() || self->IsDistconfEnableQuery()) { // distconf (will be) enabled
             auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
             self->FillDistconfQuery(*ev);
             self->Send(MakeBlobStorageNodeWardenID(self->SelfId().NodeId()), ev.release());

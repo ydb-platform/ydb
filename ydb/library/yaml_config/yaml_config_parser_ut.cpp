@@ -97,13 +97,11 @@ pdisk_key_config:
         NKikimrConfig::TAppConfig cfg = Parse(config, true);
         UNIT_ASSERT(cfg.HasBlobStorageConfig());
         auto& bsConfig = cfg.GetBlobStorageConfig();
-        UNIT_ASSERT(bsConfig.HasAutoconfigSettings());
-        auto& autoconf = bsConfig.GetAutoconfigSettings();
-        UNIT_ASSERT(autoconf.HasDefineBox());
-        UNIT_ASSERT_VALUES_EQUAL(autoconf.DefineHostConfigSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(autoconf.GetDefineBox().HostSize(), 2);
-        for (const auto& host : autoconf.GetDefineBox().GetHost()) {
-            UNIT_ASSERT_VALUES_EQUAL(host.GetHostConfigId(), autoconf.GetDefineHostConfig(0).GetHostConfigId());
+        UNIT_ASSERT(bsConfig.HasDefineBox());
+        UNIT_ASSERT_VALUES_EQUAL(bsConfig.DefineHostConfigSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(bsConfig.GetDefineBox().HostSize(), 2);
+        for (const auto& host : bsConfig.GetDefineBox().GetHost()) {
+            UNIT_ASSERT_VALUES_EQUAL(host.GetHostConfigId(), bsConfig.GetDefineHostConfig(0).GetHostConfigId());
         }
     }
 

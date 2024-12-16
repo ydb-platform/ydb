@@ -32,6 +32,6 @@ void RegisterParentPathDependencies(const TOperationId& operationId, const TOper
 
 void AdvanceTransactionStateToPropose(const TOperationId& operationId, const TOperationContext& context, NIceDb::TNiceDb& db);
 
-void PersistResourcePool(const TOperationId& operationId, const TOperationContext& context, NIceDb::TNiceDb& db, const TPathElement::TPtr& resourcePoolPath, const TResourcePoolInfo::TPtr& resourcePoolInfo, const TString& acll);
+void PersistResourcePool(const TOperationId& operationId, const TOperationContext& context, NIceDb::TNiceDb& db, const TPathElement::TPtr& resourcePoolPath, const TResourcePoolInfo::TPtr& resourcePoolInfo, const TString& acl);
 
 }  // namespace NKikimr::NSchemeShard::NResourcePool

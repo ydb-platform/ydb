@@ -382,13 +382,13 @@ Y_UNIT_TEST_SUITE(TGRpcCmsTest) {
         channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
 
         // create tenant
-        CheckCreateDatabase(server, channel, "/Root/users/user-1", false, true, BUILTIN_ACL_ROOT);
+        CheckCreateDatabase(server, channel, "/Root/users/user-1", false, true, BUILTIN_SID_ROOT);
 
         // Check owner
         {
             TClient client(*server.ServerSettings);
             auto resp = client.Ls("/Root/users/user-1");
-            UNIT_ASSERT_VALUES_EQUAL(resp->Record.GetPathDescription().GetSelf().GetOwner(), BUILTIN_ACL_ROOT);
+            UNIT_ASSERT_VALUES_EQUAL(resp->Record.GetPathDescription().GetSelf().GetOwner(), BUILTIN_SID_ROOT);
         }
     }
 
@@ -528,29 +528,29 @@ Y_UNIT_TEST_SUITE(TGRpcCmsTest) {
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull,
-                          "user-1@" BUILTIN_ACL_DOMAIN);
+                          "user-1@" AUTH_DOMAIN_BUILTIN);
             TClient client(*server.ServerSettings);
             client.ModifyACL("/", "Root", acl.SerializeAsString());
         }
 
         CheckCreateDatabase(server, channel, "/Root/users/user-1",
-                            false, true, "user-1@" BUILTIN_ACL_DOMAIN);
+                            false, true, "user-1@" AUTH_DOMAIN_BUILTIN);
 
         CheckRemoveDatabase(channel, "/Root/users/user-1",
-                            "user-2@" BUILTIN_ACL_DOMAIN,
+                            "user-2@" AUTH_DOMAIN_BUILTIN,
                             Ydb::StatusIds::UNAUTHORIZED);
 
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull,
-                          "user-2@" BUILTIN_ACL_DOMAIN);
+                          "user-2@" AUTH_DOMAIN_BUILTIN);
             TClient client(*server.ServerSettings);
             client.ModifyACL("/Root/users", "user-1", acl.SerializeAsString());
             client.RefreshPathCache(server.Server_->GetRuntime(), "/Root/users/user-1");
         }
 
         CheckRemoveDatabase(channel, "/Root/users/user-1",
-                            "user-2@" BUILTIN_ACL_DOMAIN);
+                            "user-2@" AUTH_DOMAIN_BUILTIN);
     }
 }
 

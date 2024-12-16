@@ -93,7 +93,7 @@ struct TExecutionOptions {
             .Action = NKikimrKqp::EQueryAction::QUERY_ACTION_EXECUTE,
             .TraceId = DefaultTraceId,
             .PoolId = "",
-            .UserSID = BUILTIN_ACL_ROOT,
+            .UserSID = BUILTIN_SID_ROOT,
             .Database = GetValue(0, Databases, TString()),
             .Timeout = TDuration::Zero()
         };
@@ -113,7 +113,7 @@ struct TExecutionOptions {
             .Action = GetScriptQueryAction(index),
             .TraceId = TStringBuilder() << GetValue(index, TraceIds, DefaultTraceId) << "-" << startTime.ToString(),
             .PoolId = GetValue(index, PoolIds, TString()),
-            .UserSID = GetValue(index, UserSIDs, TString(BUILTIN_ACL_ROOT)),
+            .UserSID = GetValue(index, UserSIDs, TString(BUILTIN_SID_ROOT)),
             .Database = GetValue(index, Databases, TString()),
             .Timeout = GetValue(index, Timeouts, TDuration::Zero()),
             .QueryId = queryId,

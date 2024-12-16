@@ -1172,7 +1172,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 Value String,
                 PRIMARY KEY (Key)
             )
-            )") 
+            )")
             + (СolumnTable ? TString("WITH (STORE = COLUMN)") : "");
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -10640,11 +10640,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         result = session.ExecuteSchemeQuery(TStringBuilder() << R"(
             CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
                 RESOURCE_POOL="test",
-                MEMBER_NAME=")" << BUILTIN_ACL_METADATA << R"("
+                MEMBER_NAME=")" << SYSTEM_SID_METADATA << R"("
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-            TStringBuilder() << "Invalid resource pool classifier configuration, cannot create classifier for system user " << BUILTIN_ACL_METADATA,
+            TStringBuilder() << "Invalid resource pool classifier configuration, cannot create classifier for system user " << SYSTEM_SID_METADATA,
             result.GetIssues().ToString()
         );
     }

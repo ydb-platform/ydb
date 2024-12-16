@@ -669,7 +669,7 @@ private:
     template <typename TTokenRecord>
     bool CanInitBuiltinToken(const TString& key, TTokenRecord& record) {
         if (Config.GetUseBuiltinDomain() && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::Builtin)) {
-            if(record.Ticket.EndsWith("@" BUILTIN_ACL_DOMAIN)) {
+            if(record.Ticket.EndsWith("@" AUTH_DOMAIN_BUILTIN)) {
                 record.TokenType = TDerived::ETokenType::Builtin;
                 SetToken(key, record, new NACLib::TUserToken({
                     .OriginalUserToken = record.Ticket,
@@ -680,16 +680,22 @@ private:
                 return true;
             }
 
-            if (record.Ticket.EndsWith("@" BUILTIN_ERROR_DOMAIN)) {
+            if (record.Ticket.EndsWith("@" AUTH_DOMAIN_ERROR)) {
                 record.TokenType = TDerived::ETokenType::Builtin;
                 SetError(key, record, { .Message = "Builtin error simulation" });
                 CounterTicketsBuiltin->Inc();
                 return true;
             }
+        }
+        return false;
+    }
 
-            if (record.Ticket.EndsWith("@" BUILTIN_SYSTEM_DOMAIN)) {
+    template <typename TTokenRecord>
+    bool CanInitSystemToken(const TString& key, TTokenRecord& record) {
+        if (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::Builtin) {
+            if (record.Ticket.EndsWith("@" AUTH_DOMAIN_SYSTEM)) {
                 record.TokenType = TDerived::ETokenType::Builtin;
-                SetError(key, record, { .Message = "System domain not available for user usage", .Retryable = false });
+                SetError(key, record, { .Message = "System auth domain not available for user usage", .Retryable = false });
                 CounterTicketsBuiltin->Inc();
                 return true;
             }
@@ -1747,9 +1753,10 @@ protected:
             return;
         }
 
-        if (CanInitBuiltinToken(key, record) ||
-            CanInitLoginToken(key, record) ||
-            CanInitTokenFromCertificate(key, record)) {
+        if (CanInitBuiltinToken(key, record)
+            || CanInitSystemToken(key, record)
+            || CanInitLoginToken(key, record)
+            || CanInitTokenFromCertificate(key, record)) {
             return;
         }
 

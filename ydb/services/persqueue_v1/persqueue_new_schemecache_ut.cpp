@@ -68,12 +68,12 @@ namespace NKikimr::NPersQueueTests {
                 NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PQ_METACACHE}
             );
             PrepareForGrpcNoDC(*server.AnnoyingClient);
-            server.AnnoyingClient->GrantConnect("topic1@" BUILTIN_ACL_DOMAIN);
+            server.AnnoyingClient->GrantConnect("topic1@" AUTH_DOMAIN_BUILTIN);
 
             TPQDataWriter writer("source1", server, DEFAULT_TOPIC_PATH);
 
-            writer.Write("/Root/account2/topic2", {"valuevaluevalue1"}, true, "topic1@" BUILTIN_ACL_DOMAIN);
-            writer.Write("/Root/PQ/account1/topic1", {"valuevaluevalue1"}, true, "topic1@" BUILTIN_ACL_DOMAIN);
+            writer.Write("/Root/account2/topic2", {"valuevaluevalue1"}, true, "topic1@" AUTH_DOMAIN_BUILTIN);
+            writer.Write("/Root/PQ/account1/topic1", {"valuevaluevalue1"}, true, "topic1@" AUTH_DOMAIN_BUILTIN);
 
             NYdb::TDriverConfig driverCfg;
 
@@ -84,13 +84,13 @@ namespace NKikimr::NPersQueueTests {
             auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
 
 
-            ModifyTopicACL(ydbDriver.Get(), "/Root/account2/topic2", {{"topic1@" BUILTIN_ACL_DOMAIN, {"ydb.generic.write"}}});
-            ModifyTopicACL(ydbDriver.Get(), "/Root/PQ/account1/topic1", {{"topic1@" BUILTIN_ACL_DOMAIN, {"ydb.generic.write"}}});
+            ModifyTopicACL(ydbDriver.Get(), "/Root/account2/topic2", {{"topic1@" AUTH_DOMAIN_BUILTIN, {"ydb.generic.write"}}});
+            ModifyTopicACL(ydbDriver.Get(), "/Root/PQ/account1/topic1", {{"topic1@" AUTH_DOMAIN_BUILTIN, {"ydb.generic.write"}}});
 
-            writer.Write("/Root/account2/topic2", {"valuevaluevalue1"}, false, "topic1@" BUILTIN_ACL_DOMAIN);
+            writer.Write("/Root/account2/topic2", {"valuevaluevalue1"}, false, "topic1@" AUTH_DOMAIN_BUILTIN);
 
-            writer.Write("/Root/PQ/account1/topic1", {"valuevaluevalue1"}, false, "topic1@" BUILTIN_ACL_DOMAIN);
-            writer.Write("/Root/PQ/account1/topic1", {"valuevaluevalue2"}, false, "topic1@" BUILTIN_ACL_DOMAIN);
+            writer.Write("/Root/PQ/account1/topic1", {"valuevaluevalue1"}, false, "topic1@" AUTH_DOMAIN_BUILTIN);
+            writer.Write("/Root/PQ/account1/topic1", {"valuevaluevalue2"}, false, "topic1@" AUTH_DOMAIN_BUILTIN);
 
         }
 
@@ -106,7 +106,7 @@ namespace NKikimr::NPersQueueTests {
                      .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()))
                      .SetDatabase("/Root");
 
-            server.AnnoyingClient->GrantConnect("user1@" BUILTIN_ACL_DOMAIN);
+            server.AnnoyingClient->GrantConnect("user1@" AUTH_DOMAIN_BUILTIN);
 
             auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
             auto persQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver);
@@ -118,7 +118,7 @@ namespace NKikimr::NPersQueueTests {
                 UNIT_ASSERT(res.GetValue().IsSuccess());
             }
 
-            ModifyTopicACL(ydbDriver.Get(), "/Root/account2/topic2", {{"user1@" BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}}});
+            ModifyTopicACL(ydbDriver.Get(), "/Root/account2/topic2", {{"user1@" AUTH_DOMAIN_BUILTIN, {"ydb.generic.read"}}});
 
             {
                 auto writer = CreateSimpleWriter(*ydbDriver, "/Root/account2/topic2", "123", 1);

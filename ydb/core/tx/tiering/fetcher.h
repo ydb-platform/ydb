@@ -97,7 +97,7 @@ private:
         }
 
         auto event = BuildSchemeCacheNavigateRequest(
-            std::move(splitPaths), MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{}));
+            std::move(splitPaths), MakeIntrusive<NACLib::TUserToken>(SYSTEM_SID_METADATA, TVector<NACLib::TSID>{}));
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(event.Release()), IEventHandle::FlagTrackDelivery);
     }
 

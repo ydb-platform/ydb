@@ -742,7 +742,7 @@ public:
 
     NKikimrClient::TPersQueueRequest MakeValidRequest(ui64 topicsCount = 2) override {
         NKikimrClient::TPersQueueRequest persQueueRequest;
-        persQueueRequest.SetTicket("client_id@" BUILTIN_ACL_DOMAIN);
+        persQueueRequest.SetTicket("client_id@" AUTH_DOMAIN_BUILTIN);
 
         auto& req = *persQueueRequest.MutableMetaRequest()->MutableCmdGetTopicMetadata();
         req.AddTopic(topic1);
@@ -836,7 +836,7 @@ public:
 
     NKikimrClient::TPersQueueRequest MakeValidRequest(ui64 topicsCount = 2) override {
         NKikimrClient::TPersQueueRequest persQueueRequest;
-        persQueueRequest.SetTicket("client_id@" BUILTIN_ACL_DOMAIN);
+        persQueueRequest.SetTicket("client_id@" AUTH_DOMAIN_BUILTIN);
 
         auto& req = *persQueueRequest.MutableMetaRequest()->MutableCmdGetPartitionLocations();
         FillValidTopicRequest(*req.MutableTopicRequest(), topicsCount);
@@ -1002,7 +1002,7 @@ public:
 
     NKikimrClient::TPersQueueRequest MakeValidRequest(ui64 topicsCount = 2) override {
         NKikimrClient::TPersQueueRequest persQueueRequest;
-        persQueueRequest.SetTicket("client_id@" BUILTIN_ACL_DOMAIN);
+        persQueueRequest.SetTicket("client_id@" AUTH_DOMAIN_BUILTIN);
 
         auto& req = *persQueueRequest.MutableMetaRequest()->MutableCmdGetPartitionOffsets();
         FillValidTopicRequest(*req.MutableTopicRequest(), topicsCount);
@@ -1165,7 +1165,7 @@ public:
 
     NKikimrClient::TPersQueueRequest MakeValidRequest(ui64 topicsCount = 2) override {
         NKikimrClient::TPersQueueRequest persQueueRequest;
-        persQueueRequest.SetTicket("client_id@" BUILTIN_ACL_DOMAIN);
+        persQueueRequest.SetTicket("client_id@" AUTH_DOMAIN_BUILTIN);
 
         auto& req = *persQueueRequest.MutableMetaRequest()->MutableCmdGetPartitionStatus();
         FillValidTopicRequest(*req.MutableTopicRequest(), topicsCount);
@@ -1318,7 +1318,7 @@ public:
 
     NKikimrClient::TPersQueueRequest MakeValidRequest(ui64 topicsCount = 2) override {
         NKikimrClient::TPersQueueRequest persQueueRequest;
-        persQueueRequest.SetTicket("client_id@" BUILTIN_ACL_DOMAIN);
+        persQueueRequest.SetTicket("client_id@" AUTH_DOMAIN_BUILTIN);
 
         auto& req = *persQueueRequest.MutableMetaRequest()->MutableCmdGetReadSessionsInfo();
         req.SetClientId("client_id");
@@ -1422,7 +1422,7 @@ public:
             UNIT_ASSERT(resp->Record.GetMetaResponse().HasCmdGetReadSessionsInfoResult());
             auto perTopicResults = resp->Record.GetMetaResponse().GetCmdGetReadSessionsInfoResult().GetTopicResult();
             UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
-            Cerr << "RESPONSE " << resp->Record.DebugString() << "\n"; 
+            Cerr << "RESPONSE " << resp->Record.DebugString() << "\n";
 
             {
                 const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1 ? perTopicResults.Get(0) : perTopicResults.Get(1);

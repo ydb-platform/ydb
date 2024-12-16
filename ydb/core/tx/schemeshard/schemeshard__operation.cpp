@@ -109,7 +109,7 @@ bool TSchemeShard::ProcessOperationParts(
     TOperationContext& context)
 {
     auto selfId = SelfTabletId();
-    const TString owner = record.HasOwner() ? record.GetOwner() : BUILTIN_ACL_ROOT;
+    const TString owner = record.HasOwner() ? record.GetOwner() : BUILTIN_SID_ROOT;
 
     if (parts.size() > 1) {
         // allow altering impl index tables as part of consistent operation

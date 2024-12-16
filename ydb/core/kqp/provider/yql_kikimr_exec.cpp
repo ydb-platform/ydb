@@ -662,8 +662,8 @@ namespace {
         return true;
     }
 
-    bool ParseAsyncReplicationSettings(
-        TReplicationSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos
+    bool ParseAsyncReplicationSettingsBase(
+        TReplicationSettingsBase& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos
     ) {
         for (auto setting : srcSettings) {
             auto name = setting.Name().Value();
@@ -688,7 +688,47 @@ namespace {
             } else if (name == "password_secret_name") {
                 dstSettings.EnsureStaticCredentials().PasswordSecretName =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-            } else if (name == "consistency_mode" || name == "consistency_level") {
+            }
+        }
+
+        if (dstSettings.ConnectionString && (dstSettings.Endpoint || dstSettings.Database)) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                "CONNECTION_STRING and ENDPOINT/DATABASE are mutually exclusive"));
+            return false;
+        }
+
+        if (dstSettings.OAuthToken && dstSettings.StaticCredentials) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                "TOKEN and USER/PASSWORD are mutually exclusive"));
+            return false;
+        }
+
+        if (const auto& x = dstSettings.OAuthToken; x && x->Token && x->TokenSecretName) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                "TOKEN and TOKEN_SECRET_NAME are mutually exclusive"));
+            return false;
+        }
+
+        if (const auto& x = dstSettings.StaticCredentials; x && x->Password && x->PasswordSecretName) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive"));
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ParseAsyncReplicationSettings(
+        TReplicationSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos
+    ) {
+
+        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos)) {
+            return false;
+        }
+
+        for (auto setting : srcSettings) {
+            auto name = setting.Name().Value();
+            if (name == "consistency_mode" || name == "consistency_level") {
                 auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                 if (to_lower(value) == "global") {
                     dstSettings.EnsureGlobalConsistency();
@@ -735,36 +775,18 @@ namespace {
             }
         }
 
-        if (dstSettings.ConnectionString && (dstSettings.Endpoint || dstSettings.Database)) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos),
-                "CONNECTION_STRING and ENDPOINT/DATABASE are mutually exclusive"));
-            return false;
-        }
-
-        if (dstSettings.OAuthToken && dstSettings.StaticCredentials) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos),
-                "TOKEN and USER/PASSWORD are mutually exclusive"));
-            return false;
-        }
-
-        if (const auto& x = dstSettings.OAuthToken; x && x->Token && x->TokenSecretName) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos),
-                "TOKEN and TOKEN_SECRET_NAME are mutually exclusive"));
-            return false;
-        }
-
-        if (const auto& x = dstSettings.StaticCredentials; x && x->Password && x->PasswordSecretName) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos),
-                "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive"));
-            return false;
-        }
-
         if (dstSettings.RowConsistency && dstSettings.GlobalConsistency) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), "Ambiguous consistency level"));
             return false;
         }
 
         return true;
+    }
+
+    bool ParseTransferSettings(
+        TTransferSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos
+    ) {
+        return ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos);
     }
 
     bool ParseBackupCollectionSettings(
@@ -2308,6 +2330,108 @@ public:
                 auto resultNode = ctx.NewWorld(input->Pos());
                 return resultNode;
             }, "Executing DROP ASYNC REPLICATION");
+        }
+
+        if (auto maybeCreateTransfer = TMaybeNode<TKiCreateTransfer>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto createTransfer = maybeCreateTransfer.Cast();
+
+            TCreateTransferSettings settings;
+            settings.Name = TString(createTransfer.Transfer());
+
+            /*
+            for (auto target : createTransfer.Targets()) {
+                settings.Targets.emplace_back(
+                    target.RemotePath().Cast<TCoAtom>().StringValue(),
+                    target.LocalPath().Cast<TCoAtom>().StringValue()
+                );
+            }
+            */
+
+            if (!ParseTransferSettings(settings.Settings, createTransfer.TransferSettings(), ctx, createTransfer.Pos())) {
+                return SyncError();
+            }
+
+            if (!settings.Settings.ConnectionString && (!settings.Settings.Endpoint || !settings.Settings.Database)) {
+                ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
+                    "Neither CONNECTION_STRING nor ENDPOINT/DATABASE are provided"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.StaticCredentials; x && !x->UserName) {
+                ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
+                    "USER is not provided"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.StaticCredentials; x && (!x->Password || !x->PasswordSecretName)) {
+                ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
+                    "PASSWORD or PASSWORD_SECRET_NAME are not provided"));
+                return SyncError();
+            }
+
+            auto cluster = TString(createTransfer.DataSink().Cluster());
+            auto future = Gateway->CreateTransfer(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing CREATE TRANSFER");
+        }
+
+        if (auto maybeAlterTransfer = TMaybeNode<TKiAlterTransfer>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto alterTransfer = maybeAlterTransfer.Cast();
+
+            TAlterTransferSettings settings;
+            settings.Name = TString(alterTransfer.Transfer());
+
+            if (!ParseTransferSettings(settings.Settings, alterTransfer.TransferSettings(), ctx, alterTransfer.Pos())) {
+                return SyncError();
+            }
+
+            auto cluster = TString(alterTransfer.DataSink().Cluster());
+            auto future = Gateway->AlterTransfer(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing ALTER TRANSFER");
+        }
+
+        if (auto maybeDropTransfer = TMaybeNode<TKiDropTransfer>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto dropTransfer = maybeDropTransfer.Cast();
+
+            TDropTransferSettings settings;
+            settings.Name = TString(dropTransfer.Transfer());
+            settings.Cascade = (dropTransfer.Cascade().Value() == "1");
+
+            auto cluster = TString(dropTransfer.DataSink().Cluster());
+            auto future = Gateway->DropTransfer(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing DROP TRANSFER");
         }
 
         if (auto maybeGrantPermissions = TMaybeNode<TKiModifyPermissions>(input)) {

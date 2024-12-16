@@ -907,10 +907,11 @@ alter_replication_set_setting: SET LPAREN replication_settings RPAREN;
 drop_replication_stmt: DROP ASYNC REPLICATION object_ref CASCADE?;
 
 create_transfer_stmt: CREATE TRANSFER object_ref
-    FROM object_ref TO object_ref
+    FROM transfer_target (COMMA transfer_target)*
     WITH LPAREN transfer_settings RPAREN
 ;
 
+transfer_target: object_ref TO object_ref;
 transfer_settings: transfer_settings_entry (COMMA transfer_settings_entry)*;
 transfer_settings_entry: an_id EQUALS expr;
 
@@ -1480,6 +1481,7 @@ keyword_as_compat:
   | TO
   | TOPIC
   | TRANSACTION
+  | TRANSFER
   | TRIGGER
   | TYPE
   | UNCONDITIONAL
@@ -1704,6 +1706,7 @@ keyword_compat: (
   | TO
   | TOPIC
   | TRANSACTION
+  | TRANSFER
   | TRIGGER
   | TYPE
   | UNCONDITIONAL
@@ -2080,6 +2083,7 @@ TIES: T I E S;
 TO: T O;
 TOPIC: T O P I C;
 TRANSACTION: T R A N S A C T I O N;
+TRANSFER: T R A N S F E R;
 TRIGGER: T R I G G E R;
 TRUE: T R U E;
 TUPLE: T U P L E;

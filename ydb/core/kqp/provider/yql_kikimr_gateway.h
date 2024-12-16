@@ -772,15 +772,7 @@ struct TDropExternalTableSettings {
     TString ExternalTable;
 };
 
-struct TReplicationSettings {
-    struct TStateDone {
-        enum class EFailoverMode: ui32 {
-            Consistent = 1,
-            Force = 2,
-        };
-
-        EFailoverMode FailoverMode;
-    };
+struct TReplicationSettingsBase {
 
     struct TOAuthToken {
         TString Token;
@@ -797,22 +789,11 @@ struct TReplicationSettings {
         void Serialize(NKikimrReplication::TStaticCredentials& proto) const;
     };
 
-    struct TRowConsistency {};
-
-    struct TGlobalConsistency {
-        TDuration CommitInterval;
-
-        void Serialize(NKikimrReplication::TConsistencySettings_TGlobalConsistency& proto) const;
-    };
-
     TMaybe<TString> ConnectionString;
     TMaybe<TString> Endpoint;
     TMaybe<TString> Database;
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
-    TMaybe<TRowConsistency> RowConsistency;
-    TMaybe<TGlobalConsistency> GlobalConsistency;
-    TMaybe<TStateDone> StateDone;
 
     TOAuthToken& EnsureOAuthToken() {
         if (!OAuthToken) {
@@ -829,6 +810,29 @@ struct TReplicationSettings {
 
         return *StaticCredentials;
     }
+};
+
+struct TReplicationSettings : public TReplicationSettingsBase {
+    struct TStateDone {
+        enum class EFailoverMode: ui32 {
+            Consistent = 1,
+            Force = 2,
+        };
+
+        EFailoverMode FailoverMode;
+    };
+
+    struct TRowConsistency {};
+
+    struct TGlobalConsistency {
+        TDuration CommitInterval;
+
+        void Serialize(NKikimrReplication::TConsistencySettings_TGlobalConsistency& proto) const;
+    };
+
+    TMaybe<TRowConsistency> RowConsistency;
+    TMaybe<TGlobalConsistency> GlobalConsistency;
+    TMaybe<TStateDone> StateDone;
 
     TRowConsistency& EnsureRowConsistency() {
         if (!RowConsistency) {
@@ -874,29 +878,7 @@ struct TDropReplicationSettings {
     bool Cascade = false;
 };
 
-struct TTransferSettings {
-
-    TMaybe<TString> ConnectionString;
-    TMaybe<TString> Endpoint;
-    TMaybe<TString> Database;
-    TMaybe<TReplicationSettings::TOAuthToken> OAuthToken;
-    TMaybe<TReplicationSettings::TStaticCredentials> StaticCredentials;
-
-    TReplicationSettings::TOAuthToken& EnsureOAuthToken() {
-        if (!OAuthToken) {
-            OAuthToken = TReplicationSettings::TOAuthToken();
-        }
-
-        return *OAuthToken;
-    }
-
-    TReplicationSettings::TStaticCredentials& EnsureStaticCredentials() {
-        if (!StaticCredentials) {
-            StaticCredentials = TReplicationSettings::TStaticCredentials();
-        }
-
-        return *StaticCredentials;
-    }
+struct TTransferSettings : public TReplicationSettingsBase {
 };
 
 struct TCreateTransferSettings {

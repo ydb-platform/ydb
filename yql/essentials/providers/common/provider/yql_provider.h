@@ -96,6 +96,17 @@ struct TWriteReplicationSettings {
     {}
 };
 
+struct TWriteTransferSettings {
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
+    NNodes::TMaybeNode<NNodes::TCoTransferTargetList> Targets;
+    NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> TransferSettings;
+    NNodes::TCoNameValueTupleList Other;
+
+    TWriteTransferSettings(const NNodes::TCoNameValueTupleList& other)
+        : Other(other)
+    {}
+};
+
 struct TWriteRoleSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TMaybeNode<NNodes::TCoAtomList> Roles;
@@ -167,6 +178,7 @@ TVector<TString> GetResOrPullColumnHints(const TExprNode& node);
 TWriteTableSettings ParseWriteTableSettings(NNodes::TExprList node, TExprContext& ctx);
 TWriteTopicSettings ParseWriteTopicSettings(NNodes::TExprList node, TExprContext& ctx);
 TWriteReplicationSettings ParseWriteReplicationSettings(NNodes::TExprList node, TExprContext& ctx);
+TWriteTransferSettings ParseWriteTransferSettings(NNodes::TExprList node, TExprContext& ctx);
 
 TWriteRoleSettings ParseWriteRoleSettings(NNodes::TExprList node, TExprContext& ctx);
 TWriteObjectSettings ParseWriteObjectSettings(NNodes::TExprList node, TExprContext& ctx);

@@ -52,6 +52,7 @@ struct TEvHttpProxy {
         EvResolveHostRequest,
         EvResolveHostResponse,
         EvReportSensors,
+        EvHttpOutgoingDataChunk,
         EvEnd
     };
 
@@ -160,6 +161,14 @@ struct TEvHttpProxy {
 
         TEvHttpOutgoingResponse(THttpOutgoingResponsePtr response)
             : Response(std::move(response))
+        {}
+    };
+
+    struct TEvHttpOutgoingDataChunk : NActors::TEventLocal<TEvHttpOutgoingDataChunk, EvHttpOutgoingDataChunk> {
+        THttpOutgoingDataChunkPtr DataChunk;
+
+        TEvHttpOutgoingDataChunk(THttpOutgoingDataChunkPtr dataChunk)
+            : DataChunk(std::move(dataChunk))
         {}
     };
 

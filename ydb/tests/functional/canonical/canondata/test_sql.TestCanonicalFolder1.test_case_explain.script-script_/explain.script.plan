@@ -56,7 +56,7 @@
                         "PlanNodeType": "ResultSet",
                         "Plans": [
                             {
-                                "Node Type": "Aggregate-Limit",
+                                "Node Type": "Aggregate-Limit-Aggregate",
                                 "Operators": [
                                     {
                                         "Inputs": [
@@ -64,7 +64,17 @@
                                                 "InternalOperatorId": 1
                                             }
                                         ],
-                                        "Name": "Aggregate"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
+                                    },
+                                    {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 2
+                                            }
+                                        ],
+                                        "Limit": "1",
+                                        "Name": "Limit"
                                     },
                                     {
                                         "Inputs": [
@@ -72,8 +82,8 @@
                                                 "ExternalPlanNodeId": 3
                                             }
                                         ],
-                                        "Limit": "1",
-                                        "Name": "Limit"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
                                     }
                                 ],
                                 "PlanNodeId": 4,
@@ -92,7 +102,8 @@
                                                                 "ExternalPlanNodeId": 1
                                                             }
                                                         ],
-                                                        "Name": "Aggregate"
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Intermediate"
                                                     }
                                                 ],
                                                 "PlanNodeId": 2,
@@ -175,7 +186,7 @@
                         "PlanNodeType": "Materialize",
                         "Plans": [
                             {
-                                "Node Type": "Aggregate-Limit",
+                                "Node Type": "Aggregate-Limit-Aggregate",
                                 "Operators": [
                                     {
                                         "Inputs": [
@@ -183,7 +194,17 @@
                                                 "InternalOperatorId": 1
                                             }
                                         ],
-                                        "Name": "Aggregate"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
+                                    },
+                                    {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 2
+                                            }
+                                        ],
+                                        "Limit": "1",
+                                        "Name": "Limit"
                                     },
                                     {
                                         "Inputs": [
@@ -191,8 +212,8 @@
                                                 "ExternalPlanNodeId": 2
                                             }
                                         ],
-                                        "Limit": "1",
-                                        "Name": "Limit"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
                                     }
                                 ],
                                 "PlanNodeId": 3,
@@ -211,7 +232,8 @@
                                                                 "InternalOperatorId": 1
                                                             }
                                                         ],
-                                                        "Name": "Aggregate"
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Intermediate"
                                                     },
                                                     {
                                                         "Inputs": [],
@@ -266,7 +288,7 @@
                         "PlanNodeType": "ResultSet",
                         "Plans": [
                             {
-                                "Node Type": "Aggregate-Limit",
+                                "Node Type": "Aggregate-Limit-Aggregate",
                                 "Operators": [
                                     {
                                         "Inputs": [
@@ -274,7 +296,17 @@
                                                 "InternalOperatorId": 1
                                             }
                                         ],
-                                        "Name": "Aggregate"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
+                                    },
+                                    {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 2
+                                            }
+                                        ],
+                                        "Limit": "1",
+                                        "Name": "Limit"
                                     },
                                     {
                                         "Inputs": [
@@ -282,8 +314,8 @@
                                                 "ExternalPlanNodeId": 3
                                             }
                                         ],
-                                        "Limit": "1",
-                                        "Name": "Limit"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
                                     }
                                 ],
                                 "PlanNodeId": 4,
@@ -302,7 +334,8 @@
                                                                 "ExternalPlanNodeId": 1
                                                             }
                                                         ],
-                                                        "Name": "Aggregate"
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Intermediate"
                                                     }
                                                 ],
                                                 "PlanNodeId": 2,
@@ -385,7 +418,7 @@
                         "PlanNodeType": "Materialize",
                         "Plans": [
                             {
-                                "Node Type": "Aggregate-Limit",
+                                "Node Type": "Aggregate-Limit-Aggregate",
                                 "Operators": [
                                     {
                                         "Inputs": [
@@ -393,7 +426,17 @@
                                                 "InternalOperatorId": 1
                                             }
                                         ],
-                                        "Name": "Aggregate"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
+                                    },
+                                    {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 2
+                                            }
+                                        ],
+                                        "Limit": "1",
+                                        "Name": "Limit"
                                     },
                                     {
                                         "Inputs": [
@@ -401,8 +444,8 @@
                                                 "ExternalPlanNodeId": 2
                                             }
                                         ],
-                                        "Limit": "1",
-                                        "Name": "Limit"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
                                     }
                                 ],
                                 "PlanNodeId": 3,
@@ -421,7 +464,8 @@
                                                                 "InternalOperatorId": 1
                                                             }
                                                         ],
-                                                        "Name": "Aggregate"
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Intermediate"
                                                     },
                                                     {
                                                         "Inputs": [],

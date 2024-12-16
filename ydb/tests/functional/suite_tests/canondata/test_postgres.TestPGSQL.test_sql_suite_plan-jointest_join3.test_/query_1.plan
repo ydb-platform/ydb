@@ -42,7 +42,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[row.q2,row.q1]"
                                             },
                                             {
                                                 "Inputs": [

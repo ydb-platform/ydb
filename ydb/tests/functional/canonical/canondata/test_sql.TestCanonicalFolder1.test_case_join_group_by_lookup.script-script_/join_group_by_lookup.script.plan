@@ -45,7 +45,7 @@
                                                         ],
                                                         "Limit": "1001",
                                                         "Name": "TopSort",
-                                                        "TopSortBy": ""
+                                                        "TopSortBy": "[Arg.a.Group,Arg.a.Count0,Arg.t.Value]"
                                                     }
                                                 ],
                                                 "PlanNodeId": 8,
@@ -75,7 +75,18 @@
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "Stage",
+                                                                                "Node Type": "Aggregate",
+                                                                                "Operators": [
+                                                                                    {
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "ExternalPlanNodeId": 3
+                                                                                            }
+                                                                                        ],
+                                                                                        "Name": "Aggregate",
+                                                                                        "Phase": "Final"
+                                                                                    }
+                                                                                ],
                                                                                 "PlanNodeId": 4,
                                                                                 "Plans": [
                                                                                     {
@@ -90,14 +101,15 @@
                                                                                                 "Node Type": "Aggregate",
                                                                                                 "Operators": [
                                                                                                     {
-                                                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
+                                                                                                        "Aggregation": "{SUM(1)}",
                                                                                                         "GroupBy": "item.Group",
                                                                                                         "Inputs": [
                                                                                                             {
                                                                                                                 "ExternalPlanNodeId": 1
                                                                                                             }
                                                                                                         ],
-                                                                                                        "Name": "Aggregate"
+                                                                                                        "Name": "Aggregate",
+                                                                                                        "Phase": "Intermediate"
                                                                                                     }
                                                                                                 ],
                                                                                                 "PlanNodeId": 2,

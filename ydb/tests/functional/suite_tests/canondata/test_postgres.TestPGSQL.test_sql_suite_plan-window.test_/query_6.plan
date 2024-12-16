@@ -46,7 +46,8 @@
                                                         "InternalOperatorId": 2
                                                     }
                                                 ],
-                                                "Name": "Aggregate"
+                                                "Name": "Aggregate",
+                                                "Phase": "Intermediate"
                                             },
                                             {
                                                 "Inputs": [

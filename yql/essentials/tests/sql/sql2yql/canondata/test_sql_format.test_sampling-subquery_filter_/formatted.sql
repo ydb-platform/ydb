@@ -9,9 +9,9 @@ FROM (
     FROM
         plato.Input
     WHERE
-        subkey != "1"
+        subkey != '1'
 )
 TABLESAMPLE BERNOULLI (44)
 WHERE
-    key > "50"
+    key > '50'
 ;

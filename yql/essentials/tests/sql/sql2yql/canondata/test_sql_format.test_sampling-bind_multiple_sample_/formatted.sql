@@ -3,12 +3,12 @@
 /* custom check: len(yt_res_yson[0]['Write'][0]['Data']) < 20 */
 USE plato;
 
-$var =
+$var = (
     SELECT
         *
     FROM
         Input
-;
+);
 
 INSERT INTO @tmp
 SELECT

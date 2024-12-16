@@ -2,7 +2,7 @@
 /* postgres can not */
 USE plato;
 
-PRAGMA yt.JoinMergeTablesLimit = "100";
+PRAGMA yt.JoinMergeTablesLimit = '100';
 
 INSERT INTO @t1
 SELECT

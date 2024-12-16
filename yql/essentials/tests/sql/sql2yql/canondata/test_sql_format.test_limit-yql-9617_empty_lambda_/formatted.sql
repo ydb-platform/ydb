@@ -6,7 +6,7 @@ SELECT
 FROM
     Input
 WHERE
-    key > "999"
+    key > '999'
 GROUP BY
     key
 ORDER BY

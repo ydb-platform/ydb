@@ -20,7 +20,7 @@ SELECT
 FROM
     @a
 WHERE
-    key < "100"
+    key < '100'
 ORDER BY
     key,
     subkey
@@ -29,12 +29,12 @@ ORDER BY
 INSERT INTO @d
 SELECT
     key AS key,
-    "" AS subkey,
-    "value:" || value AS value
+    '' AS subkey,
+    'value:' || value AS value
 FROM
     @a
 WHERE
-    key < "100"
+    key < '100'
 ORDER BY
     key
 ;

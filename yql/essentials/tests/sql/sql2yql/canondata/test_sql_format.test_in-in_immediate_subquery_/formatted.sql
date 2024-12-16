@@ -8,7 +8,7 @@ FROM
 WHERE
     subkey NOT IN (
         SELECT
-            key || "0"
+            key || '0'
         FROM
             Input4
     )
@@ -24,7 +24,7 @@ FROM
 WHERE
     subkey IN COMPACT (
         SELECT
-            key || "0"
+            key || '0'
         FROM
             Input4
     )

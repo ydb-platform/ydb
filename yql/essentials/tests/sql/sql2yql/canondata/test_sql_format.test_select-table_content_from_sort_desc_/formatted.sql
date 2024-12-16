@@ -13,12 +13,12 @@ ORDER BY
 
 COMMIT;
 
-$key =
+$key = (
     SELECT
         key
     FROM
         @tmp
-;
+);
 
 SELECT
     *

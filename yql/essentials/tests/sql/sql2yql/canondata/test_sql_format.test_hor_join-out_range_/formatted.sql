@@ -19,7 +19,7 @@ SELECT
 FROM
     Input
 WHERE
-    key > "100"
+    key > '100'
 GROUP BY
     key
 ORDER BY
@@ -33,7 +33,7 @@ SELECT
 FROM
     Input
 WHERE
-    key > "100"
+    key > '100'
 GROUP BY
     key
 ORDER BY

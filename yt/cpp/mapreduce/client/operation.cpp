@@ -319,6 +319,7 @@ TSimpleOperationIo CreateSimpleOperationIo(
         TOperationPreparationContext(
             inputs,
             outputs,
+            preparer.GetClient()->GetRawClient(),
             preparer.GetContext(),
             preparer.GetClientRetryPolicy(),
             preparer.GetTransactionId()),
@@ -491,6 +492,7 @@ TSimpleOperationIo CreateSimpleOperationIoHelper(
         TOperationPreparationContext(
             structuredInputs,
             structuredOutputs,
+            preparer.GetClient()->GetRawClient(),
             preparer.GetContext(),
             preparer.GetClientRetryPolicy(),
             preparer.GetTransactionId()),
@@ -499,7 +501,12 @@ TSimpleOperationIo CreateSimpleOperationIoHelper(
         hints);
 
     TVector<TSmallJobFile> formatConfigList;
-    TFormatBuilder formatBuilder(preparer.GetClientRetryPolicy(), preparer.GetContext(), preparer.GetTransactionId(), options);
+    TFormatBuilder formatBuilder(
+        preparer.GetClient()->GetRawClient(),
+        preparer.GetClientRetryPolicy(),
+        preparer.GetContext(),
+        preparer.GetTransactionId(),
+        options);
 
     auto [inputFormat, inputFormatConfig] = formatBuilder.CreateFormat(
         structuredJob,
@@ -587,11 +594,12 @@ EOperationBriefState CheckOperation(
 
 void WaitForOperation(
     const IClientRetryPolicyPtr& clientRetryPolicy,
+    const IRawClientPtr& rawClient,
     const TClientContext& context,
     const TOperationId& operationId)
 {
     const TDuration checkOperationStateInterval =
-        UseLocalModeOptimization(context, clientRetryPolicy)
+        UseLocalModeOptimization(rawClient, context, clientRetryPolicy)
         ? Min(TDuration::MilliSeconds(100), context.Config->OperationTrackerPollPeriod)
         : context.Config->OperationTrackerPollPeriod;
 
@@ -965,26 +973,32 @@ template <typename TSpec>
 void CreateDebugOutputTables(const TSpec& spec, const TOperationPreparer& preparer)
 {
     if (spec.StderrTablePath_.Defined()) {
-        NYT::NDetail::Create(
+        RequestWithRetry<void>(
             preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-            preparer.GetContext(),
-            TTransactionId(),
-            *spec.StderrTablePath_,
-            NT_TABLE,
-            TCreateOptions()
-                .IgnoreExisting(true)
-                .Recursive(true));
+            [&spec, &preparer] (TMutationId& mutationId) {
+                preparer.GetClient()->GetRawClient()->Create(
+                    mutationId,
+                    TTransactionId(),
+                    *spec.StderrTablePath_,
+                    NT_TABLE,
+                    TCreateOptions()
+                        .IgnoreExisting(true)
+                        .Recursive(true));
+            });
     }
     if (spec.CoreTablePath_.Defined()) {
-        NYT::NDetail::Create(
+        RequestWithRetry<void>(
             preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-            preparer.GetContext(),
-            TTransactionId(),
-            *spec.CoreTablePath_,
-            NT_TABLE,
-            TCreateOptions()
-                .IgnoreExisting(true)
-                .Recursive(true));
+            [&spec, &preparer] (TMutationId& mutationId) {
+                preparer.GetClient()->GetRawClient()->Create(
+                    mutationId,
+                    TTransactionId(),
+                    *spec.CoreTablePath_,
+                    NT_TABLE,
+                    TCreateOptions()
+                        .IgnoreExisting(true)
+                        .Recursive(true));
+            });
     }
 }
 
@@ -995,12 +1009,18 @@ void CreateOutputTable(
     Y_ENSURE(path.Path_, "Output table is not set");
     if (!path.Create_.Defined()) {
         // If `create` attribute is defined
-        Create(
+        RequestWithRetry<void>(
             preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-            preparer.GetContext(), preparer.GetTransactionId(), path.Path_, NT_TABLE,
-            TCreateOptions()
-                .IgnoreExisting(true)
-                .Recursive(true));
+            [&preparer, &path] (TMutationId& mutationId) {
+                preparer.GetClient()->GetRawClient()->Create(
+                    mutationId,
+                    preparer.GetTransactionId(),
+                    path.Path_,
+                    NT_TABLE,
+                    TCreateOptions()
+                        .IgnoreExisting(true)
+                        .Recursive(true));
+            });
     }
 }
 
@@ -1020,13 +1040,15 @@ void CheckInputTablesExist(
     Y_ENSURE(!paths.empty(), "Input tables are not set");
     for (auto& path : paths) {
         auto curTransactionId =  path.TransactionId_.GetOrElse(preparer.GetTransactionId());
+        auto exists = RequestWithRetry<bool>(
+            preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
+            [&preparer, &curTransactionId, &path] (TMutationId /*mutationId*/) {
+                return preparer.GetClient()->GetRawClient()->Exists(
+                    curTransactionId,
+                    path.Path_);
+            });
         Y_ENSURE_EX(
-            path.Cluster_.Defined() ||
-            Exists(
-                preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-                preparer.GetContext(),
-                curTransactionId,
-                path.Path_),
+            path.Cluster_.Defined() || exists,
             TApiUsageError() << "Input table '" << path.Path_ << "' doesn't exist");
     }
 }
@@ -1633,6 +1655,7 @@ void ExecuteMapReduce(
     VerifyHasElements(structuredInputs, "inputs");
 
     TFormatBuilder formatBuilder(
+        preparer->GetClient()->GetRawClient(),
         preparer->GetClientRetryPolicy(),
         preparer->GetContext(),
         preparer->GetTransactionId(),
@@ -1657,6 +1680,7 @@ void ExecuteMapReduce(
             TOperationPreparationContext(
                 structuredInputs,
                 mapperOutput,
+                preparer->GetClient()->GetRawClient(),
                 preparer->GetContext(),
                 preparer->GetClientRetryPolicy(),
                 preparer->GetTransactionId()),
@@ -1726,6 +1750,7 @@ void ExecuteMapReduce(
                 TOperationPreparationContext(
                     inputs,
                     outputs,
+                    preparer->GetClient()->GetRawClient(),
                     preparer->GetContext(),
                     preparer->GetClientRetryPolicy(),
                     preparer->GetTransactionId()),
@@ -1791,6 +1816,7 @@ void ExecuteMapReduce(
             TOperationPreparationContext(
                 structuredInputs,
                 structuredOutputs,
+                preparer->GetClient()->GetRawClient(),
                 preparer->GetContext(),
                 preparer->GetClientRetryPolicy(),
                 preparer->GetTransactionId()),

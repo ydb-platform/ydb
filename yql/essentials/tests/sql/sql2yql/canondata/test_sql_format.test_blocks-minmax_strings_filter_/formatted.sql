@@ -1,4 +1,4 @@
-PRAGMA yt.UsePartitionsByKeysForFinalAgg = "false";
+PRAGMA yt.UsePartitionsByKeysForFinalAgg = 'false';
 
 USE plato;
 
@@ -11,7 +11,7 @@ SELECT
 FROM
     Input
 WHERE
-    key != "1" AND s NOT IN ("7", "8")
+    key != '1' AND s NOT IN ('7', '8')
 GROUP BY
     key
 ORDER BY

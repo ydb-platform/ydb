@@ -1,8 +1,8 @@
 USE plato;
 
-$lst =
+$lst = (
     PROCESS Input
-;
+);
 
 $dict = ToDict(ListMap($lst, ($x) -> (($x.key, $x.subkey))));
 

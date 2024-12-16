@@ -1,6 +1,6 @@
 USE plato;
 
-PRAGMA yt.JoinMergeTablesLimit = "10";
+PRAGMA yt.JoinMergeTablesLimit = '10';
 PRAGMA DisableSimpleColumns;
 
 SELECT
@@ -10,5 +10,5 @@ FROM
 CROSS JOIN
     Input2 AS t2
 WHERE
-    t1.k1 == t2.k1 AND t1.k1 < "zzz"
+    t1.k1 == t2.k1 AND t1.k1 < 'zzz'
 ;

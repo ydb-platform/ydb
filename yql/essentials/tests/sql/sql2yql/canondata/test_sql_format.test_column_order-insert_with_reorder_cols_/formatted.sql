@@ -5,7 +5,7 @@ USE plato;
 PRAGMA PositionalUnionAll;
 PRAGMA yt.UseNativeYtTypes;
 
-$i =
+$i = (
     SELECT
         key,
         AGGREGATE_LIST(subkey) AS lst
@@ -13,7 +13,7 @@ $i =
         Input
     GROUP BY
         key
-;
+);
 
 INSERT INTO Output
 SELECT

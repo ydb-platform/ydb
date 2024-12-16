@@ -18,3 +18,9 @@ SELECT
     Unicode::TryToUint64("0101010", 2),
     Unicode::TryToUint64("0101010", 10),
     Unicode::TryToUint64("101", 10);
+
+SELECT
+    Unicode::TryToUint64("0", 8),
+    Unicode::TryToUint64("0", 10),
+    Unicode::TryToUint64("0", 16),
+    Unicode::TryToUint64("0");

@@ -3,28 +3,28 @@
 /* ignore runonopt plan diff */
 USE plato;
 
-PRAGMA warning("disable", "4510");
+PRAGMA warning('disable', '4510');
 
-$r1 =
+$r1 = (
     REDUCE Input0
     ON
         key
     USING ALL SimpleUdf::GenericAsStruct(TableRows())
-;
+);
 
-$r2 =
+$r2 = (
     REDUCE Input0
     ON
         key
     USING SimpleUdf::GenericAsStruct(CAST(TableRow().subkey AS Int32))
-;
+);
 
-$r3 =
+$r3 = (
     REDUCE Input0
     ON
         key
     USING ALL SimpleUdf::GenericAsStruct(TableRow().key)
-;
+);
 
 SELECT
     *

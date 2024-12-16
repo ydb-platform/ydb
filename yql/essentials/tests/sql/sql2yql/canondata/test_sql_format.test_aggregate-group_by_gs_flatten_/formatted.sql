@@ -2,13 +2,13 @@
 /* postgres can not */
 USE plato;
 
-$input =
+$input = (
     SELECT
         a.*,
         [1, 2] AS lst
     FROM
         Input AS a
-;
+);
 
 SELECT
     key,

@@ -15,7 +15,7 @@ FROM (
     SELECT
         key,
         TableRecordIndex() AS record,
-        "d" AS path
+        'd' AS path
     FROM
         Input2
 ) AS x

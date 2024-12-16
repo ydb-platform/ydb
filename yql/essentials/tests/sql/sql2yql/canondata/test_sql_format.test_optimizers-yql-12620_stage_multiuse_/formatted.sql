@@ -2,12 +2,12 @@
 /* syntax version 1 */
 USE plato;
 
-$a =
+$a = (
     SELECT
         *
     FROM
         Input
-;
+);
 
 SELECT
     count(*)

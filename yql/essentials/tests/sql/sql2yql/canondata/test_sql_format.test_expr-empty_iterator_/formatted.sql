@@ -2,16 +2,16 @@
 /* postgres can not */
 USE plato;
 
-$train =
+$train = (
     SELECT
         *
     FROM
         Input
     WHERE
-        key > "900"
+        key > '900'
     GROUP BY
         value
-;
+);
 
 $method = ($stream) -> {
     $func = CALLABLE (
@@ -23,10 +23,10 @@ $method = ($stream) -> {
     RETURN $func($stream);
 };
 
-$prediction =
+$prediction = (
     PROCESS $train
     USING $method(TableRows())
-;
+);
 
 SELECT
     *

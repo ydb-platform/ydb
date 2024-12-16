@@ -6,7 +6,7 @@ SELECT
 FROM
     Input
 WHERE
-    subkey < "100"
+    subkey < '100'
 ;
 
 SELECT

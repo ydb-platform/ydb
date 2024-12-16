@@ -1,7 +1,7 @@
-PRAGMA FeatureR010 = "prototype";
-PRAGMA config.flags("MatchRecognizeStream", "disable");
+PRAGMA FeatureR010 = 'prototype';
+PRAGMA config.flags('MatchRecognizeStream', 'disable');
 
-$input =
+$input = (
     SELECT
         *
     FROM
@@ -16,7 +16,7 @@ $input =
             <|time: 700, name: 'C'|>,
             <|time: 800, name: 'W'|>,
         ])
-;
+);
 
 SELECT
     *

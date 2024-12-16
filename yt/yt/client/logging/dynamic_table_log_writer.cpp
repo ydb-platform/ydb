@@ -26,6 +26,8 @@
 
 #include <yt/yt/core/misc/proc.h>
 
+#include <library/cpp/yt/misc/static_initializer.h>
+
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
@@ -403,17 +405,17 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void RegisterDynamicTableLogWriterFactory()
-{
-    TLogManager::Get()->RegisterWriterFactory(
-        TString(TDynamicTableLogWriterConfig::WriterType),
-        GetDynamicTableLogWriterFactory());
-}
-
 IDynamicTableLogWriterFactoryPtr GetDynamicTableLogWriterFactory()
 {
     return LeakyRefCountedSingleton<TDynamicTableLogWriterFactory>();
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+YT_STATIC_INITIALIZER(
+    TLogManager::Get()->RegisterWriterFactory(
+        TString(TDynamicTableLogWriterConfig::WriterType),
+        GetDynamicTableLogWriterFactory()));
 
 ////////////////////////////////////////////////////////////////////////////////
 

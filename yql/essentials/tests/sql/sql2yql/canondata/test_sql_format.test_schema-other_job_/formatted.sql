@@ -4,5 +4,5 @@ SELECT
 FROM
     plato.range(``, Input1, Input2)
 WHERE
-    key != "fake"
+    key != 'fake'
 ;

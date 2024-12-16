@@ -2,8 +2,8 @@
 /* postgres can not */
 USE plato;
 
-$a = CAST(Unicode::ToUpper("T"u) AS String) || "able";
-$b = CAST(Unicode::ToUpper("T"u) AS String) || "able";
+$a = CAST(Unicode::ToUpper("T"u) AS String) || 'able';
+$b = CAST(Unicode::ToUpper("T"u) AS String) || 'able';
 
 INSERT INTO @$a
 SELECT

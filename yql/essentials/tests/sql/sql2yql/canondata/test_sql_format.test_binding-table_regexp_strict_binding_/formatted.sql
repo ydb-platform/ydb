@@ -1,10 +1,10 @@
 /* syntax version 1 */
 /* postgres can not */
 /* kikimr can not - range not supported */
-$a = "";
-$b = "Input";
-$c = "";
-$d = "";
+$a = '';
+$b = 'Input';
+$c = '';
+$d = '';
 
 SELECT
     count(*)
@@ -14,10 +14,10 @@ FROM
 
 USE plato;
 
-$a = "";
-$b = "Input";
-$c = "";
-$d = "";
+$a = '';
+$b = 'Input';
+$c = '';
+$d = '';
 
 SELECT
     count(*)

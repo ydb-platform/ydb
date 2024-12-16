@@ -69,7 +69,7 @@ TResponseInfo RequestWithoutRetry(
             header.RemoveParameter("retry");
             mutationId = header.AddMutationId();
         } else {
-            header.AddParameter("retry", true, /* overwrite */ true);
+            header.AddParameter("retry", true, /*overwrite*/ true);
             header.SetMutationId(mutationId);
         }
     }

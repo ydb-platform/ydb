@@ -2,14 +2,14 @@
 /* syntax version 1 */
 USE plato;
 
-$in =
+$in = (
     SELECT
         key
     FROM
         InputSorted
     WHERE
-        key < "100"
-;
+        key < '100'
+);
 
 SELECT
     *

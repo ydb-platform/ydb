@@ -3,7 +3,7 @@ SELECT
     *
 FROM (
     SELECT
-        IF(key == "foo", CombineMembers(RemoveMembers(LAG(data) OVER w, ["key"]), ChooseMembers(data, ["key"])), data)
+        IF(key == 'foo', CombineMembers(RemoveMembers(LAG(data) OVER w, ['key']), ChooseMembers(data, ['key'])), data)
     FROM (
         SELECT
             TableRow() AS data,

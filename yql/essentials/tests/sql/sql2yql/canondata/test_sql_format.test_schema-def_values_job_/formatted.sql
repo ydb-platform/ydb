@@ -5,5 +5,5 @@ SELECT
 FROM
     plato.Input
 WHERE
-    key != "fake"
+    key != 'fake'
 ;

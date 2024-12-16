@@ -127,7 +127,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggApply(const TExprNode::TPtr& node)
         return ExpandPgAggregationTraits(node->Pos(), *aggDescPtr, false, node->ChildPtr(2), argTypes, itemType, Ctx);
     }
 
-    const TString modulePath = "/lib/yql/aggregate.yql";
+    const TString modulePath = "/lib/yql/aggregate.yqls";
     auto exportsPtr = TypesCtx.Modules->GetModule(modulePath);
     YQL_ENSURE(exportsPtr, "Failed to get module " << modulePath);
     const auto& exports = exportsPtr->Symbols();

@@ -2904,8 +2904,8 @@ public:
                 Add(Y("set_package_version", BuildQuotedAtom(Pos, p.first), BuildQuotedAtom(Pos, ToString(p.second))));
             }
 
-            Add(Y("import", "aggregate_module", BuildQuotedAtom(Pos, "/lib/yql/aggregate.yql")));
-            Add(Y("import", "window_module", BuildQuotedAtom(Pos, "/lib/yql/window.yql")));
+            Add(Y("import", "aggregate_module", BuildQuotedAtom(Pos, "/lib/yql/aggregate.yqls")));
+            Add(Y("import", "window_module", BuildQuotedAtom(Pos, "/lib/yql/window.yqls")));
             for (const auto& module : ctx.Settings.ModuleMapping) {
                 TString moduleName(module.first + "_module");
                 moduleName.to_lower();

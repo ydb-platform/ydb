@@ -50,9 +50,9 @@ def f(x,y,z):
 def f(x,y,z):
   return x + y + z
 @@))
-(import aggregate_module '"/lib/yql/aggregate.yql")
-(import window_module '"/lib/yql/window.yql")
-(import core_module '"/lib/yql/core.yql")
+(import aggregate_module '"/lib/yql/aggregate.yqls")
+(import window_module '"/lib/yql/window.yqls")
+(import core_module '"/lib/yql/core.yqls")
 (let world (block '(
   (let output (block '(
     (let select (block '(

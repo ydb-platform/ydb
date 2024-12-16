@@ -3,7 +3,7 @@
 (let config (DataSource 'config))
 (let world (Configure! world config 'PureDataSource 'yt))
 
-(import agg_module '"/lib/yql/aggregate.yql")
+(import agg_module '"/lib/yql/aggregate.yqls")
 (let list (AsList
 (AsStruct '('key (Uint32 '1)) '('value (Uint32 '2)))
 (AsStruct '('key (Uint32 '2)) '('value (Uint32 '3)))

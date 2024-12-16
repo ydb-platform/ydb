@@ -100,12 +100,12 @@ namespace NYql {
     }
 
     void LoadYqlDefaultMounts(TUserDataTable& userData) {
-        AddLibraryFromResource(userData, "/lib/yql/aggregate.yql");
-        AddLibraryFromResource(userData, "/lib/yql/window.yql");
-        AddLibraryFromResource(userData, "/lib/yql/id.yql");
-        AddLibraryFromResource(userData, "/lib/yql/sqr.yql");
-        AddLibraryFromResource(userData, "/lib/yql/core.yql");
-        AddLibraryFromResource(userData, "/lib/yql/walk_folders.yql");
+        AddLibraryFromResource(userData, "/lib/yql/aggregate.yqls");
+        AddLibraryFromResource(userData, "/lib/yql/window.yqls");
+        AddLibraryFromResource(userData, "/lib/yql/id.yqls");
+        AddLibraryFromResource(userData, "/lib/yql/sqr.yqls");
+        AddLibraryFromResource(userData, "/lib/yql/core.yqls");
+        AddLibraryFromResource(userData, "/lib/yql/walk_folders.yqls");
     }
 
     TUserDataTable GetYqlModuleResolverImpl(

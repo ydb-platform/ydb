@@ -1,6 +1,6 @@
 (
 #comment
-(import aggregate_module '"/lib/yql/aggregate.yql")
+(import aggregate_module '"/lib/yql/aggregate.yqls")
 (let mr_source (DataSource 'yt 'plato))
 (let x (Read! world mr_source (MrTableConcat (Key '('table (String 'Input1))) (Key '('table (String 'Input2)))) (Void) '()))
 (let world (Left! x))

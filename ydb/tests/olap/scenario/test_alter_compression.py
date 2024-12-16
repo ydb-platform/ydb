@@ -7,8 +7,6 @@ from ydb.tests.olap.scenario.helpers import (
     AlterTableLikeObject,
     AlterTable,
     AlterTableStore,
-    DropTable,
-    DropTableStore,
     AlterColumnFamily,
     AlterCompression,
     AlterCompressionLevel,

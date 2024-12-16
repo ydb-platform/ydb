@@ -136,11 +136,77 @@ static bool AsyncReplicationTarget(std::vector<std::pair<TString, TString>>& out
     return true;
 }
 
+static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
+        const TRule_transfer_settings_entry& in, TSqlExpression& ctx, bool create)
+{
+    auto key = IdEx(in.GetRule_an_id1(), ctx);
+    auto value = ctx.Build(in.GetRule_expr3());
+
+    if (!value) {
+        ctx.Context().Error() << "Invalid replication setting: " << key.Name;
+        return false;
+    }
+
+    TSet<TString> configSettings = {
+        "connection_string",
+        "endpoint",
+        "database",
+        "token",
+        "token_secret_name",
+        "user",
+        "password",
+        "password_secret_name",
+    };
+
+    const auto keyName = to_lower(key.Name);
+    if (!configSettings.count(keyName)) {
+        ctx.Context().Error() << "Unknown transfer setting: " << key.Name;
+        return false;
+    }
+
+    if (!out.emplace(keyName, value).second) {
+        ctx.Context().Error() << "Duplicate transfer setting: " << key.Name;
+    }
+
+    return true;
+}
+
+static bool TransferSettings(std::map<TString, TNodePtr>& out,
+        const TRule_transfer_settings& in, TSqlExpression& ctx, bool create)
+{
+    if (!TransferSettingsEntry(out, in.GetRule_transfer_settings_entry1(), ctx, create)) {
+        return false;
+    }
+
+    for (auto& block : in.GetBlock2()) {
+        if (!TransferSettingsEntry(out, block.GetRule_transfer_settings_entry2(), ctx, create)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool TransferTarget(std::vector<std::pair<TString, TString>>& out, TStringBuf prefixPath,
+        const TRule_transfer_target& in, TTranslation& ctx)
+{
+    const TString remote = Id(in.GetRule_object_ref1().GetRule_id_or_at2(), ctx).second;
+    const TString local = Id(in.GetRule_object_ref3().GetRule_id_or_at2(), ctx).second;
+    out.emplace_back(remote, BuildTablePath(prefixPath, local));
+    return true;
+}
+
 static bool AsyncReplicationAlterAction(std::map<TString, TNodePtr>& settings,
         const TRule_alter_replication_action& in, TSqlExpression& ctx)
 {
     // TODO(ilnaz): support other actions
     return AsyncReplicationSettings(settings, in.GetRule_alter_replication_set_setting1().GetRule_replication_settings3(), ctx, false);
+}
+
+static bool TransferAlterAction(std::map<TString, TNodePtr>& settings,
+        const TRule_alter_transfer_action& in, TSqlExpression& ctx)
+{
+    return TransferSettings(settings, in.GetRule_alter_transfer_set_setting1().GetRule_transfer_settings3(), ctx, false);
 }
 
 bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core) {
@@ -1748,15 +1814,82 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore58: {
-            // CREATE TRANSFER
+            // create_transfer_stmt: CREATE TRANSFER
+            auto& node = core.GetAlt_sql_stmt_core58().GetRule_create_transfer_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref3().HasBlock1()) {
+                const auto& cluster = node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1();
+                if (!ClusterExpr(cluster, false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            auto prefixPath = Ctx.GetPrefixPath(context.ServiceId, context.Cluster);
+
+            std::vector<std::pair<TString, TString>> targets;
+            if (!TransferTarget(targets, prefixPath, node.GetRule_transfer_target5(), *this)) {
+                return false;
+            }
+            for (auto& block : node.GetBlock6()) {
+                if (!TransferTarget(targets, prefixPath, block.GetRule_transfer_target2(), *this)) {
+                    return false;
+                }
+            }
+
+            std::map<TString, TNodePtr> settings;
+            TSqlExpression expr(Ctx, Mode);
+            if (!TransferSettings(settings, node.GetRule_transfer_settings9(), expr, true)) {
+                return false;
+            }
+
+            const TString id = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
+            AddStatementToBlocks(blocks, BuildCreateTransfer(Ctx.Pos(), BuildTablePath(prefixPath, id),
+                std::move(targets), std::move(settings), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore59: {
-            // ALTER TRANSFER
+            // alter_transfer_stmt: ALTER TRANSFER
+            auto& node = core.GetAlt_sql_stmt_core59().GetRule_alter_transfer_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref3().HasBlock1()) {
+                const auto& cluster = node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1();
+                if (!ClusterExpr(cluster, false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            std::map<TString, TNodePtr> settings;
+            TSqlExpression expr(Ctx, Mode);
+            if (!TransferAlterAction(settings, node.GetRule_alter_transfer_action4(), expr)) {
+                return false;
+            }
+            for (auto& block : node.GetBlock5()) {
+                if (!TransferAlterAction(settings, block.GetRule_alter_transfer_action2(), expr)) {
+                    return false;
+                }
+            }
+
+            const TString id = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
+            AddStatementToBlocks(blocks, BuildAlterTransfer(Ctx.Pos(),
+                BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), id),
+                std::move(settings), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore60: {
-            // DROP TRANSFER
+            // drop_transfer_stmt: DROP TRANSFER
+            auto& node = core.GetAlt_sql_stmt_core60().GetRule_drop_transfer_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref3().HasBlock1()) {
+                const auto& cluster = node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1();
+                if (!ClusterExpr(cluster, false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            const TString id = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
+            AddStatementToBlocks(blocks, BuildDropTransfer(Ctx.Pos(),
+                BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), id),
+                node.HasBlock4(), context));
             break;
         }
         case TRule_sql_stmt_core::ALT_NOT_SET:

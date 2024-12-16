@@ -2343,14 +2343,12 @@ public:
             TCreateTransferSettings settings;
             settings.Name = TString(createTransfer.Transfer());
 
-            /*
-            for (auto target : createTransfer.Targets()) {
+            for (auto target : createTransfer.TransferTargets()) {
                 settings.Targets.emplace_back(
                     target.RemotePath().Cast<TCoAtom>().StringValue(),
                     target.LocalPath().Cast<TCoAtom>().StringValue()
                 );
             }
-            */
 
             if (!ParseTransferSettings(settings.Settings, createTransfer.TransferSettings(), ctx, createTransfer.Pos())) {
                 return SyncError();

@@ -32,6 +32,8 @@ namespace NKikimr {
         enum : ui8 {
             // The most verbose detalisation level used in production
             ProductionVerbose = 13,
+            // The most verbose detalisation level
+            MostVerbose = 15,
         };
     };
 

@@ -109,8 +109,8 @@ template <typename TTrait> struct TTupleLayoutFallback : public TTupleLayout {
     using TSimdI8 = typename TTrait::TSimdI8;
     template <class T> using TSimd = typename TTrait::template TSimd8<T>;
 
-    static constexpr ui8 kSIMDMaxCols = 8;
-    static constexpr ui8 kSIMDMaxInnerLoopSize = 8;
+    static constexpr ui8 kSIMDMaxCols = 4;
+    static constexpr ui8 kSIMDMaxInnerLoopSize = 4;
 
     size_t BlockRows_; // Estimated rows per cache block
     std::vector<size_t> BlockColsOffsets_;

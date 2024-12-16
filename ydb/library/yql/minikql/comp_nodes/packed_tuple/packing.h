@@ -341,84 +341,56 @@ template <class TTraits> struct SIMDPack {
         ///     ui8 -> ui16 -> ui32 -> ui64 -> 128bit-lane
         /// smth like fourier butterfly
 
-        for (ui8 iter = LogIter; iter < BaseIters; ++iter) {
-            const bool from = iter % 2;
-            const bool to = from ^ 1;
+#define TRANSPOSE_ITER(iter, bits)                                             \
+    if constexpr (LogIter <= iter) {                                           \
+        constexpr bool from = iter % 2;                                        \
+        constexpr bool to = from ^ 1;                                          \
+                                                                               \
+        constexpr ui8 log = iter - LogIter;                                    \
+        constexpr ui8 exp = 1u << log;                                         \
+                                                                               \
+        for (ui8 col = 0; col != Cols; ++col) {                                \
+            switch ((col & exp) >> log) {                                      \
+            case 0: {                                                          \
+                regs[to][col] = TSimd<ui8>::UnpackLaneLo##bits(                \
+                    regs[from][col & ~exp], regs[from][col | exp]);            \
+                break;                                                         \
+            }                                                                  \
+            case 1: {                                                          \
+                regs[to][col] = TSimd<ui8>::UnpackLaneHi##bits(                \
+                    regs[from][col & ~exp], regs[from][col | exp]);            \
+                break;                                                         \
+            }                                                                  \
+            default:;                                                          \
+            }                                                                  \
+        }                                                                      \
+    }
 
-            const ui8 log = iter - LogIter;
-            const ui8 exp = 1u << log;
+        TRANSPOSE_ITER(0, 8);
+        TRANSPOSE_ITER(1, 16);
+        TRANSPOSE_ITER(2, 32);
+        TRANSPOSE_ITER(3, 64);
+    
+#undef TRANSPOSE_ITER
 
-            for (ui8 col = 0; col != Cols; ++col) {
-                switch (iter | ((col & exp) << (TransposeIters - log))) {
-                case 0: {
-                    regs[to][col] = TSimd<ui8>::UnpackLaneLo8(
-                        regs[from][col & ~exp], regs[from][col | exp]);
-                    break;
-                }
-                case 0 | (1 << TransposeIters): {
-                    regs[to][col] = TSimd<ui8>::UnpackLaneHi8(
-                        regs[from][col & ~exp], regs[from][col | exp]);
-                    break;
-                }
-                case 1: {
-                    regs[to][col] = TSimd<ui8>::UnpackLaneLo16(
-                        regs[from][col & ~exp], regs[from][col | exp]);
-                    break;
-                }
-                case 1 | (1 << TransposeIters): {
-                    regs[to][col] = TSimd<ui8>::UnpackLaneHi16(
-                        regs[from][col & ~exp], regs[from][col | exp]);
-                    break;
-                }
-                case 2: {
-                    regs[to][col] = TSimd<ui8>::UnpackLaneLo32(
-                        regs[from][col & ~exp], regs[from][col | exp]);
-                    break;
-                }
-                case 2 | (1 << TransposeIters): {
-                    regs[to][col] = TSimd<ui8>::UnpackLaneHi32(
-                        regs[from][col & ~exp], regs[from][col | exp]);
-                    break;
-                }
-                case 3: {
-                    regs[to][col] = TSimd<ui8>::UnpackLaneLo64(
-                        regs[from][col & ~exp], regs[from][col | exp]);
-                    break;
-                }
-                case 3 | (1 << TransposeIters): {
-                    regs[to][col] = TSimd<ui8>::UnpackLaneHi64(
-                        regs[from][col & ~exp], regs[from][col | exp]);
-                    break;
-                }
-                default:
-                    throw std::runtime_error("Unexpected switch case");
-                }
-            }
-        }
-
-        /// code copy-paste to support AVX2 laness permutation
-        /// TODO: is it better to add SSE lanes blank methods
-        ///       to compile them in one continuous switch above
-        ///       instead of copy-pasting code for AVX2 ?
         if constexpr (LaneIters == 1) {
-            const auto iter = BaseIters;
+            constexpr auto iter = BaseIters;
 
-            const bool from = iter % 2;
-            const bool to = from ^ 1;
+            constexpr bool from = iter % 2;
+            constexpr bool to = from ^ 1;
 
-            const ui8 log = iter - LogIter;
-            const ui8 exp = 1u << log;
+            constexpr ui8 log = iter - LogIter;
+            constexpr ui8 exp = 1u << log;
 
             for (ui8 col = 0; col != Cols; ++col) {
-                switch (iter | ((col & exp) << (TransposeIters - log))) {
-
-                case 4: {
+                switch ((col & exp) >> log) {
+                case 0: {
                     regs[to][col] =
                         TSimd<ui8>::template PermuteLanes<0 + 2 * 16>(
                             regs[from][col & ~exp], regs[from][col | exp]);
                     break;
                 }
-                case 4 | (1 << TransposeIters): {
+                case 1: {
                     regs[to][col] =
                         TSimd<ui8>::template PermuteLanes<1 + 3 * 16>(
                             regs[from][col & ~exp], regs[from][col | exp]);

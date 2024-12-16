@@ -667,10 +667,8 @@ void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Unpack(
     }
 }
 
-#define MULTI_8_I(C, i)                                                        \
-    C(i, 0) C(i, 1) C(i, 2) C(i, 3) C(i, 4) C(i, 5) C(i, 6) C(i, 7)
-#define MULTI_8(C, A)                                                          \
-    C(A, 0) C(A, 1) C(A, 2) C(A, 3) C(A, 4) C(A, 5) C(A, 6) C(A, 7)
+#define MULTI_8_I(C, i) C(i, 0) C(i, 1) C(i, 2) C(i, 3)
+#define MULTI_8(C, A) C(A, 0) C(A, 1) C(A, 2) C(A, 3)
 
 template <typename TTraits>
 void TTupleLayoutFallback<TTraits>::Pack(

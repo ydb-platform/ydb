@@ -7,7 +7,7 @@ namespace NKikimr::NJaegerTracing {
 // Generate a new trace id (or throttle existing one)
 // with probability according to current configuration and request type.
 // Can be called from actor system threads.
-void HandleTracing(NWilson::TTraceId& traceId, const TRequestDiscriminator& discriminator);
+NWilson::TTraceId HandleTracing(const TRequestDiscriminator& discriminator, const TMaybe<TString>& traceparent);
 
 // For test purposes
 // Clears tracing control TLS variables that depend on AppData

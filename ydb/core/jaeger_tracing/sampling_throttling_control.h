@@ -10,7 +10,8 @@ class TSamplingThrottlingControl: public TThrRefBase {
     friend class TSamplingThrottlingConfigurator;
     
 public:
-    void HandleTracing(NWilson::TTraceId& traceId, const TRequestDiscriminator& discriminator);
+    NWilson::TTraceId HandleTracing(const TRequestDiscriminator& discriminator,
+            const TMaybe<TString>& traceparent);
 
     ~TSamplingThrottlingControl();
     

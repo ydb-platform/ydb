@@ -280,9 +280,9 @@ protected:
             }
         }
 
-        TExprNode::TPtr ttl = nullptr;
-        TExprNode::TPtr maxCachedRows = nullptr;
-        TExprNode::TPtr maxDelayedRows = nullptr;
+        TExprNode::TPtr ttl;
+        TExprNode::TPtr maxCachedRows;
+        TExprNode::TPtr maxDelayedRows;
         if (const auto maybeOptions = join.Options()) {
             for (auto&& option: maybeOptions.Cast()) {
                 auto&& name = option.Name().Value();

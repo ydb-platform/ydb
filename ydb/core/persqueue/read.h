@@ -145,16 +145,18 @@ namespace NPQ {
 
         void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx)
         {
-            auto resp = ev->Get()->Record;
+            const auto& resp = ev->Get()->Record;
             Y_ABORT_UNLESS(resp.HasCookie());
             auto it = KvRequests.find(resp.GetCookie());
             Y_ABORT_UNLESS(it != KvRequests.end());
 
-            TErrorInfo error;
-            if (it->second.Type == TKvRequest::TypeRead) {
+            switch (it->second.Type) {
+            case TKvRequest::TypeRead:
                 OnKvReadResult(ev, ctx, it->second);
-            } else if (it->second.Type == TKvRequest::TypeWrite) {
+                break;
+            case TKvRequest::TypeWrite:
                 OnKvWriteResult(ev, ctx, it->second);
+                break;
             }
 
             KvRequests.erase(it);
@@ -229,9 +231,9 @@ namespace NPQ {
             UpdateCounters(ctx);
         }
 
-        void OnKvWriteResult(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx, TKvRequest& kvReq)
+        void OnKvWriteResult(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx, const TKvRequest& kvReq)
         {
-            auto resp = ev->Get()->Record;
+            auto& resp = ev->Get()->Record;
             if (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK) {
                 Y_ABORT_UNLESS(resp.WriteResultSize() == (kvReq.Blobs.size() + kvReq.MetadataWritesCount),
                     "Mismatch write result size: %" PRIu64 " vs expected blobs %" PRIu64 " and metadata %" PRIu32,
@@ -245,9 +247,8 @@ namespace NPQ {
                 Cache.SaveHeadBlobs(ctx, kvReq);
             }
 
-            THolder<TEvKeyValue::TEvResponse> response = MakeHolder<TEvKeyValue::TEvResponse>();
-            response->Record = std::move(ev->Get()->Record);
-
+            auto response = MakeHolder<TEvKeyValue::TEvResponse>();
+            response->Record = std::move(resp);
             response->Record.ClearCookie(); //cookie must not leak to Partition - it uses cookie for SetOffset requests
 
             ctx.Send(kvReq.Sender, response.Release()); // -> Partition

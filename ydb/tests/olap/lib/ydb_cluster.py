@@ -93,6 +93,13 @@ class YdbCluster:
             raise
 
     @classmethod
+    def reset(cls, ydb_endpoint, ydb_database, ydb_mon_port):
+        cls.ydb_endpoint = ydb_endpoint
+        cls.ydb_database = ydb_database
+        cls.ydb_mon_port = ydb_mon_port
+        cls._ydb_driver = None
+
+    @classmethod
     def get_ydb_driver(cls):
         if cls._ydb_driver is None:
             cls._ydb_driver = cls._create_ydb_driver(

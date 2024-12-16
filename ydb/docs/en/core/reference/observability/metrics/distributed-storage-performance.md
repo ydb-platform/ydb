@@ -24,12 +24,13 @@ In addition to user requests, the load on distributed storage is created by back
 
 ### Available disk time {#diskTimeAvailable}
 
-The PDisk scheduler manages the requests execution order from its client VDisks. PDisk fairly divides the device's time among its VDisks, ensuring that each of the $N$ VDisks is guaranteed $1/N$ seconds of the physical device's working time each second. The available disk time is the estimated physical device's operational time that the PDisk scheduler will allocate to a given VDisk. The available disk time is measured in the same arbitrary units as the request cost. Based on the information about the number of neighboring VDisks for each VDisk, denoted as $N$, and the configurable parameter `DiskTimeAvailableScale`, the available disk time estimate, referred to as `DiskTimeAvailable`, is calculated by the formula:
+The PDisk scheduler manages the requests execution order from its client VDisks. PDisk fairly divides the device's time among its VDisks, ensuring that each of the $N$ VDisks is guaranteed $1/N$ seconds of the physical device's working time each second. Based on the information about the number of neighboring VDisks for each VDisk, denoted as $N$, and the configurable parameter `DiskTimeAvailableScale` an estimate of the operation time with the physical device that the PDisk scheduler allocates to the client VDisk is calculated. This estimate is called DiskTimeAvailable and is calculated using the formula:
+
 $$
     DiskTimeAvailable = \dfrac{1000000000}{N} \cdot \dfrac{DiskTimeAvailableScale}{1000}
 $$
 
-### Load burst detector {#burstDetector}
+### Load burst detection {#burstDetection}
 
 A burst is a sharp, short-term increase in the load on a VDisk, which can lead to degradation in the response time of operations. The values of sensors on cluster nodes are collected at certain intervals, for example, every 15 seconds, making it impossible to reliably detect short-term events using only the metrics of request cost and available disk time. A modified [Token Bucket algorithm](https://en.wikipedia.org/wiki/Token_bucket) is used to address this issue. In this modification, the bucket can have a negative number of tokens and such a state is called underflow. Each VDisk is associated with a separate burst detector – a specialized object that monitors load bursts using the aforementioned algorithm. The minimum expected response time, at which an increase in load is considered a burst, is determined by the configurable parameter `BurstThresholdNs`. The bucket will underflow if the calculated time needed to process the requests in nanoseconds exceeds the `BurstThresholdNs` value.
 
@@ -44,9 +45,11 @@ Performance metrics are calculated based on the following VDisk sensors:
 | `CompactionDiskCost`  | Total cost of requests the VDisk sends as part of the compaction process.                                                     | arbitrary units   |
 | `DefragDiskCost`      | Total cost of requests the VDisk sends as part of the defragmentation process.                                                | arbitrary units   |
 | `ScrubDiskCost`       | Total cost of requests the VDisk sends as part of the scrubbing process.                                                      | arbitrary units   |
-| `BurstDetector_redMs` | The duration in milliseconds during which the Token Bucket was in an underflow state.                                         | ms                |
+| `BurstDetector_redMs` | The duration in milliseconds during which the Token Bucket was in the underflow state.                                         | ms                |
 
-`DiskTimeAvailable` and the request cost are estimates of available and consumed bandwidth, respectively, and not actually measured time, therefore both of these quantities are measured in arbitrary units.
+`DiskTimeAvailable` and the request cost are estimates of available and consumed bandwidth, respectively, and not actually measured time. Therefore, both of these values are measured in arbitrary units that, in terms of their physical meaning, are close to nanoseconds.
+
+Performance metrics are displayed on a [dedicated Grafana dashboard](grafana-dashboards.md#ds-performance).
 
 ### Conditions for Distributed Storage guarantees {#requirements}
 
@@ -64,9 +67,9 @@ Since the coefficients for the request cost formula were measured on specific ph
 | `disk_time_available_scale_hdd`       | [`DiskTimeAvailableScale` parameter](#diskTimeAvailable) for VDisks running on HDD devices.   | arbitrary units   | `1000`        |
 | `disk_time_available_scale_ssd`       | [`DiskTimeAvailableScale` parameter](#diskTimeAvailable) for VDisks running on SSD devices.   | arbitrary units   | `1000`        |
 | `disk_time_available_partition_nvme`  | [`DiskTimeAvailableScale` parameter](#diskTimeAvailable) for VDisks running on NVMe devices.  | arbitrary units   | `1000`        |
-| `burst_threshold_ns_hdd`              | [`BurstThresholdNs` parameter](#burstDetector) for VDisks running on HDD devices.             | ns                | `200000000`   |
-| `burst_threshold_ns_ssd`              | [`BurstThresholdNs` parameter](#burstDetector) for VDisks running on SSD devices.             | ns                | `50000000`    |
-| `burst_threshold_ns_nvme`             | [`BurstThresholdNs` parameter](#burstDetector) for VDisks running on NVMe devices.            | ns                | `32000000`    |
+| `burst_threshold_ns_hdd`              | [`BurstThresholdNs` parameter](#burstDetection) for VDisks running on HDD devices.             | ns                | `200000000`   |
+| `burst_threshold_ns_ssd`              | [`BurstThresholdNs` parameter](#burstDetection) for VDisks running on SSD devices.             | ns                | `50000000`    |
+| `burst_threshold_ns_nvme`             | [`BurstThresholdNs` parameter](#burstDetection) for VDisks running on NVMe devices.            | ns                | `32000000`    |
 
 #### Configuration examples
 
@@ -93,4 +96,3 @@ $$
 Set the `disk_time_available_scale_<used-device-type>` configuration parameter equal to the calculated value of $D$, multiplied by 1000 and rounded. We assume that the physical devices in the user cluster are comparable in performance to the baseline; hence, by default, the `disk_time_available_scale_<used-device-type>` parameter is set to 1000.
 
 Such a load can be created, for example, using [Storage LoadActor](../../../contributor/load-actors-storage.md).
-

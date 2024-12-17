@@ -1,5 +1,6 @@
 USE plato;
-PRAGMA yt.DisableOptimizers = "OutHorizontalJoin,HorizontalJoin,MultiHorizontalJoin";
+
+PRAGMA yt.DisableOptimizers = 'OutHorizontalJoin,HorizontalJoin,MultiHorizontalJoin';
 
 SELECT
     ToPg(s),
@@ -7,11 +8,15 @@ SELECT
     ToPg(y),
     ToPg(j),
     ToPg(jd)
-FROM Input;
+FROM
+    Input
+;
 
 SELECT
     ToPg(tzd),
     ToPg(tzdt),
     ToPg(tzts),
     ToPg(ud)
-FROM Input;
+FROM
+    Input
+;

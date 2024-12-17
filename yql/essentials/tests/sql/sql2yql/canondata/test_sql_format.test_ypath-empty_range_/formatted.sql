@@ -1,4 +1,6 @@
 /*ytfile can not*/
 SELECT
     *
-FROM plato.`<ranges=[]>//Input`;
+FROM
+    plato.`<ranges=[]>//Input`
+;

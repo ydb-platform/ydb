@@ -92,6 +92,7 @@ public:
     void RegisterPackage(const TString& package) override;
     bool SetPackageDefaultVersion(const TString& package, ui32 version) override;
     const TExportTable* GetModule(const TString& module) const override;
+    void WriteStatistics(NYson::TYsonWriter& writer) override;
     bool AddFromFile(const std::string_view& file, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos) final;
     bool AddFromUrl(const std::string_view& file, const std::string_view& url, const std::string_view& tokenName, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos) final;
     bool AddFromMemory(const std::string_view& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos) final;
@@ -104,7 +105,7 @@ public:
     TString GetFileAliasPrefix() const override;
 
 private:
-    bool AddFromMemory(const TString& fullName, const TString& moduleName, bool isYql, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos, std::vector<TString>* exports = nullptr, std::vector<TString>* imports = nullptr);
+    bool AddFromMemory(const TString& fullName, const TString& moduleName, bool sExpr, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos, std::vector<TString>* exports = nullptr, std::vector<TString>* imports = nullptr);
     THashMap<TString, TLibraryCohesion> FilterLibsByVersion() const;
     static TString ExtractPackageNameFromModule(TStringBuf moduleName);
     TString SubstParameters(const TString& str);
@@ -127,6 +128,7 @@ private:
     const bool OptimizeLibraries;
     THolder<TExprContext::TFreezeGuard> FreezeGuard;
     TString FileAliasPrefix;
+    TSet<TString> UsedSuffixes;
 };
 
 bool SplitUdfName(TStringBuf name, TStringBuf& moduleName, TStringBuf& funcName);

@@ -4,8 +4,11 @@ SELECT
     key,
     subkey,
     TableName() AS name
-FROM Input
-WHERE value == 'q';
+FROM
+    Input
+WHERE
+    value == 'q'
+;
 
 SELECT
     key,
@@ -14,8 +17,11 @@ FROM (
     SELECT DISTINCT
         key,
         subkey
-    FROM Input
-    WHERE value == 'q'
+    FROM
+        Input
+    WHERE
+        value == 'q'
 )
 GROUP BY
-    key;
+    key
+;

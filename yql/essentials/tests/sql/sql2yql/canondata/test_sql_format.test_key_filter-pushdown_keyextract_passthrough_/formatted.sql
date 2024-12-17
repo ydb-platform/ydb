@@ -2,21 +2,25 @@
 /* postgres can not */
 USE plato;
 
-$src =
+$src = (
     SELECT
         key,
-        "ZZZ" || key AS subkey,
+        'ZZZ' || key AS subkey,
         value,
-    FROM Input
-        AS u
+    FROM
+        Input AS u
     ASSUME ORDER BY
-        key;
+        key
+);
 
 SELECT
     *
-FROM $src
-WHERE key < "075" OR key > "075"
+FROM
+    $src
+WHERE
+    key < '075' OR key > '075'
 ORDER BY
     key,
     subkey,
-    value;
+    value
+;

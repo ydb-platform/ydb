@@ -86,20 +86,19 @@ NKqpProto::TKqpPhyInternalBinding::EType GetPhyInternalBindingType(const std::st
     return bindingType;
 }
 
-NKqpProto::EStreamLookupStrategy GetStreamLookupStrategy(const std::string_view strategy) {
-    NKqpProto::EStreamLookupStrategy lookupStrategy = NKqpProto::EStreamLookupStrategy::UNSPECIFIED;
-
-    if (strategy == "LookupRows"sv) {
-        lookupStrategy = NKqpProto::EStreamLookupStrategy::LOOKUP;
-    } else if (strategy == "LookupJoinRows"sv) {
-        lookupStrategy = NKqpProto::EStreamLookupStrategy::JOIN;
-    } else if (strategy == "LookupSemiJoinRows"sv) {
-        lookupStrategy = NKqpProto::EStreamLookupStrategy::SEMI_JOIN;
+NKqpProto::EStreamLookupStrategy GetStreamLookupStrategy(EStreamLookupStrategyType strategy) {
+    switch (strategy) {
+        case EStreamLookupStrategyType::Unspecified:
+            break;
+        case EStreamLookupStrategyType::LookupRows:
+            return NKqpProto::EStreamLookupStrategy::LOOKUP;
+        case EStreamLookupStrategyType::LookupJoinRows:
+            return NKqpProto::EStreamLookupStrategy::JOIN;
+        case EStreamLookupStrategyType::LookupSemiJoinRows:
+            return NKqpProto::EStreamLookupStrategy::SEMI_JOIN;
     }
 
-    YQL_ENSURE(lookupStrategy != NKqpProto::EStreamLookupStrategy::UNSPECIFIED,
-        "Unexpected stream lookup strategy: " << strategy);
-    return lookupStrategy;
+    YQL_ENSURE(false, "Unspecified stream lookup strategy: " << strategy);
 }
 
 void FillTableId(const TKqpTable& table, NKqpProto::TKqpPhyTableId& tableProto) {
@@ -1380,10 +1379,12 @@ private:
             const auto resultItemType = resultType->Cast<TStreamExprType>()->GetItemType();
             streamLookupProto.SetResultType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *resultItemType), TypeEnv));
 
-            YQL_ENSURE(streamLookup.LookupStrategy().Maybe<TCoAtom>());
-            TString lookupStrategy = streamLookup.LookupStrategy().Maybe<TCoAtom>().Cast().StringValue();
-            streamLookupProto.SetLookupStrategy(GetStreamLookupStrategy(lookupStrategy));
+            auto settings = TKqpStreamLookupSettings::Parse(streamLookup);
+            streamLookupProto.SetLookupStrategy(GetStreamLookupStrategy(settings.Strategy));
             streamLookupProto.SetKeepRowsOrder(Config->OrderPreservingLookupJoinEnabled());
+            if (settings.AllowNullKeysPrefixSize) {
+                streamLookupProto.SetAllowNullKeysPrefixSize(*settings.AllowNullKeysPrefixSize);
+            }
 
             switch (streamLookupProto.GetLookupStrategy()) {
                 case NKqpProto::EStreamLookupStrategy::LOOKUP: {
@@ -1442,7 +1443,7 @@ private:
                     break;
                 }
                 default:
-                    YQL_ENSURE(false, "Unexpected lookup strategy for stream lookup: " << lookupStrategy);
+                    YQL_ENSURE(false, "Unexpected lookup strategy for stream lookup: " << settings.Strategy);
             }
 
             return;

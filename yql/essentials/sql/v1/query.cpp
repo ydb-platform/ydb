@@ -370,8 +370,8 @@ static INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, cons
     if (desc.Settings.VirtualTimestamps) {
         settings = node.L(settings, node.Q(node.Y(node.Q("virtual_timestamps"), desc.Settings.VirtualTimestamps)));
     }
-    if (desc.Settings.ResolvedTimestamps) {
-        settings = node.L(settings, node.Q(node.Y(node.Q("resolved_timestamps"), desc.Settings.ResolvedTimestamps)));
+    if (desc.Settings.BarriersInterval) {
+        settings = node.L(settings, node.Q(node.Y(node.Q("barriers_interval"), desc.Settings.BarriersInterval)));
     }
     if (desc.Settings.RetentionPeriod) {
         settings = node.L(settings, node.Q(node.Y(node.Q("retention_period"), desc.Settings.RetentionPeriod)));
@@ -2904,8 +2904,8 @@ public:
                 Add(Y("set_package_version", BuildQuotedAtom(Pos, p.first), BuildQuotedAtom(Pos, ToString(p.second))));
             }
 
-            Add(Y("import", "aggregate_module", BuildQuotedAtom(Pos, "/lib/yql/aggregate.yql")));
-            Add(Y("import", "window_module", BuildQuotedAtom(Pos, "/lib/yql/window.yql")));
+            Add(Y("import", "aggregate_module", BuildQuotedAtom(Pos, "/lib/yql/aggregate.yqls")));
+            Add(Y("import", "window_module", BuildQuotedAtom(Pos, "/lib/yql/window.yqls")));
             for (const auto& module : ctx.Settings.ModuleMapping) {
                 TString moduleName(module.first + "_module");
                 moduleName.to_lower();

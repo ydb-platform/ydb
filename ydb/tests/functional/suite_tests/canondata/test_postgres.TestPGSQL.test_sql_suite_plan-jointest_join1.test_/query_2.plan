@@ -39,7 +39,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[Arg.J1_TBL.i,Arg.J1_TBL.j,Arg.J1_TBL.t,Arg.J2_TBL.k]"
                                             }
                                         ],
                                         "PlanNodeId": 6,
@@ -58,9 +58,9 @@
                                                                     "i",
                                                                     "k"
                                                                 ],
-                                                                "E-Cost": "No estimate",
-                                                                "E-Rows": "No estimate",
-                                                                "E-Size": "No estimate",
+                                                                "E-Cost": "0",
+                                                                "E-Rows": "0",
+                                                                "E-Size": "0",
                                                                 "LookupKeyColumns": [
                                                                     "i"
                                                                 ],

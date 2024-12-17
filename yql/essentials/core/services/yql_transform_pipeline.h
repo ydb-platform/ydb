@@ -4,6 +4,7 @@
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/yql_execution.h>
 #include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
 
 #include <util/generic/ptr.h>
 
@@ -29,7 +30,7 @@ public:
         IGraphTransformer* calcTransfomer = nullptr, EYqlIssueCode issueCode = TIssuesIds::CORE_EXPR_EVALUATION);
     TTransformationPipeline& AddPreIOAnnotation(bool withEpochsTransformer = true, EYqlIssueCode issueCode = TIssuesIds::CORE_PRE_TYPE_ANN);
     TTransformationPipeline& AddIOAnnotation(bool withEpochsTransformer = true, EYqlIssueCode issueCode = TIssuesIds::CORE_PRE_TYPE_ANN);
-    TTransformationPipeline& AddTypeAnnotation(EYqlIssueCode issueCode = TIssuesIds::CORE_TYPE_ANN);
+    TTransformationPipeline& AddTypeAnnotation(EYqlIssueCode issueCode = TIssuesIds::CORE_TYPE_ANN, bool twoStages = false);
     TTransformationPipeline& AddPostTypeAnnotation(bool forSubGraph = false, bool disableConstraintCheck = false, EYqlIssueCode issueCode = TIssuesIds::CORE_POST_TYPE_ANN);
     TTransformationPipeline& AddCommonOptimization(EYqlIssueCode issueCode = TIssuesIds::CORE_OPTIMIZATION);
     TTransformationPipeline& AddFinalCommonOptimization(EYqlIssueCode issueCode = TIssuesIds::CORE_OPTIMIZATION);
@@ -40,8 +41,11 @@ public:
 
     TTransformationPipeline& AddIntentDeterminationTransformer(EYqlIssueCode issueCode = TIssuesIds::CORE_INTENT);
     TTransformationPipeline& AddTableMetadataLoaderTransformer(EYqlIssueCode issueCode = TIssuesIds::CORE_TABLE_METADATA_LOADER);
-    TTransformationPipeline& AddTypeAnnotationTransformer(TAutoPtr<IGraphTransformer> callableTransformer, EYqlIssueCode issueCode = TIssuesIds::CORE_TYPE_ANN);
-    TTransformationPipeline& AddTypeAnnotationTransformer(EYqlIssueCode issueCode = TIssuesIds::CORE_TYPE_ANN);
+    TTransformationPipeline& AddTypeAnnotationTransformer(TAutoPtr<IGraphTransformer> callableTransformer, EYqlIssueCode issueCode = TIssuesIds::CORE_TYPE_ANN,
+        ETypeCheckMode mode = ETypeCheckMode::Single);
+    TTransformationPipeline& AddTypeAnnotationTransformerWithMode(EYqlIssueCode issueCode = TIssuesIds::CORE_TYPE_ANN,
+        ETypeCheckMode mode = ETypeCheckMode::Single);
+    TTransformationPipeline& AddTypeAnnotationTransformer(EYqlIssueCode issueCode = TIssuesIds::CORE_TYPE_ANN, bool twoStages = false);
 
     TTransformationPipeline& Add(TAutoPtr<IGraphTransformer> transformer, const TString& stageName,
         EYqlIssueCode issueCode = TIssuesIds::DEFAULT_ERROR, const TString& issueMessage = {});

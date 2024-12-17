@@ -1,132 +1,176 @@
 /* postgres can not */
 SELECT
-    Bool("true");
+    Bool('true')
+;
 
 SELECT
-    Bool("FalsE");
+    Bool('FalsE')
+;
 
 SELECT
-    Int8("-128");
+    Int8('-128')
+;
 
 SELECT
-    Int8("127");
+    Int8('127')
+;
 
 SELECT
-    Uint8("0");
+    Uint8('0')
+;
 
 SELECT
-    Uint8("255");
+    Uint8('255')
+;
 
 SELECT
-    Int16("-32768");
+    Int16('-32768')
+;
 
 SELECT
-    Int16("32767");
+    Int16('32767')
+;
 
 SELECT
-    Uint16("0");
+    Uint16('0')
+;
 
 SELECT
-    Uint16("65535");
+    Uint16('65535')
+;
 
 SELECT
-    Int32("-2147483648");
+    Int32('-2147483648')
+;
 
 SELECT
-    Int32("2147483647");
+    Int32('2147483647')
+;
 
 SELECT
-    Uint32("0");
+    Uint32('0')
+;
 
 SELECT
-    Uint32("4294967295");
+    Uint32('4294967295')
+;
 
 SELECT
-    Int64("-9223372036854775808");
+    Int64('-9223372036854775808')
+;
 
 SELECT
-    Int64("9223372036854775807");
+    Int64('9223372036854775807')
+;
 
 SELECT
-    Uint64("0");
+    Uint64('0')
+;
 
 SELECT
-    Uint64("18446744073709551615");
+    Uint64('18446744073709551615')
+;
 
 SELECT
-    Float("0");
+    Float('0')
+;
 
 SELECT
-    Float("1");
+    Float('1')
+;
 
 SELECT
-    Float("-1e30");
+    Float('-1e30')
+;
 
 SELECT
-    Float("-inf");
+    Float('-inf')
+;
 
 SELECT
-    Float("+inf");
+    Float('+inf')
+;
 
 SELECT
-    Float("nan");
+    Float('nan')
+;
 
 SELECT
-    Double("0");
+    Double('0')
+;
 
 SELECT
-    Double("1");
+    Double('1')
+;
 
 SELECT
-    Double("-1e300");
+    Double('-1e300')
+;
 
 SELECT
-    Double("-inf");
+    Double('-inf')
+;
 
 SELECT
-    Double("+inf");
+    Double('+inf')
+;
 
 SELECT
-    Double("nan");
+    Double('nan')
+;
 
 SELECT
-    String("foo\xffbar");
+    String('foo\xffbar')
+;
 
 SELECT
-    Utf8("привет");
+    Utf8('привет')
+;
 
 SELECT
-    Yson("<a=1>[3;%false]");
+    Yson('<a=1>[3;%false]')
+;
 
 SELECT
-    Json(@@{"a":1,"b":null}@@);
+    Json(@@{"a":1,"b":null}@@)
+;
 
 SELECT
-    CAST(Date("2000-01-01") AS string);
+    CAST(Date('2000-01-01') AS string)
+;
 
 SELECT
-    CAST(Datetime("2000-01-01T01:02:03Z") AS string);
+    CAST(Datetime('2000-01-01T01:02:03Z') AS string)
+;
 
 SELECT
-    CAST(Timestamp("2000-01-01T01:02:03.4Z") AS string);
+    CAST(Timestamp('2000-01-01T01:02:03.4Z') AS string)
+;
 
 SELECT
-    CAST(Interval("P1DT12H") AS string);
+    CAST(Interval('P1DT12H') AS string)
+;
 
 SELECT
-    TZDATE("2010-07-01,Europe/Moscow");
+    TZDATE('2010-07-01,Europe/Moscow')
+;
 
 SELECT
-    TZDATE("2010-07-01,America/Los_Angeles");
+    TZDATE('2010-07-01,America/Los_Angeles')
+;
 
 SELECT
-    TZDATETIME("2010-07-01T00:00:00,Europe/Moscow");
+    TZDATETIME('2010-07-01T00:00:00,Europe/Moscow')
+;
 
 SELECT
-    TZTIMESTAMP("2010-07-01T00:00:00,America/Los_Angeles");
+    TZTIMESTAMP('2010-07-01T00:00:00,America/Los_Angeles')
+;
 
 SELECT
-    TZTIMESTAMP("2010-07-01T12:00:00.123456,Europe/Moscow");
+    TZTIMESTAMP('2010-07-01T12:00:00.123456,Europe/Moscow')
+;
 
 SELECT
-    Uuid('550e8400-e29b-41d4-a716-446655440000');
+    Uuid('550e8400-e29b-41d4-a716-446655440000')
+;

@@ -22,6 +22,9 @@ import os
 import sys
 
 
+PY313_OR_OLDER = sys.version_info < (3, 14)
+
+
 def _normalize_name(name):
     if isinstance(name, bytes):
         name = str(name, 'ascii')

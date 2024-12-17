@@ -30,7 +30,7 @@ protected:
         switch (ev->GetTypeRewrite()) {
             HFunc(NActors::TEvPollerRegisterResult, Handle);
             HFunc(NActors::TEvPollerReady, Handle);
-            HFunc(TEvHttpProxy::TEvHttpConnectionClosed, Handle);
+            HFunc(TEvHttpProxy::TEvHttpIncomingConnectionClosed, Handle);
             HFunc(TEvHttpProxy::TEvReportSensors, Handle);
         }
     }
@@ -143,7 +143,7 @@ protected:
         }
     }
 
-    void Handle(TEvHttpProxy::TEvHttpConnectionClosed::TPtr event, const NActors::TActorContext&) {
+    void Handle(TEvHttpProxy::TEvHttpIncomingConnectionClosed::TPtr event, const NActors::TActorContext&) {
         Connections.erase(event->Get()->ConnectionID);
         for (auto& req : event->Get()->RecycledRequests) {
             if (RecycledRequests.size() >= MaxRecycledRequestsCount) {

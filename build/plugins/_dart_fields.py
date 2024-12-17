@@ -571,13 +571,52 @@ class Linter:
 class LintConfigs:
     KEY = 'LINT-CONFIGS'
 
+    @staticmethod
+    def _from_config_type(unit, spec_args):
+        if not spec_args.get('CONFIG_TYPE') or not spec_args.get('CONFIG_TYPE')[0]:
+            return
+        linter_name = spec_args['NAME'][0]
+        config_type = spec_args.get('CONFIG_TYPE')[0]
+        if config_type not in consts.LINTER_CONFIG_TYPES[linter_name]:
+            message = "Unknown {} linter config type: {}. Allowed types: {}".format(
+                linter_name, config_type, ', '.join(consts.LINTER_CONFIG_TYPES[linter_name])
+            )
+            ymake.report_configure_error(message)
+            raise DartValueError()
+        if common_configs_dir := unit.get('MODULE_COMMON_CONFIGS_DIR'):
+            config = os.path.join(common_configs_dir, config_type)
+            path = unit.resolve(config)
+            if os.path.exists(path):
+                return _common.strip_roots(config)
+            message = "File not found: {}".format(path)
+            ymake.report_configure_error(message)
+            raise DartValueError()
+        else:
+            message = "Config type specifier is only allowed with autoincludes"
+            ymake.report_configure_error(message)
+            raise DartValueError()
+
     @classmethod
     def python_configs(cls, unit, flat_args, spec_args):
         resolved_configs = []
 
-        project_to_config_map = spec_args.get('PROJECT_TO_CONFIG_MAP', [])
-        if project_to_config_map:
-            # ruff, TODO rewrite once custom configs migrated to autoincludes scheme
+        if (custom_config := spec_args.get('CUSTOM_CONFIG')) and '/' in custom_config[0]:
+            # black if custom config is passed.
+            # XXX During migration we want to use the same macro parameter
+            # for path to linter config and config type
+            # thus, we check if '/' is present, if it is then it's a path
+            # TODO delete once custom configs migrated to autoincludes scheme
+            custom_config = custom_config[0]
+            assert_file_exists(unit, custom_config)
+            resolved_configs.append(custom_config)
+            return {cls.KEY: serialize_list(resolved_configs)}
+
+        if config := cls._from_config_type(unit, spec_args):
+            # specified by config type, autoincludes scheme
+            return {cls.KEY: serialize_list([config])}
+
+        if project_to_config_map := spec_args.get('PROJECT_TO_CONFIG_MAP'):
+            # ruff, TODO delete once custom configs migrated to autoincludes scheme
             project_to_config_map = project_to_config_map[0]
             assert_file_exists(unit, project_to_config_map)
             resolved_configs.append(project_to_config_map)
@@ -587,23 +626,14 @@ class LintConfigs:
                 resolved_configs.append(c)
             return {cls.KEY: serialize_list(resolved_configs)}
 
-        custom_config = spec_args.get('CUSTOM_CONFIG', [])
-        if custom_config:
-            # black if custom config is passed
-            # TODO rewrite once custom configs migrated to autoincludes scheme
-            custom_config = custom_config[0]
-            assert_file_exists(unit, custom_config)
-            resolved_configs.append(custom_config)
-            return {cls.KEY: serialize_list(resolved_configs)}
-
+        # default config
+        linter_name = spec_args['NAME'][0]
         config = spec_args['CONFIGS'][0]
-        # black without custom config or flake8, using default configs file
         assert_file_exists(unit, config)
-        name = spec_args['NAME'][0]
-        cfg = get_linter_configs(unit, config)[name]
+        cfg = get_linter_configs(unit, config)[linter_name]
         assert_file_exists(unit, cfg)
         resolved_configs.append(cfg)
-        if name in ('flake8', 'py2_flake8'):
+        if linter_name in ('flake8', 'py2_flake8'):
             resolved_configs.extend(spec_args.get('FLAKE_MIGRATIONS_CONFIG', []))
         return {cls.KEY: serialize_list(resolved_configs)}
 
@@ -615,29 +645,13 @@ class LintConfigs:
             config = custom_config[0]
             assert_file_exists(unit, config)
             return {cls.KEY: serialize_list([config])}
-        linter_name = spec_args['NAME'][0]
-        if config_type := spec_args.get('CONFIG_TYPE'):
-            config_type = config_type[0]
-            if config_type not in consts.LINTER_CONFIG_TYPES[linter_name]:
-                message = "Unknown CPP linter config type: {}. Allowed types: {}".format(
-                    config_type, ', '.join(consts.LINTER_CONFIG_TYPES[linter_name])
-                )
-                ymake.report_configure_error(message)
-                raise DartValueError()
-            if common_configs_dir := unit.get('MODULE_COMMON_CONFIGS_DIR'):
-                config = os.path.join(common_configs_dir, config_type)
-                path = unit.resolve(config)
-                if os.path.exists(path):
-                    config = _common.strip_roots(config)
-                    return {cls.KEY: serialize_list([config])}
-                message = "File not found: {}".format(path)
-                ymake.report_configure_error(message)
-                raise DartValueError()
-            else:
-                message = "Config type specifier is only allowed with autoincludes"
-                ymake.report_configure_error(message)
-                raise DartValueError()
+
+        if config := cls._from_config_type(unit, spec_args):
+            # specified by config type, autoincludes scheme
+            return {cls.KEY: serialize_list([config])}
+
         # default config
+        linter_name = spec_args['NAME'][0]
         config = spec_args.get('CONFIGS')[0]
         assert_file_exists(unit, config)
         config = get_linter_configs(unit, config)[linter_name]

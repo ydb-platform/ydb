@@ -35,7 +35,7 @@ namespace NKikimr::NKqp {
         Ydb,
     };
 
-    NApi::TDataSourceInstance MakeDataSourceInstance(EProviderType providerType) {
+    NYql::TGenericDataSourceInstance MakeDataSourceInstance(EProviderType providerType) {
         switch (providerType) {
             case EProviderType::PostgreSQL:
                 return TConnectorClientMock::TPostgreSQLDataSourceInstanceBuilder<>().GetResult();
@@ -96,7 +96,7 @@ namespace NKikimr::NKqp {
             // prepare mock
             auto clientMock = std::make_shared<TConnectorClientMock>();
 
-            const NApi::TDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
+            const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
 
             // step 1: DescribeTable
             // clang-format off
@@ -192,7 +192,7 @@ namespace NKikimr::NKqp {
             // prepare mock
             auto clientMock = std::make_shared<TConnectorClientMock>();
 
-            const NApi::TDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
+            const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
 
             constexpr size_t ROWS_COUNT = 5;
 
@@ -285,7 +285,7 @@ namespace NKikimr::NKqp {
             // prepare mock
             auto clientMock = std::make_shared<TConnectorClientMock>();
 
-            const NApi::TDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
+            const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
 
             constexpr size_t ROWS_COUNT = 5;
 
@@ -374,7 +374,7 @@ namespace NKikimr::NKqp {
             // prepare mock
             auto clientMock = std::make_shared<TConnectorClientMock>();
 
-            const NApi::TDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
+            const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
             // clang-format off
             const NApi::TSelect select = TConnectorClientMock::TSelectBuilder<>()
                 .DataSourceInstance(dataSourceInstance)

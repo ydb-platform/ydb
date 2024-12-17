@@ -8,7 +8,8 @@ SELECT
     key_mod,
     aggr_list(value) OVER w,
     aggr_list(subkey) OVER w
-FROM Input
+FROM
+    Input
 WINDOW
     w AS (
         PARTITION BY
@@ -18,4 +19,5 @@ WINDOW
     )
 ORDER BY
     key_mod,
-    column1;
+    column1
+;

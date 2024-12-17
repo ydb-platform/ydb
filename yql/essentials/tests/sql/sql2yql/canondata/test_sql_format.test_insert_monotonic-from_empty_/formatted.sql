@@ -3,7 +3,9 @@ USE plato;
 INSERT INTO Output WITH MONOTONIC_KEYS
 SELECT
     *
-FROM EmptyInput
+FROM
+    EmptyInput
 ORDER BY
     key,
-    subkey;
+    subkey
+;

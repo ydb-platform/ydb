@@ -171,6 +171,9 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
 }
 
 void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) {
+    AFL_VERIFY(VersionedIndex.IsEmpty() || schema.GetVersion() >= VersionedIndex.GetLastSchema()->GetVersion())("empty", VersionedIndex.IsEmpty())("current", schema.GetVersion())(
+                                            "last", VersionedIndex.GetLastSchema()->GetVersion());
+
     std::optional<NOlap::TIndexInfo> indexInfoOptional;
     if (schema.GetDiff()) {
         AFL_VERIFY(!VersionedIndex.IsEmpty());
@@ -352,7 +355,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 limitExceeded = true;
                 break;
             }
-            changes->AddPortionToDrop(info);
+            changes->AddPortionToRemove(info);
             ++portionsFromDrop;
         }
         changes->AddTableToDrop(pathId);
@@ -437,9 +440,9 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "StartTtl")("skip", "not_ready_tiers");
     }
     std::vector<std::shared_ptr<TTTLColumnEngineChanges>> result;
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "StartTtl")("rw_tasks_count", context.GetTasks().size());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "StartTtl")("rw_tasks_count", context.GetTasks().size());
     for (auto&& i : context.GetTasks()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "StartTtl")("rw", i.first.DebugString())("count", i.second.size());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "StartTtl")("rw", i.first.DebugString())("count", i.second.size());
         for (auto&& t : i.second) {
             SignalCounters.OnActualizationTask(t.GetTask()->GetPortionsToEvictCount(), t.GetTask()->GetPortionsToRemoveSize());
             result.emplace_back(t.GetTask());
@@ -502,18 +505,22 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
         return out;
     }
 
-    if (withUncommitted) {
-        for (const auto& [_, portionInfo] : spg->GetInsertedPortions()) {
-            AFL_VERIFY(portionInfo->HasInsertWriteId());
-            AFL_VERIFY(!portionInfo->HasCommitSnapshot());
-            const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo);
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")("pathId", pathId)(
-                "portion", portionInfo->DebugString());
-            if (skipPortion) {
+    for (const auto& [_, portionInfo] : spg->GetInsertedPortions()) {
+        AFL_VERIFY(portionInfo->HasInsertWriteId());
+        if (withUncommitted) {
+            if (!portionInfo->IsVisible(snapshot, !withUncommitted)) {
                 continue;
             }
-            out->PortionsOrderedPK.emplace_back(portionInfo);
+        } else if (!portionInfo->HasCommitSnapshot()) {
+            continue;
         }
+        const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo);
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")("pathId", pathId)(
+            "portion", portionInfo->DebugString());
+        if (skipPortion) {
+            continue;
+        }
+        out->Portions.emplace_back(portionInfo);
     }
     for (const auto& [_, portionInfo] : spg->GetPortions()) {
         if (!portionInfo->IsVisible(snapshot, !withUncommitted)) {
@@ -525,7 +532,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
         if (skipPortion) {
             continue;
         }
-        out->PortionsOrderedPK.emplace_back(portionInfo);
+        out->Portions.emplace_back(portionInfo);
     }
 
     return out;

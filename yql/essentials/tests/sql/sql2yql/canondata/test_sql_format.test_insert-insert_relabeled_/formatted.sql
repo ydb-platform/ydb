@@ -10,5 +10,7 @@ SELECT
     key,
     subkey,
     value AS new_value,
-    "x"
-FROM plato.Input;
+    'x'
+FROM
+    plato.Input
+;

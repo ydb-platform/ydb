@@ -13,8 +13,11 @@ private:
     THashMap<TPortionAddress, std::shared_ptr<const TPortionInfo>> PortionsToMove;
 
 protected:
+    std::vector<TWritePortionInfoWithBlobsResult> AppendedPortions;
     std::optional<ui64> TargetCompactionLevel;
     TSaverContext SaverContext;
+    bool NoAppendIsCorrect = false;
+
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& /*context*/) override {
 
     }
@@ -58,6 +61,14 @@ public:
 
     }
 
+    const std::vector<TWritePortionInfoWithBlobsResult>& GetAppendedPortions() const {
+        return AppendedPortions;
+    }
+
+    std::vector<TWritePortionInfoWithBlobsResult>& MutableAppendedPortions() {
+        return AppendedPortions;
+    }
+
     void AddMovePortions(const std::vector<std::shared_ptr<TPortionInfo>>& portions) {
         for (auto&& i : portions) {
             AFL_VERIFY(i);
@@ -90,7 +101,6 @@ public:
         }
     }
 
-    std::vector<TWritePortionInfoWithBlobsResult> AppendedPortions;
     virtual ui32 GetWritePortionsCount() const override {
         return AppendedPortions.size();
     }

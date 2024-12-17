@@ -9,7 +9,7 @@ from typing import Dict, Any, Sequence
 
 import yatest.common
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
 
 LOGGER = make_logger(__name__)
@@ -111,17 +111,17 @@ class DockerComposeHelper:
     def get_container_name(self, service_name: str) -> str:
         return self.docker_compose_yml_data['services'][service_name]['container_name']
 
-    def list_tables(self, dataSourceKind: EDataSourceKind) -> Sequence[str]:
+    def list_tables(self, dataSourceKind: EGenericDataSourceKind) -> Sequence[str]:
         match dataSourceKind:
-            case EDataSourceKind.CLICKHOUSE:
+            case EGenericDataSourceKind.CLICKHOUSE:
                 return self.list_clickhouse_tables()
-            case EDataSourceKind.YDB:
+            case EGenericDataSourceKind.YDB:
                 return self._list_ydb_tables()
-            case EDataSourceKind.MYSQL:
+            case EGenericDataSourceKind.MYSQL:
                 return self._list_mysql_tables()
-            case EDataSourceKind.MS_SQL_SERVER:
+            case EGenericDataSourceKind.MS_SQL_SERVER:
                 return self._list_ms_sql_server_tables()
-            case EDataSourceKind.ORACLE:
+            case EGenericDataSourceKind.ORACLE:
                 return self._list_oracle_tables()
             case _:
                 raise ValueError("invalid data source kind: {dataSourceKind}")

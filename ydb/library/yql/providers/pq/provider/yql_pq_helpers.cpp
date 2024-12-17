@@ -101,5 +101,20 @@ void FillSettingsWithResolvedYdsIds(
     }
 }
 
+TMaybeNode<TExprBase> FindSetting(TExprNode::TPtr settings, TStringBuf name) {
+    const auto maybeSettingsList = TMaybeNode<TCoNameValueTupleList>(settings);
+    if (!maybeSettingsList) {
+        return nullptr;
+    }
+    const auto settingsList = maybeSettingsList.Cast();
+
+    for (size_t i = 0; i < settingsList.Size(); ++i) {
+        TCoNameValueTuple setting = settingsList.Item(i);
+        if (setting.Name().Value() == name) {
+            return setting.Value();
+        }
+    }
+    return nullptr;
+}
 
 } // namespace NYql

@@ -77,7 +77,8 @@ private:
     void HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev);
     void ReplayEvents(const TString& databaseName, const TActorContext& ctx);
 
-    void MaybeStartTracing(IRequestProxyCtx& ctx);
+    template<class TEvent>
+    void MaybeStartTracing(TAutoPtr<TEventHandle<TEvent>>& event);
 
     static bool IsAuthStateOK(const IRequestProxyCtx& ctx);
 
@@ -153,7 +154,7 @@ private:
             return;
         }
 
-        MaybeStartTracing(*requestBaseCtx);
+        MaybeStartTracing(event);
 
         if (IsAuthStateOK(*requestBaseCtx)) {
             Handle(event, ctx);
@@ -436,7 +437,9 @@ bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
     return false;
 }
 
-void TGRpcRequestProxyImpl::MaybeStartTracing(IRequestProxyCtx& ctx) {
+template<class TEvent>
+void TGRpcRequestProxyImpl::MaybeStartTracing(TAutoPtr<TEventHandle<TEvent>>& event) {
+    IRequestProxyCtx& ctx = *event->Get();
     auto isTracingDecided = ctx.IsTracingDecided();
     if (!isTracingDecided) {
         return;
@@ -445,11 +448,12 @@ void TGRpcRequestProxyImpl::MaybeStartTracing(IRequestProxyCtx& ctx) {
         return;
     }
 
-    NWilson::TTraceId traceId;
-    if (const auto otelHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER)) {
-        traceId = NWilson::TTraceId::FromTraceparentHeader(otelHeader.GetRef(), TComponentTracingLevels::ProductionVerbose);
+    NWilson::TTraceId traceId = NWilson::TTraceId(event->TraceId); // Can be not empty in case of internal subrequests // In this case it is part of the big request
+    if (!traceId) {
+        TMaybe<TString> traceparentHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER);
+        traceId = NJaegerTracing::HandleTracing(ctx.GetRequestDiscriminator(), traceparentHeader);
     }
-    NJaegerTracing::HandleTracing(traceId, ctx.GetRequestDiscriminator());
+
     if (traceId) {
         NWilson::TSpan grpcRequestProxySpan(TWilsonGrpc::RequestProxy, std::move(traceId), "GrpcRequestProxy");
         if (auto database = ctx.GetDatabaseName()) {
@@ -479,7 +483,8 @@ void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdat
     }
 
     if (describeScheme.GetPathDescription().HasDomainDescription()
-        && describeScheme.GetPathDescription().GetDomainDescription().HasSecurityState()) {
+        && describeScheme.GetPathDescription().GetDomainDescription().HasSecurityState()
+        && describeScheme.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize() > 0) {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Updating SecurityState for " << databaseName);
         Send(MakeTicketParserID(), new TEvTicketParser::TEvUpdateLoginSecurityState(
             describeScheme.GetPathDescription().GetDomainDescription().GetSecurityState()
@@ -489,6 +494,8 @@ void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdat
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no DomainDescription");
         } else if (!describeScheme.GetPathDescription().GetDomainDescription().HasSecurityState()) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no SecurityState");
+        } else if (describeScheme.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize() == 0) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no PublicKeys");
         }
     }
 

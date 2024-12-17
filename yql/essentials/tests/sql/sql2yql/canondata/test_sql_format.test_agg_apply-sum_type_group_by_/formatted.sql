@@ -2,16 +2,20 @@
 /* postgres can not */
 PRAGMA EmitAggApply;
 
-$p =
+$p = (
     SELECT
         key,
         sum(value) AS a
-    FROM AS_TABLE([<|key: 1, value: 2|>])
+    FROM
+        AS_TABLE([<|key: 1, value: 2|>])
     GROUP BY
-        key;
+        key
+);
 
-$p =
-    PROCESS $p;
+$p = (
+    PROCESS $p
+);
 
 SELECT
-    FormatType(TypeOf($p));
+    FormatType(TypeOf($p))
+;

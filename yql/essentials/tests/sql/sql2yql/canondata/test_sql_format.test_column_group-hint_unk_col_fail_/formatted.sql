@@ -2,7 +2,9 @@
 USE plato;
 
 -- unknown column
-INSERT INTO Output WITH column_groups = "{g1=[l;b;c];def=#}"
+INSERT INTO Output WITH column_groups = '{g1=[l;b;c];def=#}'
 SELECT
     *
-FROM Input;
+FROM
+    Input
+;

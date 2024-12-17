@@ -6,21 +6,23 @@ DEFINE SUBQUERY $strict() AS
 
     SELECT
         count(*)
-    FROM Input1
-        AS a
-    JOIN Input2
-        AS b
-    USING (k1)
+    FROM
+        Input1 AS a
+    JOIN
+        Input2 AS b
+    USING (k1);
 END DEFINE;
 
 SELECT
     count(*)
-FROM Input1
-    AS a
-JOIN Input2
-    AS b
+FROM
+    Input1 AS a
+JOIN
+    Input2 AS b
 USING (k1);
 
 SELECT
     *
-FROM $strict();
+FROM
+    $strict()
+;

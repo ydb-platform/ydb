@@ -3,12 +3,16 @@ USE plato;
 
 SELECT
     subkey
-FROM Input
-WHERE subkey < "100";
+FROM
+    Input
+WHERE
+    subkey < '100'
+;
 
 SELECT
     value
-FROM Input
+FROM
+    Input
 LIMIT 3;
 
 SELECT
@@ -16,7 +20,8 @@ SELECT
 FROM (
     SELECT
         *
-    FROM Input
+    FROM
+        Input
     ORDER BY
         -CAST(subkey AS Int32)
     LIMIT 5

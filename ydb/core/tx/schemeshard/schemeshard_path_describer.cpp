@@ -939,9 +939,7 @@ void TPathDescriber::DescribeDomainExtra(TPathElement::TPtr pathEl) {
     for (auto& pool: subDomainInfo->GetStoragePools()) {
         *entry->AddStoragePools() = pool;
     }
-    if (subDomainInfo->HasSecurityState()) {
-        entry->MutableSecurityState()->CopyFrom(subDomainInfo->GetSecurityState());
-    }
+    entry->MutableSecurityState()->CopyFrom(subDomainInfo->GetSecurityState());
 }
 
 void TPathDescriber::DescribeBlockStoreVolume(TPathId pathId, TPathElement::TPtr pathEl) {
@@ -1009,7 +1007,7 @@ void TPathDescriber::DescribeSequence(TPathId pathId, TPathElement::TPtr pathEl)
 }
 
 void TPathDescriber::DescribeReplication(TPathId pathId, TPathElement::TPtr pathEl) {
-    Y_ABORT_UNLESS(pathEl->IsReplication());
+    Y_ABORT_UNLESS(pathEl->IsReplication() || pathEl->IsTransfer());
     Self->DescribeReplication(pathId, pathEl->Name, *Result->Record.MutablePathDescription()->MutableReplicationDescription());
 }
 
@@ -1243,6 +1241,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             DescribeSequence(path.Base()->PathId, path.Base());
             break;
         case NKikimrSchemeOp::EPathTypeReplication:
+            DescribeReplication(path.Base()->PathId, path.Base());
+            break;
+        case NKikimrSchemeOp::EPathTypeTransfer:
             DescribeReplication(path.Base()->PathId, path.Base());
             break;
         case NKikimrSchemeOp::EPathTypeBlobDepot:

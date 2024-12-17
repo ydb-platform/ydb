@@ -5,6 +5,7 @@
 
 #include <ydb/public/api/protos/ydb_bsconfig.pb.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/protos/blobstorage_base3.pb.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
@@ -155,11 +156,11 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
-        this->OnBootstrap();
-        this->Become(&TBSConfigRequestGrpc::StateFunc);
-        BSCTabletId = MakeBSControllerID();
-        CreatePipe();
-        SendRequest();
+        auto *self = Self();
+        self->OnBootstrap();
+        self->Become(&TBSConfigRequestGrpc::StateFunc);
+        // ask Node Warden for configuration to see whether we are using distconf
+        self->Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvNodeWardenQueryStorageConfig(false));
     }
 
 protected:
@@ -168,8 +169,36 @@ protected:
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
+            hFunc(TEvNodeWardenStorageConfig, Handle);
+            hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
         default:
             return TBase::StateFuncBase(ev);
+        }
+    }
+
+    void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
+        auto *self = Self();
+        if (ev->Get()->Config->GetGeneration() || self->IsDistconfEnableQuery()) { // distconf (will be) enabled
+            auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            self->FillDistconfQuery(*ev);
+            self->Send(MakeBlobStorageNodeWardenID(self->SelfId().NodeId()), ev.release());
+        } else { // classic BSC
+            BSCTabletId = MakeBSControllerID();
+            CreatePipe();
+            SendRequest();
+        }
+    }
+
+    void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev) {
+        auto *self = Self();
+        auto& record = ev->Get()->Record;
+        if (record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+            self->Reply(Ydb::StatusIds::INTERNAL_ERROR, record.GetErrorReason(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                TActivationContext::AsActorContext());
+        } else {
+            TResultRecord result;
+            self->FillDistconfResult(record, result);
+            self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, TActivationContext::AsActorContext());
         }
     }
 
@@ -219,6 +248,10 @@ protected:
     }
 
     virtual bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) = 0;
+
+    const TDerived *Self() const { return static_cast<const TDerived*>(this); }
+    TDerived *Self() { return static_cast<TDerived*>(this); }
+
 private:
     ui64 BSCTabletId = 0;
     TActorId BSCPipeClient;

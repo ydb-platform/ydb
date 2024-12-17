@@ -1,0 +1,13 @@
+#pragma once
+
+namespace NYT::NBacktrace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Configures Abseil to use a libunwind-based stack unwinder.
+//! This is useful, e.g., for collecting TCMalloc heap dumps.
+void SetAbslStackUnwinder();
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NBacktrace

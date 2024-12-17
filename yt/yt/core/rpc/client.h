@@ -143,7 +143,7 @@ public:
     DEFINE_BYVAL_RW_PROPERTY(bool, ResponseHeavy);
     DEFINE_BYVAL_RW_PROPERTY(NCompression::ECodec, RequestCodec, NCompression::ECodec::None);
     DEFINE_BYVAL_RW_PROPERTY(NCompression::ECodec, ResponseCodec, NCompression::ECodec::None);
-    DEFINE_BYVAL_RW_PROPERTY(bool, EnableLegacyRpcCodecs, true);
+    DEFINE_BYVAL_RW_PROPERTY(bool, EnableLegacyRpcCodecs, false);
     DEFINE_BYVAL_RW_PROPERTY(bool, GenerateAttachmentChecksums, true);
     DEFINE_BYVAL_RW_PROPERTY(IMemoryUsageTrackerPtr, MemoryUsageTracker);
     // Field is used on client side only. So it is never serialized.
@@ -481,7 +481,7 @@ public:
     DEFINE_BYVAL_RW_PROPERTY(NCompression::ECodec, DefaultRequestCodec, NCompression::ECodec::None);
     DEFINE_BYVAL_RW_PROPERTY(NCompression::ECodec, DefaultResponseCodec, NCompression::ECodec::None);
     DEFINE_BYVAL_RW_PROPERTY(IMemoryUsageTrackerPtr, DefaultMemoryUsageTracker);
-    DEFINE_BYVAL_RW_PROPERTY(bool, DefaultEnableLegacyRpcCodecs, true);
+    DEFINE_BYVAL_RW_PROPERTY(bool, DefaultEnableLegacyRpcCodecs, false);
 
     DEFINE_BYREF_RW_PROPERTY(TStreamingParameters, DefaultClientAttachmentsStreamingParameters);
     DEFINE_BYREF_RW_PROPERTY(TStreamingParameters, DefaultServerAttachmentsStreamingParameters);

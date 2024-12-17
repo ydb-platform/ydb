@@ -579,6 +579,30 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus FailMeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto failureKind = input->Child(0)->Content();
+        if (failureKind == "expr") {
+            input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String));
+        } else if (failureKind == "type") {
+            input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String));
+        } else if (failureKind == "constraint") {
+            input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String)));
+        } else {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()), TStringBuilder() << "Unknown failure kind: " << failureKind));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus DataWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -940,6 +964,30 @@ namespace NTypeAnnImpl {
     TMaybe<ui32> FindOrReportMissingMember(TStringBuf memberName, TPositionHandle pos, const TStructExprType& structType, TExprContext& ctx) {
         TString errStr;
         auto result = FindOrReportMissingMember(memberName, structType, errStr);
+        if (!result) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), errStr));
+        }
+        return result;
+    }
+
+    TMaybe<ui32> FindOrReportMissingMember(TStringBuf memberName, const TTupleExprType& tupleType, TString& errStr) {
+        ui32 index = 0;
+        if (!TryFromString(memberName, index)) {
+            errStr = TStringBuilder() << "Failed to convert to integer: " << memberName;
+            return Nothing();
+        }
+        if (index >= tupleType.GetSize()) {
+            errStr = TStringBuilder()
+                << "Index out of range. Index: "
+                << index << ", size: " << tupleType.GetSize();
+            return Nothing();
+        }
+        return index;
+    }
+
+    TMaybe<ui32> FindOrReportMissingMember(TStringBuf memberName, TPositionHandle pos, const TTupleExprType& tupleType, TExprContext& ctx) {
+        TString errStr;
+        auto result = FindOrReportMissingMember(memberName, tupleType, errStr);
         if (!result) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), errStr));
         }
@@ -6197,11 +6245,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         TExprNode::TPtr mergeLambda = nullptr;
         if (input->ChildrenSize() == 3) {
-            mergeLambda = input->ChildPtr(2);
-            auto status = ConvertToLambda(mergeLambda, ctx.Expr, 3);
+            auto status = ConvertToLambda(input->ChildRef(2), ctx.Expr, 3);
             if (status.Level != IGraphTransformer::TStatus::Ok) {
                 return status;
             }
+            mergeLambda = input->ChildPtr(2);
         } else {
             mergeLambda = ctx.Expr.Builder(input->Pos())
                 .Lambda()
@@ -6492,17 +6540,16 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         TExprNode::TPtr result = nullptr;
         TExprNode::TPtr initFunc = nullptr;
         if (input->Content() == "StaticFold1") {
-            initFunc = input->ChildPtr(1);
-
-            auto status = ConvertToLambda(initFunc, ctx.Expr, 1);
+            auto status = ConvertToLambda(input->ChildRef(1), ctx.Expr, 1);
             if (status.Level != IGraphTransformer::TStatus::Ok) {
                 return status;
             }
+            initFunc = input->ChildPtr(1);
         } else {
             result = input->ChildPtr(1);
         }
 
-        auto reduceFunc = input->ChildPtr(2);
+        auto& reduceFunc = input->ChildRef(2);
         auto status = ConvertToLambda(reduceFunc, ctx.Expr, 2);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
@@ -8534,6 +8581,50 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus SqlVariantItemWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (IsNull(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+            auto optType = input->Head().GetTypeAnn()->Cast<TOptionalExprType>();
+            if (!EnsureVariantType(input->Head().Pos(), *optType->GetItemType(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            auto varType = optType->GetItemType()->Cast<TVariantExprType>();
+            auto isOptionalItem = false;
+            if (varType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
+                auto tupType = varType->GetUnderlyingType()->Cast<TTupleExprType>();
+                if (tupType->GetSize() > 0 && tupType->GetItems()[0]->GetKind() == ETypeAnnotationKind::Optional) {
+                    isOptionalItem = true;
+                }
+            } else {
+                auto strType = varType->GetUnderlyingType()->Cast<TStructExprType>();
+                if (strType->GetSize() > 0 && strType->GetItems()[0]->GetItemType()->GetKind() == ETypeAnnotationKind::Optional) {
+                    isOptionalItem = true;
+                }
+            }
+            output = ctx.Expr.Builder(input->Pos())
+                .Callable(isOptionalItem ? "FlatMap" : "Map")
+                    .Add(0, input->HeadPtr())
+                    .Lambda(1)
+                        .Param("var")
+                        .Callable("VariantItem")
+                            .Arg(0, "var")
+                        .Seal()
+                    .Seal()
+                .Seal().Build();
+        } else {
+            output = ctx.Expr.RenameNode(*input, "VariantItem");
+        }
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
     IGraphTransformer::TStatus VariantItemWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
@@ -8591,6 +8682,112 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus SqlVisitWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (IsNull(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+            auto appendOtherArgs = [&] (auto &builder) -> auto {
+                for (size_t pos = 1; pos < input->ChildrenSize(); pos++) {
+                    builder.Add(pos, input->ChildPtr(pos));
+                }
+                return builder;
+            };
+
+            auto optType = input->Head().GetTypeAnn()->Cast<TOptionalExprType>();
+            if (!EnsureVariantType(input->Pos(), *optType->GetItemType(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            auto varType = optType->GetItemType()->Cast<TVariantExprType>();
+            const TTupleExprType* tupType = nullptr;
+            const TStructExprType* strType = nullptr;
+            if (varType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
+                tupType = varType->GetUnderlyingType()->Cast<TTupleExprType>();
+            } else {
+                strType = varType->GetUnderlyingType()->Cast<TStructExprType>();
+            }
+
+            bool isOptionalResult = false;
+            bool repeat = false;
+            for (size_t idx = 1; idx < input->ChildrenSize(); idx++) {
+                auto child = input->ChildPtr(idx);
+                if (child->IsAtom()) {
+                    const TTypeAnnotationNode* itemType;
+                    if (tupType) {
+                        auto pos = FindOrReportMissingMember(child->Content(), child->Pos(), *tupType, ctx.Expr);
+                        if (!pos) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        itemType = tupType->GetItems()[*pos];
+                    } else {
+                        auto pos = FindOrReportMissingMember(child->Content(), child->Pos(), *strType, ctx.Expr);
+                        if (!pos) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        itemType = strType->GetItems()[*pos]->GetItemType();
+                    }
+
+                    idx++;
+                    if (idx == input->ChildrenSize()) {
+                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), "Expected lambda after this argument"));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    auto status = ConvertToLambda(input->ChildRef(idx), ctx.Expr, 1);
+                    if (status.Level != IGraphTransformer::TStatus::Ok) {
+                        return status;
+                    }
+
+                    auto& lambda = input->ChildRef(idx);
+                    if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    if (!lambda->GetTypeAnn()) {
+                        repeat = true;
+                        continue;
+                    }
+
+                    if (lambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+                        isOptionalResult = true;
+                    }
+                } else {
+                    if (!EnsureComputable(*child, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    if (child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+                        isOptionalResult = true;
+                    }
+                }
+            }
+
+            if (repeat) {
+                return IGraphTransformer::TStatus::Repeat;
+            }
+
+            output = appendOtherArgs(ctx.Expr.Builder(input->Pos())
+                .Callable(isOptionalResult ? "FlatMap" : "Map")
+                    .Add(0, input->HeadPtr())
+                    .Lambda(1)
+                        .Param("var")
+                        .Callable("Visit")
+                            .Arg(0, "var"))
+                        .Seal()
+                    .Seal()
+                .Seal().Build();
+        } else {
+            output = ctx.Expr.RenameNode(*input, "Visit");
+        }
+
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
     IGraphTransformer::TStatus VisitWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
@@ -8625,21 +8822,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 const TTypeAnnotationNode* itemType;
                 ui32 itemIndex;
                 if (tupleType) {
-                    ui32 index = 0;
-                    if (!TryFromString(child->Content(), index)) {
-                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Failed to convert to integer: " << child->Content()));
+                    auto pos = FindOrReportMissingMember(child->Content(), child->Pos(), *tupleType, ctx.Expr);
+                    if (!pos) {
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    if (index >= tupleType->GetSize()) {
-                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder()
-                            << "Index out of range. Index: "
-                            << index << ", size: " << tupleType->GetSize()));
-                        return IGraphTransformer::TStatus::Error;
-                    }
-
-                    itemType = tupleType->GetItems()[index];
-                    itemIndex = index;
+                    itemType = tupleType->GetItems()[*pos];
+                    itemIndex = *pos;
                 } else {
                     auto pos = FindOrReportMissingMember(child->Content(), child->Pos(), *structType, ctx.Expr);
                     if (!pos) {
@@ -8762,6 +8951,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
 
             variantType = itemType->Cast<TVariantExprType>();
+        }
+        else if (IsNull(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
         }
         else {
             if (!EnsureVariantType(input->Head(), ctx.Expr)) {
@@ -12027,6 +12220,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     TSyncFunctionsMap::TSyncFunctionsMap() {
+        Functions["FailMe"] = &FailMeWrapper;
         Functions["Data"] = &DataWrapper;
         Functions["DataOrOptionalData"] = &DataWrapper;
         Functions["DataSource"] = &DataSourceWrapper;
@@ -12421,7 +12615,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["FlattenMembersType"] = &TypeArgWrapper<ETypeArgument::FlattenMembers>;
         Functions["VariantUnderlyingType"] = &TypeArgWrapper<ETypeArgument::VariantUnderlying>;
         Functions["Guess"] = &GuessWrapper;
+        Functions["SqlVariantItem"] = &SqlVariantItemWrapper;
         Functions["VariantItem"] = &VariantItemWrapper;
+        Functions["SqlVisit"] = &SqlVisitWrapper;
         Functions["Visit"] = &VisitWrapper;
         Functions["Way"] = &WayWrapper;
         Functions["SqlAccess"] = &SqlAccessWrapper;

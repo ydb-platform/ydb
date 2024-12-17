@@ -13,7 +13,8 @@ SELECT
         Just(Just(2)) == Just(1u),
         Just(2) == Just(Just(1u)),
         2 == Just(Just(1u))
-    );
+    )
+;
 
 SELECT
     AsTuple(
@@ -29,7 +30,8 @@ SELECT
         Just(Just(2)) != Just(1u),
         Just(2) != Just(Just(1u)),
         2 != Just(Just(1u))
-    );
+    )
+;
 
 SELECT
     AsTuple(
@@ -45,7 +47,8 @@ SELECT
         Just(Just(2)) < Just(1u),
         Just(2) < Just(Just(1u)),
         2 < Just(Just(1u))
-    );
+    )
+;
 
 SELECT
     AsTuple(
@@ -61,7 +64,8 @@ SELECT
         Just(Just(2)) <= Just(1u),
         Just(2) <= Just(Just(1u)),
         2 <= Just(Just(1u))
-    );
+    )
+;
 
 SELECT
     AsTuple(
@@ -77,7 +81,8 @@ SELECT
         Just(Just(2)) > Just(1u),
         Just(2) > Just(Just(1u)),
         2 > Just(Just(1u))
-    );
+    )
+;
 
 SELECT
     AsTuple(
@@ -93,4 +98,5 @@ SELECT
         Just(Just(2)) >= Just(1u),
         Just(2) >= Just(Just(1u)),
         2 >= Just(Just(1u))
-    );
+    )
+;

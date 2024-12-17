@@ -13,6 +13,8 @@ SELECT
             subkey,
             min(value)
     ) AS rk,
-FROM Input
+FROM
+    Input
 GROUP BY
-    ROLLUP (key, subkey);
+    ROLLUP (key, subkey)
+;

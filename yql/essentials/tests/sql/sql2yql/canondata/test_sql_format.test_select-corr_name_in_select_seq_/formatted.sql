@@ -6,11 +6,10 @@ FROM (
     FROM (
         SELECT
             a.key
-        FROM plato.Input
-            AS a
-    )
-        AS b
-)
-    AS c
+        FROM
+            plato.Input AS a
+    ) AS b
+) AS c
 ORDER BY
-    c.key;
+    c.key
+;

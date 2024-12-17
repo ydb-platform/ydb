@@ -362,6 +362,7 @@ public:
             case NKikimrSchemeOp::EPathType::EPathTypeCdcStream:
             case NKikimrSchemeOp::EPathType::EPathTypeSequence:
             case NKikimrSchemeOp::EPathType::EPathTypeReplication:
+            case NKikimrSchemeOp::EPathType::EPathTypeTransfer:
             case NKikimrSchemeOp::EPathType::EPathTypeBlobDepot:
             case NKikimrSchemeOp::EPathType::EPathTypeBackupCollection:
                 Y_ABORT("UNIMPLEMENTED");
@@ -1299,7 +1300,7 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-            << "TDecisionDone operationId#" << OperationId;
+            << "TDecisionDone operationId# " << OperationId;
     }
 
 public:

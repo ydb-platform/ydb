@@ -1,5 +1,6 @@
 /* postgres can not */
 USE plato;
+
 $udf = YQL::@@(lambda '(key stream) (AsStruct
   '('key key) '('superstring (Collect (Condense stream (String '"") (lambda '(item state) (Bool 'False)) (lambda '(item state)
     (Concat state (Concat (Member item 'char) (Member item 'num)))
@@ -19,6 +20,8 @@ $res = (
 
 SELECT
     *
-FROM $res
+FROM
+    $res
 ORDER BY
-    key;
+    key
+;

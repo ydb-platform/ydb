@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
+#include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
 namespace NYql::NDq::NInternal {
 

@@ -46,13 +46,16 @@ class TOperationAbortable
     : public IAbortable
 {
 public:
-    TOperationAbortable(IClientRetryPolicyPtr clientRetryPolicy, TClientContext context, const TOperationId& operationId);
+    TOperationAbortable(
+        IRawClientPtr rawClient,
+        IClientRetryPolicyPtr clientRetryPolicy,
+        const TOperationId& operationId);
     void Abort() override;
     TString GetType() const override;
 
 private:
+    const IRawClientPtr RawClient_;
     const IClientRetryPolicyPtr ClientRetryPolicy_;
-    const TClientContext Context_;
     const TOperationId OperationId_;
 };
 

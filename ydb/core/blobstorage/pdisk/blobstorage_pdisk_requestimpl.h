@@ -321,7 +321,6 @@ public:
         if (OnDestroy) {
             OnDestroy();
         }
-        delete NextInBatch;
     }
 
     ERequestType GetType() const override {

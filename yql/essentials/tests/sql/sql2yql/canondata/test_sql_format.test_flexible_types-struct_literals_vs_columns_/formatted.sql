@@ -13,4 +13,5 @@ FROM (
 );
 
 SELECT
-    <|text: ''|>;
+    <|text: ''|>
+;

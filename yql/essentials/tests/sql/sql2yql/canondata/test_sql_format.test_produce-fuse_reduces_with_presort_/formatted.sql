@@ -1,4 +1,5 @@
 USE plato;
+
 $reduce = ($_, $TableRows) -> {
     RETURN Yql::Condense1(
         $TableRows,
@@ -8,13 +9,15 @@ $reduce = ($_, $TableRows) -> {
     );
 };
 
-$stream =
+$stream = (
     SELECT
         *
-    FROM Input;
+    FROM
+        Input
+);
 
 --
-$stream1 =
+$stream1 = (
     REDUCE $stream
     PRESORT
         value1
@@ -25,9 +28,10 @@ $stream1 =
     ASSUME ORDER BY
         key,
         subkey,
-        value1;
+        value1
+);
 
-$stream1 =
+$stream1 = (
     REDUCE $stream1
     PRESORT
         value1
@@ -38,10 +42,11 @@ $stream1 =
     ASSUME ORDER BY
         key,
         subkey,
-        value1;
+        value1
+);
 
 --
-$stream2 =
+$stream2 = (
     REDUCE $stream
     PRESORT
         value1,
@@ -54,9 +59,10 @@ $stream2 =
         key,
         subkey,
         value1,
-        value2;
+        value2
+);
 
-$stream2 =
+$stream2 = (
     REDUCE $stream2
     PRESORT
         value1
@@ -67,10 +73,11 @@ $stream2 =
     ASSUME ORDER BY
         key,
         subkey,
-        value1;
+        value1
+);
 
 --
-$stream3 =
+$stream3 = (
     REDUCE $stream
     PRESORT
         value1,
@@ -85,9 +92,10 @@ $stream3 =
         subkey,
         value1,
         value2,
-        value3;
+        value3
+);
 
-$stream3 =
+$stream3 = (
     REDUCE $stream3
     ON
         key,
@@ -95,25 +103,32 @@ $stream3 =
     USING $reduce(TableRow())
     ASSUME ORDER BY
         key,
-        subkey;
+        subkey
+);
 
 SELECT
     *
-FROM $stream1
+FROM
+    $stream1
 ASSUME ORDER BY
     `key`,
-    `subkey`;
+    `subkey`
+;
 
 SELECT
     *
-FROM $stream2
+FROM
+    $stream2
 ASSUME ORDER BY
     `key`,
-    `subkey`;
+    `subkey`
+;
 
 SELECT
     *
-FROM $stream3
+FROM
+    $stream3
 ASSUME ORDER BY
     `key`,
-    `subkey`;
+    `subkey`
+;

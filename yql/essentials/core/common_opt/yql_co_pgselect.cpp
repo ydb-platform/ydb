@@ -401,7 +401,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(TPositionHand
 
                 auto select = ExpandPgSelectSublink(node->TailPtr(), ctx, optCtx, it->second, cleanedInputs, inputAliases);
 
-                auto exportsPtr = optCtx.Types->Modules->GetModule("/lib/yql/aggregate.yql");
+                auto exportsPtr = optCtx.Types->Modules->GetModule("/lib/yql/aggregate.yqls");
                 YQL_ENSURE(exportsPtr);
                 const auto& exports = exportsPtr->Symbols();
 
@@ -1022,7 +1022,7 @@ TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::T
 void FillInputIndices(const TExprNode::TPtr& from, const TExprNode::TPtr& finalExtTypes,
     TUsedColumns& usedColumns, TOptimizeContext& optCtx) {
     for (auto& x : usedColumns) {
-        TStringBuf alias;
+        TString alias;
         TStringBuf column = NTypeAnnImpl::RemoveAlias(x.first, alias);
 
         bool foundColumn = false;

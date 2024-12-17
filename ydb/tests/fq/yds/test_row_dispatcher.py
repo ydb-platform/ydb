@@ -216,7 +216,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         issues = str(client.describe_query(query_id).result.query.issue)
-        assert "Cannot parse JSON string" in issues, "Incorrect Issues: " + issues
+        assert "Failed to parse json message for offset" in issues, "Incorrect Issues: " + issues
 
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 0)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
@@ -876,6 +876,38 @@ class TestPqRowDispatcher(TestYdsBase):
         assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == expected
 
         stop_yds_query(client, query_id)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
+
+    @yq_v1
+    def test_2_connection(self, kikimr, client):
+        client.create_yds_connection("name1", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True)
+        client.create_yds_connection("name2", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True)
+        self.init_topics("test_2_connection", partitions_count=2)
+        create_read_rule(self.input_topic, "best")
+
+        sql1 = Rf'''
+            INSERT INTO `name1`.`{self.output_topic}`
+            SELECT Cast(time as String) FROM `name1`.`{self.input_topic}` WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
+        sql2 = Rf'''
+            INSERT INTO `name2`.`{self.output_topic}`
+            SELECT Cast(time as String) FROM `name2`.`{self.input_topic}` WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
+        query_id1 = start_yds_query(kikimr, client, sql1)
+        query_id2 = start_yds_query(kikimr, client, sql2)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 4)
+
+        input_messages1 = [Rf'''{{"time": {c}}}''' for c in range(100, 110)]
+        write_stream(self.input_topic, input_messages1, "partition_key1")
+
+        input_messages2 = [Rf'''{{"time": {c}}}''' for c in range(110, 120)]
+        write_stream(self.input_topic, input_messages2, "partition_key2")
+
+        expected = [Rf'''{c}''' for c in range(100, 120)]
+        expected = [item for item in expected for i in range(2)]
+        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == expected
+
+        stop_yds_query(client, query_id1)
+        stop_yds_query(client, query_id2)
+
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
 
     @yq_v1

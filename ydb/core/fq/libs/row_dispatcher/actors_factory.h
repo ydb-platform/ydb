@@ -12,6 +12,7 @@ struct IActorFactory : public TThrRefBase {
     using TPtr = TIntrusivePtr<IActorFactory>;
 
     virtual NActors::TActorId RegisterTopicSession(
+        const TString& readGroup,
         const TString& topicPath,
         const TString& endpoint,
         const TString& database,
@@ -22,6 +23,7 @@ struct IActorFactory : public TThrRefBase {
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
+        const ::NMonitoring::TDynamicCounterPtr& countersRoot,
         const NYql::IPqGateway::TPtr& pqGateway,
         ui64 maxBufferSize) const = 0;
 };

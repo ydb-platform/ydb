@@ -4,4 +4,6 @@ USE plato;
 
 SELECT
     *
-FROM each(["Input1", "Input2", "Input3"]);
+FROM
+    each(['Input1', 'Input2', 'Input3'])
+;

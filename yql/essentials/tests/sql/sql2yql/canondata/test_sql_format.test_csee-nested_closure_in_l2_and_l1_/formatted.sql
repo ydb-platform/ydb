@@ -8,16 +8,16 @@ SELECT
                             AsList(7, 8), ($y) -> {
                                 RETURN $x + Yql::Fold(
                                     AsList(11, 12), 2, ($e, $f) -> {
-                                        RETURN $e + $f + $y
+                                        RETURN $e + $f + $y;
                                     }
-                                )
+                                );
                             }
                         ), 0, ($a, $b) -> {
                             RETURN $a + $b + Yql::Fold(
                                 AsList(13, 14), 3, ($i, $j) -> {
-                                    RETURN $i + $j + $a
+                                    RETURN $i + $j + $a;
                                 }
-                            )
+                            );
                         }
                     )
                     + Yql::Fold(
@@ -27,20 +27,21 @@ SELECT
                                     AsList(5, 6), ($y) -> {
                                         RETURN $x + Yql::Fold(
                                             AsList(11, 12), 2, ($e, $f) -> {
-                                                RETURN $e + $f + $y
+                                                RETURN $e + $f + $y;
                                             }
-                                        )
+                                        );
                                     }
                                 ), 0, ($a, $b) -> {
                                     RETURN $a + $b + Yql::Fold(
                                         AsList(13, 14), 3, ($i, $j) -> {
-                                            RETURN $i + $j + $a
+                                            RETURN $i + $j + $a;
                                         }
-                                    )
+                                    );
                                 }
-                            )
+                            );
                         }
-                    )
+                    );
             }
         )
-    );
+    )
+;

@@ -1,5 +1,6 @@
 #include "datashard_txs.h"
 #include "datashard_locks_db.h"
+#include "memory_state_migration.h"
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tx_processing.h>
@@ -12,9 +13,36 @@ namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
-TDataShard::TTxInit::TTxInit(TDataShard* ds)
-    : TBase(ds)
-{}
+class TDataShard::TTxInit : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxInit(TDataShard* self)
+        : TTransactionBase(self)
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_INIT; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext &ctx) override;
+
+private:
+    bool CreateScheme(TTransactionContext &txc);
+    bool ReadEverything(TTransactionContext &txc);
+};
+
+class TDataShard::TTxInitRestored : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxInitRestored(TDataShard* self)
+        : TTransactionBase(self)
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_INIT_RESTORED; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+
+private:
+    bool InMemoryStateActorStarted = false;
+};
 
 bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInit::Execute");
@@ -39,7 +67,7 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         Self->ChangesQueue.clear();
         Self->LockChangeRecords.clear();
         Self->CommittedLockChangeRecords.clear();
-        ChangeRecords.clear();
+        Self->InitialState.emplace();
 
         bool done = ReadEverything(txc);
 
@@ -48,6 +76,10 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
             for (const auto& pr : Self->TableInfos) {
                 pr.second->Fix_KIKIMR_17222(txc.DB);
             }
+        }
+
+        if (done) {
+            Self->StartInMemoryRestoreActor();
         }
 
         return done;
@@ -63,6 +95,38 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
 
 void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInit::Complete");
+}
+
+void TDataShard::OnInMemoryStateRestored() {
+    Execute(CreateTxInitRestored());
+}
+
+bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActorContext& ctx) {
+    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Execute");
+
+    InMemoryStateActorStarted = Self->StartInMemoryStateActor();
+
+    // We persist the state actor id when either we started it, or decided
+    // not to (e.g. because the feature was disabled) and we need to clear the
+    // previous actor id.
+    if (InMemoryStateActorStarted || Self->InMemoryStatePrevActorId && !Self->InMemoryStateActorId) {
+        NIceDb::TNiceDb db(txc.DB);
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "DataShard " << Self->TabletID()
+            << " persisting started state actor id " << Self->InMemoryStateActorId
+            << " in generation " << Self->Generation());
+        Self->PersistSys(db, Schema::Sys_InMemoryStateActorId, Self->InMemoryStateActorId);
+        Self->PersistSys(db, Schema::Sys_InMemoryStateGeneration, Self->Generation());
+    }
+
+    return true;
+}
+
+void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
+    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Complete");
+
+    if (Self->InMemoryStateActor && InMemoryStateActorStarted) {
+        Self->InMemoryStateActor->ConfirmPersistent();
+    }
 
     // Start MakeSnapshot() if we started in SplitSrcMakeSnapshot state
     if (Self->State == TShardState::SplitSrcMakeSnapshot) {
@@ -111,7 +175,7 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
     }
 
     Self->CreateChangeSender(ctx);
-    Self->EnqueueChangeRecords(std::move(ChangeRecords));
+    Self->EnqueueChangeRecords(std::move(Self->InitialState->ChangeRecords));
     Self->MaybeActivateChangeSender(ctx);
     Self->EmitHeartbeats();
 
@@ -127,11 +191,14 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
             }
         }
     }
+
+    Self->InitialState.reset();
 }
 
 #define LOAD_SYS_UI64(db, row, value) if (!TDataShard::SysGetUi64(db, row, value)) return false;
 #define LOAD_SYS_BYTES(db, row, value) if (!TDataShard::SysGetBytes(db, row, value)) return false;
 #define LOAD_SYS_BOOL(db, row, value) if (!TDataShard::SysGetBool(db, row, value)) return false;
+#define LOAD_SYS_ACTORID(db, key, value) if (!TDataShard::SysGetActorId(db, key, value)) return false;
 
 bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     // Note that we should not store any data directly into Self until NoMoreReads() is called
@@ -224,6 +291,9 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             Y_ABORT_UNLESS(Self->ProcessingParams->ParseFromString(rawProcessingParams));
         }
     }
+
+    LOAD_SYS_ACTORID(db, Schema::Sys_InMemoryStateActorId, Self->InMemoryStatePrevActorId);
+    LOAD_SYS_UI64(db, Schema::Sys_InMemoryStateGeneration, Self->InMemoryStatePrevGeneration);
 
     if (!Self->Pipeline.Load(db))
         return false;
@@ -433,7 +503,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     }
 
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::ChangeRecords::TableId)) {
-        if (!Self->LoadChangeRecords(db, ChangeRecords)) {
+        if (!Self->LoadChangeRecords(db, Self->InitialState->ChangeRecords)) {
             return false;
         }
     }
@@ -445,7 +515,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     }
 
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::ChangeRecordCommits::TableId)) {
-        if (!Self->LoadChangeRecordCommits(db, ChangeRecords)) {
+        if (!Self->LoadChangeRecordCommits(db, Self->InitialState->ChangeRecords)) {
             return false;
         }
     }
@@ -663,6 +733,10 @@ public:
 
 ITransaction* TDataShard::CreateTxInit() {
     return new TTxInit(this);
+}
+
+ITransaction* TDataShard::CreateTxInitRestored() {
+    return new TTxInitRestored(this);
 }
 
 ITransaction* TDataShard::CreateTxInitSchema() {

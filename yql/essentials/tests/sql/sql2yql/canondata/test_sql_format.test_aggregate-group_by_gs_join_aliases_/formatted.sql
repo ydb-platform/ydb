@@ -5,16 +5,18 @@ SELECT
     k2,
     b.subkey AS kk2,
     SOME(a.value) AS val
-FROM plato.Input
-    AS a
-JOIN plato.Input
-    AS b
+FROM
+    plato.Input AS a
+JOIN
+    plato.Input AS b
 USING (key)
 GROUP BY
     GROUPING SETS (
         (a.key AS k1, b.subkey AS k2),
         (k1),
-        (b.subkey))
+        (b.subkey)
+    )
 ORDER BY
     k1,
-    kk2;
+    kk2
+;

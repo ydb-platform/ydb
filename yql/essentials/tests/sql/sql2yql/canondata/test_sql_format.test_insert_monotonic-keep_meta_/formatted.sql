@@ -7,7 +7,9 @@ INSERT INTO Output WITH (
 )
 SELECT
     *
-FROM Input1
+FROM
+    Input1
 ORDER BY
     key,
-    subkey;
+    subkey
+;

@@ -1,6 +1,7 @@
 USE plato;
+
 PRAGMA yt.UseNativeDescSort;
-PRAGMA yt.UsePartitionsByKeysForFinalAgg = "false";
+PRAGMA yt.UsePartitionsByKeysForFinalAgg = 'false';
 
 SELECT
     count(*),
@@ -8,9 +9,9 @@ SELECT
 FROM (
     SELECT
         *
-    FROM concat(Dates, Dates)
-)
-    AS t
+    FROM
+        concat(Dates, Dates)
+) AS t
 GROUP BY
     na,
     wa,
@@ -25,4 +26,5 @@ GROUP BY
     wt,
     wtz,
     ni,
-    wi;
+    wi
+;

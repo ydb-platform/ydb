@@ -2,11 +2,13 @@ USE plato;
 
 INSERT INTO @tmp WITH truncate
 SELECT
-    "dummy" AS a,
-    "1" AS b,
-    ["b", "s"] AS data
+    'dummy' AS a,
+    '1' AS b,
+    ['b', 's'] AS data
 ORDER BY
-    a;
+    a
+;
+
 COMMIT;
 
 SELECT
@@ -19,7 +21,8 @@ FROM (
             [String::AsciiToLower(b)],
             ListMap(data, String::AsciiToLower)
         ) AS joins
-    FROM @tmp
+    FROM
+        @tmp
 )
-    FLATTEN LIST BY
-        joins AS id;
+    FLATTEN LIST BY joins AS id
+;

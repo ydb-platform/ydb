@@ -1,19 +1,21 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 $user_process = ($key, $t1, $t2, $t3) -> {
     RETURN AsStruct(
         $key.0 AS key,
         COALESCE(CAST($t1.subkey AS Int32), 0) + COALESCE(CAST($t2.subkey AS Int32), 0) + COALESCE(CAST($t3.subkey AS Int32), 0) AS subkey
     );
 };
+
 $reducer = ($key, $stream) -> {
     $stream = YQL::OrderedMap(
         $stream, ($item) -> {
             RETURN AsStruct(
-                YQL::Guess($item, AsAtom("0")).t1 AS t1,
-                YQL::Guess($item, AsAtom("1")).t2 AS t2,
-                YQL::Guess($item, AsAtom("2")).t3 AS t3,
+                YQL::Guess($item, AsAtom('0')).t1 AS t1,
+                YQL::Guess($item, AsAtom('1')).t2 AS t2,
+                YQL::Guess($item, AsAtom('2')).t3 AS t3,
             );
         }
     );
@@ -49,19 +51,22 @@ REDUCE (
         key,
         subkey,
         TableRow() AS t1
-    FROM Input
+    FROM
+        Input
 ), (
     SELECT
         key,
         subkey,
         TableRow() AS t2
-    FROM Input
+    FROM
+        Input
 ), (
     SELECT
         key,
         subkey,
         TableRow() AS t3
-    FROM Input
+    FROM
+        Input
 )
 ON
     key,
@@ -69,4 +74,5 @@ ON
 USING $reducer(TableRow())
 ASSUME ORDER BY
     key,
-    subkey;
+    subkey
+;

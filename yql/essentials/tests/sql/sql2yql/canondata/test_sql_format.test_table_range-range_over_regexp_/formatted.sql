@@ -5,4 +5,6 @@ PRAGMA RegexUseRe2 = 'true';
 
 SELECT
     count(*) AS count
-FROM plato.regexp(``, "np");
+FROM
+    plato.regexp(``, 'np')
+;

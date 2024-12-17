@@ -49,7 +49,7 @@ void TestChunkWriteReleaseRun() {
         UNIT_ASSERT(ok);
         pDisk->RouteRequest(log);
     }
-    pDisk->ProcessLogWriteQueueAndCommits();
+    pDisk->ProcessLogWriteQueue();
 
     {
         NPDisk::TEvChunkWrite ev(evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound, reservedChunk,

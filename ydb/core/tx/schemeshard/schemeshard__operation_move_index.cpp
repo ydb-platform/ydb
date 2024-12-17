@@ -23,7 +23,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TUpdateMainTableOnIndexMove TConfigureParts"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:

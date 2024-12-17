@@ -67,7 +67,7 @@ static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
     };
 
     TSet<TString> modeSettings = {
-        "consistency_mode",
+        "consistency_level",
         "commit_interval",
     };
 
@@ -3007,6 +3007,9 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             Ctx.FlexibleTypes = true;
             Ctx.IncrementMonCounter("sql_pragma", "FlexibleTypes");
         } else if (normalizedPragma == "disableflexibletypes") {
+            Ctx.Warning(Ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
+                << "Deprecated pragma DisableFlexibleTypes - it will be removed soon. "
+                   "Consider submitting bug report if FlexibleTypes doesn't work for you";
             Ctx.FlexibleTypes = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableFlexibleTypes");
         } else if (normalizedPragma == "ansicurrentrow") {

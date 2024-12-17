@@ -1,4 +1,5 @@
-PRAGMA yt.UsePartitionsByKeysForFinalAgg = "false";
+PRAGMA yt.UsePartitionsByKeysForFinalAgg = 'false';
+
 USE plato;
 
 SELECT
@@ -9,8 +10,10 @@ SELECT
     max(subkey),
     sum(subkey),
     avg(subkey)
-FROM Input
+FROM
+    Input
 GROUP BY
     key
 ORDER BY
-    key;
+    key
+;

@@ -6,33 +6,41 @@ DEFINE SUBQUERY $q($name, $a) AS
     $i = (
         SELECT
             *
-        FROM $name
+        FROM
+            $name
     );
-    $b = "_foo";
+    $b = '_foo';
 
     SELECT
         key || $a || $b AS key
-    FROM $i;
+    FROM
+        $i
+    ;
 END DEFINE;
 
 $z = (
     SELECT
         key
-    FROM $q("Input", "_bar")
+    FROM
+        $q('Input', '_bar')
 );
 
 SELECT
-    $z;
+    $z
+;
 
 SELECT
     key
-FROM $q("Input", "_baz")
+FROM
+    $q('Input', '_baz')
 ORDER BY
-    key;
+    key
+;
 
 DEFINE SUBQUERY $e() AS
     SELECT
-        "hello";
+        'hello'
+    ;
 END DEFINE;
 
 PROCESS $e();

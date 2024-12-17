@@ -6,7 +6,8 @@ $data = (
         CAST(key AS uint32) AS age,
         CAST(subkey AS uint32) AS region,
         value AS name
-    FROM Input
+    FROM
+        Input
 );
 
 --insert into Output
@@ -15,7 +16,8 @@ SELECT
     region,
     name,
     sum(age) OVER w1 AS sum1
-FROM $data
+FROM
+    $data
 WINDOW
     w1 AS (
         PARTITION BY
@@ -26,4 +28,5 @@ WINDOW
 ORDER BY
     prefix,
     region,
-    name;
+    name
+;

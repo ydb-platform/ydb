@@ -8,4 +8,5 @@ SELECT
     ListToTuple([], 0),
     ListToTuple(ListCreate(Int32), 0),
     ListToTuple([1, 2], 2),
-    ListToTuple(just([3, 4]), 2);
+    ListToTuple(just([3, 4]), 2)
+;

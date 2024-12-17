@@ -1,12 +1,18 @@
 USE plato;
 
-$a =
+$a = (
     SELECT
         max(key)
-    FROM Input
-    WHERE key IN ParseFile("String", "list.txt");
+    FROM
+        Input
+    WHERE
+        key IN ParseFile('String', 'list.txt')
+);
 
 SELECT
     *
-FROM Input
-WHERE key >= $a;
+FROM
+    Input
+WHERE
+    key >= $a
+;

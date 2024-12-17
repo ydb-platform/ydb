@@ -17,6 +17,8 @@ SELECT
     (1 > 2) AND b1 AND b2 AND ob1 AND ob2 AS chain1,
     (1 < 2) XOR b1 XOR b2 XOR ob1 XOR ob2 AS chain2,
     (1 / 0 < 1) OR b1 OR b2 OR ob1 OR ob2 AS chain3,
-FROM Input
+FROM
+    Input
 ORDER BY
-    key;
+    key
+;

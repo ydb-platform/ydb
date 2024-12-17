@@ -48,4 +48,5 @@ SELECT
     {} != SetCreate(Int32),
     SetCreate(Int32) != {},
     {} != {1},
-    {1} != {},;
+    {1} != {},
+;

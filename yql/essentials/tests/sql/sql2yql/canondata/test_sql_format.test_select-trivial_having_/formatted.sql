@@ -1,8 +1,11 @@
 SELECT
     key,
-    "WAT" AS subkey,
+    'WAT' AS subkey,
     Max(value) AS value
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     key
-HAVING Max(value) == "FOO";
+HAVING
+    Max(value) == 'FOO'
+;

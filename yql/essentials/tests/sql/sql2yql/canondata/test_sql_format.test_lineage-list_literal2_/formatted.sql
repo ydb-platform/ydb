@@ -1,9 +1,11 @@
 USE plato;
 
-$key =
+$key = (
     SELECT
         min(key)
-    FROM Input;
+    FROM
+        Input
+);
 
 INSERT INTO Output
 SELECT
@@ -12,4 +14,6 @@ FROM (
     SELECT
         $key AS key
 )
-WHERE key > '';
+WHERE
+    key > ''
+;

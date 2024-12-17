@@ -11,9 +11,10 @@ namespace {
 using TCases = TVector<std::pair<TString, TString>>;
 
 struct TSetup {
-    TSetup() {
+    TSetup(bool ansiLexer = false) {
         NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &Arena;
+        settings.AnsiLexer = ansiLexer;
         Formatter = NSQLFormat::MakeSqlFormatter(settings);
     }
 

@@ -5,7 +5,10 @@ SELECT
     key + subkey,
     value,
     value_utf
-FROM Input
-WHERE subkey != 4
+FROM
+    Input
+WHERE
+    subkey != 4
 ORDER BY
-    key;
+    key
+;

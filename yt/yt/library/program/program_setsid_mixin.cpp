@@ -13,16 +13,17 @@ TProgramSetsidMixin::TProgramSetsidMixin(NLastGetopt::TOpts& opts)
     opts.AddLongOption("setsid", "create a new session")
         .StoreTrue(&Setsid_)
         .Optional();
+
+    RegisterMixinCallback([&] { Handle(); });
 }
 
-bool TProgramSetsidMixin::HandleSetsidOptions()
+void TProgramSetsidMixin::Handle()
 {
     if (Setsid_) {
 #ifdef _linux_
         setsid();
 #endif
     }
-    return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

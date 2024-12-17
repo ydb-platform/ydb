@@ -1,6 +1,6 @@
 /* syntax version 1 */
 /* postgres can not */
-PRAGMA warning("disable", "4520");
+PRAGMA warning('disable', '4520');
 
 SELECT
     value,
@@ -8,7 +8,8 @@ SELECT
     LEAD(value || value, 3) OVER w1 AS dvalue_lead1,
     SUM(CAST(subkey AS uint32)) OVER w2 AS sum2,
     LAG(CAST(value AS uint32)) OVER w2 AS value_lag2,
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w1 AS (
         PARTITION BY
@@ -23,4 +24,5 @@ WINDOW
         ROWS BETWEEN 3 FOLLOWING AND 2 FOLLOWING
     )
 ORDER BY
-    value;
+    value
+;

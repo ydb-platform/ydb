@@ -1003,32 +1003,42 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         UNIT_ASSERT_VALUES_EQUAL(value, GetSimpleCounter(runtime, name));
     }
 
-    ui64 GetPercentileCounter(TTestBasicRuntime& runtime, const TString& name, const TString& range) {
+    auto GetPercentileCounters(TTestBasicRuntime& runtime, const TString& name) {
         const auto counters = GetCounters(runtime);
         for (const auto& counter : counters.GetTabletCounters().GetAppCounters().GetPercentileCounters()) {
             if (name != counter.GetName()) {
                 continue;
             }
 
-            for (ui32 i = 0; i < counter.RangesSize(); ++i) {
-                if (range != counter.GetRanges(i)) {
-                    continue;
-                }
-
-                UNIT_ASSERT(i < counter.ValuesSize());
-                return counter.GetValues(i);
-            }
-
-            UNIT_ASSERT_C(false, "Range not found: " << range);
+            return counter;
         }
 
-        UNIT_ASSERT_C(false, "Counter not found: " << name);
-        return 0; // unreachable
+        Y_FAIL("Counter not found: %s", name.c_str());
+    }
+
+    ui64 GetPercentileCounter(const auto& counters, const TString& range) {
+        for (ui32 i = 0; i < counters.RangesSize(); ++i) {
+            if (range != counters.GetRanges(i)) {
+                continue;
+            }
+
+            UNIT_ASSERT(i < counters.ValuesSize());
+            return counters.GetValues(i);
+        }
+
+        Y_FAIL("Range not found: %s", range.c_str());
+    }
+
+    ui64 GetPercentileCounter(TTestBasicRuntime& runtime, const TString& name, const TString& range) {
+        auto counters = GetPercentileCounters(runtime, name);
+        return GetPercentileCounter(counters, range);
     }
 
     void CheckPercentileCounter(TTestBasicRuntime& runtime, const TString& name, const THashMap<TString, ui64>& rangeValues) {
+        auto counters = GetPercentileCounters(runtime, name);
+        Cerr << counters.DebugString();
         for (const auto& [range, value] : rangeValues) {
-            const auto v = GetPercentileCounter(runtime, name, range);
+            const auto v = GetPercentileCounter(counters, range);
             UNIT_ASSERT_VALUES_EQUAL_C(v, value, "Unexpected value in range"
                 << ": range# " << range
                 << ", expected# " << value
@@ -1074,6 +1084,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         // after erase
         WaitForCondErase(runtime);
         WaitForStats(runtime, 1);
+        if (GetPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", "0") > 0) {
+            // Sometimes stats arrive too quickly?
+            WaitForStats(runtime, 1);
+        }
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 1}, {"1800", 0}, {"inf", 0}});
 
         // after a little more time

@@ -1,6 +1,6 @@
 /* syntax version 1 */
 /* postgres can not */
-PRAGMA warning("disable", "4520");
+PRAGMA warning('disable', '4520');
 PRAGMA AnsiRankForNullableKeys;
 
 SELECT
@@ -17,8 +17,10 @@ SELECT
 FROM (
     SELECT
         *
-    FROM plato.Input
-    WHERE key == '1'
+    FROM
+        plato.Input
+    WHERE
+        key == '1'
 )
 WINDOW
     w1 AS (
@@ -36,4 +38,5 @@ WINDOW
     )
 ORDER BY
     key,
-    subkey;
+    subkey
+;

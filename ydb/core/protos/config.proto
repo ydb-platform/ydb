@@ -286,15 +286,14 @@ message TBlobStorageConfig {
         optional NKikimrBlobStorage.EPDiskType PDiskType = 7;
 
         // some extra settings
-        optional bool AutomaticBoxManagement = 4; // invoke BSC DefineHostConfig/DefineBox automatically
+        optional bool AutomaticBoxManagement = 4; // invoke BSC DefineHostConfig/DefineBox automatically (true when unset)
         optional bool AutomaticBootstrap = 9; // whether bootstrap should be performed automatically; PROHIBITED for production
-
-        // filled in by config parser, not by user; required for automatic static group creation
-        repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 5;
-        optional NKikimrBlobStorage.TDefineBox DefineBox = 6;
 
         // generation of the distconf section; when set, one can automatically apply in-filesystem config
         optional uint64 Generation = 8;
+
+        // internally-used field with initial config.yaml loaded on the start
+        optional bytes InitialConfigYaml = 10;
     }
 
     optional TAutoconfigSettings AutoconfigSettings = 6;
@@ -331,6 +330,10 @@ message TBlobStorageConfig {
     reserved 7;  // TCostMetricsSettings, moved to ICB
     optional TVDiskPerformanceSettings VDiskPerformanceSettings = 8;
     optional TVDiskBalancingConfig VDiskBalancingConfig = 9;
+
+    // filled in by config parser, not by user; required for correct distconf operation
+    repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 10;
+    optional NKikimrBlobStorage.TDefineBox DefineBox = 11;
  }
 
 message TBlobStorageFormatConfig {
@@ -1451,6 +1454,17 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 200 }];
+        optional uint64 UseNoopSchedulerHDD = 3 [(ControlOptions) = {
+            Description: "Enables noop scheduler for HDD disks only",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 UseNoopSchedulerSSD = 4 [(ControlOptions) = {
+            Description: "Enables noop scheduler for SSD, NVME",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+
     }
 
     message TBlobStorageControllerControls {
@@ -1482,10 +1496,13 @@ message TMeteringConfig {
 };
 
 message TAuditConfig {
+    // For each new format, we need to register the audit event conversion function
+    // See  ydb/core/audit/audit_log_impl.cpp for details
     enum EFormat {
         JSON = 1;                // Outputs audit log in format: "<time>: {"k1": "v1", "k2": "v2", ...}" where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values
         TXT = 2;                 // Outputs audit log in format: "<time>: k1=v1, k2=v2, ..." where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values
         JSON_LOG_COMPATIBLE = 3; // Outputs audit log in format: "{"@timestamp": "<ISO 8601 time>", "@log_type": "audit", "k1": "v1", "k2": "v2", ...}" where @timestamp is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values // Suitable for output both debug log and audit log to the same destination (stderr)
+        FORMAT_4 = 4;        // Reserved
     }
 
     message TStderrBackend {
@@ -1894,6 +1911,7 @@ message TTracingConfig {
     // field meaning is the same as in TSamplingRule
     message TExternalThrottlingRule {
         optional TSelectors Scope = 1;
+        optional uint32 Level = 4;
         optional uint64 MaxTracesPerMinute = 2;
         optional uint64 MaxTracesBurst = 3;
     }

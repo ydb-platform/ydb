@@ -23,19 +23,23 @@ SELECT
     [d32, ts64],
     5,
     [dt64, ts64]
-FROM BigDates
-    AS bd
-JOIN NarrowDates
+FROM
+    BigDates AS bd
+JOIN
+    NarrowDates
 USING (row)
 ORDER BY
-    row;
+    row
+;
 
 SELECT
     bd.row AS row,
     [i, i64]
-FROM BigDates
-    AS bd
-JOIN NarrowInterval
+FROM
+    BigDates AS bd
+JOIN
+    NarrowInterval
 USING (row)
 ORDER BY
-    row;
+    row
+;

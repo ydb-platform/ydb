@@ -6,10 +6,12 @@ SELECT
     LAST_VALUE(CAST(subkey AS uint32)) RESPECT NULLS OVER w1,
     LAST_VALUE(CAST(subkey AS uint32)) IGNORE NULLS OVER w1,
     subkey
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w1 AS (
         ORDER BY
             key ASC,
             subkey
-    );
+    )
+;

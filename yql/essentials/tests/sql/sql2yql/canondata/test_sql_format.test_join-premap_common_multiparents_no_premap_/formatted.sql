@@ -1,5 +1,6 @@
 PRAGMA DisableSimpleColumns;
 PRAGMA DisablePullUpFlatMapOverJoin;
+
 USE plato;
 
 $map = (
@@ -8,13 +9,14 @@ $map = (
         subkey,
         1 AS value,
         2 AS another
-    FROM Input1
+    FROM
+        Input1
 );
 
-FROM $map
-    AS a
-JOIN Input2
-    AS b
+FROM
+    $map AS a
+JOIN
+    Input2 AS b
 USING (key)
 SELECT
     a.key,
@@ -22,14 +24,16 @@ SELECT
     b.value
 ORDER BY
     a.key,
-    a.value;
+    a.value
+;
 
-FROM $map
-    AS a
+FROM
+    $map AS a
 SELECT
     a.key,
     a.value,
     a.subkey
 ORDER BY
     a.key,
-    a.value;
+    a.value
+;

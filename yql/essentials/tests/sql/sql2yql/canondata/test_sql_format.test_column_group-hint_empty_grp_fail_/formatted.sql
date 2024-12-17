@@ -2,7 +2,9 @@
 USE plato;
 
 -- empty group
-INSERT INTO Output WITH column_groups = "{g1=[];def=#}"
+INSERT INTO Output WITH column_groups = '{g1=[];def=#}'
 SELECT
     *
-FROM Input;
+FROM
+    Input
+;

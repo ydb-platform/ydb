@@ -1,8 +1,10 @@
 /* postgres can not */
 USE plato;
+
 $improve_low = ($val) -> {
     RETURN CAST($val AS Utf8);
 };
+
 $names_intersection = ($org_names, $db_names) -> {
     RETURN ListLength(
         ListFlatten(
@@ -24,4 +26,5 @@ $names_intersection = ($org_names, $db_names) -> {
 };
 
 SELECT
-    $names_intersection(['1', '2'], ['nets']);
+    $names_intersection(['1', '2'], ['nets'])
+;

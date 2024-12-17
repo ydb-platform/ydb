@@ -48,15 +48,6 @@ void SetAccountLockoutParameters(TTestActorRuntime &runtime, ui64 schemeShard, c
     SetConfig(runtime, schemeShard, std::move(request));
 }
 
-std::function<void(ui32 nodeIdx, NKikimr::TAppData& appData)> InitializeAccountLockoutConfig() {
-    return [](ui32 nodeIdx, NKikimr::TAppData& appData) {
-        Y_UNUSED(nodeIdx);
-        auto accountLockout = appData.AuthConfig.MutableAccountLockout();
-        accountLockout->SetAttemptThreshold(4);
-        accountLockout->SetAttemptResetDuration("5s");
-    };
-}
-
 struct TCheckSecurityStateExpectedValues {
     size_t PublicKeysSize;
     size_t SidsSize;
@@ -582,7 +573,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
     Y_UNIT_TEST(AccountLockoutAndAutomaticallyUnlock) {
         TTestBasicRuntime runtime;
-        runtime.AddAppDataInit(InitializeAccountLockoutConfig());
         TTestEnv env(runtime);
         auto accountLockoutConfig = runtime.GetAppData().AuthConfig.GetAccountLockout();
         ui64 txId = 100;
@@ -610,7 +600,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
         }
 
-        runtime.SimulateSleep(TDuration::Seconds(7));
+        // User is blocked for 1 hour
+        runtime.AdvanceCurrentTime(TDuration::Minutes(61));
 
         resultLogin = Login(runtime, "user1", "wrongpassword6");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
@@ -626,7 +617,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
     Y_UNIT_TEST(ResetFailedAttemptCount) {
         TTestBasicRuntime runtime;
-        runtime.AddAppDataInit(InitializeAccountLockoutConfig());
         TTestEnv env(runtime);
         auto accountLockoutConfig = runtime.GetAppData().AuthConfig.GetAccountLockout();
         ui64 txId = 100;
@@ -648,7 +638,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
         }
 
-        runtime.SimulateSleep(TDuration::Seconds(7));
+        // FailedAttemptCount will reset in 1 hour
+        runtime.AdvanceCurrentTime(TDuration::Minutes(61));
 
         // FailedAttemptCount should be reset
         for (size_t attempt = 0; attempt < accountLockoutConfig.GetAttemptThreshold() - 1; attempt++) {
@@ -667,7 +658,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
     Y_UNIT_TEST(ChangeAccountLockoutParameters) {
         TTestBasicRuntime runtime;
-        runtime.AddAppDataInit(InitializeAccountLockoutConfig());
         TTestEnv env(runtime);
         auto accountLockoutConfig = runtime.GetAppData().AuthConfig.GetAccountLockout();
         ui64 txId = 100;
@@ -691,9 +681,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
         }
 
-        runtime.SimulateSleep(TDuration::Seconds(7));
+        // user is blocked for 1 hour
+        runtime.AdvanceCurrentTime(TDuration::Minutes(61));
 
-        // Unlock user after 5 sec
+        // Unlock user after 1 hour
         resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
 
@@ -704,7 +695,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
 
         size_t newAttemptThreshold = 6;
-        SetAccountLockoutParameters(runtime, TTestTxConfig::SchemeShard, {.AttemptThreshold = newAttemptThreshold, .AttemptResetDuration = "10s"});
+        SetAccountLockoutParameters(runtime, TTestTxConfig::SchemeShard, {.AttemptThreshold = newAttemptThreshold, .AttemptResetDuration = "5h"});
 
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
         // Now user2 have 6 attempts to login
@@ -721,12 +712,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 2});
         }
 
-        // After 7 sec user2 must be locked out
-        runtime.SimulateSleep(TDuration::Seconds(7));
+        // user2 is blocked for 10 hour
+        // After 3 hours user2 must be locked out
+        runtime.AdvanceCurrentTime(TDuration::Hours(3));
         resultLogin = Login(runtime, "user2", "wrongpassword28");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user2 is locked out");
 
-        runtime.SimulateSleep(TDuration::Seconds(5));
+        // After 5 h 1 m user2 must be unlocked
+        runtime.AdvanceCurrentTime(TDuration::Minutes(5 * 60 + 1));
 
         // Unlock user after 10 sec
         resultLogin = Login(runtime, "user2", "password2");
@@ -740,7 +733,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
     Y_UNIT_TEST(UserStayLockedOutIfEnterValidPassword) {
         TTestBasicRuntime runtime;
-        runtime.AddAppDataInit(InitializeAccountLockoutConfig());
         TTestEnv env(runtime);
         auto accountLockoutConfig = runtime.GetAppData().AuthConfig.GetAccountLockout();
         ui64 txId = 100;
@@ -762,6 +754,73 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // Also do not accept correct password
         resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
+    }
+
+    void CheckUserIsLockedOutPermanently(TTestBasicRuntime& runtime) {
+        TTestEnv env(runtime);
+        auto accountLockoutConfig = runtime.GetAppData().AuthConfig.GetAccountLockout();
+        ui64 txId = 100;
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
+        }
+
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        NKikimrScheme::TEvLoginResult resultLogin;
+        for (size_t attempt = 0; attempt < accountLockoutConfig.GetAttemptThreshold(); attempt++) {
+            resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << attempt);
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        }
+        resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
+
+        // Also do not accept correct password
+        resultLogin = Login(runtime, "user1", "password1");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
+        }
+
+        // User is blocked permanently
+        runtime.AdvanceCurrentTime(TDuration::Days(365));
+
+        // After 1 year user is locked out
+        resultLogin = Login(runtime, "user1", "wrongpassword365");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
+
+        // Also do not accept correct password
+        resultLogin = Login(runtime, "user1", "password1");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
+        }
+    }
+
+    Y_UNIT_TEST(LockOutUserPermanentlyIfAttemptResetDurationIsZeroSeconds) {
+        TTestBasicRuntime runtime;
+        runtime.AddAppDataInit([] (ui32 nodeIdx, NKikimr::TAppData& appData) {
+            Y_UNUSED(nodeIdx);
+            auto accountLockout = appData.AuthConfig.MutableAccountLockout();
+            accountLockout->SetAttemptThreshold(4);
+            accountLockout->SetAttemptResetDuration("0s");
+        });
+        CheckUserIsLockedOutPermanently(runtime);
+    }
+
+    Y_UNIT_TEST(LockOutUserPermanentlyIfAttemptResetDurationCannotParse) {
+        TTestBasicRuntime runtime;
+        runtime.AddAppDataInit([] (ui32 nodeIdx, NKikimr::TAppData& appData) {
+            Y_UNUSED(nodeIdx);
+            auto accountLockout = appData.AuthConfig.MutableAccountLockout();
+            accountLockout->SetAttemptThreshold(4);
+            accountLockout->SetAttemptResetDuration("blablabla");
+        });
+        CheckUserIsLockedOutPermanently(runtime);
     }
 }
 

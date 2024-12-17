@@ -16,11 +16,11 @@ PEERDIR(
 )
 
 IF (NOT PY_PROTOS_FOR)
-	ONLY_TAGS(
-	    CPP_PROTO
-	    PY_PROTO
-	    PY3_PROTO
-	)
+    ONLY_TAGS(
+        CPP_PROTO
+        PY_PROTO
+        PY3_PROTO
+    )
 ENDIF()
 
 END()

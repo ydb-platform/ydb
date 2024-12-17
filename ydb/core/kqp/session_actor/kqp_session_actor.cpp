@@ -1366,6 +1366,7 @@ public:
             && !txCtx->BufferActorId
             && (txCtx->HasTableWrite || request.TopicOperations.GetSize() != 0)) {
             txCtx->TxManager->SetTopicOperations(std::move(request.TopicOperations));
+            txCtx->TxManager->AddTopicsToShards();
 
             TKqpBufferWriterSettings settings {
                 .SessionActorId = SelfId(),
@@ -1376,6 +1377,9 @@ public:
             };
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);
+        } else if (Settings.TableService.GetEnableOltpSink() && txCtx->BufferActorId) {
+            txCtx->TxManager->SetTopicOperations(std::move(request.TopicOperations));
+            txCtx->TxManager->AddTopicsToShards();
         }
 
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,

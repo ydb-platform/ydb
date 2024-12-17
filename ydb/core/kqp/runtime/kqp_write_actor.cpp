@@ -1403,7 +1403,6 @@ public:
         State = EState::WRITING;
         Alloc->Release();
         Counters->BufferActorsCount->Inc();
-        TxManager->AddTopicsToShards();
     }
 
     void Bootstrap() {

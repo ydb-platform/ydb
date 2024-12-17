@@ -703,6 +703,31 @@ public:                                                                         
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
+        // TResponseStatusGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TResponseStatusGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TResponseStatusGroup)
+            {
+                COUNTER_INIT(ResponsesWithStatusError, true);
+                COUNTER_INIT(ResponsesWithStatusRace, true);
+                COUNTER_INIT(ResponsesWithStatusBlocked, true);
+                COUNTER_INIT(ResponsesWithStatusOutOfSpace, true);
+                COUNTER_INIT(ResponsesWithStatusDeadline, true);
+                COUNTER_INIT(ResponsesWithStatusNotReady, true);
+                COUNTER_INIT(ResponsesWithStatusVdiskErrorState, true);
+            }
+
+            COUNTER_DEF(ResponsesWithStatusError);
+            COUNTER_DEF(ResponsesWithStatusRace);
+            COUNTER_DEF(ResponsesWithStatusBlocked);
+            COUNTER_DEF(ResponsesWithStatusOutOfSpace);
+            COUNTER_DEF(ResponsesWithStatusDeadline);
+            COUNTER_DEF(ResponsesWithStatusNotReady);
+            COUNTER_DEF(ResponsesWithStatusVdiskErrorState);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
         // TCostTrackerGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TCostTrackerGroup : public TBase {

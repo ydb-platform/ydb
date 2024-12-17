@@ -260,6 +260,10 @@ def default_users():
     return {user: password}
 
 
+def enable_survive_restart():
+    return os.getenv('YDB_LOCAL_SURVIVE_RESTART') == 'true'
+
+
 def enable_tls():
     return os.getenv('YDB_GRPC_ENABLE_TLS') == 'true'
 
@@ -320,7 +324,7 @@ def deploy(arguments):
     initialize_working_dir(arguments)
     recipe = Recipe(arguments)
 
-    if os.path.exists(recipe.metafile_path()):
+    if os.path.exists(recipe.metafile_path()) and enable_survive_restart()::
         return start(arguments)
 
     if getattr(arguments, 'use_packages', None) is not None:

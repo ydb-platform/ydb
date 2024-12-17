@@ -499,7 +499,30 @@ def ssh_args():
         metavar="SSH_USER",
         default=current_user,
         help="user for ssh interaction with slice. Default value is $USER "
-             "(which equals {user} now)".format(user=current_user),
+        "(which equals {user} now)".format(user=current_user),
+    )
+    return args
+
+
+def cluster_type_args():
+    args = argparse.ArgumentParser(add_help=True)
+    args.add_argument(
+        "--cluster-type",
+        metavar="ERASURE",
+        required=True,
+        help="Erasure type for slice",
+        choices=["block-4-2", "mirror-3dc-3-nodes-in-memory", "mirror", "mirror-3dc-9-nodes"],
+    )
+    return args
+
+
+def output_file():
+    args = argparse.ArgumentParser(add_help=True)
+    args.add_argument(
+        "output-file",
+        metavar="OUTPUT_FILE",
+        required=False,
+        help="File to save cluster configuration",
     )
     return args
 
@@ -686,12 +709,24 @@ def add_format_mode(modes, walle_provider):
         "format",
         parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
         description="Stop all kikimr instances at the nodes, format all kikimr drivers at the nodes, start the instances. "
-                    "If you call format for all cluster, you will spoil it. "
-                    "Additional dynamic configuration will required after it. "
-                    "If you call format for few nodes, cluster will regenerate after it. "
-                    "Use --hosts to specify particular hosts."
-
+        "If you call format for all cluster, you will spoil it. "
+        "Additional dynamic configuration will required after it. "
+        "If you call format for few nodes, cluster will regenerate after it. "
+        "Use --hosts to specify particular hosts.",
     )
+    mode.set_defaults(handler=_run)
+
+
+def add_sample_config(modes):
+    def _run(args):
+        pass
+
+    mode = modes.add_parser(
+        "sample-config",
+        parents=[cluster_type_args()],
+        description="Generate default mock-configuration for provided erasure"
+    )
+
     mode.set_defaults(handler=_run)
 
 

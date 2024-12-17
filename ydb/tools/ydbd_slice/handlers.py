@@ -20,6 +20,14 @@ class CalledProcessError(subprocess.CalledProcessError):
         )
 
 
+class Configuration(object):
+    def __init__():
+        pass
+
+    def generate_config(self) -> str:
+        pass
+
+
 class Slice:
     def __init__(self, components, nodes, cluster_details, configurator, do_clear_logs, yav_version, walle_provider):
         self.slice_kikimr_path = '/Berkanavt/kikimr/bin/kikimr'

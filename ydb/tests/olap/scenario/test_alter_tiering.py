@@ -28,6 +28,60 @@ import datetime
 import random
 from typing import Iterable
 from string import ascii_lowercase
+import yatest.common
+from library.recipes import common as recipes_common
+import os
+import requests
+import logging
+
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+
+
+class TestWithS3(BaseTestSet):
+    MOTO_SERVER_PATH = "contrib/python/moto/bin/moto_server"
+    S3_PID_FILE = "s3.pid"
+
+    @classmethod
+    def _do_setup(cls):
+        port_manager = yatest.common.network.PortManager()
+        s3_port = port_manager.get_port()
+        s3_url = f"http://localhost:{s3_port}"
+
+        command = [yatest.common.binary_path(cls.MOTO_SERVER_PATH), "s3", "--host", "::1", "--port", str(s3_port)]
+
+        def is_s3_ready():
+            try:
+                response = requests.get(s3_url)
+                response.raise_for_status()
+                return True
+            except requests.RequestException as err:
+                logging.debug(err)
+                return False
+
+        assert not os.path.exists(cls.S3_PID_FILE)
+        recipes_common.start_daemon(
+            command=command, environment=None, is_alive_check=is_s3_ready, pid_file_name=cls.S3_PID_FILE
+        )
+
+        cls.s3_url = s3_url
+
+    @classmethod
+    def _do_teardown(cls):
+        with open(cls.S3_PID_FILE, 'r') as f:
+            pid = int(f.read())
+            os.remove(cls.S3_PID_FILE)
+        recipes_common.stop_daemon(pid)
+
+    @classmethod
+    def _get_cluster_config(cls):
+        return KikimrConfigGenerator(
+            extra_feature_flags=["enable_external_data_sources", "enable_tiering_in_column_shard"],
+            columnshard_config={
+                "lag_for_compaction_before_tierings_ms": 1000,
+                "compaction_actualization_lag_ms": 1000,
+                "optimizer_freshness_check_duration_ms": 1000
+            }
+        )
 
 
 class TestLoop:
@@ -43,7 +97,7 @@ class TestLoop:
         return StopIteration
 
 
-class TestAlterTiering(BaseTestSet):
+class TestAlterTiering(TestWithS3):
     schema1 = (
         ScenarioTestHelper.Schema()
         .with_column(name='timestamp', type=PrimitiveType.Timestamp, not_null=True)
@@ -132,18 +186,16 @@ class TestAlterTiering(BaseTestSet):
         random.seed(42)
         n_tables = 4
 
-        test_duration = datetime.timedelta(seconds=int(get_external_param('test-duration-seconds', '4600')))
+        test_duration = datetime.timedelta(seconds=int(get_external_param('test-duration-seconds', '10')))
         n_tables = int(get_external_param('tables', '4'))
         n_writers = int(get_external_param('writers-per-table', '4'))
         allow_s3_unavailability = external_param_is_true('allow-s3-unavailability')
         is_standalone_tables = external_param_is_true('test-standalone-tables')
 
-        s3_endpoint = get_external_param('s3-endpoint', 'http://storage.yandexcloud.net')
-        s3_access_key = get_external_param('s3-access-key', 'YCAJEM3Pg9fMyuX9ZUOJ_fake')
-        s3_secret_key = get_external_param('s3-secret-key', 'YCM7Ovup55wDkymyEtO8pw5F10_L5jtVY8w_fake')
-        s3_buckets = get_external_param('s3-buckets', 'ydb-tiering-test-1,ydb-tiering-test-2').split(',')
-
-        assert len(s3_buckets) == 2, f'expected 2 bucket configs, got {len(s3_buckets)}'
+        s3_endpoint = self.s3_url
+        s3_buckets = ["ydb-tiering-test-1", "ydb-tiering-test-2"]
+        s3_access_key = "access_key"
+        s3_secret_key = "secret_key"
 
         sth = ScenarioTestHelper(ctx)
 
@@ -162,6 +214,15 @@ class TestAlterTiering(BaseTestSet):
                 secret_key=s3_secret_key
             ) for bucket in s3_buckets
         ]
+
+        for config in s3_configs:
+            s3 = self._make_s3_client(config.access_key, config.secret_key, config.endpoint)
+            s3.create_bucket(
+                Bucket=config.bucket,
+                CreateBucketConfiguration={
+                    'LocationConstraint': 'ru-central1'
+                },
+            )
 
         sources: list[str] = []
         for i, s3_config in enumerate(s3_configs):

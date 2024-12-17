@@ -3,6 +3,7 @@ import inspect
 import pytest
 import threading
 import time
+import abc
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import TestContext, ScenarioTestHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
@@ -26,14 +27,13 @@ class YdbClusterInstance():
     _endpoint = None
     _database = None
 
-    def __init__(self, endpoint, database):
+    def __init__(self, endpoint, database, config):
         if endpoint is not None:
             self._endpoint = endpoint
             self._database = database
             self._mon_port = 8765
         else:
-            config = KikimrConfigGenerator(extra_feature_flags=["enable_column_store"])
-            cluster = KiKiMR(configurator=config)
+            cluster = KiKiMR(configurator=config, extra_feature_flags=["enable_column_store"])
             cluster.start()
             node = cluster.nodes[1]
             self._endpoint = "grpc://%s:%d" % (node.host, node.port)
@@ -80,13 +80,15 @@ class BaseTestSet:
     def setup_class(cls):
         ydb_endpoint = get_external_param('ydb-endpoint', None)
         ydb_database = get_external_param('ydb-db', "").lstrip('/')
-        cls._ydb_instance = YdbClusterInstance(ydb_endpoint, ydb_database)
+        cls._ydb_instance = YdbClusterInstance(ydb_endpoint, ydb_database, cls._get_cluster_config())
         YdbCluster.reset(cls._ydb_instance.endpoint(), cls._ydb_instance.database(), cls._ydb_instance.mon_port())
         if not external_param_is_true('reuse-tables'):
             ScenarioTestHelper(None).remove_path(cls.get_suite_name())
+        cls._do_setup()
 
     @classmethod
     def teardown_class(cls):
+        cls._do_teardown()
         if not external_param_is_true('keep-tables'):
             ScenarioTestHelper(None).remove_path(cls.get_suite_name())
         cls._ydb_instance.stop()
@@ -121,6 +123,21 @@ class BaseTestSet:
             raise
         allure_test_description(ctx.suite, ctx.test, start_time=start_time, end_time=time.time())
         ScenarioTestHelper(None).remove_path(test_path, ctx.suite)
+
+    @classmethod
+    @abc.abstractmethod
+    def _do_setup(cls):
+        pass
+
+    @classmethod
+    @abc.abstractmethod
+    def _do_teardown(cls):
+        pass
+
+    @classmethod
+    @abc.abstractmethod
+    def _get_cluster_config(cls):
+        return KikimrConfigGenerator()
 
 
 def pytest_generate_tests(metafunc):

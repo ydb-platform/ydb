@@ -14,6 +14,7 @@ PY3TEST()
 
     ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
     DEPENDS(
+        contrib/python/moto/bin
         ydb/apps/ydbd
     )
 
@@ -29,6 +30,7 @@ PY3TEST()
         ydb/tests/library
         ydb/tests/olap/scenario/helpers
         library/python/testing/yatest_common
+        library/recipes/common
     )
 
     SIZE(MEDIUM)

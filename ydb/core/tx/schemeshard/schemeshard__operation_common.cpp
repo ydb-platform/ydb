@@ -425,12 +425,22 @@ bool TDeletePartsAndDone::ProgressState(TOperationContext& context) {
 TDone::TDone(const TOperationId& id)
     : OperationId(id)
 {
-    IgnoreMessages(DebugHint(), AllIncomingEvents());
+    auto events = AllIncomingEvents();
+    events.erase(TEvPrivate::TEvCompleteBarrier::EventType);
+    IgnoreMessages(DebugHint(), events);
 }
 
 bool TDone::ProgressState(TOperationContext& context) {
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " ProgressState");
+
+    context.OnComplete.Barrier(OperationId, "DoneBarrier");
+    return false;
+}
+
+bool TDone::HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr&, TOperationContext& context) {
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " HandleReply TEvCompleteBarrier");
 
     const auto* txState = context.SS->FindTx(OperationId);
 

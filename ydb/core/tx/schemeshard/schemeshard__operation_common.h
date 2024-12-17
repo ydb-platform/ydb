@@ -120,6 +120,7 @@ public:
     explicit TDone(const TOperationId& id);
 
     bool ProgressState(TOperationContext& context) override;
+    bool HandleReply(TEvPrivate::TEvCompleteBarrier__HandlePtr& ev, TOperationContext& context) override;
 };
 
 namespace NPQState {

@@ -383,8 +383,8 @@ class TDoneWithInitialScan: public TDone {
 public:
     using TDone::TDone;
 
-    bool ProgressState(TOperationContext& context) override {
-        if (!TDone::ProgressState(context)) {
+    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
+        if (!TDone::HandleReply(ev, context)) {
             return false;
         }
 

@@ -33,11 +33,29 @@ ALTER TABLE series_with_families
   ALTER COLUMN release_date SET FAMILY family_small;
 ```
 
-При помощи команды `ALTER FAMILY` можно изменить параметры группы колонок. Приведенный ниже код для группы колонок `default` в таблице `series_with_families` сменит тип хранилища на `hdd` (поддерживается только для [строковых](../../../../concepts/datamodel/table.md#row-oriented-tables) таблиц):
+При помощи команды `ALTER FAMILY` можно изменить параметры группы колонок.
+
+### Изменение типа хранилища
+
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [OLTP_only_allow_note](../../../../_includes/only_allow_for_oltp_note.md) %}
+
+{% endif %}
+
+Приведенный ниже код для группы колонок `default` в таблице `series_with_families` сменит тип хранилища на `hdd`:
 
 ```yql
 ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
 ```
+
+### Изменение кодека сжатия
+
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [codec_zstd_allow_for_olap_note](../../../../_includes/codec_zstd_allow_for_olap_note.md) %}
+
+{% endif %}
 
 Приведенный ниже код для группы колонок `default` в таблице `series_with_families` сменит кодек сжатия на `lz4`:
 
@@ -45,7 +63,15 @@ ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
 ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION "lz4";
 ```
 
-Приведенный ниже код для группы колонок `default` в таблице `series_with_families` сменит уровень сжатия кодека, если он поддерживает различные уровни сжатия (поддерживается только для [колоночных](../../../../concepts/datamodel/table.md#column-oriented-tables) таблиц):
+### Изменение уровня кодека сжатия
+
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [OLAP_only_allow_note](../../../../_includes/only_allow_for_olap_note.md) %}
+
+{% endif %}
+
+Приведенный ниже код для группы колонок `default` в таблице `series_with_families` сменит уровень кодека сжатия, если он поддерживает различные уровни сжатия:
 
 ```yql
 ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION_LEVEL 5;

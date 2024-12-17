@@ -2,9 +2,29 @@
 
 Колонки одной таблицы можно объединять в группы, для того чтобы задать следующие параметры:
 
-* `DATA` — тип устройства хранения для данных колонок этой группы (поддерживается только для [строковых](../../../../concepts/datamodel/table.md#row-oriented-tables) таблиц). Допустимые значения: `"ssd"`, `"rot"`.
-* `COMPRESSION` — кодек сжатия данных. Допустимые значения: `"off"`, `"lz4"`, `"zstd"` (только для [колоночных](../../../../concepts/datamodel/table.md#column-oriented-tables) таблиц).
-* `COMPRESSION_LEVEL` — уровень сжатия кодека (поддерживается только для [колоночных](../../../../concepts/datamodel/table.md#column-oriented-tables) таблиц), если кодек поддерживает уровень сжатия.
+* `DATA` — тип устройства хранения для данных колонок этой группы. Допустимые значения: `"ssd"`, `"rot"`.
+
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [OLTP_only_allow_note](../../../../_includes/only_allow_for_oltp_note.md) %}
+
+{% endif %}
+
+* `COMPRESSION` — кодек сжатия данных. Допустимые значения: `"off"`, `"lz4"`, `"zstd"`.
+
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [codec_zstd_allow_for_olap_note](../../../../_includes/codec_zstd_allow_for_olap_note.md) %}
+
+{% endif %}
+
+* `COMPRESSION_LEVEL` — уровень сжатия кодека, если кодек поддерживает уровень сжатия.
+
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [OLAP_only_allow_note](../../../../_includes/only_allow_for_olap_note.md) %}
+
+{% endif %}
 
 По умолчанию все колонки находятся в одной группе с именем `default`.  При желании, параметры этой группы тоже можно переопределить.
 

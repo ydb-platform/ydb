@@ -102,7 +102,7 @@ public:
             : -1)
     {
         BlobOutput_ = GetOutputStream();
-        WriteColumnNamesHeader([this](TStringBuf buf, char c) {
+        WriteColumnNamesHeader([this] (TStringBuf buf, char c) {
             WriteRaw(buf);
             WriteRaw(c);
         });
@@ -186,7 +186,7 @@ public:
             IdToIndexInRow)
         , Output_(CreateBufferedSyncAdapter(stream))
     {
-        WriteColumnNamesHeader([this](TStringBuf buf, char c) {
+        WriteColumnNamesHeader([this] (TStringBuf buf, char c) {
             Output_->Write(buf);
             Output_->Write(c);
         });
@@ -248,6 +248,11 @@ public:
         return Result_;
     }
 
+    std::optional<NCrypto::TMD5Hash> GetDigest() const override
+    {
+        return std::nullopt;
+    }
+
 private:
     std::unique_ptr<IOutputStream> Output_;
 
@@ -261,9 +266,9 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ValidateDuplicateColumns(const std::vector<TString>& columns)
+void ValidateDuplicateColumns(const std::vector<std::string>& columns)
 {
-    THashSet<TString> names;
+    THashSet<std::string> names;
     for (const auto& name : columns) {
         if (!names.insert(name).second) {
             THROW_ERROR_EXCEPTION("Duplicate column name %Qv in schemaful DSV config",
@@ -352,7 +357,7 @@ ISchemalessFormatWriterPtr CreateSchemalessWriterForSchemafulDsv(
             controlAttributesConfig,
             keyColumnCount);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(EErrorCode::InvalidFormat, "Failed to parse config for schemaful DSV format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for schemaful DSV format") << ex;
     }
 }
 

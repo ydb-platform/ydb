@@ -21,13 +21,13 @@ from
   cross join {{web_site}} as web_site
   cross join {{date_dim}} as date_dim
 where
-    d_month_seq between 1215 and 1215 + 11
+    d_month_seq between 1200 and 1200 + 11
 and ws_ship_date_sk   = d_date_sk
 and ws_warehouse_sk   = w_warehouse_sk
 and ws_ship_mode_sk   = sm_ship_mode_sk
 and ws_web_site_sk    = web_site_sk
 group by
-   substring(cast(w_warehouse_name as string),1,20) as bla
+   substring(cast(w_warehouse_name as string),0,20) as bla
   ,ship_mode.sm_type
   ,web_site.web_name
 order by bla

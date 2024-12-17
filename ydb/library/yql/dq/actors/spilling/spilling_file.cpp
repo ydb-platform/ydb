@@ -1,8 +1,9 @@
 #include "spilling.h"
 #include "spilling_file.h"
 
+#include <format>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -13,6 +14,11 @@
 #include <util/folder/path.h>
 #include <util/stream/file.h>
 #include <util/thread/pool.h>
+#include <util/generic/guid.h>
+#include <util/folder/iterator.h>
+#include <util/generic/vector.h>
+#include <util/folder/dirut.h>
+#include <util/system/user.h>
 
 namespace NYql::NDq {
 
@@ -159,6 +165,7 @@ private:
             EvCloseFileResponse = TEvDqSpillingLocalFile::EEv::LastEvent + 1,
             EvWriteFileResponse,
             EvReadFileResponse,
+            EvRemoveOldTmp,
 
             LastEvent
         };
@@ -189,6 +196,15 @@ private:
             bool Removed = false;
             TMaybe<TString> Error;
         };
+
+        struct TEvRemoveOldTmp : public TEventLocal<TEvRemoveOldTmp, EvRemoveOldTmp> {
+            TFsPath TmpRoot;
+            ui32 NodeId;
+            TString SpillingSessionId;
+
+            TEvRemoveOldTmp(TFsPath tmpRoot, ui32 nodeId, TString spillingSessionId) 
+                : TmpRoot(std::move(tmpRoot)), NodeId(nodeId), SpillingSessionId(std::move(spillingSessionId)) {}
+        };
     };
 
     struct TFileDesc;
@@ -206,8 +222,11 @@ public:
 
     void Bootstrap() {
         Root_ = Config_.Root;
-        Root_ /= (TStringBuilder() << "node_" << SelfId().NodeId());
+        const auto rootToRemoveOldTmp = Root_;
+        const auto sessionId = Config_.SpillingSessionId;
+        const auto nodeId = SelfId().NodeId();
 
+        Root_ /= (TStringBuilder() << NodePrefix_ << "_" << nodeId << "_" << sessionId);
         LOG_I("Init DQ local file spilling service at " << Root_ << ", actor: " << SelfId());
 
         try {
@@ -221,6 +240,8 @@ public:
             Become(&TDqLocalFileSpillingService::BrokenState);
             return;
         }
+        
+        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(rootToRemoveOldTmp, nodeId, sessionId));
 
         Become(&TDqLocalFileSpillingService::WorkState);
     }
@@ -271,6 +292,7 @@ private:
         hFunc(TEvPrivate::TEvWriteFileResponse, HandleWork)
         hFunc(TEvDqSpilling::TEvRead, HandleWork)
         hFunc(TEvPrivate::TEvReadFileResponse, HandleWork)
+        hFunc(TEvPrivate::TEvRemoveOldTmp, HandleWork)
         hFunc(NMon::TEvHttpInfo, HandleWork)
         cFunc(TEvents::TEvPoison::EventType, PassAway)
     );
@@ -360,12 +382,12 @@ private:
 
     void HandleWork(TEvDqSpilling::TEvWrite::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_D("[Write] from: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
+        LOG_D("[Write] from: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
         auto it = Files_.find(ev->Sender);
         if (it == Files_.end()) {
             LOG_E("[Write] File not found. "
-                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
+                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
             Send(ev->Sender, new TEvDqSpilling::TEvError("File not found"));
             return;
@@ -375,39 +397,44 @@ private:
 
         if (fd.CloseAt) {
             LOG_E("[Write] File already closed. "
-                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
+                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
             Send(ev->Sender, new TEvDqSpilling::TEvError("File already closed"));
             return;
         }
 
-        if (Config_.MaxFileSize && fd.TotalSize + msg.Blob.size() > Config_.MaxFileSize) {
+        if (Config_.MaxFileSize && fd.TotalSize + msg.Blob.Size() > Config_.MaxFileSize) {
             LOG_E("[Write] File size limit exceeded. "
-                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
+                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("File size limit exceeded"));
+            const auto usedMb = (fd.TotalSize + msg.Blob.Size()) / 1024 / 1024;
+            const auto limitMb = Config_.MaxFileSize / 1024 / 1024;
+
+            Send(ev->Sender, new TEvDqSpilling::TEvError(std::format("File size limit exceeded: {}/{}Mb", usedMb, limitMb)));
 
             Counters_->SpillingTooBigFileErrors->Inc();
             return;
         }
 
-        if (Config_.MaxTotalSize && TotalSize_ + msg.Blob.size() > Config_.MaxTotalSize) {
+        if (Config_.MaxTotalSize && TotalSize_ + msg.Blob.Size() > Config_.MaxTotalSize) {
             LOG_E("[Write] Total size limit exceeded. "
-                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
+                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("Total size limit exceeded"));
+            const auto usedMb = (TotalSize_ + msg.Blob.Size()) / 1024 / 1024;
+            const auto limitMb = Config_.MaxTotalSize / 1024 / 1024;
+            Send(ev->Sender, new TEvDqSpilling::TEvError(std::format("Total size limit exceeded: {}/{}Mb", usedMb, limitMb)));
 
             Counters_->SpillingNoSpaceErrors->Inc();
             return;
         }
 
-        fd.TotalSize += msg.Blob.size();
-        TotalSize_ += msg.Blob.size();
+        fd.TotalSize += msg.Blob.Size();
+        TotalSize_ += msg.Blob.Size();
 
         TFileDesc::TFilePart* fp = fd.PartsList.empty() ? nullptr : &fd.PartsList.back();
 
         bool newFile = false;
-        if (!fp || (fd.RemoveBlobsAfterRead && (Config_.MaxFilePartSize && fp->Size + msg.Blob.size() > Config_.MaxFilePartSize))) {
+        if (!fp || (fd.RemoveBlobsAfterRead && (Config_.MaxFilePartSize && fp->Size + msg.Blob.Size() > Config_.MaxFilePartSize))) {
             if (!fd.PartsList.empty()) {
                 fd.PartsList.back().Last = false;
             }
@@ -426,7 +453,7 @@ private:
         }
 
         auto& blobDesc = fp->Blobs[msg.BlobId];
-        blobDesc.Size = msg.Blob.size();
+        blobDesc.Size = msg.Blob.Size();
         blobDesc.Offset = fp->Size;
 
         fp->Size += blobDesc.Size;
@@ -712,6 +739,50 @@ private:
         Send(ev->Sender, new NMon::TEvHttpInfoRes(s.Str()));
     }
 
+    void HandleWork(TEvPrivate::TEvRemoveOldTmp::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        const auto& root = msg.TmpRoot;
+        const auto nodeIdString = ToString(msg.NodeId);
+        const auto& sessionId = msg.SpillingSessionId;
+        const auto& nodePrefix = this->NodePrefix_;
+
+        LOG_I("[RemoveOldTmp] removing at root: " << root);
+
+        const auto isDirOldTmp = [&nodePrefix, &nodeIdString, &sessionId](const TString& dirName) -> bool {            
+            // dirName: node_<nodeId>_<sessionId>
+            TVector<TString> parts;
+            StringSplitter(dirName).Split('_').Limit(3).Collect(&parts);
+
+            if (parts.size() < 3) {
+                return false;
+            }
+            return parts[0] == nodePrefix && parts[1] == nodeIdString && parts[2] != sessionId;
+        };
+
+        try {
+            TDirIterator iter(root, TDirIterator::TOptions().SetMaxLevel(1));
+            
+            TVector<TString> oldTmps;
+            for (const auto& dirEntry : iter) {
+                if (dirEntry.fts_info == FTS_DP) {
+                    continue;
+                }
+                
+                const auto dirName = dirEntry.fts_name;
+                if (isDirOldTmp(dirName)) {
+                    LOG_D("[RemoveOldTmp] found old temporary at " << (root / dirName));
+                    oldTmps.emplace_back(std::move(dirName));
+                }
+            }
+
+            for (const auto& dirName : oldTmps) {
+                (root / dirName).ForceDelete();
+            }
+        } catch (const yexception& e) {
+            LOG_E("[RemoveOldTmp] removing failed due to: " << e.what());
+        }
+    }
+
 private:
     void RunOp(TStringBuf opName, THolder<IObjectInQueue> op, TFileDesc& fd) {
         if (fd.HasActiveOp) {
@@ -784,12 +855,12 @@ private:
         TString FileName;
         bool CreateFile = false;
         ui64 BlobId = 0;
-        TRope Blob;
+        TChunkedBuffer Blob;
         TInstant Ts = TInstant::Now();
 
         void Process(void*) override {
             auto now = TInstant::Now();
-            A_LOG_D("[Write async] file: " << FileName << ", blobId: " << BlobId << ", bytes: " << Blob.size()
+            A_LOG_D("[Write async] file: " << FileName << ", blobId: " << BlobId << ", bytes: " << Blob.Size()
                 << ", offset: " << (CreateFile ? 0 : GetFileLength(FileName)));
 
             auto resp = MakeHolder<TEvPrivate::TEvWriteFileResponse>();
@@ -805,9 +876,8 @@ private:
                 } else {
                     file = TFile::ForAppend(FileName);
                 }
-                for (auto it = Blob.Begin(); it.Valid(); ++it) {
-                    file.Write(it.ContiguousData(), it.ContiguousSize());
-                }
+                TUnbufferedFileOutput fout(file);
+                Blob.CopyTo(fout);
             } catch (const yexception& e) {
                 A_LOG_E("[Write async] file: " << FileName << ", io error: " << e.what());
                 resp->Error = e.what();
@@ -941,6 +1011,7 @@ private:
 
 private:
     const TFileSpillingServiceConfig Config_;
+    const TString NodePrefix_ = "node";
     TFsPath Root_;
     TIntrusivePtr<TSpillingCounters> Counters_;
 
@@ -951,6 +1022,12 @@ private:
 };
 
 } // anonymous namespace
+
+TFsPath GetTmpSpillingRootForCurrentUser() {
+    auto root = TFsPath{GetSystemTempDir()};
+    root /= "spilling-tmp-" + GetUsername();
+    return root;
+}
 
 IActor* CreateDqLocalFileSpillingActor(TTxId txId, const TString& details, const TActorId& client,
     bool removeBlobsAfterRead)

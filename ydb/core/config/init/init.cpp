@@ -48,8 +48,8 @@ private:
     static bool IsFileReadable(const fs::path& p) {
         std::error_code ec; // For noexcept overload usage.
         auto perms = fs::status(p, ec).permissions();
-        if ((perms & fs::perms::owner_read)  != fs::perms::none &&
-            (perms & fs::perms::group_read)  != fs::perms::none &&
+        if ((perms & fs::perms::owner_read)  != fs::perms::none ||
+            (perms & fs::perms::group_read)  != fs::perms::none ||
             (perms & fs::perms::others_read) != fs::perms::none   )
         {
             return true;
@@ -58,10 +58,6 @@ private:
         return false;
     }
 public:
-    TDefaultProtoConfigFileProvider() {
-        AddProtoConfigOptions(*this);
-    }
-
     void AddConfigFile(TString optName, TString description) override {
         Opts.emplace(optName, MakeSimpleShared<TFileConfigOptions>(TFileConfigOptions{.Description = description}));
     }
@@ -146,7 +142,8 @@ class TDefaultNodeBrokerClient
             const NYdb::NDiscovery::TNodeRegistrationResult& result,
             NKikimrConfig::TAppConfig& appConfig,
             ui32& nodeId,
-            TKikimrScopeId& outScopeId)
+            TKikimrScopeId& outScopeId,
+            TString& outNodeName)
         {
             nodeId = result.GetNodeId();
             NActors::TScopeId scopeId;
@@ -170,6 +167,10 @@ class TDefaultNodeBrokerClient
                     nodeInfo.SetAddress(node.Address);
                     nodeInfo.SetExpire(node.Expire);
                     NConfig::CopyNodeLocation(nodeInfo.MutableLocation(), node.Location);
+                    if (result.HasNodeName()) {
+                        nodeInfo.SetName(result.GetNodeName());
+                        outNodeName = result.GetNodeName();
+                    }
                 } else {
                     auto &info = *nsConfig.AddNode();
                     info.SetNodeId(node.NodeId);
@@ -182,58 +183,32 @@ class TDefaultNodeBrokerClient
             }
         }
 
-        static void ProcessRegistrationDynamicNodeResult(
-            const THolder<NClient::TRegistrationResult>& result,
-            NKikimrConfig::TAppConfig& appConfig,
-            ui32& nodeId,
-            TKikimrScopeId& outScopeId)
-        {
-            nodeId = result->GetNodeId();
-            outScopeId = TKikimrScopeId(result->GetScopeId());
-
-            auto &nsConfig = *appConfig.MutableNameserviceConfig();
-            nsConfig.ClearNode();
-
-            auto &dnConfig = *appConfig.MutableDynamicNodeConfig();
-            for (auto &node : result->Record().GetNodes()) {
-                if (node.GetNodeId() == result->GetNodeId()) {
-                    dnConfig.MutableNodeInfo()->CopyFrom(node);
-                } else {
-                    auto &info = *nsConfig.AddNode();
-                    info.SetNodeId(node.GetNodeId());
-                    info.SetAddress(node.GetAddress());
-                    info.SetPort(node.GetPort());
-                    info.SetHost(node.GetHost());
-                    info.SetInterconnectHost(node.GetResolveHost());
-                    info.MutableLocation()->CopyFrom(node.GetLocation());
-                }
-            }
-        }
-
-        std::variant<
-            NYdb::NDiscovery::TNodeRegistrationResult,
-            THolder<NClient::TRegistrationResult>> Result;
+            NYdb::NDiscovery::TNodeRegistrationResult Result;
     public:
-        TResult(std::variant<
-            NYdb::NDiscovery::TNodeRegistrationResult,
-            THolder<NClient::TRegistrationResult>> result)
+        TResult(NYdb::NDiscovery::TNodeRegistrationResult result)
             : Result(std::move(result))
         {}
 
-        void Apply(NKikimrConfig::TAppConfig& appConfig, ui32& nodeId, TKikimrScopeId& scopeId) const override {
-            std::visit([&appConfig, &nodeId, &scopeId](const auto& res) mutable { ProcessRegistrationDynamicNodeResult(res, appConfig, nodeId, scopeId); }, Result);
+        void Apply(
+            NKikimrConfig::TAppConfig& appConfig,
+            ui32& nodeId,
+            TKikimrScopeId& scopeId,
+            TString& nodeName) const override
+        {
+            ProcessRegistrationDynamicNodeResult(Result, appConfig, nodeId, scopeId, nodeName);
         }
     };
 
-    static NYdb::NDiscovery::TNodeRegistrationResult TryToRegisterDynamicNodeViaDiscoveryService(
+    static NYdb::NDiscovery::TNodeRegistrationResult TryToRegisterDynamicNode(
             const TGrpcSslSettings& grpcSettings,
             const TString addr,
             const NYdb::NDiscovery::TNodeRegistrationSettings& settings,
+            const TString& nodeRegistrationToken,
             const IEnv& env)
     {
         TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
         NYdb::TDriverConfig config;
-        if (endpoint.EnableSsl.Defined()) {
+        if (endpoint.EnableSsl.Defined() && endpoint.EnableSsl.GetRef()) {
             if (grpcSettings.PathToGrpcCaFile) {
                 config.UseSecureConnection(env.ReadFromFile(grpcSettings.PathToGrpcCaFile, "CA certificates").c_str());
             }
@@ -243,7 +218,9 @@ class TDefaultNodeBrokerClient
                 config.UseClientCertificate(certificate.c_str(), privateKey.c_str());
             }
         }
-        config.SetAuthToken(BUILTIN_ACL_ROOT);
+        if (nodeRegistrationToken) {
+            config.SetAuthToken(nodeRegistrationToken);
+        }
         config.SetEndpoint(endpoint.Address);
         auto connection = NYdb::TDriver(config);
 
@@ -253,91 +230,36 @@ class TDefaultNodeBrokerClient
         return result;
     }
 
-    static THolder<NClient::TRegistrationResult> TryToRegisterDynamicNodeViaLegacyService(
-            const TGrpcSslSettings& grpcSettings,
-            const TString& addr,
-            const TNodeRegistrationSettings& settings,
-            const IEnv& env)
-    {
-        NClient::TKikimr kikimr(GetKikimr(grpcSettings, addr, env));
-        auto registrant = kikimr.GetNodeRegistrant();
-
-        return MakeHolder<NClient::TRegistrationResult>(
-            registrant.SyncRegisterNode(
-                ToString(settings.DomainName),
-                settings.NodeHost,
-                settings.InterconnectPort,
-                settings.NodeAddress,
-                settings.NodeResolveHost,
-                settings.Location,
-                settings.FixedNodeID,
-                settings.Path));
-    }
-
-    static THolder<NClient::TRegistrationResult> RegisterDynamicNodeViaLegacyService(
-        const TGrpcSslSettings& grpcSettings,
-        const TVector<TString>& addrs,
-        const TNodeRegistrationSettings& settings,
-        const IEnv& env,
-        IInitLogger& logger)
-    {
-        THolder<NClient::TRegistrationResult> result;
-        while (!result || !result->IsSuccess()) {
-            for (const auto& addr : addrs) {
-                result = TryToRegisterDynamicNodeViaLegacyService(
-                    grpcSettings,
-                    addr,
-                    settings,
-                    env);
-                if (result->IsSuccess()) {
-                    logger.Out() << "Success. Registered via legacy service as " << result->GetNodeId() << Endl;
-                    break;
-                }
-                logger.Err() << "Registration error: " << result->GetErrorMessage() << Endl;
-            }
-            if (!result || !result->IsSuccess()) {
-                env.Sleep(TDuration::Seconds(1));
-            }
-        }
-        if (!result) {
-            ythrow yexception() << "Invalid result";
-        }
-
-        if (!result->IsSuccess()) {
-            ythrow yexception() << "Cannot register dynamic node: " << result->GetErrorMessage();
-        }
-
-        return result;
-    }
-
-   static NYdb::NDiscovery::TNodeRegistrationResult RegisterDynamicNodeViaDiscoveryService(
+   static NYdb::NDiscovery::TNodeRegistrationResult RegisterDynamicNodeImpl(
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const NYdb::NDiscovery::TNodeRegistrationSettings& settings,
+        const TString& nodeRegistrationToken,
         const IEnv& env,
         IInitLogger& logger)
     {
         NYdb::NDiscovery::TNodeRegistrationResult result;
-        const size_t maxNumberReceivedCallUnimplemented = 5;
-        size_t currentNumberReceivedCallUnimplemented = 0;
-        while (!result.IsSuccess() && currentNumberReceivedCallUnimplemented < maxNumberReceivedCallUnimplemented) {
+        while (!result.IsSuccess()) {
             for (const auto& addr : addrs) {
-                result = TryToRegisterDynamicNodeViaDiscoveryService(
-                    grpcSettings,
-                    addr,
-                    settings,
-                    env);
+                logger.Out() << "Trying to register dynamic node to " << addr << Endl;
+                result = TryToRegisterDynamicNode(grpcSettings,
+                                                  addr,
+                                                  settings,
+                                                  nodeRegistrationToken,
+                                                  env);
                 if (result.IsSuccess()) {
-                    logger.Out() << "Success. Registered via discovery service as " << result.GetNodeId() << Endl;
+                    logger.Out() << "Success. Registered as " << result.GetNodeId() << Endl;
+                    logger.Out() << "Node name: ";
+                    if (result.HasNodeName()) {
+                        logger.Out() << result.GetNodeName();
+                    }
+                    logger.Out() << Endl;
                     break;
                 }
                 logger.Err() << "Registration error: " << static_cast<NYdb::TStatus>(result) << Endl;
             }
             if (!result.IsSuccess()) {
                 env.Sleep(TDuration::Seconds(1));
-                if (result.GetStatus() == NYdb::EStatus::CLIENT_CALL_UNIMPLEMENTED) {
-                    currentNumberReceivedCallUnimplemented++;
-                }
             }
         }
         return result;
@@ -376,23 +298,12 @@ public:
     {
         auto newRegSettings = GetNodeRegistrationSettings(regSettings);
 
-        std::variant<
-            NYdb::NDiscovery::TNodeRegistrationResult,
-            THolder<NClient::TRegistrationResult>> result = RegisterDynamicNodeViaDiscoveryService(
-                grpcSettings,
-                addrs,
-                newRegSettings,
-                env,
-                logger);
-
-        if (!std::get<NYdb::NDiscovery::TNodeRegistrationResult>(result).IsSuccess()) {
-            result = RegisterDynamicNodeViaLegacyService(
-                grpcSettings,
-                addrs,
-                regSettings,
-                env,
-                logger);
-        }
+       NYdb::NDiscovery::TNodeRegistrationResult result = RegisterDynamicNodeImpl(grpcSettings,
+                                                                                  addrs,
+                                                                                  newRegSettings,
+                                                                                  regSettings.NodeRegistrationToken,
+                                                                                  env,
+                                                                                  logger);
 
         return std::make_shared<TResult>(std::move(result));
     }
@@ -677,6 +588,12 @@ void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConf
     IProtoConfigFileProvider& protoConfigFileProvider = refs.ProtoConfigFileProvider;
 
     const TString yamlConfigString = protoConfigFileProvider.GetProtoFromFile(yamlConfigFile, errorCollector);
+
+    if (appConfig.HasBlobStorageConfig() && appConfig.GetBlobStorageConfig().HasAutoconfigSettings()) {
+        auto *proto = appConfig.MutableBlobStorageConfig()->MutableAutoconfigSettings();
+        proto->SetInitialConfigYaml(yamlConfigString);
+    }
+
     /*
      * FIXME: if (ErrorCollector.HasFatal()) { return; }
      */
@@ -753,7 +670,7 @@ NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, cons
     TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
     NYdbGrpc::TGRpcClientConfig grpcConfig(endpoint.Address, TDuration::Seconds(5));
     grpcConfig.LoadBalancingPolicy = "round_robin";
-    if (endpoint.EnableSsl.Defined()) {
+    if (endpoint.EnableSsl.Defined() && endpoint.EnableSsl.GetRef()) {
         grpcConfig.EnableSsl = endpoint.EnableSsl.GetRef();
         auto& sslCredentials = grpcConfig.SslCredentials;
         if (cf.PathToGrpcCaFile) {
@@ -807,7 +724,7 @@ std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(TInitialCon
     return std::make_unique<TInitialConfiguratorImpl>(deps);
 }
 
-class TInitlaConfiguratorDepsRecorder
+class TInitialConfiguratorDepsRecorder
     : public IInitialConfiguratorDepsRecorder
 {
     TInitialConfiguratorDependencies Impls;
@@ -816,7 +733,7 @@ class TInitlaConfiguratorDepsRecorder
     TDynConfigClientRecorder DynConfigClient;
     TEnvRecorder Env;
 public:
-    TInitlaConfiguratorDepsRecorder(TInitialConfiguratorDependencies deps)
+    TInitialConfiguratorDepsRecorder(TInitialConfiguratorDependencies deps)
         : Impls(deps)
         , ProtoConfigFileProvider(deps.ProtoConfigFileProvider)
         , NodeBrokerClient(deps.NodeBrokerClient)
@@ -852,7 +769,7 @@ public:
 };
 
 std::unique_ptr<IInitialConfiguratorDepsRecorder> MakeDefaultInitialConfiguratorDepsRecorder(TInitialConfiguratorDependencies deps) {
-    return std::make_unique<TInitlaConfiguratorDepsRecorder>(deps);
+    return std::make_unique<TInitialConfiguratorDepsRecorder>(deps);
 }
 
 } // namespace NKikimr::NConfig

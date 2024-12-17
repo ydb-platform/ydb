@@ -1,38 +1,54 @@
 items:
-# Header
 - name: Contents
   href: index.yaml
-- name: Getting started
-  items:
-  - name: Quick start
-    href: getting_started/quickstart.md
-  - name: Kubernetes
-    href: getting_started/kubernetes.md
-  - name: Ansible
-    href: getting_started/ansible.md
-
-# Main
-- { name: Concepts,                               include: { mode: link, path: concepts/toc_p.yaml } }
-- { name: Tutorials,                              include: { mode: link, path: operations/toc_p.yaml } }
-
-- { name: Recommendations,                           include: { mode: link, path: best_practices/toc_p.yaml } }
-# - { name: Diagnostics,                             include: { mode: link, path: troubleshooting/toc_p.yaml } } moved into maintenance!
-# - { name: Deployment,                              include: { mode: link, path: deploy/toc_p.yaml } }
-# - { name: Maintenance,                             include: { mode: link, path: maintenance/toc_p.yaml } }
-
-- { name: Managing databases,                    include: { mode: link, path: db/toc_p.yaml } }
-- { name: Managing a cluster,                    include: { mode: link, path: cluster/toc_p.yaml } }
-# References
-- { name: YQL,                                             include: { mode: link, path: yql/toc_p.yaml } }
-- { name: Compatibility with PostgreSQL,                   include: { mode: link, path: postgresql/toc_p.yaml } }
-- { name: Integrations,                                    include: { mode: link, path: integrations/toc_p.yaml } }
-- { name: Working with the YDB CLI,                        include: { mode: link, path: reference/ydb-cli/toc_p.yaml } }
-- { name: Working with the YDB SDK,                        include: { mode: link, path: reference/ydb-sdk/toc_p.yaml } }
-- { name: Working with the Kafka API,                      include: { mode: link, path: reference/kafka-api/toc_p.yaml } }
-- { name: Development,                                     include: { mode: link, path: development/toc_p.yaml } }
-# Footer
-- { name: Questions and answers,                        include: { mode: link, path: faq/toc_p.yaml } }
-- include: { mode: link, path: downloads/toc_p.yaml }
-- name: Public talks
-  href: public-talks.md
-- { name: Changelog,                                     include: { mode: link, path: toc_changelog.yaml } }
+- name: Quick start
+  href: quickstart.md
+- name: Concepts
+  href: concepts/index.md
+  include:
+    mode: link
+    path: concepts/toc_p.yaml
+- name: For DevOps
+  href: devops/index.md
+  include:
+    mode: link
+    path: devops/toc_p.yaml
+- name: For Developers
+  href: dev/index.md
+  include:
+    mode: link
+    path: dev/toc_p.yaml
+- name: For Security Engineers
+  href: security/index.md
+  include:
+    mode: link
+    path: security/toc_p.yaml
+- name: For Contributors
+  href: contributor/index.md
+  include:
+    mode: link
+    path: contributor/toc_p.yaml
+- name: Reference
+  include:
+    mode: link
+    path: reference/toc_p.yaml
+- name: Recipes
+  href: recipes/index.md
+  include:
+    mode: link
+    path: recipes/toc_p.yaml
+- name: Questions and answers
+  href: faq/index.md
+  include:
+    mode: link
+    path: faq/toc_p.yaml
+- name: Public materials
+  include:
+    mode: link
+    path: public-materials/toc_p.yaml
+- name: Downloads
+  href: downloads/index.md
+- name: Changelog
+  include:
+    mode: link
+    path: toc_changelog.yaml

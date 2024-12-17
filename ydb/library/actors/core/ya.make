@@ -42,6 +42,7 @@ SRCS(
     event_local.h
     event_pb.cpp
     event_pb.h
+    events.cpp
     events.h
     events_undelivered.cpp
     executelater.h
@@ -55,8 +56,6 @@ SRCS(
     executor_pool_shared.h
     executor_thread.cpp
     executor_thread.h
-    harmonizer.cpp
-    harmonizer.h
     hfunc.h
     interconnect.cpp
     interconnect.h
@@ -73,9 +72,11 @@ SRCS(
     log_metrics.h
     mailbox.cpp
     mailbox.h
-    mailbox_queue_revolving.h
-    mailbox_queue_simple.h
+    mailbox_lockfree.cpp
+    mailbox_lockfree.h
+    mon.cpp
     mon.h
+    mon_stats.cpp
     mon_stats.h
     monotonic.cpp
     monotonic.h
@@ -103,6 +104,7 @@ GENERATE_ENUM_SERIALIZATION(log_iface.h)
 
 PEERDIR(
     ydb/library/actors/actor_type
+    ydb/library/actors/core/harmonizer
     ydb/library/actors/memory_log
     ydb/library/actors/prof
     ydb/library/actors/protos
@@ -125,6 +127,10 @@ IF (SANITIZER_TYPE == "thread")
 ENDIF()
 
 END()
+
+RECURSE(
+    harmonizer
+)
 
 RECURSE_FOR_TESTS(
     ut

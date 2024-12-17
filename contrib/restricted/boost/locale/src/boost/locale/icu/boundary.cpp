@@ -137,7 +137,9 @@ namespace boost { namespace locale {
 #if BOOST_LOCALE_ICU_VERSION >= 5502
             UErrorCode err = U_ZERO_ERROR;
             BOOST_LOCALE_START_CONST_CONDITION
-            if(sizeof(CharType) == 2 || (sizeof(CharType) == 1 && util::normalize_encoding(encoding) == "utf8")) {
+            if(sizeof(CharType) == 2 || util::is_char8_t<CharType>::value
+               || (sizeof(CharType) == 1 && util::normalize_encoding(encoding) == "utf8"))
+            {
                 UText ut_stack = UTEXT_INITIALIZER;
                 std::unique_ptr<UText> ut;
                 if(sizeof(CharType) == 1)
@@ -176,7 +178,7 @@ namespace boost { namespace locale {
         template<typename CharType>
         class boundary_indexing_impl : public boundary_indexing<CharType> {
         public:
-            boundary_indexing_impl(const cdata& data) : locale_(data.locale), encoding_(data.encoding) {}
+            boundary_indexing_impl(const cdata& data) : locale_(data.locale()), encoding_(data.encoding()) {}
             index_type map(boundary_type t, const CharType* begin, const CharType* end) const
             {
                 return do_map<CharType>(t, begin, end, locale_, encoding_);
@@ -197,6 +199,9 @@ namespace boost { namespace locale {
                 case char_facet_t::nochar: break;
                 case char_facet_t::char_f: return std::locale(in, new boundary_indexing_impl<char>(cd));
                 case char_facet_t::wchar_f: return std::locale(in, new boundary_indexing_impl<wchar_t>(cd));
+#ifdef __cpp_char8_t
+                case char_facet_t::char8_f: return std::locale(in, new boundary_indexing_impl<char8_t>(cd));
+#endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
                 case char_facet_t::char16_f: return std::locale(in, new boundary_indexing_impl<char16_t>(cd));
 #endif

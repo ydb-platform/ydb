@@ -11,14 +11,14 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp/ut/common
-    ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/sql/pg
-    ydb/library/yql/parser/pg_wrapper
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/pg
+    yql/essentials/parser/pg_wrapper
     ydb/public/lib/ut_helpers
 )
 
 ADDINCL(
-    ydb/library/yql/parser/pg_wrapper/postgresql/src/include
+    yql/essentials/parser/pg_wrapper/postgresql/src/include
 )
 
 IF (OS_WINDOWS)
@@ -32,7 +32,5 @@ ENDIF()
 NO_COMPILER_WARNINGS()
 
 YQL_LAST_ABI_VERSION()
-
-REQUIREMENTS(ram:32)
 
 END()

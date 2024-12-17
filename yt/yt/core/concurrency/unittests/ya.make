@@ -2,15 +2,13 @@ GTEST(unittester-core-concurrency)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
-IF (NOT OS_WINDOWS AND NOT ARCH_AARCH64)
-    ALLOCATOR(YT)
-ENDIF()
-
 PROTO_NAMESPACE(yt)
 
 SRCS(
     async_barrier_ut.cpp
+    async_looper_ut.cpp
     async_rw_lock_ut.cpp
+    async_semaphore_ut.cpp
     async_stream_pipe_ut.cpp
     async_stream_ut.cpp
     async_yson_writer_ut.cpp
@@ -26,6 +24,7 @@ SRCS(
     invoker_pool_ut.cpp
     nonblocking_batcher_ut.cpp
     nonblocking_queue_ut.cpp
+    parallel_runner_ut.cpp
     periodic_ut.cpp
     profiled_fair_share_invoker_pool_ut.cpp
     propagating_storage_ut.cpp
@@ -45,6 +44,8 @@ INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 PEERDIR(
     yt/yt/core
     yt/yt/core/test_framework
+
+    library/cpp/json/yson
 )
 
 REQUIREMENTS(

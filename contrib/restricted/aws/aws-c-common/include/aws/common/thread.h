@@ -12,6 +12,8 @@
 #    include <pthread.h>
 #endif
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 enum aws_thread_detach_state {
     AWS_THREAD_NOT_CREATED = 1,
     AWS_THREAD_JOINABLE,
@@ -264,5 +266,6 @@ AWS_COMMON_API int aws_thread_name(
     struct aws_string **out_name);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_THREAD_H */

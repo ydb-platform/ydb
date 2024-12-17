@@ -8,6 +8,10 @@ namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! A special category for logs produced by the logging subsystem itself.
+//! Logs in this category are written by a separate stderr writer.
+constexpr TStringBuf SystemLoggingCategoryName = "Logging";
+
 DEFINE_ENUM(ELogFormat,
     (PlainText)
     (Json)
@@ -33,6 +37,7 @@ DECLARE_REFCOUNTED_CLASS(TRotationPolicyConfig)
 DECLARE_REFCOUNTED_CLASS(TStderrLogWriterConfig)
 
 struct ILogFormatter;
+struct ISystemLogEventProvider;
 struct ILogWriterHost;
 DECLARE_REFCOUNTED_STRUCT(ILogWriterFactory)
 DECLARE_REFCOUNTED_STRUCT(ILogWriter)

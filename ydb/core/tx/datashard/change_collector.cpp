@@ -137,10 +137,11 @@ public:
             .WithPathId(pathId)
             .WithTableId(tableId.PathId)
             .WithSchemaVersion(userTable->GetTableSchemaVersion())
+            .WithSchema(userTable) // used for debugging purposes
             .WithBody(body.SerializeAsString())
             .Build();
 
-        const auto& record = *recordPtr->Get<TChangeRecord>();
+        const auto& record = *recordPtr;
         Self->PersistChangeRecord(db, record);
 
         if (record.GetLockId() == 0) {

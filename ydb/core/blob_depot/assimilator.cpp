@@ -89,10 +89,12 @@ namespace NKikimr::NBlobDepot {
             if (stateBits & TStateBits::Blobs) {
                 Load(&stream, SkipBlobsUpTo.emplace());
             }
+            UpdateAssimilatorPosition();
         }
 
         Become(&TThis::StateFunc);
         Action();
+        UpdateBytesCopiedQ();
     }
 
     void TAssimilator::PassAway() {
@@ -115,12 +117,14 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvBlobStorage::TEvControllerGroupDecommittedResponse, Handle);
             cFunc(TEvPrivate::EvResume, Action);
+            cFunc(TEvPrivate::EvResumeScanDataForPlanning, HandleResumeScanDataForPlanning);
             cFunc(TEvPrivate::EvResumeScanDataForCopying, HandleResumeScanDataForCopying);
             fFunc(TEvPrivate::EvTxComplete, HandleTxComplete);
+            cFunc(TEvPrivate::EvUpdateBytesCopiedQ, UpdateBytesCopiedQ);
             cFunc(TEvents::TSystem::Poison, PassAway);
 
             default:
-                Y_DEBUG_ABORT_UNLESS(false, "unexpected event Type# %08" PRIx32, type);
+                Y_DEBUG_ABORT("unexpected event Type# %08" PRIx32, type);
                 STLOG(PRI_CRIT, BLOB_DEPOT, BDT00, "unexpected event", (Id, Self->GetLogId()), (Type, type));
                 break;
         }
@@ -133,7 +137,11 @@ namespace NKikimr::NBlobDepot {
         if (Self->DecommitState < EDecommitState::BlobsFinished) {
             SendAssimilateRequest();
         } else if (Self->DecommitState < EDecommitState::BlobsCopied) {
-            ScanDataForCopying();
+            if (PlanningComplete) {
+                ScanDataForCopying();
+            } else {
+                ScanDataForPlanning();
+            }
         } else if (Self->DecommitState == EDecommitState::BlobsCopied) {
             Y_ABORT_UNLESS(!PipeId);
             CreatePipe();
@@ -210,6 +218,7 @@ namespace NKikimr::NBlobDepot {
                     Self->Self->Data->AddDataOnDecommit(blob, txc, this);
                     Self->SkipBlobsUpTo.emplace(blob.Id);
                     Self->Self->Data->LastAssimilatedBlobId = blob.Id;
+                    Self->Self->JsonHandler.Invalidate();
                     BlocksFinished = BarriersFinished = true; // no blocks and no more barriers
                 }
 
@@ -226,6 +235,7 @@ namespace NKikimr::NBlobDepot {
                     if (wasEmpty && decommitState < EDecommitState::BlobsFinished) {
                         decommitState = EDecommitState::BlobsFinished;
                     }
+                    Self->Self->JsonHandler.Invalidate();
 
                     db.Table<Schema::Config>().Key(Schema::Config::Key::Value).Update(
                         NIceDb::TUpdate<Schema::Config::DecommitState>(decommitState),
@@ -255,6 +265,7 @@ namespace NKikimr::NBlobDepot {
 
             void Complete(const TActorContext&) override {
                 Self->Self->Data->CommitTrash(this);
+                Self->UpdateAssimilatorPosition();
 
                 if (MoreData) {
                     Self->Self->Execute(std::make_unique<TTxPutAssimilatedData>(*this));
@@ -281,7 +292,63 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
+    void TAssimilator::ScanDataForPlanning() {
+        if (ResumeScanDataForPlanningInFlight) {
+            return;
+        }
+
+        THPTimer timer;
+        ui32 numItems = 0;
+        bool timeout = false;
+
+        if (!LastPlanScannedKey) {
+            ++Self->AsStats.CopyIteration;
+            Self->AsStats.BytesToCopy = 0;
+            Self->JsonHandler.Invalidate();
+        }
+
+        TData::TScanRange range{
+            LastPlanScannedKey ? TData::TKey(*LastPlanScannedKey) : TData::TKey::Min(),
+            TData::TKey::Max(),
+        };
+        Self->Data->ScanRange(range, nullptr, nullptr, [&](const TData::TKey& key, const TData::TValue& value) {
+            if (++numItems == 1000) {
+                numItems = 0;
+                if (TDuration::Seconds(timer.Passed()) >= TDuration::MilliSeconds(1)) {
+                    timeout = true;
+                    return false;
+                }
+            }
+            if (value.GoingToAssimilate) {
+                Self->AsStats.BytesToCopy += key.GetBlobId().BlobSize();
+                Self->JsonHandler.Invalidate();
+            }
+            LastPlanScannedKey.emplace(key.GetBlobId());
+            return true;
+        });
+
+        if (timeout) {
+            ResumeScanDataForPlanningInFlight = true;
+            TActivationContext::Send(new IEventHandle(TEvPrivate::EvResumeScanDataForPlanning, 0, SelfId(), {}, nullptr, 0));
+            return;
+        }
+
+        ActionInProgress = false;
+        PlanningComplete = true;
+        Action();
+    }
+
+    void TAssimilator::HandleResumeScanDataForPlanning() {
+        Y_ABORT_UNLESS(ResumeScanDataForPlanningInFlight);
+        ResumeScanDataForPlanningInFlight = false;
+        ScanDataForPlanning();
+    }
+
     void TAssimilator::ScanDataForCopying() {
+        if (ResumeScanDataForCopyingInFlight) {
+            return;
+        }
+
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT54, "TAssimilator::ScanDataForCopying", (Id, Self->GetLogId()),
             (LastScannedKey, LastScannedKey), (NumGetsUnprocessed, GetIdToUnprocessedPuts.size()));
 
@@ -322,11 +389,8 @@ namespace NKikimr::NBlobDepot {
                 (EntriesToProcess, EntriesToProcess), (Timeout, timeout), (NumGetsUnprocessed, GetIdToUnprocessedPuts.size()));
 
             if (timeout) { // timeout hit, reschedule work
-                if (!ResumeScanDataForCopyingInFlight) {
-                    TActivationContext::Send(new IEventHandle(TEvPrivate::EvResumeScanDataForCopying, 0, SelfId(), {}, nullptr, 0));
-                    ResumeScanDataForCopyingInFlight = true;
-                }
-                break;
+                TActivationContext::Send(new IEventHandle(TEvPrivate::EvResumeScanDataForCopying, 0, SelfId(), {}, nullptr, 0));
+                ResumeScanDataForCopyingInFlight = true;
             } else if (!ScanQ.empty()) {
                 using TQuery = TEvBlobStorage::TEvGet::TQuery;
                 const ui32 sz = ScanQ.size();
@@ -343,15 +407,18 @@ namespace NKikimr::NBlobDepot {
                 GetIdToUnprocessedPuts.try_emplace(getId);
                 ScanQ.clear();
                 TotalSize = 0;
-            } else if (!GetIdToUnprocessedPuts.empty()) { // there are some unprocessed get queries, still have to wait
-                break;
+                continue;
+            } else if (!GetIdToUnprocessedPuts.empty()) {
+                // there are some unprocessed get queries, still have to wait
             } else if (!EntriesToProcess) { // we have finished scanning the whole table without any entries, copying is done
                 OnCopyDone();
-                break;
             } else { // we have finished scanning, but we have replicated some data, restart scanning to ensure that nothing left
                 LastScannedKey.reset();
-                EntriesToProcess = false;
+                LastPlanScannedKey.reset();
+                EntriesToProcess = PlanningComplete = ActionInProgress = false;
+                Action();
             }
+            break;
         }
     }
 
@@ -363,6 +430,8 @@ namespace NKikimr::NBlobDepot {
 
     void TAssimilator::Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
         auto& msg = *ev->Get();
+        (msg.Status == NKikimrProto::OK ? Self->AsStats.LatestOkGet : Self->AsStats.LatestErrorGet) = TInstant::Now();
+        Self->JsonHandler.Invalidate();
         const auto it = GetIdToUnprocessedPuts.find(ev->Cookie);
         Y_ABORT_UNLESS(it != GetIdToUnprocessedPuts.end());
         ui32 getBytes = 0;
@@ -386,20 +455,29 @@ namespace NKikimr::NBlobDepot {
                     ++it->second;
                 }
                 getBytes += resp.Id.BlobSize();
+                ++Self->AsStats.BlobsReadOk;
+                Self->JsonHandler.Invalidate();
             } else if (resp.Status == NKikimrProto::NODATA) {
                 Self->Data->ExecuteTxCommitAssimilatedBlob(NKikimrProto::NODATA, TBlobSeqId(), TData::TKey(resp.Id),
                     TEvPrivate::EvTxComplete, SelfId(), it->first);
                 ++it->second;
+                ++Self->AsStats.BlobsReadNoData;
+                Self->AsStats.BytesToCopy -= resp.Id.BlobSize();
+                Self->JsonHandler.Invalidate();
+            } else {
+                ++Self->AsStats.BlobsReadError;
+                Self->JsonHandler.Invalidate();
+                continue;
             }
+            Self->AsStats.LastReadBlobId = resp.Id;
+            Self->JsonHandler.Invalidate();
         }
         if (getBytes) {
             Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_DECOMMIT_GET_BYTES] += getBytes;
         }
         if (!it->second) {
             GetIdToUnprocessedPuts.erase(it);
-            if (!ResumeScanDataForCopyingInFlight) {
-                ScanDataForCopying();
-            }
+            ScanDataForCopying();
         }
     }
 
@@ -408,17 +486,23 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT_UNLESS(it != GetIdToUnprocessedPuts.end());
         if (!--it->second) {
             GetIdToUnprocessedPuts.erase(it);
-            if (!ResumeScanDataForCopyingInFlight) {
-                ScanDataForCopying();
-            }
+            ScanDataForCopying();
         }
     }
 
     void TAssimilator::Handle(TEvBlobStorage::TEvPutResult::TPtr ev) {
         auto& msg = *ev->Get();
+        (msg.Status == NKikimrProto::OK ? Self->AsStats.LatestOkPut : Self->AsStats.LatestErrorPut) = TInstant::Now();
+        Self->JsonHandler.Invalidate();
         if (msg.Status == NKikimrProto::OK) {
             Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_DECOMMIT_PUT_OK_BYTES] += msg.Id.BlobSize();
+            ++Self->AsStats.BlobsPutOk;
+            Self->AsStats.BytesToCopy -= msg.Id.BlobSize();
+            Self->AsStats.BytesCopied += msg.Id.BlobSize();
+        } else {
+            ++Self->AsStats.BlobsPutError;
         }
+        Self->JsonHandler.Invalidate();
         const auto it = PutIdToKey.find(ev->Cookie);
         Y_ABORT_UNLESS(it != PutIdToKey.end());
         const auto& [key, getId] = it->second;
@@ -450,6 +534,7 @@ namespace NKikimr::NBlobDepot {
                 db.Table<Schema::Config>().Key(Schema::Config::Key::Value).Update(
                     NIceDb::TUpdate<Schema::Config::DecommitState>(Self->Self->DecommitState)
                 );
+                Self->Self->JsonHandler.Invalidate();
                 return true;
             }
 
@@ -500,6 +585,7 @@ namespace NKikimr::NBlobDepot {
                 bool Execute(TTransactionContext& txc, const TActorContext&) override {
                     NIceDb::TNiceDb db(txc.DB);
                     Self->DecommitState = EDecommitState::Done;
+                    Self->JsonHandler.Invalidate();
                     db.Table<Schema::Config>().Key(Schema::Config::Key::Value).Update(
                         NIceDb::TUpdate<Schema::Config::DecommitState>(Self->DecommitState)
                     );
@@ -510,6 +596,7 @@ namespace NKikimr::NBlobDepot {
             };
 
             Self->GroupAssimilatorId = {};
+            Self->JsonHandler.Invalidate();
             Self->Execute(std::make_unique<TTxFinishDecommission>(this));
             PassAway();
         } else {
@@ -540,6 +627,70 @@ namespace NKikimr::NBlobDepot {
         return stream.Str();
     }
 
+    void TAssimilator::UpdateAssimilatorPosition() const {
+        Self->AsStats.SkipBlocksUpTo = SkipBlocksUpTo;
+        Self->AsStats.SkipBarriersUpTo = SkipBarriersUpTo;
+        Self->AsStats.SkipBlobsUpTo = SkipBlobsUpTo;
+        Self->JsonHandler.Invalidate();
+    }
+
+    void TAssimilator::UpdateBytesCopiedQ() {
+        while (BytesCopiedQ.size() >= 3) {
+            BytesCopiedQ.pop_front();
+        }
+        BytesCopiedQ.emplace_back(TActivationContext::Monotonic(), Self->AsStats.BytesCopied);
+
+        Self->AsStats.CopySpeed = 0;
+        Self->AsStats.CopyTimeRemaining = TDuration::Max();
+
+        if (BytesCopiedQ.size() > 1) {
+            const auto& [frontTs, frontBytes] = BytesCopiedQ.front();
+            const auto& [backTs, backBytes] = BytesCopiedQ.back();
+            const TDuration deltaTs = backTs - frontTs;
+            const ui64 deltaBytes = backBytes - frontBytes;
+            if (deltaTs != TDuration::Zero()) {
+                Self->AsStats.CopySpeed = deltaBytes * 1'000'000 / deltaTs.MicroSeconds();
+            }
+            if (deltaBytes) {
+                Self->AsStats.CopyTimeRemaining = TDuration::MicroSeconds(Self->AsStats.BytesToCopy *
+                    deltaTs.MicroSeconds() / deltaBytes);
+            }
+        }
+
+        Self->JsonHandler.Invalidate();
+        TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvUpdateBytesCopiedQ, 0,
+            SelfId(), {}, nullptr, 0));
+    }
+
+    void TBlobDepot::TAsStats::ToJson(NJson::TJsonValue& json, bool pretty) const {
+        auto formatSize = [&](ui64 size) { return pretty ? FormatByteSize(size) : ToString(size); };
+
+        json["d.skip_blocks_up_to"] = SkipBlocksUpTo
+            ? ToString(*SkipBlocksUpTo)
+            : "<null>";
+        json["d.skip_barriers_up_to"] = SkipBarriersUpTo
+            ? TStringBuilder() << std::get<0>(*SkipBarriersUpTo) << ':' << (int)std::get<1>(*SkipBarriersUpTo)
+            : "<null>"_sb;
+        json["d.skip_blobs_up_to"] = SkipBlobsUpTo
+            ? SkipBlobsUpTo->ToString()
+            : "<null>";
+        json["d.latest_error_get"] = LatestErrorGet.ToString();
+        json["d.latest_ok_get"] = LatestOkGet.ToString();
+        json["d.latest_error_put"] = LatestErrorPut.ToString();
+        json["d.latest_ok_put"] = LatestOkPut.ToString();
+        json["d.last_read_blob_id"] = LastReadBlobId.ToString();
+        json["d.bytes_to_copy"] = formatSize(BytesToCopy);
+        json["d.bytes_copied"] = formatSize(BytesCopied);
+        json["d.copy_speed"] = TStringBuilder() << formatSize(CopySpeed) << "/s";
+        json["d.copy_time_remaining"] = TStringBuilder() << CopyTimeRemaining;
+        json["d.blobs_read_ok"] = ToString(BlobsReadOk);
+        json["d.blobs_read_nodata"] = ToString(BlobsReadNoData);
+        json["d.blobs_read_error"] = ToString(BlobsReadError);
+        json["d.blobs_put_ok"] = ToString(BlobsPutOk);
+        json["d.blobs_put_error"] = ToString(BlobsPutError);
+        json["d.copy_iteration"] = ToString(CopyIteration);
+    }
+
     void TBlobDepot::TData::ExecuteTxCommitAssimilatedBlob(NKikimrProto::EReplyStatus status, TBlobSeqId blobSeqId,
             TData::TKey key, ui32 notifyEventType, TActorId parentId, ui64 cookie, bool keep, bool doNotKeep) {
         Self->Execute(std::make_unique<TTxCommitAssimilatedBlob>(Self, status, blobSeqId, std::move(key),
@@ -551,6 +702,7 @@ namespace NKikimr::NBlobDepot {
            Y_ABORT_UNLESS(!GroupAssimilatorId);
            Y_ABORT_UNLESS(Data->IsLoaded());
            GroupAssimilatorId = RegisterWithSameMailbox(new TGroupAssimilator(this));
+           JsonHandler.Invalidate();
         }
     }
 

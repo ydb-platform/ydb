@@ -1,0 +1,2 @@
+mark_as_tests:
+  - test_cookies.py

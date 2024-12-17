@@ -13,13 +13,17 @@
 #include <ydb/core/protos/alloc.pb.h>
 #include <ydb/core/protos/resource_broker.pb.h>
 #include <ydb/core/protos/http_config.pb.h>
+#include <ydb/core/protos/local.pb.h>
+#include <ydb/core/protos/tablet.pb.h>
 #include <ydb/core/protos/tenant_pool.pb.h>
 #include <ydb/core/protos/compile_service_config.pb.h>
 #include <ydb/core/protos/cms.pb.h>
+#include <ydb/core/config/validation/validators.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yaml_config/yaml_config_parser.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/lib/ydb_cli/common/common.h>
 
 #include <google/protobuf/text_format.h>
@@ -44,6 +48,7 @@ extern TAutoPtr<NKikimrConfig::TActorSystemConfig> DummyActorSystemConfig();
 extern TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig();
 
 using namespace NYdb::NConsoleClient;
+using namespace NKikimrTabletBase;
 
 namespace NKikimr::NConfig {
 
@@ -230,7 +235,7 @@ public:
         const auto* curOpt = parser->CurOpt();
         TStringBuf val(parser->CurValStr());
         try {
-            if (!val.IsInited() || parser->CurVal() == curOpt->GetDefaultValue().Data()) {
+            if (!val.IsInited() || parser->CurVal() == curOpt->GetDefaultValue().data()) {
                 Target->Value = FromString<typename TType::TWrappedType>(curOpt->GetDefaultValue());
                 Target->Default = true;
                 return;
@@ -257,7 +262,7 @@ public:
     void HandleOpt(const NLastGetopt::TOptsParser* parser) override {
         const auto* curOpt = parser->CurOpt();
         TStringBuf val(parser->CurValStr());
-        if (!val.IsInited() || parser->CurVal() == curOpt->GetDefaultValue().Data()) {
+        if (!val.IsInited() || parser->CurVal() == curOpt->GetDefaultValue().data()) {
             Target->Value = curOpt->GetDefaultValue();
             Target->Default = true;
             return;
@@ -284,6 +289,7 @@ struct TCommonAppOptions {
     ui32 MonitoringPort = 0;
     TString MonitoringAddress;
     ui32 MonitoringThreads = 10;
+    ui32 MonitoringMaxRequestsPerSecond = 0;
     TString MonitoringCertificateFile;
     TString RestartsCountFile = "";
     size_t CompileInflightLimit = 100000; // MiniKQLCompileService
@@ -312,6 +318,8 @@ struct TCommonAppOptions {
     TString GRpcPublicHost = "";
     ui32 GRpcPublicPort = 0;
     ui32 GRpcsPublicPort = 0;
+    TString PGWireAddress = "";
+    ui32 PGWirePort = 0;
     TVector<TString> GRpcPublicAddressesV4;
     TVector<TString> GRpcPublicAddressesV6;
     TString GRpcPublicTargetNameOverride = "";
@@ -323,6 +331,7 @@ struct TCommonAppOptions {
     bool SysLogEnabled = false;
     bool TcpEnabled = false;
     bool SuppressVersionCheck = false;
+    EWorkload Workload = EWorkload::Hybrid;
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
@@ -379,6 +388,8 @@ struct TCommonAppOptions {
         opts.AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicHost);
         opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT").StoreResult(&GRpcPublicPort);
         opts.AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT").StoreResult(&GRpcsPublicPort);
+        opts.AddLongOption("pgwire-address", "set host for listen postgres protocol").RequiredArgument("ADDR").StoreResult(&PGWireAddress);
+        opts.AddLongOption("pgwire-port", "set port for listen postgres protocol").OptionalArgument("PORT").StoreResult(&PGWirePort);
         opts.AddLongOption("grpc-public-address-v4", "set public ipv4 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV4);
         opts.AddLongOption("grpc-public-address-v6", "set public ipv6 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV6);
         opts.AddLongOption("grpc-public-target-name-override", "set public hostname override for TLS in discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicTargetNameOverride);
@@ -413,6 +424,9 @@ struct TCommonAppOptions {
 
         opts.AddLongOption("tiny-mode", "Start in a tiny mode")
             .NoArgument().SetFlag(&TinyMode);
+
+        opts.AddLongOption("workload", Sprintf("Workload to be served by this node, allowed values are %s", GetEnumAllNames<EWorkload>().data()))
+            .RequiredArgument("NAME").StoreResult(&Workload);
     }
 
     void ApplyFields(NKikimrConfig::TAppConfig& appConfig, IEnv& env, IConfigUpdateTracer& ConfigUpdateTracer) const {
@@ -422,17 +436,17 @@ struct TCommonAppOptions {
         }
 
         // apply certificates, if any
-        if (!PathToInterconnectCertFile.Empty()) {
+        if (!PathToInterconnectCertFile.empty()) {
             appConfig.MutableInterconnectConfig()->SetPathToCertificateFile(PathToInterconnectCertFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::InterconnectConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!PathToInterconnectPrivateKeyFile.Empty()) {
+        if (!PathToInterconnectPrivateKeyFile.empty()) {
             appConfig.MutableInterconnectConfig()->SetPathToPrivateKeyFile(PathToInterconnectPrivateKeyFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::InterconnectConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!PathToInterconnectCaFile.Empty()) {
+        if (!PathToInterconnectCaFile.empty()) {
             appConfig.MutableInterconnectConfig()->SetPathToCaFile(PathToInterconnectCaFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::InterconnectConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
@@ -442,7 +456,7 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!GrpcSslSettings.PathToGrpcCertFile.Empty()) {
+        if (!GrpcSslSettings.PathToGrpcCertFile.empty()) {
             appConfig.MutableGRpcConfig()->SetPathToCertificateFile(GrpcSslSettings.PathToGrpcCertFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
@@ -452,7 +466,7 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!GrpcSslSettings.PathToGrpcPrivateKeyFile.Empty()) {
+        if (!GrpcSslSettings.PathToGrpcPrivateKeyFile.empty()) {
             appConfig.MutableGRpcConfig()->SetPathToPrivateKeyFile(GrpcSslSettings.PathToGrpcPrivateKeyFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
@@ -462,7 +476,7 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!GrpcSslSettings.PathToGrpcCaFile.Empty()) {
+        if (!GrpcSslSettings.PathToGrpcCaFile.empty()) {
             appConfig.MutableGRpcConfig()->SetPathToCaFile(GrpcSslSettings.PathToGrpcCaFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
@@ -480,6 +494,21 @@ struct TCommonAppOptions {
             auto& nmConfig = *fqConfig.MutableNodesManager();
             nmConfig.SetPort(InterconnectPort);
             nmConfig.SetHost(env.HostName());
+        }
+
+         // YQ-3253: derive Connector endpoint from YDB's Interconnect Port
+        if (appConfig.GetQueryServiceConfig().GetGeneric().HasConnector() && InterconnectPort) {
+            auto& connectorConfig = *appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableConnector();
+            auto offset = connectorConfig.GetOffsetFromIcPort();
+            if (offset) {
+                connectorConfig.MutableEndpoint()->Setport(InterconnectPort + offset) ;
+
+                // Assign default hostname 'localhost', because
+                // connector is usually deployed to the same host as the dynamic node.
+                if (connectorConfig.GetEndpoint().host().empty()) {
+                    connectorConfig.MutableEndpoint()->Sethost("localhost");
+                }
+            }
         }
 
         if (SuppressVersionCheck) {
@@ -575,6 +604,12 @@ struct TCommonAppOptions {
             }
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
+        if (PGWireAddress) {
+            appConfig.MutableLocalPgWireConfig()->SetAddress(PGWireAddress);
+        }
+        if (PGWirePort) {
+            appConfig.MutableLocalPgWireConfig()->SetListeningPort(PGWirePort);
+        }
         for (const auto& addr : GRpcPublicAddressesV4) {
             appConfig.MutableGRpcConfig()->AddPublicAddressesV4(addr);
         }
@@ -596,8 +631,23 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::TenantPoolConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (TenantName && InterconnectPort != DefaultInterconnectPort) {
-            appConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort(env));
+        if (TenantName) {
+            if (appConfig.GetDynamicNodeConfig().GetNodeInfo().HasName()) {
+                const TString& nodeName = appConfig.GetDynamicNodeConfig().GetNodeInfo().GetName();
+                appConfig.MutableMonitoringConfig()->SetHostLabelOverride(nodeName);
+                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+            } else if (InterconnectPort != DefaultInterconnectPort) {
+                appConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort(env));
+                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+            }
+        }
+
+        if (TenantName) {
+            if (InterconnectPort == DefaultInterconnectPort) {
+                appConfig.MutableMonitoringConfig()->SetProcessLocation(Host(env));
+            } else {
+                appConfig.MutableMonitoringConfig()->SetProcessLocation(HostAndICPort(env));
+            }
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
@@ -610,6 +660,80 @@ struct TCommonAppOptions {
                 ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::FederatedQueryConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
             }
         }
+
+        if (TenantName) {
+            switch (Workload) {
+                case EWorkload::Operational:
+                    ApplyTabletDenyList(*appConfig.MutableDynamicNodeConfig(), { TTabletTypes::ColumnShard }, ConfigUpdateTracer);
+                    break;
+                case EWorkload::Analyitical:
+                    ApplyTabletAllowList(*appConfig.MutableDynamicNodeConfig(), { TTabletTypes::ColumnShard }, ConfigUpdateTracer);
+                    ApplyDontStartGrpcProxy(*appConfig.MutableGRpcConfig(), ConfigUpdateTracer);
+                    break;
+                case EWorkload::Hybrid:
+                    // default, do nothing
+                    break;
+            }
+        }
+    }
+
+    void ApplyTabletAvailability(NKikimrConfig::TDynamicNodeConfig& config,
+        const std::unordered_set<TTabletTypes::EType>& allowList,
+        const std::unordered_set<TTabletTypes::EType>& denyList,
+        IConfigUpdateTracer& configUpdateTracer) const
+    {
+        std::unordered_map<TTabletTypes::EType, NKikimrLocal::TTabletAvailability> tabletAvailabilities;
+        for (const auto& availability : config.GetTabletAvailability()) {
+            tabletAvailabilities.emplace(availability.GetType(), availability);
+        }
+
+        if (!allowList.empty()) {
+            Y_ABORT_UNLESS(denyList.empty());
+
+            for (int i = TTabletTypes::EType_MIN; i < TTabletTypes::EType_MAX; ++i) {
+                const auto type = static_cast<TTabletTypes::EType>(i);
+                tabletAvailabilities[type].SetType(type);
+                if (allowList.contains(type)) {
+                    tabletAvailabilities[type].ClearMaxCount(); // default is big enough
+                    tabletAvailabilities[type].SetPriority(std::numeric_limits<i32>::max());
+                } else {
+                    tabletAvailabilities[type].SetMaxCount(0);
+                }
+            }
+        } else if (!denyList.empty()) {
+            Y_ABORT_UNLESS(allowList.empty());
+
+            for (const auto type : denyList) {
+                tabletAvailabilities[type].SetType(type);
+                tabletAvailabilities[type].SetMaxCount(0);
+            }
+        }
+
+        config.MutableTabletAvailability()->Clear();
+        for (const auto& [_, tabletAvailability] : tabletAvailabilities) {
+            config.MutableTabletAvailability()->Add()->CopyFrom(tabletAvailability);
+        }
+
+        configUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::DynamicNodeConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+    }
+
+    void ApplyTabletAllowList(NKikimrConfig::TDynamicNodeConfig& config,
+        const std::unordered_set<TTabletTypes::EType>& allowList,
+        IConfigUpdateTracer& configUpdateTracer) const
+    {
+        ApplyTabletAvailability(config, allowList, {}, configUpdateTracer);
+    }
+
+    void ApplyTabletDenyList(NKikimrConfig::TDynamicNodeConfig& config,
+        const std::unordered_set<TTabletTypes::EType>& denyList,
+        IConfigUpdateTracer& configUpdateTracer) const
+    {
+        ApplyTabletAvailability(config, {}, denyList, configUpdateTracer);
+    }
+
+    void ApplyDontStartGrpcProxy(NKikimrConfig::TGRpcConfig& config, IConfigUpdateTracer& configUpdateTracer) const {
+        config.SetStartGRpcProxy(false);
+        configUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
     }
 
     ui32 DeduceNodeId(const NKikimrConfig::TAppConfig& appConfig, IEnv& env) const {
@@ -685,10 +809,17 @@ struct TCommonAppOptions {
     }
 
     TString HostAndICPort(IEnv& env) const {
+        auto hostname = Host(env);
+        if (!hostname) {
+            return "";
+        }
+        return TStringBuilder() << hostname << ":" << InterconnectPort;
+    }
+
+    TString Host(IEnv& env) const {
         try {
             auto hostname = to_lower(env.HostName());
-            hostname = hostname.substr(0, hostname.find('.'));
-            return TStringBuilder() << hostname << ":" << InterconnectPort;
+            return hostname.substr(0, hostname.find('.'));
         } catch (TSystemError& error) {
             return "";
         }
@@ -891,6 +1022,7 @@ class TInitialConfiguratorImpl
     TKikimrScopeId ScopeId;
     TString TenantName;
     TString ClusterName;
+    TString NodeName;
 
     TMap<TString, TString> Labels;
 
@@ -995,13 +1127,19 @@ public:
 
         TenantName = FillTenantPoolConfig(CommonAppOptions);
 
+        std::vector<TString> errors;
+        EValidationResult result = ValidateConfig(AppConfig, errors);
+        if (result == EValidationResult::Error) {
+            ythrow yexception() << errors.front();
+        }
+
         Logger.Out() << "configured" << Endl;
 
         FillData(CommonAppOptions);
     }
 
     void FillData(const NConfig::TCommonAppOptions& cf) {
-        if (cf.TenantName && ScopeId.IsEmpty()) {
+        if (!cf.TenantName && ScopeId.IsEmpty()) {
             const TString myDomain = DeduceNodeDomain(cf, AppConfig);
             for (const auto& domain : AppConfig.GetDomainsConfig().GetDomain()) {
                 if (domain.GetName() == myDomain) {
@@ -1080,7 +1218,7 @@ public:
         // will be replaced with proper version info
         Labels["branch"] = GetBranch();
         Labels["rev"] = GetProgramCommitId();
-        Labels["dynamic"] = ToString(cf.NodeBrokerAddresses.empty() ? "false" : "true");
+        Labels["dynamic"] = ToString(CommonAppOptions.IsStaticNode() ? "false" : "true");
 
         for (const auto& [name, value] : Labels) {
             auto *label = AppConfig.AddLabels();
@@ -1129,11 +1267,12 @@ public:
             cf.FixedNodeID,
             cf.InterconnectPort,
             cf.CreateNodeLocation(),
+            AppConfig.GetAuthConfig().GetNodeRegistrationToken(),
         };
 
         auto result = NodeBrokerClient.RegisterDynamicNode(cf.GrpcSslSettings, addrs, settings, Env, Logger);
 
-        result->Apply(AppConfig, NodeId, ScopeId);
+        result->Apply(AppConfig, NodeId, ScopeId, NodeName);
     }
 
     void ApplyConfigForNode(NKikimrConfig::TAppConfig &appConfig) {
@@ -1162,6 +1301,11 @@ public:
 
         Labels["node_id"] = ToString(NodeId);
         AddLabelToAppConfig("node_id", Labels["node_id"]);
+
+        if (!NodeName.empty()) {
+            Labels["node_name"] = NodeName;
+            AddLabelToAppConfig("node_name", Labels["node_name"]);
+        }
 
         if (CommonAppOptions.IgnoreCmsConfigs) {
             return;

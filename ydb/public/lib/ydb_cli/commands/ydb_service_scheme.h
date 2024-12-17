@@ -4,13 +4,21 @@
 #include "ydb_common.h"
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
+#include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
+#include <ydb/public/sdk/cpp/client/draft/ydb_replication.h>
+#include <ydb/public/sdk/cpp/client/draft/ydb_view.h>
 #include <ydb/public/sdk/cpp/client/ydb_coordination/coordination.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 namespace NYdb {
+
+namespace NTopic {
+struct TDescribeConsumerResult;
+} // namespace NTopic
 namespace NConsoleClient {
 
 class TCommandScheme : public TClientCommandTree {
@@ -44,7 +52,32 @@ void PrintAllPermissions(
     const TVector<NScheme::TPermissions>& effectivePermissions
 );
 
-class TCommandDescribe : public TYdbOperationCommand, public TCommandWithPath, public TCommandWithFormat {
+// Pretty print consumer info ('scheme describe' and 'topic consumer describe' commands)
+int PrintPrettyDescribeConsumerResult(const NYdb::NTopic::TConsumerDescription& description, bool withPartitionsStats);
+
+template <typename TCommand, typename TValue>
+using TPrettyPrinter = int(TCommand::*)(const TValue&) const;
+
+template <typename TCommand, typename TValue>
+static int PrintDescription(TCommand* self, EDataFormat format, const TValue& value, TPrettyPrinter<TCommand, TValue> prettyFunc) {
+    switch (format) {
+        case EDataFormat::Default:
+        case EDataFormat::Pretty:
+            return std::invoke(prettyFunc, self, value);
+        case EDataFormat::Json:
+            Cerr << "Warning! Option --json is deprecated and will be removed soon. "
+                 << "Use \"--format proto-json-base64\" option instead." << Endl;
+            [[fallthrough]];
+        case EDataFormat::ProtoJsonBase64:
+            return PrintProtoJsonBase64(TProtoAccessor::GetProto(value));
+        default:
+            throw TMisuseException() << "This command doesn't support " << format << " output format";
+    }
+
+    return EXIT_SUCCESS;
+}
+
+class TCommandDescribe : public TYdbOperationCommand, public TCommandWithPath, public TCommandWithOutput {
 public:
     TCommandDescribe();
     virtual void Config(TConfig& config) override;
@@ -56,23 +89,27 @@ private:
     int DescribeEntryDefault(NScheme::TSchemeEntry entry);
     int DescribeTable(TDriver& driver);
     int DescribeColumnTable(TDriver& driver);
-    int PrintTableResponse(NTable::TDescribeTableResult& result);
-    void PrintResponsePretty(const NTable::TTableDescription& tableDescription);
-    int PrintResponseProtoJsonBase64(const NTable::TTableDescription& tableDescription);
+    int PrintTableResponsePretty(const NTable::TTableDescription& tableDescription) const;
     void WarnAboutTableOptions();
 
     int DescribeTopic(TDriver& driver);
-    int PrintTopicResponse(const NYdb::NTopic::TDescribeTopicResult& result);
-    int PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescription& settings);
-    int PrintTopicResponseProtoJsonBase64(const NYdb::NTopic::TDescribeTopicResult& result);
+    int PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescription& settings) const;
 
     int DescribeCoordinationNode(const TDriver& driver);
-    int PrintCoordinationNodeResponse(const NYdb::NCoordination::TDescribeNodeResult& result) const;
     int PrintCoordinationNodeResponsePretty(const NYdb::NCoordination::TNodeDescription& result) const;
-    int PrintCoordinationNodeResponseProtoJsonBase64(const NYdb::NCoordination::TNodeDescription& result) const;
+
+    int DescribeReplication(const TDriver& driver);
+    int PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const;
+
+    int DescribeView(const TDriver& driver);
+    int PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const;
+
+    int TryTopicConsumerDescribeOrFail(NYdb::TDriver& driver, const NScheme::TDescribePathResult& result);
+    std::pair<TString, TString> ParseTopicConsumer() const;
+    int PrintConsumerResponsePretty(const NYdb::NTopic::TConsumerDescription& description) const;
 
     template<typename TDescriptionType>
-    void PrintPermissionsIfNeeded(const TDescriptionType& description) {
+    void PrintPermissionsIfNeeded(const TDescriptionType& description) const {
         if (ShowPermissions) {
             Cout << Endl;
             PrintAllPermissions(
@@ -89,9 +126,10 @@ private:
     bool ShowKeyShardBoundaries = false;
     bool ShowStats = false;
     bool ShowPartitionStats = false;
+    TString Database;
 };
 
-class TCommandList : public TYdbOperationCommand, public TCommandWithPath, public TCommandWithFormat {
+class TCommandList : public TYdbOperationCommand, public TCommandWithPath, public TCommandWithOutput {
 public:
     TCommandList();
     virtual void Config(TConfig& config) override;
@@ -160,6 +198,22 @@ private:
 class TCommandPermissionClear : public TYdbOperationCommand, public TCommandWithPath {
 public:
     TCommandPermissionClear();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+};
+
+class TCommandPermissionSetInheritance : public TYdbOperationCommand, public TCommandWithPath {
+public:
+    TCommandPermissionSetInheritance();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+};
+
+class TCommandPermissionClearInheritance : public TYdbOperationCommand, public TCommandWithPath {
+public:
+    TCommandPermissionClearInheritance();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;

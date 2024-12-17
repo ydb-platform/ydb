@@ -1,0 +1,37 @@
+{
+  "Command":
+    [
+      {
+        "DefineHostConfig":
+          {
+            "HostConfigId":1,
+            "Drive":
+              [
+                {
+                  "Path":"SectorMap:1:64",
+                  "Type":"SSD"
+                }
+              ],
+            "ItemConfigGeneration":18446744073709551615
+          }
+      },
+      {
+        "DefineBox":
+          {
+            "BoxId":1,
+            "Host":
+              [
+                {
+                  "Key":
+                    {
+                      "Fqdn":"localhost",
+                      "IcPort":19001,
+                      "NodeId":1
+                    },
+                  "HostConfigId":1
+                }
+              ]
+          }
+      }
+    ]
+}

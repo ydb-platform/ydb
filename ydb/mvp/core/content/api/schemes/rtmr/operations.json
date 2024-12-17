@@ -1,0 +1,152 @@
+{
+    "get": {
+        "tags": ["RTMR"],
+        "produces": ["application/json"],
+        "summary": "Lists operations",
+        "parameters": [{
+            "name": "installation",
+            "in": "path",
+            "description": "RTMR installation",
+            "required": true,
+            "type": "string"
+        },{
+            "name": "location",
+            "in": "query",
+            "description": "RTMR location",
+            "required": false,
+            "type": "string"
+        },{
+            "name": "task",
+            "in": "query",
+            "description": "list operations for task only",
+            "type": "string"
+        },{
+            "name": "pool",
+            "in": "query",
+            "description": "list operations for specified pool@account only (requires account parameter if set)",
+            "type": "string"
+        },{
+            "name": "account",
+            "in": "query",
+            "description": "list operations for specified account only",
+            "type": "string"
+        },{
+            "name": "operation",
+            "in": "query",
+            "description": "get data for specific operation",
+            "type": "string"
+        }],
+        "responses": {
+            "200": {
+                "description": "OK",
+                "schema": {
+                    "type": "object",
+                    "title": "ListOperationsResult",
+                    "required": ["locations"],
+                    "properties": {
+                        "locations": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["location", "operations"],
+                                "properties": {
+                                    "location": {
+                                        "type": "string"
+                                    },
+                                    "operations": {
+                                        "title" : "OperationsList",
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "title" : "Operation",
+                                            "required": ["account", "pool", "task", "operation"],
+                                            "properties": {
+                                                "account": {
+                                                    "type": "string"
+                                                },
+                                                "pool": {
+                                                    "type": "string"
+                                                },
+                                                "task": {
+                                                    "type": "string"
+                                                },
+                                                "operation": {
+                                                    "type": "string"
+                                                },
+                                                "status": {
+                                                    "type": "string"
+                                                },
+                                                "owner": {
+                                                    "type": "string"
+                                                },
+                                                "my": {
+                                                    "type": "boolean"
+                                                },
+                                                "inputBytes": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "inputBytesDiscarded": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuConsumed": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuConsumedRead": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuConsumedExec": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuConsumedLoadState": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuCurrentLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "flowConsumed": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "flowLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "flowCurrentLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "storageConsumed": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "storageLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "weight": {
+                                                    "type": "integer",
+                                                    "format": "int64"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

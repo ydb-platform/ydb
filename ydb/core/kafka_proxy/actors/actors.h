@@ -7,7 +7,7 @@
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h> // strange
 
-#include "../kafka_messages.h"
+#include <ydb/core/kafka_proxy/kafka_messages.h>
 
 namespace NKafka {
 
@@ -144,7 +144,7 @@ inline EKafkaErrors ConvertErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode code) 
 }
 
 inline TString NormalizePath(const TString& database, const TString& topic) {
-    if (topic.Size() > database.Size() && topic.at(database.Size()) == '/' && topic.StartsWith(database)) {
+    if (topic.size() > database.size() && topic.at(database.size()) == '/' && topic.StartsWith(database)) {
         return topic;
     }
     return NKikimr::CanonizePath(database + "/" + topic);
@@ -152,7 +152,7 @@ inline TString NormalizePath(const TString& database, const TString& topic) {
 
 inline TString GetTopicNameWithoutDb(const TString& database, TString topic) {
     auto topicWithDb = NormalizePath(database, topic);
-    topic = topicWithDb.substr(database.Size()+1);
+    topic = topicWithDb.substr(database.size()+1);
     return topic;
 }
 

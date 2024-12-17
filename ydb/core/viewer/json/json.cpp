@@ -492,9 +492,7 @@ void TProtoToJson::ProtoToJsonSchema(IOutputStream& to, const TJsonSettings& jso
                 to << "{\"type\":\"array\",\"items\":";
             }
             if (fieldDescriptor->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
-                if (fieldDescriptor->message_type()->full_name() == google::protobuf::Timestamp::descriptor()->full_name()) {
-                    to << "{\"type\":\"string\",\"format\":\"date-time\"}";
-                } else if (fieldDescriptor->message_type()->full_name() == google::protobuf::Duration::descriptor()->full_name()) {
+                if (fieldDescriptor->message_type()->full_name() == google::protobuf::Duration::descriptor()->full_name()) {
                     to << "{\"type\":\"string\", \"example\":\"3600s\"}";
                 } else if (fieldDescriptor->message_type()->full_name() == google::protobuf::BoolValue::descriptor()->full_name()) {
                     to << "{\"type\":\"boolean\"}";

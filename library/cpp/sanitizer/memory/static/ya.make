@@ -1,7 +1,5 @@
 LIBRARY()
 
-OWNER(g:devtools-contrib)
-
 NO_UTIL()
 
 PEERDIR(

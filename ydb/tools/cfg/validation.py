@@ -244,9 +244,22 @@ HOST_SCHEMA = {
             "type": "integer",
         },
         "node_id": {"type": "integer", "minLength": 1},
+        "host": {"type": "string", "minLength": 1},
     },
-    "required": [
-        "name",
+    "oneOf": [
+        {
+            "additionalProperties": False
+        },
+        {
+            "required": [
+                "name"
+            ]
+        },
+        {
+            "required": [
+                "host"
+            ]
+        }
     ],
 }
 
@@ -483,6 +496,7 @@ DOMAIN_SCHEMA = {
 NBS_SCHEMA = {
     "type": "object",
     "properties": {
+        "diagnostics": {"type": "object"},
         "enable": {"type": "boolean"},
         "new_config_generator_enabled": {"type": "boolean"},
         "sys": copy.deepcopy(SYS_SCHEMA),
@@ -970,9 +984,6 @@ TEMPLATE_SCHEMA = {
         "nw_cache_file_path": {
             "type": "string",
         },
-        "enable_cms_config_cache": {
-            "type": "boolean",
-        },
         "hosts": {
             "type": "array",
             "items": copy.deepcopy(HOST_SCHEMA),
@@ -1014,7 +1025,7 @@ TEMPLATE_SCHEMA = {
 
 
 def _host_and_ic_port(host):
-    return "%s:%s" % (host["name"], str(host.get("ic_port", 19001)))
+    return "%s:%s" % (host.get("name", host.get("host")), str(host.get("ic_port", 19001)))
 
 
 def checkNameServiceDuplicates(validator, allow_duplicates, instance, schema):

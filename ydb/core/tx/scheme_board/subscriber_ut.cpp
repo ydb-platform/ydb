@@ -1,4 +1,3 @@
-#include "events.h"
 #include "subscriber.h"
 #include "ut_helpers.h"
 
@@ -22,7 +21,7 @@ class TSubscriberTest: public NUnitTest::TTestBase {
         const TActorId proxy = MakeStateStorageProxyID();
         const TActorId edge = Context->AllocateEdgeActor();
 
-        Context->Send(proxy, edge, new TEvStateStorage::TEvListSchemeBoard());
+        Context->Send(proxy, edge, new TEvStateStorage::TEvListSchemeBoard(false));
         auto ev = Context->GrabEdgeEvent<TEvStateStorage::TEvListSchemeBoardResult>(edge);
 
         Y_ABORT_UNLESS(ev->Get()->Info);
@@ -151,7 +150,7 @@ void TSubscriberTest::InvalidNotification() {
     const TActorId subscriber = Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, "path");
 
     // send notification directly to subscriber
-    auto* notify = new TSchemeBoardEvents::TEvNotifyBuilder(TPathId(1, 1));
+    auto* notify = new NInternalEvents::TEvNotifyBuilder(TPathId(1, 1));
     notify->SetPathDescription(MakeOpaquePathDescription("", GenerateDescribe("another/path", TPathId(1, 1))));
     Context->Send(subscriber, edge, notify);
 
@@ -187,8 +186,8 @@ void TSubscriberTest::Sync() {
     }
 
     const TActorId subscriber = Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyUpdate>(edge, "path");
-    Context->Send(subscriber, edge, new TSchemeBoardEvents::TEvSyncRequest(), 0, 1);
-    auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvSyncResponse>(edge);
+    Context->Send(subscriber, edge, new NInternalEvents::TEvSyncRequest(), 0, 1);
+    auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge);
 
     UNIT_ASSERT(ev->Get());
     UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->Path);
@@ -204,8 +203,8 @@ void TSubscriberTest::SyncPartial() {
     for (ui32 i : xrange(replicas.size())) {
         Context->Send(replicas[i], edge, new TEvents::TEvPoisonPill());
 
-        Context->Send(subscriber, edge, new TSchemeBoardEvents::TEvSyncRequest(), 0, ++syncCookie);
-        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvSyncResponse>(edge);
+        Context->Send(subscriber, edge, new NInternalEvents::TEvSyncRequest(), 0, ++syncCookie);
+        auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge);
 
         UNIT_ASSERT(ev->Get());
         UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->Path);
@@ -240,9 +239,9 @@ void TSubscriberTest::SyncWithOutdatedReplica() {
         UNIT_ASSERT_VALUES_EQUAL(TPathId(2, 2), ev->Get()->PathId);
     }
 
-    Context->Send(subscriber, edge, new TSchemeBoardEvents::TEvSyncRequest(), 0, 1);
+    Context->Send(subscriber, edge, new NInternalEvents::TEvSyncRequest(), 0, 1);
     {
-        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvSyncResponse>(edge);
+        auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge);
         UNIT_ASSERT(ev->Get());
         UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->Path);
         UNIT_ASSERT(!ev->Get()->Partial);
@@ -254,7 +253,7 @@ class TSubscriberCombinationsTest: public NUnitTest::TTestBase {
         const TActorId proxy = MakeStateStorageProxyID();
         const TActorId edge = context.AllocateEdgeActor();
 
-        context.Send(proxy, edge, new TEvStateStorage::TEvListSchemeBoard());
+        context.Send(proxy, edge, new TEvStateStorage::TEvListSchemeBoard(false));
         auto ev = context.GrabEdgeEvent<TEvStateStorage::TEvListSchemeBoardResult>(edge);
 
         Y_ABORT_UNLESS(ev->Get()->Info);

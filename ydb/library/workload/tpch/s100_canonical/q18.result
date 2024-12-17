@@ -1,0 +1,3 @@
+c_name,c_custkey,o_orderkey,o_orderdate,o_totalprice,sum_l_quantity
+"Customer#011472112",11472112,458304292,"1998-02-05",591036.15+-0.01,322
+...

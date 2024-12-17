@@ -55,27 +55,54 @@ public:
         DataShard.SubscribeNewLocks(ctx);
     }
 
-    EExecutionStatus OnTabletNotReady(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx)
-    {
+    void ResetChanges(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc) {
+        userDb.ResetCollectedChanges();
+
+        writeOp.ReleaseTxData(txc);
+
+        if (txc.DB.HasChanges())
+            txc.DB.RollbackChanges();
+    }
+
+    bool CheckForVolatileReadDependencies(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
+        if (!userDb.GetVolatileReadDependencies().empty()) {
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting because volatile read dependencies");
+
+            for (ui64 txId : userDb.GetVolatileReadDependencies()) {
+                writeOp.AddVolatileDependency(txId);
+                bool ok = DataShard.GetVolatileTxManager().AttachBlockedOperation(txId, writeOp.GetTxId());
+                Y_VERIFY_S(ok, "Unexpected failure to attach TxId# " << writeOp.GetTxId() << " to volatile tx " << txId);
+            }
+
+            ResetChanges(userDb, writeOp, txc);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    EExecutionStatus OnTabletNotReadyException(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID() << " is not ready for " << writeOp << " execution");
 
         DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
 
-        userDb.ResetCollectedChanges();
-
-        writeOp.ReleaseTxData(txc);
+        ResetChanges(userDb, writeOp, txc);
         return EExecutionStatus::Restart;
     }
 
-    void DoUpdateToUserDb(TDataShardUserDb& userDb, TWriteOperation* writeOp, TTransactionContext& txc, const TActorContext& ctx) {
-        TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
+    EExecutionStatus OnUniqueConstrainException(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
+        if (CheckForVolatileReadDependencies(userDb, writeOp, txc, ctx)) 
+            return EExecutionStatus::Continue;
+        
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting because an duplicate key");
+        writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "Operation is aborting because an duplicate key");
+        ResetChanges(userDb, writeOp, txc);
+        return EExecutionStatus::Executed;
+    }
 
-        if (!writeTx->HasOperations()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Skip empty write operation for " << *writeOp << " at " << DataShard.TabletID());
-            return;
-        }
-
-        const ui64 tableId = writeTx->GetTableId().PathId.LocalPathId;
+    void DoUpdateToUserDb(TDataShardUserDb& userDb, const TValidatedWriteTxOperation& validatedOperation, TTransactionContext& txc) {
+        const ui64 tableId = validatedOperation.GetTableId().PathId.LocalPathId;
         const TTableId fullTableId(DataShard.GetPathOwnerId(), tableId);
         const TUserTable& userTable = *DataShard.GetUserTables().at(tableId);
 
@@ -85,8 +112,8 @@ public:
         TSmallVec<TRawTypeValue> key;
         TSmallVec<NTable::TUpdateOp> ops;
 
-        const TSerializedCellMatrix& matrix = writeTx->GetMatrix();
-        const auto operationType = writeTx->GetOperationType();
+        const TSerializedCellMatrix& matrix = validatedOperation.GetMatrix();
+        const auto operationType = validatedOperation.GetOperationType();
 
         auto fillOps = [&](ui32 rowIdx) {
             ops.clear();
@@ -94,11 +121,11 @@ public:
             ops.reserve(matrix.GetColCount() - userTable.KeyColumnIds.size());
 
             for (ui16 valueColIdx = userTable.KeyColumnIds.size(); valueColIdx < matrix.GetColCount(); ++valueColIdx) {
-                ui32 columnTag = writeTx->GetColumnIds()[valueColIdx];
+                ui32 columnTag = validatedOperation.GetColumnIds()[valueColIdx];
                 const TCell& cell = matrix.GetCell(rowIdx, valueColIdx);
 
-                NScheme::TTypeInfo vtypeInfo = scheme.GetColumnInfo(tableInfo, columnTag)->PType;
-                ops.emplace_back(columnTag, NTable::ECellOp::Set, cell.IsNull() ? TRawTypeValue() : TRawTypeValue(cell.Data(), cell.Size(), vtypeInfo));
+                const NScheme::TTypeId vtypeId = scheme.GetColumnInfo(tableInfo, columnTag)->PType.GetTypeId();
+                ops.emplace_back(columnTag, NTable::ECellOp::Set, cell.IsNull() ? TRawTypeValue() : TRawTypeValue(cell.Data(), cell.Size(), vtypeId));
             }
         };
 
@@ -112,16 +139,15 @@ public:
                 if (cell.IsNull()) {
                     key.emplace_back();
                 } else {
-                    NScheme::TTypeInfo vtypeInfo = scheme.GetColumnInfo(tableInfo, keyCol)->PType;
-                    key.emplace_back(cell.Data(), cell.Size(), vtypeInfo);
+                    NScheme::TTypeId vtypeId = scheme.GetColumnInfo(tableInfo, keyCol)->PType.GetTypeId();
+                    key.emplace_back(cell.Data(), cell.Size(), vtypeId);
                 }
             }
 
             switch (operationType) {
-                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
-                {
+                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT: {
                     fillOps(rowIdx);
-                    userDb.UpdateRow(fullTableId, key, ops);
+                    userDb.UpsertRow(fullTableId, key, ops);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE: {
@@ -129,9 +155,18 @@ public:
                     userDb.ReplaceRow(fullTableId, key, ops);
                     break;
                 }
-                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE:
-                {
+                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE: {
                     userDb.EraseRow(fullTableId, key);
+                    break;
+                }
+                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT: {
+                    fillOps(rowIdx);
+                    userDb.InsertRow(fullTableId, key, ops);
+                    break;
+                }
+                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: {
+                    fillOps(rowIdx);
+                    userDb.UpdateRow(fullTableId, key, ops);
                     break;
                 }
                 default:
@@ -142,7 +177,9 @@ public:
 
         switch (operationType) {
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
-            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE: {
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE:
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT:
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: {
                 DataShard.IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
                 DataShard.IncCounter(COUNTER_WRITE_BYTES, matrix.GetBuffer().size());
                 break;
@@ -155,14 +192,13 @@ public:
                 // Checked before in TWriteOperation
                 Y_FAIL_S(operationType << " operation is not supported now");
         }
-
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executed write operation for " << *writeOp << " at " << DataShard.TabletID() << ", row count=" << matrix.GetRowCount());
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
+        const ui64 tabletId = DataShard.TabletID();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executing write operation for " << *op << " at " << DataShard.TabletID());
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executing write operation for " << *op << " at " << tabletId);
 
         if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
             return EExecutionStatus::Executed;
@@ -205,8 +241,6 @@ public:
         TDataShardLocksDb locksDb(DataShard, txc);
         TSetupSysLocks guardLocks(op, DataShard, &locksDb);
 
-        ui64 tabletId = DataShard.TabletID();
-
         if (op->IsImmediate() && !writeOp->ReValidateKeys(txc.DB.GetScheme())) {
             // Immediate transactions may be reordered with schema changes and become invalid
             Y_ABORT_UNLESS(!writeTx->Ready());
@@ -245,7 +279,7 @@ public:
 
             ui64 consumedMemory = writeTx->GetTxSize();
             if (MaybeRequestMoreTxMemory(consumedMemory, txc)) {
-                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << DataShard.TabletID() << " requested " << txc.GetRequestedMemory() << " more memory");
+                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << tabletId << " requested " << txc.GetRequestedMemory() << " more memory");
 
                 DataShard.IncCounter(COUNTER_TX_WAIT_RESOURCE);
                 return EExecutionStatus::Restart;
@@ -313,11 +347,24 @@ public:
                 return EExecutionStatus::Executed;
             }
 
+            const bool isArbiter = op->HasVolatilePrepareFlag() && KqpLocksIsArbiter(tabletId, kqpLocks);
+
             KqpCommitLocks(tabletId, kqpLocks, sysLocks, writeVersion, userDb);
 
-            DoUpdateToUserDb(userDb, writeOp, txc, ctx);
+            TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
+            if (writeTx->HasOperations()) {
+                for (const auto& validatedOperation : writeTx->GetOperations()) {
+                    DoUpdateToUserDb(userDb, validatedOperation, txc);
+                    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executed write operation for " << *writeOp << " at " << DataShard.TabletID() << ", row count=" << validatedOperation.GetMatrix().GetRowCount());
+                }
+            } else {
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Skip empty write operation for " << *writeOp << " at " << DataShard.TabletID());
+            }
 
-            writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildCompleted(DataShard.TabletID(), writeOp->GetTxId()));
+            if (CheckForVolatileReadDependencies(userDb, *writeOp, txc, ctx))
+                return EExecutionStatus::Continue;
+
+            writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildCompleted(tabletId, writeOp->GetTxId()));
 
             auto& writeResult = writeOp->GetWriteResult();
             writeResult->Record.SetOrderId(op->GetTxId());
@@ -346,15 +393,20 @@ public:
                     participants,
                     userDb.GetChangeGroup(),
                     userDb.GetVolatileCommitOrdered(),
+                    isArbiter,
                     txc
                 );
+            }
+
+            if (userDb.GetPerformedUserReads()) {
+                op->SetPerformedUserReads(true);
             }
 
             if (op->HasVolatilePrepareFlag()) {
                 // Notify other shards about our expectations as soon as possible, even before we commit
                 for (ui64 target : op->AwaitingDecisions()) {
                     if (DataShard.AddExpectation(target, op->GetStep(), op->GetTxId())) {
-                        DataShard.SendReadSetExpectation(ctx, op->GetStep(), op->GetTxId(), DataShard.TabletID(), target);
+                        DataShard.SendReadSetExpectation(ctx, op->GetStep(), op->GetTxId(), tabletId, target);
                     }
                 }
                 if (!op->OutReadSets().empty()) {
@@ -390,17 +442,17 @@ public:
             }
             return EExecutionStatus::Continue;
         } catch (const TNotReadyTabletException&) {
-            return OnTabletNotReady(userDb, *writeOp, txc, ctx);
+            return OnTabletNotReadyException(userDb, *writeOp, txc, ctx);
         } catch (const TLockedWriteLimitException&) {
             userDb.ResetCollectedChanges();
 
-            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder() << "Shard " << DataShard.TabletID() << " cannot write more uncommitted changes");
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder() << "Shard " << tabletId << " cannot write more uncommitted changes");
 
             for (auto& table : guardLocks.AffectedTables) {
                 Y_ABORT_UNLESS(guardLocks.LockTxId);
                 op->Result()->AddTxLock(
                     guardLocks.LockTxId,
-                    DataShard.TabletID(),
+                    tabletId,
                     DataShard.Generation(),
                     Max<ui64>(),
                     table.GetTableId().OwnerId,
@@ -417,6 +469,8 @@ public:
                 txc.DB.RollbackChanges();
             }
             return EExecutionStatus::Executed;
+        } catch (const TUniqueConstrainException&) {
+            return OnUniqueConstrainException(userDb, *writeOp, txc, ctx);
         }
 
         Pipeline.AddCommittingOp(op);

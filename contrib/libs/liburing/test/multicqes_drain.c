@@ -39,8 +39,8 @@ struct sqe_info {
  * sqe_flags: combination of sqe flags
  * multi_sqes: record the user_data/index of all the multishot sqes
  * cnt: how many entries there are in multi_sqes
- * we can leverage multi_sqes array for cancellation: we randomly pick
- * up an entry in multi_sqes when form a cancellation sqe.
+ * we can leverage multi_sqes array for cancelation: we randomly pick
+ * up an entry in multi_sqes when form a cancelation sqe.
  * multi_cap: limitation of number of multishot sqes
  */
 static const unsigned sqe_flags[4] = {
@@ -110,7 +110,7 @@ static __u8 generate_flags(int sqe_op)
 {
 	__u8 flags = 0;
 	/*
-	 * drain sqe must be put after multishot sqes cancelled
+	 * drain sqe must be put after multishot sqes canceled
 	 */
 	do {
 		flags = sqe_flags[rand() % 4];
@@ -125,7 +125,7 @@ static __u8 generate_flags(int sqe_op)
 	/*
 	 * avoid below case:
 	 * sqe0(multishot, link)->sqe1(nop, link)->sqe2(nop)->sqe3(cancel_sqe0)
-	 * sqe3 may execute before sqe0 so that sqe0 isn't cancelled
+	 * sqe3 may execute before sqe0 so that sqe0 isn't canceled
 	 */
 	if (sqe_op == multi)
 		flags &= ~IOSQE_IO_LINK;
@@ -234,7 +234,7 @@ static int test_generic_drain(struct io_uring *ring)
 	}
 
 	sleep(1);
-	// TODO: randomize event triggerring order
+	// TODO: randomize event triggering order
 	for (i = 0; i < max_entry; i++) {
 		if (si[i].op != multi && si[i].op != single)
 			continue;
@@ -266,7 +266,7 @@ static int test_generic_drain(struct io_uring *ring)
 			}
 		}
 		/*
-		 * for multishot sqes, record them only when it is cancelled
+		 * for multishot sqes, record them only when it is canceled
 		 */
 		if ((si[index].op != multi) || (cqe_res[j] == -ECANCELED))
 			compl_bits |= (1ULL << index);

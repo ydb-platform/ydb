@@ -1,8 +1,8 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <grpc++/client_context.h>
-#include <grpc++/create_channel.h>
+#include <grpcpp/client_context.h>
+#include <grpcpp/create_channel.h>
 
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/protos/console_config.pb.h>
@@ -20,8 +20,8 @@
 
 #include <google/protobuf/any.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 // new grpc client
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>

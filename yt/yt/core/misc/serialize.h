@@ -171,7 +171,6 @@ class TStreamLoadContext
 public:
     DEFINE_BYVAL_RW_PROPERTY(int, Version);
     DEFINE_BYREF_RW_PROPERTY(TSerializationDumper, Dumper);
-    DEFINE_BYVAL_RW_PROPERTY(bool, EnableTotalWriteCountReport);
 
 public:
     explicit TStreamLoadContext(IInputStream* input);

@@ -51,6 +51,7 @@ public:
     void RegisterSourceId(const TString& sourceId, Args&&... args) {
         RegisterSourceIdInfo(sourceId, TSourceIdInfo(std::forward<Args>(args)...), false);
     }
+    void RegisterSourceIdInfo(const TString& sourceId, TSourceIdInfo&& sourceIdInfo, bool load);
 
     void DeregisterSourceId(const TString& sourceId);
 
@@ -65,13 +66,12 @@ public:
 private:
     void LoadRawSourceIdInfo(const TString& key, const TString& data, TInstant now);
     void LoadProtoSourceIdInfo(const TString& key, const TString& data);
-    void RegisterSourceIdInfo(const TString& sourceId, TSourceIdInfo&& sourceIdInfo, bool load);
 
 private:
     TSourceIdMap InMemorySourceIds;
     THashMap<TString, TString> SourceIdOwners;
     TVector<TString> OwnersToDrop;
-    TSet<std::pair<ui64, TString>> SourceIdsByOffset;
+    TSet<std::pair<ui64, TString>> SourceIdsByOffset[2];
     // used to track heartbeats
     THashSet<TString> ExplicitSourceIds;
 
@@ -83,6 +83,10 @@ public:
 
     const TSourceIdMap& GetSourceIdsToWrite() const {
         return Registrations;
+    }
+
+    const THashSet<TString>& GetSourceIdsToDelete() const {
+        return Deregistrations;
     }
 
     template <typename... Args>

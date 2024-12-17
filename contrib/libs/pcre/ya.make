@@ -29,12 +29,6 @@ CFLAGS(
     -DHAVE_CONFIG_H
 )
 
-IF(PCRE_LINK_SIZE)
-    CFLAGS(
-        -DPCRE_LINK_SIZE=$PCRE_LINK_SIZE
-    )
-ENDIF()
-
 # JIT adds ≈108KB to binary size which may be critical for mobile and embedded devices binary distributions
 DEFAULT(ARCADIA_PCRE_ENABLE_JIT yes)
 

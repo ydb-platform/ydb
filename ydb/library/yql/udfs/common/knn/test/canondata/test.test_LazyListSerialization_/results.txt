@@ -10,78 +10,11 @@
                             [
                                 "column0";
                                 [
-                                    "DataType";
-                                    "String"
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            "AQAAgD8AAABAAABAQAAAgEAAAKBA"
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "ListType";
-                                        [
-                                            "DataType";
-                                            "Float"
-                                        ]
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            [
-                                "1";
-                                "2";
-                                "3";
-                                "4";
-                                "5"
-                            ]
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
+                                    "TaggedType";
+                                    "FloatVector";
                                     [
                                         "DataType";
-                                        "Bool"
+                                        "String"
                                     ]
                                 ]
                             ]
@@ -91,8 +24,69 @@
                 "Data" = [
                     [
                         [
-                            %true
+                            "AACAPwAAAEAAAEBAAACAQAAAoEAB"
                         ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "ListType";
+                                    [
+                                        "DataType";
+                                        "Float"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "1";
+                            "2";
+                            "3";
+                            "4";
+                            "5"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
                     ]
                 ]
             }

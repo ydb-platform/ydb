@@ -1,0 +1,69 @@
+--- a/src/google/protobuf/compiler/cpp/parse_function_generator.cc	(index)
++++ b/src/google/protobuf/compiler/cpp/parse_function_generator.cc	(working tree)
+@@ -44,6 +44,10 @@
+ #include "google/protobuf/generated_message_tctable_impl.h"
+ #include "google/protobuf/wire_format.h"
+ 
++#include "util/generic/string.h"
++
++using TProtoStringType = TString;
++
+ namespace google {
+ namespace protobuf {
+ namespace compiler {
+@@ -894,7 +898,7 @@ void ParseFunctionGenerator::GenerateFieldNames(Formatter& format) {
+ 
+   // Then print each name in a line of its own
+   for (; sizes < sizes_end; p += *sizes++) {
+-    if (*sizes != 0) format("\"$1$\"\n", TProtoStringType(p, p + *sizes));
++    if (*sizes != 0) format("\"$1$\"\n", TProtoStringType((const char*)p, (const char*)p + *sizes));
+   }
+ }
+ 
+--- a/src/google/protobuf/compiler/csharp/names.h	(index)
++++ b/src/google/protobuf/compiler/csharp/names.h	(working tree)
+@@ -39,10 +39,13 @@
+ #define GOOGLE_PROTOBUF_COMPILER_CSHARP_NAMES_H__
+ 
+ #include <string>
++#include "util/generic/string.h"
+ 
+ #include "absl/strings/string_view.h"
+ #include "google/protobuf/port_def.inc"
+ 
++using TProtoStringType = TString;
++
+ namespace google {
+ namespace protobuf {
+ 
+--- a/src/google/protobuf/compiler/java/options.h	(index)
++++ b/src/google/protobuf/compiler/java/options.h	(working tree)
+@@ -32,9 +32,12 @@
+ #define GOOGLE_PROTOBUF_COMPILER_JAVA_OPTIONS_H__
+ 
+ #include <string>
++#include "util/generic/string.h"
+ 
+ #include "google/protobuf/port_def.inc"
+ 
++using TProtoStringType = TString;
++
+ namespace google {
+ namespace protobuf {
+ namespace compiler {
+--- a/src/google/protobuf/compiler/objectivec/text_format_decode_data.h	(index)
++++ b/src/google/protobuf/compiler/objectivec/text_format_decode_data.h	(working tree)
+@@ -35,9 +35,13 @@
+ #include <utility>
+ #include <vector>
+ 
++#include "util/generic/string.h"
++
+ // Must be included last
+ #include "google/protobuf/port_def.inc"
+ 
++using TProtoStringType = TString;
++
+ namespace google {
+ namespace protobuf {
+ namespace compiler {

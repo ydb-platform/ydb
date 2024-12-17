@@ -12,14 +12,16 @@ namespace NKikimr {
         TActorId ParentId;
         std::deque<std::pair<TVDiskID, TActorId>> Donors;
         TDynBitMap UnresolvedItems;
+        TIntrusivePtr<TVDiskContext> VCtx;
 
     public:
-        TDonorQueryActor(TEvBlobStorage::TEvEnrichNotYet& msg, std::deque<std::pair<TVDiskID, TActorId>> donors)
+        TDonorQueryActor(TEvBlobStorage::TEvEnrichNotYet& msg, std::deque<std::pair<TVDiskID, TActorId>> donors, const TIntrusivePtr<TVDiskContext>& vCtx)
             : Query(msg.Query->Release().Release())
             , Sender(msg.Query->Sender)
             , Cookie(msg.Query->Cookie)
             , Result(std::move(msg.Result))
             , Donors(std::move(donors))
+            , VCtx(vCtx)
         {
             Y_ABORT_UNLESS(!Query->Record.HasRangeQuery());
         }
@@ -66,10 +68,9 @@ namespace NKikimr {
             }
 
             if (action) {
-                const TActorId temp(actorId);
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_GET, SelfId() << " sending " << query->ToString()
-                    << " to " << temp);
-                Send(actorId, query.release());
+                    << " to " << actorId);
+                Send(actorId, query.release(), IEventHandle::FlagTrackDelivery);
             } else {
                 PassAway();
             }
@@ -108,12 +109,13 @@ namespace NKikimr {
         void PassAway() override {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_GET, SelfId() << " finished query");
             Send(ParentId, new TEvents::TEvActorDied);
-            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, Result.release(), Cookie);
+            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, Result.release(), Cookie, VCtx);
             TActorBootstrapped::PassAway();
         }
 
         STRICT_STFUNC(StateFunc,
             hFunc(TEvBlobStorage::TEvVGetResult, Handle);
+            cFunc(TEvents::TSystem::Undelivered, Step);
             cFunc(TEvents::TSystem::Poison, PassAway);
         )
     };

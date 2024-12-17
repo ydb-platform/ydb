@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.ydb.v1;
+
+message Location {
+  string id = 1;
+  string description = 2;
+}

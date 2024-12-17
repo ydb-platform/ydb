@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(69.1.1)
+VERSION(70.3.0)
 
 LICENSE(MIT)
 
@@ -24,6 +24,8 @@ PY_SRCS(
     _distutils_hack/override.py
     pkg_resources/__init__.py
     pkg_resources/_vendor/__init__.py
+    pkg_resources/_vendor/backports/__init__.py
+    pkg_resources/_vendor/backports/tarfile.py
     pkg_resources/_vendor/importlib_resources/__init__.py
     pkg_resources/_vendor/importlib_resources/_adapters.py
     pkg_resources/_vendor/importlib_resources/_common.py
@@ -35,7 +37,8 @@ PY_SRCS(
     pkg_resources/_vendor/importlib_resources/simple.py
     pkg_resources/_vendor/jaraco/__init__.py
     pkg_resources/_vendor/jaraco/context.py
-    pkg_resources/_vendor/jaraco/functools.py
+    pkg_resources/_vendor/jaraco/functools/__init__.py
+    pkg_resources/_vendor/jaraco/functools/__init__.pyi
     pkg_resources/_vendor/jaraco/text/__init__.py
     pkg_resources/_vendor/more_itertools/__init__.py
     pkg_resources/_vendor/more_itertools/__init__.pyi
@@ -65,7 +68,6 @@ PY_SRCS(
     pkg_resources/_vendor/platformdirs/unix.py
     pkg_resources/_vendor/platformdirs/version.py
     pkg_resources/_vendor/platformdirs/windows.py
-    pkg_resources/_vendor/typing_extensions.py
     pkg_resources/_vendor/zipp.py
     pkg_resources/extern/__init__.py
     setuptools/__init__.py
@@ -73,10 +75,26 @@ PY_SRCS(
     setuptools/_distutils/__init__.py
     setuptools/_distutils/_collections.py
     setuptools/_distutils/_functools.py
+    setuptools/_distutils/_itertools.py
     setuptools/_distutils/_log.py
     setuptools/_distutils/_macos_compat.py
     setuptools/_distutils/_modified.py
     setuptools/_distutils/_msvccompiler.py
+    setuptools/_distutils/_vendor/__init__.py
+    setuptools/_distutils/_vendor/packaging/__init__.py
+    setuptools/_distutils/_vendor/packaging/_elffile.py
+    setuptools/_distutils/_vendor/packaging/_manylinux.py
+    setuptools/_distutils/_vendor/packaging/_musllinux.py
+    setuptools/_distutils/_vendor/packaging/_parser.py
+    setuptools/_distutils/_vendor/packaging/_structures.py
+    setuptools/_distutils/_vendor/packaging/_tokenizer.py
+    setuptools/_distutils/_vendor/packaging/markers.py
+    setuptools/_distutils/_vendor/packaging/metadata.py
+    setuptools/_distutils/_vendor/packaging/requirements.py
+    setuptools/_distutils/_vendor/packaging/specifiers.py
+    setuptools/_distutils/_vendor/packaging/tags.py
+    setuptools/_distutils/_vendor/packaging/utils.py
+    setuptools/_distutils/_vendor/packaging/version.py
     setuptools/_distutils/archive_util.py
     setuptools/_distutils/bcppcompiler.py
     setuptools/_distutils/ccompiler.py
@@ -100,10 +118,12 @@ PY_SRCS(
     setuptools/_distutils/command/install_headers.py
     setuptools/_distutils/command/install_lib.py
     setuptools/_distutils/command/install_scripts.py
-    setuptools/_distutils/command/py37compat.py
     setuptools/_distutils/command/register.py
     setuptools/_distutils/command/sdist.py
     setuptools/_distutils/command/upload.py
+    setuptools/_distutils/compat/__init__.py
+    setuptools/_distutils/compat/py38.py
+    setuptools/_distutils/compat/py39.py
     setuptools/_distutils/config.py
     setuptools/_distutils/core.py
     setuptools/_distutils/cygwinccompiler.py
@@ -119,8 +139,6 @@ PY_SRCS(
     setuptools/_distutils/log.py
     setuptools/_distutils/msvc9compiler.py
     setuptools/_distutils/msvccompiler.py
-    setuptools/_distutils/py38compat.py
-    setuptools/_distutils/py39compat.py
     setuptools/_distutils/spawn.py
     setuptools/_distutils/sysconfig.py
     setuptools/_distutils/text_file.py
@@ -128,6 +146,7 @@ PY_SRCS(
     setuptools/_distutils/util.py
     setuptools/_distutils/version.py
     setuptools/_distutils/versionpredicate.py
+    setuptools/_distutils/zosccompiler.py
     setuptools/_entry_points.py
     setuptools/_imp.py
     setuptools/_importlib.py
@@ -136,6 +155,8 @@ PY_SRCS(
     setuptools/_path.py
     setuptools/_reqs.py
     setuptools/_vendor/__init__.py
+    setuptools/_vendor/backports/__init__.py
+    setuptools/_vendor/backports/tarfile.py
     setuptools/_vendor/importlib_metadata/__init__.py
     setuptools/_vendor/importlib_metadata/_adapters.py
     setuptools/_vendor/importlib_metadata/_collections.py
@@ -156,7 +177,8 @@ PY_SRCS(
     setuptools/_vendor/importlib_resources/simple.py
     setuptools/_vendor/jaraco/__init__.py
     setuptools/_vendor/jaraco/context.py
-    setuptools/_vendor/jaraco/functools.py
+    setuptools/_vendor/jaraco/functools/__init__.py
+    setuptools/_vendor/jaraco/functools/__init__.pyi
     setuptools/_vendor/jaraco/text/__init__.py
     setuptools/_vendor/more_itertools/__init__.py
     setuptools/_vendor/more_itertools/__init__.pyi
@@ -183,7 +205,11 @@ PY_SRCS(
     setuptools/_vendor/tomli/_parser.py
     setuptools/_vendor/tomli/_re.py
     setuptools/_vendor/tomli/_types.py
-    setuptools/_vendor/typing_extensions.py
+    setuptools/_vendor/wheel/__init__.py
+    setuptools/_vendor/wheel/macosx_libfile.py
+    setuptools/_vendor/wheel/metadata.py
+    setuptools/_vendor/wheel/util.py
+    setuptools/_vendor/wheel/wheelfile.py
     setuptools/_vendor/zipp.py
     setuptools/archive_util.py
     setuptools/build_meta.py
@@ -192,6 +218,7 @@ PY_SRCS(
     setuptools/command/alias.py
     setuptools/command/bdist_egg.py
     setuptools/command/bdist_rpm.py
+    setuptools/command/bdist_wheel.py
     setuptools/command/build.py
     setuptools/command/build_clib.py
     setuptools/command/build_ext.py
@@ -216,6 +243,7 @@ PY_SRCS(
     setuptools/compat/__init__.py
     setuptools/compat/py310.py
     setuptools/compat/py311.py
+    setuptools/compat/py39.py
     setuptools/config/__init__.py
     setuptools/config/_apply_pyprojecttoml.py
     setuptools/config/_validate_pyproject/__init__.py
@@ -227,7 +255,6 @@ PY_SRCS(
     setuptools/config/expand.py
     setuptools/config/pyprojecttoml.py
     setuptools/config/setupcfg.py
-    setuptools/dep_util.py
     setuptools/depends.py
     setuptools/discovery.py
     setuptools/dist.py
@@ -257,11 +284,14 @@ RESOURCE_FILES(
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
     pkg_resources/_vendor/importlib_resources/py.typed
+    pkg_resources/_vendor/jaraco/functools/py.typed
     pkg_resources/_vendor/more_itertools/py.typed
     pkg_resources/_vendor/packaging/py.typed
     pkg_resources/_vendor/platformdirs/py.typed
+    setuptools/_distutils/_vendor/packaging/py.typed
     setuptools/_vendor/importlib_metadata/py.typed
     setuptools/_vendor/importlib_resources/py.typed
+    setuptools/_vendor/jaraco/functools/py.typed
     setuptools/_vendor/more_itertools/py.typed
     setuptools/_vendor/packaging/py.typed
     setuptools/_vendor/tomli/py.typed

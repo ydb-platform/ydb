@@ -126,8 +126,7 @@
   - variant
   - vector
   - version
-  - unwind.h:
-    - contrib/libs/libunwind/include/unwind.h
+  - unwind.h
 
 
 # Though these are headers provided by libcxx, we do not want to allow them to be included.

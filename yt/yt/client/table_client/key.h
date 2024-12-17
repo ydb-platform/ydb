@@ -50,8 +50,7 @@ private:
 
 bool operator==(const TKey& lhs, const TKey& rhs);
 
-void FormatValue(TStringBuilderBase* builder, const TKey& key, TStringBuf format);
-TString ToString(const TKey& key);
+void FormatValue(TStringBuilderBase* builder, const TKey& key, TStringBuf spec);
 
 void Serialize(const TKey& key, NYson::IYsonConsumer* consumer);
 

@@ -50,6 +50,8 @@ protected:
         TString MonitoringAddress;
         TString MonitoringCertificateFile;
         ui32 MonitoringThreads;
+        ui32 MonitoringMaxRequestsPerSecond;
+        TDuration MonitoringInactivityTimeout;
         TString RestartsCountFile;
         bool StartTracingBusProxy;
         TString TracePath;

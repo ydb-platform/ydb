@@ -1,4 +1,9 @@
+#include "node_warden.h"
 #include "node_warden_impl.h"
+
+#include <ydb/core/blob_depot/agent/agent.h>
+
+#include <ydb/core/util/random.h>
 
 namespace NKikimr::NStorage {
 
@@ -57,7 +62,7 @@ namespace NKikimr::NStorage {
         ui8 *keyBytes = nullptr;
         ui32 keySizeBytes = 0;
         groupKey.MutableKeyBytes(&keyBytes, &keySizeBytes);
-        EntropyPool().Read(keyBytes, keySizeBytes);
+        SafeEntropyPoolRead(keyBytes, keySizeBytes);
         TString encryptedGroupKey;
         ui32 h = Crc32c(keyBytes, keySizeBytes);
         encryptedGroupKey.resize(keySizeBytes + sizeof(ui32));
@@ -228,6 +233,26 @@ namespace NKikimr::NStorage {
                     UpdateGroupInfoForDisk(vdisk, info);
                 }
             }
+
+            if (const auto it = GroupPendingQueue.find(groupId); it != GroupPendingQueue.end()) {
+                auto& queue = it->second;
+                Y_ABORT_UNLESS(!queue.empty());
+
+                if (!group.ProxyId) {
+                    StartLocalProxy(groupId);
+                }
+
+                const auto& [timestamp, _] = queue.front();
+                const size_t numErased = TimeoutToQueue.erase(std::make_tuple(timestamp, &*it));
+                Y_ABORT_UNLESS(numErased == 1);
+
+                for (auto& [timestamp, ev] : queue) {
+                    THolder<IEventHandle> tmp(ev.release());
+                    TActivationContext::Forward(tmp, ev->GetForwardOnNondeliveryRecipient());
+                }
+
+                GroupPendingQueue.erase(it);
+            }
         }
     }
 
@@ -272,11 +297,11 @@ namespace NKikimr::NStorage {
     void TNodeWarden::Handle(TEvBlobStorage::TEvUpdateGroupInfo::TPtr ev) {
         auto *msg = ev->Get();
         bool fromResolver = false;
-        if (const auto it = Groups.find(msg->GroupId); it != Groups.end() && ev->Sender == it->second.GroupResolver) {
+        if (const auto it = Groups.find(msg->GroupId.GetRawId()); it != Groups.end() && ev->Sender == it->second.GroupResolver) {
             it->second.GroupResolver = {};
             fromResolver = true;
         }
-        ApplyGroupInfo(msg->GroupId, msg->GroupGeneration, msg->GroupInfo ? &*msg->GroupInfo : nullptr, false, fromResolver);
+        ApplyGroupInfo(msg->GroupId.GetRawId(), msg->GroupGeneration, msg->GroupInfo ? &*msg->GroupInfo : nullptr, false, fromResolver);
     }
 
     void TNodeWarden::HandleGetGroup(TAutoPtr<IEventHandle> ev) {

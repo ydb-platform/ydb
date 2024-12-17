@@ -10,13 +10,13 @@ namespace NKikimr {
 namespace NPQ {
 
     struct TBlobId {
-        ui32 Partition;
+        TPartitionId Partition;
         ui64 Offset;
         ui16 PartNo;
         ui32 Count; // have to be unique for {Partition, Offset, partNo}
         ui16 InternalPartsCount; // have to be unique for {Partition, Offset, partNo}
 
-        TBlobId(ui32 partition, ui64 offset, ui16 partNo, ui32 count, ui16 internalPartsCount)
+        TBlobId(const TPartitionId& partition, ui64 offset, ui16 partNo, ui32 count, ui16 internalPartsCount)
             : Partition(partition)
             , Offset(offset)
             , PartNo(partNo)
@@ -26,11 +26,11 @@ namespace NPQ {
         }
 
         bool operator == (const TBlobId& r) const {
-            return Partition == r.Partition && Offset == r.Offset && PartNo == r.PartNo;
+            return Partition.IsEqual(r.Partition) && Offset == r.Offset && PartNo == r.PartNo;
         }
 
         ui64 Hash() const {
-            return Hash128to32((ui64(Partition) << 16) + PartNo, Offset);
+            return Hash128to32((ui64(Partition.InternalPartitionId) << 17) + (Partition.IsSupportivePartition() ? 0 : (1 << 16)) + PartNo, Offset);
         }
     };
 }}
@@ -66,11 +66,11 @@ namespace NPQ {
         , MetadataWritesCount(0)
         {}
 
-        TBlobId GetBlobId(ui32 pos) const { return TBlobId(Partition.InternalPartitionId, Blobs[pos].Offset, Blobs[pos].PartNo, Blobs[pos].Count, Blobs[pos].InternalPartsCount); }
+        TBlobId GetBlobId(ui32 pos) const { return TBlobId(Partition, Blobs[pos].Offset, Blobs[pos].PartNo, Blobs[pos].Count, Blobs[pos].InternalPartsCount); }
 
         THolder<TEvKeyValue::TEvRequest> MakeKvRequest() const
         {
-            THolder<TEvKeyValue::TEvRequest> request = MakeHolder<TEvKeyValue::TEvRequest>();
+            auto request = MakeHolder<TEvKeyValue::TEvRequest>();
             for (auto& blob : Blobs) {
                 if (blob.Value.empty()) {
                     // add reading command
@@ -123,7 +123,6 @@ namespace NPQ {
         {}
 
         virtual void SaveHeadBlob(const TBlobId& blob) = 0;
-        virtual void SaveUserOffset(TString client, ui32 partition, ui64 offset) = 0;
         virtual TDeque<TBlobId> BlobsToTouch() const = 0;
     };
 
@@ -141,16 +140,6 @@ namespace NPQ {
             Head.push_back(blob);
             if (Head.size() > HeadBlobsCount)
                 Head.pop_front();
-        }
-
-        virtual void SaveUserOffset(TString client, ui32 partition, ui64 offset) override
-        {
-            Y_UNUSED(client);
-            Y_UNUSED(partition);
-            Y_UNUSED(offset);
-#if 0 // TODO: prevent unlimited memory growth
-            UserOffset[std::make_pair(partition, client)] = offset;
-#endif
         }
 
         virtual TDeque<TBlobId> BlobsToTouch() const override
@@ -240,46 +229,33 @@ namespace NPQ {
         ui64 GetSize() const { return Cache.size(); }
         const TCounters& GetCounters() const { return Counters; }
 
-        void SetUserOffset(const TActorContext& ctx, TString client, ui32 partition, ui64 offset)
-        {
-            if (L1Strategy) {
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Setting reader offset. User: "
-                    << client << " Partition: " << partition << " offset " << offset);
-                L1Strategy->SaveUserOffset(client, partition, offset);
-            }
-        }
-
         /// @return count of cached blobs
         ui32 RequestBlobs(const TActorContext& ctx, TKvRequest& kvReq)
         {
             ui32 fromCache = GetBlobs(ctx, kvReq);
 
-            THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TabletId);
+            auto reqData = MakeHolder<TCacheL2Request>(TabletId);
 
             for (const auto& blob : kvReq.Blobs) {
                 // Touching blobs in L2. We don't need data here
-                TCacheBlobL2 key = {kvReq.Partition.InternalPartitionId, blob.Offset, blob.PartNo, nullptr};
-                if (blob.Cached)
-                    reqData->RequestedBlobs.push_back(key);
-                else
-                    reqData->MissedBlobs.push_back(key);
+                auto& blobs = blob.Cached ? reqData->RequestedBlobs : reqData->MissedBlobs;
+                blobs.emplace_back(kvReq.Partition, blob.Offset, blob.PartNo, nullptr);
             }
 
-            THolder<TEvPqCache::TEvCacheL2Request> l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
+            auto l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
             ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
             return fromCache;
         }
 
         void SaveHeadBlobs(const TActorContext& ctx, const TKvRequest& kvReq)
         {
-            THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TabletId);
+            auto reqData = MakeHolder<TCacheL2Request>(TabletId);
 
             for (const TRequestedBlob& reqBlob : kvReq.Blobs) {
-                TBlobId blob(kvReq.Partition.InternalPartitionId, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
+                TBlobId blob(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
                 { // there could be a new blob with same id (for big messages)
                     if (RemoveExists(ctx, blob)) {
-                        TCacheBlobL2 removed = {kvReq.Partition.InternalPartitionId, reqBlob.Offset, reqBlob.PartNo, nullptr};
-                        reqData->RemovedBlobs.push_back(removed);
+                        reqData->RemovedBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, nullptr);
                     }
                 }
 
@@ -290,15 +266,14 @@ namespace NPQ {
                 if (L1Strategy)
                     L1Strategy->SaveHeadBlob(blob);
 
-                TCacheBlobL2 blobL2 = {kvReq.Partition.InternalPartitionId, reqBlob.Offset, reqBlob.PartNo, cached};
-                reqData->StoredBlobs.push_back(blobL2);
+                reqData->StoredBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, cached);
 
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Caching head blob in L1. Partition "
                     << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
                     << " size " << reqBlob.Value.size() << " actorID " << ctx.SelfID);
             }
 
-            THolder<TEvPqCache::TEvCacheL2Request> l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
+            auto l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
             ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
         }
 
@@ -306,7 +281,7 @@ namespace NPQ {
         {
             Y_ABORT_UNLESS(store.size() == kvReq.Blobs.size());
 
-            THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TabletId);
+            auto reqData = MakeHolder<TCacheL2Request>(TabletId);
 
             bool haveSome = false;
             for (ui32 i = 0; i < kvReq.Blobs.size(); ++i) {
@@ -314,7 +289,7 @@ namespace NPQ {
                     continue;
 
                 const TRequestedBlob& reqBlob = kvReq.Blobs[i];
-                TBlobId blob(kvReq.Partition.InternalPartitionId, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
+                TBlobId blob(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
                 {
                     TValueL1 value;
                     if (CheckExists(ctx, blob, value)) {
@@ -328,8 +303,7 @@ namespace NPQ {
                 Cache[blob] = valL1; // weak
                 Counters.Inc(valL1);
 
-                TCacheBlobL2 blobL2 = {kvReq.Partition.InternalPartitionId, reqBlob.Offset, reqBlob.PartNo, cached};
-                reqData->StoredBlobs.push_back(blobL2);
+                reqData->StoredBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, cached);
 
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Prefetched blob in L1. Partition "
                     << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
@@ -338,7 +312,7 @@ namespace NPQ {
             }
 
             if (haveSome) {
-                THolder<TEvPqCache::TEvCacheL2Request> l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
+                auto l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
                 ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
             }
         }
@@ -356,7 +330,7 @@ namespace NPQ {
             auto sp = it->second.GetBlob();
             Y_ABORT_UNLESS(sp.get() == value.get(),
                 "Evicting strange blob. Partition %d offset %ld partNo %d size %ld. L1 ptr %p vs L2 ptr %p",
-                blob.Partition, blob.Offset, blob.PartNo, value->DataSize(), sp.get(), value.get());
+                blob.Partition.InternalPartitionId, blob.Offset, blob.PartNo, value->DataSize(), sp.get(), value.get());
 
             RemoveBlob(it);
 
@@ -370,12 +344,12 @@ namespace NPQ {
             RemoveEvicted();
 
             if (L1Strategy) {
-                THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TabletId);
+                auto reqData = MakeHolder<TCacheL2Request>(TabletId);
 
                 TDeque<TBlobId> needTouch = L1Strategy->BlobsToTouch();
                 PrepareTouch(ctx, reqData, needTouch);
 
-                THolder<TEvPqCache::TEvCacheL2Request> l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
+                auto l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
                 ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
             }
         }
@@ -384,8 +358,7 @@ namespace NPQ {
         void PrepareTouch(const TActorContext& ctx, THolder<TCacheL2Request>& reqData, const TDeque<TBlobId>& used)
         {
             for (auto& blob : used) {
-                TCacheBlobL2 blobL2 = {blob.Partition, blob.Offset, blob.PartNo, nullptr};
-                reqData->ExpectedBlobs.push_back(blobL2);
+                reqData->ExpectedBlobs.emplace_back(blob.Partition, blob.Offset, blob.PartNo, nullptr);
 
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Touching blob. Partition "
                     << blob.Partition << " offset " << blob.Offset << " count " << blob.Count);
@@ -428,7 +401,7 @@ namespace NPQ {
                     ++numCached;
                     continue;
                 }
-                TBlobId blobId(kvReq.Partition.InternalPartitionId, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount);
+                TBlobId blobId(kvReq.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount);
                 TCacheValue::TPtr cached = GetValue(ctx, blobId);
                 if (cached) {
                     ++numCached;

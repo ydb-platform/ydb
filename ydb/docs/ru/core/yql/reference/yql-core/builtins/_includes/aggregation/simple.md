@@ -1,35 +1,38 @@
 ## COUNT {#count}
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 COUNT(*)->Uint64
 COUNT(T)->Uint64
 COUNT(T?)->Uint64
 ```
 
-Подсчет количества строк в таблице (если в качестве аргумента указана `*` или константа) или непустых значений в столбце таблицы (если в качестве аргумента указано имя столбца).
+Подсчет количества строк в строковой или колоночной таблице (если в качестве аргумента указана `*` или константа) или непустых значений в столбце таблицы (если в качестве аргумента указано имя столбца).
 
 Как и другие агрегатные функции, может использоваться в сочетании с [GROUP BY](../../../syntax/group_by.md) для получения статистики по частям таблицы, соответствующим значениям в столбцах, по которым идет группировка. {% if select_statement != "SELECT STREAM" %}А модификатор [DISTINCT](../../../syntax/group_by.md#distinct) позволяет посчитать число уникальных значений.{% endif %}
 
-**Примеры**
-``` yql
+### Примеры
+
+```yql
 SELECT COUNT(*) FROM my_table;
 ```
 
-``` yql
+```yql
 SELECT key, COUNT(value) FROM my_table GROUP BY key;
 ```
 {% if select_statement != "SELECT STREAM" %}
 
-``` yql
+```yql
 SELECT COUNT(DISTINCT value) FROM my_table;
 ```
 {% endif %}
 
 ## MIN и MAX {#min-max}
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 MIN(T?)->T?
 MIN(T)->T?
 MAX(T?)->T?
@@ -40,15 +43,17 @@ MAX(T)->T?
 
 В качестве аргумента допустимо произвольное вычислимое выражение с результатом, допускающим сравнение значений.
 
-**Примеры**
-``` yql
+### Примеры
+
+```yql
 SELECT MIN(value), MAX(value) FROM my_table;
 ```
 
 ## SUM {#sum}
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 SUM(Unsigned?)->Uint64?
 SUM(Signed?)->Int64?
 SUM(Interval?)->Interval?
@@ -61,14 +66,15 @@ SUM(Decimal(N, M)?)->Decimal(35, M)?
 
 Целые числа автоматически расширяются до 64 бит, чтобы уменьшить риск переполнения.
 
-``` yql
+```yql
 SELECT SUM(value) FROM my_table;
 ```
 
 ## AVG {#avg}
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 AVG(Double?)->Double?
 AVG(Interval?)->Interval?
 AVG(Decimal(N, M)?)->Decimal(N, M)?
@@ -80,15 +86,17 @@ AVG(Decimal(N, M)?)->Decimal(N, M)?
 
 Целочисленные значения и интервалы времени автоматически приводятся к Double.
 
-**Примеры**
-``` yql
+### Примеры
+
+```yql
 SELECT AVG(value) FROM my_table;
 ```
 
 ## COUNT_IF {#count-if}
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 COUNT_IF(Bool?)->Uint64?
 ```
 
@@ -98,24 +106,28 @@ COUNT_IF(Bool?)->Uint64?
 
 Функция *не* выполняет неявного приведения типов к булевым для строк и чисел.
 
-**Примеры**
-``` yql
+### Примеры
+
+```yql
 SELECT
   COUNT_IF(value % 2 == 1) AS odd_count
 ```
 
 {% if select_statement != "SELECT STREAM" %}
+
 {% note info %}
 
 Если нужно посчитать число уникальных значений на строках, где выполняется условие, то в отличие от остальных агрегатных функций модификатор [DISTINCT](../../../syntax/group_by.md#distinct) тут не поможет, так как в аргументах нет никаких значений. Для получения данного результата, стоит воспользоваться в подзапросе встроенной функцией [IF](../../../builtins/basic.md#if) с двумя аргументами (чтобы в else получился `NULL`), а снаружи сделать [COUNT(DISTINCT ...)](#count) по её результату.
 
 {% endnote %}
+
 {% endif %}
 
 ## SUM_IF и AVG_IF {#sum-if}
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 SUM_IF(Unsigned?, Bool?)->Uint64?
 SUM_IF(Signed?, Bool?)->Int64?
 SUM_IF(Interval?, Bool?)->Interval?
@@ -127,19 +139,18 @@ AVG_IF(Double?, Bool?)->Double?
 
 Таким образом, `SUM_IF(value, condition)` является чуть более короткой записью для `SUM(IF(condition, value))`, аналогично для `AVG`. Расширение типа данных аргумента работает так же аналогично одноименным функциям без суффикса.
 
-**Примеры**
-``` yql
+### Примеры
+
+```yql
 SELECT
     SUM_IF(value, value % 2 == 1) AS odd_sum,
     AVG_IF(value, value % 2 == 1) AS odd_avg,
 FROM my_table;
 ```
 
-При использовании [фабрики агрегационной функции](../../basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregateby) передается `Tuple` из значения и предиката.
+При использовании [фабрики агрегационной функции](../../basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](../../aggregation.md#aggregateby) передается `Tuple` из значения и предиката.
 
-**Примеры**
-
-``` yql
+```yql
 $sum_if_factory = AggregationFactory("SUM_IF");
 $avg_if_factory = AggregationFactory("AVG_IF");
 
@@ -151,18 +162,20 @@ FROM my_table;
 
 ## SOME {#some}
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 SOME(T?)->T?
 SOME(T)->T?
 ```
 
-Получить значение указанного в качестве аргумента выражения для одной из строк таблицы. Не дает никаких гарантий о том, какая именно строка будет использована. Аналог функции [any()]{% if lang == "en" %}(https://clickhouse.tech/docs/en/sql-reference/aggregate-functions/reference/any/){% else %}(https://clickhouse.tech/docs/ru/sql-reference/aggregate-functions/reference/any/){% endif %} в ClickHouse.
+Получить значение указанного в качестве аргумента выражения для одной из строк таблицы. Не дает никаких гарантий о том, какая именно строка будет использована.
 
-Из-за отсутствия гарантий `SOME` вычислительно дешевле, чем часто использующиеся в подобных ситуациях [MIN](#min)/[MAX](#max).
+Из-за отсутствия гарантий `SOME` вычислительно дешевле, чем часто использующиеся в подобных ситуациях [MIN и MAX](#min-max).
 
-**Примеры**
-``` yql
+### Примеры
+
+```yql
 SELECT
   SOME(value)
 FROM my_table;

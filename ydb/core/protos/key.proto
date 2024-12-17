@@ -1,9 +1,11 @@
+import "ydb/public/api/protos/annotations/sensitive.proto";
+
 package NKikimrProto;
 option java_package = "ru.yandex.kikimr.proto";
 
 message TKeyRecord {
     optional string ContainerPath = 1 [default = ""]; // Path to the key container file
-    optional bytes Pin = 2 [default = ""]; // Used to obtain the actual key from the container
+    optional bytes Pin = 2 [default = "", (Ydb.sensitive) = true]; // Used to obtain the actual key from the container
     optional string Id = 3 [default = ""]; // Arbitrary Id, must be part of the ContainerPath
     optional uint64 Version = 4 [default = 0]; // Must be 1 at the moment
 }

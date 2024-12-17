@@ -194,7 +194,7 @@ public:
         const TString& threadNamePrefix,
         TDuration pollingPeriod)
         : TThread(Format("%v:%v", threadNamePrefix, "Poll"))
-        , Logger(ConcurrencyLogger.WithTag("ThreadNamePrefix: %v", threadNamePrefix))
+        , Logger(ConcurrencyLogger().WithTag("ThreadNamePrefix: %v", threadNamePrefix))
     {
         // Register auxilary notifictation handle to wake up poller thread when deregistering
         // pollables and on shutdown.
@@ -210,9 +210,14 @@ public:
         AuxInvoker_ = FairShareThreadPool_->GetInvoker("aux", "default");
     }
 
-    void Reconfigure(int threadCount) override
+    void SetThreadCount(int threadCount) override
     {
-        FairShareThreadPool_->Configure(threadCount);
+        FairShareThreadPool_->SetThreadCount(threadCount);
+    }
+
+    void SetPollingPeriod(TDuration pollingPeriod) override
+    {
+        FairShareThreadPool_->SetPollingPeriod(pollingPeriod);
     }
 
     bool TryRegister(const IPollablePtr& pollable, TString poolName) override
@@ -523,9 +528,14 @@ public:
         Poller_->Start();
     }
 
-    void Reconfigure(int threadCount) override
+    void SetThreadCount(int threadCount) override
     {
-        return Poller_->Reconfigure(threadCount);
+        return Poller_->SetThreadCount(threadCount);
+    }
+
+    void SetPollingPeriod(TDuration pollingPeriod) override
+    {
+        return Poller_->SetPollingPeriod(pollingPeriod);
     }
 
     void Shutdown() override

@@ -35,7 +35,7 @@
                         "PlanNodeType": "Materialize",
                         "Plans": [
                             {
-                                "Node Type": "Aggregate-Limit",
+                                "Node Type": "Aggregate-Limit-Aggregate",
                                 "Operators": [
                                     {
                                         "Inputs": [
@@ -43,7 +43,17 @@
                                                 "InternalOperatorId": 1
                                             }
                                         ],
-                                        "Name": "Aggregate"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
+                                    },
+                                    {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 2
+                                            }
+                                        ],
+                                        "Limit": "1",
+                                        "Name": "Limit"
                                     },
                                     {
                                         "Inputs": [
@@ -51,8 +61,8 @@
                                                 "ExternalPlanNodeId": 2
                                             }
                                         ],
-                                        "Limit": "1",
-                                        "Name": "Limit"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
                                     }
                                 ],
                                 "PlanNodeId": 3,
@@ -71,7 +81,8 @@
                                                                 "InternalOperatorId": 1
                                                             }
                                                         ],
-                                                        "Name": "Aggregate"
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Intermediate"
                                                     },
                                                     {
                                                         "Inputs": [],
@@ -80,12 +91,13 @@
                                                             "UserID"
                                                         ],
                                                         "ReadRanges": [
-                                                            "EventTime (-\u221e, +\u221e)",
                                                             "CounterID (-\u221e, +\u221e)",
                                                             "EventDate (-\u221e, +\u221e)",
                                                             "UserID (-\u221e, +\u221e)",
+                                                            "EventTime (-\u221e, +\u221e)",
                                                             "WatchID (-\u221e, +\u221e)"
                                                         ],
+                                                        "Scan": "Parallel",
                                                         "Table": "clickbench/plans/row/hits"
                                                     }
                                                 ],
@@ -101,7 +113,10 @@
                         ],
                         "Subplan Name": "CTE precompute_0_0"
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {
@@ -112,10 +127,10 @@
                                 "UserID"
                             ],
                             "scan_by": [
-                                "EventTime (-\u221e, +\u221e)",
                                 "CounterID (-\u221e, +\u221e)",
                                 "EventDate (-\u221e, +\u221e)",
                                 "UserID (-\u221e, +\u221e)",
+                                "EventTime (-\u221e, +\u221e)",
                                 "WatchID (-\u221e, +\u221e)"
                             ],
                             "type": "FullScan"

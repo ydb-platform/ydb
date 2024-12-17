@@ -31,6 +31,7 @@ namespace NActors {
         i16 SoftProcessingDurationTs = 0;
         EASProfile ActorSystemProfile = EASProfile::Default;
         bool HasSharedThread = false;
+        bool UseRingQueue = false;
     };
 
     struct TSharedExecutorPoolConfig {
@@ -47,6 +48,7 @@ namespace NActors {
         TString PoolName;
         ui32 Threads = 1;
         TCpuMask Affinity; // Executor thread affinity
+        bool UseRingQueue = false;
     };
 
     struct TSelfPingInfo {
@@ -55,11 +57,17 @@ namespace NActors {
         ui32 MaxAvgPingUs;
     };
 
+    struct TExecutorPoolJailConfig {
+        ui32 MaxThreadsInJailCore = 0;
+        TCpuMask JailAffinity;
+    };
+
     struct TCpuManagerConfig {
         TVector<TBasicExecutorPoolConfig> Basic;
         TVector<TIOExecutorPoolConfig> IO;
         TVector<TSelfPingInfo> PingInfoByPool;
         TSharedExecutorPoolConfig Shared;
+        std::optional<TExecutorPoolJailConfig> Jail;
 
         ui32 GetExecutorsCount() const {
             return Basic.size() + IO.size();

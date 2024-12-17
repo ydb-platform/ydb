@@ -1,0 +1,23 @@
+From a5061c9086ee1a1c86ed59647541d2d9d3bbcd75 Mon Sep 17 00:00:00 2001
+From: Yuriy Chernyshov <thegeorg@yandex-team.com>
+Date: Thu, 28 Mar 2024 11:54:53 +0100
+Subject: [PATCH] Fix building on windows-x86 if clang already includes
+
+[D101338](https://reviews.llvm.org/D101338) landed in 2021, so clang16 should have it
+---
+ lib/common/cpu.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/common/cpu.h b/lib/common/cpu.h
+index 0e684d9ad8..d9cdf8febe 100644
+--- a/lib/common/cpu.h
++++ b/lib/common/cpu.h
+@@ -35,7 +35,7 @@ MEM_STATIC ZSTD_cpuid_t ZSTD_cpuid(void) {
+     U32 f7b = 0;
+     U32 f7c = 0;
+ #if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+-#if !defined(__clang__)
++#if !defined(__clang__) || __clang_major__ >= 16
+     int reg[4];
+     __cpuid((int*)reg, 0);
+     {

@@ -16,6 +16,15 @@ message TChannelStats {
     optional uint64 IndexSize = 3;
 }
 
+message TStoragePoolsStats {
+    message TPoolUsage {
+        optional string PoolKind = 1;
+        optional uint64 DataSize = 2;
+        optional uint64 IndexSize = 3;
+    }
+    repeated TPoolUsage PoolsUsage = 1;
+}
+
 message TTableStats {
     optional uint64 DataSize = 1; // both inMem and ondisk
     optional uint64 RowCount = 2; // both inMem and ondisk
@@ -55,4 +64,16 @@ message TTableStats {
     optional bool HasLoanedParts = 29;
 
     repeated TChannelStats Channels = 30;
+
+    optional TStoragePoolsStats StoragePools = 31;
+
+    optional uint64 ByKeyFilterSize = 32;
+
+    // denotes that datashard should be background compacted 
+    // even if it is single parted
+    optional bool HasSchemaChanges = 33;
+
+    optional uint64 LocksAcquired = 34;
+    optional uint64 LocksWholeShard = 35;
+    optional uint64 LocksBroken = 36;
 }

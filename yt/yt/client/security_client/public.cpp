@@ -16,6 +16,7 @@ const TString GuestUserName("guest");
 const TString JobUserName("job");
 const TString SchedulerUserName("scheduler");
 const TString ReplicatorUserName("replicator");
+const TString BundleControllerUserName("bundle_controller");
 const TString OwnerUserName("owner");
 const TString FileCacheUserName("file_cache");
 const TString OperationsCleanerUserName("operations_cleaner");
@@ -31,6 +32,7 @@ const TString TabletBalancerUserName("tablet_balancer");
 const TString EveryoneGroupName("everyone");
 const TString UsersGroupName("users");
 const TString SuperusersGroupName("superusers");
+const TString AdminsGroupName("admins");
 
 ////////////////////////////////////////////////////////////////////////////////
 

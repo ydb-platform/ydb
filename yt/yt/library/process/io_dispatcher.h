@@ -6,7 +6,24 @@
 
 #include <yt/yt/core/misc/lazy_ptr.h>
 
+#include <yt/yt/core/ytree/yson_struct.h>
+
 namespace NYT::NPipes {
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TIODispatcherConfig
+    : public NYTree::TYsonStruct
+{
+public:
+    TDuration ThreadPoolPollingPeriod;
+
+    REGISTER_YSON_STRUCT(TIODispatcherConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TIODispatcherConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -16,6 +33,8 @@ public:
     ~TIODispatcher();
 
     static TIODispatcher* Get();
+
+    void Configure(const TIODispatcherConfigPtr& config);
 
     IInvokerPtr GetInvoker();
 

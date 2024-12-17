@@ -399,7 +399,7 @@ def wait_pods_deleted(api_client, pods, timeout=1800):
     while time.time() < end_ts:
         if not any(pod_present.values()):
             return
-        logger.debug(f'pods left: {len([v for v  in pod_present.values() if v])}/{len(pod_present)}')
+        logger.debug(f'pods left: {len([v for v in pod_present.values() if v])}/{len(pod_present)}')
         for key, present in pod_present.items():
             if not present:
                 continue

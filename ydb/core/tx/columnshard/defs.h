@@ -15,14 +15,23 @@ namespace NKikimr::NColumnShard {
 using TLogThis = TCtorLogger<NKikimrServices::TX_COLUMNSHARD>;
 
 struct TLimits {
+private:
+    static constexpr ui64 MAX_BLOB_SIZE_LIMIT = 8 * 1024 * 1024;
+    static inline ui64 MaxBlobSize = MAX_BLOB_SIZE_LIMIT;
+
+public:
     static constexpr const ui32 MIN_SMALL_BLOBS_TO_INSERT = 200;
     static constexpr const ui32 MIN_BYTES_TO_INSERT = 4 * 1024 * 1024;
     static constexpr const ui64 MAX_BYTES_TO_INSERT = 16 * 1024 * 1024;
     static constexpr const ui32 MAX_TX_RECORDS = 100000;
     static constexpr const ui64 MAX_BLOBS_TO_DELETE = NOlap::TCompactionLimits::MAX_BLOBS_TO_DELETE;
 
-    static ui64 GetBlobSizeLimit();
-    static ui64 GetMaxBlobSize();
+    static constexpr ui64 GetBlobSizeLimit() {
+        return MAX_BLOB_SIZE_LIMIT;
+    }
+    static ui64 GetMaxBlobSize() {
+        return MaxBlobSize;
+    }
     static void SetMaxBlobSize(const ui64 value);
 
     class TMaxBlobSizeGuard: TNonCopyable {

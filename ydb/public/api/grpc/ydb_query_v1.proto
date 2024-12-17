@@ -6,13 +6,8 @@ option java_package = "com.yandex.ydb.query.v1";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_query.proto";
 
-// ! WARNING: Experimental API
-// ! This API is currently in experimental state and is a subject for changes.
-// ! No backward and/or forward compatibility guarantees are provided.
-// ! DO NOT USE for production workloads.
-
 service QueryService {
-    // Sessions are basic primitives for communicating with YDB Query Service. The are similar to
+    // Sessions are basic primitives for communicating with YDB Query Service. They are similar to
     // connections for classic relational DBs. Sessions serve three main purposes:
     // 1. Provide a flow control for DB requests with limited number of active channels.
     // 2. Distribute load evenly across multiple DB nodes.

@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/misc/range.h>
 
+#include <yt/yt/core/crypto/crypto.h>
+
 namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -22,12 +24,22 @@ struct IUnversionedRowsetWriter
     /*!
      *  Writes given rows.
      *
-     *  The returned value is |true| iff one can write next rowset immediately,
+     *  The returned value is |true| if one can write next rowset immediately,
      *  otherwise one should wait for |GetReadyEvent()| future.
      *
      *  Every row must contain exactly one value for each column in schema, in the same order.
      */
-    virtual bool Write(TRange<TUnversionedRow> rows) = 0;
+    [[nodiscard]] virtual bool Write(TRange<TUnversionedRow> rows) = 0;
+
+    /*!
+     * Returns the digest of the written rows.
+     *
+     * Useful for checking the determinism of user jobs.
+     * Returns nullopt when hash is not computed.
+     *
+     * Must not be called concurrently with Write method.
+     */
+    virtual std::optional<NCrypto::TMD5Hash> GetDigest() const = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IUnversionedRowsetWriter)

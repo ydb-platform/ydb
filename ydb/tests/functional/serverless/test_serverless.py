@@ -45,8 +45,6 @@ CLUSTER_CONFIG = dict(
         'DISCOVERY': LogLevels.TRACE,
         'GRPC_SERVER': LogLevels.DEBUG
     },
-    enforce_user_token_requirement=True,
-    default_user_sid='user@builtin',
     extra_feature_flags=['enable_serverless_exclusive_dynamic_nodes'],
     datashard_config={
         'keep_snapshot_timeout': 5000,

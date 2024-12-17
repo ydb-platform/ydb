@@ -1,0 +1,21 @@
+{%- macro Requirements(dir_macro, requirements) -%}
+{%-     set cpu_reqs = requirements|select('startsWith', 'cpu:') -%}
+{%-     if cpu_reqs|length -%}
+{%-         set cpu_req = cpu_reqs|first -%}
+{{ dir_macro }}(
+  TEST
+  {{ requirements[0] }}
+  PROPERTY
+  PROCESSORS
+  {{ cpu_req|replace('cpu:', '') }}
+)
+{%      endif -%}
+{%- endmacro -%}
+
+{%- if current_target.add_test_requirements is defined %}
+{{ Requirements('set_property', current_target.add_test_requirements) }}
+{%- endif -%}
+
+{%- if current_target.add_ytest_requirements is defined %}
+{{ Requirements('set_yunittest_property', current_target.add_ytest_requirements) }}
+{%- endif -%}

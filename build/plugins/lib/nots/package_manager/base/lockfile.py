@@ -4,6 +4,17 @@ from abc import ABCMeta, abstractmethod
 from six import add_metaclass
 
 
+class LockfilePackageMetaInvalidError(RuntimeError):
+    pass
+
+
+def is_tarball_url_valid(tarball_url):
+    if not tarball_url.startswith("https://") and not tarball_url.startswith("http://"):
+        return True
+
+    return tarball_url.startswith("https://npm.yandex-team.ru/") or tarball_url.startswith("http://npm.yandex-team.ru/")
+
+
 class LockfilePackageMeta(object):
     """
     Basic struct representing package meta from lockfile.
@@ -16,6 +27,11 @@ class LockfilePackageMeta(object):
         return LockfilePackageMeta(*s.strip().split(" "))
 
     def __init__(self, key, tarball_url, sky_id, integrity, integrity_algorithm):
+        if not is_tarball_url_valid(tarball_url):
+            raise LockfilePackageMetaInvalidError(
+                "tarball can only point to npm.yandex-team.ru, got {}".format(tarball_url)
+            )
+
         # http://npm.yandex-team.ru/@scope%2fname/-/name-0.0.1.tgz
         parts = tarball_url.split("/")
 
@@ -24,14 +40,17 @@ class LockfilePackageMeta(object):
         self.sky_id = sky_id
         self.integrity = integrity
         self.integrity_algorithm = integrity_algorithm
-        self.tarball_path = "/".join(parts[-3:])  # @scope%2fname/-/name-0.0.1.tgz
+        self.tarball_path = "/".join(parts[-3:]).replace("%2f", "/")  # @scope%2fname/-/name-0.0.1.tgz
 
     def to_str(self):
         return " ".join([self.tarball_url, self.sky_id, self.integrity, self.integrity_algorithm])
 
-
-class LockfilePackageMetaInvalidError(RuntimeError):
-    pass
+    def to_uri(self):
+        tarball_url: str = self.tarball_url
+        if not tarball_url.startswith("https://") and not tarball_url.startswith("http://"):
+            tarball_url = "https://npm.yandex-team.ru/" + tarball_url
+        pkg_uri = f"{tarball_url}#integrity={self.integrity_algorithm}-{self.integrity}"
+        return pkg_uri
 
 
 @add_metaclass(ABCMeta)
@@ -73,4 +92,8 @@ class BaseLockfile(object):
 
     @abstractmethod
     def validate_has_addons_flags(self):
+        pass
+
+    @abstractmethod
+    def get_requires_build_packages(self):
         pass

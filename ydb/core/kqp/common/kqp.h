@@ -12,13 +12,12 @@
 
 #include <library/cpp/lwtrace/shuttle.h>
 
-#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/cancelation/cancelation.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yql/dq/actors/dq.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
@@ -33,18 +32,9 @@
 
 namespace NKikimr::NKqp {
 
-void ConvertKqpQueryResultToDbResult(const NKikimrMiniKQL::TResult& from, Ydb::ResultSet* to);
-
 TString ScriptExecutionRunnerActorIdString(const NActors::TActorId& actorId);
 bool ScriptExecutionRunnerActorIdFromString(const TString& executionId, TActorId& actorId);
 
-template<typename TFrom, typename TTo>
-inline void ConvertKqpQueryResultsToDbResult(const TFrom& from, TTo* to) {
-    const auto& results = from.GetResults();
-    for (const auto& result : results) {
-        ConvertKqpQueryResultToDbResult(result, to->add_result_sets());
-    }
-}
 
 class TKqpRequestInfo {
 public:
@@ -80,6 +70,8 @@ public:
     /// Accepts query text
     virtual void Collect(const TString& queryData) = 0;
 
+    virtual bool IsNull() { return false; }
+
     virtual ~IQueryReplayBackend() {};
 
     //// Updates configuration onn running backend, if applicable.
@@ -93,6 +85,10 @@ public:
     }
 
     virtual void UpdateConfig(const NKikimrConfig::TTableServiceConfig&) {
+    }
+
+    bool IsNull() {
+        return true;
     }
 
     ~TNullQueryReplayBackend() {

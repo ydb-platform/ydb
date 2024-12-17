@@ -51,6 +51,7 @@ void IStoragesManager::OnTieringModified(const std::shared_ptr<NColumnShard::ITi
 void IStoragesManager::DoInitialize() {
     GetOperator(DefaultStorageId);
     GetOperator(MemoryStorageId);
+    GetOperator(LocalMetadataStorageId);
 }
 
 bool IStoragesManager::LoadIdempotency(NTable::TDatabase& database) {

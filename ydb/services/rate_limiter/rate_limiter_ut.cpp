@@ -7,7 +7,7 @@
 
 #include <ydb/core/grpc_services/local_rate_limiter.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -108,6 +108,9 @@ private:
             request.set_resource_path(ResourcePath);
 
             SetDuration(Settings.OperationTimeout_, *request.mutable_operation_params()->mutable_operation_timeout());
+            if (Settings.CancelAfter_) {
+                SetDuration(Settings.CancelAfter_, *request.mutable_operation_params()->mutable_cancel_after());
+            }
 
             if (Settings.IsUsedAmount_) {
                 request.set_used(Settings.Amount_.GetRef());
@@ -317,7 +320,10 @@ Y_UNIT_TEST_SUITE(TGRpcRateLimiterTest) {
         return std::make_unique<TTestSetup>();
     }
 
-    void AcquireResourceManyRequired(bool useActorApi) {
+    void AcquireResourceManyRequired(bool useActorApi, bool useCancelAfter) {
+        const TDuration operationTimeout = useCancelAfter ? TDuration::Hours(1) : TDuration::MilliSeconds(200);
+        const TDuration cancelAfter = useCancelAfter ? TDuration::MilliSeconds(200) : TDuration::Zero(); // 0 means that parameter is not set
+
         using NYdb::NRateLimiter::TAcquireResourceSettings;
 
         auto setup = MakeTestSetup(useActorApi);
@@ -325,42 +331,61 @@ Y_UNIT_TEST_SUITE(TGRpcRateLimiterTest) {
         ASSERT_STATUS_SUCCESS(setup->RateLimiterClient.CreateResource(TTestSetup::CoordinationNodePath, "res",
                                                                      TCreateResourceSettings().MaxUnitsPerSecond(1).MaxBurstSizeCoefficient(42)));
 
-        setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(10000).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::SUCCESS);
+        setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(10000).OperationTimeout(operationTimeout).CancelAfter(cancelAfter), NYdb::EStatus::SUCCESS);
 
         for (int i = 0; i < 3; ++i) {
-            setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::TIMEOUT);
-            setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).IsUsedAmount(true).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::SUCCESS);
+            setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).OperationTimeout(operationTimeout).CancelAfter(cancelAfter), useCancelAfter ? NYdb::EStatus::CANCELLED : NYdb::EStatus::TIMEOUT);
+            setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).IsUsedAmount(true).OperationTimeout(operationTimeout).CancelAfter(cancelAfter), NYdb::EStatus::SUCCESS);
         }
     }
 
-    void AcquireResourceManyUsed(bool useActorApi) {
+    void AcquireResourceManyUsed(bool useActorApi, bool useCancelAfter) {
+        const TDuration operationTimeout = useCancelAfter ? TDuration::Hours(1) : TDuration::MilliSeconds(200);
+        const TDuration cancelAfter = useCancelAfter ? TDuration::MilliSeconds(200) : TDuration::Zero(); // 0 means that parameter is not set
+
         using NYdb::NRateLimiter::TAcquireResourceSettings;
 
         auto setup = MakeTestSetup(useActorApi);
         ASSERT_STATUS_SUCCESS(setup->RateLimiterClient.CreateResource(TTestSetup::CoordinationNodePath, "res",
                                                                      TCreateResourceSettings().MaxUnitsPerSecond(1).MaxBurstSizeCoefficient(42)));
 
-        setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(10000).IsUsedAmount(true).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::SUCCESS);
+        setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(10000).IsUsedAmount(true).OperationTimeout(operationTimeout).CancelAfter(cancelAfter), NYdb::EStatus::SUCCESS);
         for (int i = 0; i < 3; ++i) {
-            setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::TIMEOUT);
-            setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).IsUsedAmount(true).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::SUCCESS);
+            setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).OperationTimeout(operationTimeout).CancelAfter(cancelAfter), useCancelAfter ? NYdb::EStatus::CANCELLED : NYdb::EStatus::TIMEOUT);
+            setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).IsUsedAmount(true).OperationTimeout(operationTimeout).CancelAfter(cancelAfter), NYdb::EStatus::SUCCESS);
         }
     }
 
     Y_UNIT_TEST(AcquireResourceManyRequiredGrpcApi) {
-        AcquireResourceManyRequired(false);
+        AcquireResourceManyRequired(false, false);
     }
 
     Y_UNIT_TEST(AcquireResourceManyRequiredActorApi) {
-        AcquireResourceManyRequired(true);
+        AcquireResourceManyRequired(true, false);
+    }
+
+    Y_UNIT_TEST(AcquireResourceManyRequiredGrpcApiWithCancelAfter) {
+        AcquireResourceManyRequired(false, true);
+    }
+
+    Y_UNIT_TEST(AcquireResourceManyRequiredActorApiWithCancelAfter) {
+        AcquireResourceManyRequired(true, true);
     }
 
     Y_UNIT_TEST(AcquireResourceManyUsedGrpcApi) {
-        AcquireResourceManyUsed(false);
+        AcquireResourceManyUsed(false, false);
     }
 
     Y_UNIT_TEST(AcquireResourceManyUsedActorApi) {
-        AcquireResourceManyUsed(true);
+        AcquireResourceManyUsed(true, false);
+    }
+
+    Y_UNIT_TEST(AcquireResourceManyUsedGrpcApiWithCancelAfter) {
+        AcquireResourceManyUsed(false, true);
+    }
+
+    Y_UNIT_TEST(AcquireResourceManyUsedActorApiWithCancelAfter) {
+        AcquireResourceManyUsed(true, true);
     }
 }
 

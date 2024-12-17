@@ -8,7 +8,7 @@
 /**
  * Returns whether all bytes of the two byte arrays match.
  */
-#if (AWS_DEEP_CHECKS == 1)
+#if defined(AWS_DEEP_CHECKS) && (AWS_DEEP_CHECKS == 1)
 #    ifdef CBMC
 /* clang-format off */
 #        define AWS_BYTES_EQ(arr1, arr2, len)                                                                              \

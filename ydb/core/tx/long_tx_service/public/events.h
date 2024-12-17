@@ -4,7 +4,7 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/long_tx_service.pb.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <library/cpp/lwtrace/shuttle.h>

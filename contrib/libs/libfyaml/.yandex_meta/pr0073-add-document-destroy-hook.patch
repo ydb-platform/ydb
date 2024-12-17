@@ -1,0 +1,162 @@
+From aa19573fcfdc9344c217277c63fe6e1890e56e89 Mon Sep 17 00:00:00 2001
+From: Innokentii Mokin <innokentii@yandex-team.ru>
+Date: Sun, 5 Mar 2023 23:25:29 +0300
+Subject: [PATCH] add document destroy hook
+
+---
+ include/libfyaml.h | 70 ++++++++++++++++++++++++++++++++++++++++++++++
+ src/lib/fy-doc.c   | 37 ++++++++++++++++++++++++
+ src/lib/fy-doc.h   |  3 ++
+ 3 files changed, 110 insertions(+)
+
+diff --git a/include/libfyaml.h b/include/libfyaml.h
+index 828f077..db85d54 100644
+--- a/include/libfyaml.h
++++ b/include/libfyaml.h
+@@ -4758,6 +4758,76 @@ void
+ fy_document_unregister_meta(struct fy_document *fyd)
+ 	FY_EXPORT;
+ 
++/**
++ * fy_document_get_userdata() - Get the userdata pointer of a document
++ *
++ * Return the userdata pointer of a document.
++ *
++ * @fyn: The document to get userdata from
++ *
++ * Returns:
++ * The stored userdata pointer
++ */
++void *
++fy_document_get_userdata(struct fy_document *fyd)
++	FY_EXPORT;
++
++/**
++ * fy_document_set_userdata() - Set the userdata pointer of a document
++ *
++ * Set the userdata pointer of a document. If @userdata is NULL
++ * then clear the userdata.
++ *
++ * @fyd: The document to set userdata
++ * @userdata: The userdata pointer
++ *
++ * Returns:
++ * 0 on success, -1 on error
++ */
++int
++fy_document_set_userdata(struct fy_document *fyd, void *userdata)
++	FY_EXPORT;
++
++/**
++ * typedef fy_document_on_destroy_fn - Userdata clear method
++ *
++ * This is the callback called just before document is destroyed.
++ *
++ * @fyd: The document which will be destroyed
++ * @userdata: The userdata pointer of a document
++ *
++ */
++typedef void (*fy_document_on_destroy_fn)(struct fy_document *fyd, void *userdata);
++
++/**
++ * fy_document_register_on_destroy() - Register an on_destroy hook
++ *
++ * Register an on_destroy hook, to be called when
++ * the document is freed via a final call to fy_document_destroy().
++ *
++ * @fyd: The document which the hook is registered to
++ * @on_destroy_fn: The on_destroy hook method
++ *
++ * Returns:
++ * 0 on success, -1 if another hook is already registered.
++ */
++int
++fy_document_register_on_destroy(struct fy_document *fyd,
++				fy_document_on_destroy_fn on_destroy_fn)
++	FY_EXPORT;
++
++/**
++ * fy_document_unregister_on_destroy() - Unregister an on_destroy hook
++ *
++ * Unregister the currently active on_destroy hook.
++ *
++ * @fyd: The document to unregister it's on_destroy hook.
++ */
++void
++fy_document_unregister_on_destroy(struct fy_document *fyd)
++	FY_EXPORT;
++
++
+ /**
+  * fy_node_set_marker() - Set a marker of a node
+  *
+diff --git a/src/lib/fy-doc.c b/src/lib/fy-doc.c
+index 602264b..c2f778c 100644
+--- a/src/lib/fy-doc.c
++++ b/src/lib/fy-doc.c
+@@ -380,6 +380,9 @@ void fy_parse_document_destroy(struct fy_parser *fyp, struct fy_document *fyd)
+ 
+ 	fy_diag_unref(fyd->diag);
+ 
++	if (fyd->on_destroy_fn)
++		fyd->on_destroy_fn(fyd, fyd->userdata);
++
+ 	free(fyd);
+ }
+ 
+@@ -6285,6 +6288,40 @@ void fy_document_unregister_meta(struct fy_document *fyd)
+ 	fyd->meta_user = NULL;
+ }
+ 
++int fy_document_set_userdata(struct fy_document *fyd, void *userdata)
++{
++	if (!fyd || !userdata)
++		return -1;
++
++	fyd->userdata = userdata;
++
++	return 0;
++}
++
++void* fy_document_get_userdata(struct fy_document *fyd)
++{
++	return fyd->userdata;
++}
++
++int fy_document_register_on_destroy(struct fy_document *fyd,
++				    fy_document_on_destroy_fn on_destroy_fn)
++{
++	if (!fyd || !on_destroy_fn)
++		return -1;
++
++	fyd->on_destroy_fn = on_destroy_fn;
++
++	return 0;
++}
++
++void fy_document_unregister_on_destroy(struct fy_document *fyd)
++{
++	if (!fyd)
++		return;
++
++	fyd->on_destroy_fn = NULL;
++}
++
+ bool fy_node_set_marker(struct fy_node *fyn, unsigned int marker)
+ {
+ 	unsigned int prev_marks;
+diff --git a/src/lib/fy-doc.h b/src/lib/fy-doc.h
+index 6c15024..b268edf 100644
+--- a/src/lib/fy-doc.h
++++ b/src/lib/fy-doc.h
+@@ -118,6 +118,9 @@ struct fy_document {
+ 	fy_node_meta_clear_fn meta_clear_fn;
+ 	void *meta_user;
+ 
++	fy_document_on_destroy_fn on_destroy_fn;
++	void *userdata;
++
+ 	struct fy_path_expr_document_data *pxdd;
+ };
+ /* only the list declaration/methods */
+

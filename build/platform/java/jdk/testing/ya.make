@@ -1,5 +1,6 @@
 PACKAGE()
 
+
 # FIXME: make use of java/jdk/jdk8/jdk.json somehow
 IF (OS_LINUX)
     SET(ID 1901306329)

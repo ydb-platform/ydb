@@ -48,7 +48,7 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        TVDiskID vdiskId(~0, ~0, 'H', 'I', 'K');
+        TVDiskID vdiskId(TGroupId::FromValue(~0), ~0, 'H', 'I', 'K');
         ctx.Send(KeeperId, new TEvIncrHugeInit(vdiskId, Owner, 0));
         Become(&TTestActorSeq::StateFunc);
     }

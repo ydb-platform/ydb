@@ -13,7 +13,8 @@ void TGarbageCollectionActor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TP
         GCTask->OnGCResult(ev);
         CheckFinished();
     } else {
-        SendToBSProxy(NActors::TActivationContext::AsActorContext(), ev->Cookie, GCTask->BuildRequest(ev->Cookie).release(), ev->Cookie);
+        ACFL_ERROR()("event", "GC_ERROR")("details", ev->Get()->Print(true));
+        SendToBSProxy(NActors::TActivationContext::AsActorContext(), ev->Cookie, GCTask->BuildRequest(TBlobAddress(ev->Cookie, ev->Get()->Channel)).release(), ev->Cookie);
     }
 }
 

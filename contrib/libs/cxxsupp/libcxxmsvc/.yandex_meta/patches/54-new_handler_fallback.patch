@@ -1,0 +1,17 @@
+diff --git a/src/support/runtime/new_handler_fallback.ipp b/src/support/runtime/new_handler_fallback.ipp
+index 2ec4083..7556f69 100644
+--- a/src/support/runtime/new_handler_fallback.ipp
++++ b/src/support/runtime/new_handler_fallback.ipp
+@@ -7,9 +7,11 @@
+ //
+ //===----------------------------------------------------------------------===//
+ 
++#include "../../include/atomic_support.h"
++
+ namespace std {
+ 
+-static constinit std::new_handler __new_handler = nullptr;
++static _LIBCPP_CONSTINIT std::new_handler __new_handler = nullptr;
+ 
+ new_handler
+ set_new_handler(new_handler handler) noexcept

@@ -9,10 +9,7 @@ try:
         ydb_table_v1_pb2_grpc,
         ydb_operation_v1_pb2_grpc,
         ydb_topic_v1_pb2_grpc,
-    )
-
-    from ydb.public.api.grpc.draft import (
-        ydb_dynamic_config_v1_pb2_grpc,
+        ydb_query_v1_pb2_grpc,
     )
 
     from ydb.public.api.protos import (
@@ -23,11 +20,9 @@ try:
         ydb_value_pb2,
         ydb_operation_pb2,
         ydb_common_pb2,
+        ydb_query_pb2,
     )
 
-    from ydb.public.api.protos.draft import (
-        ydb_dynamic_config_pb2,
-    )
 except ImportError:
     from contrib.ydb.public.api.grpc import (
         ydb_cms_v1_pb2_grpc,
@@ -36,10 +31,7 @@ except ImportError:
         ydb_table_v1_pb2_grpc,
         ydb_operation_v1_pb2_grpc,
         ydb_topic_v1_pb2_grpc,
-    )
-
-    from contrib.ydb.public.api.grpc.draft import (
-        ydb_dynamic_config_v1_pb2_grpc,
+        ydb_query_v1_pb2_grpc,
     )
 
     from contrib.ydb.public.api.protos import (
@@ -50,10 +42,7 @@ except ImportError:
         ydb_value_pb2,
         ydb_operation_pb2,
         ydb_common_pb2,
-    )
-
-    from contrib.ydb.public.api.protos.draft import (
-        ydb_dynamic_config_pb2,
+        ydb_query_pb2,
     )
 
 
@@ -65,7 +54,7 @@ ydb_scheme = ydb_scheme_pb2
 ydb_table = ydb_table_pb2
 ydb_discovery = ydb_discovery_pb2
 ydb_operation = ydb_operation_pb2
-ydb_dynamic_config = ydb_dynamic_config_pb2
+ydb_query = ydb_query_pb2
 
 
 class CmsService(object):
@@ -122,15 +111,23 @@ class TopicService(object):
 
     CreateTopic = "CreateTopic"
     DescribeTopic = "DescribeTopic"
+    AlterTopic = "AlterTopic"
     DropTopic = "DropTopic"
     StreamRead = "StreamRead"
     StreamWrite = "StreamWrite"
 
 
-class DynamicConfigService(object):
-    Stub = ydb_dynamic_config_v1_pb2_grpc.DynamicConfigServiceStub
+class QueryService(object):
+    Stub = ydb_query_v1_pb2_grpc.QueryServiceStub
 
-    ReplaceConfig = "ReplaceConfig"
-    SetConfig = "SetConfig"
-    GetConfig = "GetConfig"
-    GetNodeLabels = "GetNodeLabels"
+    CreateSession = "CreateSession"
+    DeleteSession = "DeleteSession"
+    AttachSession = "AttachSession"
+
+    BeginTransaction = "BeginTransaction"
+    CommitTransaction = "CommitTransaction"
+    RollbackTransaction = "RollbackTransaction"
+
+    ExecuteQuery = "ExecuteQuery"
+    ExecuteScript = "ExecuteScript"
+    FetchScriptResults = "FetchScriptResults"

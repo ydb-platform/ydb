@@ -1,0 +1,26 @@
+ifdef __GNUC__ is needed to support GCC 4 on Precise and Trusty used by
+BUILD_APACHE_BUNDLE task:
+https://a.yandex-team.ru/arc/trunk/arcadia/sandbox/projects/BuildApacheBundle/__init__.py?rev=5292353#L36
+
+--- a/zconf.h
++++ b/zconf.h
+@@ -433,8 +433,16 @@ typedef uLong FAR uLongf;
+ 
+-#if 1    /* was set to #if 1 by ./configure */
++#ifdef __GNUC__
+ #  define Z_HAVE_UNISTD_H
++#else
++#  if __has_include(<unistd.h>)
++#    define Z_HAVE_UNISTD_H
++#  endif
+ #endif
+ 
+-#if 1    /* was set to #if 1 by ./configure */
+-#  define Z_HAVE_STDARG_H
++#ifdef __GNUC__
++#  define Z_HAVE_UNISTD_H
++#else
++#  if __has_include(<stdarg.h>)
++#    define Z_HAVE_STDARG_H
++#  endif
+ #endif

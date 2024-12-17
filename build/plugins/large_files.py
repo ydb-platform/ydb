@@ -51,7 +51,7 @@ def onlarge_files(unit, *args):
                 )
                 return
 
-            from_cmd = ['FILE', '{}'.format(res_id), 'OUT_NOAUTO', arg, 'EXTERNAL_FILE', external]
+            from_cmd = ['FILE', '{}'.format(res_id), 'OUT_NOAUTO', arg]
             if os.path.dirname(arg):
                 from_cmd.extend(("RENAME", os.path.basename(arg)))
 

@@ -1,4 +1,5 @@
 #pragma once
+#include "counters.h"
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
@@ -7,6 +8,7 @@ namespace NKikimr::NOlap::NActualizer {
 
 class TSchemeActualizer: public IActualizer {
 private:
+    const TSchemeCounters Counters;
     THashMap<TRWAddress, THashSet<ui64>> PortionsToActualizeScheme;
     std::shared_ptr<ISnapshotSchema> TargetSchema;
     const ui64 PathId;
@@ -56,16 +58,12 @@ private:
 
 protected:
     virtual void DoAddPortion(const TPortionInfo& info, const TAddExternalContext& context) override;
-    virtual void DoRemovePortion(const TPortionInfo& info) override;
-    virtual void DoBuildTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& internalContext) const override;
+    virtual void DoRemovePortion(const ui64 portionId) override;
+    virtual void DoExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& internalContext) override;
 public:
     void Refresh(const TAddExternalContext& externalContext);
 
-    TSchemeActualizer(const ui64 pathId, const TVersionedIndex& versionedIndex)
-        : PathId(pathId)
-        , VersionedIndex(versionedIndex) {
-        Y_UNUSED(PathId);
-    }
+    TSchemeActualizer(const ui64 pathId, const TVersionedIndex& versionedIndex);
 };
 
 }

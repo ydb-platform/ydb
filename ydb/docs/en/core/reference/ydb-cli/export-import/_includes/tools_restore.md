@@ -27,6 +27,7 @@ To import data to the table, use the [YQL `REPLACE` command](../../../../yql/ref
 `--restore-indexes VAL`: Enables/disables import of indexes, 1 (yes) or 0 (no), defaults to 1. If set to 0, the import won't either register secondary indexes in the data schema or populate them with data.
 
 `--dry-run`: Matching the data schemas in the database and file system without updating the database, 1 (yes) or 0 (no), defaults to 0. When enabled, the system checks that:
+
 - All tables in the file system are present in the database
 - These items are based on the same schema, both in the file system and in the database
 
@@ -57,13 +58,13 @@ Some of the below parameters have default values. This means that the workload w
 
 From the current file system directory:
 
-```
+```bash
 {{ ydb-cli }} -p quickstart tools restore -p . -i .
 ```
 
 From the current file system directory:
 
-```
+```bash
 {{ ydb-cli }} -p quickstart tools restore -p . -i ~/backup_quickstart
 ```
 
@@ -71,18 +72,18 @@ From the current file system directory:
 
 From the current file system directory:
 
-```
+```bash
 {{ ydb-cli }} -p quickstart tools restore -p dir1/dir2 -i .
 ```
 
 From the current file system directory:
 
-```
+```bash
 {{ ydb-cli }} -p quickstart tools restore -p dir1/dir2 -i ~/backup_quickstart
 ```
 
 Matching schemas between the database and file system:
 
-```
+```bash
 {{ ydb-cli }} -p quickstart tools restore -p dir1/dir2 -i ~/backup_quickstart --dry-run
 ```

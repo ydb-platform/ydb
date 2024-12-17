@@ -28,9 +28,6 @@ def read_ipv4_col(source: ByteSource, num_rows: int):
 
 def read_datetime_col(source: ByteSource, num_rows: int, tz_info: Optional[tzinfo]):
     src_array = source.read_array('I', num_rows)
-    if tz_info is None:
-        fts = datetime.utcfromtimestamp
-        return [fts(ts) for ts in src_array]
     fts = datetime.fromtimestamp
     return [fts(ts, tz_info) for ts in src_array]
 
@@ -122,7 +119,7 @@ def write_str_col(column: Sequence, nullable: bool, encoding: Optional[str], des
             if encoding:
                 x = x.encode(encoding)
             else:
-                x = b''
+                x = bytes(x)
             sz = len(x)
             while True:
                 b = sz & 0x7f

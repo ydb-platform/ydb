@@ -4,6 +4,11 @@
 
 * [Директории](../dir.md)
 * [Таблицы](../table.md)
+
+{% if feature_view %}
+* [Представления (VIEW)](../view.md)
+{% endif %}
+
 * [Топики](../../topic.md)
 * [Секреты](../secrets.md)
 * [Подключения к внешним БД](../external_data_source.md)

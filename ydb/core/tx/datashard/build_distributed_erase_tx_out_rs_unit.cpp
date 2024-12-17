@@ -56,13 +56,13 @@ class TBuildDistributedEraseTxOutRSUnit : public TExecutionUnit {
         return result;
     }
 
-    static bool CompareCells(const TVector<TRawTypeValue>& expectedValue, const TVector<TCell>& actualValue) {
+    static bool CompareCells(const TVector<std::pair<NScheme::TTypeInfo, TRawTypeValue>>& expectedValue, const TVector<TCell>& actualValue) {
         Y_ABORT_UNLESS(expectedValue.size() == actualValue.size());
 
         for (ui32 pos = 0; pos < expectedValue.size(); ++pos) {
             const auto& expected = expectedValue.at(pos);
             const auto& actual = actualValue.at(pos);
-            if (0 != CompareTypedCells(actual, expected.AsRef(), expected.TypeInfo())) {
+            if (0 != CompareTypedCells(actual, expected.second.AsRef(), expected.first)) {
                 return false;
             }
         }
@@ -117,13 +117,13 @@ public:
 
             TVector<TRawTypeValue> key;
             for (ui32 pos = 0; pos < tableInfo.KeyColumnTypes.size(); ++pos) {
-                const NScheme::TTypeInfo type = tableInfo.KeyColumnTypes[pos];
+                const NScheme::TTypeId typeId = tableInfo.KeyColumnTypes[pos].GetTypeId();
                 const TCell& cell = keyCells.GetCells()[pos];
-                key.emplace_back(TRawTypeValue(cell.AsRef(), type));
+                key.emplace_back(TRawTypeValue(cell.AsRef(), typeId));
             }
 
             TSerializedCellVec indexCells;
-            TVector<TRawTypeValue> indexTypedVals;
+            TVector<std::pair<NScheme::TTypeInfo, TRawTypeValue>> indexTypedVals;
             if (!eraseTx->GetIndexColumns().empty()) {
                 Y_ABORT_UNLESS(i < static_cast<ui32>(eraseTx->GetIndexColumns().size()));
                 Y_ABORT_UNLESS(TSerializedCellVec::TryParse(eraseTx->GetIndexColumns().at(i), indexCells));
@@ -133,10 +133,10 @@ public:
                     auto it = tableInfo.Columns.find(eraseTx->GetIndexColumnIds().Get(pos));
                     Y_ABORT_UNLESS(it != tableInfo.Columns.end());
 
-                    const NScheme::TTypeInfo type = it->second.Type;
+                    const NScheme::TTypeInfo& typeInfo = it->second.Type;
                     const TCell& cell = indexCells.GetCells()[pos];
 
-                    indexTypedVals.emplace_back(TRawTypeValue(cell.AsRef(), type));
+                    indexTypedVals.push_back({typeInfo, TRawTypeValue(cell.AsRef(), typeInfo.GetTypeId())});
                 }
             }
 

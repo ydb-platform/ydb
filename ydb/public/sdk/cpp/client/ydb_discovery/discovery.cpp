@@ -86,6 +86,7 @@ TNodeRegistrationResult::TNodeRegistrationResult(TStatus&& status, const Ydb::Di
     , Expire_(proto.expire())
     , ScopeTableId_(proto.has_scope_tablet_id() ? std::make_optional(proto.scope_tablet_id()) : std::nullopt)
     , ScopePathId_(proto.has_scope_path_id() ? std::make_optional(proto.scope_path_id()) : std::nullopt)
+    , NodeName_(proto.has_node_name() ? std::make_optional(proto.node_name()) : std::nullopt)
 {
     const auto& nodes = proto.nodes();
     Nodes_.reserve(nodes.size());
@@ -119,7 +120,15 @@ const ui64& TNodeRegistrationResult::GetScopePathId() const {
 }
 
 bool TNodeRegistrationResult::HasScopePathId() const {
-    return ScopePathId_.value();
+    return ScopePathId_.has_value();
+}
+
+bool TNodeRegistrationResult::HasNodeName() const {
+    return NodeName_.has_value();
+}
+
+const TString& TNodeRegistrationResult::GetNodeName() const {
+    return NodeName_.value();
 }
 
 const TVector<TNodeInfo>& TNodeRegistrationResult::GetNodes() const {
@@ -196,7 +205,7 @@ public:
         request.set_address(settings.Address_);
         request.set_domain_path(settings.DomainPath_);
         request.set_fixed_node_id(settings.FixedNodeId_);
-        if (!settings.Path_.Empty()) {
+        if (!settings.Path_.empty()) {
             request.set_path(settings.Path_);
         }
 

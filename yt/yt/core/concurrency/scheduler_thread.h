@@ -26,8 +26,15 @@ protected:
 
     ~TSchedulerThread();
 
+    // NB(arkady-e1ppa): We don't need a customisation point OnStop
+    // because the only sensible case when we need to do something
+    // after stop is a graceful shutdown for which we might want
+    // to clear the queue. Now, every shutdownable queue is
+    // either drained automatically (graceful = false) or
+    // the Shutdown is graceful (TSchedulerThread::Stop(true)) will
+    // be called. In the latter case |OnExecute| loop will
+    // continue working until the queue is empty anyway. So we are safe.
     virtual void OnStart();
-    virtual void OnStop();
 
     TClosure OnExecute() override;
 

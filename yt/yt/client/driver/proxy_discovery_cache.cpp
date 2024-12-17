@@ -45,11 +45,6 @@ void FormatValue(TStringBuilderBase* builder, const TProxyDiscoveryRequest& requ
         request.IgnoreBalancers);
 }
 
-TString ToString(const TProxyDiscoveryRequest& request)
-{
-    return ToStringViaBuilder(request);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 class TProxyDiscoveryCache
@@ -62,7 +57,7 @@ public:
         IClientPtr client)
         : TAsyncExpiringCache(
             std::move(config),
-            DriverLogger.WithTag("Cache: ProxyDiscovery"))
+            DriverLogger().WithTag("Cache: ProxyDiscovery"))
         , Client_(std::move(client))
     { }
 
@@ -138,7 +133,7 @@ private:
                     continue;
                 }
 
-                if (proxyNode->Attributes().Get<TString>(RoleAttributeName, DefaultRpcProxyRole) != request.Role) {
+                if (proxyNode->Attributes().Get<std::string>(RoleAttributeName, DefaultRpcProxyRole) != request.Role) {
                     continue;
                 }
 

@@ -17,12 +17,10 @@ namespace NKikimr {
         Y_UNIT_TEST(SerializeParse) {
             ui32 chunkSize = 134274560u;
             ui32 appendBlockSize = 56896u;
-            ui32 minHugeBlobInBytes = 512u << 10u;
             ui32 milestoneHugeBlobInBytes = 512u << 10u;
             ui32 maxBlobInBytes = 10u << 20u;
             ui32 overhead = 8;
             ui32 freeChunksReservation = 2;
-            bool oldMapCompatible = false;
 
             auto logf = [] (const TString &state) { STR << state; };
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
@@ -31,12 +29,10 @@ namespace NKikimr {
                 nullptr, NPDisk::DEVICE_TYPE_UNKNOWN);
             std::unique_ptr<THullHugeKeeperPersState> state(
                     new THullHugeKeeperPersState(vctx, chunkSize, appendBlockSize,
-                        minHugeBlobInBytes, milestoneHugeBlobInBytes, maxBlobInBytes,
-                        overhead, freeChunksReservation, oldMapCompatible, logf));
+                        appendBlockSize, milestoneHugeBlobInBytes, maxBlobInBytes,
+                        overhead, freeChunksReservation, logf));
 
             state->LogPos = THullHugeRecoveryLogPos(0, 0, 100500, 50000, 70000, 56789, 39482);
-            NHuge::THugeSlot hugeSlot(453, 0, 234);
-            state->AllocatedSlots.insert(hugeSlot);
 
             TString serialized(state->Serialize());
             UNIT_ASSERT(THullHugeKeeperPersState::CheckEntryPoint(serialized));

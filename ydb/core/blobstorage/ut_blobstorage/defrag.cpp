@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
                     ++chunkToBlobs[item.Location.ChunkIdx];
                 }
             }
-            UNIT_ASSERT_VALUES_EQUAL(chunkToBlobs.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(chunkToBlobs.size(), 9 + 1); // defragmentation stopping if number of can be freed chunks is 9 + 1 chunk really used
         }
     }
 
@@ -232,6 +232,8 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
         TAutoPtr<NPDisk::TEvChunkReadResult> readMsg;
         bool caughtRestore = false;
         bool caughtDone = false;
+        ui32 rewrittenRecs = 0;
+        ui32 rewrittenBytes = 0;
         env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             Y_UNUSED(nodeId);
             switch(ev->Type) {
@@ -251,13 +253,12 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
                     }
                     return true;
                 case TEvBlobStorage::EvDefragRewritten:
-                    if (rewriterActorId == ev->Sender) {
-                        UNIT_ASSERT_VALUES_EQUAL(caughtDone, false);
+                    {
                         caughtDone = true;
 
                         const TEvDefragRewritten* msg = ev->Get<TEvDefragRewritten>();
-                        UNIT_ASSERT_VALUES_EQUAL(msg->RewrittenRecs, 18);
-                        UNIT_ASSERT_VALUES_EQUAL(msg->RewrittenBytes, 9961567);
+                        rewrittenRecs += msg->RewrittenRecs;
+                        rewrittenBytes += msg->RewrittenBytes;
                     }
                     return true;
                 case TEvBlobStorage::EvRestoreCorruptedBlob:
@@ -278,9 +279,12 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
                     return true;
             }
         };
-        while (!caughtDone || !caughtRestore) {
-            env.Sim(TDuration::Minutes(1));
-        }
+        env.Sim(TDuration::Minutes(10));
+        UNIT_ASSERT_VALUES_EQUAL(caughtDone, true);
+        UNIT_ASSERT_VALUES_EQUAL(caughtRestore, true);
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenRecs, 20 - (9 + 1));  // // defragmentation stopping if number of can be freed chunks is 9 + 1 chunk really used
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenBytes, 5767223);
+
     }
 
     Y_UNIT_TEST(CorruptedReadHandling) {

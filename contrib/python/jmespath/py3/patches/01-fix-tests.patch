@@ -1,0 +1,12 @@
+--- contrib/python/jmespath/py3/tests/test_compliance.py	(index)
++++ contrib/python/jmespath/py3/tests/test_compliance.py	(working tree)
+@@ -3,2 +3,2 @@
+-from tests import OrderedDict
+-from tests import json
++from . import OrderedDict
++from . import json
+--- contrib/python/jmespath/py3/tests/test_parser.py	(index)
++++ contrib/python/jmespath/py3/tests/test_parser.py	(working tree)
+@@ -6,1 +6,1 @@ import re
+-from tests import unittest, OrderedDict
++from . import unittest, OrderedDict

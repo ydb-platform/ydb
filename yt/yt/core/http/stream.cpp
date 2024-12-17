@@ -5,6 +5,8 @@
 
 #include <yt/yt/core/misc/finally.h>
 
+#include <library/cpp/yt/misc/global.h>
+
 #include <util/generic/buffer.h>
 
 #include <util/string/escape.h>
@@ -14,7 +16,28 @@ namespace NYT::NHttp {
 using namespace NConcurrency;
 using namespace NNet;
 
-static const auto& Logger = HttpLogger;
+////////////////////////////////////////////////////////////////////////////////
+
+static constexpr auto& Logger = HttpLogger;
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+using TFilteredHeaderMap = THashSet<TString, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer>;
+YT_DEFINE_GLOBAL(const TFilteredHeaderMap, FilteredHeaders, {
+    "transfer-encoding",
+    "content-length",
+    "connection",
+    "host",
+});
+
+YT_DEFINE_GLOBAL(const TSharedRef, Http100ContinueBuffer, TSharedRef::FromString("HTTP/1.1 100 Continue\r\n\r\n"));
+YT_DEFINE_GLOBAL(const TSharedRef, CrLfBuffer, TSharedRef::FromString("\r\n"));
+YT_DEFINE_GLOBAL(const TSharedRef, ZeroCrLfBuffer, TSharedRef::FromString("0\r\n"));
+YT_DEFINE_GLOBAL(const TSharedRef, ZeroCrLfCrLfBuffer, TSharedRef::FromString("0\r\n\r\n"));
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -225,21 +248,21 @@ struct THttpParserTag
 { };
 
 THttpInput::THttpInput(
-    const IConnectionPtr& connection,
+    IConnectionPtr connection,
     const TNetworkAddress& remoteAddress,
-    const IInvokerPtr& readInvoker,
+    IInvokerPtr readInvoker,
     EMessageType messageType,
-    const THttpIOConfigPtr& config)
-    : Connection_(connection)
+    THttpIOConfigPtr config)
+    : Connection_(std::move(connection))
     , RemoteAddress_(remoteAddress)
     , MessageType_(messageType)
-    , Config_(config)
+    , Config_(std::move(config))
+    , ReadInvoker_(std::move(readInvoker))
     , InputBuffer_(TSharedMutableRef::Allocate<THttpParserTag>(Config_->ReadBufferSize))
     , Parser_(messageType == EMessageType::Request ? HTTP_REQUEST : HTTP_RESPONSE)
-    , StartByteCount_(connection->GetReadByteCount())
-    , StartStatistics_(connection->GetReadStatistics())
+    , StartByteCount_(Connection_->GetReadByteCount())
+    , StartStatistics_(Connection_->GetReadStatistics())
     , LastProgressLogTime_(TInstant::Now())
-    , ReadInvoker_(readInvoker)
 { }
 
 std::pair<int, int> THttpInput::GetVersion()
@@ -279,7 +302,7 @@ EStatusCode THttpInput::GetStatusCode()
 const THeadersPtr& THttpInput::GetTrailers()
 {
     if (Parser_.GetState() != EParserState::MessageFinished) {
-        THROW_ERROR_EXCEPTION("Cannot access trailers while body is not fully consumed");
+        THROW_ERROR(AnnotateError(TError("Cannot access trailers while body is not fully consumed")));
     }
 
     const auto& trailers = Parser_.GetTrailers();
@@ -295,22 +318,17 @@ const TNetworkAddress& THttpInput::GetRemoteAddress() const
     return RemoteAddress_;
 }
 
-TGuid THttpInput::GetConnectionId() const
+TConnectionId THttpInput::GetConnectionId() const
 {
-    return ConnectionId_;
+    return Connection_->GetId();
 }
 
-void THttpInput::SetConnectionId(TGuid connectionId)
-{
-    ConnectionId_ = connectionId;
-}
-
-TGuid THttpInput::GetRequestId() const
+TRequestId THttpInput::GetRequestId() const
 {
     return RequestId_;
 }
 
-void THttpInput::SetRequestId(TGuid requestId)
+void THttpInput::SetRequestId(TRequestId requestId)
 {
     RequestId_ = requestId;
 }
@@ -341,6 +359,13 @@ void THttpInput::Reset()
     StartStatistics_ = Connection_->GetReadStatistics();
 }
 
+TError THttpInput::AnnotateError(const TError& error)
+{
+    return error
+        << TErrorAttribute("connection_id", Connection_->GetId())
+        << TErrorAttribute("request_id", RequestId_);
+}
+
 void THttpInput::FinishHeaders()
 {
     HeadersReceived_ = true;
@@ -355,7 +380,7 @@ void THttpInput::FinishHeaders()
 void THttpInput::EnsureHeadersReceived()
 {
     if (!ReceiveHeaders()) {
-        THROW_ERROR_EXCEPTION("Connection was closed before the first byte of HTTP message");
+        THROW_ERROR(AnnotateError(TError("Connection was closed before the first byte of HTTP message")));
     }
 }
 
@@ -366,7 +391,7 @@ bool THttpInput::ReceiveHeaders()
     }
 
     bool idleConnection = MessageType_ == EMessageType::Request;
-    TInstant start = TInstant::Now();
+    auto start = TInstant::Now();
 
     if (idleConnection) {
         Connection_->SetReadDeadline(start + Config_->ConnectionIdleTimeout);
@@ -397,7 +422,7 @@ bool THttpInput::ReceiveHeaders()
             UnconsumedData_ = Parser_.Feed(UnconsumedData_);
         } catch (const std::exception& ex) {
             if (!readResult.IsOK()) {
-                THROW_ERROR_EXCEPTION(ex) << readResult;
+                THROW_ERROR(AnnotateError(TError(ex) << readResult));
             } else {
                 throw;
             }
@@ -548,25 +573,29 @@ std::optional<TString> THttpInput::TryGetRedirectUrl()
 ////////////////////////////////////////////////////////////////////////////////
 
 THttpOutput::THttpOutput(
-    const THeadersPtr& headers,
-    const IConnectionPtr& connection,
+    THeadersPtr headers,
+    IConnectionPtr connection,
     EMessageType messageType,
-    const THttpIOConfigPtr& config)
-    : Connection_(connection)
+    THttpIOConfigPtr config)
+    : Connection_(std::move(connection))
     , MessageType_(messageType)
-    , Config_(config)
+    , Config_(std::move(config))
     , OnWriteFinish_(BIND_NO_PROPAGATE(&THttpOutput::OnWriteFinish, MakeWeak(this)))
-    , StartByteCount_(connection->GetWriteByteCount())
-    , StartStatistics_(connection->GetWriteStatistics())
+    , StartByteCount_(Connection_->GetWriteByteCount())
+    , StartStatistics_(Connection_->GetWriteStatistics())
     , LastProgressLogTime_(TInstant::Now())
-    , Headers_(headers)
+    , Headers_(std::move(headers))
 { }
 
 THttpOutput::THttpOutput(
-    const IConnectionPtr& connection,
+    IConnectionPtr connection,
     EMessageType messageType,
-    const THttpIOConfigPtr& config)
-    : THttpOutput(New<THeaders>(), connection, messageType, config)
+    THttpIOConfigPtr config)
+    : THttpOutput(
+        New<THeaders>(),
+        std::move(connection),
+        messageType,
+        std::move(config))
 { }
 
 const THeadersPtr& THttpOutput::GetHeaders()
@@ -614,6 +643,8 @@ bool THttpOutput::IsSafeToReuse() const
 
 void THttpOutput::Reset()
 {
+    RequestId_ = {};
+
     StartByteCount_ = Connection_->GetWriteByteCount();
     StartStatistics_ = Connection_->GetWriteStatistics();
     HeadersLogged_ = false;
@@ -633,12 +664,7 @@ void THttpOutput::Reset()
     Trailers_.Reset();
 }
 
-void THttpOutput::SetConnectionId(TGuid connectionId)
-{
-    ConnectionId_ = connectionId;
-}
-
-void THttpOutput::SetRequestId(TGuid requestId)
+void THttpOutput::SetRequestId(TRequestId requestId)
 {
     RequestId_ = requestId;
 }
@@ -682,7 +708,7 @@ TSharedRef THttpOutput::GetHeadersPart(std::optional<size_t> contentLength)
 
     if (contentLength) {
         if (MessageType_ == EMessageType::Response ||
-            (MessageType_ == EMessageType::Request && methodNeedsContentLength)) {
+            (MessageType_ == EMessageType::Request && (*contentLength > 0 || methodNeedsContentLength))) {
             messageHeaders << "Content-Length: " << *contentLength << "\r\n";
         }
     } else {
@@ -697,7 +723,7 @@ TSharedRef THttpOutput::GetHeadersPart(std::optional<size_t> contentLength)
         messageHeaders << "Host: " << *HostHeader_ << "\r\n";
     }
 
-    Headers_->WriteTo(&messageHeaders, &FilteredHeaders_);
+    Headers_->WriteTo(&messageHeaders, &FilteredHeaders());
 
     TString headers;
     messageHeaders.Buffer().AsString(headers);
@@ -708,7 +734,7 @@ TSharedRef THttpOutput::GetTrailersPart()
 {
     TBufferOutput messageTrailers;
 
-    Trailers_->WriteTo(&messageTrailers, &FilteredHeaders_);
+    Trailers_->WriteTo(&messageTrailers, &FilteredHeaders());
 
     TString trailers;
     messageTrailers.Buffer().AsString(trailers);
@@ -723,31 +749,31 @@ TSharedRef THttpOutput::GetChunkHeader(size_t size)
 void THttpOutput::Flush100Continue()
 {
     if (HeadersFlushed_) {
-        THROW_ERROR_EXCEPTION("Cannot send 100 Continue after headers");
+        THROW_ERROR(AnnotateError(TError("Cannot send 100 Continue after headers")));
     }
 
     Connection_->SetWriteDeadline(TInstant::Now() + Config_->WriteIdleTimeout);
-    WaitFor(Connection_->Write(Http100Continue).Apply(OnWriteFinish_))
+    WaitFor(Connection_->Write(Http100ContinueBuffer()).Apply(OnWriteFinish_))
         .ThrowOnError();
 }
 
 TFuture<void> THttpOutput::Write(const TSharedRef& data)
 {
     if (MessageFinished_) {
-        THROW_ERROR_EXCEPTION("Cannot write to finished HTTP message");
+        THROW_ERROR(AnnotateError(TError("Cannot write to finished HTTP message")));
     }
 
     std::vector<TSharedRef> writeRefs;
     if (!HeadersFlushed_) {
         HeadersFlushed_ = true;
-        writeRefs.emplace_back(GetHeadersPart(std::nullopt));
-        writeRefs.emplace_back(CrLf);
+        writeRefs.push_back(GetHeadersPart(std::nullopt));
+        writeRefs.push_back(CrLfBuffer());
     }
 
-    if (data.Size() != 0) {
-        writeRefs.emplace_back(GetChunkHeader(data.Size()));
-        writeRefs.emplace_back(data);
-        writeRefs.push_back(CrLf);
+    if (!data.Empty()) {
+        writeRefs.push_back(GetChunkHeader(data.Size()));
+        writeRefs.push_back(data);
+        writeRefs.push_back(CrLfBuffer());
     }
 
     Connection_->SetWriteDeadline(TInstant::Now() + Config_->WriteIdleTimeout);
@@ -773,16 +799,23 @@ TFuture<void> THttpOutput::Close()
     return FinishChunked();
 }
 
+TError THttpOutput::AnnotateError(const TError& error)
+{
+    return error
+        << TErrorAttribute("connection_id", Connection_->GetId())
+        << TErrorAttribute("request_id", RequestId_);
+}
+
 TFuture<void> THttpOutput::FinishChunked()
 {
     std::vector<TSharedRef> writeRefs;
 
     if (Trailers_) {
-        writeRefs.emplace_back(ZeroCrLf);
-        writeRefs.emplace_back(GetTrailersPart());
-        writeRefs.emplace_back(CrLf);
+        writeRefs.push_back(ZeroCrLfBuffer());
+        writeRefs.push_back(GetTrailersPart());
+        writeRefs.push_back(CrLfBuffer());
     } else {
-        writeRefs.emplace_back(ZeroCrLfCrLf);
+        writeRefs.push_back(ZeroCrLfCrLfBuffer());
     }
 
     MessageFinished_ = true;
@@ -794,7 +827,7 @@ TFuture<void> THttpOutput::FinishChunked()
 TFuture<void> THttpOutput::WriteBody(const TSharedRef& smallBody)
 {
     if (HeadersFlushed_ || MessageFinished_) {
-        THROW_ERROR_EXCEPTION("Cannot write body to partially flushed HTTP message");
+        THROW_ERROR(AnnotateError(TError("Cannot write body to partially flushed HTTP message")));
     }
 
     TSharedRefArray writeRefs;
@@ -803,16 +836,16 @@ TFuture<void> THttpOutput::WriteBody(const TSharedRef& smallBody)
             std::array<TSharedRef, 4>{
                 GetHeadersPart(smallBody.Size()),
                 GetTrailersPart(),
-                CrLf,
-                smallBody
+                CrLfBuffer(),
+                smallBody,
             },
             TSharedRefArray::TCopyParts{});
     } else {
         writeRefs = TSharedRefArray(
             std::array<TSharedRef, 3>{
                 GetHeadersPart(smallBody.Size()),
-                CrLf,
-                smallBody
+                CrLfBuffer(),
+                smallBody,
             },
             TSharedRefArray::TCopyParts{});
     }
@@ -859,20 +892,6 @@ void THttpOutput::OnWriteFinish()
         }
     }
 }
-
-////////////////////////////////////////////////////////////////////////////////
-
-const THashSet<TString, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer> THttpOutput::FilteredHeaders_ = {
-    "transfer-encoding",
-    "content-length",
-    "connection",
-    "host",
-};
-
-const TSharedRef THttpOutput::Http100Continue = TSharedRef::FromString("HTTP/1.1 100 Continue\r\n\r\n");
-const TSharedRef THttpOutput::CrLf = TSharedRef::FromString("\r\n");
-const TSharedRef THttpOutput::ZeroCrLf = TSharedRef::FromString("0\r\n");
-const TSharedRef THttpOutput::ZeroCrLfCrLf = TSharedRef::FromString("0\r\n\r\n");
 
 ////////////////////////////////////////////////////////////////////////////////
 

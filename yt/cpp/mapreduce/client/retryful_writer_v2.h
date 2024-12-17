@@ -18,6 +18,7 @@ class TRetryfulWriterV2
 {
 public:
     TRetryfulWriterV2(
+        const IRawClientPtr& rawClient,
         IClientRetryPolicyPtr clientRetryPolicy,
         ITransactionPingerPtr transactionPinger,
         const TClientContext& context,
@@ -31,6 +32,8 @@ public:
 
     void NotifyRowEnd() override;
     void Abort() override;
+
+    size_t GetBufferMemoryUsage() const override;
 
 protected:
     void DoWrite(const void* buf, size_t len) override;

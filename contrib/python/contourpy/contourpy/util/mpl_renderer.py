@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
 import io
+from itertools import pairwise
 from typing import TYPE_CHECKING, Any, cast
 
 import matplotlib.collections as mcollections
@@ -15,6 +15,8 @@ from contourpy.util.mpl_util import filled_to_mpl_paths, lines_to_mpl_paths
 from contourpy.util.renderer import Renderer
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure
     from numpy.typing import ArrayLike
@@ -49,14 +51,15 @@ class MplRenderer(Renderer):
         gridspec_kw: dict[str, Any] | None = None,
     ) -> None:
         if backend is not None:
-            import matplotlib
-            matplotlib.use(backend)
+            import matplotlib as mpl
+            mpl.use(backend)
 
-        kwargs: dict[str, Any] = dict(figsize=figsize, squeeze=False, sharex=True, sharey=True)
+        kwargs: dict[str, Any] = {"figsize": figsize, "squeeze": False,
+                                  "sharex": True, "sharey": True}
         if gridspec_kw is not None:
             kwargs["gridspec_kw"] = gridspec_kw
         else:
-            kwargs["subplot_kw"] = dict(aspect="equal")
+            kwargs["subplot_kw"] = {"aspect": "equal"}
 
         self._fig, axes = plt.subplots(nrows, ncols, **kwargs)
         self._axes = axes.flatten()
@@ -98,9 +101,9 @@ class MplRenderer(Renderer):
 
         Args:
             filled (sequence of arrays): Filled contour data as returned by
-                :func:`~contourpy.ContourGenerator.filled`.
-            fill_type (FillType or str): Type of ``filled`` data as returned by
-                :attr:`~contourpy.ContourGenerator.fill_type`, or string equivalent
+                :meth:`~.ContourGenerator.filled`.
+            fill_type (FillType or str): Type of :meth:`~.ContourGenerator.filled` data as returned
+                by :attr:`~.ContourGenerator.fill_type`, or string equivalent
             ax (int or Maplotlib Axes, optional): Which axes to plot on, default ``0``.
             color (str, optional): Color to plot with. May be a string color or the letter ``"C"``
                 followed by an integer in the range ``"C0"`` to ``"C9"`` to use a color from the
@@ -145,7 +148,7 @@ class MplRenderer(Renderer):
         """
         ax = self._get_ax(ax)
         x, y = self._grid_as_2d(x, y)
-        kwargs: dict[str, Any] = dict(color=color, alpha=alpha)
+        kwargs: dict[str, Any] = {"color": color, "alpha": alpha}
         ax.plot(x, y, x.T, y.T, **kwargs)
         if quad_as_tri_alpha > 0:
             # Assumes no quad mask.
@@ -175,9 +178,9 @@ class MplRenderer(Renderer):
 
         Args:
             lines (sequence of arrays): Contour line data as returned by
-                :func:`~contourpy.ContourGenerator.lines`.
-            line_type (LineType or str): Type of ``lines`` data as returned by
-                :attr:`~contourpy.ContourGenerator.line_type`, or string equivalent.
+                :meth:`~.ContourGenerator.lines`.
+            line_type (LineType or str): Type of :meth:`~.ContourGenerator.lines` data as returned
+                by :attr:`~.ContourGenerator.line_type`, or string equivalent.
             ax (int or Matplotlib Axes, optional): Which Axes to plot on, default ``0``.
             color (str, optional): Color to plot lines. May be a string color or the letter ``"C"``
                 followed by an integer in the range ``"C0"`` to ``"C9"`` to use a color from the
@@ -402,7 +405,7 @@ class MplDebugRenderer(MplRenderer):
             for points, offsets in zip(*filled):
                 if points is None:
                     continue
-                for start, end in zip(offsets[:-1], offsets[1:]):
+                for start, end in pairwise(offsets):
                     xys = points[start:end]
                     ax.plot(xys[:, 0], xys[:, 1], c=line_color, alpha=line_alpha)
 

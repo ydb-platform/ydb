@@ -1,0 +1,248 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.ydb.v1;
+
+import "google/protobuf/timestamp.proto";
+import "ydb/public/api/client/yc_private/ydb/v1/backup.proto";
+
+// YDB database.
+message Database {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    PROVISIONING = 1;
+    RUNNING = 2;
+    UPDATING = 4;
+    ERROR = 5;
+    DELETING = 6;
+    STARTING = 7;
+    STOPPED = 8;
+  }
+
+  string id = 1;
+
+  string folder_id = 2;
+
+  google.protobuf.Timestamp created_at = 3;
+
+  string name = 4;
+
+  string description = 5;
+
+  Status status = 6;
+
+  string endpoint = 8;
+  // deprecated field
+  string resource_preset_id = 9;
+  // deprecated field
+  StorageConfig storage_config = 10;
+  // deprecated field
+  ScalePolicy scale_policy = 11;
+  // deprecated field
+  string network_id = 12;
+  // deprecated field
+  repeated string subnet_ids = 13;
+
+  oneof database_type {
+    // deprecated fields
+    ZonalDatabase zonal_database = 14;
+    // deprecated fields
+    RegionalDatabase regional_database = 15;
+    DedicatedDatabase dedicated_database = 18;
+    ServerlessDatabase serverless_database = 19;
+    SharedDatabase shared_database = 100;
+  }
+  // deprecated field
+  bool assign_public_ips = 16;
+  string location_id = 17;
+  map<string, string> labels = 20;
+
+  BackupConfig backup_config = 21;
+
+  string document_api_endpoint = 22;
+
+  string kinesis_api_endpoint = 23;
+  
+  string kafka_api_endpoint = 26;
+
+  // configured monitoring config for the database.
+  MonitoringConfig monitoring_config = 24;
+
+  bool deletion_protection = 25;
+
+  ServerlessInternals serverless_internals = 101;
+  string cloud_id = 102;
+}
+
+message AlertParameter {
+  message DoubleParameterValue {
+    // Required. Parameter name
+    string name = 1;
+    // Required. Parameter value
+    double value = 2;
+  }
+
+  message IntegerParameterValue {
+    // Required. Parameter name
+    string name = 1;
+    // Required. Parameter value
+    int64 value = 2;
+  }
+
+  message TextParameterValue {
+    // Required. Parameter name
+    string name = 1;
+    // Required. Parameter value
+    string value = 2;
+  }
+
+  message TextListParameterValue {
+    // Required. Parameter name
+    string name = 1;
+    // Required. Parameter value
+    repeated string values = 2;
+  }
+
+  message LabelListParameterValue {
+    // Required. Parameter name
+    string name = 1;
+    // Required. Parameter value
+    repeated string values = 2;
+  }
+
+  oneof parameter {
+    DoubleParameterValue double_parameter_value = 1;
+    IntegerParameterValue integer_parameter_value = 2;
+    TextParameterValue text_parameter_value = 3;
+    TextListParameterValue text_list_parameter_value = 4;
+    LabelListParameterValue label_list_parameter_value = 5;
+  }
+}
+
+
+enum AlertEvaluationStatus {
+  ALERT_EVALUATION_STATUS_UNSPECIFIED = 0;
+  ALERT_EVALUATION_STATUS_OK = 1;
+  ALERT_EVALUATION_STATUS_NO_DATA = 2;
+  ALERT_EVALUATION_STATUS_ERROR = 3;
+  ALERT_EVALUATION_STATUS_ALARM = 4;
+  ALERT_EVALUATION_STATUS_WARN = 5;
+}
+
+message NotificationChannel {
+  string notification_channel_id = 1;
+
+  repeated AlertEvaluationStatus notify_about_statuses = 2;
+
+  int64 repeate_notify_delay_ms = 3;
+}
+
+message Alert {
+  // output only field.
+  string alert_id = 1;
+
+  // template of the alert.
+  string alert_template_id = 2;
+
+  // name of the alert.
+  string name = 3;
+
+  // human readable description of the alert.
+  string description = 4;
+
+  // the notification channels of the alert.
+  repeated NotificationChannel notification_channels = 5;
+
+  // alert parameters to override.
+  repeated AlertParameter alert_parameters = 6;
+
+  // alert paratemers to override.
+  repeated AlertParameter alert_thresholds = 7;
+}
+
+
+message MonitoringConfig {
+  repeated Alert alerts = 1;
+
+  // internal field.
+  string project_id = 100;
+}
+
+
+message ServerlessInternals {
+  // endpoint of ratelimiter service
+  string ratelimiter_endpoint = 1;
+  // coordination node path
+  string ratelimiter_coordination_node_path = 2;
+  // endpoint of shared endpoint
+  string shared_endpoint = 3;
+  // ratelimiter resources to consume
+  map<string, string> ratelimiter_resources = 4;
+}
+
+
+message DedicatedDatabase {
+  string resource_preset_id = 1;
+  StorageConfig storage_config = 2;
+  ScalePolicy scale_policy = 3;
+  string network_id = 4;
+  repeated string subnet_ids = 5;
+  bool assign_public_ips = 6;
+}
+
+message SharedDatabase {
+  string resource_preset_id = 1;
+  StorageConfig storage_config = 2;
+  ScalePolicy scale_policy = 3;
+  string network_id = 4;
+  repeated string subnet_ids = 5;
+  bool assign_public_ips = 6;
+}
+
+message ServerlessDatabase {
+  // Let's define 1 RU  - 1 request unit
+  // Let's define 1 RCU - 1 request capacity unit, which is 1 RU per second.
+  // If `enable_throttling_rcu_limit` flag is true, the database will be throttled using `throttling_rcu_limit` value.
+  // Otherwise, the database is throttled using the cloud quotas.
+  // If zero, all requests will be blocked until non zero value is set.
+  int64 throttling_rcu_limit = 1;
+  // Specify serverless database storage size limit. If zero, default value is applied.
+  int64 storage_size_limit = 2;
+  // If false, the database is throttled by cloud value.
+  bool enable_throttling_rcu_limit = 3;
+  // Specify the number of provisioned RCUs to pay less if the database has predictable load.
+  // You will be charged for the provisioned capacity regularly even if this capacity is not fully consumed.
+  // You will be charged for the on-demand consumption only if provisioned capacity is consumed.
+  int64 provisioned_rcu_limit = 4;
+  // write quota for topic service, defined in bytes per second.
+  int64 topic_write_quota = 5;
+}
+
+message ZonalDatabase {
+  string zone_id = 1; // [(required) = true];
+}
+
+message RegionalDatabase {
+  string region_id = 1; // [(required) = true];
+}
+
+message ScalePolicy {
+  oneof scale_type {
+    // option (exactly_one) = true;
+    FixedScale fixed_scale = 1;
+  }
+
+  message FixedScale {
+    int64 size = 1; // [(yandex.cloud.priv.value) = ">=1"];
+  }
+}
+
+message StorageConfig {
+   repeated StorageOption storage_options = 1; // [(size) = ">=1"];
+   // output only field: storage size limit of dedicated database.
+   int64 storage_size_limit = 2;
+}
+
+message StorageOption {
+  string storage_type_id = 1;
+  int64 group_count = 2;
+}

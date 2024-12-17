@@ -10,6 +10,7 @@
 #include <ydb/core/blobstorage/base/bufferwithgaps.h>
 #include <ydb/core/blobstorage/base/transparent.h>
 #include <ydb/core/blobstorage/base/batched_vec.h>
+#include <ydb/core/util/stlog.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/map.h>
 
@@ -19,6 +20,7 @@ namespace NKikimr {
 IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainKey &mainKey,
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
 
+struct TPDiskMon;
 namespace NPDisk {
 
 struct TCommitRecord {
@@ -173,7 +175,7 @@ struct TEvYardInitResult : public TEventLocal<TEvYardInitResult, TEvBlobStorage:
     TEvYardInitResult(const NKikimrProto::EReplyStatus status, const TString &errorReason)
         : Status(status)
         , StatusFlags(0)
-        , PDiskParams(new TPDiskParams(0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+        , PDiskParams(new TPDiskParams(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, DEVICE_TYPE_ROT))
         , ErrorReason(errorReason)
     {
         Y_ABORT_UNLESS(status != NKikimrProto::OK, "Single-parameter constructor is for error responses only");
@@ -183,7 +185,7 @@ struct TEvYardInitResult : public TEventLocal<TEvYardInitResult, TEvBlobStorage:
             ui64 writeSpeedBps, ui64 readBlockSize, ui64 writeBlockSize,
             ui64 bulkWriteBlockSize, ui32 chunkSize, ui32 appendBlockSize,
             TOwner owner, TOwnerRound ownerRound, TStatusFlags statusFlags, TVector<TChunkIdx> ownedChunks,
-            const TString &errorReason)
+            EDeviceType trueMediaType, const TString &errorReason)
         : Status(status)
         , StatusFlags(statusFlags)
         , PDiskParams(new TPDiskParams(
@@ -196,8 +198,8 @@ struct TEvYardInitResult : public TEventLocal<TEvYardInitResult, TEvBlobStorage:
                     writeSpeedBps,
                     readBlockSize,
                     writeBlockSize,
-                    bulkWriteBlockSize
-                    ))
+                    bulkWriteBlockSize,
+                    trueMediaType))
         , OwnedChunks(std::move(ownedChunks))
         , ErrorReason(errorReason)
     {}
@@ -451,6 +453,9 @@ struct TEvReadLogResult : public TEventLocal<TEvReadLogResult, TEvBlobStorage::E
     TLogPosition Position;
     TLogPosition NextPosition;
     bool IsEndOfLog;
+    ui32 LastGoodChunkIdx = 0;
+    ui64 LastGoodSectorIdx = 0;
+
     TStatusFlags StatusFlags;
     TString ErrorReason;
     TOwner Owner;
@@ -974,38 +979,12 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
     class TBufBackedUpParts : public IParts {
     public:
         TBufBackedUpParts(TTrackableBuffer &&buf)
-            : Buffers({std::move(buf)})
+            : Buffer(std::move(buf))
         {}
 
         virtual TDataRef operator[] (ui32 i) const override {
-            Y_DEBUG_ABORT_UNLESS(i < Buffers.size());
-            return TDataRef(Buffers[i].Data(), Buffers[i].Size());
-        }
-
-        virtual ui32 Size() const override {
-            return Buffers.size();
-        }
-
-        void AppendBuffer(TTrackableBuffer&& buffer) {
-            Buffers.push_back(std::move(buffer));
-        }
-
-    private:
-        TVector<TTrackableBuffer> Buffers;
-    };
-
-    ///////////////////// TStrokaBackedUpParts //////////////////////////////
-    class TStrokaBackedUpParts : public IParts {
-    public:
-        TStrokaBackedUpParts(TString &buf)
-            : Buf()
-        {
-            Buf.swap(buf);
-        }
-
-        virtual TDataRef operator[] (ui32 i) const override {
             Y_DEBUG_ABORT_UNLESS(i == 0);
-            return TDataRef(Buf.data(), (ui32)Buf.size());
+            return TDataRef(Buffer.Data(), Buffer.Size());
         }
 
         virtual ui32 Size() const override {
@@ -1013,7 +992,7 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
         }
 
     private:
-        TString Buf;
+        TTrackableBuffer Buffer;
     };
 
     ///////////////////// TAlignedParts //////////////////////////////
@@ -1022,6 +1001,11 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
         size_t FullSize;
 
     public:
+        TAlignedParts(TString&& data)
+            : Data(std::move(data))
+            , FullSize(Data.size())
+        {}
+
         TAlignedParts(TString&& data, size_t fullSize)
             : Data(std::move(data))
             , FullSize(fullSize)
@@ -1044,7 +1028,7 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
         }
     };
 
-    ///////////////////// TAlignedParts //////////////////////////////
+    ///////////////////// TRopeAlignedParts //////////////////////////////
     class TRopeAlignedParts : public IParts {
         TRope Data; // we shall keep the rope here to prevent it from being freed
         TVector<TDataRef> Refs;
@@ -1319,9 +1303,11 @@ struct TEvCheckSpaceResult : public TEventLocal<TEvCheckSpaceResult, TEvBlobStor
     ui32 NumSlots; // number of VSlots over PDisk
     double Occupancy = 0;
     TString ErrorReason;
+    TStatusFlags LogStatusFlags;
 
     TEvCheckSpaceResult(NKikimrProto::EReplyStatus status, TStatusFlags statusFlags, ui32 freeChunks,
-            ui32 totalChunks, ui32 usedChunks, ui32 numSlots, const TString &errorReason)
+            ui32 totalChunks, ui32 usedChunks, ui32 numSlots, const TString &errorReason,
+            TStatusFlags logStatusFlags = {})
         : Status(status)
         , StatusFlags(statusFlags)
         , FreeChunks(freeChunks)
@@ -1329,6 +1315,7 @@ struct TEvCheckSpaceResult : public TEventLocal<TEvCheckSpaceResult, TEvBlobStor
         , UsedChunks(usedChunks)
         , NumSlots(numSlots)
         , ErrorReason(errorReason)
+        , LogStatusFlags(logStatusFlags)
     {}
 
     TString ToString() const {
@@ -1340,6 +1327,7 @@ struct TEvCheckSpaceResult : public TEventLocal<TEvCheckSpaceResult, TEvBlobStor
         str << " UsedChunks# " << UsedChunks;
         str << " NumSlots# " << NumSlots;
         str << " ErrorReason# \"" << ErrorReason << "\"";
+        str << " LogStatusFlags# " << StatusFlagsToString(LogStatusFlags);
         str << "}";
         return str.Str();
     }
@@ -1521,8 +1509,9 @@ struct TEvReadMetadataResult : TEventLocal<TEvReadMetadataResult, TEvBlobStorage
     TRcBuf Metadata;
     std::optional<ui64> PDiskGuid;
 
-    TEvReadMetadataResult(EPDiskMetadataOutcome outcome)
+    TEvReadMetadataResult(EPDiskMetadataOutcome outcome, std::optional<ui64> pdiskGuid)
         : Outcome(outcome)
+        , PDiskGuid(pdiskGuid)
     {}
 
     TEvReadMetadataResult(TRcBuf&& metadata, std::optional<ui64> pdiskGuid)
@@ -1550,6 +1539,38 @@ struct TEvWriteMetadataResult : TEventLocal<TEvWriteMetadataResult, TEvBlobStora
     {}
 };
 
+
+/*
+ * One common context in the PDisk's world.
+ * It should only contain things that are used in each of the PDisk's component.
+ * Since it is used from multiple threads it's build once
+ * in TPDiskActor::Boorstrap and never changed
+ */
+struct TPDiskCtx {
+    TActorSystem * const ActorSystem = nullptr;
+    const ui32 PDiskId = 0;
+    const TActorId PDiskActor;
+    // TPDiskMon * const Mon = nullptr; TODO implement it
+
+    TPDiskCtx() = default;
+
+    TPDiskCtx(TActorSystem *actorSystem)
+        : ActorSystem(actorSystem)
+    {}
+
+    TPDiskCtx(TActorSystem *actorSystem, ui32 pdiskId, TActorId pdiskActor)
+        : ActorSystem(actorSystem)
+        , PDiskId(pdiskId)
+        , PDiskActor(pdiskActor)
+    {}
+};
+
+#define P_LOG(LEVEL, MARKER, ...) \
+    do { \
+        if (PCtx && PCtx->ActorSystem) { \
+            STLOGX(*PCtx->ActorSystem, LEVEL, BS_PDISK, MARKER, __VA_ARGS__, (PDiskId, PCtx->PDiskId)); \
+        } \
+    } while (false)
+
 } // NPDisk
 } // NKikimr
-

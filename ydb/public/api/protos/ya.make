@@ -11,12 +11,20 @@ SRCS(
     draft/fq.proto
     draft/persqueue_common.proto
     draft/persqueue_error_codes.proto
-    draft/ydb_maintenance.proto
-    draft/ydb_logstore.proto
+    draft/ydb_backup.proto
     draft/ydb_dynamic_config.proto
+    draft/ydb_logstore.proto
+    draft/ydb_maintenance.proto
+    draft/ydb_object_storage.proto
+    draft/ydb_replication.proto
+    draft/ydb_tablet.proto
+    draft/ydb_view.proto
+    draft/ymq.proto
+    draft/field_transformation.proto
     ydb_federation_discovery.proto
     persqueue_error_codes_v1.proto
     ydb_auth.proto
+    ydb_debug.proto
     ydb_persqueue_v1.proto
     ydb_persqueue_cluster_discovery.proto
     ydb_clickhouse_internal.proto
@@ -40,6 +48,7 @@ SRCS(
     ydb_topic.proto
     ydb_value.proto
     ydb_keyvalue.proto
+    ydb_bsconfig.proto
 )
 
 CPP_PROTO_PLUGIN0(validation ydb/public/lib/validation)

@@ -34,19 +34,60 @@ public:
 
     struct TExtractorsMap : public THashMap<NTable::TTag, TExtractor> {
         TExtractorsMap() {
-            insert({TSchema::NodeId::ColumnId, [] (const TNodeInfo&, ui32 nodeId) {
+            insert({TSchema::SessionId::ColumnId, [] (const TNodeInfo& info, ui32) {  // 1
+                return TCell(info.GetSessionId().data(), info.GetSessionId().size());
+            }});
+
+            insert({TSchema::NodeId::ColumnId, [] (const TNodeInfo&, ui32 nodeId) { // 2
                 return TCell::Make<ui32>(nodeId);
             }});
 
-            insert({TSchema::SessionId::ColumnId, [] (const TNodeInfo& info, ui32) {
-                return TCell(info.GetSessionId().data(), info.GetSessionId().size());
-            }});
-            insert({TSchema::QueryText::ColumnId, [] (const TNodeInfo& info, ui32) {
-                return TCell(info.GetQueryText().data(), info.GetQueryText().size());
+            insert({TSchema::State::ColumnId, [] (const TNodeInfo& info, ui32) {  // 3
+                return TCell(info.GetState().data(), info.GetState().size());
             }});
 
-            insert({TSchema::Status::ColumnId, [] (const TNodeInfo& info, ui32) {
-                return TCell(info.GetStatus().data(), info.GetStatus().size());
+            insert({TSchema::Query::ColumnId, [] (const TNodeInfo& info, ui32) {  // 4
+                return TCell(info.GetQuery().data(), info.GetQuery().size());
+            }});
+
+            insert({TSchema::QueryCount::ColumnId, [] (const TNodeInfo& info, ui32) { // 5
+                return TCell::Make<ui32>(info.GetQueryCount());
+            }});
+
+            insert({TSchema::ClientAddress::ColumnId, [] (const TNodeInfo& info, ui32) {  // 6
+                return TCell(info.GetClientAddress().data(), info.GetClientAddress().size());
+            }});
+
+            insert({TSchema::ClientPID::ColumnId, [] (const TNodeInfo& info, ui32) {  // 7
+                return TCell(info.GetClientPID().data(), info.GetClientPID().size());
+            }});
+
+            insert({TSchema::ClientUserAgent::ColumnId, [] (const TNodeInfo& info, ui32) {  //8
+                return TCell(info.GetClientUserAgent().data(), info.GetClientUserAgent().size());
+            }});
+
+            insert({TSchema::ClientSdkBuildInfo::ColumnId, [] (const TNodeInfo& info, ui32) {  // 9
+                return TCell(info.GetClientSdkBuildInfo().data(), info.GetClientSdkBuildInfo().size());
+            }});
+
+            insert({TSchema::ApplicationName::ColumnId, [] (const TNodeInfo& info, ui32) {  // 10
+                return TCell(info.GetApplicationName().data(), info.GetApplicationName().size());
+            }});
+
+            insert({TSchema::SessionStartAt::ColumnId, [] (const TNodeInfo& info, ui32) {  // 11
+                return TCell::Make<ui64>(info.GetSessionStartAt());
+            }});
+
+            insert({TSchema::QueryStartAt::ColumnId, [] (const TNodeInfo& info, ui32) {  // 12
+                return info.GetQueryStartAt() ? TCell::Make<ui64>(info.GetQueryStartAt()) : TCell();
+            }});
+
+            insert({TSchema::StateChangeAt::ColumnId, [] (const TNodeInfo& info, ui32) {  // 13
+                return info.GetStateChangeAt() ? TCell::Make<ui64>(info.GetStateChangeAt()) : TCell();
+            }});
+
+            insert({TSchema::UserSID::ColumnId, [] (const TNodeInfo& info, ui32) {   // 14
+                return TCell(info.GetUserSID().data(), info.GetUserSID().size());
             }});
         }
     };
@@ -137,6 +178,7 @@ private:
             const auto& nodeId = PendingNodes.front();
             auto kqpProxyId = NKqp::MakeKqpProxyID(nodeId);
             auto req = std::make_unique<NKikimr::NKqp::TEvKqp::TEvListSessionsRequest>();
+            req->Record.SetTenantName(TenantName);
             if (!ContinuationToken.empty()) {
                 req->Record.SetSessionIdStart(ContinuationToken);
                 req->Record.SetSessionIdStartInclusive(true);

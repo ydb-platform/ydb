@@ -28,7 +28,7 @@ IFairShareActionQueuePtr CreateFairShareActionQueue(
     const TString& threadName,
     const std::vector<TString>& queueNames,
     const THashMap<TString, std::vector<TString>>& bucketToQueues = {},
-    NProfiling::IRegistryImplPtr registry = {});
+    NProfiling::IRegistryPtr registry = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -47,7 +47,7 @@ template <typename EQueue, typename EBucket = EQueue>
 IEnumIndexedFairShareActionQueuePtr<EQueue> CreateEnumIndexedFairShareActionQueue(
     const TString& threadName,
     const THashMap<EBucket, std::vector<EQueue>>& bucketToQueues = {},
-    NProfiling::IRegistryImplPtr registry = {});
+    NProfiling::IRegistryPtr registry = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,7 +1,7 @@
 #include "service_table.h"
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/base/flow_control.h>
 
-#include "rpc_common/rpc_common.h"
 #include "rpc_kqp_base.h"
 #include "service_table.h"
 
@@ -16,6 +16,8 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+
+#include <ydb/core/protos/stream.pb.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -153,7 +155,7 @@ public:
 
     TStreamExecuteScanQueryRPC(TEvStreamExecuteScanQueryRequest* request, ui64 rpcBufferSize)
         : Request_(request)
-        , RpcBufferSize_(rpcBufferSize) {}
+        , FlowControl_(rpcBufferSize) {}
 
     void Bootstrap(const TActorContext &ctx) {
         this->Become(&TStreamExecuteScanQueryRPC::StateWork);
@@ -189,7 +191,6 @@ private:
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
-            HFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, Handle);
             default: {
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, TStringBuilder()
                     << "Unexpected event received in TStreamExecuteScanQueryRPC::StateWork: " << ev->GetTypeRewrite());
@@ -248,37 +249,33 @@ private:
     void Handle(TRpcServices::TEvGrpcNextReply::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " NextReply"
             << ", left: " << ev->Get()->LeftInQueue
-            << ", queue: " << GRpcResponsesSizeQueue_.size()
-            << ", used memory: " << GRpcResponsesSize_
-            << ", buffer size: " << RpcBufferSize_);
+            << ", queue: " << FlowControl_.QueueSize()
+            << ", inflight bytes: " << FlowControl_.InflightBytes()
+            << ", limit bytes: " << FlowControl_.InflightLimitBytes());
 
-        while (GRpcResponsesSizeQueue_.size() > ev->Get()->LeftInQueue) {
-            GRpcResponsesSize_ -= GRpcResponsesSizeQueue_.front();
-            GRpcResponsesSizeQueue_.pop();
+        while (FlowControl_.QueueSize() > ev->Get()->LeftInQueue) {
+            FlowControl_.PopResponse();
         }
-        Y_DEBUG_ABORT_UNLESS(GRpcResponsesSizeQueue_.empty() == (GRpcResponsesSize_ == 0));
+
         LastDataStreamTimestamp_ = TAppData::TimeProvider->Now();
 
-        if (WaitOnSeqNo_ && RpcBufferSize_ > GRpcResponsesSize_) {
-            ui64 freeSpace = RpcBufferSize_ - GRpcResponsesSize_;
-
+        const i64 freeSpaceBytes = FlowControl_.FreeSpaceBytes();
+        if (freeSpaceBytes > 0 && LastSeqNo_ && AckedFreeSpaceBytes_ <= 0) {
             LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " Send stream data ack"
-                << ", seqNo: " << *WaitOnSeqNo_
-                << ", freeSpace: " << freeSpace
+                << ", seqNo: " << *LastSeqNo_
+                << ", freeSpace: " << freeSpaceBytes
                 << ", to: " << ExecuterActorId_);
 
-            auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-            resp->Record.SetSeqNo(*WaitOnSeqNo_);
-            resp->Record.SetFreeSpace(freeSpace);
-
+            // scan query has single result set, so it's ok to put zero as channelId here.
+            auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo_, 0);
+            resp->Record.SetFreeSpace(freeSpaceBytes);
             ctx.Send(ExecuterActorId_, resp.Release());
-
-            WaitOnSeqNo_.Clear();
+            AckedFreeSpaceBytes_ = freeSpaceBytes;
         }
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
-        auto& record = ev->Get()->Record.GetRef();
+        auto& record = ev->Get()->Record;
 
         NYql::TIssues issues;
         const auto& issueMessage = record.GetResponse().GetQueryIssues();
@@ -297,16 +294,12 @@ private:
 
             if (reportStats) {
                 if (kqpResponse.HasQueryStats()) {
-                    for (const auto& execStats: ExecutionProfiles_) {
-                        record.MutableResponse()->MutableQueryStats()->AddExecutions()->Swap(execStats.get());
-                    }
 
                     record.MutableResponse()->SetQueryPlan(reportPlan
                         ? SerializeAnalyzePlan(kqpResponse.GetQueryStats())
                         : "");
 
                     FillQueryStats(*response.mutable_result()->mutable_query_stats(), kqpResponse);
-                    ExecutionProfiles_.clear();
                 } else if (reportPlan) {
                     response.mutable_result()->mutable_query_stats()->set_query_plan(kqpResponse.GetQueryPlan());
                 }
@@ -325,6 +318,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
+
         auto& record = ev->Get()->Record;
         NYql::TIssues issues = ev->Get()->GetIssues();
 
@@ -347,42 +341,23 @@ private:
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
 
-        GRpcResponsesSizeQueue_.push(out.size());
-        GRpcResponsesSize_ += out.size();
+        FlowControl_.PushResponse(out.size());
+        const i64 freeSpaceBytes = FlowControl_.FreeSpaceBytes();
+        LastSeqNo_ = ev->Get()->Record.GetSeqNo();
+        AckedFreeSpaceBytes_ = freeSpaceBytes;
 
         Request_->SendSerializedResult(std::move(out), StatusIds::SUCCESS);
 
-        ui64 freeSpace = GRpcResponsesSize_ < RpcBufferSize_
-            ? RpcBufferSize_ - GRpcResponsesSize_
-            : 0;
-
-        if (freeSpace == 0) {
-            WaitOnSeqNo_ = ev->Get()->Record.GetSeqNo();
-        }
-
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " Send stream data ack"
             << ", seqNo: " << ev->Get()->Record.GetSeqNo()
-            << ", freeSpace: " << freeSpace
+            << ", freeSpace: " << freeSpaceBytes
             << ", to: " << ev->Sender
-            << ", queue: " << GRpcResponsesSizeQueue_.size());
+            << ", queue: " << FlowControl_.QueueSize());
 
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-        resp->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
-        resp->Record.SetFreeSpace(freeSpace);
+        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
+        resp->Record.SetFreeSpace(freeSpaceBytes);
 
         ctx.Send(ev->Sender, resp.Release());
-    }
-
-    void Handle(NKqp::TEvKqpExecuter::TEvStreamProfile::TPtr& ev, const TActorContext&) {
-        auto req = Request_->GetProtoRequest();
-        if (!NeedReportStats(*req)) {
-            return;
-        }
-
-        // every TKqpExecuter sends its own profile
-        auto profile = std::make_unique<NYql::NDqProto::TDqExecutionStats>();
-        profile->Swap(ev->Get()->Record.MutableProfile());
-        ExecutionProfiles_.emplace_back(std::move(profile));
     }
 
 private:
@@ -409,9 +384,9 @@ private:
         TInstant now = TAppData::TimeProvider->Now();
         TDuration timeout;
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Got timeout event, InactiveClientTimeout: " << InactiveClientTimeout_
-            << " GRpcResponsesSizeQueue: " << GRpcResponsesSizeQueue_.size());
+            << " GRpcResponsesSizeQueue: " << FlowControl_.QueueSize());
 
-        if (InactiveClientTimeout_ && GRpcResponsesSizeQueue_.size() > 0) {
+        if (InactiveClientTimeout_ && FlowControl_.QueueSize() > 0) {
             TDuration processTime = now - LastDataStreamTimestamp_;
             if (processTime >= InactiveClientTimeout_) {
                 auto message = TStringBuilder() << this->SelfId() << " Client cannot process data in " << processTime
@@ -475,27 +450,31 @@ private:
 
 private:
     std::shared_ptr<TEvStreamExecuteScanQueryRequest> Request_;
-    const ui64 RpcBufferSize_;
+    TRpcFlowControlState FlowControl_;
+    TMaybe<ui64> LastSeqNo_;
+    i64 AckedFreeSpaceBytes_ = 0;
 
     TDuration InactiveClientTimeout_;
-    TQueue<ui64> GRpcResponsesSizeQueue_;
-    ui64 GRpcResponsesSize_ = 0;
     TInstant LastDataStreamTimestamp_;
-    TMaybe<ui64> WaitOnSeqNo_;
 
     TSchedulerCookieHolder TimeoutTimerCookieHolder_;
 
-    TVector<std::unique_ptr<NYql::NDqProto::TDqExecutionStats>> ExecutionProfiles_;
     TActorId ExecuterActorId_;
 };
 
 } // namespace
 
-void DoExecuteScanQueryRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
-    ui64 rpcBufferSize = f.GetChannelBufferSize();
-    auto* req = dynamic_cast<TEvStreamExecuteScanQueryRequest*>(p.release());
+template<>
+template<>
+IActor* TEvStreamExecuteScanQueryRequest::CreateRpcActor(IRequestNoOpCtx* msg, ui64 rpcBufferSize) {
+    auto* req = dynamic_cast<TEvStreamExecuteScanQueryRequest*>(msg);
     Y_ABORT_UNLESS(req != nullptr, "Wrong using of TGRpcRequestWrapper");
-    f.RegisterActor(new TStreamExecuteScanQueryRPC(req, rpcBufferSize));
+    return new TStreamExecuteScanQueryRPC(req, rpcBufferSize);
+}
+
+void DoExecuteScanQueryRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    auto actor = TEvStreamExecuteScanQueryRequest::CreateRpcActor(p.release(), f.GetChannelBufferSize());
+    f.RegisterActor(actor);
 }
 
 } // namespace NGRpcService

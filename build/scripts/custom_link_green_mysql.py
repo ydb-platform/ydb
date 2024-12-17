@@ -1,3 +1,4 @@
+from __future__ import print_function
 import os
 import shutil
 import subprocess
@@ -91,7 +92,7 @@ def main():
         name = os.path.basename(sys.argv[0])
         command = ' '.join(args)
         message = '{name} failed: {error}\nCommand line: {command}'
-        print >> sys.stderr, message.format(**locals())
+        print(message.format(**locals()), file=sys.stderr)
 
 
 if __name__ == '__main__':

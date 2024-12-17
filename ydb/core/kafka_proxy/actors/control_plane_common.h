@@ -292,10 +292,6 @@ public:
         return DummyAuditLogParts;
     };
 
-    google::protobuf::Message* GetRequestMut() override {
-        return nullptr;
-    };
-
     void SetRuHeader(ui64 ru) override {
         Y_UNUSED(ru);
     };
@@ -347,14 +343,6 @@ public:
             const google::protobuf::RepeatedPtrField<NKikimr::NGRpcService::TYdbIssueMessageType>& message) override {
 
         Y_UNUSED(result);
-        Y_UNUSED(message);
-        ProcessYdbStatusCode(status);
-    };
-
-    void SendResult(
-            Ydb::StatusIds::StatusCode status,
-            const google::protobuf::RepeatedPtrField<NKikimr::NGRpcService::TYdbIssueMessageType>& message) override {
-
         Y_UNUSED(message);
         ProcessYdbStatusCode(status);
     };

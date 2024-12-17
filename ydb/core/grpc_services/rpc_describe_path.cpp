@@ -65,8 +65,12 @@ private:
             return SendProposeRequest(ctx, this->GetProtoRequest()->path());
         }
 
-        if (entry.Kind != TSchemeCacheNavigate::EKind::KindCdcStream) {
-            return SendProposeRequest(ctx, this->GetProtoRequest()->path());
+        switch (entry.Kind) {
+            case TSchemeCacheNavigate::EKind::KindCdcStream:
+            case TSchemeCacheNavigate::EKind::KindIndex:
+                break;
+            default:
+                return SendProposeRequest(ctx, this->GetProtoRequest()->path());
         }
 
         if (!entry.Self || !entry.ListNodeEntry) {
@@ -79,10 +83,10 @@ private:
         }
 
         OverrideName = entry.Self->Info.GetName();
-        const auto& topicName = entry.ListNodeEntry->Children.at(0).Name;
+        const auto& childName = entry.ListNodeEntry->Children.at(0).Name;
 
         return SendProposeRequest(ctx,
-            NKikimr::JoinPath(NKikimr::ChildPath(NKikimr::SplitPath(this->GetProtoRequest()->path()), topicName)));
+            NKikimr::JoinPath(NKikimr::ChildPath(NKikimr::SplitPath(this->GetProtoRequest()->path()), childName)));
     }
 
     void SendProposeRequest(const TActorContext& ctx, const TString& path) {
@@ -160,6 +164,11 @@ public:
 
 void DoListDirectoryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TListDirectoryRPC(p.release()));
+}
+
+template<>
+IActor* TEvListDirectoryRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TListDirectoryRPC(msg);
 }
 
 void DoDescribePathRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {

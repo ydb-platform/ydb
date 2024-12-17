@@ -86,6 +86,10 @@ static void FillDefaultParameters(NConfig::TCheckpointCoordinatorConfig& checkpo
         limits.SetMaxTaskStateSizeBytes(1099511627776);
     }
 
+    if (!limits.GetMaxRowSizeBytes()) {
+        limits.SetMaxRowSizeBytes(MaxYdbStringValueLength);
+    }
+
     if (!checkpointCoordinatorConfig.GetStorage().GetToken() && checkpointCoordinatorConfig.GetStorage().GetOAuthFile()) {
         checkpointCoordinatorConfig.MutableStorage()->SetToken(StripString(TFileInput(checkpointCoordinatorConfig.GetStorage().GetOAuthFile()).ReadAll()));
     }
@@ -115,7 +119,7 @@ void TStorageProxy::Bootstrap() {
         LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint storage: " << issues.ToOneLineString());
     }
 
-    StateStorage = NewYdbStateStorage(StorageConfig, CredentialsProviderFactory, YqSharedResources);
+    StateStorage = NewYdbStateStorage(Config, CredentialsProviderFactory, YqSharedResources);
     issues = StateStorage->Init().GetValueSync();
     if (!issues.Empty()) {
         LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint state storage: " << issues.ToOneLineString());
@@ -257,6 +261,7 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCompleteCheckpointRequest::T
                 coordinatorId = event->CoordinatorId,
                 cookie = ev->Cookie,
                 sender = ev->Sender,
+                type = event->Type,
                 gcEnabled = Config.GetCheckpointGarbageConfig().GetEnabled(),
                 actorGC = ActorGC,
                 actorSystem = TActivationContext::ActorSystem()]
@@ -268,7 +273,7 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCompleteCheckpointRequest::T
             } else {
                 LOG_STREAMS_STORAGE_SERVICE_AS_INFO(*actorSystem, "[" << coordinatorId << "] [" << checkpointId << "] Status updated to 'Completed'")
                 if (gcEnabled) {
-                    auto request = std::make_unique<TEvCheckpointStorage::TEvNewCheckpointSucceeded>(coordinatorId, checkpointId);
+                    auto request = std::make_unique<TEvCheckpointStorage::TEvNewCheckpointSucceeded>(coordinatorId, checkpointId, type);
                     LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*actorSystem, "[" << coordinatorId << "] [" << checkpointId << "] Send TEvNewCheckpointSucceeded")
                     actorSystem->Send(actorGC, request.release(), 0);
                 }
@@ -342,14 +347,13 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvSaveTaskState::TPtr& ev) 
                 taskId = event->TaskId,
                 cookie = ev->Cookie,
                 sender = ev->Sender,
-                stateSize = stateSize,
-                actorSystem = TActivationContext::ActorSystem()](const NThreading::TFuture<NYql::TIssues>& futureResult) {
+                actorSystem = TActivationContext::ActorSystem()](const NThreading::TFuture<IStateStorage::TSaveStateResult>& futureResult) {
             LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*actorSystem, "[" << graphId << "] [" << checkpointId << "] TEvSaveTaskState Apply: task: " << taskId)
-            const auto& issues = futureResult.GetValue();
+            const auto& issues = futureResult.GetValue().second;
             auto response = std::make_unique<NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult>();
             response->Record.MutableCheckpoint()->SetGeneration(checkpointId.CoordinatorGeneration);
             response->Record.MutableCheckpoint()->SetId(checkpointId.SeqNo);
-            response->Record.SetStateSizeBytes(stateSize);
+            response->Record.SetStateSizeBytes(futureResult.GetValue().first);
             response->Record.SetTaskId(taskId);
 
             if (issues) {

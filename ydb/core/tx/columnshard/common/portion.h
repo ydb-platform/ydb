@@ -17,8 +17,12 @@ class TSpecialColumns {
 public:
     static constexpr const char* SPEC_COL_PLAN_STEP = "_yql_plan_step";
     static constexpr const char* SPEC_COL_TX_ID = "_yql_tx_id";
-    static const ui32 SPEC_COL_PLAN_STEP_INDEX = 0xffffff00;
-    static const ui32 SPEC_COL_TX_ID_INDEX = SPEC_COL_PLAN_STEP_INDEX + 1;
+    static constexpr const char* SPEC_COL_WRITE_ID = "_yql_write_id";
+    static constexpr const char* SPEC_COL_DELETE_FLAG = "_yql_delete_flag";
+    static constexpr const ui32 SPEC_COL_PLAN_STEP_INDEX = 0xffffff00;
+    static constexpr const ui32 SPEC_COL_TX_ID_INDEX = SPEC_COL_PLAN_STEP_INDEX + 1;
+    static constexpr const ui32 SPEC_COL_WRITE_ID_INDEX = SPEC_COL_PLAN_STEP_INDEX + 2;
+    static constexpr const ui32 SPEC_COL_DELETE_FLAG_INDEX = SPEC_COL_PLAN_STEP_INDEX + 3;
 };
 
 }

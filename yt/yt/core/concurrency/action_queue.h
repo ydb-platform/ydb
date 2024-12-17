@@ -4,6 +4,8 @@
 
 #include <yt/yt/core/actions/callback.h>
 
+#include <yt/yt/core/logging/public.h>
+
 #include <yt/yt/library/profiling/public.h>
 #include <yt/yt/library/profiling/tag.h>
 
@@ -43,12 +45,12 @@ DEFINE_REFCOUNTED_TYPE(TActionQueue)
 IInvokerPtr CreateSerializedInvoker(
     IInvokerPtr underlyingInvoker,
     const TString& invokerName = "default",
-    NProfiling::IRegistryImplPtr registry = nullptr);
+    NProfiling::IRegistryPtr registry = nullptr);
 
 IInvokerPtr CreateSerializedInvoker(
     IInvokerPtr underlyingInvoker,
     const NProfiling::TTagSet& tagSet,
-    NProfiling::IRegistryImplPtr registry = nullptr);
+    NProfiling::IRegistryPtr registry = nullptr);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -59,12 +61,12 @@ IInvokerPtr CreateSerializedInvoker(
 IPrioritizedInvokerPtr CreatePrioritizedInvoker(
     IInvokerPtr underlyingInvoker,
     const TString& invokerName = "default",
-    NProfiling::IRegistryImplPtr registry = nullptr);
+    NProfiling::IRegistryPtr registry = nullptr);
 
 IPrioritizedInvokerPtr CreatePrioritizedInvoker(
     IInvokerPtr underlyingInvoker,
     const NProfiling::TTagSet& tagSet,
-    NProfiling::IRegistryImplPtr registry = nullptr);
+    NProfiling::IRegistryPtr registry = nullptr);
 
 //! Creates a wrapper around IInvoker that implements IPrioritizedInvoker but
 //! does not perform any actual reordering. Priorities passed to #IPrioritizedInvoker::Invoke
@@ -82,7 +84,7 @@ IInvokerPtr CreateFixedPriorityInvoker(
 //! Creates an invoker that executes all callbacks in the
 //! context of #underlyingInvoker allowing up to #maxConcurrentInvocations
 //! outstanding requests to the latter.
-IInvokerPtr CreateBoundedConcurrencyInvoker(
+IBoundedConcurrencyInvokerPtr CreateBoundedConcurrencyInvoker(
     IInvokerPtr underlyingInvoker,
     int maxConcurrentInvocations);
 
@@ -92,11 +94,12 @@ ISuspendableInvokerPtr CreateSuspendableInvoker(IInvokerPtr underlyingInvoker);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Creates an invoker that creates a codicil guard with a given string before each
-//! callback invocation.
-IInvokerPtr CreateCodicilGuardedInvoker(
+//! Creates an invoker that emits warning into #logger when callback executes
+//! longer than #threshold without interruptions.
+IInvokerPtr CreateWatchdogInvoker(
     IInvokerPtr underlyingInvoker,
-    TString codicil);
+    const NLogging::TLogger& logger,
+    TDuration threshold);
 
 ////////////////////////////////////////////////////////////////////////////////
 

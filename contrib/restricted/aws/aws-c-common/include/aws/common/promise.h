@@ -8,12 +8,17 @@
 
 #include <aws/common/common.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 /*
  * Standard promise interface. Promise can be waited on by multiple threads, and as long as it is
  * ref-counted correctly, will provide the resultant value/error code to all waiters.
  * All promise API calls are internally thread-safe.
  */
 struct aws_promise;
+
+AWS_EXTERN_C_BEGIN
+
 /*
  * Creates a new promise
  */
@@ -91,5 +96,8 @@ void *aws_promise_value(struct aws_promise *promise);
  */
 AWS_COMMON_API
 void *aws_promise_take_value(struct aws_promise *promise);
+
+AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif // AWS_COMMON_PROMISE_H

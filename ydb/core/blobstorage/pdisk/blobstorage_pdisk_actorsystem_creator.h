@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/library/services/services.pb.h>
 

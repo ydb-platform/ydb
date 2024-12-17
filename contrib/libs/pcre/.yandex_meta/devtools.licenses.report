@@ -1,0 +1,351 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+SKIP     LicenseRef-scancode-pcre AND BSD-3-Clause 097b48a9b1aaa62de087c91ca588596c
+BELONGS ya.make
+    # changelog
+    License text:
+        24. Changed the PCRE licence to be the more standard "BSD" licence.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-pcre
+        Score           : 11.00
+        Match type      : REFERENCE
+        Links           : http://www.pcre.org/licence.txt, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/pcre.LICENSE
+    Files with this license:
+        ChangeLog [4772:4772]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        ChangeLog [4772:4772]
+
+KEEP     Public-Domain        18645a531a9d976f5e74253296440788
+BELONGS ya.make
+    License text:
+        in the testdata directory is not copyrighted and is in the public domain.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENCE [10:10]
+
+KEEP     PCRE                 284428f37f95a7afd7ab8de1885e8cdb
+BELONGS ya.make
+FILE_INCLUDE LICENCE found in files: LICENCE at line 1
+    License text:
+        PCRE LICENCE
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-pcre
+        Score           : 11.00
+        Match type      : REFERENCE
+        Links           : http://www.pcre.org/licence.txt, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/pcre.LICENSE
+    Files with this license:
+        LICENCE [1:1]
+
+SKIP     GPL-1.0-or-later     3678b29d3643ef75c6842943acf50d72
+BELONGS ya.make
+    # our pcre does not contain libreadline
+    License text:
+          Note that libreadline is GPL-licenced, so if you distribute a binary of
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        README [401:401]
+
+KEEP     BSD-3-Clause         5276af3fc24d12afb931e0faed359b1b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        pcre.h [11:35]
+        pcre16_byte_order.c [12:36]
+        pcre16_chartables.c [12:36]
+        pcre16_compile.c [12:36]
+        pcre16_config.c [12:36]
+        pcre16_dfa_exec.c [12:36]
+        pcre16_exec.c [12:36]
+        pcre16_fullinfo.c [12:36]
+        pcre16_get.c [12:36]
+        pcre16_globals.c [12:36]
+        pcre16_jit_compile.c [12:36]
+        pcre16_maketables.c [12:36]
+        pcre16_newline.c [12:36]
+        pcre16_ord2utf16.c [12:36]
+        pcre16_refcount.c [12:36]
+        pcre16_string_utils.c [12:36]
+        pcre16_study.c [12:36]
+        pcre16_tables.c [12:36]
+        pcre16_ucd.c [12:36]
+        pcre16_utf16_utils.c [12:36]
+        pcre16_valid_utf16.c [12:36]
+        pcre16_version.c [12:36]
+        pcre16_xclass.c [12:36]
+        pcre32_byte_order.c [12:36]
+        pcre32_chartables.c [12:36]
+        pcre32_compile.c [12:36]
+        pcre32_config.c [12:36]
+        pcre32_dfa_exec.c [12:36]
+        pcre32_exec.c [12:36]
+        pcre32_fullinfo.c [12:36]
+        pcre32_get.c [12:36]
+        pcre32_globals.c [12:36]
+        pcre32_jit_compile.c [12:36]
+        pcre32_maketables.c [12:36]
+        pcre32_newline.c [12:36]
+        pcre32_ord2utf32.c [12:36]
+        pcre32_refcount.c [12:36]
+        pcre32_string_utils.c [12:36]
+        pcre32_study.c [12:36]
+        pcre32_tables.c [12:36]
+        pcre32_ucd.c [12:36]
+        pcre32_utf32_utils.c [12:36]
+        pcre32_valid_utf32.c [12:36]
+        pcre32_version.c [12:36]
+        pcre32_xclass.c [12:36]
+        pcre_byte_order.c [12:36]
+        pcre_compile.c [12:36]
+        pcre_config.c [12:36]
+        pcre_dfa_exec.c [13:37]
+        pcre_exec.c [12:36]
+        pcre_fullinfo.c [12:36]
+        pcre_get.c [12:36]
+        pcre_globals.c [12:36]
+        pcre_internal.h [13:37]
+        pcre_jit_compile.c [15:39]
+        pcre_maketables.c [12:36]
+        pcre_newline.c [12:36]
+        pcre_ord2utf8.c [12:36]
+        pcre_refcount.c [12:36]
+        pcre_string_utils.c [12:36]
+        pcre_study.c [12:36]
+        pcre_tables.c [12:36]
+        pcre_valid_utf8.c [12:36]
+        pcre_version.c [12:36]
+        pcre_xclass.c [12:36]
+        pcrecpp_internal.h [10:34]
+        pcreposix.c [12:36]
+        pcreposix.h [15:39]
+
+KEEP     BSD-3-Clause         6aa235708ac9f5dd8e5c6ac415fc5837
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        pcre_scanner.cc [4:28]
+        pcre_scanner.h [4:28]
+        pcre_stringpiece.cc [4:28]
+        pcre_stringpiece.h [4:28]
+        pcrecpp.cc [4:28]
+        pcrecpp.h [4:28]
+        pcrecpparg.h [4:28]
+
+KEEP     BSD-3-Clause         7854eb9ba6db8008b77942822d1018fe
+BELONGS ya.make
+    License text:
+        conventional "BSD" licence.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        NEWS [572:572]
+
+KEEP     BSD-2-Clause         7b9b15809e143335a85813bb93b561a4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        sljit/sljitConfig.h [6:24]
+        sljit/sljitConfigInternal.h [6:24]
+        sljit/sljitExecAllocator.c [6:24]
+        sljit/sljitLir.c [6:24]
+        sljit/sljitLir.h [6:24]
+        sljit/sljitNativeARM_32.c [6:24]
+        sljit/sljitNativeARM_64.c [6:24]
+        sljit/sljitNativeARM_T2_32.c [6:24]
+        sljit/sljitNativeMIPS_32.c [6:24]
+        sljit/sljitNativeMIPS_64.c [6:24]
+        sljit/sljitNativeMIPS_common.c [6:24]
+        sljit/sljitNativePPC_32.c [6:24]
+        sljit/sljitNativePPC_64.c [6:24]
+        sljit/sljitNativePPC_common.c [6:24]
+        sljit/sljitNativeSPARC_32.c [6:24]
+        sljit/sljitNativeSPARC_common.c [6:24]
+        sljit/sljitNativeTILEGX-encoder.c [7:25]
+        sljit/sljitNativeTILEGX_64.c [7:25]
+        sljit/sljitNativeX86_32.c [6:24]
+        sljit/sljitNativeX86_64.c [6:24]
+        sljit/sljitNativeX86_common.c [6:24]
+        sljit/sljitUtils.c [6:24]
+
+KEEP     PCRE                 7ddbee06474ee949f8d2b1e6cc17f09f
+BELONGS ya.make
+FILE_INCLUDE LICENCE found in files: COPYING at line 1, COPYING at line 3
+    License text:
+        PCRE LICENCE
+        Please see the file LICENCE in the PCRE distribution for licensing details.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-pcre
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.pcre.org/licence.txt, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/pcre.LICENSE
+    Files with this license:
+        COPYING [1:3]
+
+SKIP     GPL-1.0-or-later     7f1778c4f216a7885343f128b6c3cd3d
+BELONGS ya.make
+    # only for cygwin
+    License text:
+        licence, this forces not only PCRE to be under the GPL, but also the entire
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        NON-AUTOTOOLS-BUILD [353:353]
+
+KEEP     BSD-3-Clause         81767233d62cdab4a67573b277ec0f37
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENCE [66:91]
+
+KEEP     BSD-3-Clause         a1ed101cefe2f975d6aef1dceeff7c8e
+BELONGS ya.make
+    License text:
+           of multiple projects. In sljit, the code is under BSD licence.  */
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        sljit/sljitNativeTILEGX-encoder.c [29:29]
+
+KEEP     BSD-3-Clause         aa36d6d984971367f4fda7d892144cd4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENCE [7:9]
+
+SKIP     GPL-1.0-or-later     ce2168f95c81d34ebb78d28c1801a759
+BELONGS ya.make
+    # only for cygwin
+    License text:
+        cygwin1.dll has to be distributed as well. Since cygwin1.dll is under the GPL
+        licence, this forces not only PCRE to be under the GPL, but also the entire
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        NON-AUTOTOOLS-BUILD [352:353]
+
+KEEP     FSFAP                d02cc4799cbd521d2aa8c3ff19e655f6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: FSFAP
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/prep/maintain/html_node/License-Notices-for-Other-Files.html, https://spdx.org/licenses/FSFAP
+    Files with this license:
+        INSTALL [7:10]
+
+KEEP     BSD-3-Clause         d5e3a1e92f7c1348d74dfa716d281369
+BELONGS ya.make
+FILE_INCLUDE LICENCE found in files: LICENCE at line 63
+    License text:
+        THE "BSD" LICENCE
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENCE [63:63]
+
+KEEP     BSD-3-Clause         e73c88530490fbb7d73165c511d60f9d
+BELONGS ya.make
+    License text:
+          avoided by linking with libedit (which has a BSD licence) instead.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        README [403:403]
+
+SKIP     GPL-1.0-or-later     f7abe239790339a908564d9a088dde6d
+BELONGS ya.make
+    # changelog
+    License text:
+        2. Added 4th condition (GPL supersedes if conflict) and created separate
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        ChangeLog [5848:5848]

@@ -1,5 +1,7 @@
 PY2TEST()
 
+NO_LINT()
+
 TEST_SRCS(
     SQS-119.py
 )

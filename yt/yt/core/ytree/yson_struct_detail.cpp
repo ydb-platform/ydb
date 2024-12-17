@@ -29,7 +29,11 @@ bool ShouldThrow(EUnrecognizedStrategy strategy)
 
 void TYsonStructMeta::SetDefaultsOfInitializedStruct(TYsonStructBase* target) const
 {
-    for (const auto& [_, parameter] : Parameters_) {
+    if (auto* bitmap = target->GetSetFieldsBitmap()) {
+        bitmap->Initialize(ssize(Parameters_));
+    }
+
+    for (const auto& [_, parameter] : SortedParameters_) {
         parameter->SetDefaultsInitialized(target);
     }
 
@@ -60,7 +64,7 @@ IYsonStructParameterPtr TYsonStructMeta::GetParameter(const TString& keyOrAlias)
         return it->second;
     }
 
-    for (const auto& [_, parameter] : Parameters_) {
+    for (const auto& [_, parameter] : SortedParameters_) {
         if (Count(parameter->GetAliases(), keyOrAlias) > 0) {
             return parameter;
         }
@@ -71,7 +75,7 @@ IYsonStructParameterPtr TYsonStructMeta::GetParameter(const TString& keyOrAlias)
 void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const TString& key, const NYTree::INodePtr& node) const
 {
     const auto& parameter = GetParameter(key);
-    auto validate = [&] () {
+    auto validate = [&] {
         parameter->PostprocessParameter(target, "/" + key);
         try {
             for (const auto& postprocessor : Postprocessors_) {
@@ -94,7 +98,7 @@ void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const TString& key,
 
 void TYsonStructMeta::PostprocessStruct(TYsonStructBase* target, const TYPath& path) const
 {
-    for (const auto& [name, parameter] : Parameters_) {
+    for (const auto& [name, parameter] : SortedParameters_) {
         parameter->PostprocessParameter(target, path + "/" + ToYPathLiteral(name));
     }
 
@@ -125,7 +129,7 @@ void TYsonStructMeta::LoadStruct(
 
     auto mapNode = node->AsMap();
     auto unrecognizedStrategy = target->InstanceUnrecognizedStrategy_.template value_or(MetaUnrecognizedStrategy_);
-    for (const auto& [name, parameter] : Parameters_) {
+    for (const auto& [name, parameter] : SortedParameters_) {
         TString key = name;
         auto child = mapNode->FindChild(name); // can be NULL
         for (const auto& alias : parameter->GetAliases()) {
@@ -195,7 +199,7 @@ void TYsonStructMeta::LoadStruct(
 
     THashMap<TStringBuf, IYsonStructParameter*> keyToParameter;
     THashSet<IYsonStructParameter*> pendingParameters;
-    for (const auto& [key, parameter] : Parameters_) {
+    for (const auto& [key, parameter] : SortedParameters_) {
         EmplaceOrCrash(keyToParameter, key, parameter.Get());
         for (const auto& alias : parameter->GetAliases()) {
             EmplaceOrCrash(keyToParameter, alias, parameter.Get());
@@ -273,7 +277,11 @@ void TYsonStructMeta::LoadStruct(
         pendingParameters.erase(parameter);
     });
 
-    for (const auto parameter : pendingParameters) {
+    auto sortedPendingParameters = std::vector(pendingParameters.begin(), pendingParameters.end());
+    Sort(sortedPendingParameters, [] (const auto* lhs, const auto* rhs) {
+        return lhs->GetKey() < rhs->GetKey();
+    });
+    for (const auto parameter : sortedPendingParameters) {
         parameter->Load(target, /*cursor*/ nullptr, createLoadOptions(parameter->GetKey()));
     }
 
@@ -287,7 +295,7 @@ IMapNodePtr TYsonStructMeta::GetRecursiveUnrecognized(const TYsonStructBase* tar
     // Take a copy of `LocalUnrecognized` and add parameter->GetRecursiveUnrecognized()
     // for all parameters that are TYsonStruct's themselves.
     auto result = target->LocalUnrecognized_ ? ConvertTo<IMapNodePtr>(target->LocalUnrecognized_) : GetEphemeralNodeFactory()->CreateMap();
-    for (const auto& [name, parameter] : Parameters_) {
+    for (const auto& [name, parameter] : SortedParameters_) {
         auto unrecognized = parameter->GetRecursiveUnrecognized(target);
         if (unrecognized && unrecognized->AsMap()->GetChildCount() > 0) {
             result->AddChild(name, unrecognized);
@@ -355,6 +363,31 @@ void TYsonStructMeta::FinishInitialization(const std::type_info& structType)
         [] (const auto& lhs, const auto& rhs) {
             return lhs.first < rhs.first;
         });
+}
+
+bool TYsonStructMeta::CompareStructs(
+    const TYsonStructBase* lhs,
+    const TYsonStructBase* rhs) const
+{
+    YT_VERIFY(lhs->Meta_ == this);
+
+    if (lhs == rhs) {
+        return true;
+    }
+
+    if (rhs->Meta_ != lhs->Meta_) {
+        return false;
+    }
+
+    // Equal Meta implies equal struct types.
+    // Thus structs must be instances of the same class.
+    for (const auto& [_, parameter] : SortedParameters_) {
+        if (!parameter->CompareParameter(lhs, rhs)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

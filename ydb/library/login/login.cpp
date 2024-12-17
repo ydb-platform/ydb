@@ -8,12 +8,11 @@
 #include <openssl/pem.h>
 #include <openssl/rand.h>
 
-#include <util/generic/singleton.h>
 #include <util/string/builder.h>
-#include <util/string/cast.h>
-#include <util/string/hex.h>
 
 #include <deque>
+
+#include <ydb/library/login/password_checker/password_checker.h>
 
 #include "login.h"
 
@@ -38,6 +37,12 @@ struct TLoginProvider::TImpl {
 
 TLoginProvider::TLoginProvider()
     : Impl(new TImpl())
+    , PasswordChecker(TPasswordComplexity())
+{}
+
+TLoginProvider::TLoginProvider(const TPasswordComplexity& passwordComplexity)
+    : Impl(new TImpl())
+    , PasswordChecker(passwordComplexity)
 {}
 
 TLoginProvider::~TLoginProvider()
@@ -54,6 +59,13 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
         response.Error = "Name is not allowed";
         return response;
     }
+
+    TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password);
+    if (!passwordCheckResult.Success) {
+        response.Error = passwordCheckResult.Error;
+        return response;
+    }
+
     auto itUserCreate = Sids.emplace(request.User, TSidRecord{.Type = NLoginProto::ESidType::USER});
     if (!itUserCreate.second) {
         if (itUserCreate.first->second.Type == ESidType::USER) {
@@ -86,6 +98,12 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
     auto itUserModify = Sids.find(request.User);
     if (itUserModify == Sids.end() || itUserModify->second.Type != ESidType::USER) {
         response.Error = "User not found";
+        return response;
+    }
+
+    TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password);
+    if (!passwordCheckResult.Success) {
+        response.Error = passwordCheckResult.Error;
         return response;
     }
 
@@ -339,7 +357,8 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
             .set_issued_at(now)
             .set_expires_at(expires_at);
     if (!Audience.empty()) {
-        token.set_audience(Audience);
+        // jwt.h require audience claim to be a set
+        token.set_audience(std::set<std::string>{Audience});
     }
 
     if (request.ExternalAuth) {
@@ -354,6 +373,7 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
     auto encoded_token = token.sign(algorithm);
 
     response.Token = TString(encoded_token);
+    response.SanitizedToken = SanitizeJwtToken(response.Token);
 
     return response;
 }
@@ -381,7 +401,7 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
     try {
         jwt::decoded_jwt decoded_token = jwt::decode(request.Token);
         if (Audience) {
-            // we check audience manually because we wan't this error instead of wrong key id in case of databases mismatch
+            // we check audience manually because we want an explicit error instead of wrong key id in case of databases mismatch
             auto audience = decoded_token.get_audience();
             if (audience.empty() || TString(*audience.begin()) != Audience) {
                 response.Error = "Wrong audience";
@@ -391,11 +411,15 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
         auto keyId = FromStringWithDefault<ui64>(decoded_token.get_key_id());
         const TKeyRecord* key = FindKey(keyId);
         if (key != nullptr) {
+            static const size_t ISSUED_AT_LEEWAY_SEC = 2;
             auto verifier = jwt::verify()
-                .allow_algorithm(jwt::algorithm::ps256(key->PublicKey));
+                .allow_algorithm(jwt::algorithm::ps256(key->PublicKey))
+                .issued_at_leeway(ISSUED_AT_LEEWAY_SEC);
             if (Audience) {
-                verifier.with_audience(std::set<std::string>({Audience}));
+                // jwt.h require audience claim to be a set
+                verifier.with_audience(std::set<std::string>{Audience});
             }
+
             verifier.verify(decoded_token);
             response.User = decoded_token.get_subject();
             response.ExpiresAt = decoded_token.get_expires_at();
@@ -435,8 +459,10 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
                 response.Error = "Key not found";
             }
         }
-    } catch (const jwt::token_verification_exception& e) {
+    } catch (const jwt::signature_verification_exception& e) {
         response.Error = e.what(); // invalid token signature
+    } catch (const jwt::token_verification_exception& e) {
+        response.Error = e.what(); // invalid token
     } catch (const std::invalid_argument& e) {
         response.Error = "Token is not in correct format";
         response.TokenUnrecognized = true;
@@ -644,6 +670,18 @@ void TLoginProvider::UpdateSecurityState(const NLoginProto::TSecurityState& stat
             }
         }
     }
+}
+
+TString TLoginProvider::SanitizeJwtToken(const TString& token) {
+    const size_t signaturePos = token.find_last_of('.');
+    if (signaturePos == TString::npos || signaturePos == token.size() - 1) {
+        return {};
+    }
+    return TStringBuilder() << TStringBuf(token).SubString(0, signaturePos) << ".**"; // <token>.**
+}
+
+void TLoginProvider::UpdatePasswordCheckParameters(const TPasswordComplexity& passwordComplexity) {
+    PasswordChecker.Update(passwordComplexity);
 }
 
 }

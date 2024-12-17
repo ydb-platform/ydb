@@ -24,15 +24,14 @@ public:
         HFunc(TEvFqListBindingsResponse, TBase::HandleResponse<FederatedQuery::ListBindingsRequest>);
     )
 
-    void ListBindings(const TActorContext& ctx, TString continuationToken) {
+    void ListBindings(const TActorContext& ctx, const TString& continuationToken) {
         FederatedQuery::ListBindingsRequest req;
         constexpr i32 Limit = 100;
 
         req.set_limit(Limit);
         req.set_page_token(std::move(continuationToken));
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-            "pseudo ListDirectories actorId: " << SelfId().ToString() << ", listing bindings");
+        SRC_LOG_T("listing bindings");
 
         Become(&ListDirectoryRPC::ListBindingsState);
         MakeLocalCall(std::move(req), ctx);
@@ -59,6 +58,10 @@ public:
         self.set_type(Ydb::Scheme::Entry::DIRECTORY);
 
         for (const auto& binding : Bindings_) {
+            if (binding.type() == FederatedQuery::BindingSetting::DATA_STREAMS) {
+                continue;
+            }
+
             auto& destEntry = *result.add_children();
             destEntry.set_name(binding.name());
             destEntry.set_owner(binding.meta().created_by());
@@ -73,7 +76,7 @@ private:
 };
 
 std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> GetListDirectoryExecutor(NActors::TActorId grpcProxyId) {
-    return [grpcProxyId = std::move(grpcProxyId)](std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    return [grpcProxyId](std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
         f.RegisterActor(new ListDirectoryRPC(p.release(), grpcProxyId));
     };
 }

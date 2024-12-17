@@ -73,16 +73,23 @@ public:
         return BackingSize() - IndexesRawSize;
     }
 
-    ui64 GetPageSize(NPage::TPageId id, NPage::TGroupId groupId) const override
+    ui64 GetPageSize(NPage::TPageId pageId, NPage::TGroupId groupId) const override
     {
         Y_ABORT_UNLESS(groupId.Index < PageCollections.size());
-        return PageCollections[groupId.Index]->PageCollection->Page(id).Size;
+        return PageCollections[groupId.Index]->GetPageSize(pageId);
     }
 
-    NPage::EPage GetPageType(NPage::TPageId id, NPage::TGroupId groupId) const override
+    ui64 GetPageSize(ELargeObj lob, ui64 ref) const override
+    {
+        auto* cache = Locate(lob, ref);
+
+        return cache->PageCollection->Page(ref).Size;
+    }
+
+    NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const override
     {
         Y_ABORT_UNLESS(groupId.Index < PageCollections.size());
-        return EPage(PageCollections[groupId.Index]->PageCollection->Page(id).Type);
+        return PageCollections[groupId.Index]->GetPageType(pageId);
     }
 
     ui8 GetGroupChannel(NPage::TGroupId groupId) const override
@@ -147,9 +154,6 @@ public:
 
         for (auto &one: components) {
             caches.emplace_back(new TCache(std::move(one.Packet)));
-
-            for (auto &page: one.Sticky)
-                caches.back()->Fill(page, true);
         }
 
         return caches;

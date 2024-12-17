@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 
@@ -12,40 +14,21 @@ namespace NKikimr::NOlap {
 
 class TSimpleChunkMeta {
 protected:
-    std::shared_ptr<arrow::Scalar> Max;
-    std::optional<ui32> NumRows;
-    std::optional<ui32> RawBytes;
+    ui32 RecordsCount = 0;
+    ui32 RawBytes = 0;
     TSimpleChunkMeta() = default;
 public:
-    TSimpleChunkMeta(const std::shared_ptr<arrow::Array>& column, const bool needMinMax, const bool isSortedColumn);
+    TSimpleChunkMeta(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column);
 
     ui64 GetMetadataSize() const {
-        return sizeof(ui32) + sizeof(ui32) + 8 * 3 * 2;
+        return sizeof(ui32) + sizeof(ui32);
     }
 
-    std::shared_ptr<arrow::Scalar> GetMax() const {
-        return Max;
+    ui32 GetRecordsCount() const {
+        return RecordsCount;
     }
-    std::optional<ui32> GetNumRows() const {
-        return NumRows;
-
-    }
-    std::optional<ui32> GetRawBytes() const {
+    ui32 GetRawBytes() const {
         return RawBytes;
-    }
-
-    ui32 GetNumRowsVerified() const {
-        Y_ABORT_UNLESS(NumRows);
-        return *NumRows;
-    }
-
-    ui32 GetRawBytesVerified() const {
-        Y_ABORT_UNLESS(RawBytes);
-        return *RawBytes;
-    }
-
-    bool HasMax() const noexcept {
-        return Max.get();
     }
 
 };

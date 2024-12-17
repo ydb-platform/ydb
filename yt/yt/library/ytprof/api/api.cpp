@@ -11,18 +11,18 @@ DEFINE_REFCOUNTED_TYPE(TProfilerTag)
 struct TCpuProfilerTags;
 
 // This variable is referenced from signal handler.
-constinit YT_THREAD_LOCAL(std::atomic<TCpuProfilerTags*>) CpuProfilerTagsPtr = nullptr;
+YT_DEFINE_THREAD_LOCAL(std::atomic<TCpuProfilerTags*>, CpuProfilerTagsPtr, nullptr);
 
 struct TCpuProfilerTags
 {
     TCpuProfilerTags()
     {
-        CpuProfilerTagsPtr = this;
+        CpuProfilerTagsPtr() = this;
     }
 
     ~TCpuProfilerTags()
     {
-        CpuProfilerTagsPtr = nullptr;
+        CpuProfilerTagsPtr() = nullptr;
     }
 
     std::array<TAtomicSignalPtr<TProfilerTag>, MaxActiveTags> Tags;
@@ -30,11 +30,11 @@ struct TCpuProfilerTags
 
 // We can't reference CpuProfilerTags from signal handler,
 // since it may trigger lazy initialization.
-YT_THREAD_LOCAL(TCpuProfilerTags) CpuProfilerTags;
+YT_DEFINE_THREAD_LOCAL(TCpuProfilerTags, CpuProfilerTags);
 
 std::array<TAtomicSignalPtr<TProfilerTag>, MaxActiveTags>* GetCpuProfilerTags()
 {
-    auto tags = CpuProfilerTagsPtr.load();
+    auto tags = CpuProfilerTagsPtr().load();
     if (tags) {
         return &(tags->Tags);
     }
@@ -46,7 +46,7 @@ std::array<TAtomicSignalPtr<TProfilerTag>, MaxActiveTags>* GetCpuProfilerTags()
 
 TCpuProfilerTagGuard::TCpuProfilerTagGuard(TProfilerTagPtr tag)
 {
-    auto& cpuProfilerTags = GetTlsRef(CpuProfilerTags);
+    auto& cpuProfilerTags = CpuProfilerTags();
 
     for (int i = 0; i < MaxActiveTags; i++) {
         if (!cpuProfilerTags.Tags[i].IsSetFromThread()) {
@@ -59,7 +59,7 @@ TCpuProfilerTagGuard::TCpuProfilerTagGuard(TProfilerTagPtr tag)
 
 TCpuProfilerTagGuard::~TCpuProfilerTagGuard()
 {
-    auto& cpuProfilerTags = GetTlsRef(CpuProfilerTags);
+    auto& cpuProfilerTags = CpuProfilerTags();
 
     if (TagIndex_ != -1) {
         cpuProfilerTags.Tags[TagIndex_].StoreFromThread(nullptr);
@@ -79,7 +79,7 @@ TCpuProfilerTagGuard& TCpuProfilerTagGuard::operator = (TCpuProfilerTagGuard&& o
     }
 
     if (TagIndex_ != -1) {
-        auto& cpuProfilerTags = GetTlsRef(CpuProfilerTags);
+        auto& cpuProfilerTags = CpuProfilerTags();
         cpuProfilerTags.Tags[TagIndex_].StoreFromThread(nullptr);
     }
 

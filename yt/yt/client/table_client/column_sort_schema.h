@@ -9,7 +9,7 @@ namespace NYT::NTableClient {
 
 struct TColumnSortSchema
 {
-    TString Name;
+    std::string Name;
     ESortOrder SortOrder;
 
     bool operator==(const TColumnSortSchema& other) const = default;
@@ -35,8 +35,7 @@ void FromProto(
     TSortColumns* sortColumns,
     const NProto::TSortColumnsExt& protoSortColumns);
 
-void FormatValue(TStringBuilderBase* builder, const TSortColumns& key, TStringBuf format);
-TString ToString(const TSortColumns& key);
+void FormatValue(TStringBuilderBase* builder, const TSortColumns& key, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

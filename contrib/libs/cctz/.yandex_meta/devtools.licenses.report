@@ -1,0 +1,124 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0           0f66a26c8211d9f8c21369fcb6702370
+BELONGS test/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        include/cctz/civil_time.h [3:13]
+        include/cctz/civil_time_detail.h [3:13]
+        include/cctz/time_zone.h [3:13]
+        include/cctz/zone_info_source.h [3:13]
+        src/civil_time_detail.cc [3:13]
+        src/time_zone_fixed.cc [3:13]
+        src/time_zone_fixed.h [3:13]
+        src/time_zone_format.cc [3:13]
+        src/time_zone_if.cc [3:13]
+        src/time_zone_if.h [3:13]
+        src/time_zone_impl.cc [3:13]
+        src/time_zone_impl.h [3:13]
+        src/time_zone_info.cc [3:13]
+        src/time_zone_info.h [3:13]
+        src/time_zone_libc.cc [3:13]
+        src/time_zone_libc.h [3:13]
+        src/time_zone_lookup.cc [3:13]
+        src/time_zone_posix.cc [3:13]
+        src/time_zone_posix.h [3:13]
+        test/civil_time_test.cc [3:13]
+        test/time_zone_format_test.cc [3:13]
+        test/time_zone_lookup_test.cc [3:13]
+
+KEEP     Public-Domain        3a682fe6def1cddc889298ee2a043f6f
+BELONGS ya.make
+    License text:
+        ** This file is in the public domain, so clarified as of
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        src/tzfile.h [8:8]
+
+KEEP     Apache-2.0           5c285672050d1bc5672ee878fd75afe5
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        src/zone_info_source.cc [3:13]
+
+SKIP     LicenseRef-scancode-generic-cla 968cc2e7110b73d14171fc11913223a6
+BELONGS ya.make
+    # notice about contributing, not a license
+    License text:
+        one above, the Software Grant and Corporate Contributor License Agreement.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [29:29]
+
+KEEP     Apache-2.0           cac6cbe8ed5a3da569f7c01e4e486688
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [2:202]
+
+SKIP     LicenseRef-scancode-generic-cla d9d8eb54ae33584c7a97dc4e4db96874
+BELONGS ya.make
+    # contributor agreement
+    License text:
+        Before we can use your code, you must sign the [Google Individual Contributor
+        License
+        Agreement](https://developers.google.com/open-source/cla/individual?csw=1)
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 22.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [6:8]

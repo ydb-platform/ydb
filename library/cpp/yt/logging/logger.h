@@ -47,16 +47,21 @@ struct TLoggingCategory
 struct TLoggingAnchor
 {
     std::atomic<bool> Registered = false;
-    ::TSourceLocation SourceLocation = {TStringBuf{}, 0};
-    TString AnchorMessage;
     TLoggingAnchor* NextAnchor = nullptr;
 
+    ::TSourceLocation SourceLocation = {TStringBuf{}, 0};
+    TString AnchorMessage;
+
     std::atomic<int> CurrentVersion = 0;
-    std::atomic<bool> Enabled = false;
+
+    std::atomic<bool> Suppressed = false;
+
+    std::atomic<std::optional<ELogLevel>> LevelOverride;
+    static_assert(decltype(LevelOverride)::is_always_lock_free);
 
     struct TCounter
     {
-        std::atomic<i64> Current = 0;
+        i64 Current = 0;
         i64 Previous = 0;
     };
 
@@ -100,6 +105,8 @@ struct TLogEvent
 
     TStringBuf SourceFile;
     int SourceLine = -1;
+
+    TLoggingAnchor* Anchor = nullptr;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -181,7 +188,14 @@ public:
 
     explicit operator bool() const;
 
+    //! Enables using |Logger| in YT_LOG_* macros as both data members and functions
+    //! (e.g. those introduced by YT_DEFINE_GLOBAL).
+    const TLogger& operator()() const;
+
     const TLoggingCategory* GetCategory() const;
+
+    //! Combines given #level and the override from #anchor.
+    static ELogLevel GetEffectiveLoggingLevel(ELogLevel level, const TLoggingAnchor& anchor);
 
     //! Validate that level is admitted by logger's own min level
     //! and by category's min level.
@@ -192,8 +206,12 @@ public:
     bool IsEssential() const;
 
     bool IsAnchorUpToDate(const TLoggingAnchor& anchor) const;
-    void UpdateAnchor(TLoggingAnchor* anchor) const;
-    void RegisterStaticAnchor(TLoggingAnchor* anchor, ::TSourceLocation sourceLocation, TStringBuf message) const;
+    void UpdateStaticAnchor(
+        TLoggingAnchor* anchor,
+        std::atomic<bool>* anchorRegistered,
+        ::TSourceLocation sourceLocation,
+        TStringBuf message) const;
+    void UpdateDynamicAnchor(TLoggingAnchor* anchor) const;
 
     void Write(TLogEvent&& event) const;
 
@@ -288,57 +306,69 @@ void LogStructuredEvent(
 #define YT_LOG_FATAL_UNLESS(condition, ...)    if (!Y_LIKELY(condition)) YT_LOG_FATAL(__VA_ARGS__)
 
 #define YT_LOG_EVENT(logger, level, ...) \
-    YT_LOG_EVENT_WITH_ANCHOR(logger, level, nullptr, __VA_ARGS__)
-
-#define YT_LOG_EVENT_WITH_ANCHOR(logger, level, anchor, ...) \
     do { \
-        const auto& logger__ = (logger); \
+        const auto& logger__ = (logger)(); \
         auto level__ = (level); \
+        auto location__ = __LOCATION__; \
+        static ::NYT::TLeakyStorage<::NYT::NLogging::TLoggingAnchor> anchorStorage__; \
+        auto* anchor__ = anchorStorage__.Get(); \
         \
-        if (!logger__.IsLevelEnabled(level__)) { \
+        bool anchorUpToDate__ = logger__.IsAnchorUpToDate(*anchor__); \
+        [[likely]] if (anchorUpToDate__) { \
+            auto effectiveLevel__ = ::NYT::NLogging::TLogger::GetEffectiveLoggingLevel(level__, *anchor__); \
+            if (!logger__.IsLevelEnabled(effectiveLevel__)) { \
+                break; \
+            } \
+        } \
+        \
+        auto loggingContext__ = ::NYT::NLogging::GetLoggingContext(); \
+        auto message__ = ::NYT::NLogging::NDetail::BuildLogMessage(loggingContext__, logger__, __VA_ARGS__); \
+        \
+        [[unlikely]] if (!anchorUpToDate__) { \
+            static std::atomic<bool> anchorRegistered__; \
+            logger__.UpdateStaticAnchor(anchor__, &anchorRegistered__, location__, message__.Anchor); \
+        } \
+        \
+        auto effectiveLevel__ = ::NYT::NLogging::TLogger::GetEffectiveLoggingLevel(level__, *anchor__); \
+        if (!logger__.IsLevelEnabled(effectiveLevel__)) { \
             break; \
         } \
         \
+        ::NYT::NLogging::NDetail::LogEventImpl( \
+            loggingContext__, \
+            logger__, \
+            effectiveLevel__, \
+            location__, \
+            anchor__, \
+            std::move(message__.MessageRef)); \
+    } while (false)
+
+#define YT_LOG_EVENT_WITH_DYNAMIC_ANCHOR(logger, level, anchor, ...) \
+    do { \
+        const auto& logger__ = (logger)(); \
+        auto level__ = (level); \
         auto location__ = __LOCATION__; \
-        \
-        ::NYT::NLogging::TLoggingAnchor* anchor__ = (anchor); \
-        if (!anchor__) { \
-            static ::NYT::TLeakyStorage<::NYT::NLogging::TLoggingAnchor> staticAnchor__; \
-            anchor__ = staticAnchor__.Get(); \
-        } \
+        auto* anchor__ = (anchor); \
         \
         bool anchorUpToDate__ = logger__.IsAnchorUpToDate(*anchor__); \
-        if (anchorUpToDate__ && !anchor__->Enabled.load(std::memory_order::relaxed)) { \
+        [[unlikely]] if (!anchorUpToDate__) { \
+            logger__.UpdateDynamicAnchor(anchor__); \
+        } \
+        \
+        auto effectiveLevel__ = ::NYT::NLogging::TLogger::GetEffectiveLoggingLevel(level__, *anchor__); \
+        if (!logger__.IsLevelEnabled(effectiveLevel__)) { \
             break; \
         } \
         \
         auto loggingContext__ = ::NYT::NLogging::GetLoggingContext(); \
         auto message__ = ::NYT::NLogging::NDetail::BuildLogMessage(loggingContext__, logger__, __VA_ARGS__); \
         \
-        if (!anchorUpToDate__) { \
-            logger__.RegisterStaticAnchor(anchor__, location__, message__.Anchor); \
-            logger__.UpdateAnchor(anchor__); \
-        } \
-        \
-        if (!anchor__->Enabled.load(std::memory_order::relaxed)) { \
-            break; \
-        } \
-        \
-        static YT_THREAD_LOCAL(i64) localByteCounter__; \
-        static YT_THREAD_LOCAL(ui8) localMessageCounter__; \
-        \
-        localByteCounter__ += message__.MessageRef.Size(); \
-        if (Y_UNLIKELY(++localMessageCounter__ == 0)) { \
-            anchor__->MessageCounter.Current += 256; \
-            anchor__->ByteCounter.Current += localByteCounter__; \
-            localByteCounter__ = 0; \
-        } \
-        \
         ::NYT::NLogging::NDetail::LogEventImpl( \
             loggingContext__, \
             logger__, \
-            level__, \
+            effectiveLevel__, \
             location__, \
+            anchor__, \
             std::move(message__.MessageRef)); \
     } while (false)
 

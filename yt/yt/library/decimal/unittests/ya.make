@@ -2,8 +2,6 @@ GTEST(unittester-library-decimal)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
-ALLOCATOR(YT)
-
 SRCS(
     decimal_ut.cpp
 )

@@ -4,8 +4,8 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/executor.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/executor_impl.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
@@ -75,11 +75,19 @@ public:
     void InitObserver();
 
 private:
+
+    // Use single-threaded executor to prevent deadlocks inside subsession event handlers.
+    NTopic::IExecutor::TPtr GetSubsessionHandlersExecutor();
+
+private:
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
     const TFederatedTopicClientSettings ClientSettings;
     std::shared_ptr<TFederatedDbObserver> Observer;
     std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> ProvidedCodecs =
         std::make_shared<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>>();
+
+    NTopic::IExecutor::TPtr SubsessionHandlersExecutor;
+
     TAdaptiveLock Lock;
 };
 

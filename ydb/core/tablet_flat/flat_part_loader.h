@@ -13,8 +13,6 @@
 namespace NKikimr {
 namespace NTable {
 
-    class TKeysEnv;
-
     class TLoader {
     public:
         enum class EStage : ui8 {
@@ -22,10 +20,98 @@ namespace NTable {
             PartView,
             Slice,
             Deltas,
+            PreloadData,
             Result,
         };
 
         using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
+
+        struct TLoaderEnv : public IPages {
+            TLoaderEnv(TIntrusivePtr<TCache> cache)
+                : Cache(std::move(cache))
+            {
+            }
+
+            TResult Locate(const TMemTable*, ui64, ui32) noexcept override
+            {
+                Y_ABORT("IPages::Locate(TMemTable*, ...) shouldn't be used here");
+            }
+
+            TResult Locate(const TPart*, ui64, ELargeObj) noexcept override
+            {
+                Y_ABORT("IPages::Locate(TPart*, ...) shouldn't be used here");
+            }
+
+            void ProvidePart(const TPart* part) noexcept
+            {
+                Y_ABORT_IF(Part);
+                Part = part;
+            }
+
+            const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override
+            {
+                Y_ABORT_UNLESS(part == Part, "Unsupported part");
+                Y_ABORT_UNLESS(groupId.IsMain(), "Unsupported column group");
+
+                auto savedPage = SavedPages.find(pageId);
+                
+                if (savedPage == SavedPages.end()) {
+                    if (auto cachedPage = Cache->GetPage(pageId); cachedPage) {
+                        if (auto sharedPageRef = cachedPage->SharedBody; sharedPageRef && sharedPageRef.Use()) {
+                            // Save page in case it's evicted on the next iteration
+                            AddSavedPage(pageId, std::move(sharedPageRef));
+                            savedPage = SavedPages.find(pageId);
+                        }
+                    }
+                }
+
+                if (savedPage != SavedPages.end()) {
+                    return &savedPage->second;
+                } else {
+                    NeedPages.insert(pageId);
+                    return nullptr;
+                }
+            }
+
+            void EnsureNoNeedPages() const noexcept
+            {
+                Y_ABORT_UNLESS(!NeedPages);
+            }
+
+            TAutoPtr<NPageCollection::TFetch> GetFetch()
+            {
+                if (NeedPages) {
+                    TVector<TPageId> pages(NeedPages.begin(), NeedPages.end());
+                    std::sort(pages.begin(), pages.end());
+                    return new NPageCollection::TFetch{ 0, Cache->PageCollection, std::move(pages) };
+                } else {
+                    return nullptr;
+                }
+            }
+
+            void Save(ui32 cookie, NSharedCache::TEvResult::TLoaded&& loaded) noexcept
+            {
+                if (cookie == 0 && NeedPages.erase(loaded.PageId)) {
+                    auto pageType = Cache->GetPageType(loaded.PageId);
+                    bool sticky = NeedIn(pageType) || pageType == EPage::FlatIndex;
+                    AddSavedPage(loaded.PageId, loaded.Page);
+                    Cache->Fill(loaded.PageId, std::move(loaded.Page), sticky);
+                }
+            }
+
+        private:
+            void AddSavedPage(TPageId pageId, NSharedCache::TSharedPageRef page) noexcept
+            {
+                SavedPages[pageId] = NSharedCache::TPinnedPageRef(page).GetData();
+                SavedPagesRefs.emplace_back(std::move(page));
+            }
+
+            const TPart* Part = nullptr;
+            TIntrusivePtr<TCache> Cache;
+            THashMap<TPageId, TSharedData> SavedPages;
+            TVector<NSharedCache::TSharedPageRef> SavedPagesRefs;
+            THashSet<TPageId> NeedPages;
+        };
 
         TLoader(TPartComponents ou)
             : TLoader(TPartStore::Construct(std::move(ou.PageCollectionComponents)),
@@ -42,7 +128,7 @@ namespace NTable {
                 TEpoch epoch = NTable::TEpoch::Max());
         ~TLoader();
 
-        TVector<TAutoPtr<NPageCollection::TFetch>> Run()
+        TVector<TAutoPtr<NPageCollection::TFetch>> Run(bool preloadData)
         {
             while (Stage < EStage::Result) {
                 TAutoPtr<NPageCollection::TFetch> fetch;
@@ -59,6 +145,11 @@ namespace NTable {
                         break;
                     case EStage::Deltas:
                         StageDeltas();
+                        break;
+                    case EStage::PreloadData:
+                        if (preloadData) {
+                            fetch = StagePreloadData();
+                        }
                         break;
                     default:
                         break;
@@ -94,6 +185,7 @@ namespace NTable {
             Y_ABORT_UNLESS(Stage == EStage::Result);
             Y_ABORT_UNLESS(PartView, "Result may only be grabbed once");
             Y_ABORT_UNLESS(PartView.Slices, "Missing slices in Result stage");
+            
             return std::move(PartView);
         }
 
@@ -140,16 +232,6 @@ namespace NTable {
                 (FlatGroupIndexes || BTreeGroupIndexes);
         }
 
-        const TSharedData* GetPage(TPageId page) noexcept
-        {
-            return page == Max<TPageId>() ? nullptr : Packs[0]->Lookup(page);
-        }
-
-        size_t GetPageSize(TPageId page) noexcept
-        {
-            return Packs[0]->PageCollection->Page(page).Size;
-        }
-
         void ParseMeta(TArrayRef<const char> plain) noexcept
         {
             TMemoryInput stream(plain.data(), plain.size());
@@ -162,6 +244,7 @@ namespace NTable {
         TAutoPtr<NPageCollection::TFetch> StageCreatePartView() noexcept;
         TAutoPtr<NPageCollection::TFetch> StageSliceBounds() noexcept;
         void StageDeltas() noexcept;
+        TAutoPtr<NPageCollection::TFetch> StagePreloadData() noexcept;
 
     private:
         TVector<TIntrusivePtr<TCache>> Packs;
@@ -186,6 +269,6 @@ namespace NTable {
         TRowVersion MaxRowVersion;
         NProto::TRoot Root;
         TPartView PartView;
-        TAutoPtr<TKeysEnv> KeysEnv;
+        THolder<TLoaderEnv> LoaderEnv;
     };
 }}

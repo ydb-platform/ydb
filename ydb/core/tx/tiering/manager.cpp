@@ -12,7 +12,7 @@ private:
     std::shared_ptr<TTiersManager> Owner;
     NMetadata::NFetcher::ISnapshotsFetcher::TPtr SecretsFetcher;
     std::shared_ptr<NMetadata::NSecret::TSnapshot> SecretsSnapshot;
-    std::shared_ptr<NTiers::TConfigsSnapshot> ConfigsSnapshot;
+    std::shared_ptr<NTiers::TTiersSnapshot> ConfigsSnapshot;
     TActorId GetExternalDataActorId() const {
         return NMetadata::NProvider::MakeServiceId(SelfId().NodeId());
     }
@@ -45,7 +45,7 @@ public:
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
         auto snapshot = ev->Get()->GetSnapshot();
-        if (auto configs = std::dynamic_pointer_cast<NTiers::TConfigsSnapshot>(snapshot)) {
+        if (auto configs = std::dynamic_pointer_cast<NTiers::TTiersSnapshot>(snapshot)) {
             AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "TEvRefreshSubscriberData")("snapshot", "configs");
             ConfigsSnapshot = configs;
             if (SecretsSnapshot) {
@@ -108,7 +108,7 @@ TManager::TManager(const ui64 tabletId, const NActors::TActorId& tabletActorId, 
 
 NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compressionProto) {
     NArrow::NSerialization::TSerializerContainer container;
-    AFL_VERIFY(container.DeserializeFromProto(compressionProto));
+    container.DeserializeFromProto(compressionProto).Validate();
     return container;
 }
 
@@ -123,7 +123,7 @@ void TTiersManager::TakeConfigs(NMetadata::NFetcher::ISnapshot::TPtr snapshotExt
     ALS_INFO(NKikimrServices::TX_TIERING) << "Take configs:"
         << (snapshotExt ? " snapshots" : "") << (secrets ? " secrets" : "") << " at tablet " << TabletId;
 
-    auto snapshotPtr = std::dynamic_pointer_cast<NTiers::TConfigsSnapshot>(snapshotExt);
+    auto snapshotPtr = std::dynamic_pointer_cast<NTiers::TTiersSnapshot>(snapshotExt);
     Y_ABORT_UNLESS(snapshotPtr);
     Snapshot = snapshotExt;
     Secrets = secrets;
@@ -190,33 +190,6 @@ NMetadata::NFetcher::ISnapshotsFetcher::TPtr TTiersManager::GetExternalDataManip
         ExternalDataManipulation = std::make_shared<NTiers::TSnapshotConstructor>();
     }
     return ExternalDataManipulation;
-}
-
-THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
-    THashMap<ui64, NKikimr::NOlap::TTiering> result;
-    AFL_VERIFY(IsReady());
-    auto snapshotPtr = std::dynamic_pointer_cast<NTiers::TConfigsSnapshot>(Snapshot);
-    Y_ABORT_UNLESS(snapshotPtr);
-    auto& tierConfigs = snapshotPtr->GetTierConfigs();
-    for (auto&& i : PathIdTiering) {
-        auto* tiering = snapshotPtr->GetTieringById(i.second);
-        if (tiering) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("path_id", i.first)("tiering_name", i.second)("event", "activation");
-            result.emplace(i.first, tiering->BuildOlapTiers());
-            for (auto& [pathId, pathTiering] : result) {
-                for (auto& [name, tier] : pathTiering.GetTierByName()) {
-                    AFL_VERIFY(name != NOlap::NTiering::NCommon::DeleteTierName);
-                    auto it = tierConfigs.find(name);
-                    if (it != tierConfigs.end()) {
-                        tier->SetSerializer(NTiers::ConvertCompression(it->second.GetCompression()));
-                    }
-                }
-            }
-        } else {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("path_id", i.first)("tiering_name", i.second)("event", "not_found");
-        }
-    }
-    return result;
 }
 
 TActorId TTiersManager::GetActorId() const {

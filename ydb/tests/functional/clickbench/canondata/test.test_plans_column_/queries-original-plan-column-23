@@ -35,7 +35,7 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TopSort-TableFullScan",
+                                                "Node Type": "TopSort-Filter-TableFullScan",
                                                 "Operators": [
                                                     {
                                                         "Inputs": [
@@ -46,6 +46,16 @@
                                                         "Limit": "10",
                                                         "Name": "TopSort",
                                                         "TopSortBy": "$4.EventTime"
+                                                    },
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 2
+                                                            }
+                                                        ],
+                                                        "Name": "Filter",
+                                                        "Predicate": "URL LIKE \"%google%\"",
+                                                        "Pushdown": "True"
                                                     },
                                                     {
                                                         "Inputs": [],
@@ -157,14 +167,14 @@
                                                             "WindowName",
                                                             "WithHash"
                                                         ],
-                                                        "ReadLimit": "10",
                                                         "ReadRanges": [
-                                                            "EventTime (-\u221e, +\u221e)",
                                                             "CounterID (-\u221e, +\u221e)",
                                                             "EventDate (-\u221e, +\u221e)",
                                                             "UserID (-\u221e, +\u221e)",
+                                                            "EventTime (-\u221e, +\u221e)",
                                                             "WatchID (-\u221e, +\u221e)"
                                                         ],
+                                                        "Scan": "Parallel",
                                                         "SsaProgram": {
                                                             "Command": [
                                                                 {
@@ -192,7 +202,8 @@
                                                                                 }
                                                                             ],
                                                                             "FunctionType": 2,
-                                                                            "KernelIdx": 0
+                                                                            "KernelIdx": 0,
+                                                                            "YqlOperationId": 10
                                                                         }
                                                                     }
                                                                 },
@@ -525,7 +536,7 @@
                                                                     }
                                                                 }
                                                             ],
-                                                            "Version": 4
+                                                            "Version": 5
                                                         },
                                                         "Table": "clickbench/plans/column/hits"
                                                     }
@@ -544,7 +555,10 @@
                             }
                         ]
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {
@@ -658,12 +672,11 @@
                                 "WindowName",
                                 "WithHash"
                             ],
-                            "limit": "10",
                             "scan_by": [
-                                "EventTime (-\u221e, +\u221e)",
                                 "CounterID (-\u221e, +\u221e)",
                                 "EventDate (-\u221e, +\u221e)",
                                 "UserID (-\u221e, +\u221e)",
+                                "EventTime (-\u221e, +\u221e)",
                                 "WatchID (-\u221e, +\u221e)"
                             ],
                             "type": "FullScan"

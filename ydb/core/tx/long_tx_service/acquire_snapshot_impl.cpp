@@ -24,7 +24,7 @@ namespace NLongTxService {
             , Cookie(cookie)
             , DatabaseName(databaseName)
             , SchemeCache(MakeSchemeCacheID())
-            , LeaderPipeCache(MakePipePeNodeCacheID(false))
+            , LeaderPipeCache(MakePipePerNodeCacheID(false))
             , LogPrefix("LongTxService.AcquireSnapshot ")
         { }
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import copy
 import base64
 import collections
 import itertools
@@ -51,7 +52,6 @@ class StaticConfigGenerator(object):
         cfg_home="/Berkanavt/kikimr",
         sqs_port=8771,
         enable_cores=False,
-        enable_cms_config_cache=False,
         local_binary_path=None,
         skip_location=False,
         schema_validator=None,
@@ -64,6 +64,7 @@ class StaticConfigGenerator(object):
         # collects and provides information about cluster hosts
         self.__cluster_details = base.ClusterDetailsProvider(template, walle_provider, validator=schema_validator, database=database)
         self._enable_cores = template.get("enable_cores", enable_cores)
+        self._yaml_config_enabled = template.get("yaml_config_enabled", False)
         self.__is_dynamic_node = True if database is not None else False
         self._database = database
         self._walle_provider = walle_provider
@@ -114,7 +115,6 @@ class StaticConfigGenerator(object):
                 "pdisk_key.txt",
             )
         )
-        self._enable_cms_config_cache = template.get("enable_cms_config_cache", enable_cms_config_cache)
         tracing = template.get("tracing_config")
         if tracing is not None:
             self.__tracing = (
@@ -281,6 +281,10 @@ class StaticConfigGenerator(object):
         return self.__cluster_details.get_service("table_service_config")
 
     @property
+    def column_shard_config(self):
+        return self.__cluster_details.get_service("column_shard_config")
+
+    @property
     def hive_config(self):
         return self.__proto_config("hive", config_pb2.THiveConfig, self.__cluster_details.get_service("hive_config"))
 
@@ -299,7 +303,6 @@ class StaticConfigGenerator(object):
                 self.__cluster_details.default_log_level,
                 mon_address=self.__cluster_details.monitor_address,
                 cert_params=self.__cluster_details.ic_cert_params,
-                enable_cms_config_cache=self._enable_cms_config_cache,
                 rb_txt_enabled=self.rb_txt_enabled,
                 metering_txt_enabled=self.metering_txt_enabled,
                 audit_txt_enabled=self.audit_txt_enabled,
@@ -349,7 +352,9 @@ class StaticConfigGenerator(object):
             all_configs["app_config.proto"] = utils.message_to_string(self.get_app_config())
         all_configs["kikimr.cfg"] = self.kikimr_cfg
         all_configs["dynamic_server.cfg"] = self.dynamic_server_common_args
-        all_configs["config.yaml"] = self.get_yaml_format_config()
+        normalized_config = self.get_normalized_config()
+        all_configs["config.yaml"] = self.get_yaml_format_config(normalized_config)
+        all_configs["dynconfig.yaml"] = self.get_yaml_format_dynconfig(normalized_config)
         return all_configs
 
     def get_yaml_format_string(self, key):
@@ -382,7 +387,7 @@ class StaticConfigGenerator(object):
             return yaml_config
         return result
 
-    def get_yaml_format_config(self):
+    def get_normalized_config(self):
         app_config = self.get_app_config()
         dictionary = json_format.MessageToDict(app_config, preserving_proto_field_name=True)
         normalized_config = self.normalize_dictionary(dictionary)
@@ -396,6 +401,18 @@ class StaticConfigGenerator(object):
 
         if self.table_service_config:
             normalized_config["table_service_config"] = self.table_service_config
+
+        if self.column_shard_config:
+            normalized_config["column_shard_config"] = self.column_shard_config
+
+        if self.__cluster_details.client_certificate_authorization is not None:
+            normalized_config["client_certificate_authorization"] = self.__cluster_details.client_certificate_authorization
+
+        if self.__cluster_details.table_profiles_config is not None:
+            normalized_config["table_profiles_config"] = self.__cluster_details.table_profiles_config
+
+        if self.__cluster_details.http_proxy_config is not None:
+            normalized_config["http_proxy_config"] = self.__cluster_details.http_proxy_config
 
         if self.__cluster_details.blob_storage_config is not None:
             normalized_config["blob_storage_config"] = self.__cluster_details.blob_storage_config
@@ -484,7 +501,72 @@ class StaticConfigGenerator(object):
 
         normalized_config["static_erasure"] = str(self.__cluster_details.static_erasure)
 
-        return yaml.safe_dump(normalized_config, sort_keys=True, default_flow_style=None)
+        if 'blob_storage_config' in normalized_config:
+            for group in normalized_config['blob_storage_config']['service_set']['groups']:
+                for ring in group['rings']:
+                    for fail_domain in ring['fail_domains']:
+                        for vdisk_location in fail_domain['vdisk_locations']:
+                            vdisk_location['pdisk_guid'] = int(vdisk_location['pdisk_guid'])
+                            vdisk_location['pdisk_category'] = int(vdisk_location['pdisk_category'])
+                            if 'pdisk_config' in vdisk_location:
+                                if 'expected_slot_count' in vdisk_location['pdisk_config']:
+                                    vdisk_location['pdisk_config']['expected_slot_count'] = int(vdisk_location['pdisk_config']['expected_slot_count'])
+        if 'channel_profile_config' in normalized_config:
+            for profile in normalized_config['channel_profile_config']['profile']:
+                for channel in profile['channel']:
+                    channel['pdisk_category'] = int(channel['pdisk_category'])
+        if 'system_tablets' in normalized_config:
+            for tablets in normalized_config['system_tablets'].values():
+                for tablet in tablets:
+                    tablet['info']['tablet_id'] = int(tablet['info']['tablet_id'])
+
+        if self._yaml_config_enabled:
+            normalized_config['yaml_config_enabled'] = True
+
+        return normalized_config
+
+    def get_yaml_format_config(self, normalized_config):
+        return yaml.safe_dump(normalized_config, sort_keys=True, default_flow_style=False, indent=2)
+
+    def get_yaml_format_dynconfig(self, normalized_config):
+        cluster_uuid = normalized_config.get('nameservice_config', {}).get('cluster_uuid', '')
+        dynconfig = {
+            'metadata': {
+                'kind': 'MainConfig',
+                'cluster': cluster_uuid,
+                'version': 0,
+            },
+            'config': copy.deepcopy(normalized_config),
+            'allowed_labels': {
+                'node_id': {'type': 'string'},
+                'host': {'type': 'string'},
+                'tenant': {'type': 'string'},
+            },
+            'selector_config': [],
+        }
+
+        if self.__cluster_details.use_auto_config:
+            dynconfig['selector_config'].append({
+                'description': 'actor system config for dynnodes',
+                'selector': {
+                    'dynamic': True,
+                },
+                'config': {
+                    'actor_system_config': {
+                        'cpu_count': self.__cluster_details.dynamic_cpu_count,
+                        'node_type': 'COMPUTE',
+                        'use_auto_config': True,
+                    }
+                }
+            })
+        # emulate dumping ordered dict to yaml
+        lines = []
+        for key in ['metadata', 'config', 'allowed_labels', 'selector_config']:
+            lines.append(key + ':')
+            substr = yaml.safe_dump(dynconfig[key], sort_keys=True, default_flow_style=False, indent=2)
+            for line in substr.split('\n'):
+                lines.append('  ' + line)
+        return '\n'.join(lines)
 
     def get_app_config(self):
         app_config = config_pb2.TAppConfig()
@@ -577,7 +659,16 @@ class StaticConfigGenerator(object):
             tablet.AllowDynamicConfiguration = True
 
         if explicit_node_ids:
-            node_ids = explicit_node_ids
+            node_ids = []
+            for item in explicit_node_ids:
+                if type(item) is list:
+                    try:
+                        node_ids.append(item[index])
+                    except IndexError:
+                        logger.error("nodes count for tablet type %s wrong, nodeid for tablet index: %d not found" % (tablet_name, index))
+                        exit(1)
+                else:
+                    node_ids.append(item)
         tablet.Node.extend(node_ids)
 
         for channel_id in range(int(number_of_channels)):
@@ -1162,6 +1253,7 @@ class StaticConfigGenerator(object):
             selectors = throttling.get("scope")
             if selectors is not None:
                 throttling_scope_pb.Scope.CopyFrom(get_selectors(selectors))
+            throttling_scope_pb.Level = throttling['level']
             throttling_scope_pb.MaxTracesPerMinute = throttling['max_traces_per_minute']
             throttling_scope_pb.MaxTracesBurst = throttling.get('max_traces_burst', 0)
             return throttling_scope_pb
@@ -1356,5 +1448,5 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.use_new_style_kikimr_cfg:
             return dynamic_cfg_new_style(self._enable_cores)
         return kikimr_cfg_for_dynamic_slot(
-            self._enable_cores, self._enable_cms_config_cache, cert_params=self.__cluster_details.ic_cert_params
+            self._enable_cores, cert_params=self.__cluster_details.ic_cert_params
         )

@@ -1,0 +1,62 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/public/api/protos/ydb_value.proto";
+
+package Ydb.Tablet;
+option java_package = "com.yandex.ydb.tablet";
+
+message ExecuteTabletMiniKQLRequest {
+    // Tablet id for the minikql script
+    fixed64 tablet_id = 1;
+
+    // Text of the MiniKQL program
+    string program = 2;
+
+    // Optional map of query parameters
+    // Parameters may be references using `(Parameter 'NAME ...TYPE)` calls
+    map<string, TypedValue> parameters = 3;
+
+    // When true any changes by the program will not be committed
+    bool dry_run = 4;
+}
+
+message ExecuteTabletMiniKQLResponse {
+    Ydb.StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+
+    // The value returned by the program
+    TypedValue result = 3;
+}
+
+message ChangeTabletSchemaRequest {
+    // Tablet id for schema changes
+    fixed64 tablet_id = 1;
+
+    // Schema changes in the text format (see the internal NTabletFlatScheme.TSchemeChanges proto message)
+    // Empty changes are useful to dump current tablet schema
+    string schema_changes = 2;
+
+    // When true any changes will not be committed
+    bool dry_run = 3;
+}
+
+message ChangeTabletSchemaResponse {
+    Ydb.StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+
+    // The resulting schema of the tablet (see the internal NTabletFlatScheme.TSchemeChanges proto message)
+    string schema = 3;
+}
+
+message RestartTabletRequest {
+    // Tablet id to restart
+    fixed64 tablet_id = 2;
+}
+
+message RestartTabletResponse {
+    Ydb.StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+}

@@ -15,18 +15,22 @@ public:
 
 class TSimpleParamStream : public IParamStream {
 public:
+    TSimpleParamStream(IInputStream* input);
     virtual TString ReadAll() override;
     virtual size_t ReadLine(TString& res) override;
+private:
+    IInputStream* Input;
 };
 
 class TCsvParamStream : public IParamStream {
 public:
-    TCsvParamStream();
+    TCsvParamStream(IInputStream* input);
     virtual TString ReadAll() override;
     virtual size_t ReadLine(TString& res) override;
 
 private:
-    TCountingInput Input;
+    IInputStream* Input;
+    TCountingInput CountingInput;
     NCsvFormat::TLinesSplitter Splitter;
     ui64 CurrentCount = 0;
 };

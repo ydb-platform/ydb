@@ -32,6 +32,9 @@ namespace boost { namespace locale { namespace impl_std {
             case char_facet_t::nochar: break;
             case char_facet_t::char_f: return codecvt_bychar<char>(in, locale_name);
             case char_facet_t::wchar_f: return codecvt_bychar<wchar_t>(in, locale_name);
+#ifdef __cpp_char8_t
+            case char_facet_t::char8_f: break; // std-facet not available (yet)
+#endif
 #if defined(BOOST_LOCALE_ENABLE_CHAR16_T)
             case char_facet_t::char16_f: return codecvt_bychar<char16_t>(in, locale_name);
 #endif

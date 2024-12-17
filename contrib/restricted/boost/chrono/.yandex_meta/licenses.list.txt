@@ -1,0 +1,140 @@
+====================BSL-1.0====================
+### License
+
+Distributed under the [Boost Software License, Version 1.0](http://boost.org/LICENSE_1_0.txt).
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0.
+//  See http://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0. (See accompanying
+//  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt).
+
+
+====================BSL-1.0====================
+// Distributed under the Boost
+// Software License, Version 1.0.
+// (See accompanying file LICENSE_1_0.txt or
+// copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+// (See accompanying file LICENSE_1_0.txt or
+// copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+Many thanks to Howard for making his code available under the Boost license.
+
+
+====================COPYRIGHT====================
+//  (C) Copyright 2011 Vicente J. Botet Escriba
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Howard Hinnant
+//  (C) Copyright 2010 Vicente J. Botet Escriba
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Howard Hinnant
+//  (C) Copyright 2010-2011 Vicente J. Botet Escriba
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Howard Hinnant
+//  Copyright 2011 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+//  Copyright 2008 Howard Hinnant
+//  Copyright 2008 Beman Dawes
+//  Copyright 2009-2011 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+//  Copyright 2008 Howard Hinnant
+//  Copyright 2008 Beman Dawes
+//  Copyright 2009-2012 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+//  Copyright 2009-2010 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+//  Copyright 2009-2011 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+//  Copyright 2010 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 1994, 2006, 2008
+//  Copyright Vicente J. Botet Escriba 2009
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 1994, 2006, 2008
+//  Copyright Vicente J. Botet Escriba 2009-2011
+//  Copyright Christopher Brown 2013
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2003, 2006, 2008
+//  Copyright 2009-2011 Vicente J. Botet Escriba
+//  Copyright (c) Microsoft Corporation 2014
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2008
+//  Copyright Vicente J. Botet Escriba 2009
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2008
+//  Copyright Vicente J. Botet Escriba 2009-2010
+
+
+====================COPYRIGHT====================
+// (C) Copyright Vicente J. Botet Escriba 20010.
+// Distributed under the Boost Software License, Version 1.0.
+// (See accompanying file LICENSE_1_0.txt or
+
+
+====================COPYRIGHT====================
+// (C) Copyright Vicente J. Botet Escriba 2010.
+// Distributed under the Boost
+// Software License, Version 1.0.
+
+
+====================COPYRIGHT====================
+// Copyright 2023 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================NCSA AND MIT====================
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.

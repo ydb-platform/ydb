@@ -188,7 +188,7 @@ namespace NKikimr {
             }
 
             THolder<IActor> actor{CreateSkeletonVPatchActor(EdgeActors[nodeId], GType,
-                    ev, TInstant(), nullptr, nullptr, nullptr, nullptr, nullptr, patchCtx, VDiskIds[nodeId].ToString(), 0)};
+                    ev, TInstant(), nullptr, nullptr, nullptr, nullptr, nullptr, patchCtx, VDiskIds[nodeId].ToString(), 0, nullptr)};
 
             if constexpr (!std::is_void_v<DecoratorType>) {
                 TVPatchDecoratorArgs args{EdgeActors[nodeId], IsCheckingEventsByDecorator,
@@ -735,7 +735,7 @@ namespace NKikimr {
                 bool quickXorDiffs = false)
         {
             ui32 nodeCount = type.TotalPartCount();
-            TVPatchTestGeneralData testData(type, data.Size(), nodeCount);
+            TVPatchTestGeneralData testData(type, data.size(), nodeCount);
 
             for (ui32 nodeIdx = 0; nodeIdx < nodeCount; ++nodeIdx) {
                 std::unique_ptr<TEvBlobStorage::TEvVPatchStart> start = testData.CreateVPatchStart(nodeIdx, nodeIdx);

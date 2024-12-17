@@ -1,6 +1,6 @@
 #pragma once
 
-#include "yson_struct_enum.h"
+#include "yson_struct_public.h"
 
 #include <yt/yt/core/yson/public.h>
 #include <yt/yt/core/ypath/public.h>
@@ -9,6 +9,38 @@
 #include <library/cpp/yt/misc/optional.h>
 
 namespace NYT::NYTree {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NPrivate {
+
+// Least common denominator between INodePtr
+// and TYsonPullParserCursor.
+// Maybe something else in the future.
+template <class T>
+struct TYsonSourceTraits
+{
+    static constexpr bool IsValid = false;
+
+    static INodePtr AsNode(T& source)
+        requires false;
+
+    static bool IsEmpty(T& source)
+        requires false;
+
+    static void Advance(T& source)
+        requires false;
+
+    template <CStdVector TVector, class TFiller>
+    static void FillVector(T& source, TVector& vector, TFiller filler)
+        requires false;
+
+    template <CAnyMap TMap, class TFiller>
+    static void FillMap(T& source, TMap& map, TFiller filler)
+        requires false;
+};
+
+} // namespace NPrivate
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -56,6 +88,10 @@ struct IYsonStructParameter
     virtual IMapNodePtr GetRecursiveUnrecognized(const TYsonStructBase* self) const = 0;
 
     virtual void WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const = 0;
+
+    virtual bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const = 0;
+
+    virtual int GetFieldIndex() const = 0;
 };
 
 DECLARE_REFCOUNTED_STRUCT(IYsonStructParameter)
@@ -96,10 +132,14 @@ struct IYsonStructMeta
 
     virtual void WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer) const = 0;
 
+    virtual bool CompareStructs(
+        const TYsonStructBase* lhs,
+        const TYsonStructBase* rhs) const = 0;
+
     virtual ~IYsonStructMeta() = default;
 };
 
-///////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class TYsonStructMeta
     : public IYsonStructMeta
@@ -140,6 +180,10 @@ public:
     void WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer) const override;
 
     void FinishInitialization(const std::type_info& structType);
+
+    bool CompareStructs(
+        const TYsonStructBase* lhs,
+        const TYsonStructBase* rhs) const override;
 
 private:
     friend class TYsonStructRegistry;
@@ -210,7 +254,8 @@ public:
 
     TYsonStructParameter(
         TString key,
-        std::unique_ptr<IYsonFieldAccessor<TValue>> fieldAccessor);
+        std::unique_ptr<IYsonFieldAccessor<TValue>> fieldAccessor,
+        int fieldIndex);
 
     void Load(
         TYsonStructBase* self,
@@ -238,6 +283,10 @@ public:
     IMapNodePtr GetRecursiveUnrecognized(const TYsonStructBase* self) const override;
 
     void WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const override;
+
+    bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const override;
+
+    virtual int GetFieldIndex() const override;
 
     // Mark as optional. Field will be default-initialized if `init` is true, initialization is skipped otherwise.
     TYsonStructParameter& Optional(bool init = true);
@@ -268,6 +317,12 @@ public:
     TYsonStructParameter& Alias(const TString& name);
     // Set field to T() (or suitable analogue) before deserializations.
     TYsonStructParameter& ResetOnLoad();
+    // Uses given unrecognized strategy in |Load| if there was no strategy supplied.
+    TYsonStructParameter& DefaultUnrecognizedStrategy(EUnrecognizedStrategy strategy);
+    // Forces given parameter to ignore unrecognized strategy even if it set to
+    // some recursive version. Combination with |DefaultUnrecognizedStrategy| enables
+    // behavior which ensures selected default strategy for all fields below.
+    TYsonStructParameter& EnforceDefaultUnrecognizedStrategy();
 
     // Register constructor with parameters as initializer of default value for ref-counted class.
     template <class... TArgs>
@@ -284,6 +339,9 @@ private:
     bool TriviallyInitializedIntrusivePtr_ = false;
     bool Optional_ = false;
     bool ResetOnLoad_ = false;
+    std::optional<EUnrecognizedStrategy> DefaultUnrecognizedStrategy_;
+    bool EnforceDefaultUnrecognizedStrategy_ = false;
+    const int FieldIndex_ = -1;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -20,6 +20,7 @@ namespace NKikimr {
         };
 
 
+        DEFINE_TRACING_LEVELS(THttp, 0, 5, 10, 14, 15)
         DEFINE_TRACING_LEVELS(TGrpcProxy, 0, 5, 10, 14, 15)
         DEFINE_TRACING_LEVELS(TQueryProcessor, 1, 6, 10, 14, 15)
         DEFINE_TRACING_LEVELS(TDistributedTransactions, 2, 7, 11, 14, 15)
@@ -31,6 +32,8 @@ namespace NKikimr {
         enum : ui8 {
             // The most verbose detalisation level used in production
             ProductionVerbose = 13,
+            // The most verbose detalisation level
+            MostVerbose = 15,
         };
     };
 
@@ -77,7 +80,16 @@ namespace NKikimr {
 
                 LookupActor = TComponentTracingLevels::TQueryProcessor::Basic,
                     LookupActorShardsResolve = TComponentTracingLevels::TQueryProcessor::Detailed,
-                
+
+                TableWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
+                    TableWriteActorTableNavigate = TComponentTracingLevels::TQueryProcessor::Detailed,
+
+                DirectWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
+                ForwardWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
+
+                BufferWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
+                    BufferWriteActorState = TComponentTracingLevels::TQueryProcessor::Basic,
+
             BulkUpsertActor = TComponentTracingLevels::TQueryProcessor::TopLevel,
         };
     };

@@ -81,12 +81,16 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
-            auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate>();
-            auto& wb = ev->Record;
-            wb.SetGroupID(Config.GetVirtualGroupId());
-            wb.SetAllocatedSize(Data->GetTotalStoredDataSize());
-            wb.SetAvailableSize(params->GetAvailableSize());
-            Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), ev.release());
+            auto *wb = record.MutableWhiteboardUpdate();
+            wb->SetGroupID(Config.GetVirtualGroupId());
+            wb->SetAllocatedSize(Data->GetTotalStoredDataSize());
+            wb->SetAvailableSize(params->GetAvailableSize());
+            wb->SetReadThroughput(ReadThroughput);
+            wb->SetWriteThroughput(WriteThroughput);
+
+            if (ReadyForAgentQueries()) {
+                wb->SetBlobDepotOnlineTime(TInstant::Now().MilliSeconds());
+            }
 
             params->SetAllocatedSize(Data->GetTotalStoredDataSize());
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), response.release());
@@ -103,7 +107,9 @@ namespace NKikimr::NBlobDepot {
         const auto& record = ev->Get()->Record;
         BytesRead += record.GetBytesRead();
         BytesWritten += record.GetBytesWritten();
-        MetricsQ.emplace_back(TActivationContext::Monotonic(), BytesRead, BytesWritten);
+        if (Config.HasVirtualGroupId()) {
+            MetricsQ.emplace_back(TActivationContext::Monotonic(), BytesRead, BytesWritten);
+        }
         UpdateThroughputs(false);
     }
 
@@ -128,24 +134,17 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
-            ui64 readThroughput = 0;
-            ui64 writeThroughput = 0;
             const auto& [ts, read, written] = MetricsQ.front();
             if (ts + TDuration::Seconds(1) < now) {
-                readThroughput = (BytesRead - read) * 1'000'000 / (now - ts).MicroSeconds();
-                writeThroughput = (BytesWritten - written) * 1'000'000 / (now - ts).MicroSeconds();
+                ReadThroughput = (BytesRead - read) * 1'000'000 / (now - ts).MicroSeconds();
+                WriteThroughput = (BytesWritten - written) * 1'000'000 / (now - ts).MicroSeconds();
+            } else {
+                ReadThroughput = WriteThroughput = 0;
             }
-
-            auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate>();
-            auto& wb = ev->Record;
-            wb.SetGroupID(Config.GetVirtualGroupId());
-            wb.SetReadThroughput(readThroughput);
-            wb.SetWriteThroughput(writeThroughput);
-            Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), ev.release());
         }
 
         if (reschedule) {
-            TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvUpdateThroughputs, 0,
+            TActivationContext::Schedule(Window, new IEventHandle(TEvPrivate::EvUpdateThroughputs, 0,
                 SelfId(), {}, nullptr, 0));
         }
     }

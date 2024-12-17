@@ -13,27 +13,27 @@ for older versions in distutils.msvc9compiler and distutils.msvccompiler.
 # ported to VS 2005 and VS 2008 by Christian Heimes
 # ported to VS 2015 by Steve Dower
 
+import contextlib
 import os
 import subprocess
-import contextlib
-import warnings
 import unittest.mock as mock
+import warnings
 
 with contextlib.suppress(ImportError):
     import winreg
 
+from itertools import count
+
+from ._log import log
+from .ccompiler import CCompiler, gen_lib_options
 from .errors import (
+    CompileError,
     DistutilsExecError,
     DistutilsPlatformError,
-    CompileError,
     LibError,
     LinkError,
 )
-from .ccompiler import CCompiler, gen_lib_options
-from ._log import log
 from .util import get_platform
-
-from itertools import count
 
 
 def _find_vc2015():
@@ -218,7 +218,7 @@ class MSVCCompiler(CCompiler):
     static_lib_format = shared_lib_format = '%s%s'
     exe_extension = '.exe'
 
-    def __init__(self, verbose=0, dry_run=0, force=0):
+    def __init__(self, verbose=False, dry_run=False, force=False):
         super().__init__(verbose, dry_run, force)
         # target platform (.plat_name is consistent with 'bdist')
         self.plat_name = None
@@ -253,7 +253,7 @@ class MSVCCompiler(CCompiler):
         vc_env = _get_vc_env(plat_spec)
         if not vc_env:
             raise DistutilsPlatformError(
-                "Unable to find a compatible " "Visual Studio installation."
+                "Unable to find a compatible Visual Studio installation."
             )
         self._configure(vc_env)
 
@@ -334,7 +334,7 @@ class MSVCCompiler(CCompiler):
         output_dir=None,
         macros=None,
         include_dirs=None,
-        debug=0,
+        debug=False,
         extra_preargs=None,
         extra_postargs=None,
         depends=None,
@@ -423,7 +423,7 @@ class MSVCCompiler(CCompiler):
         return objects
 
     def create_static_lib(
-        self, objects, output_libname, output_dir=None, debug=0, target_lang=None
+        self, objects, output_libname, output_dir=None, debug=False, target_lang=None
     ):
         if not self.initialized:
             self.initialize()
@@ -452,7 +452,7 @@ class MSVCCompiler(CCompiler):
         library_dirs=None,
         runtime_library_dirs=None,
         export_symbols=None,
-        debug=0,
+        debug=False,
         extra_preargs=None,
         extra_postargs=None,
         build_temp=None,
@@ -551,7 +551,7 @@ class MSVCCompiler(CCompiler):
     def library_option(self, lib):
         return self.library_filename(lib)
 
-    def find_library_file(self, dirs, lib, debug=0):
+    def find_library_file(self, dirs, lib, debug=False):
         # Prefer a debugging library if found (and requested), but deal
         # with it if we don't have one.
         if debug:

@@ -192,6 +192,18 @@ static NTi::TTypePtr OldTypeToTypeV3(EValueType type)
             return NTi::Float();
         case VT_JSON:
             return NTi::Json();
+
+        case VT_DATE32:
+            return NTi::Date32();
+        case VT_DATETIME64:
+            return NTi::Datetime64();
+        case VT_TIMESTAMP64:
+            return NTi::Timestamp64();
+        case VT_INTERVAL64:
+            return NTi::Interval64();
+
+        case VT_UUID:
+            return NTi::Uuid();
     }
 }
 
@@ -250,9 +262,18 @@ static std::pair<EValueType, bool> Simplify(const NTi::TTypePtr& type)
         case ETypeName::Decimal:
             return {VT_STRING, true};
         case ETypeName::Uuid:
-            break;
+            return {VT_UUID, true};
         case ETypeName::Yson:
             return {VT_ANY, true};
+
+        case ETypeName::Date32:
+            return {VT_DATE32, true};
+        case ETypeName::Datetime64:
+            return {VT_DATETIME64, true};
+        case ETypeName::Timestamp64:
+            return {VT_TIMESTAMP64, true};
+        case ETypeName::Interval64:
+            return {VT_INTERVAL64, true};
 
         case ETypeName::Void:
             return {VT_VOID, false};
@@ -327,6 +348,7 @@ TColumnSchema& TColumnSchema::Type(const NTi::TTypePtr& type) &
 {
     Y_ABORT_UNLESS(type.Get(), "Cannot create column schema with nullptr type");
     TypeV3_ = type;
+    RawTypeV3_ = {};
     return *this;
 }
 
@@ -334,6 +356,7 @@ TColumnSchema TColumnSchema::Type(const NTi::TTypePtr& type) &&
 {
     Y_ABORT_UNLESS(type.Get(), "Cannot create column schema with nullptr type");
     TypeV3_ = type;
+    RawTypeV3_ = {};
     return *this;
 }
 
@@ -365,6 +388,25 @@ TColumnSchema& TColumnSchema::Type(EValueType type, bool required) &
 TColumnSchema TColumnSchema::Type(EValueType type, bool required) &&
 {
     return Type(ToTypeV3(type, required));
+}
+
+const TMaybe<TNode>& TColumnSchema::RawTypeV3() const
+{
+    return RawTypeV3_;
+}
+
+TColumnSchema& TColumnSchema::RawTypeV3(TNode rawTypeV3) &
+{
+    RawTypeV3_ = std::move(rawTypeV3);
+    TypeV3_ = nullptr;
+    return *this;
+}
+
+TColumnSchema TColumnSchema::RawTypeV3(TNode rawTypeV3) &&
+{
+    RawTypeV3_ = std::move(rawTypeV3);
+    TypeV3_ = nullptr;
+    return *this;
 }
 
 bool operator==(const TColumnSchema& lhs, const TColumnSchema& rhs)
@@ -633,6 +675,18 @@ TString ToString(EValueType type)
 
         case VT_JSON:
             return "json";
+
+        case VT_DATE32:
+            return "date32";
+        case VT_DATETIME64:
+            return "datetime64";
+        case VT_TIMESTAMP64:
+            return "timestamp64";
+        case VT_INTERVAL64:
+            return "interval64";
+
+        case VT_UUID:
+            return "uuid";
     }
     ythrow yexception() << "Invalid value type " << static_cast<int>(type);
 }

@@ -2,9 +2,11 @@
 #include "common/owner.h"
 
 #include <ydb/core/base/logoblob.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/common.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <ydb/core/util/gen_step.h>
 
 namespace NKikimr::NOlap {
 class TTabletsByBlob;
@@ -12,99 +14,53 @@ class TTabletsByBlob;
 
 namespace NKikimr::NColumnShard {
 
+class TBlobsManagerGCCounters: public TCommonCountersOwner {
+private:
+    using TBase = TCommonCountersOwner;
+    NMonitoring::THistogramPtr KeepsCountBytes;
+    NMonitoring::THistogramPtr KeepsCountBlobs;
+    NMonitoring::THistogramPtr KeepsCountTasks;
+    NMonitoring::THistogramPtr DeletesCountBytes;
+    NMonitoring::THistogramPtr DeletesCountBlobs;
+    NMonitoring::THistogramPtr DeletesCountTasks;
+    NMonitoring::TDynamicCounters::TCounterPtr FullGCTasks;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveBarriers;
+    NMonitoring::TDynamicCounters::TCounterPtr DontMoveBarriers;
+    NMonitoring::TDynamicCounters::TCounterPtr GCTasks;
+    NMonitoring::TDynamicCounters::TCounterPtr EmptyGCTasks;
+public:
+    const NMonitoring::TDynamicCounters::TCounterPtr SkipCollectionEmpty;
+    const NMonitoring::TDynamicCounters::TCounterPtr SkipCollectionThrottling;
+
+    TBlobsManagerGCCounters(const TCommonCountersOwner& sameAs, const TString& componentName);
+
+    void OnGCTask(const ui32 keepsCount, const ui32 keepBytes, const ui32 deleteCount, const ui32 deleteBytes,
+        const bool isFull, const bool moveBarrier) const;
+
+    void OnEmptyGCTask() const {
+        EmptyGCTasks->Add(1);
+    }
+};
+
 class TBlobsManagerCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
-    NMonitoring::TDynamicCounters::TCounterPtr CollectDropExplicitBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr CollectDropExplicitCount;
-    NMonitoring::TDynamicCounters::TCounterPtr CollectDropImplicitBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr CollectDropImplicitCount;
-    NMonitoring::TDynamicCounters::TCounterPtr CollectKeepBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr CollectKeepCount;
-    NMonitoring::TDynamicCounters::TCounterPtr PutBlobBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr PutBlobCount;
-    NMonitoring::TDynamicCounters::TCounterPtr CollectGen;
-    NMonitoring::TDynamicCounters::TCounterPtr CollectStep;
-    NMonitoring::TDynamicCounters::TCounterPtr DeleteBlobMarkerBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr DeleteBlobMarkerCount;
-    NMonitoring::TDynamicCounters::TCounterPtr DeleteBlobDelayedMarkerBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr DeleteBlobDelayedMarkerCount;
-    NMonitoring::TDynamicCounters::TCounterPtr AddSmallBlobBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr AddSmallBlobCount;
-    NMonitoring::TDynamicCounters::TCounterPtr DeleteSmallBlobBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr DeleteSmallBlobCount;
-    NMonitoring::TDynamicCounters::TCounterPtr BrokenKeepCount;
-    NMonitoring::TDynamicCounters::TCounterPtr BrokenKeepBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr BlobsKeepCount;
-    NMonitoring::TDynamicCounters::TCounterPtr BlobsKeepBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr BlobsDeleteCount;
-    NMonitoring::TDynamicCounters::TCounterPtr BlobsDeleteBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr KeepMarkerCount;
-    NMonitoring::TDynamicCounters::TCounterPtr KeepMarkerBytes;
-
+    const NMonitoring::TDynamicCounters::TCounterPtr BlobsToDeleteCount;
+    const NMonitoring::TDynamicCounters::TCounterPtr BlobsToDeleteDelayedCount;
+    const NMonitoring::TDynamicCounters::TCounterPtr BlobsToKeepCount;
 public:
-    NMonitoring::TDynamicCounters::TCounterPtr SkipCollection;
-    NMonitoring::TDynamicCounters::TCounterPtr StartCollection;
-
+    const NMonitoring::TDynamicCounters::TCounterPtr CurrentGen;
+    const NMonitoring::TDynamicCounters::TCounterPtr CurrentStep;
+    const TBlobsManagerGCCounters GCCounters;
     TBlobsManagerCounters(const TString& module);
-
-    void OnKeepMarker(const ui64 size) const {
-        KeepMarkerCount->Add(1);
-        KeepMarkerBytes->Add(size);
+    void OnBlobsToDelete(const NOlap::TTabletsByBlob& blobs) const {
+        BlobsToDeleteCount->Set(blobs.GetSize());
     }
-
-    void OnBlobsKeep(const TSet<TLogoBlobID>& blobs) const;
-
-    void OnBlobsDelete(const NOlap::TTabletsByBlob& blobs) const;
-
-    void OnAddSmallBlob(const ui32 bSize) const {
-        AddSmallBlobBytes->Add(bSize);
-        AddSmallBlobCount->Add(1);
+    void OnBlobsToKeep(const NOlap::TBlobsByGenStep& blobs) const {
+        BlobsToKeepCount->Set(blobs.GetSize());
     }
-
-    void OnDeleteBlobDelayedMarker(const ui32 bSize) const {
-        DeleteBlobDelayedMarkerBytes->Add(bSize);
-        DeleteBlobDelayedMarkerCount->Add(1);
-    }
-
-    void OnDeleteBlobMarker(const ui32 bSize) const {
-        DeleteBlobMarkerBytes->Add(bSize);
-        DeleteBlobMarkerCount->Add(1);
-    }
-
-    void OnNewCollectStep(const ui32 gen, const ui32 step) const {
-        CollectGen->Set(gen);
-        CollectStep->Set(step);
-    }
-
-    void OnDeleteSmallBlob(const ui32 bSize) const {
-        DeleteSmallBlobBytes->Add(bSize);
-        DeleteSmallBlobCount->Add(1);
-    }
-
-    void OnPutResult(const ui32 bSize) const {
-        PutBlobBytes->Add(bSize);
-        PutBlobCount->Add(1);
-    }
-
-    void OnCollectKeep(const ui32 bSize) const {
-        CollectKeepBytes->Add(bSize);
-        CollectKeepCount->Add(1);
-    }
-
-    void OnBrokenKeep(const ui32 bSize) const {
-        BrokenKeepBytes->Add(bSize);
-        BrokenKeepCount->Add(1);
-    }
-
-    void OnCollectDropExplicit(const ui32 bSize) const {
-        CollectDropExplicitBytes->Add(bSize);
-        CollectDropExplicitCount->Add(1);
-    }
-
-    void OnCollectDropImplicit(const ui32 bSize) const {
-        CollectDropImplicitBytes->Add(bSize);
-        CollectDropImplicitCount->Add(1);
+    void OnBlobsToDeleteDelayed(const NOlap::TTabletsByBlob& blobs) const {
+        BlobsToDeleteDelayedCount->Set(blobs.GetSize());
     }
 };
 

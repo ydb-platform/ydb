@@ -1,0 +1,8 @@
+{
+    "get": {
+        "tags": ["LB UI v2"],
+        "security": { "Bearer": [] },
+        "produces": ["application/json"],
+        "summary": "Lists Logbroker installations"
+    }
+}

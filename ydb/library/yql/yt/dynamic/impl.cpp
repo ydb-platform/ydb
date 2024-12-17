@@ -8,11 +8,14 @@ using namespace NYT::NYson;
 
 extern "C" {
 
+#define FREE_STRING_FIELD(StringField) delete[] result->StringField;
+#define FILL_STRING_FIELD(StringField) FillString(bridgeResult->StringField, bridgeResult->StringField##Length, result.StringField);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 ssize_t BridgeGetAbiVersion()
 {
-    return 4; // EYqlPluginAbiVersion::TemporaryTokens
+    return 5; // EYqlPluginAbiVersion::Credentials
 }
 
 TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOptions)
@@ -27,6 +30,10 @@ TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOpt
         ? TYsonString(TString(bridgeOptions->SingletonsConfig, bridgeOptions->SingletonsConfigLength))
         : EmptyMap;
 
+    auto libraries = bridgeOptions->Libraries
+        ? TYsonString(TString(bridgeOptions->Libraries, bridgeOptions->LibrariesLength))
+        : EmptyMap;
+
     TYqlPluginOptions options{
         .SingletonsConfig = singletonsConfig,
         .GatewayConfig = TYsonString(TStringBuf(bridgeOptions->GatewayConfig, bridgeOptions->GatewayConfigLength)),
@@ -34,6 +41,7 @@ TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOpt
         .DqManagerConfig = bridgeOptions->DqGatewayConfigLength ? TYsonString(TStringBuf(bridgeOptions->DqManagerConfig, bridgeOptions->DqManagerConfigLength)) : TYsonString(),
         .FileStorageConfig = TYsonString(TStringBuf(bridgeOptions->FileStorageConfig, bridgeOptions->FileStorageConfigLength)),
         .OperationAttributes = TYsonString(TStringBuf(bridgeOptions->OperationAttributes, bridgeOptions->OperationAttributesLength)),
+        .Libraries = libraries,
         .YTTokenPath = TString(bridgeOptions->YTTokenPath),
         .LogBackend = std::move(*reinterpret_cast<THolder<TLogBackend>*>(bridgeOptions->LogBackend)),
     };
@@ -59,17 +67,14 @@ void BridgeFreeClustersResult(TBridgeClustersResult* result)
         delete[] result->Clusters[i];
     }
     delete[] result->Clusters;
-    delete[] result->YsonError;
+
+    FOR_EACH_BRIDGE_RESULT_STRING_FIELD(FREE_STRING_FIELD);
     delete result;
 }
 
 void BridgeFreeQueryResult(TBridgeQueryResult* result)
 {
-    delete[] result->TaskInfo;
-    delete[] result->Statistics;
-    delete[] result->Plan;
-    delete[] result->YsonResult;
-    delete[] result->YsonError;
+    FOR_EACH_QUERY_RESULT_STRING_FIELD(FREE_STRING_FIELD);
     delete result;
 }
 
@@ -97,7 +102,7 @@ TBridgeClustersResult* BridgeGetUsedClusters(
     static const auto EmptyMap = TYsonString(TString("{}"));
 
     auto* nativePlugin = reinterpret_cast<IYqlPlugin*>(plugin);
-    auto* bridgeClustersResult = new TBridgeClustersResult;
+    auto* bridgeResult = new TBridgeClustersResult;
 
     std::vector<TQueryFile> files(bridgeFileCount);
     for (int index = 0; index < bridgeFileCount; index++) {
@@ -109,34 +114,35 @@ TBridgeClustersResult* BridgeGetUsedClusters(
         });
     }
 
-    auto clustersResult = nativePlugin->GetUsedClusters(
+    auto result = nativePlugin->GetUsedClusters(
         TString(queryText),
         settings ? TYsonString(TString(settings, settingsLength)) : EmptyMap,
         files);
 
-    bridgeClustersResult->Clusters = new const char*[clustersResult.Clusters.size()];
-    for (size_t i = 0; i < clustersResult.Clusters.size(); i++) {
+    bridgeResult->Clusters = new const char*[result.Clusters.size()];
+    for (size_t i = 0; i < result.Clusters.size(); i++) {
         ssize_t clusterLength;
-        FillString(bridgeClustersResult->Clusters[i], clusterLength, clustersResult.Clusters[i]);
+        FillString(bridgeResult->Clusters[i], clusterLength, result.Clusters[i]);
     }
-    bridgeClustersResult->ClusterCount = clustersResult.Clusters.size();
+    bridgeResult->ClusterCount = result.Clusters.size();
 
-    FillString(bridgeClustersResult->YsonError, bridgeClustersResult->YsonErrorLength, clustersResult.YsonError);
+    FOR_EACH_BRIDGE_RESULT_STRING_FIELD(FILL_STRING_FIELD);
 
-    return bridgeClustersResult;
+    return bridgeResult;
 }
 
 TBridgeQueryResult* BridgeRun(
     TBridgeYqlPlugin* plugin,
     const char* queryId,
     const char* user,
-    const char* token,
     const char* queryText,
     const char* settings,
     int settingsLength,
     const TBridgeQueryFile* bridgeFiles,
     int bridgeFileCount,
-    int executeMode)
+    int executeMode,
+    const char* credentials,
+    int credentialsLength)
 {
     static const auto EmptyMap = TYsonString(TString("{}"));
 
@@ -156,17 +162,12 @@ TBridgeQueryResult* BridgeRun(
     auto result = nativePlugin->Run(
         NYT::TGuid::FromString(queryId),
         TString(user),
-        TString(token),
+        TYsonString(TString(credentials, credentialsLength)),
         TString(queryText),
         settings ? TYsonString(TString(settings, settingsLength)) : EmptyMap,
         files,
         executeMode);
-    FillString(bridgeResult->YsonResult, bridgeResult->YsonResultLength, result.YsonResult);
-    FillString(bridgeResult->Plan, bridgeResult->PlanLength, result.Plan);
-    FillString(bridgeResult->Statistics, bridgeResult->StatisticsLength, result.Statistics);
-    FillString(bridgeResult->Progress, bridgeResult->ProgressLength, result.Progress);
-    FillString(bridgeResult->TaskInfo, bridgeResult->TaskInfoLength, result.TaskInfo);
-    FillString(bridgeResult->YsonError, bridgeResult->YsonErrorLength, result.YsonError);
+    FOR_EACH_QUERY_RESULT_STRING_FIELD(FILL_STRING_FIELD);
 
     return bridgeResult;
 }
@@ -177,8 +178,7 @@ TBridgeQueryResult* BridgeGetProgress(TBridgeYqlPlugin* plugin, const char* quer
     auto* bridgeResult = new TBridgeQueryResult;
 
     auto result = nativePlugin->GetProgress(NYT::TGuid::FromString(queryId));
-    FillString(bridgeResult->Plan, bridgeResult->PlanLength, result.Plan);
-    FillString(bridgeResult->Progress, bridgeResult->ProgressLength, result.Progress);
+    FOR_EACH_QUERY_RESULT_STRING_FIELD(FILL_STRING_FIELD);
 
     return bridgeResult;
 }
@@ -189,14 +189,14 @@ TBridgeAbortResult* BridgeAbort(TBridgeYqlPlugin* plugin, const char* queryId)
     auto* bridgeResult = new TBridgeAbortResult;
 
     auto result = nativePlugin->Abort(NYT::TGuid::FromString(queryId));
-    FillString(bridgeResult->YsonError, bridgeResult->YsonErrorLength, result.YsonError);
+    FOR_EACH_ABORT_RESULT_STRING_FIELD(FILL_STRING_FIELD);
 
     return bridgeResult;
 }
 
 void BridgeFreeAbortResult(TBridgeAbortResult* result)
 {
-    delete[] result->YsonError;
+    FOR_EACH_ABORT_RESULT_STRING_FIELD(FREE_STRING_FIELD);
     delete result;
 }
 

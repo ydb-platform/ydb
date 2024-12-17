@@ -15,7 +15,7 @@ public:
     void CreateTestOlapStore(TActorId sender, TString scheme);
     void CreateTestOlapTable(TActorId sender, TString storeOrDirName, TString scheme);
     void SendDataViaActorSystem(TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui32 tsStepUs = 1) const;
-    void SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& expectedStatus =  Ydb::StatusIds::SUCCESS) const;
+    void SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& expectedStatus = Ydb::StatusIds::SUCCESS) const;
 
     virtual std::shared_ptr<arrow::RecordBatch> TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui32 tsStepUs = 1) const = 0;
 };
@@ -27,11 +27,20 @@ private:
     std::shared_ptr<arrow::Schema> GetArrowSchema() const;
     YDB_FLAG_ACCESSOR(WithJsonDocument, false);
     YDB_ACCESSOR(TString, OptionalStorageId, "__MEMORY");
+protected:
     TString ShardingMethod = "HASH_FUNCTION_CONSISTENCY_64";
+private:
     bool WithSomeNulls_ = false;
 protected:
-    void CreateOlapTableWithStore(TString tableName = "olapTable", TString storeName = "olapStore",
+    void CreateSchemaOlapTablesWithStore(const TString tableSchema, TVector<TString> tableName = {"olapTable"}, TString storeName = "olapStore",
         ui32 storeShardsCount = 4, ui32 tableShardsCount = 3);
+    void CreateOlapTablesWithStore(TVector<TString> tableName = {"olapTable"}, TString storeName = "olapStore",
+        ui32 storeShardsCount = 4, ui32 tableShardsCount = 3);
+
+    void CreateSchemaOlapTables(const TString tableSchema, TVector<TString> tableNames = {"olapTable"},
+        ui32 tableShardsCount = 3);
+    void CreateOlapTables(TVector<TString> tableName = {"olapTable"}, ui32 tableShardsCount = 3);
+
 public:
     using TBase::TBase;
 
@@ -43,12 +52,11 @@ public:
 
     static constexpr const char * PROTO_SCHEMA = R"(
         Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
-        Columns { Name: "resource_id" Type: "Utf8" }
+        Columns { Name: "resource_id" Type: "Utf8" DataAccessorConstructor{ ClassName: "SPARSED" }}
         Columns { Name: "uid" Type: "Utf8" }
-        Columns { Name: "level" Type: "Int32" }
+        Columns { Name: "level" Type: "Int32" DataAccessorConstructor{ ClassName: "SPARSED" }}
         Columns { Name: "message" Type: "Utf8" }
         KeyColumnNames: "timestamp"
-        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
     )";
 
     void WithSomeNulls() {

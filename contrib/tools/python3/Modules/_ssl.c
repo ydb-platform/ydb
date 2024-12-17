@@ -2224,6 +2224,17 @@ PySSL_dealloc(PySSLSocket *self)
     PyTypeObject *tp = Py_TYPE(self);
     PyObject_GC_UnTrack(self);
     if (self->ssl) {
+        // If we free the SSL socket object without having called SSL_shutdown,
+        // OpenSSL will invalidate the linked SSL session object. While this
+        // behavior is strictly RFC-compliant, it makes session reuse less
+        // likely and it would also break compatibility with older stdlib
+        // versions (which used an ugly workaround of duplicating the
+        // SSL_SESSION object).
+        // Therefore, we ensure the socket is marked as shutdown in any case.
+        //
+        // See elaborate explanation at
+        // https://github.com/python/cpython/pull/123249#discussion_r1766164530
+        SSL_set_shutdown(self->ssl, SSL_SENT_SHUTDOWN | SSL_get_shutdown(self->ssl));
         SSL_free(self->ssl);
     }
     Py_XDECREF(self->Socket);
@@ -2768,48 +2779,6 @@ _ssl__SSLSocket_verify_client_post_handshake_impl(PySSLSocket *self)
 #endif
 }
 
-static SSL_SESSION*
-_ssl_session_dup(SSL_SESSION *session) {
-    SSL_SESSION *newsession = NULL;
-    int slen;
-    unsigned char *senc = NULL, *p;
-    const unsigned char *const_p;
-
-    if (session == NULL) {
-        PyErr_SetString(PyExc_ValueError, "Invalid session");
-        goto error;
-    }
-
-    /* get length */
-    slen = i2d_SSL_SESSION(session, NULL);
-    if (slen == 0 || slen > 0xFF00) {
-        PyErr_SetString(PyExc_ValueError, "i2d() failed");
-        goto error;
-    }
-    if ((senc = PyMem_Malloc(slen)) == NULL) {
-        PyErr_NoMemory();
-        goto error;
-    }
-    p = senc;
-    if (!i2d_SSL_SESSION(session, &p)) {
-        PyErr_SetString(PyExc_ValueError, "i2d() failed");
-        goto error;
-    }
-    const_p = senc;
-    newsession = d2i_SSL_SESSION(NULL, &const_p, slen);
-    if (newsession == NULL) {
-        PyErr_SetString(PyExc_ValueError, "d2i() failed");
-        goto error;
-    }
-    PyMem_Free(senc);
-    return newsession;
-  error:
-    if (senc != NULL) {
-        PyMem_Free(senc);
-    }
-    return NULL;
-}
-
 static PyObject *
 PySSL_get_session(PySSLSocket *self, void *closure) {
     /* get_session can return sessions from a server-side connection,
@@ -2817,15 +2786,6 @@ PySSL_get_session(PySSLSocket *self, void *closure) {
     PySSLSession *pysess;
     SSL_SESSION *session;
 
-    /* duplicate session as workaround for session bug in OpenSSL 1.1.0,
-     * https://github.com/openssl/openssl/issues/1550 */
-    session = SSL_get0_session(self->ssl);  /* borrowed reference */
-    if (session == NULL) {
-        Py_RETURN_NONE;
-    }
-    if ((session = _ssl_session_dup(session)) == NULL) {
-        return NULL;
-    }
     session = SSL_get1_session(self->ssl);
     if (session == NULL) {
         Py_RETURN_NONE;
@@ -2844,11 +2804,8 @@ PySSL_get_session(PySSLSocket *self, void *closure) {
 }
 
 static int PySSL_set_session(PySSLSocket *self, PyObject *value,
-                             void *closure)
-                              {
+                             void *closure) {
     PySSLSession *pysess;
-    SSL_SESSION *session;
-    int result;
 
     if (!Py_IS_TYPE(value, get_state_sock(self)->PySSLSession_Type)) {
         PyErr_SetString(PyExc_TypeError, "Value is not a SSLSession.");
@@ -2871,14 +2828,7 @@ static int PySSL_set_session(PySSLSocket *self, PyObject *value,
                         "Cannot set session after handshake.");
         return -1;
     }
-    /* duplicate session */
-    if ((session = _ssl_session_dup(pysess->session)) == NULL) {
-        return -1;
-    }
-    result = SSL_set_session(self->ssl, session);
-    /* free duplicate, SSL_set_session() bumps ref count */
-    SSL_SESSION_free(session);
-    if (result == 0) {
+    if (SSL_set_session(self->ssl, pysess->session) == 0) {
         _setSSLError(get_state_sock(self), NULL, 0, __FILE__, __LINE__);
         return -1;
     }
@@ -3143,7 +3093,6 @@ _ssl__SSLContext_impl(PyTypeObject *type, int proto_version)
         result = SSL_CTX_set_cipher_list(ctx, "HIGH:!aNULL:!eNULL");
     }
     if (result == 0) {
-        Py_DECREF(self);
         ERR_clear_error();
         PyErr_SetString(get_state_ctx(self)->PySSLErrorObject,
                         "No cipher can be selected.");
@@ -4520,6 +4469,50 @@ set_sni_callback(PySSLContext *self, PyObject *arg, void *c)
     return 0;
 }
 
+#if OPENSSL_VERSION_NUMBER < 0x30300000L
+static X509_OBJECT *x509_object_dup(const X509_OBJECT *obj)
+{
+    int ok;
+    X509_OBJECT *ret = X509_OBJECT_new();
+    if (ret == NULL) {
+        return NULL;
+    }
+    switch (X509_OBJECT_get_type(obj)) {
+        case X509_LU_X509:
+            ok = X509_OBJECT_set1_X509(ret, X509_OBJECT_get0_X509(obj));
+            break;
+        case X509_LU_CRL:
+            /* X509_OBJECT_get0_X509_CRL was not const-correct prior to 3.0.*/
+            ok = X509_OBJECT_set1_X509_CRL(
+                ret, X509_OBJECT_get0_X509_CRL((X509_OBJECT *)obj));
+            break;
+        default:
+            /* We cannot duplicate unrecognized types in a polyfill, but it is
+             * safe to leave an empty object. The caller will ignore it. */
+            ok = 1;
+            break;
+    }
+    if (!ok) {
+        X509_OBJECT_free(ret);
+        return NULL;
+    }
+    return ret;
+}
+
+static STACK_OF(X509_OBJECT) *
+X509_STORE_get1_objects(X509_STORE *store)
+{
+    STACK_OF(X509_OBJECT) *ret;
+    if (!X509_STORE_lock(store)) {
+        return NULL;
+    }
+    ret = sk_X509_OBJECT_deep_copy(X509_STORE_get0_objects(store),
+                                   x509_object_dup, X509_OBJECT_free);
+    X509_STORE_unlock(store);
+    return ret;
+}
+#endif
+
 PyDoc_STRVAR(PySSLContext_sni_callback_doc,
 "Set a callback that will be called when a server name is provided by the SSL/TLS client in the SNI extension.\n\
 \n\
@@ -4549,7 +4542,12 @@ _ssl__SSLContext_cert_store_stats_impl(PySSLContext *self)
     int x509 = 0, crl = 0, ca = 0, i;
 
     store = SSL_CTX_get_cert_store(self->ctx);
-    objs = X509_STORE_get0_objects(store);
+    objs = X509_STORE_get1_objects(store);
+    if (objs == NULL) {
+        PyErr_SetString(PyExc_MemoryError, "failed to query cert store");
+        return NULL;
+    }
+
     for (i = 0; i < sk_X509_OBJECT_num(objs); i++) {
         obj = sk_X509_OBJECT_value(objs, i);
         switch (X509_OBJECT_get_type(obj)) {
@@ -4563,12 +4561,11 @@ _ssl__SSLContext_cert_store_stats_impl(PySSLContext *self)
                 crl++;
                 break;
             default:
-                /* Ignore X509_LU_FAIL, X509_LU_RETRY, X509_LU_PKEY.
-                 * As far as I can tell they are internal states and never
-                 * stored in a cert store */
+                /* Ignore unrecognized types. */
                 break;
         }
     }
+    sk_X509_OBJECT_pop_free(objs, X509_OBJECT_free);
     return Py_BuildValue("{sisisi}", "x509", x509, "crl", crl,
         "x509_ca", ca);
 }
@@ -4600,7 +4597,12 @@ _ssl__SSLContext_get_ca_certs_impl(PySSLContext *self, int binary_form)
     }
 
     store = SSL_CTX_get_cert_store(self->ctx);
-    objs = X509_STORE_get0_objects(store);
+    objs = X509_STORE_get1_objects(store);
+    if (objs == NULL) {
+        PyErr_SetString(PyExc_MemoryError, "failed to query cert store");
+        goto error;
+    }
+
     for (i = 0; i < sk_X509_OBJECT_num(objs); i++) {
         X509_OBJECT *obj;
         X509 *cert;
@@ -4628,9 +4630,11 @@ _ssl__SSLContext_get_ca_certs_impl(PySSLContext *self, int binary_form)
         }
         Py_CLEAR(ci);
     }
+    sk_X509_OBJECT_pop_free(objs, X509_OBJECT_free);
     return rlist;
 
   error:
+    sk_X509_OBJECT_pop_free(objs, X509_OBJECT_free);
     Py_XDECREF(ci);
     Py_XDECREF(rlist);
     return NULL;

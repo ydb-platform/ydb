@@ -43,7 +43,7 @@ void TBehaviourRegistrator::Handle(TEvTableDescriptionFailed::TPtr& ev) {
 
 void TBehaviourRegistrator::Handle(TEvStartRegistration::TPtr& /*ev*/) {
     NInitializer::TDSAccessorInitialized::Execute(ReqConfig,
-        Behaviour->GetTypeId(), Behaviour->GetInitializer(), InternalController, RegistrationData->GetInitializationSnapshot());
+        Behaviour->GetTypeId(), Behaviour->GetInitializer(), InternalController, RegistrationData->GetSnapshotOwner());
 }
 
 void TBehaviourRegistrator::Handle(NInitializer::TEvInitializationFinished::TPtr& ev) {

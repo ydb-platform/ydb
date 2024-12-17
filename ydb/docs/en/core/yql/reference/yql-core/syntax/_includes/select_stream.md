@@ -4,7 +4,7 @@ To use RTMR streams, use the construct `SELECT STREAM` rather than `SELECT` used
 
 You can specify column names from the source (separated by commas) in your statements, between `SELECT STREAM` and `FROM`. The `*` special character in this position means "all columns".
 
-**Examples:**
+## Examples
 
 ```yql
 SELECT STREAM key FROM my_stream;
@@ -24,7 +24,7 @@ SELECT STREAM * FROM $stream_name;
 
 Filtering rows in the `SELECT STREAM` result based on a condition.
 
-**Examples:**
+### Examples
 
 ```yql
 SELECT STREAM key FROM my_stream
@@ -37,7 +37,7 @@ Concatenating the results of multiple `SELECT STREAM` statements with their sche
 
 {% include [union all rules](../_includes/select/union_all_rules.md) %}
 
-**Examples:**
+### Examples
 
 ```yql
 SELECT STREAM x FROM my_stream_1

@@ -102,6 +102,7 @@ struct TStats {
     ui64 RowCount = 0;
     TChanneledDataSize DataSize = { };
     TChanneledDataSize IndexSize = { };
+    ui64 ByKeyFilterSize = 0;
     THistogram RowCountHistogram;
     THistogram DataSizeHistogram;
 
@@ -109,6 +110,7 @@ struct TStats {
         RowCount = 0;
         DataSize = { };
         IndexSize = { };
+        ByKeyFilterSize = 0;
         RowCountHistogram.clear();
         DataSizeHistogram.clear();
     }
@@ -117,6 +119,7 @@ struct TStats {
         std::swap(RowCount, other.RowCount);
         std::swap(DataSize, other.DataSize);
         std::swap(IndexSize, other.IndexSize);
+        std::swap(ByKeyFilterSize, other.ByKeyFilterSize);
         RowCountHistogram.swap(other.RowCountHistogram);
         DataSizeHistogram.swap(other.DataSizeHistogram);
     }
@@ -188,7 +191,9 @@ private:
     THashMap<TString, ui64> KeyRefCount;
 };
 
-bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env);
+using TBuildStatsYieldHandler = std::function<void()>;
+
+bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, ui32 histogramBucketsCount, IPages* env, TBuildStatsYieldHandler yieldHandler);
 void GetPartOwners(const TSubset& subset, THashSet<ui64>& partOwners);
 
 }}

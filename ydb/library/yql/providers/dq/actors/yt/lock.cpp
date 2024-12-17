@@ -2,12 +2,13 @@
 
 #include "yt_wrapper.h"
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <yt/yt/client/api/transaction.h>
 #include <yt/yt/core/ytree/public.h>
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <library/cpp/yson/node/node_io.h>

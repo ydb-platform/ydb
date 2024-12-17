@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
+import os
 import pytest
 
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
@@ -12,6 +13,7 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 
 class TestSelectLimitWithDbId(TestYdsBase):
     @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_select_same_with_id(self, kikimr, client):
         pytest.skip("Skip until streaming disposition is implemented YQ-589")
 

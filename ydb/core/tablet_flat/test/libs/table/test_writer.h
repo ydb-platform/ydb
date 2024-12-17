@@ -77,8 +77,14 @@ namespace NTest {
                 for (const auto &meta : eggs.BTreeGroupIndexes) {
                     indexesRawSize += meta.IndexSize;
                 }
+                for (const auto &meta : eggs.BTreeHistoricIndexes) {
+                    indexesRawSize += meta.IndexSize;
+                }
             } else {
-                for (auto indexPage : eggs.GroupIndexes) {
+                for (auto indexPage : eggs.FlatGroupIndexes) {
+                    indexesRawSize += Store->GetPageSize(0, indexPage);
+                }
+                for (auto indexPage : eggs.FlatHistoricIndexes) {
                     indexesRawSize += Store->GetPageSize(0, indexPage);
                 }
             }
@@ -90,7 +96,7 @@ namespace NTest {
                     {
                         epoch,
                         TPartScheme::Parse(*eggs.Scheme, eggs.Rooted),
-                        { eggs.GroupIndexes, eggs.HistoricIndexes, eggs.BTreeGroupIndexes, eggs.BTreeHistoricIndexes },
+                        { eggs.FlatGroupIndexes, eggs.FlatHistoricIndexes, eggs.BTreeGroupIndexes, eggs.BTreeHistoricIndexes },
                         eggs.Blobs ? new TExtBlobs(*eggs.Blobs, { }) : nullptr,
                         eggs.ByKey ? new TBloom(*eggs.ByKey) : nullptr,
                         eggs.Large ? new TFrames(*eggs.Large) : nullptr,
@@ -133,9 +139,10 @@ namespace NTest {
             for (bool history : {false, true}) {
                 for (const auto &meta : history ? lay.GetBTreeHistoricIndexes() : lay.GetBTreeGroupIndexes()) {
                     NPage::TBtreeIndexMeta converted{{
-                        meta.GetRootPageId(), 
-                        meta.GetRowCount(), 
-                        meta.GetDataSize(), 
+                        meta.GetRootPageId(),
+                        meta.GetRowCount(),
+                        meta.GetDataSize(),
+                        meta.GetGroupDataSize(),
                         meta.GetErasedRowCount()}, 
                         meta.GetLevelCount(), 
                         meta.GetIndexSize()};

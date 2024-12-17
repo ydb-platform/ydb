@@ -35,7 +35,6 @@ namespace NKikimr {
 
     public:
         static const size_t HeaderSize = sizeof(ui32) + sizeof(ui8);
-        static const size_t HugeBlobOverhead = HeaderSize;
 
         TDiskBlob() = default;
 
@@ -44,29 +43,41 @@ namespace NKikimr {
             , Parts(parts)
         {
             // ensure the blob format is correct
-            Y_ABORT_UNLESS(Rope->GetSize() >= HeaderSize);
             Y_ABORT_UNLESS(parts.GetSize() <= MaxTotalPartCount);
             //Y_ABORT_UNLESS(parts.GetSize() == gtype.TotalPartCount()); // TODO(alexvru): fit UTs
 
+            ui32 blobSize = 0;
+            for (ui8 i = parts.FirstPosition(); i != parts.GetSize(); i = parts.NextPosition(i)) {
+                blobSize += gtype.PartSize(TLogoBlobID(fullId, i + 1));
+            }
+
+            Y_ABORT_UNLESS(rope->GetSize() == blobSize || rope->GetSize() == blobSize + HeaderSize);
+
             auto iter = Rope->Begin();
+            ui32 offset = 0;
 
-            // obtain full data size from the header
-            iter.ExtractPlainDataAndAdvance(&FullDataSize, sizeof(FullDataSize));
+            if (rope->GetSize() == blobSize + HeaderSize) {
+                // obtain full data size from the header
+                iter.ExtractPlainDataAndAdvance(&FullDataSize, sizeof(FullDataSize));
 
-            // then check the parts; we have `parts' argument to validate actual blob content
-            ui8 partsMask;
-            iter.ExtractPlainDataAndAdvance(&partsMask, sizeof(partsMask));
-            Y_ABORT_UNLESS(parts.Raw() == partsMask);
+                // then check the parts; we have `parts' argument to validate actual blob content
+                ui8 partsMask;
+                iter.ExtractPlainDataAndAdvance(&partsMask, sizeof(partsMask));
+                Y_ABORT_UNLESS(parts.Raw() == partsMask);
+
+                // advance offset
+                offset += HeaderSize;
+            } else {
+                FullDataSize = fullId.BlobSize();
+            }
 
             // calculate part layout in the binary
-            ui32 offset = HeaderSize;
             for (ui8 i = 0; i <= parts.GetSize(); ++i) {
                 PartOffs[i] = offset;
                 if (i != parts.GetSize()) {
                     offset += parts.Get(i) ? gtype.PartSize(TLogoBlobID(fullId, i + 1)) : 0;
                 }
             }
-            Y_ABORT_UNLESS(GetSize() == Rope->GetSize(), "%" PRIu32 " != %zu", GetSize(), Rope->GetSize());
         }
 
         bool Empty() const {
@@ -99,7 +110,7 @@ namespace NKikimr {
             }
         }
 
-        TRope GetPart(ui8 part, TRope *holder) const {
+        const TRope& GetPart(ui8 part, TRope *holder) const {
             return GetPart(part, 0, GetPartSize(part), holder);
         }
 
@@ -112,8 +123,8 @@ namespace NKikimr {
             return Parts;
         }
 
-        ui32 GetSize() const {
-            return PartOffs[Parts.GetSize()];
+        ui32 GetBlobSize(bool addHeader) const {
+            return PartOffs[Parts.GetSize()] - PartOffs[0] + (addHeader ? HeaderSize : 0);
         }
 
         ////////////////// Iterator via all parts ///////////////////////////////////////
@@ -203,19 +214,22 @@ namespace NKikimr {
 
     public:
         template<typename TPartIt>
-        static TRope CreateFromDistinctParts(TPartIt first, TPartIt last, NMatrix::TVectorType parts, ui64 fullDataSize, TRopeArena& arena) {
+        static TRope CreateFromDistinctParts(TPartIt first, TPartIt last, NMatrix::TVectorType parts, ui64 fullDataSize,
+                TRopeArena& arena, bool addHeader) {
             // ensure that we have correct number of set parts
             Y_ABORT_UNLESS(parts.CountBits() == std::distance(first, last));
             Y_ABORT_UNLESS(first != last);
 
             TRope rope;
 
-            // fill in header
-            char header[HeaderSize];
-            Y_ABORT_UNLESS(fullDataSize <= Max<ui32>());
-            *reinterpret_cast<ui32*>(header) = fullDataSize;
-            *reinterpret_cast<ui8*>(header + sizeof(ui32)) = parts.Raw();
-            rope.Insert(rope.End(), arena.CreateRope(header, HeaderSize));
+            if (addHeader) {
+                // fill in header
+                char header[HeaderSize];
+                Y_ABORT_UNLESS(fullDataSize <= Max<ui32>());
+                *reinterpret_cast<ui32*>(header) = fullDataSize;
+                *reinterpret_cast<ui8*>(header + sizeof(ui32)) = parts.Raw();
+                rope.Insert(rope.End(), arena.CreateRope(header, HeaderSize));
+            }
 
             // then copy parts' contents to the rope
             while (first != last) {
@@ -225,19 +239,22 @@ namespace NKikimr {
             return rope;
         }
 
-        static inline TRope Create(ui64 fullDataSize, ui8 partId, ui8 total, TRope&& data, TRopeArena& arena) {
+        static inline TRope Create(ui64 fullDataSize, ui8 partId, ui8 total, TRope&& data, TRopeArena& arena,
+                bool addHeader) {
             Y_ABORT_UNLESS(partId > 0 && partId <= 8);
             return CreateFromDistinctParts(&data, &data + 1, NMatrix::TVectorType::MakeOneHot(partId - 1, total),
-                fullDataSize, arena);
+                fullDataSize, arena, addHeader);
         }
 
-        static inline TRope Create(ui64 fullDataSize, NMatrix::TVectorType parts, TRope&& data, TRopeArena& arena) {
-            return CreateFromDistinctParts(&data, &data + 1, parts, fullDataSize, arena);
+        static inline TRope Create(ui64 fullDataSize, NMatrix::TVectorType parts, TRope&& data, TRopeArena& arena,
+                bool addHeader) {
+            return CreateFromDistinctParts(&data, &data + 1, parts, fullDataSize, arena, addHeader);
         }
 
         // static function for calculating size of a blob being created ('Create' function creates blob of this size)
-        static inline ui32 CalculateBlobSize(TBlobStorageGroupType gtype, const TLogoBlobID& fullId, NMatrix::TVectorType parts) {
-            ui32 res = HeaderSize;
+        static inline ui32 CalculateBlobSize(TBlobStorageGroupType gtype, const TLogoBlobID& fullId, NMatrix::TVectorType parts,
+                bool addHeader) {
+            ui32 res = addHeader ? HeaderSize : 0;
             for (ui8 i = parts.FirstPosition(); i != parts.GetSize(); i = parts.NextPosition(i)) {
                 res += gtype.PartSize(TLogoBlobID(fullId, i + 1));
             }
@@ -249,38 +266,56 @@ namespace NKikimr {
 
         // used by blob merger
         void MergePart(const TDiskBlob& source, TPartIterator iter) {
-            const ui8 part = iter.GetPartId() - 1;
-            Y_ABORT_UNLESS(!Rope); // ensure that this blob is used inside merger
-            Y_ABORT_UNLESS(FullDataSize == 0 || FullDataSize == source.FullDataSize, "FullDataSize# %" PRIu32 " source.FullDataSize# %" PRIu32,
-                FullDataSize, source.FullDataSize);
-
-            if (Parts.Empty()) {
-                Parts = NMatrix::TVectorType(0, source.Parts.GetSize());
-                PartOffs.fill(HeaderSize);
-            } else {
-                Y_ABORT_UNLESS(Parts.GetSize() == source.Parts.GetSize());
-            }
-
-            if (!Parts.Get(part)) {
-                Parts.Set(part);
-                TRope partData = iter.GetPart();
-                for (ui8 i = part + 1; i <= Parts.GetSize(); ++i) {
-                    PartOffs[i] += partData.GetSize();
-                }
-                Y_ABORT_UNLESS(part < PartData.size());
-                PartData[part] = std::move(partData);
-                FullDataSize = source.FullDataSize;
+            if (const ui8 partIdx = iter.GetPartId() - 1; Parts.Empty() || !Parts.Get(partIdx)) {
+                MergePart(iter.GetPart(), partIdx, source.FullDataSize, source.Parts.GetSize());
             }
         }
 
-        TRope CreateDiskBlob(TRopeArena& arena) const {
+        void MergePart(TRope&& data, ui8 partIdx, ui64 fullDataSize, ui8 totalPartCount) {
+            Y_ABORT_UNLESS(!Rope);
+            Y_ABORT_UNLESS(FullDataSize == 0 || FullDataSize == fullDataSize);
+
+            if (Parts.Empty()) {
+                Parts = NMatrix::TVectorType(0, totalPartCount);
+                PartOffs.fill(0); // we don't care about absolute offsets here
+            } else {
+                Y_ABORT_UNLESS(Parts.GetSize() == totalPartCount);
+            }
+
+            if (!Parts.Get(partIdx)) {
+                Parts.Set(partIdx);
+                for (ui8 i = partIdx + 1; i <= Parts.GetSize(); ++i) {
+                    PartOffs[i] += data.GetSize();
+                }
+                Y_ABORT_UNLESS(partIdx < PartData.size());
+                PartData[partIdx] = std::move(data);
+                FullDataSize = fullDataSize;
+            }
+        }
+
+        void ClearPart(ui8 partIdx) {
+            Y_DEBUG_ABORT_UNLESS(!Parts.Empty());
+            Y_DEBUG_ABORT_UNLESS(Parts.Get(partIdx));
+            Parts.Clear(partIdx);
+            const TRope data = std::exchange(PartData[partIdx], {});
+            const ui32 size = data.GetSize();
+            for (ui8 i = partIdx + 1; i <= Parts.GetSize(); ++i) {
+                PartOffs[i] -= size;
+            }
+        }
+
+        TRope CreateDiskBlob(TRopeArena& arena, bool addHeader) const {
             Y_ABORT_UNLESS(!Empty());
 
-            char header[HeaderSize];
-            *reinterpret_cast<ui32*>(header) = FullDataSize;
-            *reinterpret_cast<ui8*>(header + sizeof(ui32)) = Parts.Raw();
+            TRope rope;
 
-            TRope rope(arena.CreateRope(header, sizeof(header)));
+            if (addHeader) {
+                char header[HeaderSize];
+                *reinterpret_cast<ui32*>(header) = FullDataSize;
+                *reinterpret_cast<ui8*>(header + sizeof(ui32)) = Parts.Raw();
+                rope.Insert(rope.End(), arena.CreateRope(header, sizeof(header)));
+            }
+
             for (auto it = begin(); it != end(); ++it) {
                 rope.Insert(rope.End(), it.GetPart());
             }
@@ -295,8 +330,11 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TDiskBlobMerger {
     public:
-        TDiskBlobMerger()
-        {}
+        TDiskBlobMerger() = default;
+
+        TDiskBlobMerger(const TDiskBlob& blob) {
+            Add(blob);
+        }
 
         void Clear() {
             Blob = {};
@@ -311,12 +349,21 @@ namespace NKikimr {
             Blob.MergePart(source, it);
         }
 
+        void AddPart(TRope&& data, TBlobStorageGroupType gtype, const TLogoBlobID& id) {
+            Y_DEBUG_ABORT_UNLESS(id.PartId());
+            Blob.MergePart(std::move(data), id.PartId() - 1, id.BlobSize(), gtype.TotalPartCount());
+        }
+
+        void ClearPart(ui8 partIdx) {
+            Blob.ClearPart(partIdx);
+        }
+
         bool Empty() const {
             return Blob.Empty();
         }
 
-        TRope CreateDiskBlob(TRopeArena& arena) const {
-            return Blob.CreateDiskBlob(arena);
+        TRope CreateDiskBlob(TRopeArena& arena, bool addHeader) const {
+            return Blob.CreateDiskBlob(arena, addHeader);
         }
 
         const TDiskBlob& GetDiskBlob() const {
@@ -349,56 +396,6 @@ namespace NKikimr {
 
     private:
         TDiskBlob Blob;
-    };
-
-    class TDiskBlobMergerWithMask : public TDiskBlobMerger {
-    public:
-        TDiskBlobMergerWithMask() = default;
-        TDiskBlobMergerWithMask(const TDiskBlobMergerWithMask&) = default;
-        TDiskBlobMergerWithMask(TDiskBlobMergerWithMask&&) = default;
-
-        TDiskBlobMergerWithMask(const TDiskBlobMerger& base, NMatrix::TVectorType mask)
-            : AddFilterMask(mask)
-        {
-            // TODO(alexvru): check for saneness; maybe we shall not provide blobs not in mask?
-            const TDiskBlob& blob = base.GetDiskBlob();
-            for (auto it = blob.begin(); it != blob.end(); ++it) {
-                AddPart(blob, it);
-            }
-        }
-
-        void Clear() {
-            TDiskBlobMerger::Clear();
-            AddFilterMask.Clear();
-        }
-
-        void SetFilterMask(NMatrix::TVectorType mask) {
-            Y_ABORT_UNLESS(!AddFilterMask);
-            AddFilterMask = mask;
-        }
-
-        void Add(const TDiskBlob &addBlob) {
-            Y_ABORT_UNLESS(AddFilterMask);
-            NMatrix::TVectorType addParts = addBlob.GetParts() & *AddFilterMask;
-            if (!addParts.Empty()) {
-                TDiskBlobMerger::AddImpl(addBlob, addParts);
-            }
-        }
-
-        void AddPart(const TDiskBlob& source, const TDiskBlob::TPartIterator& it) {
-            Y_ABORT_UNLESS(AddFilterMask);
-            if (AddFilterMask->Get(it.GetPartId() - 1)) {
-                TDiskBlobMerger::AddPart(source, it);
-            }
-        }
-
-        void Swap(TDiskBlobMergerWithMask& m) {
-            TDiskBlobMerger::Swap(m);
-            DoSwap(AddFilterMask, m.AddFilterMask);
-        }
-
-    private:
-        TMaybe<NMatrix::TVectorType> AddFilterMask;
     };
 
 } // NKikimr

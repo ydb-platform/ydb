@@ -12,7 +12,10 @@ class TSecretId {
 private:
     YDB_READONLY_PROTECT_DEF(TString, OwnerUserId);
     YDB_READONLY_PROTECT_DEF(TString, SecretId);
+
 public:
+    inline static const TString PrefixWithUser = "USId:";
+
     TSecretId() = default;
     TSecretId(const TString& ownerUserId, const TString& secretId)
         : OwnerUserId(ownerUserId)
@@ -31,7 +34,7 @@ public:
         if (proto.HasValue()) {
             return proto.GetValue();
         } else {
-            return TStringBuilder() << "USId:" << (proto.GetSecretOwnerId() ? proto.GetSecretOwnerId() : defaultOwnerId) << ":" << SecretId;
+            return TStringBuilder() << PrefixWithUser << (proto.GetSecretOwnerId() ? proto.GetSecretOwnerId() : defaultOwnerId) << ":" << SecretId;
         }
     }
 
@@ -43,18 +46,41 @@ public:
     }
 };
 
+class TSecretName {
+private:
+    YDB_READONLY_DEF(TString, SecretId);
+
+public:
+    inline static const TString PrefixNoUser = "SId:";
+
+    TSecretName() = default;
+    TSecretName(const TString& secretId) : SecretId(secretId) {}
+
+    TString SerializeToString() const {
+        return TStringBuilder() << "SId:" << SecretId;
+    }
+
+    bool DeserializeFromString(const TString& secretString) {
+        if (secretString.StartsWith(PrefixNoUser)) {
+            SecretId = secretString.substr(PrefixNoUser.size());
+            return true;
+        }
+        return false;
+    }
+};
+
 class TSecretIdOrValue {
 private:
-    YDB_READONLY_DEF(std::optional<TSecretId>, SecretId);
-    YDB_READONLY_DEF(std::optional<TString>, Value);
+    using TState = std::variant<std::monostate, TSecretId, TSecretName, TString>;
+    YDB_READONLY_DEF(TState, State);
+
+private:
     TSecretIdOrValue() = default;
 
-    bool DeserializeFromStringImpl(const TString& info, const TString& defaultUserId) {
-        static const TString prefixWithUser = "USId:";
-        static const TString prefixNoUser = "SId:";
-        if (info.StartsWith(prefixWithUser)) {
+    bool DeserializeFromStringImpl(const TString& info, const TString& defaultUserId = "") {
+        if (info.StartsWith(TSecretId::PrefixWithUser)) {
             TStringBuf sb(info.data(), info.size());
-            sb.Skip(prefixWithUser.size());
+            sb.Skip(TSecretId::PrefixWithUser.size());
             TStringBuf uId;
             TStringBuf sId;
             if (!sb.TrySplit(':', uId, sId)) {
@@ -63,32 +89,37 @@ private:
             if (!uId || !sId) {
                 return false;
             }
-            SecretId = TSecretId(uId, sId);
-        } else if (info.StartsWith(prefixNoUser)) {
+            State = TSecretId(uId, sId);
+        } else if (info.StartsWith(TSecretName::PrefixNoUser)) {
             TStringBuf sb(info.data(), info.size());
-            sb.Skip(prefixNoUser.size());
-            SecretId = TSecretId(defaultUserId, TString(sb));
-            if (!sb || !defaultUserId) {
+            sb.Skip(TSecretName::PrefixNoUser.size());
+            if (!sb) {
                 return false;
             }
+            if (defaultUserId) {
+                State = TSecretId(defaultUserId, TString(sb));
+            } else {
+                State = TSecretName(TString(sb));
+            }
         } else {
-            Value = info;
+            State = info;
         }
         return true;
     }
+
     explicit TSecretIdOrValue(const TSecretId& id)
-        : SecretId(id) {
-
+        : State(id) {
     }
-
+    explicit TSecretIdOrValue(const TSecretName& id)
+        : State(id) {
+    }
     explicit TSecretIdOrValue(const TString& value)
-        : Value(value) {
-
+        : State(value) {
     }
 
 public:
     bool operator!() const {
-        return !Value && !SecretId;
+        return std::holds_alternative<std::monostate>(State);
     }
 
     static TSecretIdOrValue BuildAsValue(const TString& value) {
@@ -103,12 +134,18 @@ public:
         return TSecretIdOrValue(id);
     }
 
-    static std::optional<TSecretIdOrValue> DeserializeFromOptional(const NKikimrSchemeOp::TSecretableVariable& proto, const TString& secretInfo, const TString& defaultOwnerId = Default<TString>()) {
+    static TSecretIdOrValue BuildAsId(const TSecretName& id) {
+        return TSecretIdOrValue(id);
+    }
+
+    static std::optional<TSecretIdOrValue> DeserializeFromOptional(
+        const NKikimrSchemeOp::TSecretableVariable& proto, const TString& secretInfo, const TString& defaultOwnerId = Default<TString>()) {
         if (proto.HasSecretId()) {
             return DeserializeFromProto(proto, defaultOwnerId);
         } else if (proto.HasValue()) {
             return DeserializeFromString(proto.GetValue().GetData());
-        } if (secretInfo) {
+        }
+        if (secretInfo) {
             return DeserializeFromString(secretInfo, defaultOwnerId);
         } else {
             return {};
@@ -117,16 +154,25 @@ public:
 
     NKikimrSchemeOp::TSecretableVariable SerializeToProto() const {
         NKikimrSchemeOp::TSecretableVariable result;
-        if (SecretId) {
-            result.MutableSecretId()->SetId(SecretId->GetSecretId());
-            result.MutableSecretId()->SetOwnerId(SecretId->GetOwnerUserId());
-        } else if (Value) {
-            result.MutableValue()->SetData(*Value);
-        }
+        std::visit(TOverloaded(
+            [](std::monostate){ },
+            [&result](const TSecretId& id){
+                result.MutableSecretId()->SetId(id.GetSecretId());
+                result.MutableSecretId()->SetOwnerId(id.GetOwnerUserId());
+            },
+            [&result](const TSecretName& name){
+                result.MutableSecretId()->SetId(name.GetSecretId());
+            },
+            [&result](const TString& value){
+                result.MutableValue()->SetData(value);
+            }
+        ),
+        State);
         return result;
     }
 
-    static std::optional<TSecretIdOrValue> DeserializeFromProto(const NKikimrSchemeOp::TSecretableVariable& proto, const TString& defaultOwnerId = Default<TString>()) {
+    static std::optional<TSecretIdOrValue> DeserializeFromProto(
+        const NKikimrSchemeOp::TSecretableVariable& proto, const TString& defaultOwnerId = Default<TString>()) {
         if (proto.HasSecretId()) {
             TString ownerId;
             TString secretId;
@@ -157,12 +203,21 @@ public:
     }
 
     TString SerializeToString() const {
-        if (SecretId) {
-            return SecretId->SerializeToString();
-        } else if (Value) {
-            return *Value;
-        }
-        return "";
+        return std::visit(TOverloaded(
+            [](std::monostate) -> TString{
+                return "";
+            },
+            [](const TSecretId& id) -> TString{
+                return TStringBuilder() << TSecretId::PrefixWithUser << id.GetOwnerUserId() << ":" << id.GetSecretId();
+            },
+            [](const TSecretName& name) -> TString{
+                return TStringBuilder() << TSecretName::PrefixNoUser << name.GetSecretId();
+            },
+            [](const TString& value) -> TString{
+                return value;
+            }
+        ),
+        State);
     }
 
     TString DebugString() const;

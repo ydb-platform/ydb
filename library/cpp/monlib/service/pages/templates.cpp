@@ -31,5 +31,6 @@ namespace NMonitoring {
     extern const char DListTag[] = "dl";
     extern const char DTermTag[] = "dt";
     extern const char DDescTag[] = "dd";
+    extern const char InputTag[] = "input";
 
 }

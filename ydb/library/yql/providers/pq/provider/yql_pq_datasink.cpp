@@ -1,15 +1,15 @@
 #include "yql_pq_provider_impl.h"
 #include "yql_pq_helpers.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_topic_key_parser.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -147,11 +147,14 @@ public:
             .Done().Ptr();
     }
 
-    void GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs) override {
+    ui32 GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs, bool withLimits) override {
+        Y_UNUSED(withLimits);
         if (auto maybeOp = TMaybeNode<TPqWriteTopic>(&node)) {
             auto op = maybeOp.Cast();
             outputs.push_back(TPinInfo(nullptr, op.DataSink().Raw(), op.Topic().Raw(), MakeTopicDisplayName(op.Topic().Cluster().Value(), op.Topic().Path().Value()), false));
+            return 1;
         }
+        return 0;
     }
 
     bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {

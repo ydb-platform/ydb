@@ -1,0 +1,66 @@
+{
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "fdate";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "fdatetime";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "ftimestamp";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "finterval";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "ftzdate";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "ftzdatetime";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "ftztimestamp";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "finterval_1day";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}
+

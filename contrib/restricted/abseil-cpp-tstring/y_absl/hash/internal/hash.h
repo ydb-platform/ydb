@@ -24,6 +24,15 @@
 #include <TargetConditionals.h>
 #endif
 
+#include "y_absl/base/config.h"
+
+// For feature testing and determining which headers can be included.
+#if Y_ABSL_INTERNAL_CPLUSPLUS_LANG >= 202002L
+#include <version>
+#else
+#include <ciso646>
+#endif
+
 #include <algorithm>
 #include <array>
 #include <bitset>
@@ -47,7 +56,6 @@
 #include <utility>
 #include <vector>
 
-#include "y_absl/base/config.h"
 #include "y_absl/base/internal/unaligned_access.h"
 #include "y_absl/base/port.h"
 #include "y_absl/container/fixed_array.h"
@@ -61,7 +69,7 @@
 #include "y_absl/types/variant.h"
 #include "y_absl/utility/utility.h"
 
-#if Y_ABSL_INTERNAL_CPLUSPLUS_LANG >= 201703L && \
+#if defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L && \
     !defined(_LIBCPP_HAS_NO_FILESYSTEM_LIBRARY)
 #include <filesystem>  // NOLINT
 #endif
@@ -591,7 +599,9 @@ H AbslHashValue(H hash_state, std::basic_string_view<Char> str) {
 #if defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L && \
     !defined(_LIBCPP_HAS_NO_FILESYSTEM_LIBRARY) && \
     (!defined(__ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__) ||        \
-     __ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__ >= 130000)
+     __ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__ >= 130000) &&       \
+    (!defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) ||         \
+     __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ >= 101500)
 
 #define Y_ABSL_INTERNAL_STD_FILESYSTEM_PATH_HASH_AVAILABLE 1
 

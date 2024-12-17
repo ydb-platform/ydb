@@ -6,6 +6,7 @@ SRCS(
     readers.cpp
     request_migrator.cpp
     table_client.cpp
+    transaction.cpp
 )
 
 PEERDIR(
@@ -15,7 +16,8 @@ PEERDIR(
     ydb/public/sdk/cpp/client/impl/ydb_endpoints
     ydb/public/sdk/cpp/client/impl/ydb_internal/session_pool
     ydb/public/sdk/cpp/client/ydb_table/query_stats
-    ydb/library/yql/public/issue/protos
+    yql/essentials/public/issue/protos
+    ydb/library/yql/public/ydb_issue
 )
 
 END()

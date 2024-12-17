@@ -1,6 +1,8 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#include "schemeshard_private.h"
+
 namespace {
 
 using namespace NKikimr;
@@ -65,6 +67,15 @@ public:
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxRmDir, path.Base()->PathId);
         txState.State = TTxState::Propose;
         txState.MinStep = TStepId(1);
+
+        const TPathElement::TPtr pathElement = context.SS->PathsById.at(path.Base()->PathId);
+        if (pathElement->TempDirOwnerActorId) {
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Processing remove temp directory with Name: " << name
+                    << ", WorkingDir: " << parentPathStr
+                    << ", TempDirOwnerActorId: " << pathElement->TempDirOwnerActorId);
+            context.OnComplete.UpdateTempDirsToRemoveState(pathElement->TempDirOwnerActorId, path.Base()->PathId);
+        }
 
         context.OnComplete.ActivateTx(OperationId);
 

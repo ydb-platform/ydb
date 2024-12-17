@@ -4,6 +4,8 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
+VERSION(8.45)
+
 LICENSE(BSD-3-Clause)
 
 PEERDIR(
@@ -21,12 +23,6 @@ NO_UTIL()
 CFLAGS(
     -DHAVE_CONFIG_H
 )
-
-IF(PCRE_LINK_SIZE)
-    CFLAGS(
-        -DPCRE_LINK_SIZE=$PCRE_LINK_SIZE
-    )
-ENDIF()
 
 SRCDIR(contrib/libs/pcre)
 

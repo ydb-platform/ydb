@@ -9,17 +9,44 @@ namespace NKikimr::NOlap::NDataLocks {
 class TManager {
 private:
     THashMap<TString, std::shared_ptr<ILock>> ProcessLocks;
+    std::shared_ptr<TAtomicCounter> StopFlag = std::make_shared<TAtomicCounter>(0);
+    void UnregisterLock(const TString& processId);
 public:
     TManager() = default;
 
-    void RegisterLock(const std::shared_ptr<ILock>& lock);
+    void Stop();
+
+    class TGuard {
+    private:
+        const TString ProcessId;
+        std::shared_ptr<TAtomicCounter> StopFlag;
+        bool Released = false;
+    public:
+        TGuard(const TString& processId, const std::shared_ptr<TAtomicCounter>& stopFlag)
+            : ProcessId(processId)
+            , StopFlag(stopFlag)
+        {
+
+        }
+
+        void AbortLock();
+
+        ~TGuard();
+
+        void Release(TManager& manager);
+    };
+
+    [[nodiscard]] std::shared_ptr<TGuard> RegisterLock(const std::shared_ptr<ILock>& lock);
     template <class TLock, class ...Args>
-    void RegisterLock(Args&&... args) {
-        RegisterLock(std::make_shared<TLock>(args...));
+    [[nodiscard]] std::shared_ptr<TGuard> RegisterLock(Args&&... args) {
+        return RegisterLock(std::make_shared<TLock>(args...));
     }
-    void UnregisterLock(const TString& processId);
-    std::optional<TString> IsLocked(const TPortionInfo& portion) const;
-    std::optional<TString> IsLocked(const TGranuleMeta& granule) const;
+    std::optional<TString> IsLocked(
+        const TPortionInfo& portion, const ELockCategory lockCategory, const THashSet<TString>& excludedLocks = {}) const;
+    std::optional<TString> IsLocked(
+        const std::shared_ptr<const TPortionInfo>& portion, const ELockCategory lockCategory, const THashSet<TString>& excludedLocks = {}) const;
+    std::optional<TString> IsLocked(
+        const TGranuleMeta& granule, const ELockCategory lockCategory, const THashSet<TString>& excludedLocks = {}) const;
 
 };
 

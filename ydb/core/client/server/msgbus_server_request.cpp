@@ -10,8 +10,8 @@
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/protos/query_stats.pb.h>
 
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {
@@ -55,6 +55,7 @@ public:
     {
         TBase::SetSecurityToken(Request->Record.GetSecurityToken());
         TBase::SetRequireAdminAccess(true); // MiniKQL and ReadTable execution required administative access
+        TBase::SetPeerName(msg->MsgContext.GetPeerName());
     }
 
     //STFUNC(StateWork)
@@ -72,6 +73,7 @@ public:
         ProposalStatus.Reset(new NKikimrTxUserProxy::TEvProposeTransactionStatus());
         Proposal.Reset(new TEvTxUserProxy::TEvProposeTransaction());
         NKikimrTxUserProxy::TEvProposeTransaction &record = Proposal->Record;
+        record.SetPeerName(GetPeerName());
 
         // Transaction protobuf structure might be very heavy (if it has a batch of parameters)
         // so we don't want to copy it, just move its contents

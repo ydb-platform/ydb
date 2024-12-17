@@ -4,7 +4,7 @@ Both the [console](../../../interfaces/cli.md) and [web](../../../interfaces/web
 
 The `FileContent` and `FilePath` argument is a string with an alias.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT "Content of "
@@ -21,7 +21,7 @@ The argument is a string with a prefix among aliases.
 
 See also [PRAGMA File](../../../syntax/pragma.md#file) and [PRAGMA Folder](../../../syntax/pragma.md#folder).
 
-**Examples**
+### Examples
 
 ```yql
 PRAGMA File("foo/1.txt", "http://url/to/somewhere");
@@ -34,7 +34,7 @@ SELECT FolderPath("foo"); -- The directory at the return path will
 
 ## ParseFile
 
-Get a list of values from the attached text file. It can be combined with [IN](../../../syntax/expressions.md#in), attaching the file by URL <span style="color:gray;">(see the instruction for attaching files in the {% if feature_webui %}[web interface](../../../interfaces/web.md#attach) and the {% endif %} [client](../../../interfaces/cli.md#attach))</span>.
+Get a list of values from the attached text file. It can be combined with [IN](../../../syntax/expressions.md#in), attaching the file by URL (see the instruction for attaching files in the {% if feature_webui %}[web interface](../../../interfaces/web.md#attach) and the {% endif %} [client](../../../interfaces/cli.md#attach)).
 
 Only one file format is supported: one value per line.{% if feature_udf_noncpp %} For something more sophisticated, for now you have to write a small UDF in [Python](../../../udf/python.md) or [JavaScript](../../../udf/javascript.md). {% endif %}
 
@@ -49,7 +49,7 @@ The return value is a lazy list. For repeat use, wrap it in the function [ListCo
 
 {% endnote %}
 
-**Examples:**
+### Examples
 
 ```yql
 SELECT ListLength(ParseFile("String", "my_file.txt"));
@@ -57,6 +57,6 @@ SELECT ListLength(ParseFile("String", "my_file.txt"));
 
 ```yql
 SELECT * FROM my_table
-WHERE int_column IN ParseFile("Int64", "my_file.txt"));
+WHERE int_column IN ParseFile("Int64", "my_file.txt");
 ```
 

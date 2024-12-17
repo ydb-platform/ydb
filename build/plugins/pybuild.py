@@ -5,21 +5,22 @@ import six
 from hashlib import md5
 
 import ymake
-from _common import stripext, rootrel_arc_src, listid, pathid, lazy, get_no_lint_value
+from _common import stripext, rootrel_arc_src, listid, pathid, lazy, get_no_lint_value, ugly_conftest_exception
 
 
 YA_IDE_VENV_VAR = 'YA_IDE_VENV'
 PY_NAMESPACE_PREFIX = 'py/namespace'
 BUILTIN_PROTO = 'builtin_proto'
 DEFAULT_FLAKE8_FILE_PROCESSING_TIME = "1.5"  # in seconds
+DEFAULT_BLACK_FILE_PROCESSING_TIME = "1.5"  # in seconds
 
 
-def _split_macro_call(macro_call, data, item_size, chunk_size=1024):
+def _split_macro_call(macro_call, data, item_size, chunk_size=1024, compress=False):
     index = 0
     length = len(data)
     offset = item_size * chunk_size
     while index + 1 < length:
-        macro_call(data[index : index + offset])
+        macro_call(([] if compress else ['DONT_COMPRESS']) + data[index : index + offset])
         index += offset
 
 
@@ -56,8 +57,8 @@ def uniq_suffix(path, unit):
 
 
 def pb2_arg(suf, path, mod, unit):
-    return '{path}__int__{suf}={mod}{modsuf}'.format(
-        path=stripext(to_build_root(path, unit)), suf=suf, mod=mod, modsuf=stripext(suf)
+    return '{path}__int{py_ver}__{suf}={mod}{modsuf}'.format(
+        path=stripext(to_build_root(path, unit)), suf=suf, mod=mod, modsuf=stripext(suf), py_ver=unit.get('_PYTHON_VER')
     )
 
 
@@ -74,7 +75,7 @@ def ev_cc_arg(path, unit):
 
 
 def ev_arg(path, mod, unit):
-    return '{}__int___ev_pb2.py={}_ev_pb2'.format(stripext(to_build_root(path, unit)), mod)
+    return '{}__int{}___ev_pb2.py={}_ev_pb2'.format(stripext(to_build_root(path, unit)), unit.get('_PYTHON_VER'), mod)
 
 
 def mangle(name):
@@ -168,9 +169,12 @@ def add_python_lint_checks(unit, py_ver, files):
             "travel/",
             "market/report/lite/",  # MARKETOUT-38662, deadline: 2021-08-12
             "passport/backend/oauth/",  # PASSP-35982
+            "sdg/sdc/contrib/",  # SDC contrib
+            "sdg/sdc/third_party/",  # SDC contrib
             "testenv/",  # CI-3229
             "yt/yt/",  # YT-20053
             "yt/python/",  # YT-20053
+            "yt/python_py2/",
         )
 
         if not upath.startswith(no_lint_allowed_paths):
@@ -179,59 +183,9 @@ def add_python_lint_checks(unit, py_ver, files):
     if files and no_lint_value not in ("none", "none_internal"):
         resolved_files = get_resolved_files()
         if resolved_files:
-            flake8_cfg = 'build/config/tests/flake8/flake8.conf'
-            migrations_cfg = 'build/rules/flake8/migrations.yaml'
-            resource = "build/external_resources/flake8_py{}".format(py_ver)
-            lint_name = "py2_flake8" if py_ver == 2 else "flake8"
-            params = [lint_name, "tools/flake8_linter/flake8_linter"]
-            params += ["FILES"] + resolved_files
-            params += ["GLOBAL_RESOURCES", resource]
-            params += [
-                "FILE_PROCESSING_TIME",
-                unit.get("FLAKE8_FILE_PROCESSING_TIME") or DEFAULT_FLAKE8_FILE_PROCESSING_TIME,
-            ]
-
-            extra_params = []
-            if unit.get("DISABLE_FLAKE8_MIGRATIONS") == "yes":
-                extra_params.append("DISABLE_FLAKE8_MIGRATIONS=yes")
-                config_files = [flake8_cfg, '']
-            else:
-                config_files = [flake8_cfg, migrations_cfg]
-            params += ["CONFIGS"] + config_files
-
-            if extra_params:
-                params += ["EXTRA_PARAMS"] + extra_params
-            unit.on_add_linter_check(params)
-
-    # ruff related stuff
-    if unit.get('STYLE_RUFF_VALUE') == 'yes':
-        if no_lint_value in ("none", "none_internal"):
-            ymake.report_configure_error(
-                'NO_LINT() and STYLE_RUFF() can\'t be enabled both at the same time',
-            )
-        # temporary allow using ruff for taxi only
-        ruff_allowed_paths = ("taxi/",)
-        if not upath.startswith(ruff_allowed_paths):
-            ymake.report_configure_error("STYLE_RUFF() is allowed only in " + ", ".join(ruff_allowed_paths))
-
-        resolved_files = get_resolved_files()
-        if resolved_files:
-            resource = "build/external_resources/ruff"
-            params = ["ruff", "tools/ruff_linter/bin/ruff_linter"]
-            params += ["FILES"] + resolved_files
-            params += ["GLOBAL_RESOURCES", resource]
-            configs = [unit.get('RUFF_CONFIG_PATHS_FILE'), 'build/config/tests/ruff/ruff.toml'] + get_ruff_configs(unit)
-            params += ['CONFIGS'] + configs
-            unit.on_add_linter_check(params)
-
-    if files and unit.get('STYLE_PYTHON_VALUE') == 'yes' and is_py3(unit):
-        resolved_files = get_resolved_files()
-        if resolved_files:
-            black_cfg = unit.get('STYLE_PYTHON_PYPROJECT_VALUE') or 'build/config/tests/py_style/config.toml'
-            params = ['black', 'tools/black_linter/black_linter']
-            params += ['FILES'] + resolved_files
-            params += ['CONFIGS', black_cfg]
-            unit.on_add_linter_check(params)
+            # repeated PY_SRCS, TEST_SCRS+PY_SRCS
+            collected = json.loads(unit.get('PY_LINTER_FILES')) if unit.get('PY_LINTER_FILES') else []
+            unit.set(['PY_LINTER_FILES', json.dumps(resolved_files + collected)])
 
 
 def is_py3(unit):
@@ -255,6 +209,11 @@ def py_program(unit, py3):
         if unit.get('PYTHON_SQLITE3') != 'no':
             peers.append('contrib/tools/python/src/Modules/_sqlite')
     unit.onpeerdir(peers)
+
+    # DEVTOOLSSUPPORT-53161
+    if os.name == 'nt':
+        unit.onwindows_long_path_manifest()
+
     if unit.get('MODULE_TYPE') == 'PROGRAM':  # can not check DLL
         unit.onadd_check_py_imports()
 
@@ -548,10 +507,10 @@ def onpy_srcs(unit, *args):
         if py_files2res:
             # Compile original and generated sources into target for proper cython coverage calculation
             for files2res in (py_files2res, cpp_files2res):
-                unit.onresource_files([x for name, path in files2res for x in ('DEST', name, path)])
+                unit.onresource_files(['DONT_COMPRESS'] + [x for name, path in files2res for x in ('DEST', name, path)])
 
         if include_map:
-            data = []
+            data = ['DONT_COMPRESS']
             prefix = 'resfs/cython/include'
             for line in sorted(
                 '{}/{}={}'.format(prefix, filename, ':'.join(sorted(files)))
@@ -582,6 +541,7 @@ def onpy_srcs(unit, *args):
 
         if py3:
             mod_list_md5 = md5()
+            compress = False
             for path, mod in pys:
                 mod_list_md5.update(six.ensure_binary(mod))
                 if not (venv and is_extended_source_search_enabled(path, unit)):
@@ -593,17 +553,21 @@ def onpy_srcs(unit, *args):
                         dst = path + uniq_suffix(path, unit)
                         unit.on_py3_compile_bytecode([root_rel_path + '-', path, dst])
                         res += ['DEST', dest + '.yapyc3', dst + '.yapyc3']
+                    if not compress and ugly_conftest_exception(path):
+                        compress = True
 
             if py_namespaces:
                 # Note: Add md5 to key to prevent key collision if two or more PY_SRCS() used in the same ya.make
-                ns_res = []
+                ns_res = ['DONT_COMPRESS']
                 for path, ns in sorted(py_namespaces.items()):
                     key = '{}/{}/{}'.format(PY_NAMESPACE_PREFIX, mod_list_md5.hexdigest(), path)
                     namespaces = ':'.join(sorted(ns))
                     ns_res += ['-', '{}="{}"'.format(key, namespaces)]
                 unit.onresource(ns_res)
 
-            _split_macro_call(unit.onresource_files, res, (3 if with_py else 0) + (3 if with_pyc else 0))
+            _split_macro_call(
+                unit.onresource_files, res, (3 if with_py else 0) + (3 if with_pyc else 0), compress=compress
+            )
             add_python_lint_checks(
                 unit, 3, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split()
             )
@@ -612,12 +576,7 @@ def onpy_srcs(unit, *args):
                 root_rel_path = rootrel_arc_src(path, unit)
                 if with_py:
                     key = '/py_modules/' + mod
-                    res += [
-                        path,
-                        key,
-                        '-',
-                        'resfs/src/{}={}'.format(key, root_rel_path),
-                    ]
+                    res += [path, key, '-', 'resfs/src/{}=${{rootrel;input;context=TEXT:"{}"}}'.format(key, path)]
                 if with_pyc:
                     src = unit.resolve_arc_path(path) or path
                     dst = path + uniq_suffix(path, unit)
@@ -636,7 +595,7 @@ def onpy_srcs(unit, *args):
             pyis_dups = ', '.join(name for name in sorted(pyis_dups))
             ymake.report_configure_error('Duplicate(s) is found in the PY_SRCS macro: {}'.format(pyis_dups))
 
-        res = []
+        res = ['DONT_COMPRESS']
         for path, mod in pyis:
             dest = 'py/' + mod.replace('.', '/') + '.pyi'
             res += ['DEST', dest, path]
@@ -655,7 +614,8 @@ def onpy_srcs(unit, *args):
 
     if protos:
         if not upath.startswith(py_runtime_path) and not upath.startswith(builtin_proto_path):
-            unit.onpeerdir(py_runtime_path)
+            if 'protobuf_old' not in upath:
+                unit.onpeerdir(py_runtime_path)
 
         unit.onpeerdir(unit.get("PY_PROTO_DEPS").split())
 
@@ -711,7 +671,7 @@ def onpy_doctests(unit, *args):
     The packages should be part of a test (listed as sources of the test or its PEERDIRs).
     """
     if unit.get('PY3TEST_BIN' if is_py3(unit) else 'PYTEST_BIN') != 'no':
-        unit.onresource(['-', 'PY_DOCTEST_PACKAGES="{}"'.format(' '.join(args))])
+        unit.onresource(['DONT_COMPRESS', '-', 'PY_DOCTEST_PACKAGES="{}"'.format(' '.join(args))])
 
 
 def py_register(unit, func, py3):
@@ -756,7 +716,7 @@ def py_main(unit, arg):
     unit_needs_main = unit.get('MODULE_TYPE') in ('PROGRAM', 'DLL')
     if unit_needs_main:
         py_program(unit, is_py3(unit))
-    unit.onresource(['-', 'PY_MAIN={}'.format(arg)])
+    unit.onresource(['DONT_COMPRESS', '-', 'PY_MAIN={}'.format(arg)])
 
 
 def onpy_main(unit, arg):
@@ -788,7 +748,7 @@ def onpy_constructor(unit, arg):
         arg = arg + '=init'
     else:
         arg[arg.index(':')] = '='
-    unit.onresource(['-', 'py/constructors/{}'.format(arg)])
+    unit.onresource(['DONT_COMPRESS', '-', 'py/constructors/{}'.format(arg)])
 
 
 def onpy_enums_serialization(unit, *args):

@@ -1,20 +1,24 @@
 #pragma once
 
 #include <yt/cpp/mapreduce/client/transaction.h>
+
 #include <yt/cpp/mapreduce/common/fwd.h>
 
 #include <yt/cpp/mapreduce/http/context.h>
 #include <yt/cpp/mapreduce/http/requests.h>
 
+#include <yt/cpp/mapreduce/raw_client/raw_client.h>
+
 namespace NYT {
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class THeavyRequestRetrier
 {
 public:
     struct TParameters
     {
+        IRawClientPtr RawClientPtr;
         IClientRetryPolicyPtr ClientRetryPolicy;
         ITransactionPingerPtr TransactionPinger;
         TClientContext Context;
@@ -52,9 +56,10 @@ private:
     TStreamFactory StreamFactory_;
 };
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 void RetryHeavyWriteRequest(
+    const IRawClientPtr& rawClient,
     const IClientRetryPolicyPtr& clientRetryPolicy,
     const ITransactionPingerPtr& transactionPinger,
     const TClientContext& context,

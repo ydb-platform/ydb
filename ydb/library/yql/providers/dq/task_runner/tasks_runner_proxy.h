@@ -3,8 +3,8 @@
 #include <ydb/library/yql/providers/dq/api/protos/task_command_executor.pb.h>
 #include <ydb/library/yql/dq/common/dq_serialized_batch.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 namespace NYql::NTaskRunnerProxy {
 
@@ -12,8 +12,8 @@ extern const TString WorkingDirectoryParamName;
 extern const TString WorkingDirectoryDontInitParamName; // COMPAT(aozeritsky)
 extern const TString UseMetaParamName; // COMPAT(aozeritsky)
 
-i64 SaveRopeToPipe(IOutputStream& output, const TRope& rope);
-void LoadRopeFromPipe(IInputStream& input, TRope& rope);
+i64 SaveRopeToPipe(IOutputStream& output, const TChunkedBuffer& rope);
+void LoadRopeFromPipe(IInputStream& input, TChunkedBuffer& rope);
 NDq::TDqTaskRunnerMemoryLimits DefaultMemoryLimits();
 
 class IInputChannel : public TThrRefBase, private TNonCopyable {
@@ -83,9 +83,9 @@ class IProxyFactory: public TThrRefBase, private TNonCopyable {
 public:
     using TPtr = TIntrusivePtr<IProxyFactory>;
 
-    virtual ITaskRunner::TPtr GetOld(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NDq::TDqTaskSettings& task, const TString& traceId = "") = 0;
+    virtual ITaskRunner::TPtr GetOld(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& task, const TString& traceId = "") = 0;
 
-    virtual TIntrusivePtr<NDq::IDqTaskRunner> Get(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TString& traceId = "TODO") = 0;
+    virtual TIntrusivePtr<NDq::IDqTaskRunner> Get(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TString& traceId = "TODO") = 0;
 };
 
 } // namespace NYql::NTaskRunnerProxy

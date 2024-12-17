@@ -1,18 +1,33 @@
 #pragma once
 #include "compaction.h"
-#include <ydb/core/formats/arrow/reader/read_filter_merger.h>
+
+#include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
+#include <ydb/core/tx/priorities/usage/events.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
-class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges {
+class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges,
+                                          public NColumnShard::TMonitoringObjectsCounter<TGeneralCompactColumnEngineChanges> {
 private:
+    YDB_ACCESSOR(ui64, PortionExpectedSize, 1.5 * (1 << 20));
     using TBase = TCompactColumnEngineChanges;
+    std::shared_ptr<NPrioritiesQueue::TAllocationGuard> PrioritiesAllocationGuard;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
-    std::map<NIndexedReader::TSortableBatchPosition, bool> CheckPoints;
-    void BuildAppendedPortionsByFullBatches(TConstructionContext& context, std::vector<TPortionInfoWithBlobs>&& portions) noexcept;
-    void BuildAppendedPortionsByChunks(TConstructionContext& context, std::vector<TPortionInfoWithBlobs>&& portions) noexcept;
+    NArrow::NMerger::TIntervalPositions CheckPoints;
+    void BuildAppendedPortionsByChunks(TConstructionContext& context, std::vector<TReadPortionInfoWithBlobs>&& portions) noexcept;
+
+    std::shared_ptr<NArrow::TColumnFilter> BuildPortionFilter(const std::optional<NKikimr::NOlap::TGranuleShardingInfo>& shardingActual,
+        const std::shared_ptr<NArrow::TGeneralContainer>& batch, const TPortionInfo& pInfo, const THashSet<ui64>& portionsInUsage,
+        const ISnapshotSchema::TPtr& resultSchema) const;
+
 protected:
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept override;
+
+    virtual bool NeedDiskWriteLimiter() const override {
+        return true;
+    }
+
     virtual TPortionMeta::EProduced GetResultProducedClass() const override {
         return TPortionMeta::EProduced::SPLIT_COMPACTED;
     }
@@ -26,39 +41,31 @@ protected:
         }
         return result;
     }
-public:
-    using TBase::TBase;
 
-    class TMemoryPredictorSimplePolicy: public IMemoryPredictor {
-    private:
-        ui64 SumMemory = 0;
-    public:
-        virtual ui64 AddPortion(const TPortionInfo& portionInfo) override {
-            for (auto&& i : portionInfo.GetRecords()) {
-                SumMemory += i.BlobRange.Size;
-                SumMemory += 2 * i.GetMeta().GetRawBytesVerified();
-            }
-            return SumMemory;
-        }
-    };
+public:
+    void SetQueueGuard(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& g) {
+        PrioritiesAllocationGuard = g;
+    }
+    using TBase::TBase;
 
     class TMemoryPredictorChunkedPolicy: public IMemoryPredictor {
     private:
-        ui64 SumMemoryDelta = 0;
         ui64 SumMemoryFix = 0;
-        ui32 PortionsCount = 0;
-        THashMap<ui32, ui64> MaxMemoryByColumnChunk;
+        ui64 SumMemoryRaw = 0;
     public:
-        virtual ui64 AddPortion(const TPortionInfo& portionInfo) override;
+        virtual ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo) override;
     };
 
     static std::shared_ptr<IMemoryPredictor> BuildMemoryPredictor();
 
-    void AddCheckPoint(const NIndexedReader::TSortableBatchPosition& position, const bool include = true, const bool validationDuplications = true);
+    void AddCheckPoint(const NArrow::NMerger::TSortableBatchPosition& position, const bool include);
+    void SetCheckPoints(NArrow::NMerger::TIntervalPositions&& positions) {
+        CheckPoints = std::move(positions);
+    }
 
     virtual TString TypeString() const override {
         return StaticTypeName();
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NCompaction

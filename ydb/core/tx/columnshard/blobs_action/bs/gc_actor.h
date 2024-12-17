@@ -20,7 +20,7 @@ private:
     }
 public:
     TGarbageCollectionActor(const std::shared_ptr<TGCTask>& task, const NActors::TActorId& tabletActorId, const TTabletId selfTabletId)
-        : TBase(task->GetStorageId(), selfTabletId, task->GetBlobsToRemove().GetBorrowed())
+        : TBase(task->GetStorageId(), selfTabletId, task->GetBlobsToRemove().GetBorrowed(), task)
         , TabletActorId(tabletActorId)
         , GCTask(task)
     {
@@ -28,7 +28,8 @@ public:
     }
 
     STFUNC(StateWork) {
-        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("action_id", GCTask->GetActionGuid());
+        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)
+            ("action_id", GCTask->GetActionGuid())("tablet_id", GCTask->GetTabletId());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
             default:
@@ -37,11 +38,11 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("actor", "TGarbageCollectionActor")("event", "starting")("action_id", GCTask->GetActionGuid());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("actor", "TGarbageCollectionActor")("event", "starting")("action_id", GCTask->GetActionGuid());
         for (auto&& i : GCTask->GetListsByGroupId()) {
             auto request = GCTask->BuildRequest(i.first);
             AFL_VERIFY(request);
-            SendToBSProxy(ctx, i.first, request.release(), i.first);
+            SendToBSProxy(ctx, i.first.GetGroupId(), request.release(), i.first.GetGroupId());
         }
         TBase::Bootstrap(ctx);
         Become(&TGarbageCollectionActor::StateWork);

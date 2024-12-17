@@ -1,0 +1,31 @@
+    items:
+    - name: Creating a table
+      href: create_demo_tables.md
+    - name: Adding data to a table
+      href: fill_tables_with_data.md
+    - name: Selecting data from all columns
+      href: select_all_columns.md
+    - name: Selecting data from specific columns
+      href: select_specific_columns.md
+    - name: Sorting and filtering
+      href: basic_filter_and_sort.md
+    - name: Data aggregation
+      href: basic_aggregation.md
+    - name: Additional selection criteria
+      href: conditional_values.md
+    - name: Joining tables with JOIN
+      href: join_tables.md
+    - name: Inserting and updating data with REPLACE
+      href: replace_into.md
+    - name: Inserting and updating data with UPSERT
+      href: upsert_into.md
+    - name: Inserting data with INSERT
+      href: insert_into.md
+    - name: Updating data with UPDATE
+      href: update.md
+    - name: Deleting data
+      href: delete.md
+    - name: Adding and deleting columns
+      href: alter_table.md
+    - name: Deleting a table
+      href: delete_table.md

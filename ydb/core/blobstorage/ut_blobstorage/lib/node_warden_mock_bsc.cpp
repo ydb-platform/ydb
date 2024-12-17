@@ -7,7 +7,7 @@ void TNodeWardenMockActor::SendRegisterNode() {
 
     TVector<ui32> startedDynamicGroups, groupGenerations;
     for (const auto& [groupId, group] : Groups) {
-        startedDynamicGroups.push_back(group->Info->GroupID);
+        startedDynamicGroups.push_back(group->Info->GroupID.GetRawId());
         groupGenerations.push_back(group->Info->GroupGeneration);
     }
 
@@ -148,7 +148,7 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
             UNIT_ASSERT(!vdiskp->DonorMode); // do not allow donor mode reverts
         }
 
-        TGroupState *group = GetGroup(vdiskId.GroupID);
+        TGroupState *group = GetGroup(vdiskId.GroupID.GetRawId());
         UNIT_ASSERT(group);
 
         TPDiskState *pdisk = GetPDisk(vslotId);
@@ -184,7 +184,7 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
             vdiskp->AllocatedSize = 0;
             vdiskp->Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
         } else if (!vdiskp) {
-            const auto groupIt = Setup->Groups.find(vdiskId.GroupID);
+            const auto groupIt = Setup->Groups.find(vdiskId.GroupID.GetRawId());
             UNIT_ASSERT(groupIt != Setup->Groups.end());
             const TSetup::TGroupInfo& groupInfo = groupIt->second;
 

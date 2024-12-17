@@ -1,0 +1,26 @@
+[Unit]
+Description=bazel-remote cache (%i instance)
+
+[Service]
+# Assuming you have created a bazel-remote user and group, that can write
+# to the cache directory specified in ExecStart below:
+User=bazel-remote
+Group=bazel-remote
+
+# We need to have a lot of files open at once.
+LimitNOFILE=1000000
+
+# Try to avoid "runtime: failed to create new OS thread (have 2458 already; errno=11)"
+# errors. You can check if this worked by running "systemctl status bazel-remote"
+# and see if there's a "Tasks: 18 (limit: 2457)" line (hopefully not, after adding this).
+LimitNPROC=infinity
+TasksMax=infinity
+
+Restart=on-failure
+
+Environment=GODEBUG=gctrace=1
+
+ExecStart=/usr/local/bin/bazel-remote --config_file /usr/local/etc/bazel-remote-%i.yaml
+
+[Install]
+WantedBy=multi-user.target

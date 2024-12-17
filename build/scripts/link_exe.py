@@ -6,9 +6,14 @@ import subprocess
 import optparse
 import textwrap
 
+# Explicitly enable local imports
+# Don't forget to add imported scripts to inputs of the calling command!
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import process_command_files as pcf
+import thinlto_cache
 
 from process_whole_archive_option import ProcessWholeArchiveOption
+from fix_py2_protobuf import fix_py2
 
 
 def get_leaks_suppressions(cmd):
@@ -29,7 +34,14 @@ CUDA_LIBRARIES = {
     '-lcublasLt_static': '-lcublasLt',
     '-lcudart_static': '-lcudart',
     '-lcudnn_static': '-lcudnn',
+    '-lcudnn_adv_infer_static': '-lcudnn',
+    '-lcudnn_adv_train_static': '-lcudnn',
+    '-lcudnn_cnn_infer_static': '-lcudnn',
+    '-lcudnn_cnn_train_static': '-lcudnn',
+    '-lcudnn_ops_infer_static': '-lcudnn',
+    '-lcudnn_ops_train_static': '-lcudnn',
     '-lcufft_static_nocallback': '-lcufft',
+    '-lcupti_static': '-lcupti',
     '-lcurand_static': '-lcurand',
     '-lcusolver_static': '-lcusolver',
     '-lcusparse_static': '-lcusparse',
@@ -44,6 +56,18 @@ CUDA_LIBRARIES = {
     '-lnvrtc_static': '-lnvrtc',
     '-lnvrtc-builtins_static': '-lnvrtc-builtins',
     '-lnvptxcompiler_static': '',
+    '-lnppc_static': '-lnppc',
+    '-lnppial_static': '-lnppial',
+    '-lnppicc_static': '-lnppicc',
+    '-lnppicom_static': '-lnppicom',
+    '-lnppidei_static': '-lnppidei',
+    '-lnppif_static': '-lnppif',
+    '-lnppig_static': '-lnppig',
+    '-lnppim_static': '-lnppim',
+    '-lnppist_static': '-lnppist',
+    '-lnppisu_static': '-lnppisu',
+    '-lnppitc_static': '-lnppitc',
+    '-lnpps_static': '-lnpps',
 }
 
 
@@ -68,7 +92,9 @@ class CUDAManager:
 
     def _known_fatbin_libs(self, libs):
         libs_wo_device_code = {
-            '-lcudart_static'
+            '-lcudart_static',
+            '-lcupti_static',
+            '-lnppc_static',
         }
         return set(libs) - libs_wo_device_code
 
@@ -288,17 +314,18 @@ def parse_args():
     parser.add_option('--custom-step')
     parser.add_option('--python')
     parser.add_option('--source-root')
+    parser.add_option('--build-root')
     parser.add_option('--clang-ver')
     parser.add_option('--dynamic-cuda', action='store_true')
     parser.add_option('--cuda-architectures',
                       help='List of supported CUDA architectures, separated by ":" (e.g. "sm_52:compute_70:lto_90a"')
     parser.add_option('--nvprune-exe')
     parser.add_option('--objcopy-exe')
-    parser.add_option('--build-root')
     parser.add_option('--arch')
     parser.add_option('--linker-output')
     parser.add_option('--whole-archive-peers', action='append')
     parser.add_option('--whole-archive-libs', action='append')
+    thinlto_cache.add_options(parser)
     return parser.parse_args()
 
 
@@ -307,19 +334,12 @@ if __name__ == '__main__':
     args = pcf.skip_markers(args)
 
     cmd = fix_blas_resolving(args)
+    cmd = fix_py2(cmd)
     cmd = remove_excessive_flags(cmd)
     if opts.musl:
         cmd = fix_cmd_for_musl(cmd)
 
     cmd = fix_sanitize_flag(cmd, opts)
-
-    if 'ld.lld' in str(cmd):
-        if '-fPIE' in str(cmd) or '-fPIC' in str(cmd):
-            # support explicit PIE
-            pass
-        else:
-            cmd.append('-Wl,-no-pie')
-
 
     if opts.dynamic_cuda:
         cmd = fix_cmd_for_dynamic_cuda(cmd)
@@ -344,5 +364,8 @@ if __name__ == '__main__':
     else:
         stdout = sys.stdout
 
+    thinlto_cache.preprocess(opts, cmd)
     rc = subprocess.call(cmd, shell=False, stderr=sys.stderr, stdout=stdout)
+    thinlto_cache.postprocess(opts)
+
     sys.exit(rc)

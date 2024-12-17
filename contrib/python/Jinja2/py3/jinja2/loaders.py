@@ -1,6 +1,7 @@
 """API and implementations for loading templates from different data
 sources.
 """
+
 import importlib.util
 import os
 import posixpath
@@ -180,7 +181,9 @@ class FileSystemLoader(BaseLoader):
 
     def __init__(
         self,
-        searchpath: t.Union[str, os.PathLike, t.Sequence[t.Union[str, os.PathLike]]],
+        searchpath: t.Union[
+            str, "os.PathLike[str]", t.Sequence[t.Union[str, "os.PathLike[str]"]]
+        ],
         encoding: str = "utf-8",
         followlinks: bool = False,
     ) -> None:
@@ -276,6 +279,7 @@ class PackageLoader(BaseLoader):
         package_name: str,
         package_path: "str" = "templates",
         encoding: str = "utf-8",
+        skip_unknown_package: bool = False,
     ) -> None:
         package_path = os.path.normpath(package_path).rstrip(os.path.sep)
 
@@ -288,10 +292,17 @@ class PackageLoader(BaseLoader):
         self.package_path = package_path
         self.package_name = package_name
         self.encoding = encoding
+        self.skip_unknown_package = skip_unknown_package
 
         # Make sure the package exists. This also makes namespace
         # packages work, otherwise get_loader returns None.
-        package = import_module(package_name)
+        try:
+            package = import_module(package_name)
+        except ModuleNotFoundError:
+            if skip_unknown_package:
+                self._template_root = None
+                return
+            raise
         spec = importlib.util.find_spec(package_name)
         assert spec is not None, "An import spec was not found for the package."
         loader = spec.loader
@@ -336,6 +347,9 @@ class PackageLoader(BaseLoader):
     def get_source(
         self, environment: "Environment", template: str
     ) -> t.Tuple[str, str, t.Optional[t.Callable[[], bool]]]:
+        if self._template_root is None and self.skip_unknown_package:
+            raise TemplateNotFound(template)
+
         # Use posixpath even on Windows to avoid "drive:" or UNC
         # segments breaking out of the search directory. Use normpath to
         # convert Windows altsep to sep.
@@ -382,6 +396,9 @@ class PackageLoader(BaseLoader):
 
     def list_templates(self) -> t.List[str]:
         results: t.List[str] = []
+
+        if self._template_root is None and self.skip_unknown_package:
+            return results
 
         if self._archive is None and hasattr(self, "_package"):
             prefix = os.path.join(self._template_root, self.package_path).encode() + b"/"
@@ -621,7 +638,10 @@ class ModuleLoader(BaseLoader):
     has_source_access = False
 
     def __init__(
-        self, path: t.Union[str, os.PathLike, t.Sequence[t.Union[str, os.PathLike]]]
+        self,
+        path: t.Union[
+            str, "os.PathLike[str]", t.Sequence[t.Union[str, "os.PathLike[str]"]]
+        ],
     ) -> None:
         package_name = f"_jinja2_module_templates_{id(self):x}"
 

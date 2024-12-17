@@ -1,0 +1,179 @@
+diff --git a/include/vector b/include/vector
+index 57d3506..9810ac7 100644
+--- a/include/vector
++++ b/include/vector
+@@ -336,8 +336,13 @@ public:
+     typedef typename __alloc_traits::difference_type        difference_type;
+     typedef typename __alloc_traits::pointer                pointer;
+     typedef typename __alloc_traits::const_pointer          const_pointer;
++#if _YNDX_LIBCPP_MAKE_VECTOR_ITERATOR_POINTERS == 1
++    typedef pointer                                         iterator;
++    typedef const_pointer                                   const_iterator;
++#else
+     typedef __wrap_iter<pointer>                            iterator;
+     typedef __wrap_iter<const_pointer>                      const_iterator;
++#endif
+     typedef _VSTD::reverse_iterator<iterator>               reverse_iterator;
+     typedef _VSTD::reverse_iterator<const_iterator>         const_reverse_iterator;
+ 
+@@ -632,7 +637,7 @@ public:
+     _LIBCPP_INLINE_VISIBILITY iterator erase(const_iterator __position);
+     iterator erase(const_iterator __first, const_iterator __last);
+ 
+-    _LIBCPP_INLINE_VISIBILITY
++    _LIBCPP_REINITIALIZES_OBJECT _LIBCPP_INLINE_VISIBILITY
+     void clear() _NOEXCEPT
+     {
+         size_type __old_size = size();
+@@ -641,6 +646,10 @@ public:
+         __invalidate_all_iterators();
+     }
+ 
++#if _YNDX_LIBCXX_ENABLE_VECTOR_POD_RESIZE_UNINITIALIZED
++    void resize_uninitialized(size_type __sz);
++#endif
++
+     void resize(size_type __sz);
+     void resize(size_type __sz, const_reference __x);
+ 
+@@ -684,6 +693,7 @@ private:
+             void
+         >::type
+         __construct_at_end(_ForwardIterator __first, _ForwardIterator __last, size_type __n);
++    void __append_uninitialized(size_type __n);
+     void __append(size_type __n);
+     void __append(size_type __n, const_reference __x);
+     _LIBCPP_INLINE_VISIBILITY
+@@ -706,6 +716,11 @@ private:
+         __annotate_shrink(__old_size);
+     }
+ 
++// Disable double inline warning.
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( push )
++#pragma warning ( disable : 4141 )
++#endif
+ #ifndef _LIBCPP_CXX03_LANG
+     template <class _Up>
+     _LIBCPP_INLINE_VISIBILITY
+@@ -718,6 +733,9 @@ private:
+     template <class _Up>
+     _LIBCPP_INLINE_VISIBILITY
+     inline void __push_back_slow_path(_Up& __x);
++#endif
++#ifdef _LIBCPP_COMPILER_MSVC
++#pragma warning ( pop )
+ #endif
+ 
+     // The following functions are no-ops outside of AddressSanitizer mode.
+@@ -1024,6 +1042,23 @@ vector<_Tp, _Allocator>::__construct_at_end(_ForwardIterator __first, _ForwardIt
+     _VSTD::__construct_range_forward(this->__alloc(), __first, __last, __tx.__pos_);
+ }
+ 
++template <class _Tp, class _Allocator>
++void
++vector<_Tp, _Allocator>::__append_uninitialized(size_type __n)
++{
++    if (static_cast<size_type>(this->__end_cap() - this->__end_) >= __n) {
++        __annotate_increase(__n);
++        this->__end_ += __n;
++    }
++    else
++    {
++        allocator_type& __a = this->__alloc();
++        __split_buffer<value_type, allocator_type&> __v(__recommend(size() + __n), size(), __a);
++        __v.__uninitialized_at_end(__n);
++        __swap_out_circular_buffer(__v);
++    }
++}
++
+ //  Default constructs __n objects starting at __end_
+ //  throws if construction throws
+ //  Postcondition:  size() == size() + __n
+@@ -1659,9 +1694,9 @@ vector<_Tp, _Allocator>::__move_range(pointer __from_s, pointer __from_e, pointe
+       _ConstructTransaction __tx(*this, __from_e - __i);
+       for (pointer __pos = __tx.__pos_; __i < __from_e;
+            ++__i, (void) ++__pos, __tx.__pos_ = __pos) {
+-          __alloc_traits::construct(this->__alloc(),
+-                                    _VSTD::__to_address(__pos),
+-                                    _VSTD::move(*__i));
++        __alloc_traits::construct(this->__alloc(),
++                                  _VSTD::__to_address(__pos),
++                                  _VSTD::move(*__i));
+       }
+     }
+     _VSTD::move_backward(__from_s, __from_s + __n, __old_last);
+@@ -1902,6 +1937,23 @@ vector<_Tp, _Allocator>::insert(const_iterator __position, _ForwardIterator __fi
+     return __make_iter(__p);
+ }
+ 
++#if _YNDX_LIBCXX_ENABLE_VECTOR_POD_RESIZE_UNINITIALIZED
++
++template <class _Tp, class _Allocator>
++void
++vector<_Tp, _Allocator>::resize_uninitialized(size_type __sz)
++{
++    size_type __cs = size();
++    if (__cs < __sz)
++        this->__append_uninitialized(__sz - __cs);
++    else if (__cs > __sz) {
++        this->__end_ = this->__begin_ + __sz;
++        __annotate_shrink(__cs);
++    }
++}
++
++#endif
++
+ template <class _Tp, class _Allocator>
+ void
+ vector<_Tp, _Allocator>::resize(size_type __sz)
+@@ -2035,6 +2087,7 @@ vector<_Tp, _Allocator>::__invalidate_iterators_past(pointer __new_last) {
+ #endif
+ }
+ 
++#if _YNDX_LIBCXX_ENABLE_VECTOR_BOOL_COMPRESSION == 1
+ // vector<bool>
+ 
+ template <class _Allocator> class vector<bool, _Allocator>;
+@@ -2299,7 +2352,7 @@ public:
+     _LIBCPP_INLINE_VISIBILITY iterator erase(const_iterator __position);
+     iterator erase(const_iterator __first, const_iterator __last);
+ 
+-    _LIBCPP_INLINE_VISIBILITY
++    _LIBCPP_REINITIALIZES_OBJECT _LIBCPP_INLINE_VISIBILITY
+     void clear() _NOEXCEPT {__size_ = 0;}
+ 
+     void swap(vector&)
+@@ -3228,6 +3281,32 @@ struct _LIBCPP_TEMPLATE_VIS hash<vector<bool, _Allocator> >
+     size_t operator()(const vector<bool, _Allocator>& __vec) const _NOEXCEPT
+         {return __vec.__hash_code();}
+ };
++#else // _YNDX_LIBCXX_ENABLE_VECTOR_BOOL_COMPRESSION
++// Hash function implementation for uncompressed std::vector<bool> which returns the same result.
++template <class _Allocator>
++struct _LIBCPP_TEMPLATE_VIS hash<vector<bool, _Allocator> >
++    : public unary_function<vector<bool, _Allocator>, size_t>
++{
++    _LIBCPP_INLINE_VISIBILITY
++    size_t operator()(const vector<bool, _Allocator>& __vec) const _NOEXCEPT
++    {
++        size_t __h = 0;
++        size_t __idx = 0;
++        size_t __n = __vec.size();
++        constexpr size_t __bits_per_word = sizeof(typename allocator_traits<_Allocator>::size_type) * CHAR_BIT;
++        static_assert(sizeof(typename allocator_traits<_Allocator>::size_type) <= sizeof(size_t), "size_type constraint violated");
++        for (;__idx + __bits_per_word <= __n;) {
++            for (size_t __bit = 0; __bit < __bits_per_word; __bit++, __idx++) {
++                __h ^= static_cast<size_t>(__vec[__idx]) << __bit;
++            }
++        }
++        for (size_t __bit = 0; __idx < __n; __bit++, __idx++) {
++            __h ^= static_cast<size_t>(__vec[__idx]) << __bit;
++        }
++        return __h;
++    }
++};
++#endif // _YNDX_LIBCXX_ENABLE_VECTOR_BOOL_COMPRESSION
+ 
+ template <class _Tp, class _Allocator>
+ inline _LIBCPP_INLINE_VISIBILITY

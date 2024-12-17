@@ -17,7 +17,7 @@ For each table in the database, there's a same-name directory in the file struct
 
 The format of data files is `.csv`, where each row corresponds to a record in the table (except the row with column headings). The urlencoded format is used for rows. For example, the file row for the table with the uint64 and utf8 columns that includes the number 1 and the Russian string "Привет" (translates to English as "Hi"), would look like this:
 
-```
+```text
 1,"%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82"
 ```
 
@@ -25,7 +25,7 @@ The format of data files is `.csv`, where each row corresponds to a record in th
 
 When you export the tables created under [{#T}]({{ quickstart-path }}) in Getting started, the system will create the following file structure:
 
-```
+```text
 ├── episodes
 │   ├── data_00.csv
 │   └── scheme.pb
@@ -39,7 +39,7 @@ When you export the tables created under [{#T}]({{ quickstart-path }}) in Gettin
 
 Contents of the `series/scheme.pb` file:
 
-```
+```proto
 columns {
   name: "series_id"
   type {

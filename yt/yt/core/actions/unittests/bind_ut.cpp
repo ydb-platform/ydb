@@ -1091,7 +1091,7 @@ TEST_F(TBindTest, LambdaSupport)
 {
     int n = 1;
 
-    TClosure closure = BIND([&n] () { ++n; });
+    TClosure closure = BIND([&n] { ++n; });
     EXPECT_EQ(1, n);
     closure();
     EXPECT_EQ(2, n);
@@ -1125,7 +1125,7 @@ TEST_F(TBindTest, MutableLambdaSupport)
 TEST_F(TBindTest, ConstLambdaSupport)
 {
     int n = 1;
-    const auto l = [&n] () { ++n; return n; };
+    const auto l = [&n] { ++n; return n; };
     const auto f = BIND(l);
     EXPECT_EQ(2, f());
     EXPECT_EQ(3, f());
@@ -1161,7 +1161,7 @@ TEST_F(TBindTest, MoveOnlyLambdaSupport)
     TMoveOnly outer(5);
     EXPECT_EQ(5u, outer.Value());
 
-    auto f = BIND([inner = std::move(outer)] () { return inner.Value(); });
+    auto f = BIND([inner = std::move(outer)] { return inner.Value(); });
     EXPECT_EQ(0u, outer.Value());
 
     // Call twice just in case

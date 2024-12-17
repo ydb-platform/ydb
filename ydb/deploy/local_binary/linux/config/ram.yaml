@@ -31,6 +31,9 @@ domains_config:
       - 1
       nto_select: 1
     ssid: 1
+pqconfig:
+  check_acl: false
+  require_credentials_in_new_protocol: false
 actor_system_config:
   executor:
   - name: System

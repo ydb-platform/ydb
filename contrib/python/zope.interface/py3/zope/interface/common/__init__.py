@@ -24,10 +24,10 @@ __all__ = [
     # Nothing public here.
 ]
 
-
 # pylint:disable=inherit-non-class,
 # pylint:disable=no-self-argument,no-method-argument
 # pylint:disable=unexpected-special-method-signature
+
 
 class optional:
     # Apply this decorator to a method definition to make it
@@ -115,8 +115,9 @@ class ABCInterfaceClass(InterfaceClass):
     """
 
     # If we could figure out invalidation, and used some special
-    # Specification/Declaration instances, and override the method ``providedBy`` here,
-    # perhaps we could more closely integrate with ABC virtual inheritance?
+    # Specification/Declaration instances, and override the method
+    # ``providedBy`` here, perhaps we could more closely integrate with ABC
+    # virtual inheritance?
 
     def __init__(self, name, bases, attrs):
         # go ahead and give us a name to ease debugging.
@@ -128,7 +129,9 @@ class ABCInterfaceClass(InterfaceClass):
             # Something like ``IList(ISequence)``: We're extending
             # abc interfaces but not an ABC interface ourself.
             InterfaceClass.__init__(self, name, bases, attrs)
-            ABCInterfaceClass.__register_classes(self, extra_classes, ignored_classes)
+            ABCInterfaceClass.__register_classes(
+                self, extra_classes, ignored_classes,
+            )
             self.__class__ = InterfaceClass
             return
 
@@ -143,8 +146,9 @@ class ABCInterfaceClass(InterfaceClass):
             # e.g., ``__ror__ = __or__``.
             k: self.__method_from_function(v, k)
             for k, v in vars(based_on).items()
-            if isinstance(v, FunctionType) and not self.__is_private_name(k)
-            and not self.__is_reverse_protocol_name(k)
+            if isinstance(v, FunctionType) and
+            not self.__is_private_name(k) and
+            not self.__is_reverse_protocol_name(k)
         }
 
         methods['__doc__'] = self.__create_class_doc(attrs)
@@ -163,12 +167,13 @@ class ABCInterfaceClass(InterfaceClass):
             return ''
 
         docs = "\n\nThe following methods are optional:\n - " + "\n-".join(
-            "{}\n{}".format(k, v.__doc__) for k, v in optionals.items()
+            f"{k}\n{v.__doc__}" for k, v in optionals.items()
         )
         return docs
 
     def __create_class_doc(self, attrs):
         based_on = self.__abc
+
         def ref(c):
             mod = c.__module__
             name = c.__name__
@@ -176,13 +181,16 @@ class ABCInterfaceClass(InterfaceClass):
                 return "`%s`" % name
             if mod == '_io':
                 mod = 'io'
-            return "`{}.{}`".format(mod, name)
+            return f"`{mod}.{name}`"
+
         implementations_doc = "\n - ".join(
             ref(c)
             for c in sorted(self.getRegisteredConformers(), key=ref)
         )
         if implementations_doc:
-            implementations_doc = "\n\nKnown implementations are:\n\n - " + implementations_doc
+            implementations_doc = (
+                "\n\nKnown implementations are:\n\n - " + implementations_doc
+            )
 
         based_on_doc = (based_on.__doc__ or '')
         based_on_doc = based_on_doc.splitlines()
@@ -195,7 +203,6 @@ class ABCInterfaceClass(InterfaceClass):
             implementations_doc
         )
         return doc
-
 
     @staticmethod
     def __is_private_name(name):
@@ -221,8 +228,14 @@ class ABCInterfaceClass(InterfaceClass):
     def __register_classes(self, conformers=None, ignored_classes=None):
         # Make the concrete classes already present in our ABC's registry
         # declare that they implement this interface.
-        conformers = conformers if conformers is not None else self.getRegisteredConformers()
-        ignored = ignored_classes if ignored_classes is not None else self.__ignored_classes
+        conformers = (
+            conformers if conformers is not None
+            else self.getRegisteredConformers()
+        )
+        ignored = (
+            ignored_classes if ignored_classes is not None
+            else self.__ignored_classes
+        )
         for cls in conformers:
             if cls in ignored:
                 continue
@@ -246,7 +259,9 @@ class ABCInterfaceClass(InterfaceClass):
         # of checking that, so its quite possible that registrations
         # are in fact ignored, winding up just in the _abc_cache.
         try:
-            registered = list(based_on._abc_registry) + list(based_on._abc_cache)
+            registered = (
+                list(based_on._abc_registry) + list(based_on._abc_cache)
+            )
         except AttributeError:
             # Rewritten in C in CPython 3.7.
             # These expose the underlying weakref.
@@ -261,13 +276,16 @@ class ABCInterfaceClass(InterfaceClass):
 
 
 def _create_ABCInterface():
-    # It's a two-step process to create the root ABCInterface, because
-    # without specifying a corresponding ABC, using the normal constructor
-    # gets us a plain InterfaceClass object, and there is no ABC to associate with the
+    # It's a two-step process to create the root ABCInterface, because without
+    # specifying a corresponding ABC, using the normal constructor gets us a
+    # plain InterfaceClass object, and there is no ABC to associate with the
     # root.
     abc_name_bases_attrs = ('ABCInterface', (Interface,), {})
-    instance = ABCInterfaceClass.__new__(ABCInterfaceClass, *abc_name_bases_attrs)
+    instance = ABCInterfaceClass.__new__(
+        ABCInterfaceClass, *abc_name_bases_attrs,
+    )
     InterfaceClass.__init__(instance, *abc_name_bases_attrs)
     return instance
+
 
 ABCInterface = _create_ABCInterface()

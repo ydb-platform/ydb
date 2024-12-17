@@ -63,6 +63,9 @@ struct TModifyRowsOptions
 
     //! If set treat missing key columns as null.
     bool AllowMissingKeyColumns = false;
+
+    //! If set then WriteViaQueueProducer table schema will be used instead of Write table schema.
+    bool WriteViaQueueProducer = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -103,7 +106,7 @@ struct IDynamicTableTransaction
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         TSharedRange<NTableClient::TLegacyKey> keys,
-        const std::vector<TString>& locks,
+        const std::vector<std::string>& locks,
         NTableClient::ELockType lockType = NTableClient::ELockType::SharedStrong) = 0;
 
     virtual void ModifyRows(

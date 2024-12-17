@@ -26,10 +26,10 @@ The command changes the values of parameters specified in the command line. The 
 ---|---
 | `--partitions-count` | The number of topic [partitions](../../concepts/topic.md#partitioning). You can only increase the number of partitions. |
 | `--retention-period-hours` | The retention period for topic data, in hours. |
-| `--partition-write-speed-kbps` | The maximum write speed to a [partition](../../concepts/topic.md#partitioning), specified in KB/s.<br>The default value is `1024`. |
-| `--retention-storage-mb` | The maximum storage size, specified in MB. When the limit is reached, the oldest data will be deleted.<br>The default value is `0` (no limit). |
-| `--supported-codecs` | Supported data compression methods.<br>Possible values:<ul><li>`RAW`: No compression.</li><li>`ZSTD`: [zstd](https://en.wikipedia.org/wiki/Zstandard) compression.</li><li>`GZIP`: [gzip](https://en.wikipedia.org/wiki/Gzip) compression.</li><li>`LZOP`: [lzop](https://en.wikipedia.org/wiki/Lzop) compression.</li></ul> |
-| `--metering-mode` | The topic pricing method for a serverless database.<br>Possible values:<ul><li>`request-units`: Based on actual usage.</li><li>`reserved-capacity`: Based on dedicated resources.</li></ul> |
+| `--partition-write-speed-kbps` | The maximum write speed to a [partition](../../concepts/topic.md#partitioning), specified in KB/s.<br/>The default value is `1024`. |
+| `--retention-storage-mb` | The maximum storage size, specified in MB. When the limit is reached, the oldest data will be deleted.<br/>The default value is `0` (no limit). |
+| `--supported-codecs` | Supported data compression methods.<br/>Possible values:<ul><li>`RAW`: No compression.</li><li>`ZSTD`: [zstd](https://en.wikipedia.org/wiki/Zstandard) compression.</li><li>`GZIP`: [gzip](https://en.wikipedia.org/wiki/Gzip) compression.</li><li>`LZOP`: [lzop](https://en.wikipedia.org/wiki/Lzop) compression.</li></ul> |
+| `--metering-mode` | The topic pricing method for a serverless database.<br/>Possible values:<ul><li>`request-units`: Based on actual usage.</li><li>`reserved-capacity`: Based on dedicated resources.</li></ul> |
 
 ## Examples {#examples}
 

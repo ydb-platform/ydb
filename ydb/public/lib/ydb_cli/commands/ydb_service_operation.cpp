@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_export/export.h>
 #include <ydb/public/sdk/cpp/client/ydb_import/import.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/query.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 
 #include <util/string/builder.h>
@@ -15,7 +16,7 @@ using namespace NKikimr::NOperationId;
 namespace {
 
     template <typename T>
-    int GetOperation(NOperation::TOperationClient& client, const TOperationId& id, EOutputFormat format) {
+    int GetOperation(NOperation::TOperationClient& client, const TOperationId& id, EDataFormat format) {
         T operation = client.Get<T>(id).GetValueSync();
         switch (operation.Status().GetStatus()) {
         case EStatus::SUCCESS:
@@ -31,7 +32,7 @@ namespace {
     }
 
     template <typename T>
-    void ListOperations(NOperation::TOperationClient& client, ui64 pageSize, const TString& pageToken, EOutputFormat format) {
+    void ListOperations(NOperation::TOperationClient& client, ui64 pageSize, const TString& pageToken, EDataFormat format) {
         NOperation::TOperationsList<T> operations = client.List<T>(pageSize, pageToken).GetValueSync();
         ThrowOnError(operations);
         PrintOperationsList(operations, format);
@@ -73,13 +74,13 @@ TCommandGetOperation::TCommandGetOperation()
 void TCommandGetOperation::Config(TConfig& config) {
     TCommandWithOperationId::Config(config);
     AddDeprecatedJsonOption(config);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 }
 
 void TCommandGetOperation::Parse(TConfig& config) {
     TCommandWithOperationId::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
 }
 
 int TCommandGetOperation::Run(TConfig& config) {
@@ -100,6 +101,8 @@ int TCommandGetOperation::Run(TConfig& config) {
         }
     case Ydb::TOperationId::BUILD_INDEX:
         return GetOperation<NTable::TBuildIndexOperation>(client, OperationId, OutputFormat);
+    case Ydb::TOperationId::SCRIPT_EXECUTION:
+        return GetOperation<NQuery::TScriptExecutionOperation>(client, OperationId, OutputFormat);
     default:
         throw TMisuseException() << "Invalid operation ID (unexpected kind of operation)";
     }
@@ -134,9 +137,10 @@ void TCommandListOperations::InitializeKindToHandler(TConfig& config) {
         {"export/s3", &ListOperations<NExport::TExportToS3Response>},
         {"import/s3", &ListOperations<NImport::TImportFromS3Response>},
         {"buildindex", &ListOperations<NTable::TBuildIndexOperation>},
+        {"scriptexec", &ListOperations<NQuery::TScriptExecutionOperation>},
     };
     if (config.UseExportToYt) {
-        KindToHandler.emplace("export", &ListOperations<NExport::TExportToYtResponse>); // deprecated
+        KindToHandler.emplace("export", THandlerWrapper(&ListOperations<NExport::TExportToYtResponse>, true)); // deprecated
         KindToHandler.emplace("export/yt", &ListOperations<NExport::TExportToYtResponse>);
     }
 }
@@ -145,11 +149,14 @@ TString TCommandListOperations::KindChoices() {
     TStringBuilder help;
 
     bool first = true;
-    for (const auto& kv : KindToHandler) {
+    for (const auto& [kind, handler] : KindToHandler) {
+        if (handler.Hidden) {
+            continue;
+        }
         if (!first) {
             help << ", ";
         }
-        help << kv.first;
+        help << kind;
         first = false;
     }
 
@@ -171,7 +178,7 @@ void TCommandListOperations::Config(TConfig& config) {
     config.Opts->AddLongOption('t', "page-token", "Page token")
         .RequiredArgument("STRING").StoreResult(&PageToken);
     AddDeprecatedJsonOption(config);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 
     config.SetFreeArgsNum(1);
@@ -180,7 +187,7 @@ void TCommandListOperations::Config(TConfig& config) {
 
 void TCommandListOperations::Parse(TConfig& config) {
     TYdbCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
 
     Kind = config.ParseResult->GetFreeArgs()[0];
     if (!KindToHandler.contains(Kind)) {

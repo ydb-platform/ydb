@@ -9,12 +9,11 @@ TEST_SRCS(
 )
 
 REQUIREMENTS(
-    cpu:4
     ram:32
 )
 
-TIMEOUT(600)
-SIZE(MEDIUM)
+SIZE(LARGE)
+TAG(ya:fat)
 
 DEPENDS(
     ydb/tests/tools/ydb_serializable

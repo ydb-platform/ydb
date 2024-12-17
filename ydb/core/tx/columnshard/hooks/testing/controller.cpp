@@ -1,37 +1,21 @@
 #include "controller.h"
-#include <ydb/core/tx/columnshard/columnshard_impl.h>
+
 #include <ydb/core/tx/columnshard/blobs_action/abstract/gc.h>
-#include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/indexation.h>
+#include <ydb/core/tx/columnshard/engines/changes/ttl.h>
+#include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
 
-bool TController::DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) {
-    if (batch) {
-        FilteredRecordsCount.Add(batch->num_rows());
-    }
-    return true;
-}
-
-bool TController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& /*changes*/, const ::NKikimr::NColumnShard::TColumnShard& shard) {
+bool TController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& change, const ::NKikimr::NColumnShard::TColumnShard& shard) {
     TGuard<TMutex> g(Mutex);
-    Indexations.Inc();
-    if (SharingIds.empty()) {
-        TCheckContext context;
-        CheckInvariants(shard, context);
-    }
-    return true;
-}
-
-bool TController::DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
-    TGuard<TMutex> g(Mutex);
-    if (auto compaction = dynamic_pointer_cast<NOlap::TCompactColumnEngineChanges>(changes)) {
-        Compactions.Inc();
-    }
-    return true;
+    return TBase::DoOnWriteIndexComplete(change, shard);
 }
 
 void TController::DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard& /*shard*/, const NOlap::IBlobsGCAction& action) {
@@ -39,21 +23,20 @@ void TController::DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard&
     for (auto d = action.GetBlobsToRemove().GetDirect().GetIterator(); d.IsValid(); ++d) {
         AFL_VERIFY(RemovedBlobIds[action.GetStorageId()][d.GetBlobId()].emplace(d.GetTabletId()).second);
     }
-//    if (SharingIds.empty()) {
-//        CheckInvariants();
-//    }
 }
 
-void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& shard, TCheckContext& context) const {
+void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& shard, TCheckContext& /*context*/) const {
     if (!shard.HasIndex()) {
         return;
     }
+    /*
     const auto& index = shard.GetIndexAs<NOlap::TColumnEngineForLogs>();
     std::vector<std::shared_ptr<NOlap::TGranuleMeta>> granules = index.GetTables({}, {});
     THashMap<TString, THashSet<NOlap::TUnifiedBlobId>> ids;
     for (auto&& i : granules) {
+        auto accessor = i->GetDataAccessorPtrVerifiedAs<NOlap::TMemDataAccessor>();
         for (auto&& p : i->GetPortions()) {
-            p.second->FillBlobIdsByStorage(ids, index.GetVersionedIndex());
+            accessor->BuildAccessor(p.second).FillBlobIdsByStorage(ids, index.GetVersionedIndex());
         }
     }
     for (auto&& i : ids) {
@@ -73,13 +56,16 @@ void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& s
         auto manager = shard.GetStoragesManager()->GetOperatorVerified(i.first);
         const NOlap::TTabletsByBlob blobs = manager->GetBlobsToDelete();
         for (auto b = blobs.GetIterator(); b.IsValid(); ++b) {
-            i.second.RemoveSharing(b.GetTabletId(), b.GetBlobId());
+            Cerr << shard.TabletID() << " SHARING_REMOVE_LOCAL:" << b.GetBlobId().ToStringNew() << " FROM " << b.GetTabletId() << Endl;
+            Y_UNUSED(i.second.RemoveSharing(b.GetTabletId(), b.GetBlobId()));
         }
         for (auto b = blobs.GetIterator(); b.IsValid(); ++b) {
-            i.second.RemoveBorrowed(b.GetTabletId(), b.GetBlobId());
+            Cerr << shard.TabletID() << " BORROWED_REMOVE_LOCAL:" << b.GetBlobId().ToStringNew() << " FROM " << b.GetTabletId() << Endl;
+            Y_UNUSED(i.second.RemoveBorrowed(b.GetTabletId(), b.GetBlobId()));
         }
     }
     context.AddCategories(shard.TabletID(), std::move(shardBlobsCategories));
+    */
 }
 
 TController::TCheckContext TController::CheckInvariants() const {
@@ -127,13 +113,36 @@ bool TController::IsTrivialLinks() const {
     TGuard<TMutex> g(Mutex);
     for (auto&& i : ShardActuals) {
         if (!i.second->GetStoragesManager()->GetSharedBlobsManager()->IsTrivialLinks()) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("reason", "non_trivial");
             return false;
         }
         if (i.second->GetStoragesManager()->HasBlobsToDelete()) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("reason", "has_delete");
             return false;
         }
     }
     return true;
 }
 
+::NKikimr::NColumnShard::TBlobPutResult::TPtr TController::OverrideBlobPutResultOnCompaction(
+    const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const {
+    if (IndexWriteControllerEnabled) {
+        return original;
+    }
+    bool found = false;
+    for (auto&& i : actions) {
+        if (i.first != NOlap::NBlobOperations::TGlobal::DefaultStorageId) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        return original;
+    }
+    IndexWriteControllerBrokeCount.Inc();
+    ::NKikimr::NColumnShard::TBlobPutResult::TPtr result = std::make_shared<::NKikimr::NColumnShard::TBlobPutResult>(*original);
+    result->SetPutStatus(NKikimrProto::EReplyStatus::ERROR);
+    return result;
 }
+
+}   // namespace NKikimr::NYDBTest::NColumnShard

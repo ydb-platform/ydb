@@ -14,8 +14,9 @@ PEERDIR(
 END()
 
 RECURSE(
+    common
     compute
-    protos
+    input_transforms
     spilling
     task_runner
 )

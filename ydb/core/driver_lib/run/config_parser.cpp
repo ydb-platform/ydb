@@ -35,6 +35,7 @@ TRunCommandConfigParser::TRunOpts::TRunOpts()
     , MonitoringPort(0)
     , MonitoringAddress()
     , MonitoringThreads(10)
+    , MonitoringMaxRequestsPerSecond(0)
     , RestartsCountFile("")
     , StartTracingBusProxy(true)
     , CompileInflightLimit(100000)
@@ -365,6 +366,8 @@ void TRunCommandConfigParser::ApplyParsedOptions() {
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringPort(RunOpts.MonitoringPort);
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringAddress(RunOpts.MonitoringAddress);
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringThreads(RunOpts.MonitoringThreads);
+    Config.AppConfig.MutableMonitoringConfig()->SetMaxRequestsPerSecond(RunOpts.MonitoringMaxRequestsPerSecond);
+    Config.AppConfig.MutableMonitoringConfig()->SetInactivityTimeout(ToString(RunOpts.MonitoringInactivityTimeout.Seconds()));
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringCertificate(TUnbufferedFileInput(RunOpts.MonitoringCertificateFile).ReadAll());
     Config.AppConfig.MutableRestartsCountConfig()->SetRestartsCountFile(RunOpts.RestartsCountFile);
 }

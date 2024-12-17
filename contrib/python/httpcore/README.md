@@ -41,7 +41,7 @@ There are also a number of optional extras available...
 $ pip install httpcore['asyncio,trio,http2,socks']
 ```
 
-# Sending requests
+## Sending requests
 
 Send an HTTP request:
 

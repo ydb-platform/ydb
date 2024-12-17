@@ -96,6 +96,11 @@ Y_FORCE_INLINE TMutableRef TMutableRef::FromString(TString& str)
     return TMutableRef(str.begin(), str.length());
 }
 
+Y_FORCE_INLINE TMutableRef TMutableRef::FromString(std::string& str)
+{
+    return TMutableRef(str.data(), str.length());
+}
+
 Y_FORCE_INLINE TMutableRef TMutableRef::Slice(size_t startOffset, size_t endOffset) const
 {
     YT_ASSERT(endOffset >= startOffset && endOffset <= Size());
@@ -133,6 +138,17 @@ Y_FORCE_INLINE TSharedRef TSharedRef::FromString(TString str)
 }
 
 Y_FORCE_INLINE TSharedRef TSharedRef::FromString(TString str)
+{
+    return FromString<TDefaultSharedBlobTag>(std::move(str));
+}
+
+template <class TTag>
+Y_FORCE_INLINE TSharedRef TSharedRef::FromString(std::string str)
+{
+    return FromString(std::move(str), GetRefCountedTypeCookie<TTag>());
+}
+
+Y_FORCE_INLINE TSharedRef TSharedRef::FromString(std::string str)
 {
     return FromString<TDefaultSharedBlobTag>(std::move(str));
 }
@@ -256,7 +272,7 @@ size_t GetByteSize(TRange<T> parts)
 template <class T>
 size_t GetByteSize(const std::vector<T>& parts)
 {
-    return GetByteSize(MakeRange(parts));
+    return GetByteSize(TRange(parts));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

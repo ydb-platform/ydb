@@ -1,0 +1,5 @@
+<tmp_path>/program.sql:<main>: Error: Optimization
+
+    <tmp_path>/program.sql:<main>:1:15: Error: downsampling.aggregation must be one of AVG, COUNT, DEFAULT_AGGREGATION, LAST, MAX, MIN, SUM, but has ABC
+    	SELECT * FROM local_solomon.my_project WITH (
+	              ^

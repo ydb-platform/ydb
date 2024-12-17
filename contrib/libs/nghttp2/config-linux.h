@@ -16,8 +16,9 @@
 /* Define to 1 if you have the <arpa/inet.h> header file. */
 #define HAVE_ARPA_INET_H 1
 
-/* Define to 1 if you have the std::atomic_* overloads for std::shared_ptr. */
-#define HAVE_ATOMIC_STD_SHARED_PTR 1
+/* Define to 1 if you have the std::atomic<std::shared_ptr<T>> is supported.
+   */
+/* #undef HAVE_ATOMIC_STD_SHARED_PTR */
 
 /* Define to 1 if you have enum bpf_stats_type in linux/bpf.h. */
 /* #undef HAVE_BPF_STATS_TYPE */
@@ -28,8 +29,8 @@
 /* Define to 1 if you have the `clock_gettime' function. */
 #define HAVE_CLOCK_GETTIME 1
 
-/* define if the compiler supports basic C++14 syntax */
-#define HAVE_CXX14 1
+/* define if the compiler supports basic C++20 syntax */
+#define HAVE_CXX20 1
 
 /* Define to 1 if you have the declaration of `CLOCK_MONOTONIC', and to 0 if
    you don't. */
@@ -85,6 +86,9 @@
 /* Define to 1 if you have `libngtcp2_crypto_quictls` library. */
 /* #undef HAVE_LIBNGTCP2_CRYPTO_QUICTLS */
 
+/* Define to 1 if you have `libngtcp2_crypto_wolfssl` library. */
+/* #undef HAVE_LIBNGTCP2_CRYPTO_WOLFSSL */
+
 /* Define to 1 if you have `libsystemd` library. */
 /* #undef HAVE_LIBSYSTEMD */
 
@@ -126,6 +130,9 @@
 
 /* Define to 1 if you have `neverbleed` library. */
 /* #undef HAVE_NEVERBLEED */
+
+/* Define to 1 if you have the `pipe2' function. */
+#define HAVE_PIPE2 1
 
 /* Define to 1 if the system has the type `ptrdiff_t'. */
 #define HAVE_PTRDIFF_T 1
@@ -232,6 +239,9 @@
 /* Define to 1 if you have the <windows.h> header file. */
 /* #undef HAVE_WINDOWS_H */
 
+/* Define to 1 if you have 'wolfssl' library. */
+/* #undef HAVE_WOLFSSL */
+
 /* Define to 1 if `fork' works. */
 #define HAVE_WORKING_FORK 1
 
@@ -263,7 +273,7 @@
 #define PACKAGE_NAME "nghttp2"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "nghttp2 1.60.0"
+#define PACKAGE_STRING "nghttp2 1.64.0"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "nghttp2"
@@ -272,7 +282,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.60.0"
+#define PACKAGE_VERSION "1.64.0"
 
 /* Define to 1 if all of the C90 standard headers exist (not just the ones
    required in a freestanding environment). This macro is provided for
@@ -371,7 +381,7 @@
 
 
 /* Version number of package */
-#define VERSION "1.60.0"
+#define VERSION "1.64.0"
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */

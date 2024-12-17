@@ -4,11 +4,9 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
 IF (WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -22,8 +20,10 @@ PEERDIR(
     library/cpp/threading/local_executor
     ydb/core/kqp
     ydb/core/kqp/ut/common
-    ydb/library/yql/sql/pg_dummy
+    ydb/core/kqp/workload_service/ut/common
     ydb/core/tx/columnshard/hooks/testing
+    yql/essentials/sql/pg
+    yql/essentials/parser/pg_wrapper
 )
 
 YQL_LAST_ABI_VERSION()

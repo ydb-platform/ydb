@@ -3,7 +3,8 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/library/yql/core/issue/yql_issue.h>
+#include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
+#include <yql/essentials/core/issue/yql_issue.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
@@ -81,20 +82,27 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     ui32 NodeCount = 1;
     bool WithSampleTables = true;
     bool UseRealThreads = true;
+    bool EnableForceFollowers = false;
     TDuration KeepSnapshotTimeout = TDuration::Zero();
     IOutputStream* LogStream = nullptr;
     TMaybe<NFake::TStorage> Storage = Nothing();
     NKqp::IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
+    NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
 
     TKikimrSettings()
     {
-        FeatureFlags.SetForceColumnTablesCompositeMarks(true);
         auto* tableServiceConfig = AppConfig.MutableTableServiceConfig();
         auto* infoExchangerRetrySettings = tableServiceConfig->MutableResourceManager()->MutableInfoExchangerSettings();
         auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
         exchangerSettings->SetStartDelayMs(10);
         exchangerSettings->SetMaxDelayMs(10);
         AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+        FeatureFlags.SetEnableSparsedColumns(true);
+        FeatureFlags.SetEnableWritePortionsOnInsert(true);
+        FeatureFlags.SetEnableParameterizedDecimal(true);
+        FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
+        FeatureFlags.SetEnableFollowerStats(true);
     }
 
     TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }
@@ -110,6 +118,8 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings& SetStorage(const NFake::TStorage& storage) { Storage = storage; return *this; };
     TKikimrSettings& SetFederatedQuerySetupFactory(NKqp::IKqpFederatedQuerySetupFactory::TPtr value) { FederatedQuerySetupFactory = value; return *this; };
     TKikimrSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; };
+    TKikimrSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; };
+    TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };
 };
 
 class TKikimrRunner {
@@ -134,15 +144,20 @@ public:
     TKikimrRunner(const NFake::TStorage& storage);
 
     ~TKikimrRunner() {
+        Server->GetRuntime()->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+
         RunCall([&] { Driver->Stop(true); return false; });
         if (ThreadPoolStarted_) {
             ThreadPool.Stop();
         }
 
+        UNIT_ASSERT_C(WaitHttpGatewayFinalization(CountersRoot), "Failed to finalize http gateway before destruction");
+
         Server.Reset();
         Client.Reset();
     }
 
+    NYdb::TDriver* GetDriverMut() { return Driver.Get(); }
     const TString& GetEndpoint() const { return Endpoint; }
     const NYdb::TDriver& GetDriver() const { return *Driver; }
     NYdb::NScheme::TSchemeClient GetSchemeClient() const { return NYdb::NScheme::TSchemeClient(*Driver); }
@@ -194,6 +209,7 @@ private:
     TString Endpoint;
     NYdb::TDriverConfig DriverConfig;
     THolder<NYdb::TDriver> Driver;
+    NMonitoring::TDynamicCounterPtr CountersRoot;
 };
 
 inline TKikimrRunner DefaultKikimrRunner(TVector<NKikimrKqp::TKqpSetting> kqpSettings = {},
@@ -210,6 +226,7 @@ inline TKikimrRunner DefaultKikimrRunner(TVector<NKikimrKqp::TKqpSetting> kqpSet
 struct TCollectedStreamResult {
     TString ResultSetYson;
     TMaybe<TString> PlanJson;
+    TMaybe<TString> Ast;
     TMaybe<Ydb::TableStats::QueryStats> QueryStats;
     ui64 RowsCount = 0;
     ui64 ConsumedRuFromHeader = 0;
@@ -222,6 +239,7 @@ enum class EIndexTypeSql {
     Global,
     GlobalSync,
     GlobalAsync,
+    GlobalVectorKMeansTree,
 };
 
 inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
@@ -232,6 +250,8 @@ inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
         return "GLOBAL SYNC";
     case EIndexTypeSql::GlobalAsync:
         return "GLOBAL ASYNC";
+    case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
+        return "GLOBAL";
     }
 }
 
@@ -242,6 +262,30 @@ inline NYdb::NTable::EIndexType IndexTypeSqlToIndexType(EIndexTypeSql type) {
         return NYdb::NTable::EIndexType::GlobalSync;
     case EIndexTypeSql::GlobalAsync:
         return NYdb::NTable::EIndexType::GlobalAsync;
+    case EIndexTypeSql::GlobalVectorKMeansTree:
+        return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
+    }
+}
+
+inline constexpr TStringBuf IndexSubtypeSqlString(EIndexTypeSql type) {
+    switch (type) {
+    case EIndexTypeSql::Global:
+    case EIndexTypeSql::GlobalSync:
+    case EIndexTypeSql::GlobalAsync:
+        return "";
+    case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
+        return "USING vector_kmeans_tree";
+    }
+}
+
+inline constexpr TStringBuf IndexWithSqlString(EIndexTypeSql type) {
+    switch (type) {
+    case EIndexTypeSql::Global:
+    case EIndexTypeSql::GlobalSync:
+    case EIndexTypeSql::GlobalAsync:
+        return "";
+    case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
+        return "WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)";
     }
 }
 
@@ -313,7 +357,7 @@ inline void AssertSuccessResult(const NYdb::TStatus& result) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session, bool populateTables = true);
+void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session, bool populateTables = true, bool withPgTypes = false);
 
 void InitRoot(Tests::TServer::TPtr server, TActorId sender);
 
@@ -325,8 +369,25 @@ NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer* server, TAc
 TVector<ui64> GetTableShards(Tests::TServer* server, TActorId sender, const TString &path);
 
 TVector<ui64> GetTableShards(Tests::TServer::TPtr server, TActorId sender, const TString &path);
+TVector<ui64> GetColumnTableShards(Tests::TServer* server, TActorId sender, const TString &path);
 
 void WaitForZeroSessions(const NKqp::TKqpCounters& counters);
+
+bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference);
+
+struct TGetPlanParams {
+    bool IncludeFilters = false;
+    bool IncludeOptimizerEstimation = false;
+    bool IncludeTables = true;
+};
+
+/* Gets join order with details as: join algo, join type and scan type. */
+NJson::TJsonValue GetDetailedJoinOrder(const TString& deserializedPlan, const TGetPlanParams& params = {});
+
+/* Gets tables join order without details : only tables. */
+NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan);
+
+NJson::TJsonValue GetJoinOrderFromDetailedJoinOrder(const TString& deserializedDetailedJoinOrder);
 
 } // namespace NKqp
 } // namespace NKikimr

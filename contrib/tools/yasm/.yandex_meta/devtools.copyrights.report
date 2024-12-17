@@ -1,0 +1,549 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 040eb53afdd3e42bceae7b112ed0c7b5
+BELONGS ya.make
+    License text:
+            "Copyright (c) 2001-2010 Peter Johnson and other Yasm developers.",
+            "Run yasm --license for licensing overview and summary."
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        frontends/tasm/tasm.c [232:233]
+        frontends/vsyasm/vsyasm.c [224:225]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1042f3722f2b5478932208894fc0c75d
+BELONGS ya.make
+    License text:
+            "Copyright (c) 2001-2014 Peter Johnson and other Yasm developers.",
+            "Run yasm --license for licensing overview and summary."
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        frontends/yasm/yasm.c [228:229]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 16ed76d63a9c46131af23245e9ca696b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1991, 1993
+         *      The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libyasm/compat-queue.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1d19971221d4512a51d42f2f33f54c75
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2004-2007  Peter Johnson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libyasm/cmake-module.c [4:4]
+        libyasm/genmodule.c [5:5]
+        libyasm/listfmt.h [6:6]
+        modules/listfmts/nasm/nasm-listfmt.c [4:4]
+        modules/objfmts/xdf/xdf-objfmt.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 35e7f29f814e74c19fb7ee407d6deffa
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2005-2007  Peter Johnson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libyasm/bc-align.c [4:4]
+        libyasm/bc-org.c [4:4]
+        libyasm/insn.c [4:4]
+        modules/gas-token.c [6:6]
+        modules/parsers/gas/gas-parse.c [4:4]
+        modules/parsers/gas/gas-parser.c [4:4]
+        modules/parsers/gas/gas-parser.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3f9f5289ef7a60a17964e1be49906fee
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2008  Peter Johnson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        frontends/yasm/yasm-plugin.c [4:4]
+        frontends/yasm/yasm-plugin.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 43f1294a917d0e7b31cf14c81c7a5422
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2001-2008  Peter Johnson
+         *  Copyright (C) 2007-2008  Samuel Thibault
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        frontends/tasm/tasm.c [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 483a0cb9e254906fa6961f9279e1b8eb
+BELONGS ya.make
+    License text:
+            "Yasm is Copyright (c) 2001-2014 Peter Johnson and other Yasm developers.",
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        frontends/tasm/license.c [4:4]
+        frontends/vsyasm/license.c [4:4]
+        frontends/yasm/license.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4b83ff0699eb0004b36d21ba43ea57b3
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2001-2007  Peter Johnson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        frontends/vsyasm/vsyasm.c [4:4]
+        frontends/yasm/yasm.c [4:4]
+        libyasm/bc-data.c [4:4]
+        libyasm/bc-incbin.c [4:4]
+        libyasm/bc-reserve.c [4:4]
+        libyasm/bytecode.c [4:4]
+        libyasm/bytecode.h [6:6]
+        libyasm/coretype.h [6:6]
+        libyasm/errwarn.c [4:4]
+        libyasm/errwarn.h [6:6]
+        libyasm/file.c [4:4]
+        libyasm/file.h [6:6]
+        libyasm/floatnum.c [4:4]
+        libyasm/floatnum.h [6:6]
+        libyasm/hamt.c [4:4]
+        libyasm/hamt.h [6:6]
+        libyasm/intnum.c [4:4]
+        libyasm/intnum.h [6:6]
+        libyasm/objfmt.h [6:6]
+        libyasm/parser.h [6:6]
+        libyasm/preproc.h [6:6]
+        libyasm/section.c [4:4]
+        libyasm/section.h [6:6]
+        libyasm/valparam.c [4:4]
+        libyasm/valparam.h [6:6]
+        libyasm/xmalloc.c [4:4]
+        modules/arch/x86/x86arch.h [4:4]
+        modules/arch/x86/x86bc.c [4:4]
+        modules/arch/x86/x86expr.c [4:4]
+        modules/nasm-token.c [6:6]
+        modules/objfmts/dbg/dbg-objfmt.c [4:4]
+        modules/parsers/nasm/nasm-parser.c [4:4]
+        modules/preprocs/cpp/cpp-preproc.c [4:5]
+        modules/preprocs/raw/raw-preproc.c [4:4]
+        util.h [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4bf0523d979d6e4ffec62a69e2cc9bf7
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2010  Alexei Svitkine
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        modules/parsers/gas/gas-parse-intel.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5002082c77059b83b868762a4572de81
+BELONGS ya.make
+    License text:
+        (c) Bob Jenkins, 1996.  bob_jenkins@burtleburtle.net.  You may use this
+        code any way you wish, private, educational, or commercial, as long
+        as this whole comment accompanies it.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libyasm/phash.c [182:184]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5ac482aab2ee8bf12db24a2bdd4523b9
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1988, 1993
+         *      The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libyasm/xstrdup.c [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 65ad918678850b70e761686f90d3ec0b
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2001-2007  Michael Urman, Peter Johnson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libyasm/expr.c [4:4]
+        libyasm/expr.h [6:6]
+        libyasm/symrec.c [4:4]
+        libyasm/symrec.h [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 69ff6cc122b7ebf829e73cd9469b6699
+BELONGS ya.make
+    License text:
+        Yasm is Copyright (c) 2001-2014 Peter Johnson and other Yasm developers.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 71a5570b4ed12474c30d73d9c6d6af57
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1992, 1993
+         *      The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libyasm/mergesort.c [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 85f01196787841ee930c7d9e9afe5891
+BELONGS ya.make
+    License text:
+         Copyright (C) 1991 Free Software Foundation, Inc.
+            		      51 Franklin St, Fifth Floor, Boston, MA  02111-1307  USA
+         Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        GNU_LGPL-2.0 [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8cf91579d8cb4087b6bd775cd2b2bbed
+BELONGS ya.make
+    License text:
+         Copyright (C) 1989, 1991 Free Software Foundation, Inc.
+                               51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+         Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        GNU_GPL-2.0 [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 91ed2a52abb6d4174e5a50147be44f81
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1990, 1993
+         *      The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libyasm/strsep.c [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 971686ad99f50d98207ab34abd52386e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libyasm/bitvect.c [3858:3862]
+        libyasm/bitvect.h [477:481]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9d17f6c33ccdc6f4d2d121490290915e
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1988, 1993, 2019
+         *      The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libyasm/replace_path.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9d779b0d83ae00030ec57f9afde03f57
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1987, 1993
+         *      The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libyasm/strcasecmp.c [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a4efb4ed0f45e53e8b61395c4f0f82c8
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2001  Stanislav Karchebny <berk@madfire.net>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        frontends/tasm/tasm-options.c [4:4]
+        frontends/tasm/tasm-options.h [4:4]
+        frontends/yasm/yasm-options.c [4:4]
+        frontends/yasm/yasm-options.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a5279380087fd196a366e39471c2a41e
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2004-2007  Michael Urman
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        modules/objfmts/elf/elf-machine.h [4:4]
+        modules/objfmts/elf/elf-x86-amd64.c [4:4]
+        modules/objfmts/elf/elf-x86-x86.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aaec82dc936a1832c334f30e48c11863
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2007 Henryk Richter, built upon xdf objfmt (C) Peter Johnson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        modules/objfmts/macho/macho-objfmt.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL af24fae8ec2496b32445bfd9cdb6de72
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2009 Alexei Svitkine
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        modules/preprocs/gas/gas-preproc.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b4fcd0c4417f6edb1a48b0357023158a
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2003-2007  Michael Urman
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        modules/dbgfmts/stabs/stabs-dbgfmt.c [4:4]
+        modules/objfmts/elf/elf-objfmt.c [4:4]
+        modules/objfmts/elf/elf.c [4:4]
+        modules/objfmts/elf/elf.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b672346749080186fc3300636097f33e
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2003-2007  Peter Johnson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libyasm.h [6:6]
+        libyasm/assocdat.c [4:4]
+        libyasm/assocdat.h [6:6]
+        modules/arch/lc3b/lc3barch.c [4:4]
+        modules/arch/lc3b/lc3barch.h [4:4]
+        modules/arch/lc3b/lc3bbc.c [4:4]
+        modules/lc3bid.c [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bbe7fd4f2281aa1375aa1eff44193f3c
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2007 Henryk Richter, built upon xdf objfmt (C) Peter Johnson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        modules/objfmts/macho/macho-objfmt.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0a580767e4df988cbeb3a33fe57d251
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        GNU_GPL-2.0 [251:256]
+        GNU_LGPL-2.0 [407:412]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c2e6e65775055bdd08934848b2c77a4f
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2001-2008  Peter Johnson
+         *  Copyright (C) 2007-2008  Samuel Thibault
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        frontends/tasm/tasm.c [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c3518306e014a9991f4178523d335795
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2007  Peter Johnson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        modules/objfmts/coff/coff-objfmt.h [4:4]
+        modules/objfmts/coff/win64-except.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c751cfb88d8b5235f973b776d96e1d77
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2007       Paul Barker
+         *  Copyright (C) 2001-2007  Peter Johnson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        modules/preprocs/cpp/cpp-preproc.c [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d150d738185f9bc17b25edf92c376806
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2006-2007  Peter Johnson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libyasm/value.c [4:4]
+        libyasm/value.h [6:6]
+        modules/dbgfmts/codeview/cv-dbgfmt.c [4:4]
+        modules/dbgfmts/codeview/cv-dbgfmt.h [4:4]
+        modules/dbgfmts/codeview/cv-symline.c [4:4]
+        modules/dbgfmts/codeview/cv-type.c [4:4]
+        modules/dbgfmts/dwarf2/dwarf2-aranges.c [4:4]
+        modules/dbgfmts/dwarf2/dwarf2-dbgfmt.c [4:4]
+        modules/dbgfmts/dwarf2/dwarf2-dbgfmt.h [4:4]
+        modules/dbgfmts/dwarf2/dwarf2-info.c [4:4]
+        modules/dbgfmts/dwarf2/dwarf2-line.c [4:4]
+        modules/objfmts/rdf/rdf-objfmt.c [4:4]
+        modules/preprocs/nasm/genversion.c [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d994daedad9e22cf696cbcf2db306afd
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2001-2007  Peter Johnson, Michael Urman
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        modules/parsers/nasm/nasm-parse.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e5aac90afa3b20372e075373a6ff4520
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2012  Michael Urman and H.J. Lu
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        modules/objfmts/elf/elf-x86-x32.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e5d4de804bede12afce9eb05d2078806
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 2002-2007  Peter Johnson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libyasm/arch.h [6:6]
+        libyasm/dbgfmt.h [6:6]
+        libyasm/insn.h [6:6]
+        libyasm/linemap.c [4:4]
+        libyasm/linemap.h [6:6]
+        libyasm/module.h [4:4]
+        modules/arch/x86/x86arch.c [4:4]
+        modules/arch/x86/x86id.c [4:4]
+        modules/dbgfmts/null/null-dbgfmt.c [4:4]
+        modules/objfmts/bin/bin-objfmt.c [4:4]
+        modules/objfmts/coff/coff-objfmt.c [4:4]
+        modules/parsers/nasm/nasm-parser-struct.h [4:4]
+        modules/parsers/nasm/nasm-parser.h [4:4]
+        modules/preprocs/nasm/nasm-preproc.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f764b5881815e4324e7ce4ae38fc5d4c
+BELONGS ya.make
+    License text:
+            Copyright 1996-2009 the NASM Authors - All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        BSD.txt [49:49]

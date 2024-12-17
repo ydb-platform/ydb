@@ -284,7 +284,7 @@ public:
         TSerializedCellVec fromKeyCells(Ev->Get()->Record.GetFromKey());
         KeyFrom.clear();
         for (ui32 i = 0; i < fromKeyCells.GetCells().size(); ++i) {
-            KeyFrom.push_back(TRawTypeValue(fromKeyCells.GetCells()[i].AsRef(), tableInfo.KeyColumnTypes[i]));
+            KeyFrom.push_back(TRawTypeValue(fromKeyCells.GetCells()[i].AsRef(), tableInfo.KeyColumnTypes[i].GetTypeId()));
         }
         KeyFrom.resize(tableInfo.KeyColumnTypes.size());
         InclusiveFrom = Ev->Get()->Record.GetFromKeyInclusive();

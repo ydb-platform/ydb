@@ -5,7 +5,7 @@
 -- using 1680793381 as a seed to the RNG
 
 select
-    coalesce(c_count, 0::int8) as c_count,
+    coalesce(c_count, 0) as c_count,
     count(*) as custdist
 from
     (
@@ -15,7 +15,7 @@ from
         from
             {{customer}} left outer join {{orders}} on
                 c_custkey = o_custkey
-                and o_comment not like '%unusual%requests%'
+                and o_comment not like '%special%requests%'
         group by
             c_custkey
     ) as c_orders (c_custkey, c_count)

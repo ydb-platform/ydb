@@ -11,6 +11,7 @@
 #include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/base/secure_protobuf_printer.h>
+#include <ydb/core/ymq/base/utils.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log.h>
@@ -47,8 +48,6 @@ const std::vector<TStringBuf> PRIVATE_TOKENS_HEADERS = {
 };
 
 const TString CREDENTIAL_PARAM = "credential";
-
-constexpr TStringBuf PRIVATE_REQUEST_PATH_PREFIX = "/private";
 
 const TSet<TString> ModifyPermissionsActions = {"GrantPermissions", "RevokePermissions", "SetPermissions"};
 
@@ -165,6 +164,18 @@ void THttpRequest::WriteResponse(const TReplyParams& replyParams, const TSqsHttp
         requestAttributes.ResourceId = response.ResourceId;
         requestAttributes.Action = Action_;
 
+        RLOG_SQS_BASE_DEBUG(*Parent_->ActorSystem_,
+            TStringBuilder() << "Send metering event."
+            << " HttpStatusCode: " << requestAttributes.HttpStatusCode
+            << " IsFifo: " << requestAttributes.IsFifo
+            << " FolderId: " << requestAttributes.FolderId
+            << " RequestSizeInBytes: " << requestAttributes.RequestSizeInBytes
+            << " ResponseSizeInBytes: " << requestAttributes.ResponseSizeInBytes
+            << " SourceAddress: " << requestAttributes.SourceAddress
+            << " ResourceId: " << requestAttributes.ResourceId
+            << " Action: " << requestAttributes.Action
+        );
+
         Parent_->ActorSystem_->Send(MakeSqsMeteringServiceID(), reportRequestAttributes.Release());
     }
 
@@ -264,26 +275,9 @@ bool THttpRequest::DoReply(const TReplyParams& p) {
     }
 }
 
-TString THttpRequest::GetRequestPathPart(TStringBuf path, size_t partIdx) const {
-    if (IsPrivateRequest_) {
-        path.SkipPrefix(PRIVATE_REQUEST_PATH_PREFIX);
-    }
-
-    TVector<TStringBuf> items;
-    StringSplitter(path).Split('/').AddTo(&items);
-    if (items.size() > partIdx) {
-        return TString(items[partIdx]);
-    }
-    return TString();
-}
-
 TString THttpRequest::ExtractQueueNameFromPath(const TStringBuf path) {
-    return GetRequestPathPart(path, 2);
-}
-
-TString THttpRequest::ExtractAccountNameFromPath(const TStringBuf path) {
-    return GetRequestPathPart(path, 1);
-}
+    return NKikimr::NSQS::ExtractQueueNameFromPath(path, IsPrivateRequest_);
+};
 
 void THttpRequest::ExtractQueueAndAccountNames(const TStringBuf path) {
     if (Action_ == EAction::ModifyPermissions)
@@ -296,9 +290,11 @@ void THttpRequest::ExtractQueueAndAccountNames(const TStringBuf path) {
 
         QueueName_ = *QueryParams_.QueueName;
     } else {
-        const auto pathAndQuery = QueryParams_.QueueUrl ? GetPathAndQuery(*QueryParams_.QueueUrl) : GetPathAndQuery(path);
+        const auto pathAndQuery = QueryParams_.QueueUrl
+            ? GetPathAndQuery(*QueryParams_.QueueUrl)
+            : GetPathAndQuery(path);
         QueueName_ = ExtractQueueNameFromPath(pathAndQuery);
-        AccountName_ = ExtractAccountNameFromPath(pathAndQuery);
+        AccountName_ = NKikimr::NSQS::ExtractAccountNameFromPath(pathAndQuery, IsPrivateRequest_);
 
         if (IsProxyAction(Action_)) {
             if (QueryParams_.QueueUrl && *QueryParams_.QueueUrl) {
@@ -381,9 +377,7 @@ void THttpRequest::ParseCgiParameters(const TCgiParameters& params) {
 }
 
 void THttpRequest::ParsePrivateRequestPathPrefix(const TStringBuf& path) {
-    if (path.StartsWith(PRIVATE_REQUEST_PATH_PREFIX)) {
-        IsPrivateRequest_ = true;
-    }
+    IsPrivateRequest_ = NKikimr::NSQS::IsPrivateRequest(path);
 }
 
 ui64 THttpRequest::CalculateRequestSizeInBytes(const THttpInput& input, const ui64 contentLength) const {

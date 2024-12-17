@@ -17,6 +17,7 @@
 #include <yt/cpp/mapreduce/raw_client/raw_batch_request.h>
 
 #include <yt/cpp/mapreduce/interface/error_codes.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
@@ -141,6 +142,7 @@ TOperationPreparer::TOperationPreparer(TClientPtr client, TTransactionId transac
     : Client_(std::move(client))
     , TransactionId_(transactionId)
     , FileTransaction_(MakeHolder<TPingableTransaction>(
+        Client_->GetRawClient(),
         Client_->GetRetryPolicy(),
         Client_->GetContext(),
         TransactionId_,
@@ -315,7 +317,7 @@ public:
         return FileName_;
     }
 
-    ui64 GetDataSize() const override
+    i64 GetDataSize() const override
     {
         return GetFileLength(FileName_);
     }
@@ -353,9 +355,9 @@ public:
         return Description_;
     }
 
-    ui64 GetDataSize() const override
+    i64 GetDataSize() const override
     {
-        return Data_.size();
+        return std::ssize(Data_);
     }
 
 private:
@@ -395,7 +397,8 @@ TJobPreparer::TJobPreparer(
     size_t outputTableCount,
     const TVector<TSmallJobFile>& smallFileList,
     const TOperationOptions& options)
-    : OperationPreparer_(operationPreparer)
+    : RawClient_(operationPreparer.GetClient()->GetRawClient())
+    , OperationPreparer_(operationPreparer)
     , Spec_(spec)
     , Options_(options)
     , Layers_(spec.Layers_)
@@ -419,6 +422,7 @@ TJobPreparer::TJobPreparer(
     }
 
     if (auto commandJob = dynamic_cast<const ICommandJob*>(&job)) {
+        IsCommandJob_ = true;
         ClassName_ = TJobFactory::Get()->GetJobName(&job);
         Command_ = commandJob->GetCommand();
     } else {
@@ -465,6 +469,11 @@ ui64 TJobPreparer::GetTotalFileSize() const
     return TotalFileSize_;
 }
 
+bool TJobPreparer::ShouldRedirectStdoutToStderr() const
+{
+    return !IsCommandJob_ && OperationPreparer_.GetContext().Config->RedirectStdoutToStderr;
+}
+
 TString TJobPreparer::GetFileStorage() const
 {
     return Options_.FileStorage_ ?
@@ -481,15 +490,18 @@ TYPath TJobPreparer::GetCachePath() const
 
 void TJobPreparer::CreateStorage() const
 {
-    Create(
+    RequestWithRetry<void>(
         OperationPreparer_.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-        OperationPreparer_.GetContext(),
-        Options_.FileStorageTransactionId_,
-        GetCachePath(),
-        NT_MAP,
-        TCreateOptions()
-            .IgnoreExisting(true)
-            .Recursive(true));
+        [this] (TMutationId& mutationId) {
+            RawClient_->Create(
+                mutationId,
+                Options_.FileStorageTransactionId_,
+                GetCachePath(),
+                NT_MAP,
+                TCreateOptions()
+                    .IgnoreExisting(true)
+                    .Recursive(true));
+        });
 }
 
 int TJobPreparer::GetFileCacheReplicationFactor() const
@@ -508,17 +520,19 @@ void TJobPreparer::CreateFileInCypress(const TString& path) const
         attributes["expiration_timeout"] = Options_.FileExpirationTimeout_->MilliSeconds();
     }
 
-    Create(
+    RequestWithRetry<void>(
         OperationPreparer_.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-        OperationPreparer_.GetContext(),
-        Options_.FileStorageTransactionId_,
-        path,
-        NT_FILE,
-        TCreateOptions()
-            .IgnoreExisting(true)
-            .Recursive(true)
-            .Attributes(attributes)
-    );
+        [this, &path, &attributes] (TMutationId& mutationId) {
+            RawClient_->Create(
+                mutationId,
+                Options_.FileStorageTransactionId_,
+                path,
+                NT_FILE,
+                TCreateOptions()
+                    .IgnoreExisting(true)
+                    .Recursive(true)
+                    .Attributes(attributes));
+        });
 }
 
 TString TJobPreparer::PutFileToCypressCache(
@@ -545,12 +559,11 @@ TString TJobPreparer::PutFileToCypressCache(
         GetCachePath(),
         putFileToCacheOptions);
 
-    Remove(
+    RequestWithRetry<void>(
         OperationPreparer_.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-        OperationPreparer_.GetContext(),
-        transactionId,
-        path,
-        TRemoveOptions().Force(true));
+        [this, &transactionId, &path] (TMutationId& mutationId) {
+            RawClient_->Remove(mutationId, transactionId, path, TRemoveOptions().Force(true));
+        });
 
     return cachePath;
 }
@@ -569,7 +582,8 @@ TMaybe<TString> TJobPreparer::GetItemFromCypressCache(const TString& md5Signatur
         GetCachePath(),
         TGetFileFromCacheOptions());
     if (maybePath) {
-        YT_LOG_DEBUG("File is already in cache (FileName: %v)",
+        YT_LOG_DEBUG(
+            "File is already in cache (FileName: %v, FilePath: %v)",
             fileName,
             *maybePath);
     }
@@ -600,6 +614,7 @@ TString TJobPreparer::UploadToRandomPath(const IItemToUpload& itemToUpload) cons
     {
         TFileWriter writer(
             uniquePath,
+            OperationPreparer_.GetClient()->GetRawClient(),
             OperationPreparer_.GetClientRetryPolicy(),
             OperationPreparer_.GetClient()->GetTransactionPinger(),
             OperationPreparer_.GetContext(),
@@ -624,6 +639,7 @@ TMaybe<TString> TJobPreparer::TryUploadWithDeduplication(const IItemToUpload& it
     CreateFileInCypress(cypressPath);
 
     auto uploadTx = MakeIntrusive<TTransaction>(
+        OperationPreparer_.GetClient()->GetRawClient(),
         OperationPreparer_.GetClient(),
         OperationPreparer_.GetContext(),
         TTransactionId(),
@@ -694,7 +710,10 @@ TString TJobPreparer::UploadToCacheUsingApi(const IItemToUpload& itemToUpload) c
         itemToUpload.GetDescription(),
         OperationPreparer_.GetPreparationId());
 
-    if (OperationPreparer_.GetContext().Config->CacheUploadDeduplicationMode != EUploadDeduplicationMode::Disabled) {
+    const auto& config = OperationPreparer_.GetContext().Config;
+
+    if (config->CacheUploadDeduplicationMode != EUploadDeduplicationMode::Disabled &&
+        itemToUpload.GetDataSize() > config->CacheUploadDeduplicationThreshold) {
         if (auto path = TryUploadWithDeduplication(itemToUpload)) {
             return *path;
         }
@@ -733,23 +752,27 @@ TString TJobPreparer::UploadToCache(const IItemToUpload& itemToUpload) const
 
 void TJobPreparer::UseFileInCypress(const TRichYPath& file)
 {
-    if (!Exists(
+    auto exists = RequestWithRetry<bool>(
         OperationPreparer_.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-        OperationPreparer_.GetContext(),
-        file.TransactionId_.GetOrElse(OperationPreparer_.GetTransactionId()),
-        file.Path_))
+        [this, &file] (TMutationId /*mutationId*/) {
+            return RawClient_->Exists(
+                file.TransactionId_.GetOrElse(OperationPreparer_.GetTransactionId()),
+                file.Path_);
+        });
+    if (!exists)
     {
         ythrow yexception() << "File " << file.Path_ << " does not exist";
     }
 
     if (ShouldMountSandbox()) {
-        auto size = Get(
+        auto size = RequestWithRetry<i64>(
             OperationPreparer_.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-            OperationPreparer_.GetContext(),
-            file.TransactionId_.GetOrElse(OperationPreparer_.GetTransactionId()),
-            file.Path_ + "/@uncompressed_data_size")
-            .AsInt64();
-
+            [this, &file] (TMutationId /*mutationId*/) {
+                return RawClient_->Get(
+                    file.TransactionId_.GetOrElse(OperationPreparer_.GetTransactionId()),
+                    file.Path_ + "/@uncompressed_data_size")
+                    .AsInt64();
+            });
         TotalFileSize_ += RoundUpFileSize(static_cast<ui64>(size));
     }
     CypressFiles_.push_back(file);
@@ -822,7 +845,10 @@ void TJobPreparer::UploadSmallFile(const TSmallJobFile& smallFile)
 
 bool TJobPreparer::IsLocalMode() const
 {
-    return UseLocalModeOptimization(OperationPreparer_.GetContext(), OperationPreparer_.GetClientRetryPolicy());
+    return UseLocalModeOptimization(
+        OperationPreparer_.GetClient()->GetRawClient(),
+        OperationPreparer_.GetContext(),
+        OperationPreparer_.GetClientRetryPolicy());
 }
 
 void TJobPreparer::PrepareJobBinary(const IJob& job, int outputTableCount, bool hasState)

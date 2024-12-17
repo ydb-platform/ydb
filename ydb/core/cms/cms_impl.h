@@ -26,7 +26,7 @@
 
 namespace NKikimr::NCms {
 
-using NConsole::TEvConsole;
+namespace TEvConsole = NConsole::TEvConsole;
 using NTabletFlatExecutor::TTabletExecutedFlat;
 using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
@@ -463,8 +463,6 @@ private:
     TTabletCountersBase *TabletCounters;
 
     TInstant InfoCollectorStartTime;
-
-    bool EnableCMSRequestPriorities = false;
 
 private:
     TString GenerateStat();

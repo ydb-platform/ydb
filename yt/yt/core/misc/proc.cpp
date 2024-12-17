@@ -42,6 +42,7 @@
     #include <unistd.h>
 #endif
 #ifdef _linux_
+    #include <fcntl.h>
     #include <pty.h>
     #include <pwd.h>
     #include <grp.h>
@@ -64,9 +65,9 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static inline const NLogging::TLogger Logger("Proc");
+namespace {
 
-////////////////////////////////////////////////////////////////////////////////
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Proc");
 
 TString LinuxErrorCodeFormatter(int code)
 {
@@ -74,6 +75,8 @@ TString LinuxErrorCodeFormatter(int code)
 }
 
 YT_DEFINE_ERROR_CODE_RANGE(4200, 4399, "NYT::ELinuxErrorCode", LinuxErrorCodeFormatter);
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -523,6 +526,20 @@ TCgroupMemoryStat GetCgroupMemoryStat(
 #endif
 }
 
+std::optional<i64> GetCgroupAnonymousMemoryLimit(
+    const TString& cgroupPath,
+    const TString& cgroupMountPoint)
+{
+#ifdef _linux_
+    TString path = cgroupMountPoint + "/memory" + cgroupPath + "/memory.anon.limit";
+    auto content = Trim(TUnbufferedFileInput(path).ReadAll(), "\n");
+    return FromString<i64>(content);
+#else
+    Y_UNUSED(cgroupPath, cgroupMountPoint);
+    return {};
+#endif
+}
+
 THashMap<TString, i64> GetVmstat()
 {
 #ifdef _linux_
@@ -935,6 +952,36 @@ void SafeSetPipeCapacity(int fd, int capacity)
     }
 }
 
+bool TryEnableEmptyPipeEpollEvent(TFileDescriptor fd)
+{
+// TODO(arkady-e1ppa): To not waste gpu we swallow an error
+// resulting in a potentially broken behavior.
+// if F_SET_PIPE_WAKE_WRITER is not defined and/or properly
+// implemented we should return false.
+#if defined(_linux_) && defined(F_SET_PIPE_WAKE_WRITER)
+    int res = ::fcntl(fd, F_SET_PIPE_WAKE_WRITER, 1);
+
+    // TODO(arkady-e1ppa): Once kernel version is fresh enough
+    // remove this branch altogether.
+    if (res == -1) {
+        return errno == EINVAL;
+    }
+
+    return res != -1;
+#else
+    Y_UNUSED(fd);
+    return true;
+#endif
+}
+
+void SafeEnableEmptyPipeEpollEvent(TFileDescriptor fd)
+{
+    if (!TryEnableEmptyPipeEpollEvent(fd)) {
+        THROW_ERROR_EXCEPTION("Failed to enable empty pipe epoll event for descriptor %v", fd)
+            << TError::FromSystem();
+    }
+}
+
 bool TrySetUid(int uid)
 {
 #ifdef _linux_
@@ -1199,7 +1246,7 @@ void SendSignal(const std::vector<int>& pids, const TString& signalName)
     auto sig = FindSignalIdBySignalName(signalName);
     for (int pid : pids) {
         if (kill(pid, *sig) != 0 && errno != ESRCH) {
-            THROW_ERROR_EXCEPTION("Unable to kill process %d", pid)
+            THROW_ERROR_EXCEPTION("Unable to kill process %v", pid)
                 << TError::FromSystem();
         }
     }
@@ -1529,6 +1576,43 @@ THashMap<TString, TDiskStat> GetDiskStats()
 #endif
 }
 
+TBlockDeviceStat ParseBlockDeviceStat(const TString& statLine)
+{
+    auto buffer = SplitString(statLine, " ");
+    TBlockDeviceStat result;
+    TryParseField(buffer, 0, result.ReadsCompleted);
+    TryParseField(buffer, 1, result.ReadsMerged);
+    TryParseField(buffer, 2, result.SectorsRead);
+    TryParseField(buffer, 3, result.TimeSpentReading);
+    TryParseField(buffer, 4, result.WritesCompleted);
+    TryParseField(buffer, 5, result.WritesMerged);
+    TryParseField(buffer, 6, result.SectorsWritten);
+    TryParseField(buffer, 7, result.TimeSpentWriting);
+    TryParseField(buffer, 8, result.IOCurrentlyInProgress);
+    TryParseField(buffer, 9, result.TimeSpentDoingIO);
+    TryParseField(buffer, 10, result.WeightedTimeSpentDoingIO);
+    TryParseField(buffer, 11, result.DiscardsCompleted);
+    TryParseField(buffer, 12, result.DiscardsMerged);
+    TryParseField(buffer, 13, result.SectorsDiscarded);
+    TryParseField(buffer, 14, result.TimeSpentDiscarding);
+    TryParseField(buffer, 15, result.FlushesCompleted);
+    TryParseField(buffer, 16, result.TimeSpentFlushing);
+    return result;
+}
+
+std::optional<TBlockDeviceStat> GetBlockDeviceStat(const TString& deviceName)
+{
+#ifdef _linux_
+    const TString path = Format("/sys/block/%v/stat", deviceName);
+    TFileInput diskStatsFile(path);
+    auto data = diskStatsFile.ReadAll();
+    return ParseBlockDeviceStat(Strip(data));
+#else
+    Y_UNUSED(deviceName);
+    return std::nullopt;
+#endif
+}
+
 std::vector<TString> ListDisks()
 {
 #ifdef _linux_
@@ -1553,24 +1637,36 @@ TTaskDiskStatistics GetSelfThreadTaskDiskStatistics()
 {
 #ifdef _linux_
     static const TString path = "/proc/thread-self/io";
+    static std::atomic<bool> supported = true;
 
     TTaskDiskStatistics stat;
 
-    TIFStream ioFile(path);
-    for (TString line; ioFile.ReadLine(line); ) {
-        if (line.empty()) {
-            continue;
-        }
+    if (supported) {
+        try {
+            TIFStream ioFile(path);
+            for (TString line; ioFile.ReadLine(line); ) {
+                if (line.empty()) {
+                    continue;
+                }
 
-        auto fields = SplitString(line, " ", 2);
-        if (fields.size() != 2) {
-            continue;
-        }
+                auto fields = SplitString(line, " ", 2);
+                if (fields.size() != 2) {
+                    continue;
+                }
 
-        if (fields[0] == "read_bytes:") {
-            TryFromString(fields[1], stat.ReadBytes);
-        } else if (fields[0] == "write_bytes:") {
-            TryFromString(fields[1], stat.ReadBytes);
+                if (fields[0] == "read_bytes:") {
+                    TryFromString(fields[1], stat.ReadBytes);
+                } else if (fields[0] == "write_bytes:") {
+                    TryFromString(fields[1], stat.WriteBytes);
+                }
+            }
+        } catch (const TSystemError& ex) {
+            if (ex.Status() == ENOENT) {
+                supported = false;
+                YT_LOG_WARNING(ex, "Task I/O accounting is not supported by kernel");
+            } else {
+                throw;
+            }
         }
     }
 
@@ -1604,7 +1700,7 @@ TFile MemfdCreate(const TString& name)
 const TString& GetLinuxKernelVersion()
 {
 #ifdef _linux_
-    static TString release = []() -> TString {
+    static TString release = [] () -> TString {
         utsname buf{};
         if (uname(&buf) != 0) {
             return "unknown";

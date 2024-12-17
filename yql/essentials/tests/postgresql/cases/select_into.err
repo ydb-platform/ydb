@@ -1,0 +1,543 @@
+Registering pre-existing tables
+	onek
+	onek2
+	int8_tbl
+<sql-statement>
+--
+-- SELECT_INTO
+--
+SELECT *
+   INTO TABLE sitmp1
+   FROM onek
+   WHERE onek.unique1 < 2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: not supported intoClause
+    	--
+	^
+<sql-statement>
+DROP TABLE sitmp1;
+</sql-statement>
+<sql-statement>
+SELECT *
+   INTO TABLE sitmp1
+   FROM onek2
+   WHERE onek2.unique1 < 2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: not supported intoClause
+    	SELECT *
+	^
+<sql-statement>
+DROP TABLE sitmp1;
+</sql-statement>
+<sql-statement>
+--
+-- SELECT INTO and INSERT permission, if owner is not allowed to insert.
+--
+CREATE SCHEMA selinto_schema;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 292
+    	--
+	^
+<sql-statement>
+CREATE USER regress_selinto_user;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 285
+    	CREATE USER regress_selinto_user;
+	^
+<sql-statement>
+ALTER DEFAULT PRIVILEGES FOR ROLE regress_selinto_user
+	  REVOKE INSERT ON TABLES FROM regress_selinto_user;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 250
+    	ALTER DEFAULT PRIVILEGES FOR ROLE regress_selinto_user
+	^
+<sql-statement>
+GRANT ALL ON SCHEMA selinto_schema TO public;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 248
+    	GRANT ALL ON SCHEMA selinto_schema TO public;
+	^
+<sql-statement>
+SET SESSION AUTHORIZATION regress_selinto_user;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: session_authorization
+    	SET SESSION AUTHORIZATION regress_selinto_user;
+	^
+<sql-statement>
+-- WITH DATA, passes.
+CREATE TABLE selinto_schema.tbl_withdata1 (a)
+  AS SELECT generate_series(1,3) WITH DATA;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	-- WITH DATA, passes.
+	^
+<sql-statement>
+INSERT INTO selinto_schema.tbl_withdata1 VALUES (4);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: Unknown cluster: selinto_schema
+    	INSERT INTO selinto_schema.tbl_withdata1 VALUES (4);
+	^
+<sql-statement>
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+  CREATE TABLE selinto_schema.tbl_withdata2 (a) AS
+  SELECT generate_series(1,3) WITH DATA;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	^
+<sql-statement>
+-- WITH NO DATA, passes.
+CREATE TABLE selinto_schema.tbl_nodata1 (a) AS
+  SELECT generate_series(1,3) WITH NO DATA;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	-- WITH NO DATA, passes.
+	^
+<sql-statement>
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+  CREATE TABLE selinto_schema.tbl_nodata2 (a) AS
+  SELECT generate_series(1,3) WITH NO DATA;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	^
+<sql-statement>
+-- EXECUTE and WITH DATA, passes.
+PREPARE data_sel AS SELECT generate_series(1,3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 301
+    	-- EXECUTE and WITH DATA, passes.
+	^
+<sql-statement>
+CREATE TABLE selinto_schema.tbl_withdata3 (a) AS
+  EXECUTE data_sel WITH DATA;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE selinto_schema.tbl_withdata3 (a) AS
+	^
+<sql-statement>
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+  CREATE TABLE selinto_schema.tbl_withdata4 (a) AS
+  EXECUTE data_sel WITH DATA;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	^
+<sql-statement>
+-- EXECUTE and WITH NO DATA, passes.
+CREATE TABLE selinto_schema.tbl_nodata3 (a) AS
+  EXECUTE data_sel WITH NO DATA;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	-- EXECUTE and WITH NO DATA, passes.
+	^
+<sql-statement>
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+  CREATE TABLE selinto_schema.tbl_nodata4 (a) AS
+  EXECUTE data_sel WITH NO DATA;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	^
+<sql-statement>
+RESET SESSION AUTHORIZATION;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	RESET SESSION AUTHORIZATION;
+	^
+<sql-statement>
+ALTER DEFAULT PRIVILEGES FOR ROLE regress_selinto_user
+	  GRANT INSERT ON TABLES TO regress_selinto_user;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 250
+    	ALTER DEFAULT PRIVILEGES FOR ROLE regress_selinto_user
+	^
+<sql-statement>
+SET SESSION AUTHORIZATION regress_selinto_user;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: session_authorization
+    	SET SESSION AUTHORIZATION regress_selinto_user;
+	^
+<sql-statement>
+RESET SESSION AUTHORIZATION;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	RESET SESSION AUTHORIZATION;
+	^
+<sql-statement>
+DEALLOCATE data_sel;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 303
+    	DEALLOCATE data_sel;
+	^
+<sql-statement>
+DROP SCHEMA selinto_schema CASCADE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 228
+    	DROP SCHEMA selinto_schema CASCADE;
+	^
+<sql-statement>
+DROP USER regress_selinto_user;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 287
+    	DROP USER regress_selinto_user;
+	^
+<sql-statement>
+-- Tests for WITH NO DATA and column name consistency
+CREATE TABLE ctas_base (i int, j int);
+</sql-statement>
+<sql-statement>
+INSERT INTO ctas_base VALUES (1, 2);
+</sql-statement>
+<sql-statement>
+CREATE TABLE ctas_nodata (ii, jj, kk) AS SELECT i, j FROM ctas_base; -- Error
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE ctas_nodata (ii, jj, kk) AS SELECT i, j FROM ctas_base; -- Error
+	^
+<sql-statement>
+CREATE TABLE ctas_nodata (ii, jj, kk) AS SELECT i, j FROM ctas_base WITH NO DATA; -- Error
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE ctas_nodata (ii, jj, kk) AS SELECT i, j FROM ctas_base WITH NO DATA; -- Error
+	^
+<sql-statement>
+CREATE TABLE ctas_nodata (ii, jj) AS SELECT i, j FROM ctas_base; -- OK
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE ctas_nodata (ii, jj) AS SELECT i, j FROM ctas_base; -- OK
+	^
+<sql-statement>
+CREATE TABLE ctas_nodata_2 (ii, jj) AS SELECT i, j FROM ctas_base WITH NO DATA; -- OK
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE ctas_nodata_2 (ii, jj) AS SELECT i, j FROM ctas_base WITH NO DATA; -- OK
+	^
+<sql-statement>
+CREATE TABLE ctas_nodata_3 (ii) AS SELECT i, j FROM ctas_base; -- OK
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE ctas_nodata_3 (ii) AS SELECT i, j FROM ctas_base; -- OK
+	^
+<sql-statement>
+CREATE TABLE ctas_nodata_4 (ii) AS SELECT i, j FROM ctas_base WITH NO DATA; -- OK
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE ctas_nodata_4 (ii) AS SELECT i, j FROM ctas_base WITH NO DATA; -- OK
+	^
+<sql-statement>
+SELECT * FROM ctas_nodata;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.ctas_nodata
+    
+<sql-statement>
+SELECT * FROM ctas_nodata_2;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.ctas_nodata_2
+    
+<sql-statement>
+SELECT * FROM ctas_nodata_3;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.ctas_nodata_3
+    
+<sql-statement>
+SELECT * FROM ctas_nodata_4;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.ctas_nodata_4
+    
+<sql-statement>
+DROP TABLE ctas_base;
+</sql-statement>
+<sql-statement>
+DROP TABLE ctas_nodata;
+</sql-statement>
+<sql-statement>
+DROP TABLE ctas_nodata_2;
+</sql-statement>
+<sql-statement>
+DROP TABLE ctas_nodata_3;
+</sql-statement>
+<sql-statement>
+DROP TABLE ctas_nodata_4;
+</sql-statement>
+<sql-statement>
+--
+-- CREATE TABLE AS/SELECT INTO as last command in a SQL function
+-- have been known to cause problems
+--
+CREATE FUNCTION make_table() RETURNS VOID
+AS $$
+  CREATE TABLE created_table AS SELECT * FROM int8_tbl;
+$$ LANGUAGE SQL;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	--
+	^
+<sql-statement>
+SELECT make_table();
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT make_table();
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT make_table();
+	       ^
+            -stdin-:<main>:1:8: Error: No such proc: make_table
+            	SELECT make_table();
+	       ^
+<sql-statement>
+SELECT * FROM created_table;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.created_table
+    
+<sql-statement>
+-- Try EXPLAIN ANALYZE SELECT INTO and EXPLAIN ANALYZE CREATE TABLE AS
+-- WITH NO DATA, but hide the outputs since they won't be stable.
+DO $$
+BEGIN
+	EXECUTE 'EXPLAIN ANALYZE SELECT * INTO TABLE easi FROM int8_tbl';
+	EXECUTE 'EXPLAIN ANALYZE CREATE TABLE easi2 AS SELECT * FROM int8_tbl WITH NO DATA';
+END$$;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 263
+    	-- Try EXPLAIN ANALYZE SELECT INTO and EXPLAIN ANALYZE CREATE TABLE AS
+	^
+<sql-statement>
+DROP TABLE created_table;
+</sql-statement>
+<sql-statement>
+DROP TABLE easi, easi2;
+</sql-statement>
+<sql-statement>
+--
+-- Disallowed uses of SELECT ... INTO.  All should fail
+--
+DECLARE foo CURSOR FOR SELECT 1 INTO b;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 304
+    	--
+	^
+<sql-statement>
+COPY (SELECT 1 INTO frak UNION SELECT 2) TO 'blob';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 253
+    	COPY (SELECT 1 INTO frak UNION SELECT 2) TO 'blob';
+	^
+<sql-statement>
+SELECT * FROM (SELECT 1 INTO f) bar;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: not supported intoClause
+    	SELECT * FROM (SELECT 1 INTO f) bar;
+	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	SELECT * FROM (SELECT 1 INTO f) bar;
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	SELECT * FROM (SELECT 1 INTO f) bar;
+	^
+<sql-statement>
+CREATE VIEW foo AS SELECT 1 INTO b;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	CREATE VIEW foo AS SELECT 1 INTO b;
+	^
+<sql-statement>
+INSERT INTO b SELECT 1 INTO f;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: not supported intoClause
+    	INSERT INTO b SELECT 1 INTO f;
+	^
+<sql-statement>
+-- Test CREATE TABLE AS ... IF NOT EXISTS
+CREATE TABLE ctas_ine_tbl AS SELECT 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	-- Test CREATE TABLE AS ... IF NOT EXISTS
+	^
+<sql-statement>
+CREATE TABLE ctas_ine_tbl AS SELECT 1 / 0; -- error
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE ctas_ine_tbl AS SELECT 1 / 0; -- error
+	^
+<sql-statement>
+CREATE TABLE IF NOT EXISTS ctas_ine_tbl AS SELECT 1 / 0; -- ok
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE IF NOT EXISTS ctas_ine_tbl AS SELECT 1 / 0; -- ok
+	^
+<sql-statement>
+CREATE TABLE ctas_ine_tbl AS SELECT 1 / 0 WITH NO DATA; -- error
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE ctas_ine_tbl AS SELECT 1 / 0 WITH NO DATA; -- error
+	^
+<sql-statement>
+CREATE TABLE IF NOT EXISTS ctas_ine_tbl AS SELECT 1 / 0 WITH NO DATA; -- ok
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE IF NOT EXISTS ctas_ine_tbl AS SELECT 1 / 0 WITH NO DATA; -- ok
+	^
+<sql-statement>
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+  CREATE TABLE ctas_ine_tbl AS SELECT 1 / 0; -- error
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	^
+<sql-statement>
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+  CREATE TABLE IF NOT EXISTS ctas_ine_tbl AS SELECT 1 / 0; -- ok
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	^
+<sql-statement>
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+  CREATE TABLE ctas_ine_tbl AS SELECT 1 / 0 WITH NO DATA; -- error
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	^
+<sql-statement>
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+  CREATE TABLE IF NOT EXISTS ctas_ine_tbl AS SELECT 1 / 0 WITH NO DATA; -- ok
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	^
+<sql-statement>
+PREPARE ctas_ine_query AS SELECT 1 / 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 301
+    	PREPARE ctas_ine_query AS SELECT 1 / 0;
+	^
+<sql-statement>
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+  CREATE TABLE ctas_ine_tbl AS EXECUTE ctas_ine_query; -- error
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	^
+<sql-statement>
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+  CREATE TABLE IF NOT EXISTS ctas_ine_tbl AS EXECUTE ctas_ine_query; -- ok
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	^
+<sql-statement>
+DROP TABLE ctas_ine_tbl;
+</sql-statement>

@@ -74,37 +74,41 @@ namespace boost { namespace locale { namespace impl_posix {
         std::shared_ptr<locale_t> lc_;
     };
 
-    class utf8_converter : public converter<char> {
+    template<typename U8Char>
+    class utf8_converter : public converter<U8Char> {
     public:
-        utf8_converter(std::shared_ptr<locale_t> lc, size_t refs = 0) : converter<char>(refs), lc_(std::move(lc)) {}
-        std::string convert(converter_base::conversion_type how,
-                            const char* begin,
-                            const char* end,
-                            int /*flags*/ = 0) const override
+        static_assert(sizeof(U8Char) == sizeof(char), "Not an UTF-8 char type");
+
+        utf8_converter(std::shared_ptr<locale_t> lc, size_t refs = 0) : converter<U8Char>(refs), lc_(std::move(lc)) {}
+        std::basic_string<U8Char> convert(converter_base::conversion_type how,
+                                          const U8Char* begin,
+                                          const U8Char* end,
+                                          int /*flags*/ = 0) const override
         {
+            using conversion_type = converter_base::conversion_type;
             switch(how) {
-                case upper_case: {
+                case conversion_type::upper_case: {
                     const std::wstring tmp = conv::utf_to_utf<wchar_t>(begin, end);
                     std::wstring wres;
                     wres.reserve(tmp.size());
                     for(const wchar_t c : tmp)
                         wres += towupper_l(c, *lc_);
-                    return conv::utf_to_utf<char>(wres);
+                    return conv::utf_to_utf<U8Char>(wres);
                 }
 
-                case lower_case:
-                case case_folding: {
+                case conversion_type::lower_case:
+                case conversion_type::case_folding: {
                     const std::wstring tmp = conv::utf_to_utf<wchar_t>(begin, end);
                     std::wstring wres;
                     wres.reserve(tmp.size());
                     for(const wchar_t c : tmp)
                         wres += towlower_l(c, *lc_);
-                    return conv::utf_to_utf<char>(wres);
+                    return conv::utf_to_utf<U8Char>(wres);
                 }
-                case normalization:
-                case title_case: break;
+                case conversion_type::normalization:
+                case conversion_type::title_case: break;
             }
-            return std::string(begin, end - begin);
+            return std::basic_string<U8Char>(begin, end - begin);
         }
 
     private:
@@ -117,10 +121,15 @@ namespace boost { namespace locale { namespace impl_posix {
             case char_facet_t::nochar: break;
             case char_facet_t::char_f: {
                 if(util::normalize_encoding(nl_langinfo_l(CODESET, *lc)) == "utf8")
-                    return std::locale(in, new utf8_converter(std::move(lc)));
+                    return std::locale(in, new utf8_converter<char>(std::move(lc)));
                 return std::locale(in, new std_converter<char>(std::move(lc)));
             }
             case char_facet_t::wchar_f: return std::locale(in, new std_converter<wchar_t>(std::move(lc)));
+#ifndef BOOST_LOCALE_NO_CXX20_STRING8
+            case char_facet_t::char8_f: return std::locale(in, new utf8_converter<char8_t>(std::move(lc)));
+#elif defined(__cpp_char8_t)
+            case char_facet_t::char8_f: break;
+#endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
             case char_facet_t::char16_f: return std::locale(in, new std_converter<char16_t>(std::move(lc)));
 #endif

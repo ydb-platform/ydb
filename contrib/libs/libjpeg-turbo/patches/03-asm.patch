@@ -1,0 +1,80 @@
+diff --git a/simd/arm/jsimd_neon.S b/simd/arm/jsimd_neon.S
+index cd26127..e5c978f 100644
+--- a/simd/arm/aarch32/jsimd_neon.S
++++ b/simd/arm/aarch32/jsimd_neon.S
+@@ -30,10 +30,16 @@
+ .section .note.GNU-stack, "", %progbits  /* mark stack as non-executable */
+ #endif
+
++#if defined(__clang__) && defined(__arm__)
++#define LITE_ASM 1
++#endif
++
+ .text
++#ifndef LITE_ASM
+ .fpu neon
+ .arch armv7a
+ .object_arch armv4
++#endif
+ .arm
+ .syntax unified
+
+@@ -47,6 +53,9 @@
+     .globl _\fname
+ _\fname:
+ #else
++#ifndef LITE_ASM
++    .func \fname
++#endif
+     .global \fname
+ #ifdef __ELF__
+     .hidden \fname
+diff --git a/simd/nasm/jsimdext.inc b/simd/nasm/jsimdext.inc
+index b40901f..71a2172 100644
+--- a/simd/nasm/jsimdext.inc
++++ b/simd/nasm/jsimdext.inc
+@@ -67,7 +67,7 @@
+ %define SEG_TEXT   _text align=32 public use32 class=CODE
+ %define SEG_CONST  _data align=32 public use32 class=DATA
+
+-%elifdef ELF    ; ----(nasm -felf[64] -DELF ...)------------
++%elifdef UNIX    ; ----(nasm -felf[64] -DUNIX ...)------------
+ ; * Linux
+ ; * *BSD family Unix using elf format
+ ; * Unix System V, including Solaris x86, UnixWare and SCO Unix
+@@ -77,7 +77,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
+
+ ; -- segment definition --
+ ;
+-%ifdef __x86_64__
++%ifdef _x86_64_
+ %define SEG_TEXT   .text   progbits align=32
+ %define SEG_CONST  .rodata progbits align=32
+ %else
+@@ -130,7 +130,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
+ ; --------------------------------------------------------------------------
+ ;  Common types
+ ;
+-%ifdef __x86_64__
++%ifdef _x86_64_
+ %ifnidn __OUTPUT_FORMAT__, elfx32
+ %define POINTER         qword           ; general pointer type
+ %define SIZEOF_POINTER  SIZEOF_QWORD    ; sizeof(POINTER)
+@@ -230,7 +230,7 @@ section .note.GNU-stack noalloc noexec nowrite progbits
+ ; --------------------------------------------------------------------------
+ ;  Hidden symbols
+ ;
+-%ifdef ELF      ; ----(nasm -felf[64] -DELF ...)--------
++%ifdef UNIX      ; ----(nasm -felf[64] -DUNIX ...)--------
+ %define GLOBAL_FUNCTION(name)  global EXTN(name):function hidden
+ %define GLOBAL_DATA(name)      global EXTN(name):data hidden
+ %elifdef MACHO  ; ----(nasm -fmacho -DMACHO ...)--------
+@@ -374,7 +374,7 @@ const_base:
+     align       %1, db 0                ; filling zeros
+ %endmacro
+
+-%ifdef __x86_64__
++%ifdef _x86_64_
+
+ %ifdef WIN64
+

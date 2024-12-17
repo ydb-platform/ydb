@@ -1,0 +1,109 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 44bf37d4806e634327301adb6333234f
+BELONGS ya.make
+    License text:
+           * Copyright (c) 2007-present, Stephen Colebourne & Michael Nascimento Santos
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [338:338]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 522505e5894778a882702849ee07b13a
+BELONGS ya.make
+    License text:
+          Copyright 2011, Google Inc.
+          All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [274:275]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7993ed112cd32a97cc601b58343dfe3b
+BELONGS ya.make
+    License text:
+          (C) 1995-2017 Jean-loup Gailly and Mark Adler
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [305:305]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7ddb2995f48012001146c0eb94d23367
+BELONGS ya.make
+    License text:
+          Copyright 2008 Google Inc.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [214:214]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b5f926d3cac689f08ee106a28ae32f34
+BELONGS ya.make
+    License text:
+          (c) Copyright [2008-2015] Tom Preston-Werner
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [252:252]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d73f33a516f5e4a9b5ce47f967383cfb
+BELONGS ya.make
+    License text:
+        This product includes software developed by Hewlett-Packard:
+        (c) Copyright [2014-2015] Hewlett-Packard Development Company, L.P
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL db14b49950a466d8c06ad0d9e2101bcf
+BELONGS ya.make
+    License text:
+        Copyright 2013 and onwards The Apache Software Foundation.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [2:2]

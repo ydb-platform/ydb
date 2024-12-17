@@ -3,14 +3,15 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_build.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/core/services/yql_out_transformers.h>
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/core/services/yql_out_transformers.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -22,8 +23,31 @@ using TStatus = IGraphTransformer::TStatus;
 
 namespace {
 
-TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildPhyStagesTransformer(bool allowDependantConsumers, TTypeAnnotationContext& typesCtx) {
-    EChannelMode mode = EChannelMode::CHANNEL_SCALAR;
+EChannelMode GetChannelMode(NKikimrConfig::TTableServiceConfig_EBlockChannelsMode blockChannelsMode) {
+    switch (blockChannelsMode) {
+        case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR:
+            return EChannelMode::CHANNEL_SCALAR;
+        case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO:
+            return EChannelMode::CHANNEL_WIDE_AUTO_BLOCK;
+        case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE:
+            return EChannelMode::CHANNEL_WIDE_FORCE_BLOCK;
+        default:
+            YQL_ENSURE(false);
+    }
+}
+
+TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildWideBlockChannelsTransformer(
+        TTypeAnnotationContext& typesCtx,
+        NKikimrConfig::TTableServiceConfig_EBlockChannelsMode blockChannelsMode) {
+    const EChannelMode mode = GetChannelMode(blockChannelsMode);
+    return NDq::CreateDqBuildWideBlockChannelsTransformer(typesCtx, mode);
+}
+
+TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildPhyStagesTransformer(
+        bool allowDependantConsumers,
+        TTypeAnnotationContext& typesCtx,
+        NKikimrConfig::TTableServiceConfig_EBlockChannelsMode blockChannelsMode) {
+    const EChannelMode mode = GetChannelMode(blockChannelsMode);
     return NDq::CreateDqBuildPhyStagesTransformer(allowDependantConsumers, typesCtx, mode);
 }
 
@@ -31,7 +55,9 @@ class TKqpBuildTxTransformer : public TSyncTransformerBase {
 public:
     TKqpBuildTxTransformer()
         : QueryType(EKikimrQueryType::Unspecified)
-        , IsPrecompute(false) {}
+        , IsPrecompute(false)
+    {
+    }
 
     void Init(EKikimrQueryType queryType, bool isPrecompute) {
         QueryType = queryType;
@@ -91,8 +117,7 @@ private:
         auto stages = CollectStages(inputExpr, ctx);
         Y_DEBUG_ABORT_UNLESS(!stages.empty());
 
-        auto results = TKqlQueryResultList(inputExpr);
-        auto txResults = BuildTxResults(results, stages, ctx);
+        auto txResults = BuildTxResults(inputExpr, stages, ctx);
         if (!txResults) {
             return TStatus::Error;
         }
@@ -176,9 +201,10 @@ private:
         return std::all_of(stages.begin(), stages.end(), [](const auto& x) { return IsKqpPureLambda(x.Program()) && IsKqpPureInputs(x.Inputs()); });
     }
 
-    static TMaybeNode<TExprList> BuildTxResults(const TKqlQueryResultList& results, TVector<TDqPhyStage>& stages,
+    TMaybeNode<TExprList> BuildTxResults(TExprNode::TPtr inputExpr, TVector<TDqPhyStage>& stages,
         TExprContext& ctx)
     {
+        auto results = TKqlQueryResultList(inputExpr);
         if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE)) {
             TStringBuilder sb;
             sb << "-- BuildTxResults" << Endl;
@@ -469,14 +495,24 @@ public:
     {
         BuildTxTransformer = new TKqpBuildTxTransformer();
 
+        const bool enableSpillingGenericQuery =
+            kqpCtx->IsGenericQuery() && config->SpillingEnabled() &&
+            config->EnableSpillingGenericQuery;
+
         DataTxTransformer = TTransformationPipeline(&typesCtx)
             .AddServiceTransformers()
             .Add(TExprLogTransformer::Sync("TxOpt", NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE), "TxOpt")
             .Add(*TypeAnnTransformer, "TypeAnnotation")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
-            .Add(CreateKqpBuildPhyStagesTransformer(/* allowDependantConsumers */ false, typesCtx), "BuildPhysicalStages")
+            .Add(CreateKqpBuildPhyStagesTransformer(enableSpillingGenericQuery, typesCtx, config->BlockChannelsMode), "BuildPhysicalStages")
+            // TODO(ilezhankin): "BuildWideBlockChannels" transformer is required only for BLOCK_CHANNELS_FORCE mode.
+            .Add(CreateKqpBuildWideBlockChannelsTransformer(typesCtx, config->BlockChannelsMode), "BuildWideBlockChannels")
             .Add(*BuildTxTransformer, "BuildPhysicalTx")
-            .Add(CreateKqpTxPeepholeTransformer(TypeAnnTransformer.Get(), typesCtx, config, /* withFinalStageRules */ false), "Peephole")
+            .Add(CreateKqpTxPeepholeTransformer(
+                TypeAnnTransformer.Get(), typesCtx, config,
+                /* withFinalStageRules */ config->BlockChannelsMode == NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE,
+                {"KqpPeephole-RewriteCrossJoin"}),
+                "Peephole")
             .Build(false);
 
         ScanTxTransformer = TTransformationPipeline(&typesCtx)
@@ -484,9 +520,9 @@ public:
             .Add(TExprLogTransformer::Sync("TxOpt", NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE), "TxOpt")
             .Add(*TypeAnnTransformer, "TypeAnnotation")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
-            .Add(CreateKqpBuildPhyStagesTransformer(config->SpillingEnabled(), typesCtx), "BuildPhysicalStages")
+            .Add(CreateKqpBuildPhyStagesTransformer(config->SpillingEnabled(), typesCtx, config->BlockChannelsMode), "BuildPhysicalStages")
             .Add(*BuildTxTransformer, "BuildPhysicalTx")
-            .Add(CreateKqpTxPeepholeTransformer(TypeAnnTransformer.Get(), typesCtx, config, /* withFinalStageRules */ false), "Peephole")
+            .Add(CreateKqpTxPeepholeTransformer(TypeAnnTransformer.Get(), typesCtx, config, /* withFinalStageRules */ false, {"KqpPeephole-RewriteCrossJoin"}), "Peephole")
             .Build(false);
     }
 
@@ -524,16 +560,20 @@ public:
         }
 
         if (!query.Effects().Empty()) {
-            auto tx = BuildTx(query.Effects().Ptr(), ctx, /* isPrecompute */ false);
-            if (!tx) {
-                return TStatus::Error;
-            }
+            auto collectedEffects = CollectEffects(query.Effects(), ctx, *KqpCtx);
 
-            if (!CheckEffectsTx(tx.Cast(), query, ctx)) {
-                return TStatus::Error;
-            }
+            for (auto& effects : collectedEffects) {
+                auto tx = BuildTx(effects.Ptr(), ctx, /* isPrecompute */ false);
+                if (!tx) {
+                    return TStatus::Error;
+                }
 
-            BuildCtx->PhysicalTxs.emplace_back(tx.Cast());
+                if (!CheckEffectsTx(tx.Cast(), effects, ctx)) {
+                    return TStatus::Error;
+                }
+
+                BuildCtx->PhysicalTxs.emplace_back(tx.Cast());
+            }
         }
 
         return TStatus::Ok;
@@ -545,8 +585,102 @@ public:
     }
 
 private:
-    bool HasTableEffects(const TKqlQuery& query) const {
-        for (const TExprBase& effect : query.Effects()) {
+    TVector<TExprList> CollectEffects(const TExprList& list, TExprContext& ctx, TKqpOptimizeContext& kqpCtx) {
+        struct TEffectsInfo {
+            enum class EType {
+                KQP_EFFECT,
+                KQP_SINK,
+                KQP_BATCH_SINK,
+                EXTERNAL_SINK,
+            };
+
+            EType Type;
+            THashSet<TStringBuf> TablesPathIds;
+            TVector<TExprNode::TPtr> Exprs;
+        };
+        TVector<TEffectsInfo> effectsInfos;
+
+        for (const auto& expr : list) {
+            if (auto sinkEffect = expr.Maybe<TKqpSinkEffect>()) {
+                const size_t sinkIndex = FromString(TStringBuf(sinkEffect.Cast().SinkIndex()));
+                const auto stage = sinkEffect.Cast().Stage().Maybe<TDqStageBase>();
+                YQL_ENSURE(stage);
+                YQL_ENSURE(stage.Cast().Outputs());
+                const auto outputs = stage.Cast().Outputs().Cast();
+                YQL_ENSURE(sinkIndex < outputs.Size());
+                const auto sink = outputs.Item(sinkIndex).Maybe<TDqSink>();
+                YQL_ENSURE(sink);
+
+                const auto sinkSettings = sink.Cast().Settings().Maybe<TKqpTableSinkSettings>();
+                if (!sinkSettings) {
+                    // External writes always use their own physical transaction.
+                    effectsInfos.emplace_back();
+                    effectsInfos.back().Type = TEffectsInfo::EType::EXTERNAL_SINK;
+                    effectsInfos.back().Exprs.push_back(expr.Ptr());
+                } else {
+                    // Two table sinks can't be executed in one physical transaction if they write into same table and have same priority.
+
+                    const auto& tableDescription = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path());
+                    if (tableDescription.Metadata->Kind == EKikimrTableKind::Olap) {
+                        const TStringBuf tablePathId = sinkSettings.Cast().Table().PathId().Value();
+
+                        auto it = std::find_if(
+                            std::begin(effectsInfos),
+                            std::end(effectsInfos),
+                            [&tablePathId](const auto& effectsInfo) {
+                                return effectsInfo.Type == TEffectsInfo::EType::KQP_SINK
+                                    && !effectsInfo.TablesPathIds.contains(tablePathId);
+                            });
+                        if (it == std::end(effectsInfos)) {
+                            effectsInfos.emplace_back();
+                            it = std::prev(std::end(effectsInfos));
+                            it->Type = TEffectsInfo::EType::KQP_SINK;
+                        }
+                        it->TablesPathIds.insert(tablePathId);
+                        it->Exprs.push_back(expr.Ptr());
+                    } else {
+                        auto it = std::find_if(
+                            std::begin(effectsInfos),
+                            std::end(effectsInfos),
+                            [](const auto& effectsInfo) { return effectsInfo.Type == TEffectsInfo::EType::KQP_BATCH_SINK; });
+                        if (it == std::end(effectsInfos)) {
+                            effectsInfos.emplace_back();
+                            it = std::prev(std::end(effectsInfos));
+                            it->Type = TEffectsInfo::EType::KQP_BATCH_SINK;
+                        }
+                        it->Exprs.push_back(expr.Ptr());
+                    }
+                }
+            } else {
+                // Table effects are executed all in one physical transaction.
+                auto it = std::find_if(
+                    std::begin(effectsInfos),
+                    std::end(effectsInfos),
+                    [](const auto& effectsInfo) { return effectsInfo.Type == TEffectsInfo::EType::KQP_EFFECT; });
+                if (it == std::end(effectsInfos)) {
+                    effectsInfos.emplace_back();
+                    it = std::prev(std::end(effectsInfos));
+                    it->Type = TEffectsInfo::EType::KQP_EFFECT;
+                }
+                it->Exprs.push_back(expr.Ptr());
+            }
+        }
+
+        TVector<TExprList> results;
+
+        for (const auto& effects : effectsInfos) {
+            auto builder = Build<TExprList>(ctx, list.Pos());
+            for (const auto& expr : effects.Exprs) {
+                builder.Add(expr);
+            }
+            results.push_back(builder.Done());
+        }
+
+        return results;
+    }
+
+    bool HasTableEffects(const TExprList& effectsList) const {
+        for (const TExprBase& effect : effectsList) {
             if (auto maybeSinkEffect = effect.Maybe<TKqpSinkEffect>()) {
                 // (KqpSinkEffect (DqStage (... ((DqSink '0 (DataSink '"kikimr") ...)))) '0)
                 auto sinkEffect = maybeSinkEffect.Cast();
@@ -572,7 +706,7 @@ private:
         return false;
     }
 
-    bool CheckEffectsTx(TKqpPhysicalTx tx, const TKqlQuery& query, TExprContext& ctx) const {
+    bool CheckEffectsTx(TKqpPhysicalTx tx, const TExprList& effectsList, TExprContext& ctx) const {
         TMaybeNode<TExprBase> blackistedNode;
         VisitExpr(tx.Ptr(), [&blackistedNode](const TExprNode::TPtr& exprNode) {
             if (blackistedNode) {
@@ -594,7 +728,7 @@ private:
             return true;
         });
 
-        if (blackistedNode && HasTableEffects(query)) {
+        if (blackistedNode && HasTableEffects(effectsList)) {
             ctx.AddError(TIssue(ctx.GetPosition(blackistedNode.Cast().Pos()), TStringBuilder()
                 << "Callable not expected in effects tx: " << blackistedNode.Cast<TCallable>().CallableName()));
             return false;
@@ -747,7 +881,6 @@ private:
             << ", isPrecompute: " << isPrecompute;
 
         auto& transformer = KqpCtx->IsScanQuery() ? *ScanTxTransformer : *DataTxTransformer;
-
 
         transformer.Rewind();
         BuildTxTransformer->Init(KqpCtx->QueryCtx->Type, isPrecompute);

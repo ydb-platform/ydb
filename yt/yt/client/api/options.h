@@ -13,10 +13,10 @@ namespace NYT::NApi {
  *  UserName is extracted from YT_USER env variable or uses current system username.
  *  Token is extracted from YT_TOKEN env variable or from file `~/.yt/token`.
  */
-TClientOptions GetClientOpsFromEnv();
+TClientOptions GetClientOptionsFromEnv();
 
 //! Resolves options only once per launch and then returns the cached result.
-const TClientOptions& GetClientOpsFromEnvStatic();
+const TClientOptions& GetClientOptionsFromEnvStatic();
 
 ////////////////////////////////////////////////////////////////////////////////
 

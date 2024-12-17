@@ -3,7 +3,7 @@
 #include "kqp_tasks_graph.h"
 
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 #include <util/generic/variant.h>
 

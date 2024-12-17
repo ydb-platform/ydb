@@ -1,5 +1,6 @@
 #include "retryful_writer_v2.h"
 
+#include <util/generic/scope.h>
 #include <yt/cpp/mapreduce/client/retry_heavy_write_request.h>
 #include <yt/cpp/mapreduce/client/transaction.h>
 #include <yt/cpp/mapreduce/client/transaction_pinger.h>
@@ -25,13 +26,16 @@ public:
     TSentBuffer() = default;
     TSentBuffer(const TSentBuffer& ) = delete;
 
-    std::pair<std::shared_ptr<char[]>, ssize_t> Snapshot() const
+    std::pair<std::shared_ptr<std::string>, ssize_t> Snapshot() const
     {
         return {Buffer_, Size_};
     }
 
     void Clear()
     {
+        // This method can be called only if no other object is holding snapshot.
+        Y_ABORT_IF(Buffer_.use_count() != 1);
+
         Size_ = 0;
     }
 
@@ -44,14 +48,15 @@ public:
     {
         auto newSize = Size_ + size;
         if (newSize < Capacity_) {
-            memcpy(Buffer_.get() + Size_, data, size);
+            memcpy(Buffer_->data() + Size_, data, size);
         } else {
             // Closest power of 2 exceeding new size
             auto newCapacity = 1 << (MostSignificantBit(newSize) + 1);
             newCapacity = Max<ssize_t>(64, newCapacity);
-            auto newBuffer = std::make_shared<char[]>(newCapacity);
-            memcpy(newBuffer.get(), Buffer_.get(), Size_);
-            memcpy(newBuffer.get() + Size_, data, size);
+            auto newBuffer = std::make_shared<std::string>();
+            newBuffer->resize(newCapacity);
+            memcpy(newBuffer->data(), Buffer_->data(), Size_);
+            memcpy(newBuffer->data() + Size_, data, size);
             Buffer_ = newBuffer;
             Capacity_ = newCapacity;
         }
@@ -59,7 +64,7 @@ public:
     }
 
 private:
-    std::shared_ptr<char[]> Buffer_ = nullptr;
+    std::shared_ptr<std::string> Buffer_ = std::make_shared<std::string>();
     ssize_t Size_ = 0;
     ssize_t Capacity_ = 0;
 };
@@ -83,6 +88,12 @@ public:
     {
         Abort();
         SenderThread_.Join();
+    }
+
+    bool IsRunning() const
+    {
+        auto g = Guard(Lock_);
+        return State_.load() == EState::Running && !Error_;
     }
 
     void Abort()
@@ -113,7 +124,7 @@ public:
 
         auto taskId = NextTaskId_++;
         const auto& [it, inserted] = TaskMap_.emplace(taskId, TWriteTask{});
-        Y_ABORT_UNLESS(inserted);
+        Y_ABORT_IF(!inserted);
         TaskIdQueue_.push(taskId);
         HaveMoreData_.Signal();
         it->second.SendingComplete = NThreading::NewPromise();
@@ -130,7 +141,7 @@ public:
             CheckNoError();
 
             auto it = TaskMap_.find(taskId);
-            Y_ABORT_UNLESS(it != TaskMap_.end());
+            Y_ABORT_IF(it == TaskMap_.end());
             auto& writeTask = it->second;
             writeTask.Data = std::move(snapshot.first);
             writeTask.Size = snapshot.second;
@@ -210,7 +221,7 @@ private:
                     retrier = MakeHolder<THeavyRequestRetrier>(*currentParameters);
                 }
                 retrier->Update([task=task] {
-                    return MakeHolder<TMemoryInput>(task.Data.get(), task.Size);
+                    return MakeHolder<TMemoryInput>(task.Data->data(), task.Size);
                 });
                 if (task.BufferComplete) {
                     retrier->Finish();
@@ -245,7 +256,7 @@ private:
     struct TWriteTask
     {
         NThreading::TPromise<void> SendingComplete;
-        std::shared_ptr<char[]> Data;
+        std::shared_ptr<std::string> Data = std::make_shared<std::string>();
         ssize_t Size = 0;
         bool BufferComplete = false;
     };
@@ -280,6 +291,7 @@ struct TRetryfulWriterV2::TSendTask
 ////////////////////////////////////////////////////////////////////////////////
 
 TRetryfulWriterV2::TRetryfulWriterV2(
+    const IRawClientPtr& rawClient,
     IClientRetryPolicyPtr clientRetryPolicy,
     ITransactionPingerPtr transactionPinger,
     const TClientContext& context,
@@ -300,6 +312,7 @@ TRetryfulWriterV2::TRetryfulWriterV2(
 
     if (createTransaction) {
         WriteTransaction_ = MakeHolder<TPingableTransaction>(
+            rawClient,
             clientRetryPolicy,
             context,
             parentId,
@@ -308,16 +321,15 @@ TRetryfulWriterV2::TRetryfulWriterV2(
         );
         auto append = path.Append_.GetOrElse(false);
         auto lockMode = (append  ? LM_SHARED : LM_EXCLUSIVE);
-        NDetail::NRawClient::Lock(
+        NDetail::RequestWithRetry<void>(
             clientRetryPolicy->CreatePolicyForGenericRequest(),
-            context,
-            WriteTransaction_->GetId(),
-            path.Path_,
-            lockMode
-        );
+            [this, &rawClient, &path, &lockMode] (TMutationId& mutationId) {
+                rawClient->Lock(mutationId, WriteTransaction_->GetId(), path.Path_, lockMode);
+            });
     }
 
     THeavyRequestRetrier::TParameters parameters = {
+        .RawClientPtr = rawClient,
         .ClientRetryPolicy = clientRetryPolicy,
         .TransactionPinger = transactionPinger,
         .Context = context,
@@ -332,20 +344,31 @@ TRetryfulWriterV2::TRetryfulWriterV2(
 
 void TRetryfulWriterV2::Abort()
 {
-    if (Sender_) {
-        Sender_->Abort();
+    auto sender = std::move(Sender_);
+    auto writeTransaction = std::move(WriteTransaction_);
+    if (sender) {
+        sender->Abort();
+        if (writeTransaction) {
+            writeTransaction->Abort();
+        }
     }
+}
+
+size_t TRetryfulWriterV2::GetBufferMemoryUsage() const
+{
+    return BufferSize_ * 4;
 }
 
 void TRetryfulWriterV2::DoFinish()
 {
-    if (Sender_) {
-        Sender_->UpdateBlock(Current_->TaskId, Current_->Buffer, true);
-        Sender_->Finish();
-        Sender_.Reset();
-    }
-    if (WriteTransaction_) {
-        WriteTransaction_->Commit();
+    auto sender = std::move(Sender_);
+    auto writeTransaction = std::move(WriteTransaction_);
+    if (sender && sender->IsRunning()) {
+        sender->UpdateBlock(Current_->TaskId, Current_->Buffer, true);
+        sender->Finish();
+        if (writeTransaction) {
+            writeTransaction->Commit();
+        }
     }
 }
 

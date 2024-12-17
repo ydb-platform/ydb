@@ -88,14 +88,18 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
     effects.emplace_back(tableDelete);
 
     for (const auto& [tableNode, indexDesc] : indexes) {
-        THashSet<TStringBuf> indexTableColumns;
+        THashSet<TStringBuf> indexTableColumnsSet;
+        TVector<TStringBuf> indexTableColumns;
 
         for (const auto& column : indexDesc->KeyColumns) {
-            YQL_ENSURE(indexTableColumns.emplace(column).second);
+            YQL_ENSURE(indexTableColumnsSet.emplace(column).second);
+            indexTableColumns.emplace_back(column);
         }
 
         for (const auto& column : pk) {
-            indexTableColumns.insert(column);
+            if (indexTableColumnsSet.insert(column).second) {
+                indexTableColumns.emplace_back(column);
+            }
         }
 
         auto deleteIndexKeys = MakeRowsFromDict(lookupDict.Cast(), pk, indexTableColumns, del.Pos(), ctx);

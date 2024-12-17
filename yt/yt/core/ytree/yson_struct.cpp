@@ -5,8 +5,6 @@
 #include <yt/yt/core/ytree/node.h>
 #include <yt/yt/core/ytree/ypath_detail.h>
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <util/generic/algorithm.h>
 
 namespace NYT::NYTree {
@@ -51,16 +49,16 @@ void TYsonStructBase::Load(
     INodePtr node,
     bool postprocess,
     bool setDefaults,
-    const TYPath& path)
+    const NYPath::TYPath& path)
 {
-    Meta_->LoadStruct(this, node, postprocess, setDefaults, path);
+    Meta_->LoadStruct(this, std::move(node), postprocess, setDefaults, path);
 }
 
 void TYsonStructBase::Load(
     TYsonPullParserCursor* cursor,
     bool postprocess,
     bool setDefaults,
-    const TYPath& path)
+    const NYPath::TYPath& path)
 {
     Meta_->LoadStruct(this, cursor, postprocess, setDefaults, path);
 }
@@ -74,7 +72,12 @@ void TYsonStructBase::Load(IInputStream* input)
 void TYsonStructBase::Save(IYsonConsumer* consumer) const
 {
     consumer->OnBeginMap();
+    SaveAsMapFragment(consumer);
+    consumer->OnEndMap();
+}
 
+void TYsonStructBase::SaveAsMapFragment(NYson::IYsonConsumer* consumer) const
+{
     for (const auto& [name, parameter] : Meta_->GetParameterSortedList()) {
         if (!parameter->CanOmitValue(this)) {
             consumer->OnKeyedItem(name);
@@ -90,8 +93,6 @@ void TYsonStructBase::Save(IYsonConsumer* consumer) const
             Serialize(child, consumer);
         }
     }
-
-    consumer->OnEndMap();
 }
 
 void TYsonStructBase::Save(IOutputStream* output) const
@@ -145,6 +146,11 @@ void TYsonStructBase::WriteSchema(IYsonConsumer* consumer) const
     return Meta_->WriteSchema(this, consumer);
 }
 
+bool TYsonStructBase::IsEqual(const TYsonStructBase& rhs) const
+{
+    return Meta_->CompareStructs(this, &rhs);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TYsonStruct::InitializeRefCounted()
@@ -155,6 +161,55 @@ void TYsonStruct::InitializeRefCounted()
     }
 }
 
+bool TYsonStruct::IsSet(const TString& key) const
+{
+    return SetFields_[Meta_->GetParameter(key)->GetFieldIndex()];
+}
+
+TCompactBitmap* TYsonStruct::GetSetFieldsBitmap()
+{
+    return &SetFields_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TCompactBitmap* TYsonStructLite::GetSetFieldsBitmap()
+{
+    return nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool TYsonStructLiteWithFieldTracking::IsSet(const TString& key) const
+{
+    return SetFields_[Meta_->GetParameter(key)->GetFieldIndex()];
+}
+
+TCompactBitmap* TYsonStructLiteWithFieldTracking::GetSetFieldsBitmap()
+{
+    return &SetFields_;
+}
+
+TYsonStructLiteWithFieldTracking::TYsonStructLiteWithFieldTracking(const TYsonStructLiteWithFieldTracking& other)
+    : TYsonStructFinalClassHolder(other.FinalType_)
+    , TYsonStructLite(other)
+{
+    SetFields_.CopyFrom(other.SetFields_, GetParameterCount());
+}
+
+TYsonStructLiteWithFieldTracking& TYsonStructLiteWithFieldTracking::operator=(const TYsonStructLiteWithFieldTracking& other)
+{
+    TYsonStructLite::operator=(other);
+
+    SetFields_.CopyFrom(other.SetFields_, GetParameterCount());
+    return *this;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+YT_DEFINE_THREAD_LOCAL(IYsonStructMeta*, CurrentlyInitializingYsonMeta, nullptr);
+YT_DEFINE_THREAD_LOCAL(i64, YsonMetaRegistryDepth, 0);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TYsonStructRegistry* TYsonStructRegistry::Get()
@@ -164,20 +219,20 @@ TYsonStructRegistry* TYsonStructRegistry::Get()
 
 bool TYsonStructRegistry::InitializationInProgress()
 {
-    return CurrentlyInitializingMeta_ != nullptr;
+    return CurrentlyInitializingYsonMeta() != nullptr;
 }
 
 void TYsonStructRegistry::OnBaseCtorCalled()
 {
-    if (CurrentlyInitializingMeta_ != nullptr) {
-        ++RegistryDepth_;
+    if (CurrentlyInitializingYsonMeta() != nullptr) {
+        ++YsonMetaRegistryDepth();
     }
 }
 
 void TYsonStructRegistry::OnFinalCtorCalled()
 {
-    if (CurrentlyInitializingMeta_ != nullptr) {
-        --RegistryDepth_;
+    if (CurrentlyInitializingYsonMeta() != nullptr) {
+        --YsonMetaRegistryDepth();
     }
 }
 

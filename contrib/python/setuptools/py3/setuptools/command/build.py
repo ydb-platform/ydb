@@ -1,7 +1,7 @@
-from typing import Dict, List, Protocol
-from distutils.command.build import build as _build
+from __future__ import annotations
 
-from ..warnings import SetuptoolsDeprecationWarning
+from typing import Protocol
+from distutils.command.build import build as _build
 
 _ORIGINAL_SUBCOMMANDS = {"build_py", "build_clib", "build_ext", "build_scripts"}
 
@@ -9,22 +9,6 @@ _ORIGINAL_SUBCOMMANDS = {"build_py", "build_clib", "build_ext", "build_scripts"}
 class build(_build):
     # copy to avoid sharing the object with parent class
     sub_commands = _build.sub_commands[:]
-
-    def get_sub_commands(self):
-        subcommands = {cmd[0] for cmd in _build.sub_commands}
-        if subcommands - _ORIGINAL_SUBCOMMANDS:
-            SetuptoolsDeprecationWarning.emit(
-                "Direct usage of `distutils` commands",
-                """
-                It seems that you are using `distutils.command.build` to add
-                new subcommands. Using `distutils` directly is considered deprecated,
-                please use `setuptools.command.build`.
-                """,
-                due_date=(2023, 12, 13),  # Warning introduced in 13 Jun 2022.
-                see_url="https://peps.python.org/pep-0632/",
-            )
-            self.sub_commands = _build.sub_commands
-        return super().get_sub_commands()
 
 
 class SubCommand(Protocol):
@@ -105,7 +89,7 @@ class SubCommand(Protocol):
     def run(self):
         """(Required by the original :class:`setuptools.Command` interface)"""
 
-    def get_source_files(self) -> List[str]:
+    def get_source_files(self) -> list[str]:
         """
         Return a list of all files that are used by the command to create the expected
         outputs.
@@ -116,7 +100,7 @@ class SubCommand(Protocol):
         All files should be strings relative to the project root directory.
         """
 
-    def get_outputs(self) -> List[str]:
+    def get_outputs(self) -> list[str]:
         """
         Return a list of files intended for distribution as they would have been
         produced by the build.
@@ -129,7 +113,7 @@ class SubCommand(Protocol):
            and don't correspond to any source file already present in the project.
         """
 
-    def get_output_mapping(self) -> Dict[str, str]:
+    def get_output_mapping(self) -> dict[str, str]:
         """
         Return a mapping between destination files as they would be produced by the
         build (dict keys) into the respective existing (source) files (dict values).

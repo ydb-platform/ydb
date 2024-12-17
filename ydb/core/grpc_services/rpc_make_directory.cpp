@@ -2,8 +2,10 @@
 
 #include "rpc_scheme_base.h"
 #include "rpc_common/rpc_common.h"
+
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/public/api/protos/ydb_scheme.pb.h>
 
 namespace NKikimr {
@@ -61,6 +63,11 @@ private:
 
 void DoMakeDirectoryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TMakeDirectoryRPC(p.release()));
+}
+
+template<>
+IActor* TEvMakeDirectoryRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TMakeDirectoryRPC(msg);
 }
 
 } // namespace NGRpcService

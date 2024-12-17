@@ -8,8 +8,9 @@
 
 Если проверка не прошла успешно, то весь запрос завершается с ошибкой.
 
-**Сигнатуры**
-```
+### Сигнатуры
+
+```yql
 Ensure(T, Bool, String)->T
 EnsureType(T, Type<T>, String)->T
 EnsureConvertibleTo(T, Type<T>, String)->T
@@ -21,10 +22,15 @@ EnsureConvertibleTo(T, Type<T>, String)->T
 2. В Ensure — булевый предикат, который проверяется на `true`. В остальных функциях — тип данных, который может быть получен через [предназначенные для этого функции](../../types.md), либо строковый литерал с [текстовым описанием типа](../../../types/type_string.md).
 3. Опциональная строка с комментарием к ошибке, которая попадет в общее сообщение об ошибке при завершении запроса. Для проверок типов не может использовать сами данные, так как они выполняются на этапе валидации запроса, а для Ensure — может быть произвольным выражением.
 
+{% if backend_name != "YDB" %}
+
 Для проверки условий по финальному результату вычисления Ensure удобно использовать в сочетании с [DISCARD SELECT](../../../syntax/discard.md).
 
-**Примеры**
-``` yql
+{% endif %}
+
+### Примеры
+
+```yql
 SELECT Ensure(
     value,
     value < 100,
@@ -32,7 +38,7 @@ SELECT Ensure(
 ) AS value FROM my_table;
 ```
 
-``` yql
+```yql
 SELECT EnsureType(
     value,
     TypeOf(other_value),
@@ -40,7 +46,7 @@ SELECT EnsureType(
 ) AS value FROM my_table;
 ```
 
-``` yql
+```yql
 SELECT EnsureConvertibleTo(
     value,
     Double?,

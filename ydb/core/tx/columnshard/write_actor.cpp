@@ -34,9 +34,11 @@ public:
             YellowStopChannels.insert(msg->Id.Channel());
         }
 
+        status = NYDBTest::TControllers::GetColumnShardController()->OverrideBlobPutResultOnWrite(status);
+
         if (status != NKikimrProto::OK) {
             ACFL_ERROR("event", "TEvPutResult")("blob_id", msg->Id.ToString())("status", status)("error", msg->ErrorReason);
-            WriteController->Abort();
+            WriteController->Abort("cannot write blob " + msg->Id.ToString() + ", status: " + ::ToString(status) + ". reason: " + msg->ErrorReason);
             return SendResultAndDie(ctx, status);
         }
 

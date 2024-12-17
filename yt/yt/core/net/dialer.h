@@ -4,6 +4,8 @@
 
 #include <yt/yt/core/net/address.h>
 
+#include <yt/yt/core/misc/proc.h>
+
 #include <library/cpp/yt/logging/public.h>
 
 #include <library/cpp/yt/memory/ref.h>
@@ -14,8 +16,7 @@ namespace NYT::NNet {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TDialerContext
-    : public TRefCounted
+struct TDialerContext final
 {
     //! Host is used for TlsDialer.
     std::optional<TString> Host;
@@ -24,12 +25,11 @@ struct TDialerContext
 DEFINE_REFCOUNTED_TYPE(TDialerContext)
 
 //! Dialer establishes connection to a (resolved) network address.
-
 struct IDialer
     : public virtual TRefCounted
 {
     virtual TFuture<IConnectionPtr> Dial(
-        const TNetworkAddress& remote,
+        const TNetworkAddress& remoteAddress,
         TDialerContextPtr context = nullptr) = 0;
 };
 
@@ -43,7 +43,7 @@ IDialerPtr CreateDialer(
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Async dialer notifies caller via callback for better performance.
-using TAsyncDialerCallback = TCallback<void(const TErrorOr<SOCKET>&)>;
+using TAsyncDialerCallback = TCallback<void(const TErrorOr<TFileDescriptor>&)>;
 
 //! Dialer session interface.
 //! Caller should hold a reference to a session until callback is called.

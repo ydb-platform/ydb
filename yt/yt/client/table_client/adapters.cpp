@@ -1,4 +1,7 @@
 #include "adapters.h"
+
+#include "private.h"
+#include "schema.h"
 #include "row_batch.h"
 
 #include <yt/yt/client/api/table_writer.h>
@@ -11,18 +14,26 @@ namespace NYT::NTableClient {
 
 using namespace NApi;
 using namespace NConcurrency;
+using namespace NCrypto;
+using namespace NFormats;
+
+using NProfiling::TWallTimer;
+
+////////////////////////////////////////////////////////////////////////////////
+
+static constexpr auto& Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TApiFromSchemalessWriterAdapter
-    : public NApi::ITableWriter
+    : public ITableWriter
 {
 public:
     explicit TApiFromSchemalessWriterAdapter(IUnversionedWriterPtr underlyingWriter)
         : UnderlyingWriter_(std::move(underlyingWriter))
     { }
 
-    bool Write(TRange<NTableClient::TUnversionedRow> rows) override
+    bool Write(TRange<TUnversionedRow> rows) override
     {
         return UnderlyingWriter_->Write(rows);
     }
@@ -37,12 +48,12 @@ public:
         return UnderlyingWriter_->Close();
     }
 
-    const NTableClient::TNameTablePtr& GetNameTable() const override
+    const TNameTablePtr& GetNameTable() const override
     {
         return UnderlyingWriter_->GetNameTable();
     }
 
-    const NTableClient::TTableSchemaPtr& GetSchema() const override
+    const TTableSchemaPtr& GetSchema() const override
     {
         return UnderlyingWriter_->GetSchema();
     }
@@ -51,7 +62,7 @@ private:
     const IUnversionedWriterPtr UnderlyingWriter_;
 };
 
-NApi::ITableWriterPtr CreateApiFromSchemalessWriterAdapter(
+ITableWriterPtr CreateApiFromSchemalessWriterAdapter(
     IUnversionedWriterPtr underlyingWriter)
 {
     return New<TApiFromSchemalessWriterAdapter>(std::move(underlyingWriter));
@@ -63,11 +74,14 @@ class TSchemalessApiFromWriterAdapter
     : public IUnversionedWriter
 {
 public:
-    explicit TSchemalessApiFromWriterAdapter(NApi::ITableWriterPtr underlyingWriter)
+    TSchemalessApiFromWriterAdapter(
+        IRowBatchWriterPtr underlyingWriter,
+        TTableSchemaPtr schema)
         : UnderlyingWriter_(std::move(underlyingWriter))
+        , Schema_(std::move(schema))
     { }
 
-    bool Write(TRange<NTableClient::TUnversionedRow> rows) override
+    bool Write(TRange<TUnversionedRow> rows) override
     {
         return UnderlyingWriter_->Write(rows);
     }
@@ -82,30 +96,42 @@ public:
         return UnderlyingWriter_->Close();
     }
 
-    const NTableClient::TNameTablePtr& GetNameTable() const override
+    const TNameTablePtr& GetNameTable() const override
     {
         return UnderlyingWriter_->GetNameTable();
     }
 
-    const NTableClient::TTableSchemaPtr& GetSchema() const override
+    const TTableSchemaPtr& GetSchema() const override
     {
-        return UnderlyingWriter_->GetSchema();
+        return Schema_;
+    }
+
+    std::optional<TMD5Hash> GetDigest() const override
+    {
+        return std::nullopt;
     }
 
 private:
-    const NApi::ITableWriterPtr UnderlyingWriter_;
+    const IRowBatchWriterPtr UnderlyingWriter_;
+    const TTableSchemaPtr Schema_;
 };
 
 IUnversionedWriterPtr CreateSchemalessFromApiWriterAdapter(
-    NApi::ITableWriterPtr underlyingWriter)
+    IRowBatchWriterPtr underlyingWriter)
 {
-    return New<TSchemalessApiFromWriterAdapter>(std::move(underlyingWriter));
+    return New<TSchemalessApiFromWriterAdapter>(std::move(underlyingWriter), New<TTableSchema>());
+}
+
+IUnversionedWriterPtr CreateSchemalessFromApiWriterAdapter(
+    ITableWriterPtr underlyingWriter)
+{
+    return New<TSchemalessApiFromWriterAdapter>(underlyingWriter, underlyingWriter->GetSchema());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void PipeReaderToWriter(
-    const ITableReaderPtr& reader,
+    const IRowBatchReaderPtr& reader,
     const IUnversionedRowsetWriterPtr& writer,
     const TPipeReaderToWriterOptions& options)
 {
@@ -118,33 +144,43 @@ void PipeReaderToWriter(
     while (auto batch = reader->Read(readOptions)) {
         yielder.TryYield();
 
-        if (batch->IsEmpty()) {
-            WaitFor(reader->GetReadyEvent())
-                .ThrowOnError();
-            continue;
-        }
+        TSharedRange<TUnversionedRow> rows;
 
-        auto rows = batch->MaterializeRows();
+        try {
+            if (batch->IsEmpty()) {
+                WaitFor(reader->GetReadyEvent())
+                    .ThrowOnError();
+                continue;
+            }
 
-        if (options.ValidateValues) {
-            for (auto row : rows) {
-                for (const auto& value : row) {
-                    ValidateStaticValue(value);
+            rows = batch->MaterializeRows();
+
+            if (options.ValidateValues) {
+                for (auto row : rows) {
+                    for (const auto& value : row) {
+                        ValidateStaticValue(value);
+                    }
                 }
             }
-        }
 
-        if (options.Throttler) {
-            i64 dataWeight = 0;
-            for (auto row : rows) {
-                dataWeight += GetDataWeight(row);
+            if (options.Throttler) {
+                i64 dataWeight = 0;
+                for (auto row : rows) {
+                    dataWeight += GetDataWeight(row);
+                }
+                WaitFor(options.Throttler->Throttle(dataWeight))
+                    .ThrowOnError();
             }
-            WaitFor(options.Throttler->Throttle(dataWeight))
-                .ThrowOnError();
-        }
 
-        if (!rows.empty() && options.PipeDelay) {
-            TDelayedExecutor::WaitForDuration(options.PipeDelay);
+            if (!rows.empty() && options.PipeDelay) {
+                TDelayedExecutor::WaitForDuration(options.PipeDelay);
+            }
+        } catch (const std::exception& ex) {
+            if (options.ReaderErrorWrapper) {
+                THROW_ERROR options.ReaderErrorWrapper(ex);
+            } else {
+                throw;
+            }
         }
 
         if (!writer->Write(rows)) {
@@ -158,34 +194,54 @@ void PipeReaderToWriter(
 }
 
 void PipeReaderToWriterByBatches(
-    const ITableReaderPtr& reader,
-    const NFormats::ISchemalessFormatWriterPtr& writer,
-    const TRowBatchReadOptions& options,
+    const IRowBatchReaderPtr& reader,
+    const ISchemalessFormatWriterPtr& writer,
+    TRowBatchReadOptions options,
+    TCallback<void(TRowBatchReadOptions* mutableOptions, TDuration timeForBatch)> optionsUpdater,
     TDuration pipeDelay)
 {
-    TPeriodicYielder yielder(TDuration::Seconds(1));
+    try {
+        TPeriodicYielder yielder(TDuration::Seconds(1));
 
-    while (auto batch = reader->Read(options)) {
-        yielder.TryYield();
+        while (auto batch = reader->Read(options)) {
+            yielder.TryYield();
 
-        if (batch->IsEmpty()) {
-            WaitFor(reader->GetReadyEvent())
-                .ThrowOnError();
-            continue;
+            if (batch->IsEmpty()) {
+                WaitFor(reader->GetReadyEvent())
+                    .ThrowOnError();
+                continue;
+            }
+
+            auto rowsRead = batch->GetRowCount();
+
+            if (pipeDelay != TDuration::Zero()) {
+                TDelayedExecutor::WaitForDuration(pipeDelay);
+            }
+
+            TWallTimer timer(/*start*/ false);
+
+            if (optionsUpdater) {
+                timer.Start();
+            }
+
+            if (!writer->WriteBatch(batch)) {
+                WaitFor(writer->GetReadyEvent())
+                    .ThrowOnError();
+            }
+
+            if (optionsUpdater) {
+                options.MaxRowsPerRead = rowsRead;
+                optionsUpdater(&options, timer.GetElapsedTime());
+            }
         }
 
-        if (!batch->IsEmpty() && pipeDelay != TDuration::Zero()) {
-            TDelayedExecutor::WaitForDuration(pipeDelay);
-        }
+        WaitFor(writer->Close())
+            .ThrowOnError();
+    } catch (const std::exception& ex) {
+        YT_LOG_ERROR(ex, "Failed to transfer batches from reader to writer");
 
-        if (!writer->WriteBatch(batch)) {
-            WaitFor(writer->GetReadyEvent())
-                .ThrowOnError();
-        }
+        throw;
     }
-
-    WaitFor(writer->Close())
-        .ThrowOnError();
 }
 
 void PipeInputToOutput(
@@ -213,7 +269,7 @@ void PipeInputToOutput(
 }
 
 void PipeInputToOutput(
-    const NConcurrency::IAsyncInputStreamPtr& input,
+    const IAsyncInputStreamPtr& input,
     IOutputStream* output,
     i64 bufferBlockSize)
 {
@@ -229,6 +285,24 @@ void PipeInputToOutput(
         }
 
         output->Write(buffer.Begin(), length);
+    }
+
+    output->Finish();
+}
+
+void PipeInputToOutput(
+    const IAsyncZeroCopyInputStreamPtr& input,
+    IOutputStream* output)
+{
+    while (true) {
+        auto data = WaitFor(input->Read())
+            .ValueOrThrow();
+
+        if (!data) {
+            break;
+        }
+
+        output->Write(data.Begin(), data.Size());
     }
 
     output->Finish();

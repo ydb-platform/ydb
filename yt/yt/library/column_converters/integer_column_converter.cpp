@@ -9,6 +9,8 @@
 
 namespace NYT::NColumnConverters {
 
+using namespace NTableClient;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace {
@@ -25,14 +27,14 @@ ui64 EncodeValue(ui64 value)
 
 template <class TValue>
 typename std::enable_if<std::is_signed<TValue>::value, TValue>::type
-GetValue(const NTableClient::TUnversionedValue& value)
+GetValue(const TUnversionedValue& value)
 {
     return value.Data.Int64;
 }
 
 template <class TValue>
 typename std::enable_if<std::is_unsigned<TValue>::value, TValue>::type
-GetValue(const NTableClient::TUnversionedValue& value)
+GetValue(const TUnversionedValue& value)
 {
     return value.Data.Uint64;
 }
@@ -40,20 +42,21 @@ GetValue(const NTableClient::TUnversionedValue& value)
 ////////////////////////////////////////////////////////////////////////////////
 
 void FillColumnarIntegerValues(
-    NTableClient::IUnversionedColumnarRowBatch::TColumn* column,
+    IUnversionedColumnarRowBatch::TColumn* column,
     i64 startIndex,
     i64 valueCount,
-    NTableClient::EValueType valueType,
+    EValueType valueType,
     ui64 baseValue,
     TRef data)
 {
     column->StartIndex = startIndex;
     column->ValueCount = valueCount;
 
-    auto& values = column->Values.emplace();
+    column->Values = IUnversionedColumnarRowBatch::TValueBuffer{};
+    auto& values = *column->Values;
     values.BaseValue = baseValue;
     values.BitWidth = 64;
-    values.ZigZagEncoded = (valueType == NTableClient::EValueType::Int64);
+    values.ZigZagEncoded = (valueType == EValueType::Int64);
     values.Data = data;
 }
 
@@ -69,8 +72,8 @@ public:
 
     TIntegerColumnConverter(
         int columnId,
-        NTableClient::EValueType ValueType,
-        NTableClient::TColumnSchema columnSchema,
+        EValueType ValueType,
+        TColumnSchema columnSchema,
         int columnOffset)
         : ColumnId_(columnId)
         , ColumnSchema_(columnSchema)
@@ -121,8 +124,8 @@ public:
 
 private:
     const int ColumnId_;
-    const NTableClient::TColumnSchema ColumnSchema_;
-    const NTableClient::EValueType ValueType_;
+    const TColumnSchema ColumnSchema_;
+    const EValueType ValueType_;
     const int ColumnOffset_;
 
     i64 RowCount_ = 0;
@@ -145,7 +148,7 @@ private:
     {
         for (const auto& rowValues : rowsValues) {
             auto value = rowValues[ColumnOffset_];
-            bool isNull = !value || value->Type == NTableClient::EValueType::Null;
+            bool isNull = !value || value->Type == EValueType::Null;
             ui64 data = 0;
             if (!isNull) {
                 YT_VERIFY(value);
@@ -162,15 +165,15 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IColumnConverterPtr CreateInt64ColumnConverter(int columnId, const NTableClient::TColumnSchema& columnSchema, int columnOffset)
+IColumnConverterPtr CreateInt64ColumnConverter(int columnId, const TColumnSchema& columnSchema, int columnOffset)
 {
-    return std::make_unique<TIntegerColumnConverter<i64>>(columnId, NTableClient::EValueType::Int64, columnSchema, columnOffset);
+    return std::make_unique<TIntegerColumnConverter<i64>>(columnId, EValueType::Int64, columnSchema, columnOffset);
 }
 
 
-IColumnConverterPtr CreateUint64ColumnConverter(int columnId, const NTableClient::TColumnSchema& columnSchema, int columnOffset)
+IColumnConverterPtr CreateUint64ColumnConverter(int columnId, const TColumnSchema& columnSchema, int columnOffset)
 {
-    return std::make_unique<TIntegerColumnConverter<ui64>>(columnId, NTableClient::EValueType::Uint64, columnSchema, columnOffset);
+    return std::make_unique<TIntegerColumnConverter<ui64>>(columnId, EValueType::Uint64, columnSchema, columnOffset);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

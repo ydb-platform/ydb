@@ -1,7 +1,5 @@
 UNITTEST_FOR(util)
 
-SUBSCRIBER(g:util-subscribers)
-
 SRCS(
     digest/city_ut.cpp
     digest/fnv_ut.cpp

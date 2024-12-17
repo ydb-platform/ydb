@@ -1,3 +1,4 @@
+from __future__ import print_function
 import itertools
 import json
 import logging
@@ -9,6 +10,10 @@ import sys
 import time
 import urllib2
 import uuid
+
+# Explicitly enable local imports
+# Don't forget to add imported scripts to inputs of the calling command!
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import fetch_from
 
@@ -210,7 +215,10 @@ def fetch(resource_id, custom_fetcher):
             time.sleep(i)
     else:
         if exc_info:
-            raise exc_info[0], exc_info[1], exc_info[2]
+            if sys.version_info[0] == 2:
+                raise exc_info[0], exc_info[1], exc_info[2]
+            else:
+                raise exc_info[1].with_traceback(exc_info[2])
         else:
             raise Exception("No available protocol and/or server to fetch resource")
 
@@ -265,7 +273,7 @@ if __name__ == '__main__':
         main(args)
     except Exception as e:
         logging.exception(e)
-        print >>sys.stderr, open(args.abs_log_path).read()
+        print(open(args.abs_log_path).read(), file=sys.stderr)
         sys.stderr.flush()
 
         import error

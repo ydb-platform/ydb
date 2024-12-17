@@ -1,18 +1,17 @@
 #pragma once
 
+#include "transaction.h"
+
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
+
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/executor.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-
-#include <unordered_map>
 
 namespace NYdb::NTopic {
 
@@ -83,6 +82,11 @@ public:
 
         request.mutable_partitioning_settings()->set_min_active_partitions(settings.PartitioningSettings_.GetMinActivePartitions());
         request.mutable_partitioning_settings()->set_partition_count_limit(settings.PartitioningSettings_.GetPartitionCountLimit());
+        request.mutable_partitioning_settings()->set_max_active_partitions(settings.PartitioningSettings_.GetMaxActivePartitions());
+        request.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(static_cast<Ydb::Topic::AutoPartitioningStrategy>(settings.PartitioningSettings_.GetAutoPartitioningSettings().GetStrategy()));
+        request.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->mutable_stabilization_window()->set_seconds(settings.PartitioningSettings_.GetAutoPartitioningSettings().GetStabilizationWindow().Seconds());
+        request.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_up_utilization_percent(settings.PartitioningSettings_.GetAutoPartitioningSettings().GetUpUtilizationPercent());
+        request.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_down_utilization_percent(settings.PartitioningSettings_.GetAutoPartitioningSettings().GetDownUtilizationPercent());
 
         request.mutable_retention_period()->set_seconds(settings.RetentionPeriod_.Seconds());
 
@@ -106,42 +110,6 @@ public:
         return request;
     }
 
-    void ProvideCodec(ECodec codecId, THolder<ICodec>&& codecImpl) {
-        with_lock(Lock) {
-            if (ProvidedCodecs->contains(codecId)) {
-                throw yexception() << "codec with id " << ui32(codecId) << " already provided";
-            }
-            (*ProvidedCodecs)[codecId] = std::move(codecImpl);
-        }
-    }
-
-    void OverrideCodec(ECodec codecId, THolder<ICodec>&& codecImpl) {
-        with_lock(Lock) {
-            (*ProvidedCodecs)[codecId] = std::move(codecImpl);
-        }
-    }
-
-    const ICodec* GetCodecImplOrThrow(ECodec codecId) const {
-        with_lock(Lock) {
-            if (!ProvidedCodecs->contains(codecId)) {
-                throw yexception() << "codec with id " << ui32(codecId) << " not provided";
-            }
-            return ProvidedCodecs->at(codecId).Get();
-        }
-    }
-
-    std::shared_ptr<std::unordered_map<ECodec, THolder<ICodec>>> GetProvidedCodecs() const {
-        with_lock(Lock) {
-            return ProvidedCodecs;
-        }
-    }
-
-    void SetProvidedCodecs(std::shared_ptr<std::unordered_map<ECodec, THolder<ICodec>>> codecs) {
-        with_lock(Lock) {
-            ProvidedCodecs = std::move(codecs);
-        }
-    }
-
     TAsyncStatus CreateTopic(const TString& path, const TCreateTopicSettings& settings) {
         auto request = MakePropsCreateRequest(path, settings);
 
@@ -157,8 +125,26 @@ public:
         request.set_path(path);
 
         if (settings.AlterPartitioningSettings_) {
-            request.mutable_alter_partitioning_settings()->set_set_min_active_partitions(settings.AlterPartitioningSettings_->GetMinActivePartitions());
-            request.mutable_alter_partitioning_settings()->set_set_partition_count_limit(settings.AlterPartitioningSettings_->GetPartitionCountLimit());
+            if (settings.AlterPartitioningSettings_->MinActivePartitions_) {
+                request.mutable_alter_partitioning_settings()->set_set_min_active_partitions(*settings.AlterPartitioningSettings_->MinActivePartitions_);
+            }
+            if (settings.AlterPartitioningSettings_->MaxActivePartitions_) {
+                request.mutable_alter_partitioning_settings()->set_set_max_active_partitions(*settings.AlterPartitioningSettings_->MaxActivePartitions_);
+            }
+            if (settings.AlterPartitioningSettings_->AutoPartitioningSettings_) {
+                if (settings.AlterPartitioningSettings_->AutoPartitioningSettings_->Strategy_) {
+                    request.mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->set_set_strategy(static_cast<Ydb::Topic::AutoPartitioningStrategy>(*settings.AlterPartitioningSettings_->AutoPartitioningSettings_->Strategy_));
+                }
+                if (settings.AlterPartitioningSettings_->AutoPartitioningSettings_->DownUtilizationPercent_) {
+                    request.mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->mutable_set_partition_write_speed()->set_set_down_utilization_percent(*settings.AlterPartitioningSettings_->AutoPartitioningSettings_->DownUtilizationPercent_);
+                }
+                if (settings.AlterPartitioningSettings_->AutoPartitioningSettings_->UpUtilizationPercent_) {
+                    request.mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->mutable_set_partition_write_speed()->set_set_up_utilization_percent(*settings.AlterPartitioningSettings_->AutoPartitioningSettings_->UpUtilizationPercent_);
+                }
+                if (settings.AlterPartitioningSettings_->AutoPartitioningSettings_->StabilizationWindow_) {
+                    request.mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->mutable_set_partition_write_speed()->mutable_set_stabilization_window()->set_seconds(settings.AlterPartitioningSettings_->AutoPartitioningSettings_->StabilizationWindow_->Seconds());
+                }
+            }
         }
         if (settings.SetRetentionPeriod_) {
             request.mutable_set_retention_period()->set_seconds(settings.SetRetentionPeriod_->Seconds());
@@ -346,15 +332,15 @@ public:
             TRpcRequestSettings::Make(settings));
     }
 
-    TAsyncStatus UpdateOffsetsInTransaction(const NTable::TTransaction& tx,
+    TAsyncStatus UpdateOffsetsInTransaction(const TTransactionId& tx,
                                             const TVector<TTopicOffsets>& topics,
                                             const TString& consumerName,
                                             const TUpdateOffsetsInTransactionSettings& settings)
     {
         auto request = MakeOperationRequest<Ydb::Topic::UpdateOffsetsInTransactionRequest>(settings);
 
-        request.mutable_tx()->set_id(tx.GetId());
-        request.mutable_tx()->set_session(tx.GetSession().GetId());
+        request.mutable_tx()->set_id(GetTxId(tx));
+        request.mutable_tx()->set_session(GetSessionId(tx));
 
         for (auto& t : topics) {
             auto* topic = request.mutable_topics()->Add();
@@ -387,14 +373,14 @@ public:
     std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings);
 
     using IReadSessionConnectionProcessorFactory =
-        NYdb::NPersQueue::ISessionConnectionProcessorFactory<Ydb::Topic::StreamReadMessage::FromClient,
-                                                             Ydb::Topic::StreamReadMessage::FromServer>;
+        ISessionConnectionProcessorFactory<Ydb::Topic::StreamReadMessage::FromClient,
+                                           Ydb::Topic::StreamReadMessage::FromServer>;
 
     std::shared_ptr<IReadSessionConnectionProcessorFactory> CreateReadSessionConnectionProcessorFactory();
 
     using IWriteSessionConnectionProcessorFactory =
-        NYdb::NPersQueue::ISessionConnectionProcessorFactory<Ydb::Topic::StreamWriteMessage::FromClient,
-                                                             Ydb::Topic::StreamWriteMessage::FromServer>;
+        ISessionConnectionProcessorFactory<Ydb::Topic::StreamWriteMessage::FromClient,
+                                           Ydb::Topic::StreamWriteMessage::FromServer>;
 
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> CreateWriteSessionConnectionProcessorFactory();
 
@@ -404,7 +390,6 @@ public:
 
 private:
     const TTopicClientSettings Settings;
-    std::shared_ptr<std::unordered_map<ECodec, THolder<ICodec>>> ProvidedCodecs = std::make_shared<std::unordered_map<ECodec, THolder<ICodec>>>();
     TAdaptiveLock Lock;
 };
 

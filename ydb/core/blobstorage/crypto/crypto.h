@@ -1,16 +1,19 @@
 #pragma once
 #include <ydb/library/actors/util/rope.h>
 #include <util/generic/ptr.h>
+#include <util/system/cpu_id.h>
 #include <util/system/types.h>
 
 #if (defined(_win_) || defined(_arm64_))
 #include <ydb/core/blobstorage/crypto/chacha.h>
 #include <ydb/core/blobstorage/crypto/poly1305.h>
-#define ChaChaVec ChaCha
-#define Poly1305Vec Poly1305
 #define CHACHA_BPI 1
+using ChaChaVec = ChaCha;
+using Poly1305Vec = Poly1305;
+class ChaCha512 : public ChaCha {};
 #else
 #include <ydb/core/blobstorage/crypto/chacha_vec.h>
+#include <ydb/core/blobstorage/crypto/chacha_512/chacha_512.h>
 #include <ydb/core/blobstorage/crypto/poly1305_vec.h>
 #endif
 
@@ -18,6 +21,8 @@
 #define ENABLE_ENCRYPTION 1
 
 namespace NKikimr {
+
+constexpr ui32 BLOCK_BYTES = ChaChaVec::BLOCK_SIZE * CHACHA_BPI;
 
 ////////////////////////////////////////////////////////////////////////////
 // KeyContainer
@@ -93,10 +98,13 @@ using TT1ha0Avx2Hasher = TT1ha0HasherBase<ET1haFunc::T1HA0_AVX2>;
 ////////////////////////////////////////////////////////////////////////////
 
 class TStreamCypher {
-    alignas(16) ui8 Leftover[64 * 4];
+public:
+    static const bool HasAVX512;
+private:
+    alignas(16) ui8 Leftover[BLOCK_BYTES];
     alignas(16) ui64 Key[4];
     alignas(16) i64 Nonce;
-    std::unique_ptr<ChaChaVec> Cypher;
+    std::variant<ChaChaVec, ChaCha512> Cypher;
     ui32 UnusedBytes;
 public:
     TStreamCypher();
@@ -111,6 +119,9 @@ public:
     void InplaceEncrypt(void *source, ui32 size);
     void InplaceEncrypt(TRope::TIterator source, ui32 size);
     ~TStreamCypher();
+private:
+    void Encipher(const ui8* plaintext, ui8* ciphertext, size_t len);
+    void SetKeyAndIV(const ui64 blockIdx);
 };
 
 } // NKikimr

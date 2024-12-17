@@ -1,21 +1,22 @@
 RECURSE(
     accessor
-    actors
     aclib
+    actors
     arrow_clickhouse
     arrow_kernels
     arrow_parquet
     backup
     benchmarks
-    binary_json
     chunks_limiter
-    dynumber
     folder_service
+    formats
+    fyamlcpp
     grpc
     http_proxy
     keys
-    login
+    lockfree_bucket
     logger
+    login
     mkql_proto
     naming_conventions
     ncloud
@@ -31,9 +32,9 @@ RECURSE(
     time_series_vec
     wilson_ids
     workload
-    yaml_config
     workload
     yaml_config
+    yaml_json
     ycloud
     yql
 )

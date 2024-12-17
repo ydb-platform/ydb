@@ -22,7 +22,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = BusLogger;
+static constexpr auto& Logger = BusLogger;
 
 static constexpr auto PeriodicCheckPeriod = TDuration::MilliSeconds(100);
 static constexpr auto PerConnectionPeriodicCheckPeriod = TDuration::Seconds(10);
@@ -64,7 +64,7 @@ const TIntrusivePtr<TTcpDispatcher::TImpl>& TTcpDispatcher::TImpl::Get()
     return TTcpDispatcher::Get()->Impl_;
 }
 
-const TBusNetworkCountersPtr& TTcpDispatcher::TImpl::GetCounters(const TString& networkName, bool encrypted)
+const TBusNetworkCountersPtr& TTcpDispatcher::TImpl::GetCounters(const std::string& networkName, bool encrypted)
 {
     auto [statistics, ok] = NetworkStatistics_.FindOrInsert(networkName, [] {
         return std::array<TNetworkStatistics, 2>{};
@@ -89,7 +89,14 @@ IPollerPtr TTcpDispatcher::TImpl::GetOrCreatePoller(
     {
         auto guard = WriterGuard(PollerLock_);
         if (!*pollerPtr) {
-            *pollerPtr = CreateThreadPoolPoller(isXfer ? Config_->ThreadPoolSize : 1, threadNamePrefix);
+            if (isXfer) {
+                *pollerPtr = CreateThreadPoolPoller(
+                    Config_->ThreadPoolSize,
+                    threadNamePrefix,
+                    Config_->ThreadPoolPollingPeriod);
+            } else {
+                *pollerPtr = CreateThreadPoolPoller(/*threadCount*/ 1, threadNamePrefix);
+            }
         }
         poller = *pollerPtr;
     }
@@ -111,7 +118,7 @@ bool TTcpDispatcher::TImpl::IsNetworkingDisabled()
     return NetworkingDisabled_.load();
 }
 
-const TString& TTcpDispatcher::TImpl::GetNetworkNameForAddress(const TNetworkAddress& address)
+const std::string& TTcpDispatcher::TImpl::GetNetworkNameForAddress(const TNetworkAddress& address)
 {
     if (address.IsUnix()) {
         return LocalNetworkName;
@@ -144,6 +151,21 @@ TTosLevel TTcpDispatcher::TImpl::GetTosLevelForBand(EMultiplexingBand band)
     return bandDescriptor.TosLevel.load(std::memory_order::relaxed);
 }
 
+int TTcpDispatcher::TImpl::GetMultiplexingParallelism(EMultiplexingBand band, int multiplexingParallelism)
+{
+    if (band < TEnumTraits<EMultiplexingBand>::GetMinValue() || band > TEnumTraits<EMultiplexingBand>::GetMaxValue()) {
+        return std::clamp<int>(
+            multiplexingParallelism,
+            DefaultMinMultiplexingParallelism,
+            DefaultMaxMultiplexingParallelism);
+    }
+    const auto& bandDescriptor = BandToDescriptor_[band];
+    return std::clamp<int>(
+        multiplexingParallelism,
+        bandDescriptor.MinMultiplexingParallelism.load(std::memory_order::relaxed),
+        bandDescriptor.MaxMultiplexingParallelism.load(std::memory_order::relaxed));
+}
+
 IPollerPtr TTcpDispatcher::TImpl::GetAcceptorPoller()
 {
     static const TString ThreadNamePrefix("BusAcpt");
@@ -164,7 +186,8 @@ void TTcpDispatcher::TImpl::Configure(const TTcpDispatcherConfigPtr& config)
         Config_ = config;
 
         if (XferPoller_) {
-            XferPoller_->Reconfigure(Config_->ThreadPoolSize);
+            XferPoller_->SetThreadCount(Config_->ThreadPoolSize);
+            XferPoller_->SetPollingPeriod(Config_->ThreadPoolPollingPeriod);
         }
     }
 
@@ -189,6 +212,8 @@ void TTcpDispatcher::TImpl::Configure(const TTcpDispatcherConfigPtr& config)
         const auto& bandConfig = config->MultiplexingBands[band];
         auto& bandDescriptor = BandToDescriptor_[band];
         bandDescriptor.TosLevel.store(bandConfig ? bandConfig->TosLevel : DefaultTosLevel);
+        bandDescriptor.MinMultiplexingParallelism.store(bandConfig ? bandConfig->MinMultiplexingParallelism : DefaultMinMultiplexingParallelism);
+        bandDescriptor.MaxMultiplexingParallelism.store(bandConfig ? bandConfig->MaxMultiplexingParallelism : DefaultMaxMultiplexingParallelism);
     }
 }
 

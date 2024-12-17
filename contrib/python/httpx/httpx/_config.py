@@ -10,9 +10,11 @@ import certifi
 
 from ._compat import set_minimum_tls_version_1_2
 from ._models import Headers
-from ._types import CertTypes, HeaderTypes, TimeoutTypes, URLTypes, VerifyTypes
+from ._types import CertTypes, HeaderTypes, TimeoutTypes, VerifyTypes
 from ._urls import URL
 from ._utils import get_ca_bundle_from_env
+
+__all__ = ["Limits", "Proxy", "Timeout", "create_ssl_context"]
 
 DEFAULT_CIPHERS = ":".join(
     [
@@ -330,7 +332,7 @@ class Limits:
 class Proxy:
     def __init__(
         self,
-        url: URLTypes,
+        url: URL | str,
         *,
         ssl_context: ssl.SSLContext | None = None,
         auth: tuple[str, str] | None = None,

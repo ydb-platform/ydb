@@ -10,9 +10,28 @@
 namespace NKikimr::NReplication::NController {
 
 class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
+    void RequestPermission() {
+        Send(Parent, new TEvPrivate::TEvRequestDropStream());
+        Become(&TThis::StateRequestPermission);
+    }
+
+    STATEFN(StateRequestPermission) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPrivate::TEvAllowDropStream, Handle);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void Handle(TEvPrivate::TEvAllowDropStream::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+        DropStream();
+    }
+
     void DropStream() {
         switch (Kind) {
         case TReplication::ETargetKind::Table:
+        case TReplication::ETargetKind::IndexTable:
             Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
                 .AppendDropChangefeeds(StreamName)));
             break;
@@ -25,7 +44,8 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTableResponse, Handle);
             sFunc(TEvents::TEvWakeup, DropStream);
-            sFunc(TEvents::TEvPoison, PassAway);
+        default:
+            return StateBase(ev);
         }
     }
 
@@ -76,7 +96,13 @@ public:
     }
 
     void Bootstrap() {
-        DropStream();
+        RequestPermission();
+    }
+
+    STATEFN(StateBase) {
+        switch (ev->GetTypeRewrite()) {
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
     }
 
 private:
@@ -91,7 +117,7 @@ private:
 
 }; // TStreamRemover
 
-IActor* CreateStreamRemover(TReplication::TPtr replication, ui64 targetId, const TActorContext& ctx) {
+IActor* CreateStreamRemover(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
     return CreateStreamRemover(ctx.SelfID, replication->GetYdbProxy(),

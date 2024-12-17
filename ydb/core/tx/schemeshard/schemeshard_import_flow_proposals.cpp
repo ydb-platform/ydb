@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -19,10 +20,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
 
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
     auto& record = propose->Record;
-
-    if (importInfo->UserSID) {
-        record.SetOwner(*importInfo->UserSID);
-    }
 
     auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
@@ -52,25 +49,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             case Ydb::Table::ColumnMeta::kFromSequence: {
                 const auto& fromSequence = column.from_sequence();
 
-                auto seqDesc = indexedTable->MutableSequenceDescription()->Add();
-                seqDesc->SetName(fromSequence.name());
-                if (fromSequence.has_min_value()) {
-                    seqDesc->SetMinValue(fromSequence.min_value());
-                }
-                if (fromSequence.has_max_value()) {
-                    seqDesc->SetMaxValue(fromSequence.max_value());
-                }
-                if (fromSequence.has_start_value()) {
-                    seqDesc->SetStartValue(fromSequence.start_value());
-                }
-                if (fromSequence.has_cache()) {
-                    seqDesc->SetCache(fromSequence.cache());
-                }
-                if (fromSequence.has_increment()) {
-                    seqDesc->SetIncrement(fromSequence.increment());
-                }
-                if (fromSequence.has_cycle()) {
-                    seqDesc->SetCycle(fromSequence.cycle());
+                auto* seqDesc = indexedTable->MutableSequenceDescription()->Add();
+                if (!FillSequenceDescription(*seqDesc, fromSequence, status, error)) {
+                    return nullptr;
                 }
 
                 break;
@@ -80,6 +61,15 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             }
             default: break;
         }
+    }
+
+    if (importInfo->UserSID) {
+        record.SetOwner(*importInfo->UserSID);
+    }
+    FillOwner(record, item.Permissions);
+
+    if (!FillACL(modifyScheme, item.Permissions, error)) {
+        return nullptr;
     }
 
     return propose;

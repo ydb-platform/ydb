@@ -1,5 +1,7 @@
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/auditlog_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
@@ -12,14 +14,40 @@
 #include <util/string/printf.h>
 #include <util/system/env.h>
 
+#include <library/cpp/testing/hook/hook.h>
+
+#include <aws/core/Aws.h>
+
 using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NWrappers::NTestHelpers;
 
+using TTablesWithAttrs = TVector<std::pair<TString, TMap<TString, TString>>>;
+
 namespace {
 
-    void Run(TTestBasicRuntime& runtime, TTestEnv& env, const TVector<TString>& tables, const TString& request,
+    Aws::SDKOptions Options;
+
+    Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
+        Aws::InitAPI(Options);
+    }
+
+    Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
+        Aws::ShutdownAPI(Options);
+    }
+
+    void Run(TTestBasicRuntime& runtime, TTestEnv& env, const std::variant<TVector<TString>, TTablesWithAttrs>& tablesVar, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
-            const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "") {
+            const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "", const TString& peerName = "") {
+
+        TTablesWithAttrs tables;
+
+        if (std::holds_alternative<TVector<TString>>(tablesVar)) {
+            for (const auto& table : std::get<TVector<TString>>(tablesVar)) {
+                tables.emplace_back(table, TMap<TString, TString>{});
+            }
+        } else {
+            tables = std::get<TTablesWithAttrs>(tablesVar);
+        }
 
         ui64 txId = 100;
 
@@ -90,11 +118,14 @@ namespace {
             });
         }
 
-        for (const auto& table : tables) {
+        for (const auto& [table, attrs] : tables) {
+            TVector<std::pair<TString, TString>> attrsVec;
+            attrsVec.assign(attrs.begin(), attrs.end());
+            const auto userAttrs = AlterUserAttrs(attrsVec);
             TestCreateTable(runtime, schemeshardId, ++txId, dbName, table, {
                 NKikimrScheme::StatusAccepted,
                 NKikimrScheme::StatusAlreadyExists,
-            });
+            }, userAttrs);
             env.TestWaitNotification(runtime, txId, schemeshardId);
         }
 
@@ -104,7 +135,7 @@ namespace {
         const auto initialStatus = expectedStatus == Ydb::StatusIds::PRECONDITION_FAILED
             ? expectedStatus
             : Ydb::StatusIds::SUCCESS;
-        TestExport(runtime, schemeshardId, ++txId, dbName, request, userSID, initialStatus);
+        TestExport(runtime, schemeshardId, ++txId, dbName, request, userSID, peerName, initialStatus);
         env.TestWaitNotification(runtime, txId, schemeshardId);
 
         if (initialStatus != Ydb::StatusIds::SUCCESS) {
@@ -124,6 +155,9 @@ namespace {
 
     void Cancel(const TVector<TString>& tables, const TString& request, TDelayFunc delayFunc) {
         TTestBasicRuntime runtime;
+        std::vector<std::string> auditLines;
+        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(auditLines));
+
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -147,6 +181,22 @@ namespace {
         TestExport(runtime, ++txId, "/MyRoot", request);
         const ui64 exportId = txId;
 
+        // Check audit record for export start
+        {
+            auto line = FindAuditLine(auditLines, "operation=EXPORT START");
+            UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
+            UNIT_ASSERT_STRING_CONTAINS(line, "operation=EXPORT START");
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", exportId));
+            UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=");  // can't check the value
+            UNIT_ASSERT_STRING_CONTAINS(line, "subject={none}");
+            UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
+            UNIT_ASSERT_STRING_CONTAINS(line, "status=SUCCESS");
+            UNIT_ASSERT_STRING_CONTAINS(line, "detailed_status=SUCCESS");
+            UNIT_ASSERT(!line.contains("reason"));
+            UNIT_ASSERT(!line.contains("start_time"));
+            UNIT_ASSERT(!line.contains("end_time"));
+        }
+
         if (!delayed) {
             TDispatchOptions opts;
             opts.FinalEvents.emplace_back([&delayed](IEventHandle&) -> bool {
@@ -161,12 +211,81 @@ namespace {
         runtime.Send(delayed.Release(), 0, true);
         env.TestWaitNotification(runtime, exportId);
 
+        // Check audit record for export end
+        //
+        {
+            auto line = FindAuditLine(auditLines, "operation=EXPORT END");
+            UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
+            UNIT_ASSERT_STRING_CONTAINS(line, "operation=EXPORT END");
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", exportId));
+            UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=");  // can't check the value
+            UNIT_ASSERT_STRING_CONTAINS(line, "subject={none}");
+            UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
+            UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+            UNIT_ASSERT_STRING_CONTAINS(line, "detailed_status=CANCELLED");
+            UNIT_ASSERT_STRING_CONTAINS(line, "reason=Cancelled");
+            UNIT_ASSERT_STRING_CONTAINS(line, "start_time=");
+            UNIT_ASSERT_STRING_CONTAINS(line, "end_time=");
+        }
+
         TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
 
         TestForgetExport(runtime, ++txId, "/MyRoot", exportId);
         env.TestWaitNotification(runtime, exportId);
 
         TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    const Ydb::Table::PartitioningSettings& GetPartitioningSettings(
+        const Ydb::Table::CreateTableRequest& tableDescription
+    ) {
+        UNIT_ASSERT_C(tableDescription.has_partitioning_settings(), tableDescription.DebugString());
+        return tableDescription.partitioning_settings();
+    }
+
+    const Ydb::Table::PartitioningSettings& GetIndexTablePartitioningSettings(
+        const Ydb::Table::CreateTableRequest& tableDescription
+    ) {
+        UNIT_ASSERT_C(tableDescription.indexes_size(), tableDescription.DebugString());
+
+        const auto& index = tableDescription.indexes(0);
+        UNIT_ASSERT_C(index.has_global_index(), index.DebugString());
+        UNIT_ASSERT_C(index.global_index().has_settings(), index.DebugString());
+
+        const auto& settings = index.global_index().settings();
+        UNIT_ASSERT_C(settings.has_partitioning_settings(), settings.DebugString());
+        return settings.partitioning_settings();
+    }
+
+    // It might be an overkill to convert expectedString to expectedProto and back to .DebugString(),
+    // but it allows us to ignore whitespace differences when comparing the protobufs.
+    auto CreateProtoComparator(TString&& expectedString) {
+        return [expectedString = std::move(expectedString)](const auto& proto) {
+            std::decay_t<decltype(proto)> expectedProto;
+            UNIT_ASSERT_C(
+                google::protobuf::TextFormat::ParseFromString(expectedString, &expectedProto),
+                expectedString
+            );
+            UNIT_ASSERT_STRINGS_EQUAL(proto.DebugString(), expectedProto.DebugString());
+        };
+    }
+
+    void CheckTableScheme(const TString& scheme, auto&& fieldGetter, auto&& fieldChecker) {
+        Ydb::Table::CreateTableRequest proto;
+        UNIT_ASSERT_C(
+            google::protobuf::TextFormat::ParseFromString(scheme, &proto),
+            scheme
+        );
+        fieldChecker(fieldGetter(proto));
+    }
+
+    void CheckPermissions(const TString& permissions, auto&& fieldChecker) {
+        Ydb::Scheme::ModifyPermissionsRequest proto;
+        UNIT_ASSERT_C(
+            google::protobuf::TextFormat::ParseFromString(permissions, &proto),
+            permissions
+        );
+        fieldChecker(proto);
     }
 
 } // anonymous
@@ -189,6 +308,8 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
             auto it = s3Mock.GetData().find(canonPath + "/metadata.json");
             UNIT_ASSERT(it != s3Mock.GetData().end());
             it = s3Mock.GetData().find(canonPath + "/scheme.pb");
+            UNIT_ASSERT(it != s3Mock.GetData().end());
+            it = s3Mock.GetData().find(canonPath + "/permissions.pb");
             UNIT_ASSERT(it != s3Mock.GetData().end());
         }
     }
@@ -365,7 +486,6 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
       }
     }
   }
-  not_null: false
   from_literal {
     type {
       optional_type {
@@ -390,7 +510,6 @@ columns {
       }
     }
   }
-  not_null: false
   from_literal {
     type {
       optional_type {
@@ -413,6 +532,139 @@ storage_settings {
 column_families {
   name: "default"
   compression: COMPRESSION_NONE
+}
+partitioning_settings {
+  partitioning_by_size: DISABLED
+  partitioning_by_load: DISABLED
+  min_partitions_count: 1
+}
+)");
+    }
+
+    Y_UNIT_TEST(ShouldPreserveIncrBackupFlag) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        const TTablesWithAttrs tables{
+            {
+                R"(
+                Name: "Table"
+                Columns {
+                    Name: "key"
+                    Type: "Utf8"
+                    DefaultFromLiteral {
+                        type {
+                            optional_type {
+                                item {
+                                    type_id: UTF8
+                                }
+                            }
+                        }
+                        value {
+                            items {
+                                text_value: "b"
+                            }
+                        }
+                    }
+                }
+                Columns {
+                    Name: "value"
+                    Type: "Utf8"
+                    DefaultFromLiteral {
+                        type {
+                            optional_type {
+                                item {
+                                    type_id: UTF8
+                                }
+                            }
+                        }
+                        value {
+                            items {
+                                text_value: "a"
+                            }
+                        }
+                    }
+                }
+                KeyColumnNames: ["key"]
+                )",
+                {{"__incremental_backup", "{}"}},
+            },
+        };
+
+        Run(runtime, env, tables, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+
+        auto schemeIt = s3Mock.GetData().find("/scheme.pb");
+        UNIT_ASSERT(schemeIt != s3Mock.GetData().end());
+
+        TString scheme = schemeIt->second;
+
+        UNIT_ASSERT_NO_DIFF(scheme, R"(columns {
+  name: "key"
+  type {
+    optional_type {
+      item {
+        type_id: UTF8
+      }
+    }
+  }
+  from_literal {
+    type {
+      optional_type {
+        item {
+          type_id: UTF8
+        }
+      }
+    }
+    value {
+      items {
+        text_value: "b"
+      }
+    }
+  }
+}
+columns {
+  name: "value"
+  type {
+    optional_type {
+      item {
+        type_id: UTF8
+      }
+    }
+  }
+  from_literal {
+    type {
+      optional_type {
+        item {
+          type_id: UTF8
+        }
+      }
+    }
+    value {
+      items {
+        text_value: "a"
+      }
+    }
+  }
+}
+primary_key: "key"
+attributes {
+  key: "__incremental_backup"
+  value: "{}"
 }
 partitioning_settings {
   partitioning_by_size: DISABLED
@@ -1435,7 +1687,7 @@ partitioning_settings {
         env.TestWaitNotification(runtime, txId);
 
         // Write bad DyNumber
-        UploadRows(runtime, "/MyRoot/Table", 0, {1}, {2}, {1});
+        UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -1504,5 +1756,594 @@ partitioning_settings {
         // check previous operation
         TestGetExport(runtime, exportId, "/MyRoot");
         env.TestWaitNotification(runtime, exportId);
+    }
+
+    Y_UNIT_TEST(ExportStartTime) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.UpdateCurrentTime(TInstant::Now());
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+
+        const auto desc = TestGetExport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_PREPARING);
+        UNIT_ASSERT(entry.HasStartTime());
+        UNIT_ASSERT(!entry.HasEndTime());
+    }
+
+    Y_UNIT_TEST(CompletedExportEndTime) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.UpdateCurrentTime(TInstant::Now());
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(30)); // doing export
+
+        env.TestWaitNotification(runtime, txId);
+
+        const auto desc = TestGetExport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_DONE);
+        UNIT_ASSERT(entry.HasStartTime());
+        UNIT_ASSERT(entry.HasEndTime());
+        UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+    }
+
+    Y_UNIT_TEST(CancelledExportEndTime) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.UpdateCurrentTime(TInstant::Now());
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto delayFunc = [](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+                return false;
+            }
+
+            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
+                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup;
+        };
+
+        THolder<IEventHandle> delayed;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (delayFunc(ev)) {
+                delayed.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+        const ui64 exportId = txId;
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(30)); // doing export
+
+        if (!delayed) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&delayed](IEventHandle&) -> bool {
+                return bool(delayed);
+            });
+            runtime.DispatchEvents(opts);
+        }
+        runtime.SetObserverFunc(prevObserver);
+
+        TestCancelExport(runtime, ++txId, "/MyRoot", exportId);
+
+        auto desc = TestGetExport(runtime, exportId, "/MyRoot");
+        auto entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
+        UNIT_ASSERT(entry.HasStartTime());
+        UNIT_ASSERT(!entry.HasEndTime());
+
+        runtime.Send(delayed.Release(), 0, true);
+        env.TestWaitNotification(runtime, exportId);
+
+        desc = TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
+        UNIT_ASSERT(entry.HasStartTime());
+        UNIT_ASSERT(entry.HasEndTime());
+        UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+    }
+
+    // Based on CompletedExportEndTime
+    Y_UNIT_TEST(AuditCompletedExport) {
+        TTestBasicRuntime runtime;
+        std::vector<std::string> auditLines;
+        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(auditLines));
+
+        TTestEnv env(runtime);
+
+        runtime.UpdateCurrentTime(TInstant::Now());
+        ui64 txId = 100;
+
+        // Prepare table to export
+        //
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Start export
+        //
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        const auto request = Sprintf(R"(
+            OperationParams {
+                labels {
+                    key: "uid"
+                    value: "foo"
+                }
+            }
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/Table"
+                    destination_prefix: ""
+                }
+            }
+        )", port);
+        TestExport(runtime, ++txId, "/MyRoot", request, /*userSID*/ "user@builtin", /*peerName*/ "127.0.0.1:9876");
+
+        // Check audit record for export start
+        {
+            auto line = FindAuditLine(auditLines, "operation=EXPORT START");
+            UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
+            UNIT_ASSERT_STRING_CONTAINS(line, "operation=EXPORT START");
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", txId));
+            UNIT_ASSERT_STRING_CONTAINS(line, "uid=foo");
+            UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=127.0.0.1");
+            UNIT_ASSERT_STRING_CONTAINS(line, "subject=user@builtin");
+            UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
+            UNIT_ASSERT_STRING_CONTAINS(line, "status=SUCCESS");
+            UNIT_ASSERT_STRING_CONTAINS(line, "detailed_status=SUCCESS");
+            UNIT_ASSERT(!line.contains("reason"));
+            UNIT_ASSERT(!line.contains("start_time"));
+            UNIT_ASSERT(!line.contains("end_time"));
+        }
+
+        // Do export
+        //
+        runtime.AdvanceCurrentTime(TDuration::Seconds(30));
+
+        env.TestWaitNotification(runtime, txId);
+
+        const auto desc = TestGetExport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_DONE);
+        UNIT_ASSERT(entry.HasStartTime());
+        UNIT_ASSERT(entry.HasEndTime());
+        UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+
+        // Check audit record for export end
+        //
+        {
+            auto line = FindAuditLine(auditLines, "operation=EXPORT END");
+            UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
+            UNIT_ASSERT_STRING_CONTAINS(line, "operation=EXPORT END");
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", txId));
+            UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=127.0.0.1");
+            UNIT_ASSERT_STRING_CONTAINS(line, "subject=user@builtin");
+            UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
+            UNIT_ASSERT_STRING_CONTAINS(line, "status=SUCCESS");
+            UNIT_ASSERT_STRING_CONTAINS(line, "detailed_status=SUCCESS");
+            UNIT_ASSERT(!line.contains("reason"));
+            UNIT_ASSERT_STRING_CONTAINS(line, "start_time=");
+            UNIT_ASSERT_STRING_CONTAINS(line, "end_time=");
+        }
+    }
+
+    Y_UNIT_TEST(AuditCancelledExport) {
+        TTestBasicRuntime runtime;
+        std::vector<std::string> auditLines;
+        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(auditLines));
+
+        TTestEnv env(runtime);
+
+        runtime.UpdateCurrentTime(TInstant::Now());
+        ui64 txId = 100;
+
+        // Prepare table to export
+        //
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto delayFunc = [](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+                return false;
+            }
+
+            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
+                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup;
+        };
+
+        THolder<IEventHandle> delayed;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (delayFunc(ev)) {
+                delayed.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        // Start export
+        //
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        const auto request = Sprintf(R"(
+            OperationParams {
+                labels {
+                    key: "uid"
+                    value: "foo"
+                }
+            }
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port);
+        TestExport(runtime, ++txId, "/MyRoot", request, /*userSID*/ "user@builtin", /*peerName*/ "127.0.0.1:9876");
+        const ui64 exportId = txId;
+
+        // Check audit record for export start
+        {
+            auto line = FindAuditLine(auditLines, "operation=EXPORT START");
+            UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
+            UNIT_ASSERT_STRING_CONTAINS(line, "operation=EXPORT START");
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", exportId));
+            UNIT_ASSERT_STRING_CONTAINS(line, "uid=foo");
+            UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=127.0.0.1");
+            UNIT_ASSERT_STRING_CONTAINS(line, "subject=user@builtin");
+            UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
+            UNIT_ASSERT_STRING_CONTAINS(line, "status=SUCCESS");
+            UNIT_ASSERT_STRING_CONTAINS(line, "detailed_status=SUCCESS");
+            UNIT_ASSERT(!line.contains("reason"));
+            UNIT_ASSERT(!line.contains("start_time"));
+            UNIT_ASSERT(!line.contains("end_time"));
+        }
+
+        // Do export (unsuccessfully)
+        //
+        runtime.AdvanceCurrentTime(TDuration::Seconds(30));
+
+        if (!delayed) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&delayed](IEventHandle&) -> bool {
+                return bool(delayed);
+            });
+            runtime.DispatchEvents(opts);
+        }
+        runtime.SetObserverFunc(prevObserver);
+
+        // Cancel export mid-air
+        //
+        TestCancelExport(runtime, ++txId, "/MyRoot", exportId);
+
+        auto desc = TestGetExport(runtime, exportId, "/MyRoot");
+        auto entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
+        UNIT_ASSERT(entry.HasStartTime());
+        UNIT_ASSERT(!entry.HasEndTime());
+
+        runtime.Send(delayed.Release(), 0, true);
+        env.TestWaitNotification(runtime, exportId);
+
+        desc = TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
+        UNIT_ASSERT(entry.HasStartTime());
+        UNIT_ASSERT(entry.HasEndTime());
+        UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+
+        // Check audit record for export end
+        //
+        {
+            auto line = FindAuditLine(auditLines, "operation=EXPORT END");
+            UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
+            UNIT_ASSERT_STRING_CONTAINS(line, "operation=EXPORT END");
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", exportId));
+            UNIT_ASSERT_STRING_CONTAINS(line, "uid=foo");
+            UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=127.0.0.1");  // can't check the value
+            UNIT_ASSERT_STRING_CONTAINS(line, "subject=user@builtin");
+            UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
+            UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+            UNIT_ASSERT_STRING_CONTAINS(line, "detailed_status=CANCELLED");
+            UNIT_ASSERT_STRING_CONTAINS(line, "reason=Cancelled");
+            UNIT_ASSERT_STRING_CONTAINS(line, "start_time=");
+            UNIT_ASSERT_STRING_CONTAINS(line, "end_time=");
+        }
+    }
+
+    Y_UNIT_TEST(ExportPartitioningSettings) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        Run(runtime, env, TVector<TString>{
+                R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                    PartitionConfig {
+                        PartitioningPolicy {
+                            MinPartitionsCount: 10
+                            SplitByLoadSettings: {
+                                Enabled: true
+                            }
+                        }
+                    }
+                )"
+            },
+            Sprintf(
+                R"(
+                    ExportToS3Settings {
+                        endpoint: "localhost:%d"
+                        scheme: HTTP
+                        items {
+                            source_path: "/MyRoot/Table"
+                            destination_prefix: ""
+                        }
+                    }
+                )",
+                port
+            )
+        );
+
+        auto* scheme = s3Mock.GetData().FindPtr("/scheme.pb");
+        UNIT_ASSERT(scheme);
+        CheckTableScheme(*scheme, GetPartitioningSettings, CreateProtoComparator(R"(
+            partitioning_by_size: DISABLED
+            partitioning_by_load: ENABLED
+            min_partitions_count: 10
+        )"));
+    }
+
+    Y_UNIT_TEST(ExportIndexTablePartitioningSettings) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ByValue"
+                KeyColumnNames: ["value"]
+                IndexImplTableDescriptions: [ {
+                    PartitionConfig {
+                        PartitioningPolicy {
+                            MinPartitionsCount: 10
+                            SplitByLoadSettings: {
+                                Enabled: true
+                            }
+                        }
+                    }
+                } ]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(
+                R"(
+                    ExportToS3Settings {
+                        endpoint: "localhost:%d"
+                        scheme: HTTP
+                        items {
+                            source_path: "/MyRoot/Table"
+                            destination_prefix: ""
+                        }
+                    }
+                )",
+                port
+            )
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        auto* scheme = s3Mock.GetData().FindPtr("/scheme.pb");
+        UNIT_ASSERT(scheme);
+        CheckTableScheme(*scheme, GetIndexTablePartitioningSettings, CreateProtoComparator(R"(
+            partitioning_by_size: DISABLED
+            partitioning_by_load: ENABLED
+            min_partitions_count: 10
+        )"));
+    }
+
+    Y_UNIT_TEST(UserSID) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        const TString request = Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port);
+        const TString userSID = "user@builtin";
+        TestExport(runtime, ++txId, "/MyRoot", request, userSID);
+
+        const auto desc = TestGetExport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_PREPARING);
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetUserSID(), userSID);
+    }
+
+    Y_UNIT_TEST(TablePermissions) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        NACLib::TDiffACL diffACL;
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user@builtin", NACLib::InheritNone);
+        TestModifyACL(runtime, ++txId, "/MyRoot", "Table", diffACL.SerializeAsString(), "user@builtin");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        auto* permissions = s3Mock.GetData().FindPtr("/permissions.pb");
+        UNIT_ASSERT(permissions);
+        CheckPermissions(*permissions, CreateProtoComparator(R"(
+            actions {
+                change_owner: "user@builtin"
+            }
+            actions {
+                grant {
+                    subject: "user@builtin"
+                    permission_names: "ydb.generic.use"
+                }
+            }
+        )"));
     }
 }

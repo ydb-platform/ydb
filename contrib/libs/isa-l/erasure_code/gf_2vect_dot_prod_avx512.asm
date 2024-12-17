@@ -50,7 +50,7 @@
  %define PS     8
  %define LOG_PS 3
 
- %define func(x) x:
+ %define func(x) x: endbranch
  %macro FUNC_SAVE 0
 	push	r12
  %endmacro
@@ -73,7 +73,7 @@
  %define return rax
  %define PS     8
  %define LOG_PS 3
- %define stack_size  9*16 + 5*8		; must be an odd multiple of 8
+ %define stack_size  3*16 + 3*8		; must be an odd multiple of 8
  %define arg(x)      [rsp + stack_size + PS + PS*x]
 
  %define func(x) proc_frame x
@@ -82,16 +82,9 @@
 	vmovdqa	[rsp + 0*16], xmm6
 	vmovdqa	[rsp + 1*16], xmm7
 	vmovdqa	[rsp + 2*16], xmm8
-	vmovdqa	[rsp + 3*16], xmm9
-	vmovdqa	[rsp + 4*16], xmm10
-	vmovdqa	[rsp + 5*16], xmm11
-	vmovdqa	[rsp + 6*16], xmm12
-	vmovdqa	[rsp + 7*16], xmm13
-	vmovdqa	[rsp + 8*16], xmm14
-	save_reg	r12,  9*16 + 0*8
-	save_reg	r13,  9*16 + 1*8
-	save_reg	r14,  9*16 + 2*8
-	save_reg	r15,  9*16 + 3*8
+	save_reg	r12,  3*16 + 0*8
+	save_reg	r13,  3*16 + 1*8
+	save_reg	r15,  3*16 + 2*8
 	end_prolog
 	mov	arg4, arg(4)
  %endmacro
@@ -100,16 +93,9 @@
 	vmovdqa	xmm6, [rsp + 0*16]
 	vmovdqa	xmm7, [rsp + 1*16]
 	vmovdqa	xmm8, [rsp + 2*16]
-	vmovdqa	xmm9, [rsp + 3*16]
-	vmovdqa	xmm10, [rsp + 4*16]
-	vmovdqa	xmm11, [rsp + 5*16]
-	vmovdqa	xmm12, [rsp + 6*16]
-	vmovdqa	xmm13, [rsp + 7*16]
-	vmovdqa	xmm14, [rsp + 8*16]
-	mov	r12,  [rsp + 9*16 + 0*8]
-	mov	r13,  [rsp + 9*16 + 1*8]
-	mov	r14,  [rsp + 9*16 + 2*8]
-	mov	r15,  [rsp + 9*16 + 3*8]
+	mov	r12,  [rsp + 3*16 + 0*8]
+	mov	r13,  [rsp + 3*16 + 1*8]
+	mov	r15,  [rsp + 3*16 + 2*8]
 	add	rsp, stack_size
  %endmacro
 %endif
@@ -133,8 +119,8 @@
 %else
 ;;; Use Non-temporal load/stor
  %ifdef NO_NT_LDST
-  %define XLDR vmovdqa
-  %define XSTR vmovdqa
+  %define XLDR vmovdqa64
+  %define XSTR vmovdqa64
  %else
   %define XLDR vmovntdqa
   %define XSTR vmovntdq
@@ -160,13 +146,8 @@ default rel
 section .text
 
 align 16
-global gf_2vect_dot_prod_avx512:ISAL_SYM_TYPE_FUNCTION
+global gf_2vect_dot_prod_avx512, function
 func(gf_2vect_dot_prod_avx512)
-%ifidn __OUTPUT_FORMAT__, macho64
-global _gf_2vect_dot_prod_avx512:ISAL_SYM_TYPE_FUNCTION
-func(_gf_2vect_dot_prod_avx512)
-%endif
-
 	FUNC_SAVE
 	sub	len, 64
 	jl	.return_fail

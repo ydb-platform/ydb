@@ -6,7 +6,6 @@
 #include "grpc_request_proxy_handle_methods.h"
 
 #include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/jaeger_tracing/sampling_throttling_control.h>
 
 #include <ydb/library/actors/core/actor.h>
 
@@ -23,8 +22,7 @@ struct TAppData;
 
 namespace NGRpcService {
 
-TString DatabaseFromDomain(const TAppData* appdata);
-IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig, TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> tracingControl);
+IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig);
 IActor* CreateGRpcRequestProxySimple(const NKikimrConfig::TAppConfig& appConfig);
 
 class TGRpcRequestProxy : public TGRpcRequestProxyHandleMethods, public IFacilityProvider {
@@ -56,16 +54,6 @@ protected:
 
     TActorId DiscoveryCacheActorID;
 };
-
-inline TActorId CreateGRpcRequestProxyId(int n = 0) {
-    if (n == 0) {
-        const auto actorId = TActorId(0, "GRpcReqProxy");
-        return actorId;
-    }
-
-    const auto actorId = TActorId(0, TStringBuilder() << "GRpcReqPro" << n);
-    return actorId;
-}
 
 } // namespace NGRpcService
 } // namespace NKikimr

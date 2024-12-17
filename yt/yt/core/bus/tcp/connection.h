@@ -15,7 +15,6 @@
 
 #include <yt/yt/core/net/address.h>
 
-#include <yt/yt/core/misc/atomic_object.h>
 #include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
 #include <yt/yt/core/misc/ring_queue.h>
@@ -26,6 +25,7 @@
 
 #include <yt/yt/core/concurrency/pollable_detail.h>
 
+#include <library/cpp/yt/threading/atomic_object.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
 #include <util/network/init.h>
@@ -80,11 +80,11 @@ public:
         TConnectionId id,
         SOCKET socket,
         EMultiplexingBand multiplexingBand,
-        const TString& endpointDescription,
+        const std::string& endpointDescription,
         const NYTree::IAttributeDictionary& endpointAttributes,
         const NNet::TNetworkAddress& endpointNetworkAddress,
-        const std::optional<TString>& endpointAddress,
-        const std::optional<TString>& unixDomainSocketPath,
+        const std::optional<std::string>& endpointAddress,
+        const std::optional<std::string>& unixDomainSocketPath,
         IMessageHandlerPtr handler,
         NConcurrency::IPollerPtr poller,
         IPacketTranscoderFactory* packetTranscoderFactory,
@@ -99,15 +99,14 @@ public:
     TBusNetworkStatistics GetBusStatistics() const;
 
     // IPollable implementation.
-    NConcurrency::EPollablePriority GetPriority() const override;
     const TString& GetLoggingTag() const override;
     void OnEvent(NConcurrency::EPollControl control) override;
     void OnShutdown() override;
 
     // IBus implementation.
-    const TString& GetEndpointDescription() const override;
+    const std::string& GetEndpointDescription() const override;
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override;
-    const TString& GetEndpointAddress() const override;
+    const std::string& GetEndpointAddress() const override;
     const NNet::TNetworkAddress& GetEndpointNetworkAddress() const override;
     bool IsEndpointLocal() const override;
     bool IsEncrypted() const override;
@@ -188,7 +187,7 @@ private:
     const TBusConfigPtr Config_;
     const EConnectionType ConnectionType_;
     const TConnectionId Id_;
-    const TString EndpointDescription_;
+    const std::string EndpointDescription_;
     const NYTree::IAttributeDictionaryPtr EndpointAttributes_;
     const NNet::TNetworkAddress EndpointNetworkAddress_;
     const std::optional<TString> EndpointAddress_;
@@ -228,7 +227,7 @@ private:
 
     EMultiplexingBand ActualMultiplexingBand_ = EMultiplexingBand::Default;
 
-    TAtomicObject<TError> Error_;
+    NThreading::TAtomicObject<TError> Error_;
 
     NNet::IAsyncDialerSessionPtr DialerSession_;
 
@@ -289,7 +288,7 @@ private:
     void Close();
     void CloseSslSession(ESslState newSslState);
 
-    void Abort(const TError& error);
+    void Abort(const TError& error, NLogging::ELogLevel logLevel = NLogging::ELogLevel::Debug);
     bool AbortIfNetworkingDisabled();
     void AbortSslSession();
 
@@ -298,7 +297,7 @@ private:
     int GetSocketPort();
 
     void ConnectSocket(const NNet::TNetworkAddress& address);
-    void OnDialerFinished(const TErrorOr<SOCKET>& socketOrError);
+    void OnDialerFinished(const TErrorOr<TFileDescriptor>& fdOrError);
 
     void ResolveAddress();
     void OnAddressResolveFinished(const TErrorOr<NNet::TNetworkAddress>& result);

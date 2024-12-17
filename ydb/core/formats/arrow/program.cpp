@@ -19,6 +19,18 @@ enum class AggFunctionId {
     AGG_MIN = 3,
     AGG_MAX = 4,
     AGG_SUM = 5,
+    AGG_AVG = 6,
+    //AGG_VAR = 7,
+    //AGG_COVAR = 8,
+    //AGG_STDDEV = 9,
+    //AGG_CORR = 10,
+    //AGG_ARG_MIN = 11,
+    //AGG_ARG_MAX = 12,
+    //AGG_COUNT_DISTINCT = 13,
+    //AGG_QUANTILES = 14,
+    //AGG_TOP_COUNT = 15,
+    //AGG_TOP_SUM = 16,
+    AGG_NUM_ROWS = 17,
 };
 struct GroupByOptions: public arrow::compute::ScalarAggregateOptions {
     struct Assign {
@@ -33,6 +45,7 @@ struct GroupByOptions: public arrow::compute::ScalarAggregateOptions {
 };
 }
 #endif
+#include "common/container.h"
 
 #include <util/system/yassert.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
@@ -43,7 +56,7 @@ struct GroupByOptions: public arrow::compute::ScalarAggregateOptions {
 #include <contrib/libs/apache/arrow/cpp/src/arrow/result.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
-#include <ydb/library/yql/core/arrow_kernels/request/request.h>
+#include <yql/essentials/core/arrow_kernels/request/request.h>
 
 namespace NKikimr::NSsa {
 
@@ -66,6 +79,9 @@ public:
             } else {
                 result = arrow::compute::CallFunction(funcName, *arguments, assign.GetOptions());
             }
+            if (result.ok() && funcName == "count"sv) {
+                result = result->scalar()->CastTo(std::make_shared<arrow::UInt64Type>());
+            }
             if (result.ok()) {
                 return PrepareResult(std::move(*result), assign);
             }
@@ -84,7 +100,7 @@ class TConstFunction : public IStepFunction<TAssign>  {
     using TBase = IStepFunction<TAssign>;
 public:
     using TBase::TBase;
-    arrow::Result<arrow::Datum> Call(const TAssign& assign,  const TDatumBatch& batch) const override {
+    arrow::Result<arrow::Datum> Call(const TAssign& assign, const TDatumBatch& batch) const override {
         Y_UNUSED(batch);
         return assign.GetConstant();
     }
@@ -148,11 +164,11 @@ public:
         if (!arguments) {
             return arrow::Status::Invalid("Error parsing args.");
         }
-//        try {
+        try {
             return Function->Execute(*arguments, assign.GetOptions(), TBase::Ctx);
-//        } catch (const std::exception& ex) {
-//            return arrow::Status::ExecutionError(ex.what());
-//        }
+        } catch (const std::exception& ex) {
+            return arrow::Status::ExecutionError(ex.what());
+        }
     }
 };
 
@@ -394,6 +410,8 @@ const char * GetFunctionName(EAggregate op) {
             return "min_max";
         case EAggregate::Sum:
             return "sum";
+        case EAggregate::NumRows:
+            return "num_rows";
 #if 0 // TODO
         case EAggregate::Avg:
             return "mean";
@@ -420,6 +438,8 @@ const char * GetHouseFunctionName(EAggregate op) {
         case EAggregate::Avg:
             return "ch.avg";
 #endif
+        case EAggregate::NumRows:
+            return "ch.num_rows";
         default:
             break;
     }
@@ -444,6 +464,8 @@ CH::AggFunctionId GetHouseFunction(EAggregate op) {
         case EAggregate::Avg:
             return CH::AggFunctionId::AGG_AVG;
 #endif
+        case EAggregate::NumRows:
+            return CH::AggFunctionId::AGG_NUM_ROWS;
         default:
             break;
     }
@@ -527,38 +549,65 @@ private:
 
 
 arrow::Status TDatumBatch::AddColumn(const std::string& name, arrow::Datum&& column) {
-    if (Schema->GetFieldIndex(name) != -1) {
+    if (HasColumn(name)) {
         return arrow::Status::Invalid("Trying to add duplicate column '" + name + "'");
     }
 
     auto field = arrow::field(name, column.type());
-    if (!field || !field->type()->Equals(column.type())) {
-        return arrow::Status::Invalid("Cannot create field.");
-    }
     if (!column.is_scalar() && column.length() != Rows) {
         return arrow::Status::Invalid("Wrong column length.");
     }
 
-    Schema = *Schema->AddField(Schema->num_fields(), field);
+    NewColumnIds.emplace(name, NewColumnsPtr.size());
+    NewColumnsPtr.emplace_back(field);
+
     Datums.emplace_back(column);
     return arrow::Status::OK();
 }
 
 arrow::Result<arrow::Datum> TDatumBatch::GetColumnByName(const std::string& name) const {
-    auto i = Schema->GetFieldIndex(name);
+    auto it = NewColumnIds.find(name);
+    if (it != NewColumnIds.end()) {
+        AFL_VERIFY(SchemaBase->num_fields() + it->second < Datums.size());
+        return Datums[SchemaBase->num_fields() + it->second];
+    }
+    auto i = SchemaBase->GetFieldIndex(name);
     if (i < 0) {
         return arrow::Status::Invalid("Not found column '" + name + "' or duplicate");
     }
     return Datums[i];
 }
 
-std::shared_ptr<arrow::RecordBatch> TDatumBatch::ToRecordBatch() const {
+std::shared_ptr<arrow::Table> TDatumBatch::ToTable() {
+    std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
+    columns.reserve(Datums.size());
+    for (auto col : Datums) {
+        if (col.is_scalar()) {
+            columns.push_back(std::make_shared<arrow::ChunkedArray>(NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*col.scalar(), Rows))));
+        } else if (col.is_array()) {
+            if (col.length() == -1) {
+                return {};
+            }
+            columns.push_back(std::make_shared<arrow::ChunkedArray>(col.make_array()));
+        } else if (col.is_arraylike()) {
+            if (col.length() == -1) {
+                return {};
+            }
+            columns.push_back(col.chunked_array());
+        } else {
+            AFL_VERIFY(false);
+        }
+    }
+    return arrow::Table::Make(GetSchema(), columns, Rows);
+}
+
+std::shared_ptr<arrow::RecordBatch> TDatumBatch::ToRecordBatch() {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(Datums.size());
     for (auto col : Datums) {
         if (col.is_scalar()) {
-            columns.push_back(*arrow::MakeArrayFromScalar(*col.scalar(), Rows));
-        } else if (col.is_array()){
+            columns.push_back(NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*col.scalar(), Rows)));
+        } else if (col.is_array()) {
             if (col.length() == -1) {
                 return {};
             }
@@ -567,7 +616,7 @@ std::shared_ptr<arrow::RecordBatch> TDatumBatch::ToRecordBatch() const {
             AFL_VERIFY(false);
         }
     }
-    return arrow::RecordBatch::Make(Schema, Rows, columns);
+    return arrow::RecordBatch::Make(GetSchema(), Rows, columns);
 }
 
 std::shared_ptr<TDatumBatch> TDatumBatch::FromRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch) {
@@ -576,12 +625,7 @@ std::shared_ptr<TDatumBatch> TDatumBatch::FromRecordBatch(const std::shared_ptr<
     for (int64_t i = 0; i < batch->num_columns(); ++i) {
         datums.push_back(arrow::Datum(batch->column(i)));
     }
-    return std::make_shared<TProgramStep::TDatumBatch>(
-        TProgramStep::TDatumBatch{
-            .Schema = std::make_shared<arrow::Schema>(*batch->schema()),
-            .Datums = std::move(datums),
-            .Rows = batch->num_rows()
-        });
+    return std::make_shared<TDatumBatch>(std::make_shared<arrow::Schema>(*batch->schema()), std::move(datums), batch->num_rows());
 }
 
 std::shared_ptr<TDatumBatch> TDatumBatch::FromTable(const std::shared_ptr<arrow::Table>& batch) {
@@ -590,12 +634,15 @@ std::shared_ptr<TDatumBatch> TDatumBatch::FromTable(const std::shared_ptr<arrow:
     for (int64_t i = 0; i < batch->num_columns(); ++i) {
         datums.push_back(arrow::Datum(batch->column(i)));
     }
-    return std::make_shared<TProgramStep::TDatumBatch>(
-        TProgramStep::TDatumBatch{
-            .Schema = std::make_shared<arrow::Schema>(*batch->schema()),
-            .Datums = std::move(datums),
-            .Rows = batch->num_rows()
-        });
+    return std::make_shared<TDatumBatch>(std::make_shared<arrow::Schema>(*batch->schema()), std::move(datums), batch->num_rows());
+}
+
+TDatumBatch::TDatumBatch(const std::shared_ptr<arrow::Schema>& schema, std::vector<arrow::Datum>&& datums, const i64 rows)
+    : SchemaBase(schema)
+    , Rows(rows)
+    , Datums(std::move(datums)) {
+    AFL_VERIFY(SchemaBase);
+    AFL_VERIFY(Datums.size() == (ui32)SchemaBase->num_fields());
 }
 
 TAssign TAssign::MakeTimestamp(const TColumnInfo& column, ui64 value) {
@@ -646,6 +693,27 @@ IStepFunction<TAggregateAssign>::TPtr TAggregateAssign::GetFunction(arrow::compu
     return std::make_shared<TAggregateFunction>(ctx);
 }
 
+TString TAggregateAssign::DebugString() const {
+    TStringBuilder sb;
+    sb << "{";
+    if (Operation != EAggregate::Unspecified) {
+        sb << "op=" << GetFunctionName(Operation) << ";";
+    }
+    if (Arguments.size()) {
+        sb << "arguments=[";
+        for (auto&& i : Arguments) {
+            sb << i.DebugString() << ";";
+        }
+        sb << "];";
+    }
+    sb << "options=" << ScalarOpts.ToString() << ";";
+    if (KernelFunction) {
+        sb << "kernel=" << KernelFunction->name() << ";";
+    }
+    sb << "column=" << Column.DebugString() << ";";
+    sb << "}";
+    return sb;
+}
 
 arrow::Status TProgramStep::ApplyAssignes(TDatumBatch& batch, arrow::compute::ExecContext* ctx) const {
     if (Assignes.empty()) {
@@ -653,7 +721,7 @@ arrow::Status TProgramStep::ApplyAssignes(TDatumBatch& batch, arrow::compute::Ex
     }
     batch.Datums.reserve(batch.Datums.size() + Assignes.size());
     for (auto& assign : Assignes) {
-        if (batch.GetColumnByName(assign.GetName()).ok()) {
+        if (batch.HasColumn(assign.GetName())) {
             return arrow::Status::Invalid("Assign to existing column '" + assign.GetName() + "'.");
         }
 
@@ -676,8 +744,9 @@ arrow::Status TProgramStep::ApplyAggregates(TDatumBatch& batch, arrow::compute::
     }
 
     ui32 numResultColumns = GroupBy.size() + GroupByKeys.size();
-    TDatumBatch res;
-    res.Datums.reserve(numResultColumns);
+    std::vector<arrow::Datum> datums;
+    datums.reserve(numResultColumns);
+    std::optional<ui32> resultRecordsCount;
 
     arrow::FieldVector fields;
     fields.reserve(numResultColumns);
@@ -688,13 +757,13 @@ arrow::Status TProgramStep::ApplyAggregates(TDatumBatch& batch, arrow::compute::
             if (!funcResult.ok()) {
                 return funcResult.status();
             }
-            res.Datums.push_back(*funcResult);
-            fields.emplace_back(std::make_shared<arrow::Field>(assign.GetName(), res.Datums.back().type()));
+            datums.push_back(*funcResult);
+            fields.emplace_back(std::make_shared<arrow::Field>(assign.GetName(), datums.back().type()));
         }
-        res.Rows = 1;
+        resultRecordsCount = 1;
     } else {
         CH::GroupByOptions funcOpts;
-        funcOpts.schema = batch.Schema;
+        funcOpts.schema = batch.GetSchema();
         funcOpts.assigns.reserve(numResultColumns);
         funcOpts.has_nullable_key = false;
 
@@ -732,19 +801,18 @@ arrow::Status TProgramStep::ApplyAggregates(TDatumBatch& batch, arrow::compute::
                 return arrow::Status::Invalid("No expected column in GROUP BY result.");
             }
             fields.emplace_back(std::make_shared<arrow::Field>(assign.result_column, column->type()));
-            res.Datums.push_back(column);
+            datums.push_back(column);
         }
 
-        res.Rows = gbBatch->num_rows();
+        resultRecordsCount = gbBatch->num_rows();
     }
-
-    res.Schema = std::make_shared<arrow::Schema>(std::move(fields));
-    batch = std::move(res);
+    AFL_VERIFY(resultRecordsCount);
+    batch = TDatumBatch(std::make_shared<arrow::Schema>(std::move(fields)), std::move(datums), *resultRecordsCount);
     return arrow::Status::OK();
 }
 
 arrow::Status TProgramStep::MakeCombinedFilter(TDatumBatch& batch, NArrow::TColumnFilter& result) const {
-    TFilterVisitor filterVisitor(batch.Rows);
+    TFilterVisitor filterVisitor(batch.GetRecordsCount());
     for (auto& colName : Filters) {
         auto column = batch.GetColumnByName(colName.GetColumnName());
         if (!column.ok()) {
@@ -794,13 +862,13 @@ arrow::Status TProgramStep::ApplyFilters(TDatumBatch& batch) const {
         }
     }
     std::vector<arrow::Datum*> filterDatums;
-    for (int64_t i = 0; i < batch.Schema->num_fields(); ++i) {
-        if (batch.Datums[i].is_arraylike() && (allColumns || neededColumns.contains(batch.Schema->field(i)->name()))) {
+    for (int64_t i = 0; i < batch.GetSchema()->num_fields(); ++i) {
+        if (batch.Datums[i].is_arraylike() && (allColumns || neededColumns.contains(batch.GetSchema()->field(i)->name()))) {
             filterDatums.emplace_back(&batch.Datums[i]);
         }
     }
-    bits.Apply(batch.Rows, filterDatums);
-    batch.Rows = bits.GetFilteredCount().value_or(batch.Rows);
+    bits.Apply(batch.GetRecordsCount(), filterDatums);
+    batch.SetRecordsCount(bits.GetFilteredCount().value_or(batch.GetRecordsCount()));
     return arrow::Status::OK();
 }
 
@@ -811,15 +879,14 @@ arrow::Status TProgramStep::ApplyProjection(TDatumBatch& batch) const {
     std::vector<std::shared_ptr<arrow::Field>> newFields;
     std::vector<arrow::Datum> newDatums;
     for (size_t i = 0; i < Projection.size(); ++i) {
-        int schemaFieldIndex = batch.Schema->GetFieldIndex(Projection[i].GetColumnName());
+        int schemaFieldIndex = batch.GetSchema()->GetFieldIndex(Projection[i].GetColumnName());
         if (schemaFieldIndex == -1) {
             return arrow::Status::Invalid("Could not find column " + Projection[i].GetColumnName() + " in record batch schema.");
         }
-        newFields.push_back(batch.Schema->field(schemaFieldIndex));
+        newFields.push_back(batch.GetSchema()->field(schemaFieldIndex));
         newDatums.push_back(batch.Datums[schemaFieldIndex]);
     }
-    batch.Schema = std::make_shared<arrow::Schema>(std::move(newFields));
-    batch.Datums = std::move(newDatums);
+    batch = TDatumBatch(std::make_shared<arrow::Schema>(std::move(newFields)), std::move(newDatums), batch.GetRecordsCount());
     return arrow::Status::OK();
 }
 
@@ -835,17 +902,37 @@ arrow::Status TProgramStep::ApplyProjection(std::shared_ptr<arrow::RecordBatch>&
             return arrow::Status::Invalid("Wrong projection column '" + column.GetColumnName() + "'.");
         }
     }
-    batch = NArrow::ExtractColumns(batch, std::make_shared<arrow::Schema>(std::move(fields)));
+    batch = NArrow::TColumnOperator().Adapt(batch, std::make_shared<arrow::Schema>(std::move(fields))).DetachResult();
     return arrow::Status::OK();
 }
 
 arrow::Status TProgramStep::Apply(std::shared_ptr<arrow::RecordBatch>& batch, arrow::compute::ExecContext* ctx) const {
     auto rb = TDatumBatch::FromRecordBatch(batch);
 
-    NArrow::TStatusValidator::Validate(ApplyAssignes(*rb, ctx));
-    NArrow::TStatusValidator::Validate(ApplyFilters(*rb));
-    NArrow::TStatusValidator::Validate(ApplyAggregates(*rb, ctx));
-    NArrow::TStatusValidator::Validate(ApplyProjection(*rb));
+    {
+        auto status = ApplyAssignes(*rb, ctx);
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    {
+        auto status = ApplyFilters(*rb);
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    {
+        auto status = ApplyAggregates(*rb, ctx);
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    {
+        auto status = ApplyProjection(*rb);
+        if (!status.ok()) {
+            return status;
+        }
+    }
 
     batch = (*rb).ToRecordBatch();
     if (!batch) {
@@ -854,50 +941,71 @@ arrow::Status TProgramStep::Apply(std::shared_ptr<arrow::RecordBatch>& batch, ar
     return arrow::Status::OK();
 }
 
-std::set<std::string> TProgramStep::GetColumnsInUsage() const {
+std::set<std::string> TProgramStep::GetColumnsInUsage(const bool originalOnly/* = false*/) const {
     std::set<std::string> result;
     for (auto&& i : Filters) {
-        result.emplace(i.GetColumnName());
+        if (!originalOnly || !i.IsGenerated()) {
+            result.emplace(i.GetColumnName());
+        }
     }
     for (auto&& i : Assignes) {
         for (auto&& f : i.GetArguments()) {
-            result.emplace(f.GetColumnName());
+            if (!originalOnly || !f.IsGenerated()) {
+                result.emplace(f.GetColumnName());
+            }
         }
     }
     return result;
 }
 
-std::shared_ptr<NArrow::TColumnFilter> TProgramStep::BuildFilter(const std::shared_ptr<arrow::Table>& t) const {
+arrow::Result<std::shared_ptr<NArrow::TColumnFilter>> TProgramStep::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& t) const {
     if (Filters.empty()) {
         return nullptr;
     }
-    std::vector<std::shared_ptr<arrow::RecordBatch>> batches = NArrow::SliceToRecordBatches(t);
+    auto table = t->BuildTableVerified(GetColumnsInUsage(true));
+    arrow::TableBatchReader reader(*table);
     NArrow::TColumnFilter fullLocal = NArrow::TColumnFilter::BuildAllowFilter();
-    for (auto&& rb : batches) {
+    std::shared_ptr<arrow::RecordBatch> rb;
+    while (true) {
+        {
+            auto statusRead = reader.ReadNext(&rb);
+            if (!statusRead.ok()) {
+                return statusRead;
+            }
+        }
+        if (!rb) {
+            break;
+        }
         auto datumBatch = TDatumBatch::FromRecordBatch(rb);
-        NArrow::TStatusValidator::Validate(ApplyAssignes(*datumBatch, NArrow::GetCustomExecContext()));
+        {
+            auto statusAssign = ApplyAssignes(*datumBatch, NArrow::GetCustomExecContext());
+            if (!statusAssign.ok()) {
+                return statusAssign;
+            }
+        }
         NArrow::TColumnFilter local = NArrow::TColumnFilter::BuildAllowFilter();
         NArrow::TStatusValidator::Validate(MakeCombinedFilter(*datumBatch, local));
-        AFL_VERIFY(local.Size() == datumBatch->Rows)("local", local.Size())("datum", datumBatch->Rows);
+        AFL_VERIFY(local.GetRecordsCountVerified() == datumBatch->GetRecordsCount())("local", local.GetRecordsCount())(
+                                                                                        "datum", datumBatch->GetRecordsCount());
         fullLocal.Append(local);
     }
-    AFL_VERIFY(fullLocal.Size() == t->num_rows())("filter", fullLocal.Size())("t", t->num_rows());
+    AFL_VERIFY(fullLocal.GetRecordsCountVerified() == t->num_rows())("filter", fullLocal.GetRecordsCountVerified())("t", t->num_rows());
     return std::make_shared<NArrow::TColumnFilter>(std::move(fullLocal));
 }
 
 const std::set<ui32>& TProgramStep::GetFilterOriginalColumnIds() const {
-    AFL_VERIFY(IsFilterOnly());
+//    AFL_VERIFY(IsFilterOnly());
     return FilterOriginalColumnIds;
 }
 
 std::set<std::string> TProgram::GetEarlyFilterColumns() const {
     std::set<std::string> result;
     for (ui32 i = 0; i < Steps.size(); ++i) {
+        auto stepFields = Steps[i]->GetColumnsInUsage(true);
+        result.insert(stepFields.begin(), stepFields.end());
         if (!Steps[i]->IsFilterOnly()) {
             break;
         }
-        auto stepFields = Steps[i]->GetColumnsInUsage();
-        result.insert(stepFields.begin(), stepFields.end());
     }
     return result;
 }
@@ -908,32 +1016,6 @@ std::set<std::string> TProgram::GetProcessingColumns() const {
         result.emplace(i.second.GetColumnName());
     }
     return result;
-}
-
-std::shared_ptr<NArrow::TColumnFilter> TProgram::ApplyEarlyFilter(std::shared_ptr<arrow::Table>& batch, const bool useFilter) const {
-    std::shared_ptr<NArrow::TColumnFilter> filter = std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter());
-    for (ui32 i = 0; i < Steps.size(); ++i) {
-        try {
-            auto& step = Steps[i];
-            if (!step->IsFilterOnly()) {
-                break;
-            }
-
-            std::shared_ptr<NArrow::TColumnFilter> local = step->BuildFilter(batch);
-            AFL_VERIFY(local);
-            if (!useFilter) {
-                *filter = filter->And(*local);
-            } else {
-                *filter = filter->CombineSequentialAnd(*local);
-                if (!local->Apply(batch)) {
-                    break;
-                }
-            }
-        } catch (const std::exception& ex) {
-            AFL_VERIFY(false);
-        }
-    }
-    return filter;
 }
 
 }

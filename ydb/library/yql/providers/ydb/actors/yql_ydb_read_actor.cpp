@@ -1,7 +1,7 @@
 #include "yql_ydb_read_actor.h"
 
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <ydb/library/yql/providers/ydb/proto/range.pb.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
@@ -109,8 +109,8 @@ public:
     static constexpr char ActorName[] = "YQL_YDB_READ_ACTOR";
 
 private:
-    void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {}
-    void LoadState(const NDqProto::TSourceState&) final {}
+    void SaveState(const NDqProto::TCheckpoint&, TSourceState&) final {}
+    void LoadState(const TSourceState&) final {}
     void CommitState(const NDqProto::TCheckpoint&) final {}
     
     ui64 GetInputIndex() const final {
@@ -269,7 +269,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateYdbReadActor(
     keyColumnTypes.reserve(params.GetKeyColumnTypes().size());
     for (auto i = 0; i < params.GetKeyColumnTypes().size(); ++i)
         // TODO support pg types
-        keyColumnTypes.emplace_back(NKikimr::NScheme::TTypeInfo(params.GetKeyColumnTypes().Get(i), nullptr));
+        keyColumnTypes.emplace_back(NKikimr::NScheme::TTypeInfo(params.GetKeyColumnTypes().Get(i)));
 
     ui64 maxRowsInRequest = 0ULL;
     ui64 maxBytesInRequest = 0ULL;

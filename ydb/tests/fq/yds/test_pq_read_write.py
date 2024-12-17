@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import os
+import pytest
+
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
@@ -11,10 +14,13 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 YDS_CONNECTION = "yds"
 
 
-def start_yds_query(kikimr, client, sql) -> str:
+def start_yds_query(kikimr, client, sql, with_checkpoints) -> str:
     query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
     client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-    kikimr.compute_plane.wait_zero_checkpoint(query_id)
+    if with_checkpoints:
+        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+    else:
+        kikimr.control_plane.wait_worker_count(1, "DQ_PQ_READ_ACTOR", 1)
     return query_id
 
 
@@ -25,11 +31,14 @@ def stop_yds_query(client, query_id):
 
 class TestPqReadWrite(TestYdsBase):
     @yq_v1
-    def test_pq_read_write(self, kikimr, client):
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
+    @pytest.mark.parametrize("with_checkpoints", [True, False], ids=["with_checkpoints", "without_checkpoints"])
+    def test_pq_read_write(self, kikimr, client, with_checkpoints):
         client.create_yds_connection(name=YDS_CONNECTION, database_id="FakeDatabaseId")
-        self.init_topics("pq_test_pq_read_write")
+        self.init_topics(Rf"pq_test_pq_read_write_{with_checkpoints}")
         sql = Rf'''
             PRAGMA dq.MaxTasksPerStage="2";
+            PRAGMA dq.DisableCheckpoints="{not with_checkpoints}";
 
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT STREAM
@@ -51,7 +60,7 @@ class TestPqReadWrite(TestYdsBase):
                     k,
                     HOP(DateTime::FromMilliseconds(CAST(Unwrap(t) as Uint32)), "PT0.005S", "PT0.01S", "PT0.01S"));'''
 
-        query_id = start_yds_query(kikimr, client, sql)
+        query_id = start_yds_query(kikimr, client, sql, with_checkpoints)
 
         # 100  105   110   115   120   125   130   135   140   (ms)
         #  [ Bucket1  )<--Delay1-->
@@ -98,11 +107,14 @@ class TestPqReadWrite(TestYdsBase):
         assert len(read_rules) == 0, read_rules
 
     @yq_v1
-    def test_pq_read_schema_metadata(self, kikimr, client):
+    @pytest.mark.parametrize("with_checkpoints", [True, False], ids=["with_checkpoints", "without_checkpoints"])
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
+    def test_pq_read_schema_metadata(self, kikimr, client, with_checkpoints):
         client.create_yds_connection(name=YDS_CONNECTION, database_id="FakeDatabaseId")
-        self.init_topics("pq_test_pq_read_schema_metadata")
+        self.init_topics(Rf"pq_read_schema_meta_{with_checkpoints}")
         sql = Rf'''
                 PRAGMA dq.MaxTasksPerStage="2";
+                PRAGMA dq.DisableCheckpoints="{not with_checkpoints}";
 
                 INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
                 SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow())))
@@ -118,7 +130,7 @@ class TestPqReadWrite(TestYdsBase):
                     )
                 )'''
 
-        query_id = start_yds_query(kikimr, client, sql)
+        query_id = start_yds_query(kikimr, client, sql, with_checkpoints)
 
         data1 = [
             '{"field1": "value1", "field2": 105}',
@@ -126,10 +138,7 @@ class TestPqReadWrite(TestYdsBase):
         ]
         self.write_stream(data1)
 
-        expected = [
-            '{"field1":"value1","field2":105,"field3":0}',
-            '{"field1":"value2","field2":106,"field3":1}'
-        ]
+        expected = ['{"field1":"value1","field2":105,"field3":0}', '{"field1":"value2","field2":106,"field3":1}']
 
         assert self.read_stream(len(expected)) == expected
 

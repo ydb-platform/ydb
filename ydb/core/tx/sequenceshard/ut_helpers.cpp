@@ -268,5 +268,30 @@ namespace NSequenceShard {
         return NextRedirectSequenceResult(cookie, edge);
     }
 
+    void TTestContext::SendGetSequence(ui64 cookie, const TActorId& edge, const TPathId& pathId)
+    {
+        SendFromEdge(
+            edge,
+            new TEvSequenceShard::TEvGetSequence(pathId),
+            cookie);
+    }
+
+    THolder<TEvSequenceShard::TEvGetSequenceResult> TTestContext::NextGetSequenceResult(
+        ui64 cookie, const TActorId& edge)
+    {
+        auto result = ExpectEdgeEvent<TEvSequenceShard::TEvGetSequenceResult>(edge, cookie);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetOrigin(), TabletId);
+        return result;
+    }
+
+    THolder<TEvSequenceShard::TEvGetSequenceResult> TTestContext::GetSequence(
+        const TPathId& pathId)
+    {
+        ui64 cookie = RandomNumber<ui64>();
+        auto edge = Runtime->AllocateEdgeActor();
+        SendGetSequence(cookie, edge, pathId);
+        return NextGetSequenceResult(cookie, edge);
+    }
+
 } // namespace NSequenceShard
 } // namespace NKikimr

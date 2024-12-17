@@ -13,7 +13,7 @@ __all__ = (
     "cachedmethod",
 )
 
-__version__ = "5.3.3"
+__version__ = "5.5.0"
 
 import collections
 import collections.abc
@@ -26,7 +26,6 @@ from . import keys
 
 
 class _DefaultSize:
-
     __slots__ = ()
 
     def __getitem__(self, _):
@@ -241,6 +240,10 @@ class MRUCache(Cache):
     """Most Recently Used (MRU) cache implementation."""
 
     def __init__(self, maxsize, getsizeof=None):
+        from warnings import warn
+
+        warn("MRUCache is deprecated", DeprecationWarning, stacklevel=2)
+
         Cache.__init__(self, maxsize, getsizeof)
         self.__order = collections.OrderedDict()
 
@@ -374,7 +377,6 @@ class TTLCache(_TimedCache):
     """LRU Cache implementation with per-item time-to-live (TTL) value."""
 
     class _Link:
-
         __slots__ = ("key", "expires", "next", "prev")
 
         def __init__(self, key=None, expires=None):
@@ -465,19 +467,26 @@ class TTLCache(_TimedCache):
         return self.__ttl
 
     def expire(self, time=None):
-        """Remove expired items from the cache."""
+        """Remove expired items from the cache and return an iterable of the
+        expired `(key, value)` pairs.
+
+        """
         if time is None:
             time = self.timer()
         root = self.__root
         curr = root.next
         links = self.__links
+        expired = []
         cache_delitem = Cache.__delitem__
+        cache_getitem = Cache.__getitem__
         while curr is not root and not (time < curr.expires):
+            expired.append((curr.key, cache_getitem(self, curr.key)))
             cache_delitem(self, curr.key)
             del links[curr.key]
             next = curr.next
             curr.unlink()
             curr = next
+        return expired
 
     def popitem(self):
         """Remove and return the `(key, value)` pair least recently used that
@@ -504,7 +513,6 @@ class TLRUCache(_TimedCache):
 
     @functools.total_ordering
     class _Item:
-
         __slots__ = ("key", "expires", "removed")
 
         def __init__(self, key=None, expires=None):
@@ -579,7 +587,10 @@ class TLRUCache(_TimedCache):
         return self.__ttu
 
     def expire(self, time=None):
-        """Remove expired items from the cache."""
+        """Remove expired items from the cache and return an iterable of the
+        expired `(key, value)` pairs.
+
+        """
         if time is None:
             time = self.timer()
         items = self.__items
@@ -588,12 +599,16 @@ class TLRUCache(_TimedCache):
         if len(order) > len(items) * 2:
             self.__order = order = [item for item in order if not item.removed]
             heapq.heapify(order)
+        expired = []
         cache_delitem = Cache.__delitem__
+        cache_getitem = Cache.__getitem__
         while order and (order[0].removed or not (time < order[0].expires)):
             item = heapq.heappop(order)
             if not item.removed:
+                expired.append((item.key, cache_getitem(self, item.key)))
                 cache_delitem(self, item.key)
                 del items[item.key]
+        return expired
 
     def popitem(self):
         """Remove and return the `(key, value)` pair least recently used that

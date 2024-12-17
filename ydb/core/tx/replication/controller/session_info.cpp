@@ -29,11 +29,19 @@ const THashSet<TWorkerId>& TSessionInfo::GetWorkers() const {
     return Workers;
 }
 
+bool TSessionInfo::HasWorker(const TWorkerId& id) const {
+    return Workers.contains(id);
+}
+
 TWorkerInfo::TWorkerInfo(NKikimrReplication::TRunWorkerCommand* cmd) {
     SetCommand(cmd);
 }
 
 void TWorkerInfo::SetCommand(NKikimrReplication::TRunWorkerCommand* cmd) {
+    if (!cmd) {
+        return;
+    }
+
     if (!Command) {
         Command = MakeHolder<NKikimrReplication::TRunWorkerCommand>();
     }
@@ -51,6 +59,7 @@ const NKikimrReplication::TRunWorkerCommand* TWorkerInfo::GetCommand() const {
 
 void TWorkerInfo::AttachSession(ui32 nodeId) {
     Session = nodeId;
+    DataEnded = false;
 }
 
 void TWorkerInfo::ClearSession() {
@@ -64,6 +73,27 @@ bool TWorkerInfo::HasSession() const {
 ui32 TWorkerInfo::GetSession() const {
     Y_ABORT_UNLESS(Session.Defined());
     return *Session;
+}
+
+bool TWorkerInfo::IsDataEnded() const {
+    return DataEnded;
+}
+
+void TWorkerInfo::SetDataEnded(bool value) {
+    DataEnded = value;
+}
+
+void TWorkerInfo::SetHeartbeat(const TRowVersion& value) {
+    Heartbeat = value;
+}
+
+bool TWorkerInfo::HasHeartbeat() const {
+    return Heartbeat.Defined();
+}
+
+const TRowVersion& TWorkerInfo::GetHeartbeat() const {
+    Y_ABORT_UNLESS(Heartbeat.Defined());
+    return *Heartbeat;
 }
 
 }

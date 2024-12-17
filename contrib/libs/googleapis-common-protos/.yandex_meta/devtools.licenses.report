@@ -1,0 +1,138 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [2:202]
+
+KEEP     Apache-2.0           4248d6c827c367ff9f1b5e59ca41408e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        google/api/annotations.proto [3:13]
+        google/api/auth.proto [3:13]
+        google/api/backend.proto [3:13]
+        google/api/billing.proto [3:13]
+        google/api/client.proto [3:13]
+        google/api/config_change.proto [3:13]
+        google/api/consumer.proto [3:13]
+        google/api/context.proto [3:13]
+        google/api/control.proto [3:13]
+        google/api/distribution.proto [3:13]
+        google/api/documentation.proto [3:13]
+        google/api/endpoint.proto [3:13]
+        google/api/error_reason.proto [3:13]
+        google/api/field_behavior.proto [3:13]
+        google/api/field_info.proto [3:13]
+        google/api/http.proto [3:13]
+        google/api/httpbody.proto [3:13]
+        google/api/label.proto [3:13]
+        google/api/launch_stage.proto [3:13]
+        google/api/log.proto [3:13]
+        google/api/logging.proto [3:13]
+        google/api/metric.proto [3:13]
+        google/api/monitored_resource.proto [3:13]
+        google/api/monitoring.proto [3:13]
+        google/api/policy.proto [3:13]
+        google/api/quota.proto [3:13]
+        google/api/resource.proto [3:13]
+        google/api/routing.proto [3:13]
+        google/api/service.proto [3:13]
+        google/api/source_info.proto [3:13]
+        google/api/system_parameter.proto [3:13]
+        google/api/usage.proto [3:13]
+        google/api/visibility.proto [3:13]
+        google/cloud/extended_operations.proto [3:13]
+        google/cloud/location/locations.proto [3:13]
+        google/gapic/metadata/gapic_metadata.proto [3:13]
+        google/logging/type/http_request.proto [3:13]
+        google/logging/type/log_severity.proto [3:13]
+        google/longrunning/operations.proto [3:13]
+        google/rpc/code.proto [3:13]
+        google/rpc/context/attribute_context.proto [3:13]
+        google/rpc/context/audit_context.proto [3:13]
+        google/rpc/error_details.proto [3:13]
+        google/rpc/http.proto [3:13]
+        google/rpc/status.proto [3:13]
+        google/type/calendar_period.proto [3:13]
+        google/type/color.proto [3:13]
+        google/type/date.proto [3:13]
+        google/type/datetime.proto [3:13]
+        google/type/dayofweek.proto [3:13]
+        google/type/decimal.proto [3:13]
+        google/type/expr.proto [3:13]
+        google/type/fraction.proto [3:13]
+        google/type/interval.proto [3:13]
+        google/type/latlng.proto [3:13]
+        google/type/localized_text.proto [3:13]
+        google/type/money.proto [3:13]
+        google/type/month.proto [3:13]
+        google/type/phone_number.proto [3:13]
+        google/type/postal_address.proto [3:13]
+        google/type/quaternion.proto [3:13]
+        google/type/timeofday.proto [3:13]
+
+SKIP     LicenseRef-scancode-generic-cla 5d780ffa423067f23c6a123ae33e7c18
+BELONGS ya.make
+    License text:
+        \## Contributor License Agreement
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [6:6]
+
+SKIP     LicenseRef-scancode-generic-cla d629c1791f1024cda2ec24fa16773bcd
+BELONGS ya.make
+    License text:
+        Contributions to this project must be accompanied by a Contributor License
+        Agreement (CLA). You (or your employer) retain the copyright to your
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 22.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [8:9]

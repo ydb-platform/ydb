@@ -10,7 +10,7 @@ select  i_product_name
            ,{{item}}
        where inv_date_sk=d_date_sk
               and inv_item_sk=i_item_sk
-              and d_month_seq between 1186 and 1186 + 11
+              and d_month_seq between 1200 and 1200 + 11
        group by rollup(i_product_name
                        ,i_brand
                        ,i_class

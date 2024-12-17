@@ -21,6 +21,7 @@ class TClientReader
 public:
     TClientReader(
         const TRichYPath& path,
+        const IRawClientPtr& rawClient,
         IClientRetryPolicyPtr clientRetryPolicy,
         ITransactionPingerPtr transactionPinger,
         const TClientContext& context,
@@ -31,7 +32,8 @@ public:
 
     bool Retry(
         const TMaybe<ui32>& rangeIndex,
-        const TMaybe<ui64>& rowIndex) override;
+        const TMaybe<ui64>& rowIndex,
+        const std::exception_ptr& error) override;
 
     void ResetRetries() override;
 
@@ -42,8 +44,11 @@ protected:
 
 private:
     TRichYPath Path_;
+
+    const IRawClientPtr RawClient_;
     const IClientRetryPolicyPtr ClientRetryPolicy_;
     const TClientContext Context_;
+
     TTransactionId ParentTransactionId_;
     TMaybe<TFormat> Format_;
     TTableReaderOptions Options_;

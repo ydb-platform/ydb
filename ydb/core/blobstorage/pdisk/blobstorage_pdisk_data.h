@@ -24,6 +24,7 @@ const ui64 MagicSysLogChunkId = 0x5957095957095957;
 const ui64 MagicFormatChunkId = 0xF088A7F088A7F088;
 constexpr ui64 MagicIncompleteFormat = 0x5b48add808b31984;
 constexpr ui64 MagicIncompleteFormatSize = 512; // Bytes
+constexpr ui64 MagicMetadataFormatSector = 0xb5bf641dbca863d2;
 
 const ui64 Canary = 0x0123456789abcdef;
 constexpr ui32 CanarySize = 8;
@@ -397,6 +398,54 @@ struct TSysLogFirstNoncesToKeep {
         return str.Str();
     }
 };
+
+struct TMetadataHeader {
+    ui64 Nonce;
+    ui64 SequenceNumber; // of stored metadata
+    ui16 RecordIndex; // index of current record
+    ui16 TotalRecords; // total number of records for the this SequenceNumber
+    ui32 Length; // length of stored data, in bytes
+    THash DataHash; // of data only, not including header at all
+    THash HeaderHash; // of header only, not including HeaderHash
+
+    void Encrypt(TPDiskStreamCypher& cypher) {
+        cypher.StartMessage(Nonce);
+        cypher.InplaceEncrypt(&SequenceNumber, sizeof(TMetadataHeader) - sizeof(ui64));
+    }
+
+    void EncryptData(TPDiskStreamCypher& cypher) {
+        TMetadataHeader header = *this;
+        cypher.StartMessage(Nonce);
+        cypher.InplaceEncrypt(&SequenceNumber, sizeof(TMetadataHeader) - sizeof(ui64) + Length);
+        *this = header;
+    }
+
+    bool CheckHash() const {
+        TPDiskHashCalculator hasher;
+        hasher.Hash(this, sizeof(TMetadataHeader) - sizeof(THash));
+        return hasher.GetHashResult() == HeaderHash;
+    }
+
+    void SetHash() {
+        TPDiskHashCalculator hasher;
+        hasher.Hash(this, sizeof(TMetadataHeader) - sizeof(THash));
+        HeaderHash = hasher.GetHashResult();
+    }
+
+    bool CheckDataHash() const {
+        TPDiskHashCalculator hasher;
+        hasher.Hash(this + 1, Length);
+        return hasher.GetHashResult() == DataHash;
+    }
+};
+
+struct TMetadataFormatSector {
+    ui64 Magic; // MagicMetadataFormatSector
+    TKey DataKey; // data is encrypted with this key
+    ui64 Offset; // direct offset of latest stored metadata in this block device
+    ui64 Length; // length of stored metadata, including header
+    ui64 SequenceNumber; // sequence number of stored record
+};
 #pragma pack(pop)
 
 struct TChunkInfo {
@@ -659,7 +708,7 @@ struct TDiskFormat {
 
     void InitMagic() {
         MagicFormatChunk = MagicFormatChunkId;
-        NPDisk::TPDiskHashCalculator hash(false);
+        NPDisk::TPDiskHashCalculator hash;
         hash.Hash(&Guid, sizeof(Guid));
         hash.Hash(&MagicNextLogChunkReferenceId, sizeof(MagicNextLogChunkReferenceId));
         MagicNextLogChunkReference = hash.GetHashResult();
@@ -685,8 +734,13 @@ struct TDiskFormat {
         return DiskFormatSize;
     }
 
+    ui64 RoundUpToSectorSize(ui64 size) const { // assuming SectorSize is a power of 2
+        Y_DEBUG_ABORT_UNLESS(IsPowerOf2(SectorSize));
+        return (size + SectorSize - 1) & ~ui64(SectorSize - 1);
+    }
+
     bool IsHashOk(ui64 bufferSize) const {
-        NPDisk::TPDiskHashCalculator hashCalculator(false);
+        NPDisk::TPDiskHashCalculator hashCalculator;
         if (Version == 2) {
             ui64 size = (char*)&HashVersion2 - (char*)this;
             hashCalculator.Hash(this, size);
@@ -709,7 +763,7 @@ struct TDiskFormat {
     void SetHash() {
         // Set an invalid HashVersion2 to prevent Version2 code from trying to read incompatible disks
         {
-            NPDisk::TPDiskHashCalculator hashCalculator(false);
+            NPDisk::TPDiskHashCalculator hashCalculator;
             ui64 size = (char*)&HashVersion2 - (char*)this;
             hashCalculator.Hash(this, size);
             HashVersion2 = hashCalculator.GetHashResult();
@@ -718,7 +772,7 @@ struct TDiskFormat {
         }
         // Set Hash
         {
-            NPDisk::TPDiskHashCalculator hashCalculator(false);
+            NPDisk::TPDiskHashCalculator hashCalculator;
             Y_ABORT_UNLESS(DiskFormatSize > sizeof(THash));
             ui64 size = DiskFormatSize - sizeof(THash);
             hashCalculator.Hash(this, size);

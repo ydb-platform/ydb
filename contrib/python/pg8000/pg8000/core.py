@@ -16,7 +16,7 @@ from pg8000.converters import (
     make_params,
     string_in,
 )
-from pg8000.exceptions import DatabaseError, Error, InterfaceError
+from pg8000.exceptions import DatabaseError, InterfaceError
 
 
 ver = version("pg8000")
@@ -170,10 +170,17 @@ def _write(sock, d):
 
 
 def _make_socket(
-    unix_sock, sock, host, port, timeout, source_address, tcp_keepalive, ssl_context
+    unix_sock,
+    orig_sock,
+    host,
+    port,
+    timeout,
+    source_address,
+    tcp_keepalive,
+    orig_ssl_context,
 ):
     if unix_sock is not None:
-        if sock is not None:
+        if orig_sock is not None:
             raise InterfaceError("If unix_sock is provided, sock must be None")
 
         try:
@@ -191,8 +198,8 @@ def _make_socket(
                 sock.close()
             raise InterfaceError("communication error") from e
 
-    elif sock is not None:
-        pass
+    elif orig_sock is not None:
+        sock = orig_sock
 
     elif host is not None:
         try:
@@ -210,29 +217,30 @@ def _make_socket(
         raise InterfaceError("one of host, sock or unix_sock must be provided")
 
     channel_binding = None
-    if ssl_context is not None:
+    if orig_ssl_context is not False:
         try:
             import ssl
 
-            if ssl_context is True:
+            if orig_ssl_context is True or orig_ssl_context is None:
                 ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+            else:
+                ssl_context = orig_ssl_context
 
-            request_ssl = getattr(ssl_context, "request_ssl", True)
-
-            if request_ssl:
-                # Int32(8) - Message length, including self.
-                # Int32(80877103) - The SSL request code.
-                sock.sendall(ii_pack(8, 80877103))
-                resp = sock.recv(1)
-                if resp != b"S":
-                    raise InterfaceError("Server refuses SSL")
-
-            sock = ssl_context.wrap_socket(sock, server_hostname=host)
-
-            if request_ssl:
+            # Int32(8) - Message length, including self.
+            # Int32(80877103) - The SSL request code.
+            sock.sendall(ii_pack(8, 80877103))
+            resp = sock.recv(1).decode("ascii")
+            if resp == "S":
+                sock = ssl_context.wrap_socket(sock, server_hostname=host)
                 channel_binding = scramp.make_channel_binding(
                     "tls-server-end-point", sock
                 )
+            elif orig_ssl_context is not None:
+                if sock is not None:
+                    sock.close()
+                raise InterfaceError("Server refuses SSL")
 
         except ImportError:
             raise InterfaceError(
@@ -377,7 +385,7 @@ class CoreConnection:
             if context.error is not None:
                 raise context.error
 
-        except Error as e:
+        except BaseException as e:
             self.close()
             raise e
 
@@ -842,7 +850,9 @@ class CoreConnection:
 
     def handle_PARAMETER_STATUS(self, data, context):
         pos = data.find(NULL_BYTE)
-        key, value = data[:pos].decode("ascii"), data[pos + 1 : -1].decode("ascii")
+        key, value = data[:pos].decode("ascii"), data[pos + 1 : -1].decode(
+            self._client_encoding
+        )
         self.parameter_statuses[key] = value
         if key == "client_encoding":
             encoding = value.lower()

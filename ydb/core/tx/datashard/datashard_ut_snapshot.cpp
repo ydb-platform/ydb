@@ -6,11 +6,12 @@
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
+#include <ydb/core/testlib/actors/block_events.h>
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h> // Y_UNIT_TEST_(TWIN|QUAD)
 #include <ydb/core/mind/local.h>
 
-#include <ydb/library/yql/minikql/mkql_node_printer.h>
+#include <yql/essentials/minikql/mkql_node_printer.h>
 
 namespace NKikimr {
 
@@ -358,7 +359,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -444,7 +444,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -495,8 +494,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
-
         InitRoot(server, sender);
 
         CreateShardedTable(server, sender, "/Root", "table-1", 2);
@@ -537,7 +534,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -608,7 +604,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -671,7 +666,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -813,6 +807,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
+
+        // Don't allow granular timecast side-stepping mediator time hacks in this test
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(runtime);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
@@ -1190,8 +1187,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                         Last.MvccSnapshot.Step = record.GetSnapshot().GetStep();
                         Last.MvccSnapshot.TxId = record.GetSnapshot().GetTxId();
                     } else if (Inject.MvccSnapshot) {
-                        record.MutableSnapshot()->SetStep(Inject.MvccSnapshot.Step);
-                        record.MutableSnapshot()->SetTxId(Inject.MvccSnapshot.TxId);
+                        Inject.MvccSnapshot.Serialize(*record.MutableSnapshot());
                         Cerr << "TEvRead: injected MvccSnapshot" << Endl;
                     }
                     break;
@@ -1791,8 +1787,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         record.MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
         record.MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
         record.MutableTableId()->SetSchemaVersion(tableId.SchemaVersion);
-        record.MutableSnapshot()->SetStep(snapshot.Step);
-        record.MutableSnapshot()->SetTxId(snapshot.TxId);
+        snapshot.Serialize(*record.MutableSnapshot());
         for (ui32 columnId : columns) {
             record.AddColumns(columnId);
         }
@@ -1984,7 +1979,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -3328,7 +3322,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -3614,7 +3607,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
     Y_UNIT_TEST(ReadIteratorLocalSnapshotThenRestart) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -3730,7 +3722,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
     Y_UNIT_TEST(ReadIteratorLocalSnapshotThenWrite) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -3742,6 +3733,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
+
+        // Don't allow granular timecast side-stepping mediator time hacks in this test
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(runtime);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
@@ -3815,7 +3809,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
     Y_UNIT_TEST(UncommittedWriteRestartDuringCommit) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -3975,6 +3968,190 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "{ items { uint32_value: 2 } items { uint32_value: 20 } }, "
             "{ items { uint32_value: 3 } items { uint32_value: 30 } }, "
             "{ items { uint32_value: 4 } items { uint32_value: 40 } }");
+    }
+
+    Y_UNIT_TEST(UncommittedWriteRestartDuringCommitThenBulkErase) {
+        NKikimrConfig::TAppConfig app;
+
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(100)
+            .SetAppConfig(app)
+            // Bug was with non-volatile transactions
+            .SetEnableDataShardVolatileTransactions(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key Uint32, value Uint32, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (5));
+            )"),
+            "SUCCESS");
+
+        // Insert some initial data
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table` (key, value) VALUES (1, 10), (5, 50);");
+
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        TString sessionId, txId;
+
+        // Start inserting a couple of rows into the table
+        Cerr << "... sending initial upsert" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                SELECT key, value FROM `/Root/table` WHERE key = 1;
+                UPSERT INTO `/Root/table` (key, value) VALUES (2, 20), (6, 60);
+                )"),
+            "{ items { uint32_value: 1 } items { uint32_value: 10 } }");
+
+        // We want to block readsets next
+        std::vector<std::unique_ptr<IEventHandle>> readSets;
+        auto blockReadSets = runtime.AddObserver<TEvTxProcessing::TEvReadSet>([&](TEvTxProcessing::TEvReadSet::TPtr& ev) {
+            readSets.emplace_back(ev.Release());
+        });
+
+        // Start committing an additional read/write
+        // Note: select on the table flushes accumulated changes first
+        Cerr << "... sending commit request" << Endl;
+        auto commitFuture = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+            SELECT key, value FROM `/Root/table` ORDER BY key;
+            )", sessionId, txId, /* commitTx */ true));
+
+        WaitFor(runtime, [&]{ return readSets.size() >= 2; }, "readset exchange");
+        UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
+
+        // We want to make sure we block the first progress message when shards reboot
+        std::vector<TActorId> shardActors(shards.size());
+        UNIT_ASSERT_VALUES_EQUAL(shardActors.size(), 2u);
+        std::vector<std::unique_ptr<IEventHandle>> blockedProgress;
+        auto blockProgressQueue = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) noexcept {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTablet::TEvBoot::EventType: {
+                    auto* msg = ev->Get<TEvTablet::TEvBoot>();
+                    Cerr << "... observed TEvBoot for " << msg->TabletID << " at " << ev->GetRecipientRewrite() << Endl;
+                    auto it = std::find(shards.begin(), shards.end(), msg->TabletID);
+                    if (it != shards.end()) {
+                        shardActors.at(it - shards.begin()) = ev->GetRecipientRewrite();
+                    }
+                    break;
+                }
+                case EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 0 /* EvProgressTransaction */: {
+                    auto it = std::find(shardActors.begin(), shardActors.end(), ev->GetRecipientRewrite());
+                    if (it != shardActors.end()) {
+                        ui64 shardId = shards.at(it - shardActors.begin());
+                        Cerr << "... blocking TEvProgressTranasction at " << ev->GetRecipientRewrite() << " shard " << shardId << Endl;
+                        blockedProgress.emplace_back(ev.Release());
+                        return;
+                    }
+                    break;
+                }
+            }
+        });
+
+        // Clear old readsets and reboot both shards with TEvPoison
+        // This way shards don't have a chance to reply causing an UNDETERMINED error
+        readSets.clear();
+        for (ui64 shardId : shards) {
+            Cerr << "... sending TEvPoison to " << shardId << Endl;
+            ForwardToTablet(runtime, shardId, sender, new TEvents::TEvPoison);
+        }
+
+        // Note: we cannot wait for the commit result, since KQP is blocked trying to abort
+
+        // Sleep a little to make sure everything settles
+        Cerr << "... sleeping for 1 second" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(blockedProgress.size(), 2u);
+
+        // Send an erase rows request before the progress queue resumes
+        {
+            Cerr << "... sending TEvEraseRowsRequest to shard 1 for key 1" << Endl;
+            auto req = std::make_unique<TEvDataShard::TEvEraseRowsRequest>();
+            req->Record.SetTableId(tableId.PathId.LocalPathId);
+            req->Record.SetSchemaVersion(tableId.SchemaVersion);
+            req->Record.AddKeyColumnIds(1);
+            ui32 key = 1;
+            TCell keyCell = TCell::Make(key);
+            req->Record.AddKeyColumns(TSerializedCellVec::Serialize(TArrayRef<const TCell>(&keyCell, 1)));
+            runtime.Send(new IEventHandle(shardActors.at(0), sender, req.release()), 0, true);
+            // Give shard 1 a chance to process this request incorrectly
+            Cerr << "... sleeping for 1 second" << Endl;
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+
+        // Unblock progress queue and resend blocked messages
+        Cerr << "... resending progress queue" << Endl;
+        blockProgressQueue.Remove();
+        for (auto& ev : blockedProgress) {
+            runtime.Send(ev.release(), 0, true);
+        }
+        blockedProgress.clear();
+
+        // This insert must run after the currently committing transaction, so it must fail: either read happens before
+        // the commit and is broken later by the commit, or the read finds a duplicate row and insert fails. Due to a
+        // bug the commit lock might already be broken, causing conflicts not to work properly, and allowing the insert
+        // to overwrite key = 2.
+        Cerr << "... sending an insert" << Endl;
+        auto insertFuture = KqpSimpleSend(runtime, R"(
+            INSERT INTO `/Root/table` (key, value) VALUES (2, 22);
+        )");
+
+        // Sleep a little to make sure everything settles
+        Cerr << "... sleeping for 1 second" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Unblock readsets letting transaction to complete
+        Cerr << "... resending readsets" << Endl;
+        blockReadSets.Remove();
+        for (auto& ev : readSets) {
+            runtime.Send(ev.release(), 0, true);
+        }
+        readSets.clear();
+
+        // Sleep a little to make sure everything settles
+        Cerr << "... sleeping for 1 second" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // We expect erase to succeed by this point
+        Cerr << "... checking the erase result" << Endl;
+        {
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvEraseRowsResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvEraseRowsResponse::OK);
+        }
+
+        // We expect commit to fail with an UNDETERMINED error
+        Cerr << "... checking the commit result" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(AwaitResponse(runtime, std::move(commitFuture))),
+            "ERROR: UNDETERMINED");
+
+        // Now make a read query, we must not observe any partial commits
+        Cerr << "... checking final table state" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table`
+                ORDER BY key;
+                )"),
+            "{ items { uint32_value: 2 } items { uint32_value: 20 } }, "
+            "{ items { uint32_value: 5 } items { uint32_value: 50 } }, "
+            "{ items { uint32_value: 6 } items { uint32_value: 60 } }");
     }
 
     /**
@@ -4162,6 +4339,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         auto &runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
+        // Don't allow granular timecast side-stepping mediator time hacks in this test
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(runtime);
+
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_TRACE);
@@ -4276,6 +4456,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
+
+        // Don't allow granular timecast side-stepping mediator time hacks in this test
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(runtime);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
@@ -4396,9 +4579,17 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
     Y_UNIT_TEST(DelayedWriteReplyAfterSplit) {
         TPortManager pm;
+        TServerSettings::TControls controls;
+        // This test needs to make sure mediator time does not advance while
+        // certain operations are running. Unfortunately, volatile planning
+        // may happen every 1ms, and it's too hard to guarantee time stays
+        // still for such a short time. We disable volatile planning to make
+        // coordinator ticks are 100ms apart.
+        controls.MutableCoordinatorControls()->SetVolatilePlanLeaseMs(0);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetNodeCount(2)
+            .SetControls(controls)
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(100);
 
@@ -4406,7 +4597,12 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         auto &runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
+        // Don't allow granular timecast side-stepping mediator time hacks in this test
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(runtime);
+
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_COORDINATOR, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_MEDIATOR_TIMECAST, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_TRACE);
@@ -4537,6 +4733,421 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         } else {
             // Try to be future proof, in case we implement waiting with dst shards
             Cerr << "... upsert did not finish before unblocking node 2" << Endl;
+        }
+    }
+
+    Y_UNIT_TEST(PostMergeNotCompactedTooEarly) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(100);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        KqpSchemeExec(runtime, R"(
+            CREATE TABLE `/Root/table` (key int, value bytes, PRIMARY KEY (key))
+            WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
+                  PARTITION_AT_KEYS = (5));
+        )");
+
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+
+        for (int i = 0; i < 20; ++i) {
+            Cerr << "... upserting key " << i << Endl;
+            auto query = Sprintf(R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (%d, '%s');
+            )", i, TString(128 * 1024, 'x').c_str());
+            ExecSQL(server, sender, query);
+            if (i >= 5) {
+                Cerr << "... compacting shard " << shards.at(1) << Endl;
+                CompactTable(runtime, shards.at(1), tableId, false);
+            } else if (i == 4) {
+                Cerr << "... compacting shard " << shards.at(0) << Endl;
+                CompactTable(runtime, shards.at(0), tableId, false);
+            }
+        }
+
+        // Read (and snapshot) current data, so it doesn't go away on compaction
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, "SELECT COUNT(*) FROM `/Root/table`;"),
+            "{ items { uint64_value: 20 } }");
+
+        // Delete all the data in shard 0, this is small and will stay in memtable
+        // But when borrowed dst compaction will have pressure to compact it all
+        ExecSQL(server, sender, "DELETE FROM `/Root/table` WHERE key < 5");
+
+        std::vector<TEvDataShard::TEvSplitTransferSnapshot::TPtr> snapshots;
+        auto captureSnapshots = runtime.AddObserver<TEvDataShard::TEvSplitTransferSnapshot>(
+            [&](TEvDataShard::TEvSplitTransferSnapshot::TPtr& ev) {
+                auto* msg = ev->Get();
+                Cerr << "... captured snapshot from " << msg->Record.GetSrcTabletId() << Endl;
+                snapshots.emplace_back(ev.Release());
+            });
+
+        Cerr << "... merging table" << Endl;
+        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
+        ui64 txId = AsyncMergeTable(server, sender, "/Root/table", shards);
+        Cerr << "... started merge " << txId << Endl;
+        WaitFor(runtime, [&]{ return snapshots.size() >= 2; }, "both src tablet snapshots");
+
+        std::vector<TEvBlobStorage::TEvGet::TPtr> gets;
+        auto captureGets = runtime.AddObserver<TEvBlobStorage::TEvGet>(
+            [&](TEvBlobStorage::TEvGet::TPtr& ev) {
+                auto* msg = ev->Get();
+                if (msg->Queries[0].Id.TabletID() == shards.at(1)) {
+                    Cerr << "... blocking blob get of " << msg->Queries[0].Id << Endl;
+                    gets.emplace_back(ev.Release());
+                }
+            });
+
+        // Release snapshot for shard 0 then shard 1
+        captureSnapshots.Remove();
+        Cerr << "... unlocking snapshots from tablet " << shards.at(0) << Endl;
+        for (auto& ev : snapshots) {
+            if (ev && ev->Get()->Record.GetSrcTabletId() == shards.at(0)) {
+                runtime.Send(ev.Release(), 0, true);
+            }
+        }
+        Cerr << "... unblocking snapshots from tablet " << shards.at(1) << Endl;
+        for (auto& ev : snapshots) {
+            if (ev && ev->Get()->Record.GetSrcTabletId() == shards.at(1)) {
+                runtime.Send(ev.Release(), 0, true);
+            }
+        }
+
+        // Let it commit above snapshots and incorrectly compact after the first one is loaded and merged
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(gets.size() > 0);
+
+        Cerr << "... unblocking blob gets" << Endl;
+        captureGets.Remove();
+        for (auto& ev : gets) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+
+        // Let it finish loading the second snapshot
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Wait for merge to complete and start a borrowed compaction
+        // When bug is present it will cause newly compacted to part to have epoch larger than previously compacted
+        WaitTxNotification(server, sender, txId);
+        const auto merged = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(merged.size(), 1u);
+        Cerr << "... compacting borrowed parts in shard " << merged.at(0) << Endl;
+        CompactBorrowed(runtime, merged.at(0), tableId);
+
+        // Validate we have an expected number of rows
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, "SELECT COUNT(*) FROM `/Root/table`;"),
+            "{ items { uint64_value: 15 } }");
+    }
+
+    Y_UNIT_TEST(PipelineAndMediatorRestoreRace) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(100)
+            .SetEnableDataShardVolatileTransactions(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table1` (key int, value int, PRIMARY KEY (key));
+                CREATE TABLE `/Root/table2` (key int, value int, PRIMARY KEY (key));
+            )"),
+            "SUCCESS");
+
+        const auto shards1 = GetTableShards(server, sender, "/Root/table1");
+        UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u);
+
+        // Upsert initial data
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table1` (key, value) VALUES (1, 10);
+                UPSERT INTO `/Root/table2` (key, value) VALUES (2, 20);
+            )"),
+            "<empty>");
+
+        // Make sure shards have unprotected reads enabled
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table1`
+                UNION ALL
+                SELECT key, value FROM `/Root/table2`
+                ORDER BY key;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 10 } }, "
+            "{ items { int32_value: 2 } items { int32_value: 20 } }");
+
+        std::vector<TEvTxProcessing::TEvReadSet::TPtr> readsets;
+        auto blockReadSets = runtime.AddObserver<TEvTxProcessing::TEvReadSet>(
+            [&](TEvTxProcessing::TEvReadSet::TPtr& ev) {
+                auto* msg = ev->Get();
+                Cerr << "... blocking readset for " << msg->Record.GetTabletDest() << Endl;
+                readsets.push_back(std::move(ev));
+            });
+
+        size_t planSteps = 0;
+        auto observePlanSteps = runtime.AddObserver<TEvTxProcessing::TEvPlanStep>(
+            [&](TEvTxProcessing::TEvPlanStep::TPtr& ev) {
+                auto* msg = ev->Get();
+                Cerr << "... observed plan step " << msg->Record.GetStep() << " for " << msg->Record.GetTabletID() << Endl;
+                ++planSteps;
+            });
+
+        // Create a "staircase" of transactions at different steps
+
+        // Upsert1 will have outgoing readsets from both shards
+        Cerr << "... sending upsert1" << Endl;
+        auto upsert1 = KqpSimpleSend(runtime, R"(
+            SELECT key, value FROM `/Root/table1` WHERE key = 1;
+            SELECT key, value FROM `/Root/table2` WHERE key = 2;
+            UPSERT INTO `/Root/table1` (key, value) VALUES (3, 30), (5, 50);
+            UPSERT INTO `/Root/table2` (key, value) VALUES (4, 40);
+        )");
+        WaitFor(runtime, [&]{ return planSteps >= 2; }, "upsert1 plan step");
+        UNIT_ASSERT_VALUES_EQUAL(planSteps, 2u);
+        WaitFor(runtime, [&]{ return readsets.size() >= 2; }, "upsert1 readsets");
+        UNIT_ASSERT_VALUES_EQUAL(readsets.size(), 2u);
+
+        // Upsert2 will be blocked by dependencies (key 5) at table1, but not table2
+        Cerr << "... sending upsert2" << Endl;
+        auto upsert2 = KqpSimpleSend(runtime, R"(
+            SELECT key, value FROM `/Root/table2` WHERE key = 2;
+            UPSERT INTO `/Root/table1` (key, value) VALUES (5, 55), (7, 70);
+        )");
+        WaitFor(runtime, [&]{ return planSteps >= 4; }, "upsert2 plan step");
+        UNIT_ASSERT_VALUES_EQUAL(planSteps, 4u);
+        WaitFor(runtime, [&]{ return readsets.size() >= 3; }, "upsert2 readset from table2");
+        UNIT_ASSERT_VALUES_EQUAL(readsets.size(), 3u);
+
+        // Upsert3 will be blocked by dependencies (key 7) at table1, but not table2
+        Cerr << "... sending upsert3" << Endl;
+        auto upsert3 = KqpSimpleSend(runtime, R"(
+            SELECT key, value FROM `/Root/table2` WHERE key = 2;
+            UPSERT INTO `/Root/table1` (key, value) VALUES (7, 77), (9, 90);
+        )");
+        WaitFor(runtime, [&]{ return planSteps >= 6; }, "upsert3 plan step");
+        UNIT_ASSERT_VALUES_EQUAL(planSteps, 6u);
+        WaitFor(runtime, [&]{ return readsets.size() >= 4; }, "upsert3 readset from table2");
+        UNIT_ASSERT_VALUES_EQUAL(readsets.size(), 4u);
+
+        // Sleep a little to make sure everything is persisted at table1 and mediator time advanced
+        runtime.SimulateSleep(TDuration::MilliSeconds(200));
+
+        // Now restart table1 shard while blocking mediator timecast registration
+        std::vector<TEvMediatorTimecast::TEvRegisterTabletResult::TPtr> registrations;
+        auto blockRegistrations = runtime.AddObserver<TEvMediatorTimecast::TEvRegisterTabletResult>(
+            [&](TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev) {
+                Cerr << "... blocking timecast registration result for " << ev->GetRecipientRewrite() << Endl;
+                registrations.push_back(std::move(ev));
+            });
+
+        // ... waiting for the new tablet actor booting
+        TActorId shardActor;
+        auto waitBoot = runtime.AddObserver<TEvTablet::TEvBoot>(
+            [&](TEvTablet::TEvBoot::TPtr& ev) {
+                auto* msg = ev->Get();
+                if (msg->TabletID == shards1.at(0)) {
+                    shardActor = ev->GetRecipientRewrite();
+                    Cerr << "... booting " << msg->TabletID << " with actor " << shardActor << Endl;
+                }
+            });
+
+        // ... and blocking progress transactions
+        size_t allowProgress = 0;
+        std::vector<TAutoPtr<IEventHandle>> blockedProgress;
+        auto blockProgress = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (shardActor &&
+                ev->GetRecipientRewrite() == shardActor &&
+                ev->GetTypeRewrite() == EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 0 /* EvProgressTransaction */)
+            {
+                if (allowProgress > 0) {
+                    Cerr << "... allowing EvProgressTransaction for " << ev->GetRecipientRewrite() << Endl;
+                    --allowProgress;
+                } else {
+                    Cerr << "... blocking EvProgressTransaction for " << ev->GetRecipientRewrite() << Endl;
+                    blockedProgress.push_back(std::move(ev));
+                }
+            }
+        });
+
+        Cerr << "... rebooting " << shards1.at(0) << Endl;
+        GracefulRestartTablet(runtime, shards1.at(0), sender);
+
+        WaitFor(runtime, [&]{ return registrations.size() >= 1; }, "timecast registration");
+        UNIT_ASSERT_VALUES_EQUAL(registrations.size(), 1u);
+
+        WaitFor(runtime, [&]{ return readsets.size() >= 8; }, "readsets resent");
+        UNIT_ASSERT_VALUES_EQUAL(readsets.size(), 8u);
+
+        // We need to unblock two transactions
+        // The first is already marked incomplete
+        // The second will be added to the pipeline, but blocked by dependencies
+        for (int i = 0; i < 2; ++i) {
+            WaitFor(runtime, [&]{ return blockedProgress.size() >= 1; }, "blocked progress");
+            UNIT_ASSERT_VALUES_EQUAL(blockedProgress.size(), 1);
+
+            Cerr << "... unblocking a single progress tx" << Endl;
+            allowProgress += blockedProgress.size();
+            for (auto& ev : blockedProgress) {
+                runtime.Send(ev.Release(), 0, true);
+            }
+            blockedProgress.clear();
+        }
+
+        WaitFor(runtime, [&]{ return blockedProgress.size() >= 1; }, "blocked progress");
+        UNIT_ASSERT_VALUES_EQUAL(blockedProgress.size(), 1);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        Cerr << "... unblocking timecast registration" << Endl;
+        blockRegistrations.Remove();
+        for (auto& ev : registrations) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(200));
+
+        // Unblock the final transaction
+        // It's going to be before the restored worst-case unprotected read edge
+        // However because it's no the complete/incomplete tail it will not update lists properly
+        Cerr << "... unblocking final progress tx" << Endl;
+        blockProgress.Remove();
+        for (auto& ev : blockedProgress) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+        blockedProgress.clear();
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        // Perform snapshot read that will try to mark all pending transactions as logically complete/incomplete
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table1` WHERE key = 1
+                UNION ALL
+                SELECT key, value FROM `/Root/table2` WHERE key = 2
+                ORDER BY key;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 10 } }, "
+            "{ items { int32_value: 2 } items { int32_value: 20 } }");
+
+        Cerr << "... unblocking readsets" << Endl;
+        blockReadSets.Remove();
+        for (auto& ev : readsets) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+        readsets.clear();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(AwaitResponse(runtime, std::move(upsert1))),
+            "{ items { int32_value: 1 } items { int32_value: 10 } }\n"
+            "{ items { int32_value: 2 } items { int32_value: 20 } }");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(AwaitResponse(runtime, std::move(upsert2))),
+            "{ items { int32_value: 2 } items { int32_value: 20 } }");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(AwaitResponse(runtime, std::move(upsert3))),
+            "{ items { int32_value: 2 } items { int32_value: 20 } }");
+    }
+
+    Y_UNIT_TEST(UncommittedChangesRenameTable) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(100)
+            .SetEnableDataShardVolatileTransactions(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table1` (key int, value int, PRIMARY KEY (key));
+            )"),
+            "SUCCESS");
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table1` (key, value) VALUES (2, 22);");
+
+        TString sessionId = CreateSessionRPC(runtime);
+        TString txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                UPSERT INTO `/Root/table1` (key, value) VALUES (1, 11), (3, 33);
+                SELECT key, value FROM `/Root/table1` ORDER BY key;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 11 } }, "
+            "{ items { int32_value: 2 } items { int32_value: 22 } }, "
+            "{ items { int32_value: 3 } items { int32_value: 33 } }");
+
+        auto shards = GetTableShards(server, sender, "/Root/table1");
+        auto tableId1 = ResolveTableId(server, sender, "/Root/table1");
+
+        // Check shard has open transactions
+        {
+            runtime.SendToPipe(shards.at(0), sender, new TEvDataShard::TEvGetOpenTxs(tableId1.PathId));
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(sender);
+            UNIT_ASSERT_C(!ev->Get()->OpenTxs.empty(), "at shard " << shards.at(0));
+        }
+
+        WaitTxNotification(server, sender, AsyncMoveTable(server, "/Root/table1", "/Root/table1moved"));
+        auto tableId2 = ResolveTableId(server, sender, "/Root/table1moved");
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Check shard doesn't have open transactions
+        {
+            runtime.SendToPipe(shards.at(0), sender, new TEvDataShard::TEvGetOpenTxs(tableId2.PathId));
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(sender);
+            UNIT_ASSERT_C(ev->Get()->OpenTxs.empty(), "at shard " << shards.at(0));
+        }
+
+        RebootTablet(runtime, shards.at(0), sender);
+
+        // The original table was removed
+        // We must not be able to commit the transaction
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1"),
+            "ERROR: ABORTED");
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Check shard doesn't have open transactions
+        {
+            runtime.SendToPipe(shards.at(0), sender, new TEvDataShard::TEvGetOpenTxs(tableId2.PathId));
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(sender);
+            UNIT_ASSERT_C(ev->Get()->OpenTxs.empty(), "at shard " << shards.at(0));
         }
     }
 

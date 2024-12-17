@@ -9,13 +9,17 @@ SRCS(
     proxy.cpp
     read_table_impl.cpp
     resolvereq.cpp
+    rpc_long_tx.cpp
     snapshotreq.cpp
     commitreq.cpp
+    upload_rows_counters.cpp
     upload_rows_common_impl.cpp
     upload_rows.cpp
+    global.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(read_table_impl.h)
+GENERATE_ENUM_SERIALIZATION(upload_rows_counters.h)
 
 PEERDIR(
     ydb/library/actors/core
@@ -28,8 +32,8 @@ PEERDIR(
     ydb/core/docapi
     ydb/core/engine
     ydb/core/formats
-    ydb/core/grpc_services
-    ydb/core/io_formats/arrow
+    ydb/core/grpc_services/local_rpc
+    ydb/core/io_formats/arrow/scheme
     ydb/core/protos
     ydb/core/scheme
     ydb/core/sys_view/common

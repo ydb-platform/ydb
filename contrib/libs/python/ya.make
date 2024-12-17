@@ -1,5 +1,7 @@
 PY23_LIBRARY()
 
+VERSION(Service-proxy-version)
+
 LICENSE(Service-Py23-Proxy)
 
 WITHOUT_LICENSE_TEXTS()

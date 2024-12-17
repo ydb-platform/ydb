@@ -1,9 +1,10 @@
-## Data views (VIEW) {#view}
+# Data views (VIEW)
 
 YQL supports two types of data views:
 
 * Linked to specific tables.
 * Independent, that might use an arbitrary number of tables within the cluster.
+
 Both of the views are non-materialized. It means that they are substituted into the calculation graph at each use.
 
 Accessing a `VIEW`:
@@ -13,7 +14,7 @@ Accessing a `VIEW`:
 
 If the meta attributes of the table specify an automatic UDF call to convert raw data into a structured set of columns, you can access raw data using a special `raw` view like this: ```[cluster.]`path/to/table` VIEW raw```.
 
-**Examples:**
+### Examples
 
 ```yql
 USE some_cluster;

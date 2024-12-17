@@ -1,0 +1,270 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 07e5807de24195ca2e5973572e62bc56
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        PIL/ImageCms.py [37:39]
+        _imagingcms.c [4:10]
+        _imagingcms.c [24:26]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b1a6cefd95d29e4bd258234012d9858
+BELONGS ya.make
+    License text:
+        \# Copyright (c) Secret Labs AB 1997.
+        \# Copyright (c) Fredrik Lundh 1995-97.
+        \# Copyright (c) Eric Soroos 2017.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        PIL/MspImagePlugin.py [13:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 20e8a3f15ff00f181a93d97cedd2c1ad
+BELONGS ya.make
+    License text:
+         * Copyright (c) Secret Labs AB 1997-99.
+         * Copyright (c) Fredrik Lundh 1997.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libImaging/GifEncode.c [15:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4828843946d1d783a46638c1d8bf2a7d
+BELONGS ya.make
+    License text:
+            Copyright © 2010-2024 by Jeffrey A. Clark (Alex) and contributors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [8:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 611ade7a20f093456feab39481a50365
+BELONGS ya.make
+    License text:
+         * Copyright (c) Secret Labs AB 1999.
+         * Copyright (c) Fredrik Lundh 1999.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        outline.c [14:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 81b5c5834de84baed9e970e836634b1d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        _imagingcms.c [4:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 884fa3a8a79a86dac5bb70c63629cdcf
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        _imagingcms.c [4:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8a0ac79681d44363d42698a89e07ccbc
+BELONGS ya.make
+    License text:
+         * (littleCMS is Copyright (C) 1998-2001 Marti Maria)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        PIL/ImageCms.py [43:43]
+        _imagingcms.c [14:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8b582f434288a4b11aa579f75588fc8f
+BELONGS ya.make
+    License text:
+            Copyright © 1997-2011 by Secret Labs AB
+            Copyright © 1995-2011 by Fredrik Lundh
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9143257f4a8be04059315005d5b3b5a8
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2010 Oliver Tonnhofer <olt@bogosoft.com>, Omniscale
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libImaging/QuantOctree.c [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 96dfc7623d06a33f74674a500f080b67
+BELONGS ya.make
+    License text:
+        \# Copyright (C) 2002-2003 Kevin Cazabon
+        \# Copyright (c) 2009 by Fredrik Lundh
+        \# Copyright (c) 2013 by Eric Soroos
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        PIL/ImageCms.py [11:13]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9b5ffe40da4a5e7a0e520acb112c05ad
+BELONGS ya.make
+    License text:
+         * Copyright (c) Secret Labs AB 2002.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libImaging/RankFilter.c [10:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a0207bd31ebf7c992ad45c0274977a1c
+BELONGS ya.make
+    License text:
+        \# Copyright (C) 2002-2003 Kevin Cazabon
+        \# Copyright (c) 2009 by Fredrik Lundh
+        \# Copyright (c) 2013 by Eric Soroos
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        PIL/ImageCms.py [11:13]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ae9182ec370d280b645cb17712e97e78
+BELONGS ya.make
+    License text:
+            Copyright © 1997-2011 by Secret Labs AB
+            Copyright © 1995-2011 by Fredrik Lundh
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aefc3681b00d13f0437dac2d3d3bdcf4
+BELONGS ya.make
+    License text:
+        \# Copyright (c) Secret Labs AB 1997.
+        \# Copyright (c) Fredrik Lundh 1995-97.
+        \# Copyright (c) Eric Soroos 2017.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        PIL/MspImagePlugin.py [13:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c7c2cf605371e2305d70b37c7cbf4532
+BELONGS ya.make
+    License text:
+         * Copyright (c) Secret Labs AB 1997-99.
+         * Copyright (c) Fredrik Lundh 1997.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libImaging/GifEncode.c [15:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ca36335ef72c6c3764aa61f3c676cbc8
+BELONGS ya.make
+    License text:
+         * Copyright (c) Secret Labs AB 1999.
+         * Copyright (c) Fredrik Lundh 1999.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        outline.c [14:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d612601abf16028680fe151ce1f3d4e2
+BELONGS ya.make
+    License text:
+           By Kevin Cazabon, copyright 2003
+           kevin_cazabon@hotmail.com
+           kevin@cazabon.com */
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libImaging/UnsharpMask.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f4950785cc4a21edba78a7a71642d204
+BELONGS ya.make
+    License text:
+        \# Copyright (C) 2002-2003 Kevin Cazabon
+        \# Copyright (c) 2009 by Fredrik Lundh
+        \# Copyright (c) 2013 by Eric Soroos
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        PIL/ImageCms.py [11:13]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f5950a93a874137b9ec0e95805934d3b
+BELONGS ya.make
+    License text:
+        \# Copyright (c) Secret Labs AB 1997.
+        \# Copyright (c) Fredrik Lundh 1995-97.
+        \# Copyright (c) Eric Soroos 2017.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        PIL/MspImagePlugin.py [13:15]

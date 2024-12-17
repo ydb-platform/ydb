@@ -1,6 +1,8 @@
 #include "event.h"
 #include "event_pb.h"
 
+#include <ydb/library/actors/protos/actors.pb.h>
+
 namespace NActors {
 
     const TScopeId TScopeId::LocallyGenerated{
@@ -48,4 +50,14 @@ namespace NActors {
         }
         return new TEventSerializedData;
     }
+
+    bool IEventBase::DoExecute(IActor* /*actor*/, std::unique_ptr<IEventHandle> /*eventPtr*/) {
+        Y_DEBUG_ABORT_UNLESS(false);
+        return false;
+    }
+
+    bool IEventBase::Execute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr) {
+        return DoExecute(actor, std::move(eventPtr));
+    }
+
 }

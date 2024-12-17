@@ -1,0 +1,11 @@
+--- a/include/yaml.h      2021-01-27 16:24:20.000000000 +0300
++++ b/include/yaml.h      2021-01-27 16:26:04.000000000 +0300
+@@ -26,6 +26,8 @@
+
+ /** The public API declaration. */
+
++#define YAML_DECLARE_STATIC
++
+ #if defined(__MINGW32__)
+ #   define  YAML_DECLARE(type)  type
+ #elif defined(_WIN32)

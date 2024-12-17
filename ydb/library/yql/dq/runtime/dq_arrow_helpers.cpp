@@ -1,10 +1,10 @@
 #include "dq_arrow_helpers.h"
 
 #include <cstddef>
-#include <ydb/library/yql/public/udf/udf_value.h>
-#include <ydb/library/yql/minikql/defs.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/minikql/defs.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
@@ -96,6 +96,9 @@ bool SwitchMiniKQLDataTypeToArrowType(NUdf::EDataSlot type, TFunc&& callback) {
         case NUdf::EDataSlot::TzDate:
         case NUdf::EDataSlot::TzDatetime:
         case NUdf::EDataSlot::TzTimestamp:
+        case NUdf::EDataSlot::TzDate32:
+        case NUdf::EDataSlot::TzDatetime64:
+        case NUdf::EDataSlot::TzTimestamp64:
             return false;
     }
 }

@@ -64,7 +64,7 @@ const int version<T>::value;
  * as an error an attempt to set a version # for a class which doesn't
  * save its class information (including version #) in the archive.
  * However, this imposes a requirement that the version be set after
- * the implemention level which would be pretty confusing.  If this
+ * the implementation level which would be pretty confusing.  If this
  * is to be done, do this check in the input or output operators when
  * ALL the serialization traits are available.  Included the implementation
  * here with this comment as a reminder not to do this!

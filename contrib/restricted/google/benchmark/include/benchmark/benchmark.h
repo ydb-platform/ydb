@@ -290,17 +290,59 @@ BENCHMARK(BM_test)->Unit(benchmark::kMillisecond);
 #define BENCHMARK_OVERRIDE
 #endif
 
+#if defined(__GNUC__)
+// Determine the cacheline size based on architecture
+#if defined(__i386__) || defined(__x86_64__)
+#define BENCHMARK_INTERNAL_CACHELINE_SIZE 64
+#elif defined(__powerpc64__)
+#define BENCHMARK_INTERNAL_CACHELINE_SIZE 128
+#elif defined(__aarch64__)
+#define BENCHMARK_INTERNAL_CACHELINE_SIZE 64
+#elif defined(__arm__)
+// Cache line sizes for ARM: These values are not strictly correct since
+// cache line sizes depend on implementations, not architectures.  There
+// are even implementations with cache line sizes configurable at boot
+// time.
+#if defined(__ARM_ARCH_5T__)
+#define BENCHMARK_INTERNAL_CACHELINE_SIZE 32
+#elif defined(__ARM_ARCH_7A__)
+#define BENCHMARK_INTERNAL_CACHELINE_SIZE 64
+#endif  // ARM_ARCH
+#endif  // arches
+#endif  // __GNUC__
+
+#ifndef BENCHMARK_INTERNAL_CACHELINE_SIZE
+// A reasonable default guess.  Note that overestimates tend to waste more
+// space, while underestimates tend to waste more time.
+#define BENCHMARK_INTERNAL_CACHELINE_SIZE 64
+#endif
+
+#if defined(__GNUC__)
+// Indicates that the declared object be cache aligned using
+// `BENCHMARK_INTERNAL_CACHELINE_SIZE` (see above).
+#define BENCHMARK_INTERNAL_CACHELINE_ALIGNED \
+  __attribute__((aligned(BENCHMARK_INTERNAL_CACHELINE_SIZE)))
+#elif defined(_MSC_VER)
+#define BENCHMARK_INTERNAL_CACHELINE_ALIGNED \
+  __declspec(align(BENCHMARK_INTERNAL_CACHELINE_SIZE))
+#else
+#define BENCHMARK_INTERNAL_CACHELINE_ALIGNED
+#endif
+
 #if defined(_MSC_VER)
 #pragma warning(push)
 // C4251: <symbol> needs to have dll-interface to be used by clients of class
 #pragma warning(disable : 4251)
-#endif
+#endif  // _MSC_VER_
 
 namespace benchmark {
 class BenchmarkReporter;
 
 // Default number of minimum benchmark running time in seconds.
 const char kDefaultMinTimeStr[] = "0.5s";
+
+// Returns the version of the library.
+BENCHMARK_EXPORT std::string GetBenchmarkVersion();
 
 BENCHMARK_EXPORT void PrintDefaultHelp();
 
@@ -341,7 +383,7 @@ BENCHMARK_EXPORT BenchmarkReporter* CreateDefaultDisplayReporter();
 // The second and third overload use the specified 'display_reporter' and
 //  'file_reporter' respectively. 'file_reporter' will write to the file
 //  specified
-//   by '--benchmark_output'. If '--benchmark_output' is not given the
+//   by '--benchmark_out'. If '--benchmark_out' is not given the
 //  'file_reporter' is ignored.
 //
 // RETURNS: The number of matching benchmarks.
@@ -412,6 +454,26 @@ class MemoryManager {
 // allocation measurements for benchmark runs.
 BENCHMARK_EXPORT
 void RegisterMemoryManager(MemoryManager* memory_manager);
+
+// If a ProfilerManager is registered (via RegisterProfilerManager()), the
+// benchmark will be run an additional time under the profiler to collect and
+// report profile metrics for the run of the benchmark.
+class ProfilerManager {
+ public:
+  virtual ~ProfilerManager() {}
+
+  // This is called after `Setup()` code and right before the benchmark is run.
+  virtual void AfterSetupStart() = 0;
+
+  // This is called before `Teardown()` code and right after the benchmark
+  // completes.
+  virtual void BeforeTeardownStop() = 0;
+};
+
+// Register a ProfilerManager instance that will be used to collect and report
+// profile measurements for benchmark runs.
+BENCHMARK_EXPORT
+void RegisterProfilerManager(ProfilerManager* profiler_manager);
 
 // Add a key-value pair to output as part of the context stanza in the report.
 BENCHMARK_EXPORT
@@ -584,6 +646,12 @@ inline BENCHMARK_ALWAYS_INLINE void DoNotOptimize(Tp const& value) {
 inline BENCHMARK_ALWAYS_INLINE void ClobberMemory() { _ReadWriteBarrier(); }
 #endif
 #else
+#ifdef BENCHMARK_HAS_CXX11
+template <class Tp>
+inline BENCHMARK_ALWAYS_INLINE void DoNotOptimize(Tp&& value) {
+  internal::UseCharPointer(&reinterpret_cast<char const volatile&>(value));
+}
+#else
 template <class Tp>
 BENCHMARK_DEPRECATED_MSG(
     "The const-ref version of this method can permit "
@@ -591,6 +659,12 @@ BENCHMARK_DEPRECATED_MSG(
 inline BENCHMARK_ALWAYS_INLINE void DoNotOptimize(Tp const& value) {
   internal::UseCharPointer(&reinterpret_cast<char const volatile&>(value));
 }
+
+template <class Tp>
+inline BENCHMARK_ALWAYS_INLINE void DoNotOptimize(Tp& value) {
+  internal::UseCharPointer(&reinterpret_cast<char const volatile&>(value));
+}
+#endif
 // FIXME Add ClobberMemory() for non-gnu and non-msvc compilers, before C++11.
 #endif
 
@@ -660,13 +734,15 @@ typedef std::map<std::string, Counter> UserCounters;
 // calculated automatically to the best fit.
 enum BigO { oNone, o1, oN, oNSquared, oNCubed, oLogN, oNLogN, oAuto, oLambda };
 
+typedef int64_t ComplexityN;
+
 typedef int64_t IterationCount;
 
 enum StatisticUnit { kTime, kPercentage };
 
 // BigOFunc is passed to a benchmark in order to specify the asymptotic
 // computational complexity for the benchmark.
-typedef double(BigOFunc)(IterationCount);
+typedef double(BigOFunc)(ComplexityN);
 
 // StatisticsFunc is passed to a benchmark in order to compute some descriptive
 // statistics over all the measurements of some type
@@ -720,9 +796,14 @@ enum Skipped
 
 }  // namespace internal
 
+#if defined(_MSC_VER)
+#pragma warning(push)
+// C4324: 'benchmark::State': structure was padded due to alignment specifier
+#pragma warning(disable : 4324)
+#endif  // _MSC_VER_
 // State is passed to a running Benchmark and contains state for the
 // benchmark to use.
-class BENCHMARK_EXPORT State {
+class BENCHMARK_EXPORT BENCHMARK_INTERNAL_CACHELINE_ALIGNED State {
  public:
   struct StateIterator;
   friend struct StateIterator;
@@ -734,13 +815,13 @@ class BENCHMARK_EXPORT State {
   // have been called previously.
   //
   // NOTE: KeepRunning may not be used after calling either of these functions.
-  BENCHMARK_ALWAYS_INLINE StateIterator begin();
-  BENCHMARK_ALWAYS_INLINE StateIterator end();
+  inline BENCHMARK_ALWAYS_INLINE StateIterator begin();
+  inline BENCHMARK_ALWAYS_INLINE StateIterator end();
 
   // Returns true if the benchmark should continue through another iteration.
   // NOTE: A benchmark may not return from the test until KeepRunning() has
   // returned false.
-  bool KeepRunning();
+  inline bool KeepRunning();
 
   // Returns true iff the benchmark should run n more iterations.
   // REQUIRES: 'n' > 0.
@@ -752,7 +833,7 @@ class BENCHMARK_EXPORT State {
   //   while (state.KeepRunningBatch(1000)) {
   //     // process 1000 elements
   //   }
-  bool KeepRunningBatch(IterationCount n);
+  inline bool KeepRunningBatch(IterationCount n);
 
   // REQUIRES: timer is running and 'SkipWithMessage(...)' or
   //   'SkipWithError(...)' has not been called by the current thread.
@@ -863,10 +944,12 @@ class BENCHMARK_EXPORT State {
   // and complexity_n will
   // represent the length of N.
   BENCHMARK_ALWAYS_INLINE
-  void SetComplexityN(int64_t complexity_n) { complexity_n_ = complexity_n; }
+  void SetComplexityN(ComplexityN complexity_n) {
+    complexity_n_ = complexity_n;
+  }
 
   BENCHMARK_ALWAYS_INLINE
-  int64_t complexity_length_n() const { return complexity_n_; }
+  ComplexityN complexity_length_n() const { return complexity_n_; }
 
   // If this routine is called with items > 0, then an items/s
   // label is printed on the benchmark report line for the currently
@@ -955,7 +1038,7 @@ class BENCHMARK_EXPORT State {
   // items we don't need on the first cache line
   std::vector<int64_t> range_;
 
-  int64_t complexity_n_;
+  ComplexityN complexity_n_;
 
  public:
   // Container for user-defined counters.
@@ -965,12 +1048,13 @@ class BENCHMARK_EXPORT State {
   State(std::string name, IterationCount max_iters,
         const std::vector<int64_t>& ranges, int thread_i, int n_threads,
         internal::ThreadTimer* timer, internal::ThreadManager* manager,
-        internal::PerfCountersMeasurement* perf_counters_measurement);
+        internal::PerfCountersMeasurement* perf_counters_measurement,
+        ProfilerManager* profiler_manager);
 
   void StartKeepRunning();
   // Implementation of KeepRunning() and KeepRunningBatch().
   // is_batch must be true unless n is 1.
-  bool KeepRunningInternal(IterationCount n, bool is_batch);
+  inline bool KeepRunningInternal(IterationCount n, bool is_batch);
   void FinishKeepRunning();
 
   const std::string name_;
@@ -980,9 +1064,13 @@ class BENCHMARK_EXPORT State {
   internal::ThreadTimer* const timer_;
   internal::ThreadManager* const manager_;
   internal::PerfCountersMeasurement* const perf_counters_measurement_;
+  ProfilerManager* const profiler_manager_;
 
   friend class internal::BenchmarkInstance;
 };
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif  // _MSC_VER_
 
 inline BENCHMARK_ALWAYS_INLINE bool State::KeepRunning() {
   return KeepRunningInternal(1, /*is_batch=*/false);
@@ -1466,6 +1554,7 @@ class Fixture : public internal::Benchmark {
   BaseClass##_##Method##_Benchmark
 
 #define BENCHMARK_PRIVATE_DECLARE(n)                                 \
+  /* NOLINTNEXTLINE(misc-use-anonymous-namespace) */                 \
   static ::benchmark::internal::Benchmark* BENCHMARK_PRIVATE_NAME(n) \
       BENCHMARK_UNUSED
 
@@ -1504,7 +1593,7 @@ class Fixture : public internal::Benchmark {
 // /* Registers a benchmark named "BM_takes_args/int_string_test` */
 // BENCHMARK_CAPTURE(BM_takes_args, int_string_test, 42, std::string("abc"));
 #define BENCHMARK_CAPTURE(func, test_case_name, ...)     \
-  BENCHMARK_PRIVATE_DECLARE(func) =                      \
+  BENCHMARK_PRIVATE_DECLARE(_benchmark_) =               \
       (::benchmark::internal::RegisterBenchmarkInternal( \
           new ::benchmark::internal::FunctionBenchmark(  \
               #func "/" #test_case_name,                 \
@@ -1540,6 +1629,31 @@ class Fixture : public internal::Benchmark {
 #else
 #define BENCHMARK_TEMPLATE(n, a) BENCHMARK_TEMPLATE1(n, a)
 #endif
+
+#ifdef BENCHMARK_HAS_CXX11
+// This will register a benchmark for a templatized function,
+// with the additional arguments specified by `...`.
+//
+// For example:
+//
+// template <typename T, class ...ExtraArgs>`
+// void BM_takes_args(benchmark::State& state, ExtraArgs&&... extra_args) {
+//  [...]
+//}
+// /* Registers a benchmark named "BM_takes_args<void>/int_string_test` */
+// BENCHMARK_TEMPLATE1_CAPTURE(BM_takes_args, void, int_string_test, 42,
+//                             std::string("abc"));
+#define BENCHMARK_TEMPLATE1_CAPTURE(func, a, test_case_name, ...) \
+  BENCHMARK_CAPTURE(func<a>, test_case_name, __VA_ARGS__)
+
+#define BENCHMARK_TEMPLATE2_CAPTURE(func, a, b, test_case_name, ...) \
+  BENCHMARK_PRIVATE_DECLARE(func) =                                  \
+      (::benchmark::internal::RegisterBenchmarkInternal(             \
+          new ::benchmark::internal::FunctionBenchmark(              \
+              #func "<" #a "," #b ">"                                \
+                    "/" #test_case_name,                             \
+              [](::benchmark::State& st) { func<a, b>(st, __VA_ARGS__); })))
+#endif  // BENCHMARK_HAS_CXX11
 
 #define BENCHMARK_PRIVATE_DECLARE_F(BaseClass, Method)          \
   class BaseClass##_##Method##_Benchmark : public BaseClass {   \
@@ -1748,6 +1862,7 @@ class BENCHMARK_EXPORT BenchmarkReporter {
           real_accumulated_time(0),
           cpu_accumulated_time(0),
           max_heapbytes_used(0),
+          use_real_time_for_initial_big_o(false),
           complexity(oNone),
           complexity_lambda(),
           complexity_n(0),
@@ -1767,14 +1882,11 @@ class BENCHMARK_EXPORT BenchmarkReporter {
     internal::Skipped skipped;
     std::string skip_message;
 
-    // Total iterations across all threads.
     IterationCount iterations;
     int64_t threads;
     int64_t repetition_index;
     int64_t repetitions;
     TimeUnit time_unit;
-
-    // Total time across all threads.
     double real_accumulated_time;
     double cpu_accumulated_time;
 
@@ -1793,10 +1905,14 @@ class BENCHMARK_EXPORT BenchmarkReporter {
     // This is set to 0.0 if memory tracing is not enabled.
     double max_heapbytes_used;
 
+    // By default Big-O is computed for CPU time, but that is not what you want
+    // to happen when manual time was requested, which is stored as real time.
+    bool use_real_time_for_initial_big_o;
+
     // Keep track of arguments to compute asymptotic complexity
     BigO complexity;
     BigOFunc* complexity_lambda;
-    int64_t complexity_n;
+    ComplexityN complexity_n;
 
     // what statistics to compute from the measurements
     const std::vector<internal::Statistics>* statistics;

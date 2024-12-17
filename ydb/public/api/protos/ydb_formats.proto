@@ -9,6 +9,12 @@ message ArrowBatchSettings {
 }
 
 message CsvSettings {
+    message Quoting {
+        bool disabled = 1;
+        bytes quote_char = 2;
+        bool double_quote_disabled = 3;
+    }
+
     // Number of rows to skip before CSV data. It should be present only in the first upsert of CSV file.
     uint32 skip_rows = 1;
     // Fields delimiter in CSV file. It's "," if not set.
@@ -17,4 +23,5 @@ message CsvSettings {
     bytes null_value = 3;
     // First not skipped line is a CSV header (list of column names).
     bool header = 4;
+    Quoting quoting = 5;
 }

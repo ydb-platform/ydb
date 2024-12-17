@@ -24,6 +24,8 @@ public:
     //! Next or Restart calls.
     TDuration GetBackoff() const;
 
+    TExponentialBackoffOptions GetOptions() const;
+
     void UpdateOptions(const TExponentialBackoffOptions& newOptions);
 
 private:

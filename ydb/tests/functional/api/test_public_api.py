@@ -6,7 +6,7 @@ import json
 import os
 
 import pytest
-from hamcrest import any_of, assert_that, equal_to, is_, none, raises, less_than, has_length, not_
+from hamcrest import any_of, assert_that, calling, equal_to, is_, none, raises, less_than, has_length, not_
 from tornado import ioloop, gen
 from google.protobuf import text_format
 import logging
@@ -14,7 +14,7 @@ import logging
 from datetime import date, datetime
 from ydb.public.api.protos import ydb_table_pb2
 from ydb.public.api.protos import ydb_scheme_pb2
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -90,7 +90,7 @@ storage_policy {
 class Base(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(
+        cls.cluster = KiKiMR(
             KikimrConfigGenerator(
                 additional_log_configs={
                     'TENANT_POOL': LogLevels.DEBUG,
@@ -118,7 +118,7 @@ class Base(object):
 class WithTenant(Base):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
         cls.database_name = "/Root/tenant"
         cls.cluster.create_database(
@@ -1114,16 +1114,17 @@ actions {
                 )
             )
 
-    def test_when_result_set_is_large_then_it_is_truncated(self):
+    def test_when_result_set_is_large_then_issue_occure(self):
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
         with session.transaction() as tx:
-            result_sets = tx.execute(
-                "select t.x from ( {data} select 201 as x ) as t".format(
-                    data='\n'.join('select {x} as x union all'.format(x=x) for x in range(2001))
-                )
+            assert_that(
+                calling(tx.execute).with_args(
+                    "select t.x from ( {data} select 201 as x ) as t".format(
+                        data='\n'.join('select {x} as x union all'.format(x=x) for x in range(2001))
+                    )
+                ),
+                raises(ydb.issues.TruncatedResponseError),
             )
-            assert_that(result_sets[0].rows, has_length(1000))
-            assert_that(result_sets[0].truncated, is_(True))
 
 
 class TestSessionNotFound(Base):
@@ -1204,7 +1205,7 @@ class TestSessionNotFoundOperations(Base):
             assert_that(
                 lambda: tx.execute('select 1 as cnt', commit_tx=True),
                 raises(
-                    ydb.PreconditionFailed,
+                    RuntimeError,  # "Any operation with finished transaction is denied"
                 )
             )
 
@@ -1286,6 +1287,11 @@ class TestSessionNotFoundOperations(Base):
                         False
                     )
                 )
+
+        assert_that(
+            resp.table_stats
+            is None
+        )
 
     def test_native_datetime_types(self):
         tc_settings = ydb.TableClientSettings().with_native_datetime_in_result_sets(enabled=True)
@@ -1512,7 +1518,7 @@ class TestDriverCanRecover(Base):
 class TestSelectAfterDropWithRepetitions(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(
+        cls.cluster = KiKiMR(
             configurator=KikimrConfigGenerator(
                 additional_log_configs={
                     'TX_PROXY': LogLevels.DEBUG,
@@ -1581,7 +1587,7 @@ class TestSelectAfterDropWithRepetitions(object):
 class TestMetaDataInvalidation(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
         cls.driver = ydb.Driver(ydb.DriverConfig(
             database="/Root",
@@ -1667,7 +1673,7 @@ class TestMetaDataInvalidation(object):
 class TestJsonExample(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
         cls.driver = ydb.Driver(ydb.DriverConfig(
             database="/Root",
@@ -1753,7 +1759,7 @@ class TestJsonExample(object):
 class TestForPotentialDeadlock(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
 
     @classmethod

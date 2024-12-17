@@ -11,9 +11,9 @@
 #include <ydb/core/tx/datashard/range_ops.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -260,8 +260,8 @@ public:
         UserDb.SetIsImmediateTx(true);
     }
 
-    void SetIsRepeatableSnapshot() {
-        UserDb.SetIsRepeatableSnapshot(true);
+    void SetUsesMvccSnapshot() {
+        UserDb.SetUsesMvccSnapshot(true);
     }
 
     std::optional<ui64> GetCurrentChangeGroup() const override {
@@ -304,11 +304,15 @@ public:
         return UserDb.GetVolatileCommitOrdered();
     }
 
+    bool GetPerformedUserReads() const {
+        return UserDb.GetPerformedUserReads();
+    }
+
     bool IsValidKey(TKeyDesc& key) const override {
         TKeyValidator::TValidateOptions options(
             UserDb.GetLockTxId(),
             UserDb.GetLockNodeId(),
-            UserDb.GetIsRepeatableSnapshot(),
+            UserDb.GetUsesMvccSnapshot(),
             UserDb.GetIsImmediateTx(),
             UserDb.GetIsWriteTx(), 
             Scheme
@@ -328,6 +332,8 @@ public:
             Self->SysLocksTable().SetLock(tableId, row);
         }
 
+        UserDb.SetPerformedUserReads(true);
+
         Self->SetTableAccessTime(tableId, UserDb.GetNow());
         return TEngineHost::SelectRow(tableId, row, columnIds, returnType, readTarget, holderFactory);
     }
@@ -342,6 +348,8 @@ public:
         if (UserDb.GetLockTxId()) {
             Self->SysLocksTable().SetLock(tableId, range);
         }
+
+        UserDb.SetPerformedUserReads(true);
 
         Self->SetTableAccessTime(tableId, UserDb.GetNow());
         return TEngineHost::SelectRange(tableId, range, columnIds, skipNullKeys, returnType, readTarget,
@@ -362,15 +370,23 @@ public:
         TSmallVec<NTable::TUpdateOp> ops;
         ConvertTableValues(Scheme, tableInfo, commands, ops, nullptr);
 
-        UserDb.UpdateRow(tableId, key, ops);
+        UserDb.UpsertRow(tableId, key, ops);
     }
 
-    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
-        UserDb.UpdateRow(tableId, key, ops);
+    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
+        UserDb.UpsertRow(tableId, key, ops);
     }
 
     void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
         UserDb.ReplaceRow(tableId, key, ops);
+    }
+
+    void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
+        UserDb.InsertRow(tableId, key, ops);
+    }
+
+    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
+        UserDb.UpdateRow(tableId, key, ops);
     }
 
     void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override {
@@ -515,7 +531,7 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
     ComputeCtx = MakeHolder<TKqpDatashardComputeContext>(self, GetUserDb(), EngineHost->GetSettings().DisableByKeyFilter);
     ComputeCtx->Database = &txc.DB;
 
-    KqpAlloc = MakeHolder<TScopedAlloc>(__LOCATION__, TAlignedPagePoolCounters(), AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
+    KqpAlloc = std::make_shared<TScopedAlloc>(__LOCATION__, TAlignedPagePoolCounters(), AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
     KqpTypeEnv = MakeHolder<TTypeEnvironment>(*KqpAlloc);
     KqpAlloc->Release();
 
@@ -611,11 +627,11 @@ void TEngineBay::SetIsImmediateTx() {
     host->SetIsImmediateTx();
 }
 
-void TEngineBay::SetIsRepeatableSnapshot() {
+void TEngineBay::SetUsesMvccSnapshot() {
     Y_ABORT_UNLESS(EngineHost);
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
-    host->SetIsRepeatableSnapshot();
+    host->SetUsesMvccSnapshot();
 }
 
 TVector<IDataShardChangeCollector::TChange> TEngineBay::GetCollectedChanges() const {
@@ -656,6 +672,13 @@ bool TEngineBay::GetVolatileCommitOrdered() const {
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     return host->GetVolatileCommitOrdered();
+}
+
+bool TEngineBay::GetPerformedUserReads() const {
+    Y_ABORT_UNLESS(EngineHost);
+
+    auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
+    return host->GetPerformedUserReads();
 }
 
 IEngineFlat * TEngineBay::GetEngine() {
@@ -706,7 +729,7 @@ NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(NKikimrTxDataShard::TKqpTra
         settings.TerminateOnError = false;
         Y_ABORT_UNLESS(KqpAlloc);
         KqpAlloc->SetLimit(10_MB);
-        KqpTasksRunner = NKqp::CreateKqpTasksRunner(std::move(*tx.MutableTasks()), *KqpAlloc.Get(), KqpExecCtx, settings, KqpLogFunc);
+        KqpTasksRunner = NKqp::CreateKqpTasksRunner(std::move(*tx.MutableTasks()), KqpAlloc, KqpExecCtx, settings, KqpLogFunc);
     }
 
     return *KqpTasksRunner;

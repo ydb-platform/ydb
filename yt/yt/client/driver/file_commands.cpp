@@ -120,18 +120,17 @@ void TWriteFileCommand::DoExecute(ICommandContextPtr context)
 
     struct TWriteBufferTag { };
 
-    auto buffer = TSharedMutableRef::Allocate<TWriteBufferTag>(context->GetConfig()->WriteBufferSize, {.InitializeStorage = false});
-
     auto input = context->Request().InputStream;
 
     while (true) {
-        auto bytesRead = WaitFor(input->Read(buffer))
+        auto data = WaitFor(input->Read())
             .ValueOrThrow();
 
-        if (bytesRead == 0)
+        if (!data) {
             break;
+        }
 
-        WaitFor(writer->Write(buffer.Slice(0, bytesRead)))
+        WaitFor(writer->Write(std::move(data)))
             .ThrowOnError();
     }
 

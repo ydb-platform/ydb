@@ -16,6 +16,7 @@
 
 namespace NActors {
     class TPollerToken;
+    struct TInterconnectProxyCommon;
 }
 
 namespace NInterconnect {
@@ -82,8 +83,7 @@ namespace NInterconnect {
         friend class TSecureSocket;
 
     public:
-        TSecureSocketContext(const TString& certificate, const TString& privateKey, const TString& caFilePath,
-            const TString& ciphers);
+        TSecureSocketContext(TIntrusivePtr<NActors::TInterconnectProxyCommon> common);
         ~TSecureSocketContext();
 
     public:
@@ -121,6 +121,7 @@ namespace NInterconnect {
         int GetCipherBits() const;
         TString GetProtocolName() const;
         TString GetPeerCommonName() const;
+        TString GetSignatureAlgorithm() const;
 
         bool WantRead() const;
         bool WantWrite() const;

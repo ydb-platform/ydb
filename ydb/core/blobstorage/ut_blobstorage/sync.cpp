@@ -1,7 +1,108 @@
+#include <ydb/core/blobstorage/ut_blobstorage/ut_helpers.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
+#include <util/random/random.h>
 
 Y_UNIT_TEST_SUITE(BlobStorageSync) {
+
+    void TestCutting(TBlobStorageGroupType groupType) {
+        const ui32 groupSize = groupType.BlobSubgroupSize();
+
+        // for (ui32 mask = 0; mask < (1 << groupSize); ++mask) {  // TIMEOUT
+        {
+            ui32 mask = RandomNumber(1ull << groupSize);
+            for (bool compressChunks : { true, false }) {
+                TEnvironmentSetup env{{
+                    .NodeCount = groupSize,
+                    .Erasure = groupType,
+                }};
+
+                env.CreateBoxAndPool(1, 1);
+                std::vector<ui32> groups = env.GetGroups();
+                UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+                ui32 groupId = groups[0];
+
+                const ui64 tabletId = 5000;
+                const ui32 channel = 10;
+                ui32 gen = 1;
+                ui32 step = 1;
+                ui64 cookie = 1;
+
+                ui64 totalSize = 0;
+
+                std::vector<TControlWrapper> cutLocalSyncLogControls;
+                std::vector<TControlWrapper> compressChunksControls;
+                std::vector<TActorId> edges;
+
+                for (ui32 nodeId = 1; nodeId <= groupSize; ++nodeId) {
+                    cutLocalSyncLogControls.emplace_back(0, 0, 1);
+                    compressChunksControls.emplace_back(1, 0, 1);
+                    TAppData* appData = env.Runtime->GetNode(nodeId)->AppData.get();
+                    appData->Icb->RegisterSharedControl(cutLocalSyncLogControls.back(), "VDiskControls.EnableLocalSyncLogDataCutting");
+                    appData->Icb->RegisterSharedControl(compressChunksControls.back(), "VDiskControls.EnableSyncLogChunkCompressionHDD");
+                    edges.push_back(env.Runtime->AllocateEdgeActor(nodeId));
+                }
+
+                for (ui32 i = 0; i < groupSize; ++i) {
+                    env.Runtime->WrapInActorContext(edges[i], [&] {
+                        SendToBSProxy(edges[i], groupId, new TEvBlobStorage::TEvStatus(TInstant::Max()));
+                    });
+                    auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvStatusResult>(edges[i], false);
+                    UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+                }
+
+                auto writeBlob = [&](ui32 nodeId, ui32 blobSize) {
+                    TLogoBlobID blobId(tabletId, gen, step, channel, blobSize, ++cookie);
+                    totalSize += blobSize;
+                    TString data = MakeData(blobSize);
+                    
+                    const TActorId& sender = edges[nodeId - 1];
+                    env.Runtime->WrapInActorContext(sender, [&] () {
+                        SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvPut(blobId, std::move(data), TInstant::Max()));
+                    });
+                };
+
+                env.Runtime->FilterFunction = [&](ui32/* nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+                    switch(ev->Type) {
+                        case TEvBlobStorage::TEvPutResult::EventType:
+                            UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvBlobStorage::TEvPutResult>()->Status, NKikimrProto::OK);
+                            return false;
+                        default:
+                            return true;
+                    }
+                };
+                
+                while (totalSize < 16_MB) {
+                    writeBlob(GenerateRandom(1, groupSize + 1), GenerateRandom(1, 1_MB));
+                }
+                env.Sim(TDuration::Minutes(5));
+
+                for (ui32 i = 0; i < groupSize; ++i) {
+                    cutLocalSyncLogControls[i] = !!(mask & (1 << i));
+                    compressChunksControls[i] = compressChunks;
+                }
+
+                while (totalSize < 32_MB) {
+                    writeBlob(GenerateRandom(1, groupSize + 1), GenerateRandom(1, 1_MB));
+                }
+
+                env.Sim(TDuration::Minutes(5));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TestSyncLogCuttingMirror3dc) {
+        TestCutting(TBlobStorageGroupType::ErasureMirror3dc);
+    }
+
+    Y_UNIT_TEST(TestSyncLogCuttingMirror3of4) {
+        TestCutting(TBlobStorageGroupType::ErasureMirror3of4);
+    }
+
+    Y_UNIT_TEST(TestSyncLogCuttingBlock4Plus2) {
+        TestCutting(TBlobStorageGroupType::Erasure4Plus2Block);
+    }
+
     Y_UNIT_TEST(SyncWhenDiskGetsDown) {
         return; // re-enable when protocol issue is resolved
 

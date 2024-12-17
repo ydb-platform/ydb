@@ -34,7 +34,7 @@ DECLARE_REFCOUNTED_STRUCT(ITransactionParticipant)
 YT_DEFINE_ERROR_ENUM(
     ((MailboxNotCreatedYet)    (2200))
     ((ParticipantUnregistered) (2201))
-    ((EntryNotFound)           (2202))
+    ((TimeEntryNotFound)       (2202))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

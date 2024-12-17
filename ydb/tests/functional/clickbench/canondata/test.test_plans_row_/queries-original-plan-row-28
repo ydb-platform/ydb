@@ -35,10 +35,19 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TopSort-Filter",
+                                                "Node Type": "TopSort-Filter-Aggregate",
                                                 "Operators": [
                                                     {
                                                         "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            },
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            },
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            },
                                                             {
                                                                 "InternalOperatorId": 1
                                                             }
@@ -50,11 +59,20 @@
                                                     {
                                                         "Inputs": [
                                                             {
-                                                                "ExternalPlanNodeId": 2
+                                                                "InternalOperatorId": 2
                                                             }
                                                         ],
                                                         "Name": "Filter",
                                                         "Predicate": "item.Count0 > 100000"
+                                                    },
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "ExternalPlanNodeId": 2
+                                                            }
+                                                        ],
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Final"
                                                     }
                                                 ],
                                                 "PlanNodeId": 3,
@@ -71,14 +89,18 @@
                                                                 "Node Type": "Aggregate-Filter-TableFullScan",
                                                                 "Operators": [
                                                                     {
-                                                                        "Aggregation": "{_yql_agg_1: SUM(state._yql_agg_1,1),_yql_agg_2: MIN(item.Referer,state._yql_agg_2)}",
+                                                                        "Aggregation": "{[SUM(Size),Inc()],SUM(1),MIN(item.Referer)}",
                                                                         "GroupBy": "item.key",
                                                                         "Inputs": [
                                                                             {
                                                                                 "InternalOperatorId": 1
+                                                                            },
+                                                                            {
+                                                                                "InternalOperatorId": 1
                                                                             }
                                                                         ],
-                                                                        "Name": "Aggregate"
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Intermediate"
                                                                     },
                                                                     {
                                                                         "Inputs": [
@@ -96,12 +118,13 @@
                                                                             "Referer"
                                                                         ],
                                                                         "ReadRanges": [
-                                                                            "EventTime (-\u221e, +\u221e)",
                                                                             "CounterID (-\u221e, +\u221e)",
                                                                             "EventDate (-\u221e, +\u221e)",
                                                                             "UserID (-\u221e, +\u221e)",
+                                                                            "EventTime (-\u221e, +\u221e)",
                                                                             "WatchID (-\u221e, +\u221e)"
                                                                         ],
+                                                                        "Scan": "Parallel",
                                                                         "Table": "clickbench/plans/row/hits"
                                                                     }
                                                                 ],
@@ -123,7 +146,10 @@
                             }
                         ]
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {
@@ -134,10 +160,10 @@
                                 "Referer"
                             ],
                             "scan_by": [
-                                "EventTime (-\u221e, +\u221e)",
                                 "CounterID (-\u221e, +\u221e)",
                                 "EventDate (-\u221e, +\u221e)",
                                 "UserID (-\u221e, +\u221e)",
+                                "EventTime (-\u221e, +\u221e)",
                                 "WatchID (-\u221e, +\u221e)"
                             ],
                             "type": "FullScan"

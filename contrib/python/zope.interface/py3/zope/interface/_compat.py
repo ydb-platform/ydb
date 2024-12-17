@@ -22,12 +22,16 @@ import os
 import sys
 
 
+PY313_OR_OLDER = sys.version_info < (3, 14)
+
+
 def _normalize_name(name):
     if isinstance(name, bytes):
         name = str(name, 'ascii')
     if isinstance(name, str):
         return name
     raise TypeError("name must be a string or ASCII-only bytes")
+
 
 PYPY = hasattr(sys, 'pypy_version_info')
 
@@ -57,7 +61,7 @@ def _c_optimizations_available():
     try:
         from zope.interface import _zope_interface_coptimizations as c_opt
         return c_opt
-    except catch: # pragma: no cover (only Jython doesn't build extensions)
+    except catch:  # pragma: no cover (only Jython doesn't build extensions)
         return False
 
 
@@ -120,7 +124,7 @@ def _use_c_impl(py_impl, name=None, globs=None):
             return py_impl
 
         c_opt = _c_optimizations_available()
-        if not c_opt: # pragma: no cover (only Jython doesn't build extensions)
+        if not c_opt:  # pragma: no cover (Jython doesn't build extensions)
             return py_impl
 
         __traceback_info__ = c_opt

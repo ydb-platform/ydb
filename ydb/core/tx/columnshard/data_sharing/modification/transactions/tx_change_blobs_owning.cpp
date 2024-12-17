@@ -15,7 +15,7 @@ void TTxApplyLinksModification::DoComplete(const TActorContext& /*ctx*/) {
     Task->ApplyForRuntime(Self->GetStoragesManager()->GetSharedBlobsManager());
 
     auto ev = std::make_unique<NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished>(Task->GetTabletId(), SessionId, PackIdx);
-    NActors::TActivationContext::AsActorContext().Send(MakePipePeNodeCacheID(false),
+    NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
         new TEvPipeCache::TEvForward(ev.release(), (ui64)InitiatorTabletId, true), IEventHandle::FlagTrackDelivery);
 }
 

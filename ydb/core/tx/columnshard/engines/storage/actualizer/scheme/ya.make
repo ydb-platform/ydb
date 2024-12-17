@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     scheme.cpp
+    counters.cpp
 )
 
 PEERDIR(

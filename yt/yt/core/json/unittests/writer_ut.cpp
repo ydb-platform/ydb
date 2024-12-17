@@ -308,8 +308,7 @@ TEST(TJsonConsumerTest, IncorrectUtfWithoutEscaping)
 
     TString s = TString("\xFF", 1);
     EXPECT_ANY_THROW(
-        consumer->OnStringScalar(s);
-    );
+        consumer->OnStringScalar(s););
 }
 
 TEST(TJsonConsumerTest, StringStartingWithSpecialSymbol)
@@ -721,7 +720,7 @@ TEST(TJsonConsumerTest, TestNodeWeightLimitAccepted)
     auto consumer = CreateJsonConsumer(&outputStream, EYsonType::Node, std::move(config));
 
     TString yson = "<\"attr\"=123>\"456\"";
-    consumer->OnNodeWeightLimited(yson, yson.Size() - 1);
+    consumer->OnNodeWeightLimited(yson, yson.size() - 1);
     consumer->Flush();
 
     TString expectedOutput =
@@ -739,7 +738,7 @@ TEST(TJsonConsumerTest, TestNodeWeightLimitRejected)
     auto consumer = CreateJsonConsumer(&outputStream);
 
     TString yson = "<\"attr\"=123>\"456\"";
-    consumer->OnNodeWeightLimited(yson, yson.Size());
+    consumer->OnNodeWeightLimited(yson, yson.size());
     consumer->Flush();
 
     TString expectedOutput =

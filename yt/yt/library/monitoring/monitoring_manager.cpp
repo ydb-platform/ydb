@@ -22,7 +22,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = MonitoringLogger;
+static constexpr auto& Logger = MonitoringLogger;
 
 static const auto UpdatePeriod = TDuration::Seconds(3);
 static const auto EmptyRoot = GetEphemeralNodeFactory()->CreateMap();

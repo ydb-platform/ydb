@@ -34,17 +34,17 @@ protected:
     void Send(TActorId dst, THolder<IEventBase> message, ui32 flags = 0, ui64 cookie = 0);
     void ChangeState(TIndexBuildId id, TIndexBuildInfo::EState state);
     void Progress(TIndexBuildId id);
-    void Fill(NKikimrIndexBuilder::TIndexBuild& index, const TIndexBuildInfo::TPtr indexInfo);
-    void Fill(NKikimrIndexBuilder::TIndexBuildSettings& settings, const TIndexBuildInfo::TPtr indexInfo);
+    void Fill(NKikimrIndexBuilder::TIndexBuild& index, const TIndexBuildInfo& indexInfo);
+    void Fill(NKikimrIndexBuilder::TIndexBuildSettings& settings, const TIndexBuildInfo& indexInfo);
     void AddIssue(::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage>* issues,
                   const TString& message,
                   NYql::TSeverityIds::ESeverityId severity = NYql::TSeverityIds::S_ERROR);
-    void SendNotificationsIfFinished(TIndexBuildInfo::TPtr indexInfo);
-    void EraseBuildInfo(const TIndexBuildInfo::TPtr indexBuildInfo);
+    void SendNotificationsIfFinished(TIndexBuildInfo& indexInfo);
+    void EraseBuildInfo(const TIndexBuildInfo& indexBuildInfo);
     Ydb::StatusIds::StatusCode TranslateStatusCode(NKikimrScheme::EStatus status);
-    void Bill(const TIndexBuildInfo::TPtr& indexBuildInfo, TInstant startPeriod = TInstant::Zero(), TInstant endPeriod = TInstant::Zero());
-    void AskToScheduleBilling(const TIndexBuildInfo::TPtr& indexBuildInfo);
-    bool GotScheduledBilling(const TIndexBuildInfo::TPtr& indexBuildInfo);
+    void Bill(const TIndexBuildInfo& indexBuildInfo, TInstant startPeriod = TInstant::Zero(), TInstant endPeriod = TInstant::Zero());
+    void AskToScheduleBilling(TIndexBuildInfo& indexBuildInfo);
+    bool GotScheduledBilling(TIndexBuildInfo& indexBuildInfo);
 
 public:
     explicit TTxBase(TSelf* self, NKikimr::NSchemeShard::ETxTypes txType)

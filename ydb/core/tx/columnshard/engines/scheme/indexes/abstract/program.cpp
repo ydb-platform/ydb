@@ -1,6 +1,6 @@
 #include "program.h"
 #include "composite.h"
-#include <ydb/library/yql/core/arrow_kernels/request/request.h>
+#include <yql/essentials/core/arrow_kernels/request/request.h>
 
 namespace NKikimr::NOlap::NIndexes::NRequest {
 
@@ -401,12 +401,15 @@ private:
 public:
     TNormalForm() = default;
 
-    bool Add(const NSsa::TAssign& assign) {
+    bool Add(const NSsa::TAssign& assign, const TProgramContainer& program) {
         std::vector<std::shared_ptr<IRequestNode>> argNodes;
         for (auto&& arg : assign.GetArguments()) {
             if (arg.IsGenerated()) {
                 auto it = Nodes.find(arg.GetColumnName());
-                AFL_VERIFY(it != Nodes.end());
+                if (it == Nodes.end()) {
+                    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "program_arg_is_missing")("program", program.DebugString());
+                    return false;
+                }
                 argNodes.emplace_back(it->second);
             } else {
                 argNodes.emplace_back(std::make_shared<TOriginalColumn>(arg.GetColumnName()));
@@ -440,10 +443,15 @@ public:
 
 std::shared_ptr<TDataForIndexesCheckers> TDataForIndexesCheckers::Build(const TProgramContainer& program) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("program", program.DebugString());
-    auto fStep = program.GetSteps().front();
+    auto& steps = program.GetStepsVerified();
+    if (!steps.size()) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "no_steps_in_program");
+        return nullptr;
+    }
+    auto fStep = steps.front();
     TNormalForm nForm;
     for (auto&& s : fStep->GetAssignes()) {
-        if (!nForm.Add(s)) {
+        if (!nForm.Add(s, program)) {
             return nullptr;
         }
     }

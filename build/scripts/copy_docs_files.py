@@ -2,9 +2,13 @@ import argparse
 import codecs
 import errno
 import os
+import sys
+
+# Explicitly enable local imports
+# Don't forget to add imported scripts to inputs of the calling command!
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import process_command_files as pcf
 import shutil
-import sys
 
 
 def parse_args():
@@ -76,7 +80,6 @@ def main():
     makedirs(dst_dir)
 
     src_dir = os.path.normpath(args.src_dir) + os.path.sep
-    assert src_dir.startswith(source_root)
 
     if src_dir.startswith(source_root):
         root = source_root

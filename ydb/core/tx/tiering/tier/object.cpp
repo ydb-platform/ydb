@@ -44,16 +44,22 @@ NMetadata::NInternal::TTableRecord TTierConfig::SerializeToRecord() const {
     return result;
 }
 
-NKikimrSchemeOp::TS3Settings TTierConfig::GetPatchedConfig(
-    std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) const
-{
+NKikimrSchemeOp::TS3Settings TTierConfig::GetPatchedConfig(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) const {
     auto config = ProtoConfig.GetObjectStorage();
     if (secrets) {
-        if (!secrets->GetSecretValue(GetAccessKey(), *config.MutableAccessKey())) {
-            ALS_ERROR(NKikimrServices::TX_TIERING) << "cannot read access key secret for " << GetAccessKey().DebugString();
+        {
+            auto value = secrets->GetSecretValue(GetAccessKey());
+            if (value.IsFail()) {
+                AFL_ERROR(NKikimrServices::TX_TIERING)("error", "invalid_secret")("object", "access_key")("reason", value.GetErrorMessage());
+            }
+            config.SetAccessKey(value.DetachResult());
         }
-        if (!secrets->GetSecretValue(GetSecretKey(), *config.MutableSecretKey())) {
-            ALS_ERROR(NKikimrServices::TX_TIERING) << "cannot read secret key secret for " << GetSecretKey().DebugString();
+        {
+            auto value = secrets->GetSecretValue(GetSecretKey());
+            if (value.IsFail()) {
+                AFL_ERROR(NKikimrServices::TX_TIERING)("error", "invalid_secret")("object", "secret_key")("reason", value.GetErrorMessage());
+            }
+            config.SetSecretKey(value.DetachResult());
         }
     }
     return config;

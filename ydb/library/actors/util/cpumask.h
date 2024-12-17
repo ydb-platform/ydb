@@ -92,6 +92,12 @@ struct TCpuMask {
         }
     }
 
+    void ResetAll() {
+        for (bool &value : Cpus) {
+            value = false;
+        }
+    }
+
     void RemoveTrailingZeros() {
         while (!Cpus.empty() && !Cpus.back()) {
             Cpus.pop_back();

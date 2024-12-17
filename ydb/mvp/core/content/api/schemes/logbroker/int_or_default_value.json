@@ -1,0 +1,18 @@
+{
+    "properties": {
+        "default": {
+            "type": "integer"
+        },
+        "userDefined": {
+            "type": "integer"
+        },
+        "variantType": {
+            "type": "string",
+            "description": "oneOf case property name",
+            "enum": ["userDefined", "default"]
+        }
+    },
+    "title": "IntOrDefaultValue",
+    "type": "object",
+    "required": ["variantType"]
+}

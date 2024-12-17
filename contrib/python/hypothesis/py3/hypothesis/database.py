@@ -38,16 +38,20 @@ __all__ = [
 ]
 
 
-def _usable_dir(path: Path) -> bool:
+def _usable_dir(path: os.PathLike) -> bool:
     """
-    Returns True iff the desired path can be used as database path because
+    Returns True if the desired path can be used as database path because
     either the directory exists and can be used, or its root directory can
     be used and we can make the directory as needed.
     """
-    while not path.exists():
-        # Loop terminates because the root dir ('/' on unix) always exists.
-        path = path.parent
-    return path.is_dir() and os.access(path, os.R_OK | os.W_OK | os.X_OK)
+    path = Path(path)
+    try:
+        while not path.exists():
+            # Loop terminates because the root dir ('/' on unix) always exists.
+            path = path.parent
+        return path.is_dir() and os.access(path, os.R_OK | os.W_OK | os.X_OK)
+    except PermissionError:
+        return False
 
 
 def _db_for_path(path=None):
@@ -71,7 +75,7 @@ def _db_for_path(path=None):
             return InMemoryExampleDatabase()
     if path in (None, ":memory:"):
         return InMemoryExampleDatabase()
-    return DirectoryBasedExampleDatabase(str(path))
+    return DirectoryBasedExampleDatabase(path)
 
 
 class _EDMeta(abc.ABCMeta):
@@ -220,18 +224,21 @@ class DirectoryBasedExampleDatabase(ExampleDatabase):
     def save(self, key: bytes, value: bytes) -> None:
         # Note: we attempt to create the dir in question now. We
         # already checked for permissions, but there can still be other issues,
-        # e.g. the disk is full
-        self._key_path(key).mkdir(exist_ok=True, parents=True)
-        path = self._value_path(key, value)
-        if not path.exists():
-            suffix = binascii.hexlify(os.urandom(16)).decode("ascii")
-            tmpname = path.with_suffix(f"{path.suffix}.{suffix}")
-            tmpname.write_bytes(value)
-            try:
-                tmpname.rename(path)
-            except OSError:  # pragma: no cover
-                tmpname.unlink()
-            assert not tmpname.exists()
+        # e.g. the disk is full, or permissions might have been changed.
+        try:
+            self._key_path(key).mkdir(exist_ok=True, parents=True)
+            path = self._value_path(key, value)
+            if not path.exists():
+                suffix = binascii.hexlify(os.urandom(16)).decode("ascii")
+                tmpname = path.with_suffix(f"{path.suffix}.{suffix}")
+                tmpname.write_bytes(value)
+                try:
+                    tmpname.rename(path)
+                except OSError:  # pragma: no cover
+                    tmpname.unlink()
+                assert not tmpname.exists()
+        except OSError:  # pragma: no cover
+            pass
 
     def move(self, src: bytes, dest: bytes, value: bytes) -> None:
         if src == dest:

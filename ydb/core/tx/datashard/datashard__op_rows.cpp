@@ -203,7 +203,7 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
             Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &OutOfSpace, ctx, logThrottlerType);
             return true;
         } else if (self->IsSubDomainOutOfSpace()) {
-            self->IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
+            self->IncCounter(COUNTER_PREPARE_DISK_SPACE_EXHAUSTED);
             rejectReasons = ERejectReasons::DiskSpace;
             rejectDescription = "Cannot perform writes: database is out of disk space";
             Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &DiskSpaceExhausted, ctx, logThrottlerType);
@@ -217,6 +217,11 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
 void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx) {
     if (MediatorStateWaiting) {
         MediatorStateWaitingMsgs.emplace_back(ev.Release());
+        UpdateProposeQueueSize();
+        return;
+    }
+    if (Pipeline.HasProposeDelayers()) {
+        DelayedProposeQueue.emplace_back().Reset(ev.Release());
         UpdateProposeQueueSize();
         return;
     }
@@ -234,6 +239,11 @@ void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TAct
 void TDataShard::Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActorContext& ctx) {
     if (MediatorStateWaiting) {
         MediatorStateWaitingMsgs.emplace_back(ev.Release());
+        UpdateProposeQueueSize();
+        return;
+    }
+    if (Pipeline.HasProposeDelayers()) {
+        DelayedProposeQueue.emplace_back().Reset(ev.Release());
         UpdateProposeQueueSize();
         return;
     }

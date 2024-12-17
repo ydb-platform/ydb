@@ -6,26 +6,10 @@
 #include "flat_row_versions.h"
 #include "flat_table_subset.h"
 #include "flat_dbase_scheme.h"
+#include <ydb/core/base/memory_controller_iface.h>
 
 namespace NKikimr {
 namespace NTable {
-
-    /**
-     * Allows performing reads in the context of a compaction strategy.
-     */
-    class ICompactionRead {
-    public:
-        virtual ~ICompactionRead() = default;
-
-        /**
-         * Execute is called with the environment that may be used to load
-         * pages from currently valid parts. Method may return false indicating
-         * it needs to wait for some missing pages, in which case it will
-         * be restarted at a later time. Method must return true when there
-         * is actually nothing for the backend to load.
-         */
-        virtual bool Execute(IPages* env) = 0;
-    };
 
     /**
      * Compaction params specify which parts of the table to compact
@@ -165,7 +149,7 @@ namespace NTable {
         /**
          * Returns row schema of the specified table
          */
-        virtual TIntrusiveConstPtr<TRowScheme> RowScheme(ui32 table) = 0;
+        virtual TIntrusiveConstPtr<TRowScheme> RowScheme(ui32 table) const = 0;
 
         /**
          * Returns schema of the specified table
@@ -202,21 +186,6 @@ namespace NTable {
          * Cancels compaction previously started with BeginCompaction
          */
         virtual bool CancelCompaction(ui64 compactionId) = 0;
-
-        /**
-         * Request backend to perform some page reads
-         *
-         * Note that the first Execute call may be performed before the return
-         * from BeginRead. The returned id may be used for cancelling a pending
-         * read, where a value of 0 is used to indicate the read has finished
-         * before the return from BeginRead.
-         */
-        virtual ui64 BeginRead(THolder<ICompactionRead> read) = 0;
-
-        /**
-         * Cancels a previously started BeginRead call
-         */
-        virtual bool CancelRead(ui64 readId) = 0;
 
         /**
          * Requests backend to call ApplyChanges for the specified table
@@ -271,7 +240,7 @@ namespace NTable {
          * Overload factor must be in the [0, 1] range, where 0 means writes
          * are unrestricted and 1 means new writes must no longer be accepted
          */
-        virtual float GetOverloadFactor() = 0;
+        float GetOverloadFactor() { return OverloadFactor; }
 
         /**
          * Backing size returns total size of all currently active parts
@@ -376,6 +345,16 @@ namespace NTable {
          * Called to render current state as html
          */
         virtual void OutputHtml(IOutputStream& out) = 0;
+    protected:
+        float OverloadFactor = 0.0;
+    };
+
+    class IMemTableMemoryConsumersCollection {
+    public:
+        virtual void Register(ui32 table) = 0;
+        virtual void Unregister(ui32 table) = 0;
+        virtual void CompactionComplete(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) = 0;
+        virtual ~IMemTableMemoryConsumersCollection() = default;
     };
 
 }

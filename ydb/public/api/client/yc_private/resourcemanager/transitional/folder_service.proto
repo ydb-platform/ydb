@@ -20,7 +20,7 @@ service FolderService {
     option (google.api.http) = { post: "/yrm/v1/folder/{folder_id}/status" body: "*" };
   }
 
-  rpc Delete (DeleteFolderRequest) returns (ydb.yc.priv.operation.Operation) {
+  rpc Delete (DeleteFolderRequest) returns (.ydb.yc.priv.operation.Operation) {
     option (google.api.http) = { delete: "/yrm/v1/folders/{folder_id}" };
   }
 }

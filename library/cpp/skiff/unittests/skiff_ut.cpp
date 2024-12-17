@@ -209,6 +209,29 @@ Y_UNIT_TEST_SUITE(Skiff)
         UNIT_ASSERT_EQUAL(parser.ParseInt128(), val2);
     }
 
+    Y_UNIT_TEST(TestInt256)
+    {
+        TBufferStream bufferStream;
+
+        auto schema = CreateSimpleTypeSchema(EWireType::Int256);
+
+        const TInt256 val1 = {0x1924cd4aeb9ced82,  0x0885e83f456d6a7e, 0xe9ba36585eccae1a, 0x7854b6f9ce448be9};
+        const TInt256 val2 = {0xe9ba36585eccae1a, 0x1924cd4aeb9ced82, 0x0885e83f456d6a7e, static_cast<ui64>(-0x7854b6f9ce448be9)};
+
+        TCheckedSkiffWriter writer(schema, &bufferStream);
+        writer.WriteInt256(val1);
+        writer.WriteInt256(val2);
+        writer.Finish();
+
+        UNIT_ASSERT_VALUES_EQUAL(HexEncode(bufferStream.Buffer()),
+            "82ed9ceb4acd2419" "7e6a6d453fe88508" "1aaecc5e5836bae9" "e98b44cef9b65478"
+            "1aaecc5e5836bae9" "82ed9ceb4acd2419" "7e6a6d453fe88508" "1774bb310649ab87");
+
+        TCheckedSkiffParser parser(schema, &bufferStream);
+        UNIT_ASSERT_EQUAL(parser.ParseInt256(), val1);
+        UNIT_ASSERT_EQUAL(parser.ParseInt256(), val2);
+    }
+
     Y_UNIT_TEST(TestUint128)
     {
         TBufferStream bufferStream;
@@ -230,6 +253,29 @@ Y_UNIT_TEST_SUITE(Skiff)
         TCheckedSkiffParser parser(schema, &bufferStream);
         UNIT_ASSERT_EQUAL(parser.ParseUint128(), val1);
         UNIT_ASSERT_EQUAL(parser.ParseUint128(), val2);
+    }
+
+    Y_UNIT_TEST(TestUint256)
+    {
+        TBufferStream bufferStream;
+
+        auto schema = CreateSimpleTypeSchema(EWireType::Uint256);
+
+        const auto val1 = TUint256{0x1924cd4aeb9ced82,  0x7854b6f9ce448be9, 0x8854b6f9ce448be9, 0x0885e83f456d6a7e};
+        const auto val2 = TUint256{0xe9ba36585eccae1a,  0x8854b6f9ce448be9, 0x1924cd4aeb9ced82, 0xabacabadabacaba0};
+
+        TCheckedSkiffWriter writer(schema, &bufferStream);
+        writer.WriteUint256(val1);
+        writer.WriteUint256(val2);
+        writer.Finish();
+
+        UNIT_ASSERT_VALUES_EQUAL(HexEncode(bufferStream.Buffer()),
+            "82ed9ceb4acd2419" "e98b44cef9b65478" "e98b44cef9b65488" "7e6a6d453fe88508"
+            "1aaecc5e5836bae9" "e98b44cef9b65488" "82ed9ceb4acd2419" "a0abacabadabacab");
+
+        TCheckedSkiffParser parser(schema, &bufferStream);
+        UNIT_ASSERT_EQUAL(parser.ParseUint256(), val1);
+        UNIT_ASSERT_EQUAL(parser.ParseUint256(), val2);
     }
 
     Y_UNIT_TEST(TestBoolean)

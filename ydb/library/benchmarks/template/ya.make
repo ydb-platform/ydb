@@ -1,7 +1,5 @@
 PY3_LIBRARY()
 
-OWNER(g:yql)
-
 PY_SRCS(__init__.py)
 
 PEERDIR(

@@ -5,10 +5,10 @@
 
 namespace NKikimr::NOlap::NActualizer {
 
-void TGranuleActualizationIndex::BuildActualizationTasks(TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext) const {
+void TGranuleActualizationIndex::ExtractActualizationTasks(TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext) const {
     TInternalTasksContext internalContext;
     for (auto&& i : Actualizers) {
-        i->BuildTasks(tasksContext, externalContext, internalContext);
+        i->ExtractTasks(tasksContext, externalContext, internalContext);
     }
 }
 
@@ -20,7 +20,7 @@ void TGranuleActualizationIndex::AddPortion(const std::shared_ptr<TPortionInfo>&
 
 void TGranuleActualizationIndex::RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
     for (auto&& i : Actualizers) {
-        i->RemovePortion(portion);
+        i->RemovePortion(portion->GetPortionId());
     }
 }
 
@@ -49,6 +49,14 @@ void TGranuleActualizationIndex::Start() {
     SchemeActualizer = std::make_shared<TSchemeActualizer>(PathId, VersionedIndex);
     Actualizers.emplace_back(TieringActualizer);
     Actualizers.emplace_back(SchemeActualizer);
+}
+
+std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMetadataRequests(
+    const THashMap<ui64, TPortionInfo::TPtr>& portions) {
+    if (!TieringActualizer) {
+        return {};
+    }
+    return TieringActualizer->BuildMetadataRequests(PathId, portions, TieringActualizer);
 }
 
 }

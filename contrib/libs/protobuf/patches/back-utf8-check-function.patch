@@ -1,0 +1,11 @@
+--- contrib/libs/protobuf/src/google/protobuf/stubs/common.h	(224e5c6eb476648794a67b47aa67ced218b4043c)
++++ contrib/libs/protobuf/src/google/protobuf/stubs/common.h	(4a96e633c1c4d449c2c2adfe068664805ccccfda)
+@@ -147,6 +147,8 @@ PROTOBUF_EXPORT void ShutdownProtobufLibrary();
+ 
+ namespace internal {
+ 
++PROTOBUF_EXPORT bool IsStructurallyValidUTF8(const char* buf, int len);
++
+ // Strongly references the given variable such that the linker will be forced
+ // to pull in this variable's translation unit.
+ template <typename T>

@@ -5,9 +5,11 @@
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/filestore/core/filestore.h>
@@ -21,6 +23,7 @@ static const bool ENABLE_COORDINATOR_MEDIATOR_LOG = false;
 static const bool ENABLE_SCHEMEBOARD_LOG = false;
 static const bool ENABLE_COLUMNSHARD_LOG = false;
 static const bool ENABLE_EXPORT_LOG = false;
+static const bool ENABLE_TOPIC_LOG = false;
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -525,6 +528,8 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableBackgroundCompaction(opts.EnableBackgroundCompaction_);
     app.SetEnableBorrowedSplitCompaction(opts.EnableBorrowedSplitCompaction_);
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
+    app.FeatureFlags.SetEnableTableDatetime64(true);
+    app.FeatureFlags.SetEnableVectorIndex(true);
     app.SetEnableMoveIndex(opts.EnableMoveIndex_);
     app.SetEnableChangefeedInitialScan(opts.EnableChangefeedInitialScan_);
     app.SetEnableNotNullDataColumns(opts.EnableNotNullDataColumns_);
@@ -538,6 +543,11 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableServerlessExclusiveDynamicNodes(opts.EnableServerlessExclusiveDynamicNodes_);
     app.SetEnableAddColumsWithDefaults(opts.EnableAddColumsWithDefaults_);
     app.SetEnableReplaceIfExistsForExternalEntities(opts.EnableReplaceIfExistsForExternalEntities_);
+    app.SetEnableChangefeedsOnIndexTables(opts.EnableChangefeedsOnIndexTables_);
+    app.SetEnableTieringInColumnShard(opts.EnableTieringInColumnShard_);
+    app.SetEnableParameterizedDecimal(opts.EnableParameterizedDecimal_);
+    app.SetEnableTopicAutopartitioningForCDC(opts.EnableTopicAutopartitioningForCDC_);
+    app.SetEnableBackupService(opts.EnableBackupService_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 
@@ -569,7 +579,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         set.SetMinimumStepSeconds(5); // 5 seconds
     }
     //
-                                                        
+
     for (const auto& sid : opts.SystemBackupSIDs_) {
         app.AddSystemBackupSID(sid);
     }
@@ -615,6 +625,13 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         runtime.RegisterService(MakeTxProxyID(), txProxyId, node);
     }
 
+    // Create sequence proxies
+    for (size_t i = 0; i < runtime.GetNodeCount(); ++i) {
+        IActor* sequenceProxy = NSequenceProxy::CreateSequenceProxy();
+        TActorId sequenceProxyId = runtime.Register(sequenceProxy, i);
+        runtime.RegisterService(NSequenceProxy::MakeSequenceProxyServiceID(), sequenceProxyId, i);
+    }
+
     //SetupBoxAndStoragePool(runtime, sender, TTestTxConfig::DomainUid);
 
     TxReliablePropose = runtime.Register(new TTxReliablePropose(schemeRoot));
@@ -634,6 +651,12 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime &runtime, ui32 ncha
 
 void NSchemeShardUT_Private::TTestEnv::SetupLogging(TTestActorRuntime &runtime) {
     runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_ERROR);
+    runtime.SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NActors::NLog::PRI_ERROR);
+    if (ENABLE_TOPIC_LOG) {
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NActors::NLog::PRI_DEBUG);
+    }
+
     runtime.SetLogPriority(NKikimrServices::BS_CONTROLLER, NActors::NLog::PRI_ERROR);
     runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, NActors::NLog::PRI_ERROR);
     runtime.SetLogPriority(NKikimrServices::PIPE_SERVER, NActors::NLog::PRI_ERROR);
@@ -698,9 +721,9 @@ void NSchemeShardUT_Private::TTestEnv::AddDomain(TTestActorRuntime &runtime, TAp
     auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
                 "MyRoot", domainUid, schemeRoot,
                 planResolution,
-                TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(1)},
+                TVector<ui64>{TTestTxConfig::Coordinator},
                 TVector<ui64>{},
-                TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(1)},
+                TVector<ui64>{TTestTxConfig::TxAllocator},
                 DefaultPoolKinds(2));
 
     TVector<ui64> ids = runtime.GetTxAllocatorTabletIds();

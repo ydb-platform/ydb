@@ -1,11 +1,9 @@
 import json
 import hashlib
-import random
-import string
 import pkgutil
 
-
 from collections.abc import MutableMapping
+from typing import Any, Dict
 
 
 def str2bool(v):
@@ -13,14 +11,6 @@ def str2bool(v):
         return True
     elif v in ("no", False, "false", "False", "FALSE", "f", "0"):
         return False
-
-
-def random_string(length=None):
-    n = length or 20
-    random_str = "".join(
-        [random.choice(string.ascii_letters + string.digits) for i in range(n)]
-    )
-    return random_str
 
 
 def load_resource(package, resource, as_json=True):
@@ -33,7 +23,7 @@ def load_resource(package, resource, as_json=True):
     return json.loads(resource) if as_json else resource.decode("utf-8")
 
 
-def merge_multiple_dicts(*args):
+def merge_multiple_dicts(*args: Any) -> Dict[str, any]:
     result = {}
     for d in args:
         result.update(d)

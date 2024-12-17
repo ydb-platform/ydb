@@ -7,9 +7,9 @@
 #include <ydb/core/protos/ydb_result_set_old.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
-#include <ydb/library/binary_json/read.h>
-#include <ydb/library/dynumber/dynumber.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 //#include <ydb/library/actors/interconnect/interconnect.h>
 
 //#include <util/generic/cast.h>
@@ -156,6 +156,22 @@ Y_FORCE_INLINE bool AddCell(TOutValue& row, NScheme::TTypeInfo type, const TCell
         val.set_int64_value(value);
         break;
     }
+    case NUdf::TDataType<NUdf::TDate32>::Id: {
+        i32 value;
+        if (!cell.ToValue(value, err))
+            return false;
+        val.set_int32_value(value);
+        break;
+    }
+    case NUdf::TDataType<NUdf::TDatetime64>::Id: 
+    case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+    case NUdf::TDataType<NUdf::TInterval64>::Id: {
+        i64 value;
+        if (!cell.ToValue(value, err))
+            return false;
+        val.set_int64_value(value);
+        break;
+    }    
     case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
         const auto json = NBinaryJson::SerializeToJson(TStringBuf(cell.Data(), cell.Size()));
         val.set_text_value(json);
@@ -171,7 +187,7 @@ Y_FORCE_INLINE bool AddCell(TOutValue& row, NScheme::TTypeInfo type, const TCell
         break;
     }
     case NScheme::NTypeIds::Pg: {
-        auto result = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), type.GetTypeDesc());
+        auto result = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), type.GetPgTypeDesc());
         if (result.Error) {
             err = Sprintf("Failed to add cell to Ydb::Value: %s", (*result.Error).c_str());
             return false;
@@ -301,8 +317,9 @@ private:
 
 class TRowsToYdbResult : public TRowsToResult {
 public:
-    TRowsToYdbResult(const NKikimrTxDataShard::TReadTableTransaction& request)
+    TRowsToYdbResult(const NKikimrTxDataShard::TReadTableTransaction& request, bool allowNotNull)
         : TRowsToResult(request)
+        , AllowNotNull(allowNotNull)
     {
         BuildResultCommonPart(request);
         StartNewMessage();
@@ -338,23 +355,20 @@ private:
 
             if (col.GetTypeId() == NScheme::NTypeIds::Pg) {
                 auto* pg = meta->mutable_type()->mutable_pg_type();
-                auto* typeDesc = typeInfoMod.TypeInfo.GetTypeDesc();
+                auto typeDesc = typeInfoMod.TypeInfo.GetPgTypeDesc();
                 pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
                 pg->set_type_modifier(typeInfoMod.TypeMod);
                 pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
                 pg->set_typlen(0);
                 pg->set_typmod(0);
             } else {
+                bool notNullResp = AllowNotNull && col.GetNotNull();
                 auto id = static_cast<NYql::NProto::TypeIds>(col.GetTypeId());
+                auto xType = notNullResp ? meta->mutable_type() : meta->mutable_type()->mutable_optional_type()->mutable_item();
                 if (id == NYql::NProto::Decimal) {
-                    auto decimalType = meta->mutable_type()->mutable_optional_type()->mutable_item()
-                        ->mutable_decimal_type();
-                    //TODO: Pass decimal params here
-                    decimalType->set_precision(22);
-                    decimalType->set_scale(9);
+                    NScheme::ProtoFromDecimalType(typeInfoMod.TypeInfo.GetDecimalType(), *xType->mutable_decimal_type());
                 } else {
-                    meta->mutable_type()->mutable_optional_type()->mutable_item()
-                        ->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
+                    xType->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
                 }
             }
         }
@@ -363,6 +377,7 @@ private:
     }
 
     Ydb::ResultSet YdbResultSet;
+    const bool AllowNotNull;
 };
 
 class TReadTableScan : public TActor<TReadTableScan>, public NTable::IScan {
@@ -390,8 +405,14 @@ public:
         , PendingAcks(0)
         , Finished(false)
     {
-        if (tx.HasApiVersion() && tx.GetApiVersion() == NKikimrTxUserProxy::TReadTableTransaction::YDB_V1) {
-            Writer = MakeHolder<TRowsToYdbResult>(tx);
+        if (tx.HasApiVersion()) {
+            if (tx.GetApiVersion() == NKikimrTxUserProxy::TReadTableTransaction::YDB_V1) {
+                Writer = MakeHolder<TRowsToYdbResult>(tx, false);
+            } else if (tx.GetApiVersion() == NKikimrTxUserProxy::TReadTableTransaction::YDB_V2) {
+                Writer = MakeHolder<TRowsToYdbResult>(tx, true);
+            } else {
+                Writer = MakeHolder<TRowsToOldResult>(tx); 
+            }
         } else {
             Writer = MakeHolder<TRowsToOldResult>(tx);
         }

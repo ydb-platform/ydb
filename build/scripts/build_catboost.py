@@ -1,3 +1,4 @@
+from __future__ import print_function
 import sys
 import os
 import shutil
@@ -45,7 +46,7 @@ class BuildCbBase(object):
 class BuildCb(BuildCbBase):
     def run(self, argv):
         if len(argv) < 5:
-            print >> sys.stderr, "BuildCb.Run(<ARCADIA_ROOT> <archiver> <mninfo> <mnname> <cppOutput> [params...])"
+            print("BuildCb.Run(<ARCADIA_ROOT> <archiver> <mninfo> <mnname> <cppOutput> [params...])", file=sys.stderr)
             sys.exit(1)
 
         self.SrcRoot = argv[0]
@@ -64,7 +65,7 @@ def build_cb_f(argv):
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print >> sys.stderr, "Usage: build_cb.py <funcName> <args...>"
+        print("Usage: build_cb.py <funcName> <args...>", file=sys.stderr)
         sys.exit(1)
 
     if sys.argv[2:]:

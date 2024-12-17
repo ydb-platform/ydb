@@ -1,0 +1,5 @@
+--- contrib/python/requests-mock/py3/tests/test_mocker.py	(index)
++++ contrib/python/requests-mock/py3/tests/test_mocker.py	(working tree)
+@@ -222 +222 @@ class MockerTests(base.TestCase):
+-            self.assertEquals(
++            self.assertEqual(

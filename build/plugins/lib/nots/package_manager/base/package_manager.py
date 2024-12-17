@@ -1,13 +1,13 @@
 import os
-import sys
 import subprocess
-
+import sys
 from abc import ABCMeta, abstractmethod
 from six import add_metaclass
 
 from .constants import NPM_REGISTRY_URL
 from .package_json import PackageJson
 from .utils import build_nm_path, build_pj_path
+from .timeit import timeit
 
 
 class PackageManagerError(RuntimeError):
@@ -34,7 +34,6 @@ class BasePackageManager(object):
         sources_path,
         nodejs_bin_path,
         script_path,
-        contribs_path,
         module_path=None,
         sources_root=None,
     ):
@@ -45,7 +44,6 @@ class BasePackageManager(object):
         self.sources_root = sources_path[: -len(self.module_path) - 1] if sources_root is None else sources_root
         self.nodejs_bin_path = nodejs_bin_path
         self.script_path = script_path
-        self.contribs_path = contribs_path
 
     @classmethod
     def load_package_json(cls, path):
@@ -65,6 +63,20 @@ class BasePackageManager(object):
         """
         return cls.load_package_json(build_pj_path(dir_path))
 
+    def _build_package_json(self):
+        """
+        :rtype: PackageJson
+        """
+        pj = self.load_package_json_from_dir(self.sources_path)
+
+        if not os.path.exists(self.build_path):
+            os.makedirs(self.build_path, exist_ok=True)
+
+        pj.path = build_pj_path(self.build_path)
+        pj.write()
+
+        return pj
+
     @classmethod
     @abstractmethod
     def load_lockfile(cls, path):
@@ -76,15 +88,25 @@ class BasePackageManager(object):
         pass
 
     @abstractmethod
-    def create_node_modules(self):
-        pass
-
-    @abstractmethod
-    def calc_node_modules_inouts(self):
+    def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False, bundle=True):
         pass
 
     @abstractmethod
     def extract_packages_meta_from_lockfiles(self, lf_paths):
+        pass
+
+    @abstractmethod
+    def calc_prepare_deps_inouts_and_resources(
+        self, store_path: str, has_deps: bool
+    ) -> tuple[list[str], list[str], list[str]]:
+        pass
+
+    @abstractmethod
+    def calc_node_modules_inouts(self, local_cli: bool, has_deps: bool) -> tuple[list[str], list[str]]:
+        pass
+
+    @abstractmethod
+    def build_workspace(self, tarballs_store: str):
         pass
 
     def get_local_peers_from_package_json(self):
@@ -104,7 +126,8 @@ class BasePackageManager(object):
 
         return [p[prefix_len:] for p in pj.get_workspace_map(ignore_self=True).keys()]
 
-    def _exec_command(self, args, include_defaults=True, script_path=None):
+    @timeit
+    def _exec_command(self, args, cwd: str, include_defaults=True, script_path=None, env=None):
         if not self.nodejs_bin_path:
             raise PackageManagerError("Unable to execute command: nodejs_bin_path is not configured")
 
@@ -113,13 +136,7 @@ class BasePackageManager(object):
             + args
             + (self._get_default_options() if include_defaults else [])
         )
-        p = subprocess.Popen(
-            cmd,
-            cwd=self.build_path,
-            stdin=None,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
+        p = subprocess.Popen(cmd, cwd=cwd, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
         stdout, stderr = p.communicate()
 
         if p.returncode != 0:
@@ -129,9 +146,6 @@ class BasePackageManager(object):
 
     def _nm_path(self, *parts):
         return os.path.join(build_nm_path(self.build_path), *parts)
-
-    def _contrib_tarball_path(self, pkg):
-        return os.path.join(self.contribs_path, pkg.tarball_path)
 
     def _tarballs_store_path(self, pkg, store_path):
         return os.path.join(self.module_path, store_path, pkg.tarball_path)

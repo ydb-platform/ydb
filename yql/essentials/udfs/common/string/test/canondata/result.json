@@ -1,0 +1,112 @@
+{
+    "test.test[AsciiChecks]": [
+        {
+            "uri": "file://test.test_AsciiChecks_/results.txt"
+        }
+    ],
+    "test.test[Base32Decode]": [
+        {
+            "uri": "file://test.test_Base32Decode_/results.txt"
+        }
+    ],
+    "test.test[Base32Encode]": [
+        {
+            "uri": "file://test.test_Base32Encode_/results.txt"
+        }
+    ],
+    "test.test[BlockAsciiChecks]": [
+        {
+            "uri": "file://test.test_BlockAsciiChecks_/results.txt"
+        }
+    ],
+    "test.test[BlockFind]": [
+        {
+            "uri": "file://test.test_BlockFind_/results.txt"
+        }
+    ],
+    "test.test[BlockRemove]": [
+        {
+            "uri": "file://test.test_BlockRemove_/results.txt"
+        }
+    ],
+    "test.test[BlockReplace]": [
+        {
+            "uri": "file://test.test_BlockReplace_/results.txt"
+        }
+    ],
+    "test.test[BlockStreamFormat]": [
+        {
+            "uri": "file://test.test_BlockStreamFormat_/results.txt"
+        }
+    ],
+    "test.test[BlockStringUDF]": [
+        {
+            "uri": "file://test.test_BlockStringUDF_/results.txt"
+        }
+    ],
+    "test.test[BlockStringUnsafeUDF]": [
+        {
+            "uri": "file://test.test_BlockStringUnsafeUDF_/results.txt"
+        }
+    ],
+    "test.test[BlockTo]": [
+        {
+            "uri": "file://test.test_BlockTo_/results.txt"
+        }
+    ],
+    "test.test[ExtendAndTake]": [
+        {
+            "uri": "file://test.test_ExtendAndTake_/results.txt"
+        }
+    ],
+    "test.test[Find]": [
+        {
+            "uri": "file://test.test_Find_/results.txt"
+        }
+    ],
+    "test.test[List]": [
+        {
+            "uri": "file://test.test_List_/results.txt"
+        }
+    ],
+    "test.test[List_v0]": [
+        {
+            "uri": "file://test.test_List_v0_/results.txt"
+        }
+    ],
+    "test.test[Remove]": [
+        {
+            "uri": "file://test.test_Remove_/results.txt"
+        }
+    ],
+    "test.test[ReplaceFirstLast]": [
+        {
+            "uri": "file://test.test_ReplaceFirstLast_/results.txt"
+        }
+    ],
+    "test.test[Replace]": [
+        {
+            "uri": "file://test.test_Replace_/results.txt"
+        }
+    ],
+    "test.test[StreamFormat]": [
+        {
+            "uri": "file://test.test_StreamFormat_/results.txt"
+        }
+    ],
+    "test.test[StringUDF]": [
+        {
+            "uri": "file://test.test_StringUDF_/results.txt"
+        }
+    ],
+    "test.test[StringUnsafeUDF]": [
+        {
+            "uri": "file://test.test_StringUnsafeUDF_/results.txt"
+        }
+    ],
+    "test.test[To]": [
+        {
+            "uri": "file://test.test_To_/results.txt"
+        }
+    ]
+}

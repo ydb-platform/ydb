@@ -17,19 +17,20 @@ select  i_item_id,
        cs_item_sk = i_item_sk and
        cs_bill_cdemo_sk = cd1.cd_demo_sk and
        cs_bill_customer_sk = c_customer_sk and
-       cd1.cd_gender = 'M' and
+       cd1.cd_gender = 'F' and
        cd1.cd_education_status = 'Unknown' and
        c_current_cdemo_sk = cd2.cd_demo_sk and
        c_current_addr_sk = ca_address_sk and
-       c_birth_month in (5,1,4,7,8,9) and
-       d_year = 2002 and
-       ca_state in ('AR','TX','NC'
-                   ,'GA','MS','WV','AL')
+       c_birth_month in (1,6,8,9,12,2) and
+       d_year = 1998 and
+       ca_state in ('MS','IN','ND'
+                   ,'OK','NM','VA','MS')
  group by rollup (i_item_id, ca_country, ca_state, ca_county)
  order by ca_country nulls first,
         ca_state nulls first,
         ca_county nulls first,
-	i_item_id nulls first
+	i_item_id nulls first, 
+    agg6 nulls first
  limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query18.tpl

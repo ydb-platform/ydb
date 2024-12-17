@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import logging
+import os
+import pytest
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
 import ydb.public.api.protos.ydb_value_pb2 as ydb
@@ -10,8 +12,10 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 
 class TestSelects(object):
     @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_3_selects(self, client):
         sql = R'''
+            pragma dq.Scheduler=@@{"type": "single_node"}@@;
             SELECT 1 AS SingleColumn;
             SELECT "A" AS TextColumn;
             SELECT 11 AS Column1, 22 AS Column2;

@@ -8,6 +8,8 @@
 #include <yt/yt/client/table_client/public.h>
 #include <yt/yt/client/table_client/row_batch.h>
 
+#include <yt_proto/yt/client/table_chunk_format/proto/column_meta.pb.h>
+
 #include <iostream>
 
 namespace NYT::NTableClient {
@@ -67,7 +69,7 @@ void CheckSchemalessResult(
         ASSERT_LE(std::ssize(actual), options.MaxRowsPerRead);
 
         CheckSchemalessResult(
-            MakeRange(expected).Slice(offset, std::min(expected.size(), offset + actual.size())),
+            TRange(expected).Slice(offset, std::min(expected.size(), offset + actual.size())),
             actual,
             keyColumnCount);
         offset += actual.size();
@@ -89,7 +91,7 @@ void AppendVector(std::vector<T>* data, const std::vector<T> toAppend)
 template <class T>
 TRange<T> GetTypedData(const NTableClient::IUnversionedColumnarRowBatch::TValueBuffer& buffer)
 {
-    return MakeRange(
+    return TRange(
         reinterpret_cast<const T*>(buffer.Data.Begin()),
         reinterpret_cast<const T*>(buffer.Data.End()));
 }
@@ -225,6 +227,8 @@ std::vector<TUnversionedRow> CreateFilteredRangedRows(
     int keyColumnCount);
 
 void PrintTo(const TColumnarStatistics& statistics, std::ostream* os);
+
+NTableChunkFormat::NProto::TSegmentMeta CreateSimpleSegmentMeta();
 
 ////////////////////////////////////////////////////////////////////////////////
 

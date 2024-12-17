@@ -17,52 +17,54 @@ PEERDIR(
     yt/cpp/mapreduce/common
     yt/yt/client
     yt/yt/library/program
-    ydb/library/yql/ast
-    ydb/library/yql/sql/pg
-    ydb/library/yql/parser/pg_wrapper
-    ydb/library/yql/core/facade
-    ydb/library/yql/core/file_storage
-    ydb/library/yql/core/file_storage/proto
-    ydb/library/yql/core/file_storage/http_download
-    ydb/library/yql/core/progress_merger
-    ydb/library/yql/core/services/mounts
-    ydb/library/yql/core/user_data
-    ydb/library/yql/minikql
-    ydb/library/yql/minikql/invoke_builtins/llvm14
-    ydb/library/yql/minikql/comp_nodes/llvm14
-    ydb/library/yql/protos
-    ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/utils/backtrace
-    ydb/library/yql/utils/log
-    ydb/library/yql/utils/log/proto
-    ydb/library/yql/providers/common/proto
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/providers/common/udf_resolve
+    yql/essentials/ast
+    yql/essentials/sql/pg
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/core/facade
+    yql/essentials/core/file_storage
+    yql/essentials/core/file_storage/proto
+    yql/essentials/core/file_storage/http_download
+    yql/essentials/core/progress_merger
+    yql/essentials/core/services/mounts
+    yql/essentials/core/user_data
+    yql/essentials/minikql
+    yql/essentials/minikql/invoke_builtins/llvm14
+    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/protos
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/utils/backtrace
+    yql/essentials/utils/log
+    yql/essentials/utils/log/proto
+    yql/essentials/providers/common/proto
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/udf_resolve
     ydb/library/yql/providers/solomon/gateway
     ydb/library/yql/providers/solomon/provider
-    ydb/library/yql/core
-    ydb/library/yql/core/url_preprocessing
+    yql/essentials/core
+    yql/essentials/core/url_preprocessing
     ydb/library/yql/dq/comp_nodes
+    ydb/library/yql/dq/opt
     ydb/library/yql/providers/dq/actors/yt
     ydb/library/yql/providers/dq/global_worker_manager
+    ydb/library/yql/providers/dq/helper
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/dq/provider/exec
     ydb/library/yql/providers/dq/service
     ydb/library/yql/providers/dq/stats_collector
     ydb/library/yql/providers/dq/worker_manager/interface
-    ydb/library/yql/providers/yt/gateway/native
-    ydb/library/yql/providers/yt/codec
-    ydb/library/yql/providers/yt/codec/codegen
-    ydb/library/yql/providers/yt/lib/log
-    ydb/library/yql/providers/yt/lib/res_pull
-    ydb/library/yql/providers/yt/lib/row_spec
-    ydb/library/yql/providers/yt/lib/schema
-    ydb/library/yql/providers/yt/lib/skiff
-    ydb/library/yql/providers/yt/lib/yt_download
-    ydb/library/yql/providers/yt/provider
-    ydb/library/yql/providers/yt/codec/codegen
-    ydb/library/yql/providers/yt/comp_nodes/dq
-    ydb/library/yql/providers/yt/comp_nodes/llvm14
+    yt/yql/providers/yt/gateway/native
+    yt/yql/providers/yt/codec
+    yt/yql/providers/yt/codec/codegen
+    yt/yql/providers/yt/lib/log
+    yt/yql/providers/yt/lib/res_pull
+    yt/yql/providers/yt/lib/row_spec
+    yt/yql/providers/yt/lib/schema
+    yt/yql/providers/yt/lib/skiff
+    yt/yql/providers/yt/lib/yt_download
+    yt/yql/providers/yt/provider
+    yt/yql/providers/yt/codec/codegen
+    yt/yql/providers/yt/comp_nodes/dq
+    yt/yql/providers/yt/comp_nodes/llvm14
     ydb/library/yql/providers/yt/dq_task_preprocessor
 
     ydb/library/yql/yt

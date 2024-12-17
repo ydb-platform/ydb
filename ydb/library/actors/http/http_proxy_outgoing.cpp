@@ -11,11 +11,13 @@ public:
     const TActorId Owner;
     const TActorId Poller;
     SocketAddressType Address;
+    TString Destination;
     TActorId RequestOwner;
     THttpOutgoingRequestPtr Request;
     THttpIncomingResponsePtr Response;
     TInstant LastActivity;
     TDuration ConnectionTimeout = CONNECTION_TIMEOUT;
+    bool AllowConnectionReuse = false;
     NActors::TPollerToken::TPtr PollerToken;
 
     TOutgoingConnectionActor(const TActorId& owner, const TActorId& poller)
@@ -28,7 +30,7 @@ public:
     static constexpr char ActorName[] = "OUT_CONNECTION_ACTOR";
 
     void Die(const NActors::TActorContext& ctx) override {
-        ctx.Send(Owner, new TEvHttpProxy::TEvHttpConnectionClosed(ctx.SelfID));
+        ctx.Send(Owner, new TEvHttpProxy::TEvHttpOutgoingConnectionClosed(ctx.SelfID, Destination));
         TSocketImpl::Shutdown(); // to avoid errors when connection already closed
         TBase::Die(ctx);
     }
@@ -51,8 +53,13 @@ public:
         RequestOwner = TActorId();
         THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(Request, Response));
         ctx.Send(Owner, sensors.Release());
-        LOG_DEBUG_S(ctx, HttpLog, GetSocketName() << "connection closed");
-        Die(ctx);
+        if (!AllowConnectionReuse || Response->IsConnectionClose()) {
+            LOG_DEBUG_S(ctx, HttpLog, GetSocketName() << "connection closed");
+            Die(ctx);
+        } else {
+            LOG_DEBUG_S(ctx, HttpLog, GetSocketName() << "connection available for reuse");
+            ctx.Send(Owner, new TEvHttpProxy::TEvHttpOutgoingConnectionAvailable(ctx.SelfID, Destination));
+        }
     }
 
     void ReplyErrorAndDie(const NActors::TActorContext& ctx, const TString& error) {
@@ -242,6 +249,7 @@ protected:
     void HandleWaiting(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event, const NActors::TActorContext& ctx) {
         LastActivity = ctx.Now();
         Request = std::move(event->Get()->Request);
+        Destination = Request->GetDestination();
         TSocketImpl::SetHost(TString(Request->Host));
         LOG_DEBUG_S(ctx, HttpLog, GetSocketName() << "resolving " << TSocketImpl::Host);
         Request->Timer.Reset();
@@ -250,9 +258,27 @@ protected:
         if (event->Get()->Timeout) {
             ConnectionTimeout = event->Get()->Timeout;
         }
+        AllowConnectionReuse = event->Get()->AllowConnectionReuse;
         ctx.Schedule(ConnectionTimeout, new NActors::TEvents::TEvWakeup());
         LastActivity = ctx.Now();
         TBase::Become(&TOutgoingConnectionActor::StateResolving);
+    }
+
+    void HandleConnected(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event, const NActors::TActorContext& ctx) {
+        LastActivity = ctx.Now();
+        Request = std::move(event->Get()->Request);
+        Request->Timer.Reset();
+        Response = nullptr;
+        RequestOwner = event->Sender;
+        if (event->Get()->Timeout) {
+            ConnectionTimeout = event->Get()->Timeout;
+        }
+        AllowConnectionReuse = event->Get()->AllowConnectionReuse;
+        ctx.Schedule(ConnectionTimeout, new NActors::TEvents::TEvWakeup());
+        LastActivity = ctx.Now();
+        LOG_DEBUG_S(ctx, HttpLog, GetSocketName() << "<- (" << Request->Method << " " << Request->URL << ")");
+        FlushOutput(ctx);
+        PullInput(ctx);
     }
 
     void HandleConnected(NActors::TEvPollerReady::TPtr event, const NActors::TActorContext& ctx) {
@@ -314,6 +340,7 @@ protected:
             HFunc(NActors::TEvPollerReady, HandleConnected);
             CFunc(NActors::TEvents::TEvWakeup::EventType, HandleTimeout);
             HFunc(NActors::TEvPollerRegisterResult, HandleConnected);
+            HFunc(TEvHttpProxy::TEvHttpOutgoingRequest, HandleConnected);
         }
     }
 

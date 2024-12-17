@@ -857,23 +857,6 @@ private:
     void FinishResponse(THttpOutgoingResponsePtr& response, TStringBuf body = TStringBuf());
 };
 
-class THttpIncomingResponse :
-        public THttpParser<THttpResponse, TSocketBuffer>,
-        public TRefCounted<THttpIncomingResponse, TAtomicCounter> {
-public:
-    THttpIncomingResponse(THttpOutgoingRequestPtr request);
-
-    THttpOutgoingRequestPtr GetRequest() const {
-        return Request;
-    }
-
-    THttpIncomingResponsePtr Duplicate(THttpOutgoingRequestPtr request);
-    THttpOutgoingResponsePtr Reverse(THttpIncomingRequestPtr request);
-
-protected:
-    THttpOutgoingRequestPtr Request;
-};
-
 class THttpOutgoingRequest :
         public THttpRenderer<THttpRequest, TSocketBuffer>,
         public TRefCounted<THttpOutgoingRequest, TAtomicCounter> {
@@ -893,6 +876,35 @@ public:
     static THttpOutgoingRequestPtr CreateRequest(TStringBuf method, TStringBuf url, TStringBuf contentType = TStringBuf(), TStringBuf body = TStringBuf());
     static THttpOutgoingRequestPtr CreateHttpRequest(TStringBuf method, TStringBuf host, TStringBuf uri, TStringBuf contentType = TStringBuf(), TStringBuf body = TStringBuf());
     THttpOutgoingRequestPtr Duplicate();
+
+    bool IsConnectionClose() const {
+        return TEqNoCase()(Connection, "close");
+    }
+
+    TString GetDestination() {
+        return Secure ? (TStringBuilder() << "https://" << Host) : (TStringBuilder() << "http://" << Host);
+    }
+};
+
+class THttpIncomingResponse :
+        public THttpParser<THttpResponse, TSocketBuffer>,
+        public TRefCounted<THttpIncomingResponse, TAtomicCounter> {
+public:
+    THttpIncomingResponse(THttpOutgoingRequestPtr request);
+
+    THttpOutgoingRequestPtr GetRequest() const {
+        return Request;
+    }
+
+    THttpIncomingResponsePtr Duplicate(THttpOutgoingRequestPtr request);
+    THttpOutgoingResponsePtr Reverse(THttpIncomingRequestPtr request);
+
+    bool IsConnectionClose() const {
+        return Request->IsConnectionClose() || TEqNoCase()(Connection, "close");
+    }
+
+protected:
+    THttpOutgoingRequestPtr Request;
 };
 
 class THttpOutgoingResponse :

@@ -62,7 +62,7 @@ public:
     }
 
     void Die(const TActorContext& ctx) override {
-        ctx.Send(Endpoint->Owner, new TEvHttpProxy::TEvHttpConnectionClosed(ctx.SelfID, std::move(RecycledRequests)));
+        ctx.Send(Endpoint->Owner, new TEvHttpProxy::TEvHttpIncomingConnectionClosed(ctx.SelfID, std::move(RecycledRequests)));
         TSocketImpl::Shutdown();
         TBase::Die(ctx);
     }
@@ -218,7 +218,7 @@ protected:
         THttpIncomingRequestPtr request = response->GetRequest();
         LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") <- ("
             << response->Status << " " << response->Message << (response->IsDone() ? ")" : ") (incomplete)"));
-        if (!response->Status.StartsWith('2') && response->Status != "404") {
+        if (!response->Status.StartsWith('2') && !response->Status.StartsWith('3') && response->Status != "404") {
             static constexpr size_t MAX_LOGGED_SIZE = 1024;
             LOG_DEBUG_S(ctx, HttpLog,
                         "(#"

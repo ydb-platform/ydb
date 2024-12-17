@@ -198,7 +198,7 @@ public:
     }
 
     void Finalize() {
-        Y_ENSURE(!AlreadyReplied);
+        YQL_ENSURE(!AlreadyReplied);
 
         if (LocksBroken) {
             YQL_ENSURE(ResponseEv->BrokenLockShardId);

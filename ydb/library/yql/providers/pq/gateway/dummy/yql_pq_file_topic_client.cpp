@@ -255,8 +255,8 @@ public:
                NYdb::NTable::TTransaction* tx) override {
         Y_UNUSED(tx);
         
-        EventsMsgQ_.Push(TOwningWriteMessage(std::move(message)));
-        EventsQ_.Push(NYdb::NTopic::TWriteSessionEvent::TAcksEvent());
+        auto size = message.Data.size();
+        EventsMsgQ_.Push(TOwningWriteMessage(std::move(message)), size);
     }
 
     void Write(NYdb::NTopic::TContinuationToken&& token, TStringBuf data, TMaybe<ui64> seqNo,
@@ -335,9 +335,24 @@ public:
 private:
     void PushToFile() {
         TFileOutput fo(File_);
+        ui64 offset = 0; // FIXME dummy
+        ui64 partitionId = 0; // FIXME dummy
         while (auto maybeMsg = EventsMsgQ_.Pop(true)) {
-            auto& [content, msg] = *maybeMsg;
-            fo.Write(content);
+            NYdb::NTopic::TWriteSessionEvent::TAcksEvent acks;
+            do {
+                auto& [content, msg] = *maybeMsg;
+                NYdb::NTopic::TWriteSessionEvent::TWriteAck ack;
+                ack.SeqNo = *msg.SeqNo_;
+                ack.State = NYdb::NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN;
+                ack.Details.ConstructInPlace(offset, partitionId);
+                acks.Acks.emplace_back(std::move(ack));
+                offset += content.size() + 1;
+                fo.Write(content);
+                fo.Write('\n');
+            } while((maybeMsg = EventsMsgQ_.Pop(false)));
+            fo.Flush();
+            EventsQ_.Push(std::move(acks), 1 + acks.Acks.size());
+            EventsQ_.Push(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()}, 1);
             if (EventsQ_.IsStopped()) {
                 break;
             }

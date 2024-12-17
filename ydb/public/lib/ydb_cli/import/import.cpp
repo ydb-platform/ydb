@@ -330,20 +330,20 @@ static const TDuration minSaveInterval = TDuration::Seconds(10);
 class TProgressFile {
 public:
     TProgressFile(const TString& sourceFilePath)
-        : SourceFilePath(sourceFilePath.empty() ? "std_input" : sourceFilePath)
+        : SourceFilePath(sourceFilePath)
     {
-        std::vector<TString> pathParts;
-        StringSplitter(SourceFilePath).Split('/').Collect(&pathParts);
         TString progressFileName;
-        for (ui32 i = 0; i < pathParts.size(); ++i) {
-            if (i > 0) {
-                progressFileName += '_';
+        if (SourceFilePath.empty()) {
+            progressFileName = "std_input";
+        } else {
+            std::vector<TString> pathParts;
+            StringSplitter(SourceFilePath).Split('/').Collect(&pathParts);
+            for (ui32 i = 0; i < pathParts.size(); ++i) {
+                if (i > 0) {
+                    progressFileName += '_';
+                }
+                progressFileName += pathParts[i];
             }
-            progressFileName += pathParts[i];
-        }
-        if (!progressFileName) {
-            Cerr << "Progress file name is empty. Source file path: " << SourceFilePath
-                << ", pathParts.size = " << pathParts.size() << Endl;
         }
         ProgressFilePath = TFsPath(pathToProgressFiles).Child(progressFileName);
         ProgressFilePath.Fix();
@@ -353,7 +353,7 @@ public:
         try {
             if (ProgressFilePath.Exists()) {
                 Progress = YAML::LoadFile(ProgressFilePath.GetPath());
-                if (SourceFilePath != "std_input") {
+                if (SourceFilePath) {
                     if (static_cast<bool>(Progress[sourceModifiedKey])
                             && Progress[sourceModifiedKey].as<i64>() == TFileStat(SourceFilePath).MTime) {
                         return true;
@@ -437,7 +437,7 @@ public:
     }
 
     TString GetSourceFilePath() const {
-        return SourceFilePath == "std_input" ? SourceFilePath : TFsPath(SourceFilePath).Fix().GetPath();
+        return SourceFilePath.empty() ? "stdin" : TFsPath(SourceFilePath).Fix().GetPath();
     }
 
     TString GetProgressFilePath() const {
@@ -451,7 +451,7 @@ public:
 private:
     void StartNewProgress() {
         Progress = YAML::Node();
-        if (SourceFilePath != "std_input") {
+        if (SourceFilePath) {
             Progress[sourceModifiedKey] = TFileStat(SourceFilePath).MTime;
         }
         Progress[completedKey] = false;
@@ -717,7 +717,7 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
         }
         if (FilesPreviouslyStarted) {
             if (FilesPreviouslyStarted == 1) {
-                existingProgressMessage << "(!) Found existing import progress for file \"" << PreviouslyStartedProgressFile->GetSourceFilePath()
+                existingProgressMessage << "(!) Found existing import progress for \"" << PreviouslyStartedProgressFile->GetSourceFilePath()
                     << "\". Continuing from line " << PreviouslyStartedProgressFile->GetLastImportedLine()
                     << " where it was interrupted." << Endl;
             } else {

@@ -187,10 +187,27 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
         auto queueUrl = GetByPath<TString>(json, "QueueUrl");
 
-        json = SendMessage({
+        SendMessage({
             {"QueueUrl", queueUrl},
-            {"MessageBody", TString(150_KB, 'x')}
+            {"MessageBody", TString(1_KB, 'x')},  // 1 request unit
         });
+
+        json = ReceiveMessage({
+            {"QueueUrl", queueUrl},
+            {"WaitTimeSeconds", 20},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", TString(150_KB, 'x')},  // 3 request units
+        });
+
+        json = ReceiveMessage({
+            {"QueueUrl", queueUrl},
+            {"WaitTimeSeconds", 20},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
 
         auto makeTags = [](TVector<std::pair<TString, TString>> pairs) {
             NSc::TValue tags;
@@ -236,9 +253,27 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         };
 
         TVector<NSc::TValue> expectedRecords{
+            // CreateQueue
             makeRecord("ymq.traffic.v1", "", 0, {{"direction", "ingress"}, {"type", "inet"}}),
             makeRecord("ymq.traffic.v1", "", 0, {{"direction", "egress"}, {"type", "inet"}}),
             makeRecord("ymq.requests.v1", "", 1, {{"queue_type", "other"}}),
+
+            // SendMessage 1 KB
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}, {"type", "inet"}}),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}, {"type", "inet"}}),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 1, {{"queue_type", "std"}}),
+
+            // ReceiveMessage 1 KB
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}, {"type", "inet"}}),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}, {"type", "inet"}}),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 1, {{"queue_type", "std"}}),
+
+            // SendMessage 150 KB
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}, {"type", "inet"}}),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}, {"type", "inet"}}),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 3, {{"queue_type", "std"}}),
+
+            // ReceiveMessage 150 KB
             makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}, {"type", "inet"}}),
             makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}, {"type", "inet"}}),
             makeRecord("ymq.requests.v1", "000000000000000101v0", 3, {{"queue_type", "std"}}),
@@ -246,9 +281,11 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
         auto filePath = KikimrServer->ServerSettings->AppConfig->GetSqsConfig().GetMeteringLogFilePath();
 
-        Sleep(TDuration::Seconds(5));
-        TVector<NSc::TValue> records = loadBillingRecords(filePath);
-        UNIT_ASSERT_VALUES_EQUAL(records.size(), expectedRecords.size());
+        TVector<NSc::TValue> records;
+        while (records.size() != expectedRecords.size()) {
+            Sleep(TDuration::Seconds(1));
+            records = loadBillingRecords(filePath);
+        }
         for (size_t i = 0; i < records.size(); ++i) {
             UNIT_ASSERT(asExpected(records[i], expectedRecords[i]));
         }

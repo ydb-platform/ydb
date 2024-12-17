@@ -330,16 +330,20 @@ static const TDuration minSaveInterval = TDuration::Seconds(10);
 class TProgressFile {
 public:
     TProgressFile(const TString& sourceFilePath)
-        : SourceFilePath(!sourceFilePath.empty() ? sourceFilePath : "std_input")
+        : SourceFilePath(sourceFilePath.empty() ? "std_input" : sourceFilePath)
     {
         std::vector<TString> pathParts;
-        StringSplitter(sourceFilePath).Split('/').Collect(&pathParts);
+        StringSplitter(SourceFilePath).Split('/').Collect(&pathParts);
         TString progressFileName;
         for (ui32 i = 0; i < pathParts.size(); ++i) {
             if (i > 0) {
                 progressFileName += '_';
             }
             progressFileName += pathParts[i];
+        }
+        if (!progressFileName) {
+            Cerr << "Progress file name is empty. Source file path: " << SourceFilePath
+                << ", pathParts.size = " << pathParts.size() << Endl;
         }
         ProgressFilePath = TFsPath(pathToProgressFiles).Child(progressFileName);
         ProgressFilePath.Fix();

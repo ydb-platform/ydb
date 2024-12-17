@@ -39,6 +39,7 @@ RESOURCE(
     kube/templates/8-node-block-4-2/storage.yaml /ydbd_slice/templates/8-node-block-4-2/storage.yaml
     kube/templates/legacy-cms-config-items/table-profile.txt /ydbd_slice/templates/legacy-cms-config-items/table-profile.txt
     kube/templates/legacy-cms-config-items/unified-agent.txt /ydbd_slice/templates/legacy-cms-config-items/unified-agent.txt
+    baremetal/templates/block-4-2.yaml /ydbd_slice/baremetal/templates/block-4-2.yaml
 )
 
 END()

@@ -8,6 +8,9 @@ import logging
 import argparse
 import subprocess
 import warnings
+
+import library.python.resource as rs
+
 from urllib3.exceptions import HTTPWarning
 
 from ydb.tools.cfg.walle import NopHostsInformationProvider
@@ -505,10 +508,10 @@ def ssh_args():
 
 
 def cluster_type_args():
-    args = argparse.ArgumentParser(add_help=True)
+    args = argparse.ArgumentParser(add_help=False)
     args.add_argument(
         "--cluster-type",
-        metavar="ERASURE",
+        metavar="CLUSTER_TYPE",
         required=True,
         help="Erasure type for slice",
         choices=["block-4-2", "mirror-3dc-3-nodes-in-memory", "mirror", "mirror-3dc-9-nodes"],
@@ -517,9 +520,9 @@ def cluster_type_args():
 
 
 def output_file():
-    args = argparse.ArgumentParser(add_help=True)
+    args = argparse.ArgumentParser(add_help=False)
     args.add_argument(
-        "output-file",
+        "--output-file",
         metavar="OUTPUT_FILE",
         required=False,
         help="File to save cluster configuration",
@@ -695,7 +698,7 @@ def add_clear_mode(modes, walle_provider):
         "clear",
         parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
         description="Stop all kikimr instances at the nodes, format all kikimr drivers, shutdown dynamic slots. "
-                    "And don't start nodes afrer it. "
+                    "And don't start nodes after it. "
                     "Use --hosts to specify particular hosts."
     )
     mode.set_defaults(handler=_run)
@@ -717,14 +720,21 @@ def add_format_mode(modes, walle_provider):
     mode.set_defaults(handler=_run)
 
 
-def add_sample_config(modes):
+def add_sample_config_mode(modes):
     def _run(args):
-        pass
+        cluster_type = args.cluster_type
+        if cluster_type == "block-4-2":
+            f = rs.find("/ydbd_slice/baremetal/templates/block-4-2.yaml").decode()
+            if args.output_file is not None and args.output_file != "":
+                with open(args.output_file) as f1:
+                    f1.write(f)
+            else:
+                print(f)
 
     mode = modes.add_parser(
         "sample-config",
-        parents=[cluster_type_args()],
-        description="Generate default mock-configuration for provided erasure"
+        parents=[cluster_type_args(), output_file()],
+        description="Generate default mock-configuration for provided cluster-type"
     )
 
     mode.set_defaults(handler=_run)
@@ -1240,6 +1250,8 @@ def main(walle_provider=None):
         add_clear_mode(modes, walle_provider)
         add_format_mode(modes, walle_provider)
         add_explain_mode(modes, walle_provider)
+        add_sample_config_mode(modes)
+
         add_docker_build_mode(modes)
         add_kube_generate_mode(modes)
         add_kube_install_mode(modes)

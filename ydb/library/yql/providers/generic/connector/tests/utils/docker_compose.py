@@ -9,6 +9,7 @@ from typing import Dict, Any, Sequence
 
 import yatest.common
 
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
 
 LOGGER = make_logger(__name__)
@@ -110,7 +111,22 @@ class DockerComposeHelper:
     def get_container_name(self, service_name: str) -> str:
         return self.docker_compose_yml_data['services'][service_name]['container_name']
 
-    def list_ydb_tables(self) -> Sequence[str]:
+    def list_tables(self, dataSourceKind: EGenericDataSourceKind) -> Sequence[str]:
+        match dataSourceKind:
+            case EGenericDataSourceKind.CLICKHOUSE:
+                return self.list_clickhouse_tables()
+            case EGenericDataSourceKind.YDB:
+                return self._list_ydb_tables()
+            case EGenericDataSourceKind.MYSQL:
+                return self._list_mysql_tables()
+            case EGenericDataSourceKind.MS_SQL_SERVER:
+                return self._list_ms_sql_server_tables()
+            case EGenericDataSourceKind.ORACLE:
+                return self._list_oracle_tables()
+            case _:
+                raise ValueError("invalid data source kind: {dataSourceKind}")
+
+    def _list_ydb_tables(self) -> Sequence[str]:
         cmd = [
             self.docker_bin_path,
             'exec',
@@ -158,7 +174,7 @@ class DockerComposeHelper:
 
         return result
 
-    def list_mysql_tables(self) -> Sequence[str]:
+    def _list_mysql_tables(self) -> Sequence[str]:
         params = self.docker_compose_yml_data["services"]["mysql"]
         password = params["environment"]["MYSQL_ROOT_PASSWORD"]
         db = params["environment"]["MYSQL_DATABASE"]
@@ -180,11 +196,12 @@ class DockerComposeHelper:
         try:
             out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"docker cmd failed: {e.output} (code {e.returncode})")
+            LOGGER.error(f"docker cmd failed: {e.output} (code {e.returncode})")
+            return []
         else:
             return out.splitlines()[2:]
 
-    def list_oracle_tables(self) -> Sequence[str]:
+    def _list_oracle_tables(self) -> Sequence[str]:
         params = self.docker_compose_yml_data["services"]["oracle"]
         password = params["environment"]["ORACLE_PWD"]
         username = params["environment"]["TEST_USER_NAME"]  # also serves as default sceheme name for user
@@ -199,12 +216,13 @@ class DockerComposeHelper:
         try:
             out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"docker cmd failed: {e.output} (code {e.returncode})")
+            LOGGER.error(f"docker cmd failed: {e.output} (code {e.returncode})")
+            return []
         else:
             lines = out.splitlines()
             return lines[3 : len(lines) - 3]
 
-    def list_ms_sql_server_tables(self) -> Sequence[str]:
+    def _list_ms_sql_server_tables(self) -> Sequence[str]:
         params = self.docker_compose_yml_data["services"]["ms_sql_server"]
         password = params["environment"]["SA_PASSWORD"]
         db = 'master'
@@ -233,7 +251,35 @@ class DockerComposeHelper:
         try:
             out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"docker cmd failed: {e.output} (code {e.returncode})")
+            LOGGER.error(f"docker cmd failed: {e.output} (code {e.returncode})")
+            return []
         else:
             lines = [x.strip() for x in out.splitlines()]
             return lines[3:]
+
+    def _list_clickhouse_server_tables(self) -> Sequence[str]:
+        params = self.docker_compose_yml_data["services"]["clickhouse"]
+        db = 'db'
+        cmd = [
+            self.docker_bin_path,
+            'exec',
+            params["container_name"],
+            'clickhouse-client',
+            '--database',
+            db,
+            '--query',
+            "SHOW TABLES;",
+        ]
+
+        LOGGER.debug("calling command: " + " ".join(cmd))
+
+        out = None
+
+        try:
+            out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
+        except subprocess.CalledProcessError as e:
+            LOGGER.error(f"docker cmd failed: {e.output} (code {e.returncode})")
+            return []
+        else:
+            lines = [x.strip() for x in out.splitlines()]
+            return lines

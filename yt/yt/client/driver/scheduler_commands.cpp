@@ -25,7 +25,7 @@ using namespace NJobTrackerClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, JobShellStructuredLogger, "JobShell");
+static YT_DEFINE_GLOBAL(const NLogging::TLogger, JobShellStructuredLogger, "JobShell");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -170,6 +170,52 @@ void TGetJobStderrCommand::DoExecute(ICommandContextPtr context)
     auto output = context->Request().OutputStream;
     WaitFor(output->Write(result.Data))
         .ThrowOnError();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TGetJobTraceCommand::Register(TRegistrar registrar)
+{
+    registrar.ParameterWithUniversalAccessor<std::optional<TJobId>>(
+        "job_id",
+        [] (TThis* command) -> auto& {return command->Options.JobId; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TJobTraceId>>(
+        "trace_id",
+        [] (TThis* command) -> auto& {return command->Options.TraceId; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "from_event_index",
+        [] (TThis* command) -> auto& {return command->Options.FromEventIndex; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "to_event_index",
+        [] (TThis* command) -> auto& {return command->Options.ToEventIndex; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "from_time",
+        [] (TThis* command) -> auto& {return command->Options.FromTime; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "to_time",
+        [] (TThis* command) -> auto& {return command->Options.ToTime; })
+        .Optional(/*init*/ false);
+}
+
+void TGetJobTraceCommand::DoExecute(ICommandContextPtr context)
+{
+    auto result = WaitFor(context->GetClient()->GetJobTrace(OperationIdOrAlias, Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(BuildYsonStringFluently()
+        .DoListFor(result, [&] (TFluentList fluent, const TJobTraceEvent& traceEvent) {
+            Serialize(traceEvent, fluent.GetConsumer());
+        }));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -444,6 +490,21 @@ void TListJobsCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& { return command->Options.WithMonitoringDescriptor; })
         .Optional(/*init*/ false);
 
+    registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(
+        "from_time",
+        [] (TThis* command) -> auto& { return command->Options.FromTime; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(
+        "to_time",
+        [] (TThis* command) -> auto& { return command->Options.ToTime; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "continuation_token",
+        [] (TThis* command) -> auto& { return command->Options.ContinuationToken; })
+        .Optional(/*init*/ false);
+
     registrar.ParameterWithUniversalAccessor<TJobId>(
         "job_competition_id",
         [] (TThis* command) -> auto& { return command->Options.JobCompetitionId; })
@@ -547,6 +608,7 @@ void TListJobsCommand::DoExecute(ICommandContextPtr context)
                 }
             })
             .Item("errors").Value(result.Errors)
+            .Item("continuation_token").Value(result.ContinuationToken)
         .EndMap());
 }
 

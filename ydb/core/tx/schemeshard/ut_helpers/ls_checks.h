@@ -102,6 +102,10 @@ namespace NLs {
     void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc PartitionCount(ui32 count);
     TCheckFunc PartitionKeys(TVector<TString> lastShardKeys);
+    // Checks if the serialized representation of an expected boundary is a prefix of the actual one.
+    // Similar to PartitionKeys check, but does not require you to pass split boundaries in a serialized form.
+    template <typename T>
+    TCheckFunc SplitBoundaries(TVector<T>&& expectedBoundaries);
     TCheckFunc FollowerCount(ui32 count);
     TCheckFunc CrossDataCenterFollowerCount(ui32 count);
     TCheckFunc AllowFollowerPromotion(bool val);
@@ -130,7 +134,7 @@ namespace NLs {
     TCheckFunc HasColumnTableTtlSettingsVersion(ui64 ttlSettingsVersion);
     TCheckFunc HasColumnTableTtlSettingsEnabled(const TString& columnName, const TDuration& expireAfter);
     TCheckFunc HasColumnTableTtlSettingsDisabled();
-    TCheckFunc HasColumnTableTtlSettingsTiering(const TString& tierName);
+    TCheckFunc HasColumnTableTtlSettingsTier(const TString& columnName, const TDuration& evictAfter, const std::optional<TString>& storageName);
 
     TCheckFunc CheckPartCount(const TString& name, ui32 partCount, ui32 maxParts, ui32 tabletCount, ui32 groupCount,
                               NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
@@ -141,11 +145,12 @@ namespace NLs {
     TCheckFunc IndexState(NKikimrSchemeOp::EIndexState state);
     TCheckFunc IndexKeys(const TVector<TString>& keyNames);
     TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames);
-    
-    TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Distance dist,
-                                      Ydb::Table::VectorIndexSettings_Similarity similarity,
-                                      Ydb::Table::VectorIndexSettings_VectorType vectorType,
-                                      ui32 vectorDimension
+
+    TCheckFunc KMeansTreeDescription(Ydb::Table::VectorIndexSettings_Metric metric,
+                                     Ydb::Table::VectorIndexSettings_VectorType vectorType,
+                                     ui32 vectorDimension,
+                                     ui32 clusters,
+                                     ui32 levels
                                   );
 
     TCheckFunc SequenceName(const TString& name);

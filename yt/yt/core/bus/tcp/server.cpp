@@ -177,7 +177,7 @@ protected:
         }
     }
 
-    int GetTotalServerConnectionCount(const TString& clientNetwork)
+    int GetTotalServerConnectionCount(const std::string& clientNetwork)
     {
         const auto& dispatcher = TTcpDispatcher::TImpl::Get();
         int result = 0;

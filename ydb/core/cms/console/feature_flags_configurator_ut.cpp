@@ -131,7 +131,9 @@ Y_UNIT_TEST_SUITE(FeatureFlagsConfiguratorTest) {
         WaitForUpdate(runtime); // initial update
 
         CompareFeatureFlags(runtime,
-            "EnableExternalHive: false\n");
+            "EnableExternalHive: false\n"
+            "EnableColumnStatistics: false\n"
+            "EnableScaleRecommender: true\n");
 
         auto sender = runtime.AllocateEdgeActor();
         runtime.Send(new IEventHandle(MakeFeatureFlagsServiceID(), sender, new TEvFeatureFlags::TEvSubscribe()));

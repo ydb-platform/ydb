@@ -4,7 +4,7 @@
 -- TPC TPC-H Parameter Substitution (Version 2.17.2 build 0)
 -- using 1680793381 as a seed to the RNG
 
-$border = Date("1997-03-01");
+$border = Date("1996-01-01");
 $revenue0 = (
     select
         l_suppkey as supplier_no,
@@ -13,7 +13,7 @@ $revenue0 = (
         {{lineitem}}
     where
         l_shipdate  >= $border
-        and l_shipdate < ($border + Interval("P92D"))
+        and l_shipdate < ($border + Interval("P91D"))
     group by
         l_suppkey
 );

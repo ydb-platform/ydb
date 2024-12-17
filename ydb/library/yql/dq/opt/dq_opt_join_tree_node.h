@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h> 
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h> 
 
 namespace NYql::NDq {
 
@@ -61,6 +61,7 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
  * Create a new internal join node and compute its statistics and cost
 */
 std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
+    TOptimizerStatistics&& stats,
     std::shared_ptr<IBaseOptimizerNode> left,
     std::shared_ptr<IBaseOptimizerNode> right,
     const TVector<TJoinColumn>& leftJoinKeys,
@@ -68,9 +69,7 @@ std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
     EJoinKind joinKind,
     EJoinAlgoType joinAlgo,
     bool leftAny,
-    bool rightAny,
-    IProviderContext& ctx,
-    TCardinalityHints::TCardinalityHint* maybeHint = nullptr
+    bool rightAny
 );
 
 /**
@@ -80,6 +79,6 @@ std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
  * separately if the plan contains non-orderable joins). So we check the instances and if we encounter
  * an external node, we return the whole subtree unchanged.
 */
-std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(const std::shared_ptr<IBaseOptimizerNode> internal);
+std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(const std::shared_ptr<IBaseOptimizerNode>& internal);
 
 } // namespace NYql::NDq

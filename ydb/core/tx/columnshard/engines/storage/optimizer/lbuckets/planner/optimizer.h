@@ -43,12 +43,12 @@ public:
     void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
         Bytes += p->GetTotalBlobBytes();
         Count += 1;
-        RecordsCount += p->NumRows();
+        RecordsCount += p->GetRecordsCount();
     }
     void RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
         Bytes -= p->GetTotalBlobBytes();
         Count -= 1;
-        RecordsCount -= p->NumRows();
+        RecordsCount -= p->GetRecordsCount();
         AFL_VERIFY(Bytes >= 0);
         AFL_VERIFY(Count >= 0);
         AFL_VERIFY(RecordsCount >= 0);
@@ -215,20 +215,20 @@ public:
     bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
         for (auto&& f : Futures) {
             for (auto&& p : f.second) {
-                if (auto lockInfo = dataLocksManager->IsLocked(*p.second)) {
+                if (auto lockInfo = dataLocksManager->IsLocked(*p.second, NDataLocks::ELockCategory::Compaction)) {
                     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
                     return true;
                 }
             }
         }
         for (auto&& i : PreActuals) {
-            if (auto lockInfo = dataLocksManager->IsLocked(*i.second)) {
+            if (auto lockInfo = dataLocksManager->IsLocked(*i.second, NDataLocks::ELockCategory::Compaction)) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
                 return true;
             }
         }
         for (auto&& i : Actuals) {
-            if (auto lockInfo = dataLocksManager->IsLocked(*i.second)) {
+            if (auto lockInfo = dataLocksManager->IsLocked(*i.second, NDataLocks::ELockCategory::Compaction)) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
                 return true;
             }
@@ -383,20 +383,20 @@ public:
         return Actuals;
     }
 
-    std::vector<std::shared_ptr<TPortionInfo>> GetOptimizerTaskPortions(const ui64 sizeLimit, std::optional<NArrow::TReplaceKey>& separatePoint) const {
-        std::vector<std::shared_ptr<TPortionInfo>> sorted;
+    std::vector<TPortionInfo::TConstPtr> GetOptimizerTaskPortions(const ui64 sizeLimit, std::optional<NArrow::TReplaceKey>& separatePoint) const {
+        std::vector<TPortionInfo::TConstPtr> sorted;
         for (auto&& i : Actuals) {
             sorted.emplace_back(i.second);
         }
         for (auto&& i : PreActuals) {
             sorted.emplace_back(i.second);
         }
-        const auto pred = [](const std::shared_ptr<TPortionInfo>& l, const std::shared_ptr<TPortionInfo>& r) {
+        const auto pred = [](const TPortionInfo::TConstPtr& l, const TPortionInfo::TConstPtr& r) {
             return l->IndexKeyStart() < r->IndexKeyStart();
         };
         std::sort(sorted.begin(), sorted.end(), pred);
 
-        std::vector<std::shared_ptr<TPortionInfo>> result;
+        std::vector<TPortionInfo::TConstPtr> result;
         std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges::IMemoryPredictor> predictor = NCompaction::TGeneralCompactColumnEngineChanges::BuildMemoryPredictor();
         ui64 txSizeLimit = 0;
         for (auto&& i : sorted) {
@@ -405,7 +405,7 @@ public:
                 break;
             }
             txSizeLimit += i->GetTxVolume();
-            if (predictor->AddPortion(*i) > sizeLimit && result.size() > 1) {
+            if (predictor->AddPortion(i) > sizeLimit && result.size() > 1) {
                 break;
             }
         }
@@ -746,7 +746,7 @@ public:
 
     bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
         if (MainPortion) {
-            if (auto lockInfo = dataLocksManager->IsLocked(*MainPortion)) {
+            if (auto lockInfo = dataLocksManager->IsLocked(*MainPortion, NDataLocks::ELockCategory::Compaction)) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
                 return true;
             }
@@ -852,7 +852,7 @@ public:
         std::optional<NArrow::TReplaceKey> stopPoint;
         std::optional<TInstant> stopInstant;
         const ui64 memLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetCompactionMemoryLimit() : 512 * 1024 * 1024;
-        std::vector<std::shared_ptr<TPortionInfo>> portions = Others.GetOptimizerTaskPortions(memLimit, stopPoint);
+        std::vector<TPortionInfo::TConstPtr> portions = Others.GetOptimizerTaskPortions(memLimit, stopPoint);
         bool forceMergeForTests = false;
         if (nextBorder) {
             if (MainPortion) {
@@ -885,7 +885,7 @@ public:
         ui64 size = 0;
         for (auto&& i : portions) {
             size += i->GetTotalBlobBytes();
-            if (locksManager->IsLocked(*i)) {
+            if (locksManager->IsLocked(*i, NDataLocks::ELockCategory::Compaction)) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("info", Others.DebugString())("event", "skip_optimization")("reason", "busy");
                 return nullptr;
             }
@@ -1216,7 +1216,7 @@ protected:
         return Buckets.IsLocked(dataLocksManager);
     }
 
-    virtual void DoModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) override {
+    virtual void DoModifyPortions(const THashMap<ui64, TPortionInfo::TPtr>& add, const THashMap<ui64, TPortionInfo::TPtr>& remove) override {
         const TInstant now = TInstant::Now();
         for (auto&& [_, i] : remove) {
             if (i->GetMeta().GetTierName() != IStoragesManager::DefaultStorageId && i->GetMeta().GetTierName() != "") {

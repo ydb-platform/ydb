@@ -3,9 +3,9 @@
 
 #include "pythonic/include/numpy/fromfunction.hpp"
 
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/types/ndarray.hpp"
 #include "pythonic/builtins/None.hpp"
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 #include "pythonic/utils/tags.hpp"
 
 PYTHONIC_NS_BEGIN
@@ -19,12 +19,15 @@ namespace numpy
   template <class pS>
   types::ndarray<typename std::remove_cv<typename std::remove_reference<
                      typename std::result_of<F(dtype)>::type>::type>::type,
-                 pS> fromfunction_helper<F, 1, dtype, purity_tag>::
-  operator()(F &&f, pS const &shape, dtype d)
+                 pS>
+  fromfunction_helper<F, 1, dtype, purity_tag>::operator()(F &&f,
+                                                           pS const &shape,
+                                                           dtype d)
   {
     types::ndarray<typename std::remove_cv<typename std::remove_reference<
                        typename std::result_of<F(dtype)>::type>::type>::type,
-                   pS> out(shape, builtins::None);
+                   pS>
+        out(shape, builtins::None);
     long n = out.template shape<0>();
     for (long i = 0; i < n; ++i)
       out[i] = f(i);
@@ -36,13 +39,16 @@ namespace numpy
   types::ndarray<
       typename std::remove_cv<typename std::remove_reference<
           typename std::result_of<F(dtype, dtype)>::type>::type>::type,
-      pS> fromfunction_helper<F, 2, dtype, purity_tag>::
-  operator()(F &&f, pS const &shape, dtype d)
+      pS>
+  fromfunction_helper<F, 2, dtype, purity_tag>::operator()(F &&f,
+                                                           pS const &shape,
+                                                           dtype d)
   {
     types::ndarray<
         typename std::remove_cv<typename std::remove_reference<
             typename std::result_of<F(dtype, dtype)>::type>::type>::type,
-        pS> out(shape, builtins::None);
+        pS>
+        out(shape, builtins::None);
     long n = out.template shape<0>();
     long m = out.template shape<1>();
     for (long i = 0; i < n; ++i)
@@ -63,7 +69,7 @@ namespace numpy
   }
 
   /* TODO: must specialize for higher order */
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

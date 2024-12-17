@@ -924,6 +924,314 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
     }
 
+    void ExecuteQuery(NYdb::NTable::TSession& session, const TString& query ) {
+        const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    ui64 GetBalancerTabletId(TTopicSdkTestSetup& setup, const TString& topicPath) {
+        auto pathDescr = setup.GetServer().AnnoyingClient->Ls(topicPath)->Record.GetPathDescription().GetSelf();
+        auto balancerTabletId = pathDescr.GetBalancerTabletID();
+        Cerr << ">>>>> BalancerTabletID=" << balancerTabletId << Endl << Flush;
+        UNIT_ASSERT(balancerTabletId);
+        return balancerTabletId;
+    }
+
+    void SplitPartitionRB(TTopicSdkTestSetup& setup, const TString& topicPath, ui32 partitionId) {
+        auto balancerTabletId = GetBalancerTabletId(setup, topicPath);
+        auto edge = setup.GetRuntime().AllocateEdgeActor();
+        setup.GetRuntime().SendToPipe(balancerTabletId, edge, new TEvPQ::TEvPartitionScaleStatusChanged(partitionId, NKikimrPQ::EScaleStatus::NEED_SPLIT));
+    }
+
+    void AssertPartitionCount(TTopicSdkTestSetup& setup, const TString& topicPath, size_t expectedCount) {
+        auto client = setup.MakeClient();
+        auto describe = client.DescribeTopic(topicPath).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), expectedCount);
+    }
+
+    void WaitAndAssertPartitionCount(TTopicSdkTestSetup& setup, const TString& topicPath, size_t expectedCount) {
+        auto client = setup.MakeClient();
+        size_t partitionCount = 0;
+        for (size_t i = 0; i < 10; ++i) {
+            Sleep(TDuration::Seconds(1));
+            auto describe = client.DescribeTopic(topicPath).GetValueSync();
+            partitionCount = describe.GetTopicDescription().GetPartitions().size();
+            if (partitionCount == expectedCount) {
+                break;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(partitionCount, expectedCount);
+    }
+
+    Y_UNIT_TEST(WithDir_PartitionSplit_AutosplitByLoad) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto tableClient = setup.MakeTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            CREATE TOPIC `/Root/dir/origin`
+                WITH (
+                    AUTO_PARTITIONING_STRATEGY = 'SCALE_UP',
+                    MAX_ACTIVE_PARTITIONS = 50
+                );
+        )");
+
+        AssertPartitionCount(setup, "/Root/dir/origin", 1);
+        SplitPartitionRB(setup, "/Root/dir/origin", 0);
+        WaitAndAssertPartitionCount(setup, "/Root/dir/origin", 3);
+    }
+
+    Y_UNIT_TEST(CDC_PartitionSplit_AutosplitByLoad) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto tableClient = setup.MakeTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/origin` (
+                id Uint64,
+                value Text,
+                PRIMARY KEY (id)
+            );
+        )");
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/origin`
+                ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES',
+                    FORMAT = 'JSON',
+                    TOPIC_AUTO_PARTITIONING = 'ENABLED'
+                );
+        )");
+
+        AssertPartitionCount(setup, "/Root/origin/feed", 1);
+        SplitPartitionRB(setup, "/Root/origin/feed/streamImpl", 0);
+        WaitAndAssertPartitionCount(setup, "/Root/origin/feed", 3);
+    }
+
+    Y_UNIT_TEST(ControlPlane_CDC) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto tableClient = setup.MakeTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto client = setup.MakeClient();
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/origin` (
+                id Uint64,
+                value Text,
+                PRIMARY KEY (id)
+            );
+        )");
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/origin`
+                ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES',
+                    FORMAT = 'JSON',
+                    TOPIC_AUTO_PARTITIONING = 'ENABLED'
+                );
+        )");
+
+        {
+            TAlterTopicSettings alterSettings;
+            alterSettings
+                .BeginAlterPartitioningSettings()
+                    .MinActivePartitions(3)
+                    .MaxActivePartitions(107)
+                    .BeginAlterAutoPartitioningSettings()
+                        .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                        .StabilizationWindow(TDuration::Seconds(3))
+                        .DownUtilizationPercent(5)
+                        .UpUtilizationPercent(7)
+                    .EndAlterAutoPartitioningSettings()
+                .EndAlterTopicPartitioningSettings();
+            auto f = client.AlterTopic("/Root/origin/feed", alterSettings);
+            f.Wait();
+
+            auto v = f.GetValueSync();
+            UNIT_ASSERT_C(v.IsSuccess(),  "Error: " << v);
+        }
+
+        {
+            auto describeAfterAlter = client.DescribeTopic("/Root/origin/feed").GetValueSync();
+
+            auto& s = describeAfterAlter.GetTopicDescription().GetPartitioningSettings();
+            UNIT_ASSERT_VALUES_EQUAL(s.GetMinActivePartitions(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(s.GetMaxActivePartitions(), 107);
+            UNIT_ASSERT_VALUES_EQUAL(s.GetAutoPartitioningSettings().GetStrategy(), EAutoPartitioningStrategy::ScaleUp);
+            UNIT_ASSERT_VALUES_EQUAL(s.GetAutoPartitioningSettings().GetStabilizationWindow(), TDuration::Seconds(3));
+            UNIT_ASSERT_VALUES_EQUAL(s.GetAutoPartitioningSettings().GetDownUtilizationPercent(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(s.GetAutoPartitioningSettings().GetUpUtilizationPercent(), 7);
+        }
+    }
+
+    Y_UNIT_TEST(ControlPlane_CDC_Enable) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto tableClient = setup.MakeTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto client = setup.MakeClient();
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/origin` (
+                id Uint64,
+                value Text,
+                PRIMARY KEY (id)
+            );
+        )");
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/origin`
+                ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES',
+                    FORMAT = 'JSON',
+                    TOPIC_AUTO_PARTITIONING = 'DISABLED'
+                );
+        )");
+
+        {
+            TAlterTopicSettings alterSettings;
+            alterSettings
+                .BeginAlterPartitioningSettings()
+                    .MinActivePartitions(3)
+                    .MaxActivePartitions(107)
+                    .BeginAlterAutoPartitioningSettings()
+                        .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                    .EndAlterAutoPartitioningSettings()
+                .EndAlterTopicPartitioningSettings();
+            auto f = client.AlterTopic("/Root/origin/feed", alterSettings);
+            f.Wait();
+
+            auto v = f.GetValueSync();
+            UNIT_ASSERT_C(!v.IsSuccess(),  "Error: " << v);
+        }
+    }
+
+    Y_UNIT_TEST(ControlPlane_CDC_Disable) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto tableClient = setup.MakeTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto client = setup.MakeClient();
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/origin` (
+                id Uint64,
+                value Text,
+                PRIMARY KEY (id)
+            );
+        )");
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/origin`
+                ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES',
+                    FORMAT = 'JSON',
+                    TOPIC_AUTO_PARTITIONING = 'ENABLED'
+                );
+        )");
+
+        {
+            TAlterTopicSettings alterSettings;
+            alterSettings
+                .BeginAlterPartitioningSettings()
+                    .MinActivePartitions(3)
+                    .MaxActivePartitions(107)
+                    .BeginAlterAutoPartitioningSettings()
+                        .Strategy(EAutoPartitioningStrategy::Disabled)
+                    .EndAlterAutoPartitioningSettings()
+                .EndAlterTopicPartitioningSettings();
+            auto f = client.AlterTopic("/Root/origin/feed", alterSettings);
+            f.Wait();
+
+            auto v = f.GetValueSync();
+            UNIT_ASSERT_C(!v.IsSuccess(),  "Error: " << v);
+        }
+    }
+
+    Y_UNIT_TEST(BalancingAfterSplit_sessionsWithPartition) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+
+        TTopicClient client = setup.MakeClient();
+
+        auto writeSession = CreateWriteSession(client, "producer-1", 0);
+        UNIT_ASSERT(writeSession->Write(Msg("message_1.1", 2)));
+
+        ui64 txId = 1023;
+        SplitPartition(setup, ++txId, 0, "a");
+
+        auto readSession0 = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = SdkVersion::Topic, .ExpectedMessagesCount = 1, .AutoCommit = false, .Partitions = {0}, .AutoPartitioningSupport = true });
+
+        readSession0->WaitAndAssertPartitions({0}, "Must read partition 0");
+        readSession0->WaitAllMessages();
+
+
+        for(size_t i = 0; i < 10; ++i) {
+            auto events = readSession0->GetEndedPartitionEvents();
+            if (events.empty()) {
+                Sleep(TDuration::Seconds(1));
+                continue;
+            }
+            readSession0->Commit();
+            break;
+        }
+
+        auto readSession1 = CreateTestReadSession({ .Name="Session-1", .Setup=setup, .Sdk = SdkVersion::Topic, .AutoCommit = false, .Partitions = {1}, .AutoPartitioningSupport = true });
+        readSession1->WaitAndAssertPartitions({1}, "Must read partition 1");
+
+        auto readSession2 = CreateTestReadSession({ .Name="Session-2", .Setup=setup, .Sdk = SdkVersion::Topic, .AutoCommit = false, .Partitions = {2}, .AutoPartitioningSupport = true });
+        readSession2->WaitAndAssertPartitions({2}, "Must read partition 2");
+
+        writeSession->Close();
+        readSession0->Close();
+        readSession1->Close();
+        readSession2->Close();
+    }
+
+    Y_UNIT_TEST(ReBalancingAfterSplit_sessionsWithPartition) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 2, 100);
+
+        TTopicClient client = setup.MakeClient();
+
+        auto writeSession = CreateWriteSession(client, "producer-1", 0);
+        UNIT_ASSERT(writeSession->Write(Msg("message_1.1", 2)));
+        writeSession->Close();
+
+        ui64 txId = 1023;
+        SplitPartition(setup, ++txId, 0, "a");
+
+        auto readSession1 = CreateTestReadSession({ .Name="Session-1", .Setup=setup, .Sdk = SdkVersion::Topic, .AutoCommit = false, .Partitions = {1}, .AutoPartitioningSupport = true });
+        auto readSession0 = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = SdkVersion::Topic, .ExpectedMessagesCount = 1, .AutoCommit = false, .Partitions = {0}, .AutoPartitioningSupport = true });
+
+        readSession0->WaitAndAssertPartitions({0}, "Must read partition 0");
+        readSession0->WaitAllMessages();
+
+        for(size_t i = 0; i < 10; ++i) {
+            auto events = readSession0->GetEndedPartitionEvents();
+            if (events.empty()) {
+                Sleep(TDuration::Seconds(1));
+                continue;
+            }
+            readSession0->Commit();
+            break;
+        }
+
+        readSession0->Close();
+
+        readSession0 = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = SdkVersion::Topic, .AutoCommit = false, .Partitions = {0}, .AutoPartitioningSupport = true });
+        readSession0->WaitAndAssertPartitions({0}, "Must read partition 0 because no more readers of it");
+
+        readSession0->Close();
+    }
+
     Y_UNIT_TEST(MidOfRange) {
         auto AsString = [](std::vector<ui16> vs) {
             TStringBuilder a;
@@ -1014,6 +1322,55 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "99 FF 7F");
         }
     }
+
+    void ReadFromTimestamp(SdkVersion sdk, bool autoscaleAwareSDK) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopicWithAutoscale();
+
+        TTopicClient client = setup.MakeClient();
+
+        auto writeSession1 = CreateWriteSession(client, "producer-1");
+        UNIT_ASSERT(writeSession1->Write(Msg("message_1.1", 1)));
+        Sleep(TDuration::Seconds(5));
+
+        ui64 txId = 1023;
+        SplitPartition(setup, ++txId, 0, "a");
+
+        UNIT_ASSERT(writeSession1->Write(Msg("message_2.1", 2)));
+        Sleep(TDuration::Seconds(1));
+
+
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 1, .AutoCommit = !autoscaleAwareSDK,
+            .AutoPartitioningSupport = autoscaleAwareSDK, .ReadLag = TDuration::Seconds(4) });
+        readSession->Run();
+
+        readSession->WaitAllMessages();
+
+        for(const auto& info : readSession->GetReceivedMessages()) {
+            if (info.Data == "message_2.1") {
+                UNIT_ASSERT_VALUES_EQUAL(2, info.PartitionId);
+                UNIT_ASSERT_VALUES_EQUAL(2, info.SeqNo);
+            } else {
+                UNIT_ASSERT_C(false, "Unexpected message: " << info.Data);
+            }
+        }
+
+        writeSession1->Close(TDuration::Seconds(1));
+        readSession->Close();
+    }
+
+    Y_UNIT_TEST(ReadFromTimestamp_BeforeAutoscaleAwareSDK) {
+        ReadFromTimestamp(SdkVersion::Topic, false);
+    }
+
+    Y_UNIT_TEST(ReadFromTimestamp_AutoscaleAwareSDK) {
+        ReadFromTimestamp(SdkVersion::Topic, true);
+    }
+
+    Y_UNIT_TEST(ReadFromTimestamp_PQv1) {
+        ReadFromTimestamp(SdkVersion::PQv1, false);
+    }
+
 }
 
 } // namespace NKikimr

@@ -74,7 +74,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterOlapStore TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -178,7 +178,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterOlapStore TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -273,7 +273,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterOlapStore TProposedWaitParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -524,6 +524,18 @@ public:
         TOlapStoreInfo::TPtr alterData = ParseParams(storeInfo, alter, errors);
         if (!alterData) {
             return result;
+        }
+
+        for (auto&& tPathId: alterData->ColumnTables) {
+            auto table = context.SS->ColumnTables.GetVerifiedPtr(tPathId);
+            if (!table->Description.HasTtlSettings()) {
+                continue;
+            }
+            auto it = alterData->SchemaPresets.find(table->Description.GetSchemaPresetId());
+            AFL_VERIFY(it != alterData->SchemaPresets.end())("preset_info", table->Description.DebugString());
+            if (!it->second.ValidateTtlSettings(table->Description.GetTtlSettings(), errors)) {
+                return result;
+            }
         }
 
         if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {

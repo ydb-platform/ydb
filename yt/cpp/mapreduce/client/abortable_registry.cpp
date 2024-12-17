@@ -2,7 +2,11 @@
 
 #include <yt/cpp/mapreduce/common/retry_lib.h>
 
+#include <yt/cpp/mapreduce/http/retry_request.h>
+
 #include <yt/cpp/mapreduce/interface/common.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
+
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <util/generic/singleton.h>
@@ -31,16 +35,22 @@ TString TTransactionAbortable::GetType() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TOperationAbortable::TOperationAbortable(IClientRetryPolicyPtr clientRetryPolicy, TClientContext context, const TOperationId& operationId)
-    : ClientRetryPolicy_(std::move(clientRetryPolicy))
-    , Context_(std::move(context))
+TOperationAbortable::TOperationAbortable(
+    IRawClientPtr rawClient,
+    IClientRetryPolicyPtr clientRetryPolicy,
+    const TOperationId& operationId)
+    : RawClient_(std::move(rawClient))
+    , ClientRetryPolicy_(std::move(clientRetryPolicy))
     , OperationId_(operationId)
 { }
 
-
 void TOperationAbortable::Abort()
 {
-    AbortOperation(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, OperationId_);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this] (TMutationId& mutationId) {
+            RawClient_->AbortOperation(mutationId, OperationId_);
+        });
 }
 
 TString TOperationAbortable::GetType() const

@@ -148,6 +148,20 @@ void FromUnversionedValue(
     TUnversionedValue unversionedValue);
 
 template <class T>
+    requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
+void ToUnversionedValue(
+    TUnversionedValue* unversionedValue,
+    T value,
+    const TRowBufferPtr& rowBuffer,
+    int id = 0,
+    EValueFlags flags = EValueFlags::None);
+template <class T>
+    requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
+void FromUnversionedValue(
+    T* value,
+    TUnversionedValue unversionedValue);
+
+template <class T>
 TUnversionedValue ToUnversionedValue(
     T&& value,
     const TRowBufferPtr& rowBuffer,

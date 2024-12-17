@@ -19,13 +19,25 @@ namespace NKikimr::NReplication::NController {
 
 class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     static NYdb::NTable::TChangefeedDescription MakeChangefeed(
-            const TString& name, const TDuration& retentionPeriod, const NJson::TJsonMap& attrs)
+            const TString& name,
+            const TDuration& retentionPeriod,
+            const std::optional<TDuration>& resolvedTimestamps,
+            const NJson::TJsonMap& attrs)
     {
         using namespace NYdb::NTable;
-        return TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Json)
+
+        auto desc = TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Json)
             .WithRetentionPeriod(retentionPeriod)
             .WithInitialScan()
             .AddAttribute("__async_replication", NJson::WriteJson(attrs, false));
+
+        if (resolvedTimestamps) {
+            desc
+                .WithVirtualTimestamps()
+                .WithResolvedTimestamps(*resolvedTimestamps);
+        }
+
+        return desc;
     }
 
     void RequestPermission() {
@@ -161,16 +173,19 @@ public:
             const TString& srcPath,
             const TString& dstPath,
             const TString& streamName,
-            const TDuration& streamRetentionPeriod)
+            const TDuration& retentionPeriod,
+            const std::optional<TDuration>& resolvedTimestamps,
+            bool supportsTopicAutopartitioning)
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
         , TargetId(tid)
         , Kind(kind)
         , SrcPath(srcPath)
-        , Changefeed(MakeChangefeed(streamName, streamRetentionPeriod, NJson::TJsonMap{
+        , Changefeed(MakeChangefeed(streamName, retentionPeriod, resolvedTimestamps, NJson::TJsonMap{
             {"path", dstPath},
             {"id", ToString(rid)},
+            {"supports_topic_autopartitioning", supportsTopicAutopartitioning},
         }))
         , LogPrefix("StreamCreator", ReplicationId, TargetId)
     {
@@ -201,17 +216,27 @@ private:
 IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
+
+    const auto& config = replication->GetConfig().GetConsistencySettings();
+    const auto resolvedTimestamps = config.HasGlobal()
+        ? std::make_optional(TDuration::MilliSeconds(config.GetGlobal().GetCommitIntervalMilliSeconds()))
+        : std::nullopt;
+
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetId(), target->GetId(), target->GetKind(),
         target->GetSrcPath(), target->GetDstPath(), target->GetStreamName(),
-        TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()));
+        TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
+        AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication());
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
         TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
-        const TString& streamName, const TDuration& streamRetentionPeriod)
+        const TString& streamName, const TDuration& retentionPeriod,
+        const std::optional<TDuration>& resolvedTimestamps,
+        bool supportsTopicAutopartitioning)
 {
-    return new TStreamCreator(parent, proxy, rid, tid, kind, srcPath, dstPath, streamName, streamRetentionPeriod);
+    return new TStreamCreator(parent, proxy, rid, tid, kind, srcPath, dstPath,
+        streamName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning);
 }
 
 }

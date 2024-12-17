@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_BUILTIN_PYTHRAN_STATIC_IF_HPP
 #define PYTHONIC_INCLUDE_BUILTIN_PYTHRAN_STATIC_IF_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/builtins/pythran/is_none.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -54,9 +54,10 @@ namespace builtins
           {
           }
           template <class... Args>
-          auto operator()(Args &&... args) const -> typename __combined<
-              decltype(f0(std::forward<Args>(args)...)),
-              decltype(f1(std::forward<Args>(args)...))>::type
+          auto operator()(Args &&...args) const ->
+              typename __combined<
+                  decltype(f0(std::forward<Args>(args)...)),
+                  decltype(f1(std::forward<Args>(args)...))>::type
           {
             if (state_)
               return f0(std::forward<Args>(args)...);
@@ -71,10 +72,10 @@ namespace builtins
           return {state_, f0, f1};
         }
       };
-    }
+    } // namespace details
     template <class T, class F0, class F1>
-    auto static_if(T const &cond, F0 f0, F1 f1)
-        -> decltype(details::static_if<T>{cond}(f0, f1));
+    auto static_if(T const &cond, F0 f0,
+                   F1 f1) -> decltype(details::static_if<T>{cond}(f0, f1));
 
     template <class F0, class F1>
     auto static_if(int const &cond, F0 f0, F1 f1)
@@ -84,8 +85,8 @@ namespace builtins
     }
 
     DEFINE_FUNCTOR(pythonic::builtins::pythran, static_if);
-  }
-}
+  } // namespace pythran
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

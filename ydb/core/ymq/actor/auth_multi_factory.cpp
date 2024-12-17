@@ -583,10 +583,21 @@ void TMultiAuthFactory::RegisterAuthActor(NActors::TActorSystem& system, TAuthAc
     }
 
     const ui32 poolID = data.ExecutorPoolID;
-    system.Register(                                                        //token needed only for ResourceManager
-        new TCloudAuthRequestProxy(std::move(data), UseResourceManagerFolderService_ ? CredentialsProvider_->GetAuthInfo() : ""),
-        NActors::TMailboxType::HTSwap,
-        poolID);
+
+    // token needed only for ResourceManager
+    const auto token = UseResourceManagerFolderService_ ? CredentialsProvider_->GetAuthInfo() : "";
+
+    if (data.RequestFormat == NSQS::TAuthActorData::Json) {
+        system.Register(
+            new THttpProxyAuthRequestProxy(std::move(data), token, data.Requester),
+            NActors::TMailboxType::HTSwap,
+            poolID);
+    } else {
+        system.Register(
+            new TCloudAuthRequestProxy(std::move(data), token),
+            NActors::TMailboxType::HTSwap,
+            poolID);
+    }
 }
 
 TMultiAuthFactory::TCredentialsFactoryPtr

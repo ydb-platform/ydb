@@ -160,6 +160,7 @@ struct TSchemeCacheNavigate {
         KindView = 21,
         KindResourcePool = 22,
         KindBackupCollection = 23,
+        KindTransfer = 24,
     };
 
     struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> {
@@ -314,6 +315,7 @@ struct TSchemeCacheNavigate {
         THashSet<TString> NotNullColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
+        TVector<NKikimrSchemeOp::TSequenceDescription> Sequences;
 
         // other
         TIntrusiveConstPtr<TDomainDescription> DomainDescription;

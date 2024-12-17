@@ -220,6 +220,10 @@ void TServiceDiscoveryEndpointsConfig::Register(TRegistrar registrar)
     registrar.Parameter("endpoint_set_id", &TThis::EndpointSetId);
     registrar.Parameter("update_period", &TThis::UpdatePeriod)
         .Default(TDuration::Seconds(60));
+    registrar.Parameter("use_ipv4", &TThis::UseIPv4)
+        .Default(false);
+    registrar.Parameter("use_ipv6", &TThis::UseIPv6)
+        .Default(true);
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->Cluster.has_value() == !config->Clusters.empty()) {
@@ -315,15 +319,17 @@ void TResponseKeeperConfig::Register(TRegistrar registrar)
 void TDispatcherConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("heavy_pool_size", &TThis::HeavyPoolSize)
-        .Default(DefaultHeavyPoolSize)
+        .Default(16)
         .GreaterThan(0);
     registrar.Parameter("compression_pool_size", &TThis::CompressionPoolSize)
-        .Default(DefaultCompressionPoolSize)
+        .Default(8)
         .GreaterThan(0);
     registrar.Parameter("heavy_pool_polling_period", &TThis::HeavyPoolPollingPeriod)
         .Default(TDuration::MilliSeconds(10));
     registrar.Parameter("alert_on_missing_request_info", &TThis::AlertOnMissingRequestInfo)
         .Default(false);
+    registrar.Parameter("send_tracing_baggage", &TThis::SendTracingBaggage)
+        .Default(true);
 }
 
 TDispatcherConfigPtr TDispatcherConfig::ApplyDynamic(const TDispatcherDynamicConfigPtr& dynamicConfig) const
@@ -333,6 +339,7 @@ TDispatcherConfigPtr TDispatcherConfig::ApplyDynamic(const TDispatcherDynamicCon
     UpdateYsonStructField(mergedConfig->CompressionPoolSize, dynamicConfig->CompressionPoolSize);
     UpdateYsonStructField(mergedConfig->HeavyPoolPollingPeriod, dynamicConfig->HeavyPoolPollingPeriod);
     UpdateYsonStructField(mergedConfig->AlertOnMissingRequestInfo, dynamicConfig->AlertOnMissingRequestInfo);
+    UpdateYsonStructField(mergedConfig->SendTracingBaggage, dynamicConfig->SendTracingBaggage);
     mergedConfig->Postprocess();
     return mergedConfig;
 }
@@ -350,6 +357,8 @@ void TDispatcherDynamicConfig::Register(TRegistrar registrar)
     registrar.Parameter("heavy_pool_polling_period", &TThis::HeavyPoolPollingPeriod)
         .Optional();
     registrar.Parameter("alert_on_missing_request_info", &TThis::AlertOnMissingRequestInfo)
+        .Optional();
+    registrar.Parameter("send_tracing_baggage", &TThis::SendTracingBaggage)
         .Optional();
 }
 

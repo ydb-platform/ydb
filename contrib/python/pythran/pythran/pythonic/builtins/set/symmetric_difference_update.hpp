@@ -37,7 +37,7 @@ namespace builtins
       // nothing otherwise empty_set have ! its correct type.
       return {};
     }
-  }
-}
+  } // namespace set
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

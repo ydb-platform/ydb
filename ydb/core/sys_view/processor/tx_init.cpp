@@ -84,6 +84,47 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
         return true;
     };
 
+    template <typename S>
+    bool LoadIntervalPartitionTops(NIceDb::TNiceDb& db) {
+        auto rowset = db.Table<S>().Range().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+
+        size_t partCount = 0;
+        while (!rowset.EndOfSet()) {
+            ui32 type = rowset.template GetValue<typename S::TypeCol>();
+            TString data = rowset.template GetValue<typename S::Data>();
+
+            if (data) {
+                auto partition = MakeHolder<NKikimrSysView::TTopPartitionsInfo>();
+                Y_PROTOBUF_SUPPRESS_NODISCARD partition->ParseFromString(data);
+
+                switch ((NKikimrSysView::EStatsType)type) {
+                    case NKikimrSysView::TOP_PARTITIONS_ONE_MINUTE:
+                        Self->PartitionTopMinute.emplace_back(std::move(partition));
+                        break;
+                    case NKikimrSysView::TOP_PARTITIONS_ONE_HOUR:
+                        Self->PartitionTopHour.emplace_back(std::move(partition));
+                        break;
+                    default:
+                        SVLOG_CRIT("[" << Self->TabletID() << "] ignoring unexpected partition stats type: " << type);
+                }
+                ++partCount;
+            }
+
+            if (!rowset.Next()) {
+                return false;
+            }
+        }        
+
+        SVLOG_D("[" << Self->TabletID() << "] Loading results: "
+            << "table# " << S::TableId
+            << ", partCount count# " << partCount);
+
+        return true;
+    }
+
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         SVLOG_D("[" << Self->TabletID() << "] TTxInit::Execute");
@@ -107,6 +148,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             auto reqUnitsOneMinuteRowset = db.Table<Schema::TopByRequestUnitsOneMinute>().Range().Select();
             auto reqUnitsOneHourRowset = db.Table<Schema::TopByRequestUnitsOneHour>().Range().Select();
             auto intervalPartitionTopsRowset = db.Table<Schema::IntervalPartitionTops>().Range().Select();
+            auto intervalPartitionFollowerTopsRowset = db.Table<Schema::IntervalPartitionFollowerTops>().Range().Select();
             auto topPartitionsOneMinuteRowset = db.Table<Schema::TopPartitionsOneMinute>().Range().Select();
             auto topPartitionsOneHourRowset = db.Table<Schema::TopPartitionsOneHour>().Range().Select();
 
@@ -126,6 +168,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                 !reqUnitsOneMinuteRowset.IsReady() ||
                 !reqUnitsOneHourRowset.IsReady() ||
                 !intervalPartitionTopsRowset.IsReady() ||
+                !intervalPartitionFollowerTopsRowset.IsReady() ||
                 !topPartitionsOneMinuteRowset.IsReady() ||
                 !topPartitionsOneHourRowset.IsReady())
             {
@@ -390,37 +433,10 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             Self->PartitionTopHour.clear();
             Self->PartitionTopHour.reserve(TOP_PARTITIONS_COUNT);
 
-            auto rowset = db.Table<Schema::IntervalPartitionTops>().Range().Select();
-            if (!rowset.IsReady()) {
+            if (!LoadIntervalPartitionTops<Schema::IntervalPartitionTops>(db))
                 return false;
-            }
-
-            size_t partCount = 0;
-            while (!rowset.EndOfSet()) {
-                ui32 type = rowset.GetValue<Schema::IntervalPartitionTops::TypeCol>();
-                TString data = rowset.GetValue<Schema::IntervalPartitionTops::Data>();
-
-                if (data) {
-                    auto partition = MakeHolder<NKikimrSysView::TTopPartitionsInfo>();
-                    Y_PROTOBUF_SUPPRESS_NODISCARD partition->ParseFromString(data);
-
-                    switch ((NKikimrSysView::EStatsType)type) {
-                        case NKikimrSysView::TOP_PARTITIONS_ONE_MINUTE:
-                            Self->PartitionTopMinute.emplace_back(std::move(partition));
-                            break;
-                        case NKikimrSysView::TOP_PARTITIONS_ONE_HOUR:
-                            Self->PartitionTopHour.emplace_back(std::move(partition));
-                            break;
-                        default:
-                            SVLOG_CRIT("[" << Self->TabletID() << "] ignoring unexpected partition stats type: " << type);
-                    }
-                    ++partCount;
-                }
-
-                if (!rowset.Next()) {
-                    return false;
-                }
-            }
+            if (!LoadIntervalPartitionTops<Schema::IntervalPartitionFollowerTops>(db))
+                return false;
 
             auto compare = [] (const auto& l, const auto& r) {
                 return l->GetCPUCores() == r->GetCPUCores() ?
@@ -429,9 +445,6 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
             std::sort(Self->PartitionTopMinute.begin(), Self->PartitionTopMinute.end(), compare);
             std::sort(Self->PartitionTopHour.begin(), Self->PartitionTopHour.end(), compare);
-
-            SVLOG_D("[" << Self->TabletID() << "] Loading interval partition tops: "
-                << "partition count# " << partCount);
         }
 
         // TopPartitions...

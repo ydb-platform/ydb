@@ -4,11 +4,9 @@
 
 Ниже приведены примеры кода, которые используют встроенные в {{ ydb-short-name }} SDK средства создания объекта *режим выполнения транзакции*.
 
-{% include [work in progress message](_includes/addition.md) %}
-
 ## Serializable {#serializable}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go (native)
 
@@ -83,7 +81,7 @@
 
 ## Online Read-Only {#online-read-only}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go (native)
 
@@ -123,15 +121,11 @@
   }
   ```
 
-- PHP
-
-  {% include [is not implemented](_includes/wip.md) %}
-
 {% endlist %}
 
 ## Stale Read-Only {#stale-read-only}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go (native)
 
@@ -171,15 +165,11 @@
   }
   ```
 
-- PHP
-
-  {% include [is not implemented](_includes/wip.md) %}
-
 {% endlist %}
 
 ## Snapshot Read-Only {#snapshot-read-only}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go (native)
 
@@ -218,9 +208,5 @@
     }
   }
   ```
-
-- PHP
-
-  {% include [is not implemented](_includes/wip.md) %}
 
 {% endlist %}

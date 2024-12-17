@@ -2,36 +2,37 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs/codecs.h>
 
-#include <ydb/library/yql/providers/yt/lib/log/yt_logger.h>
-#include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
-#include <ydb/library/yql/providers/yt/lib/yt_url_lister/yt_url_lister.h>
-#include <ydb/library/yql/providers/yt/lib/config_clusters/config_clusters.h>
-#include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
-#include <ydb/library/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
-#include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
+#include <yt/yql/providers/yt/lib/log/yt_logger.h>
+#include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
+#include <yt/yql/providers/yt/lib/yt_url_lister/yt_url_lister.h>
+#include <yt/yql/providers/yt/lib/config_clusters/config_clusters.h>
+#include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
+#include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
+#include <yt/yql/providers/yt/provider/yql_yt_provider.h>
+#include <yt/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
+#include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
 #include <ydb/library/yql/providers/yt/dq_task_preprocessor/yql_yt_dq_task_preprocessor.h>
+#include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 
-#include <ydb/library/yql/core/url_preprocessing/url_preprocessing.h>
+#include <yql/essentials/core/url_preprocessing/url_preprocessing.h>
 
 #include <ydb/core/util/pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 
-#include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
-#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
 #include <ydb/library/yql/providers/clickhouse/actors/yql_ch_source_factory.h>
 #include <ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.h>
 #include <ydb/library/yql/providers/ydb/actors/yql_ydb_source_factory.h>
 #include <ydb/library/yql/providers/ydb/provider/yql_ydb_provider.h>
 #include <ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_dq_transform.h>
 #include <ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_factory.h>
-#include <ydb/library/yql/providers/pg/provider/yql_pg_provider.h>
-#include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
+#include <yql/essentials/providers/pg/provider/yql_pg_provider.h>
+#include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h>
@@ -41,20 +42,21 @@
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/core/yql_library_compiler.h>
-#include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
-#include <ydb/library/yql/core/facade/yql_facade.h>
-#include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
-#include <ydb/library/yql/core/file_storage/http_download/http_download.h>
-#include <ydb/library/yql/core/file_storage/file_storage.h>
-#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
-#include <ydb/library/yql/core/services/yql_out_transformers.h>
-#include <ydb/library/yql/core/url_lister/url_lister_manager.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/core/yql_library_compiler.h>
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/core/facade/yql_facade.h>
+#include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
+#include <yql/essentials/core/file_storage/http_download/http_download.h>
+#include <yql/essentials/core/file_storage/file_storage.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/core/services/yql_out_transformers.h>
+#include <yql/essentials/core/url_lister/url_lister_manager.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
 
 #include <yt/cpp/mapreduce/client/init.h>
 #include <yt/cpp/mapreduce/interface/config.h>
@@ -235,7 +237,7 @@ bool FillUsedUrls(
 
 NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, IHTTPGateway::TPtr httpGateway) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
-    
+
     TPqGatewayServices pqServices(
         driver,
         nullptr,
@@ -658,7 +660,7 @@ int RunMain(int argc, const char* argv[])
         auto ytNativeGateway = CreateYtNativeGateway(services);
         gateways.emplace_back(ytNativeGateway);
         FillClusterMapping(clusters, gatewaysConfig.GetYt(), TString{YtProviderName});
-        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory(), MakeDqHelper()));
     }
 
     if (gatewayTypes.contains(ClickHouseProviderName) && gatewaysConfig.HasClickHouse()) {

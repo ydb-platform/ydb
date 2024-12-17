@@ -132,7 +132,7 @@ public:
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 
-        auto bcPaths = ResolveBackupCollectionPaths(rootPathStr, name, false, context, result);
+        auto bcPaths = NBackup::ResolveBackupCollectionPaths(rootPathStr, name, false, context, result);
         if (!bcPaths) {
             return result;
         }

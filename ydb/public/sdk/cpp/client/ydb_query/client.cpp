@@ -87,7 +87,7 @@ public:
         auto request = MakeOperationRequest<ExecuteScriptRequest>(settings);
         request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
         request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
-        request.set_pool_id(settings.PoolId_);
+        request.set_pool_id(settings.ResourcePool_);
         request.mutable_script_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
         request.mutable_script_content()->set_text(script);
         SetDuration(settings.ResultsTtl_, *request.mutable_results_ttl());
@@ -484,15 +484,11 @@ public:
             return false;
         };
 
-        // No need to keep-alive
-        auto keepAliveCmd = [](TKqpSessionCommon*) {
-        };
-
         std::weak_ptr<TQueryClient::TImpl> weak = shared_from_this();
         Connections_->AddPeriodicTask(
             SessionPool_.CreatePeriodicTask(
                 weak,
-                std::move(keepAliveCmd),
+                NSessionPool::TSessionPool::TKeepAliveCmd(), // no keep-alive cmd for query service
                 std::move(deletePredicate)
             ), NSessionPool::PERIODIC_ACTION_INTERVAL);
     }

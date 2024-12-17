@@ -29,7 +29,7 @@
 
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
 #include <ydb/library/http_proxy/error/error.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/ycloud/api/access_service.h>
 #include <ydb/library/ycloud/api/iam_token_service.h>
 #include <ydb/library/grpc/actor_client/grpc_service_cache.h>
@@ -62,6 +62,7 @@
 #include <ydb/library/folder_service/events.h>
 
 #include <ydb/core/ymq/actor/auth_multi_factory.h>
+#include <ydb/core/ymq/actor/serviceid.h>
 
 #include <ydb/library/http_proxy/error/error.h>
 
@@ -438,8 +439,8 @@ namespace NKikimr::NHttpProxy {
                         << " CloudId: " << ev->Get()->CloudId
                         << " UserSid: " << ev->Get()->Sid;
                     );
-                    FolderId = ev->Get()->FolderId;
-                    CloudId = ev->Get()->CloudId;
+                    HttpContext.FolderId = FolderId = ev->Get()->FolderId;
+                    HttpContext.CloudId = CloudId = ev->Get()->CloudId;
                     UserSid = ev->Get()->Sid;
                     SendGrpcRequestNoDriver(ctx);
                 } else {
@@ -462,17 +463,19 @@ namespace NKikimr::NHttpProxy {
 
         public:
             void Bootstrap(const TActorContext& ctx) {
+                PoolId = ctx.SelfID.PoolID();
                 StartTime = ctx.Now();
                 try {
                     HttpContext.RequestBodyToProto(&Request);
                     auto queueUrl = QueueUrlExtractor(Request);
                     if (!queueUrl.empty()) {
                         auto cloudIdAndResourceId = NKikimr::NYmq::CloudIdAndResourceIdFromQueueUrl(queueUrl);
-                        if(cloudIdAndResourceId.Empty()) {
+                        if (cloudIdAndResourceId.first.empty()) {
                             return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Invalid queue url");
                         }
-                        CloudId = cloudIdAndResourceId.Get()->first;
-                        ResourceId = cloudIdAndResourceId.Get()->second;
+                        CloudId = cloudIdAndResourceId.first;
+                        HttpContext.ResourceId = ResourceId = cloudIdAndResourceId.second;
+                        HttpContext.ResponseData.YmqIsFifo = queueUrl.EndsWith(".fifo");
                     }
                 } catch (const NKikimr::NSQS::TSQSException& e) {
                     NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;
@@ -507,6 +510,7 @@ namespace NKikimr::NHttpProxy {
                     SendGrpcRequestNoDriver(ctx);
                 } else {
                     auto requestHolder = MakeHolder<NKikimrClient::TSqsRequest>();
+                    // TODO? action = NSQS::ActionFromString(Method);
                     NSQS::EAction action = NSQS::EAction::Unknown;
                     if (Method == "CreateQueue") {
                         action = NSQS::EAction::CreateQueue;
@@ -553,15 +557,14 @@ namespace NKikimr::NHttpProxy {
                         .Counters = nullptr,
                         .AWSSignature = std::move(HttpContext.GetSignature()),
                         .IAMToken = HttpContext.IamToken,
-                        .FolderID = HttpContext.FolderId
+                        .FolderID = HttpContext.FolderId,
+                        .RequestFormat = NSQS::TAuthActorData::Json,
+                        .Requester = ctx.SelfID
                     };
 
-                    auto authRequestProxy = MakeHolder<NSQS::THttpProxyAuthRequestProxy>(
-                        std::move(data),
-                        "",
-                        ctx.SelfID);
-
-                    ctx.RegisterWithSameMailbox(authRequestProxy.Release());
+                    AppData(ctx.ActorSystem())->SqsAuthFactory->RegisterAuthActor(
+                        *ctx.ActorSystem(),
+                        std::move(data));
                 }
 
                 ctx.Schedule(RequestTimeout, new TEvents::TEvWakeup());
@@ -1247,6 +1250,38 @@ namespace NKikimr::NHttpProxy {
             strByMimeAws(ContentType),
             ResponseData.DumpBody(ContentType)
         );
+
+        if (ResponseData.IsYmq && ServiceConfig.GetHttpConfig().GetYandexCloudMode()) {
+            // Send request attributes to the metering actor
+            auto reportRequestAttributes = MakeHolder<NSQS::TSqsEvents::TEvReportProcessedRequestAttributes>();
+
+            auto& requestAttributes = reportRequestAttributes->Data;
+
+            requestAttributes.HttpStatusCode = httpCode;
+            requestAttributes.IsFifo = ResponseData.YmqIsFifo;
+            requestAttributes.FolderId = FolderId;
+            requestAttributes.RequestSizeInBytes = Request->Size();
+            requestAttributes.ResponseSizeInBytes = response->Size();
+            requestAttributes.SourceAddress = SourceAddress;
+            requestAttributes.ResourceId = ResourceId;
+            requestAttributes.Action = NSQS::ActionFromString(MethodName);
+
+            LOG_SP_DEBUG_S(
+                ctx,
+                NKikimrServices::HTTP_PROXY,
+                TStringBuilder() << "Send metering event."
+                << " HttpStatusCode: " << requestAttributes.HttpStatusCode
+                << " IsFifo: " << requestAttributes.IsFifo
+                << " FolderId: " << requestAttributes.FolderId
+                << " RequestSizeInBytes: " << requestAttributes.RequestSizeInBytes
+                << " ResponseSizeInBytes: " << requestAttributes.ResponseSizeInBytes
+                << " SourceAddress: " << requestAttributes.SourceAddress
+                << " ResourceId: " << requestAttributes.ResourceId
+                << " Action: " << requestAttributes.Action
+            );
+
+            ctx.Send(NSQS::MakeSqsMeteringServiceID(), reportRequestAttributes.Release());
+        }
 
         ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }

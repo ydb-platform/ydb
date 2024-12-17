@@ -5,10 +5,12 @@ PEERDIR(
     ydb/core/discovery
     ydb/core/engine/minikql
     ydb/core/protos
+    ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/replication/common
     ydb/core/tx/replication/ydb_proxy
     ydb/core/tx/scheme_board
+    ydb/core/tx/tx_allocator_client
     ydb/core/util
     ydb/core/ydb_convert
     ydb/services/metadata
@@ -20,6 +22,7 @@ SRCS(
     dst_alterer.cpp
     dst_creator.cpp
     dst_remover.cpp
+    event_util.cpp
     lag_provider.cpp
     logging.cpp
     nodes_manager.cpp
@@ -35,6 +38,7 @@ SRCS(
     target_table.cpp
     target_with_stream.cpp
     tenant_resolver.cpp
+    tx_assign_tx_id.cpp
     tx_alter_dst_result.cpp
     tx_alter_replication.cpp
     tx_assign_stream_name.cpp
@@ -46,6 +50,7 @@ SRCS(
     tx_drop_dst_result.cpp
     tx_drop_replication.cpp
     tx_drop_stream_result.cpp
+    tx_heartbeat.cpp
     tx_init.cpp
     tx_init_schema.cpp
     tx_resolve_secret_result.cpp
@@ -59,6 +64,8 @@ YQL_LAST_ABI_VERSION()
 END()
 
 RECURSE_FOR_TESTS(
+    ut_assign_tx_id
     ut_dst_creator
+    ut_stream_creator
     ut_target_discoverer
 )

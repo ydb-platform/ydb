@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pip
-Version: 24.2
+Version: 24.3.1
 Summary: The PyPA recommended tool for installing Python packages.
 Author-email: The pip developers <distutils-sig@python.org>
 License: MIT
@@ -20,6 +20,7 @@ Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Requires-Python: >=3.8

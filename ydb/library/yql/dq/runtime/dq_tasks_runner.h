@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dq_tasks_counters.h"
+
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/dq/runtime/dq_async_output.h>
@@ -9,13 +11,14 @@
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
+#include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_node_visitor.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_watermark.h>
+#include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_node_visitor.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_watermark.h>
 
 #include <library/cpp/monlib/metrics/histogram_collector.h>
 
@@ -65,6 +68,7 @@ struct TTaskRunnerStatsBase {
     THashMap<ui32, THashMap<ui64, IDqOutputChannel::TPtr>> OutputChannels; // DstStageId => {ChannelId => Channel}
 
     TVector<TMkqlStat> MkqlStats;
+    TVector<TOperatorStat> OperatorStat;
 
     TTaskRunnerStatsBase() = default;
     TTaskRunnerStatsBase(TTaskRunnerStatsBase&&) = default;
@@ -210,7 +214,7 @@ NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, con
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NKikimr::NMiniKQL::TType* type,
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TVector<IDqOutput::TPtr>&& channels);
+    TVector<IDqOutput::TPtr>&& channels, TMaybe<ui8> minFillPercentage = {});
 
 using TDqTaskRunnerParameterProvider = std::function<
     bool(std::string_view name, NKikimr::NMiniKQL::TType* type, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
@@ -300,6 +304,10 @@ public:
             auto guard = typeEnv.BindAllocator();
             TDqDataSerializer::DeserializeParam(it->second, type, holderFactory, value);
         }
+    }
+
+    bool EnableMetering() const {
+        return Task_->GetEnableMetering();
     }
 
     ui64 GetStageId() const {
@@ -432,8 +440,8 @@ public:
 };
 
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, 
-    const TDqTaskRunnerContext& ctx, 
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+    const TDqTaskRunnerContext& ctx,
     const TDqTaskRunnerSettings& settings,
     const TLogFunc& logFunc
 );

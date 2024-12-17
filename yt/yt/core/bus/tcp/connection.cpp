@@ -303,10 +303,10 @@ void TTcpConnection::TryEnqueueHandshake()
     NProto::THandshake handshake;
     ToProto(handshake.mutable_connection_id(), Id_);
     if (ConnectionType_ == EConnectionType::Client) {
-        handshake.set_multiplexing_band(ToProto<int>(MultiplexingBand_.load()));
+        handshake.set_multiplexing_band(ToProto(MultiplexingBand_.load()));
     }
-    handshake.set_encryption_mode(ToProto<int>(EncryptionMode_));
-    handshake.set_verification_mode(ToProto<int>(VerificationMode_));
+    handshake.set_encryption_mode(ToProto(EncryptionMode_));
+    handshake.set_verification_mode(ToProto(VerificationMode_));
 
     auto message = MakeHandshakeMessage(handshake);
     auto messageSize = GetByteSize(message);

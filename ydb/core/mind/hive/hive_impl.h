@@ -304,7 +304,9 @@ protected:
     ITransaction* CreateUpdateTabletsObject(TEvHive::TEvUpdateTabletsObject::TPtr event);
     ITransaction* CreateUpdateDomain(TSubDomainKey subdomainKey, TEvHive::TEvUpdateDomain::TPtr event = {});
     ITransaction* CreateUpdateDcFollowers(const TDataCenterId& dc);
+    ITransaction* CreateGenerateTestData(uint64_t seed);
     ITransaction* CreateDeleteNode(TNodeId nodeId);
+    ITransaction* CreateConfigureScaleRecommender(TEvHive::TEvConfigureScaleRecommender::TPtr event);
 
 public:
     TDomainsView DomainsView;
@@ -379,6 +381,7 @@ protected:
     TDuration MaxTimeBetweenConnects;
     bool WarmUp;
     ui64 ExpectedNodes;
+    ui64 AliveNodes = 0;
 
     THashMap<ui32, TEvInterconnect::TNodeInfo> NodesInfo;
     TTabletCountersBase* TabletCounters;
@@ -580,6 +583,9 @@ protected:
     void Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev);
     void Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev);
     void Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev);
+    void Handle(TEvPrivate::TEvGenerateTestData::TPtr& ev);
+    void Handle(TEvPrivate::TEvRefreshScaleRecommendation::TPtr& ev);
+    void Handle(TEvHive::TEvConfigureScaleRecommender::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -958,6 +964,10 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
         return TDuration::MilliSeconds(CurrentConfig.GetStorageInfoRefreshFrequency());
     }
 
+    TDuration GetScaleRecommendationRefreshFrequency() const {
+        return TDuration::MilliSeconds(CurrentConfig.GetScaleRecommendationRefreshFrequency());
+    }
+
     double GetMinStorageScatterToBalance() const {
         return CurrentConfig.GetMinStorageScatterToBalance();
     }
@@ -1044,6 +1054,10 @@ protected:
     void ResolveDomain(TSubDomainKey domain);
     TString GetDomainName(TSubDomainKey domain);
     TSubDomainKey GetMySubDomainKey() const;
+
+    template <typename TIt>
+    static ui32 CalculateRecommendedNodes(TIt windowBegin, TIt windowEnd, size_t readyNodes, double target);
+    void MakeScaleRecommendation();
 };
 
 } // NHive

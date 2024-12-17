@@ -7,7 +7,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/intrlist.h>
 
-namespace NKikimr::NCache {
+namespace NKikimr::NSharedCache {
 
 enum class ECacheCacheGeneration {
     None,
@@ -137,6 +137,10 @@ public:
 
     void UpdateLimit(ui64 limit) override {
         Config.SetLimit(limit);
+    }
+
+    ui64 GetSize() const override {
+        return FreshWeight + StagingWeight + WarmWeight;
     }
 
 private:

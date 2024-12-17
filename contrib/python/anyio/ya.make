@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(4.6.0)
+VERSION(4.6.2.post1)
 
 LICENSE(MIT)
 

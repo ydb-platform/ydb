@@ -1,6 +1,6 @@
 // HACK: the TRe2Module class is in an anonymous namespace
 // so including the source cpp is the only way to access it
-#include <ydb/library/yql/udfs/common/re2/re2_udf.cpp>
+#include <yql/essentials/udfs/common/re2/re2_udf.cpp>
 
 namespace NKikimr::NKqp {
 

@@ -506,6 +506,10 @@ TUnversionedValueToSkiffConverter CreateDecimalValueConverter(
             return CreatePrimitiveValueConverter<EValueType::String>(
                 isRequired,
                 TDecimalSkiffWriter<EWireType::Int128>(precision));
+        case EWireType::Int256:
+            return CreatePrimitiveValueConverter<EValueType::String>(
+                isRequired,
+                TDecimalSkiffWriter<EWireType::Int256>(precision));
         case EWireType::Yson32:
             return CreatePrimitiveValueConverter(wireType, isRequired);
         default:
@@ -1092,7 +1096,7 @@ ISchemalessFormatWriterPtr CreateWriterForSkiff(
             std::move(controlAttributesConfig),
             keyColumnCount);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(EErrorCode::InvalidFormat, "Failed to parse config for Skiff format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for Skiff format") << ex;
     }
 }
 

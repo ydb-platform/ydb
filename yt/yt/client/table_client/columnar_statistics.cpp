@@ -265,7 +265,7 @@ TLightweightColumnarStatistics TColumnarStatistics::MakeLightweightStatistics() 
     };
 }
 
-TNamedColumnarStatistics TColumnarStatistics::MakeNamedStatistics(const std::vector<TString>& names) const
+TNamedColumnarStatistics TColumnarStatistics::MakeNamedStatistics(const std::vector<std::string>& names) const
 {
     TNamedColumnarStatistics result;
     result.TimestampTotalWeight = TimestampTotalWeight;

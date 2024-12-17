@@ -8,7 +8,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/scheme
-    ydb/library/yql/public/udf/service/stub
+    yql/essentials/public/udf/service/stub
     ydb/library/yql/udfs/common/clickhouse/client
 )
 

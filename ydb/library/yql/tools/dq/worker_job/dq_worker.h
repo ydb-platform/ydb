@@ -5,7 +5,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 
-#include <ydb/library/yql/utils/log/proto/logger_config.pb.h>
+#include <yql/essentials/utils/log/proto/logger_config.pb.h>
 
 #include <yt/cpp/mapreduce/interface/client.h>
 

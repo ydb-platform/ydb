@@ -10,9 +10,11 @@ struct TShuffleHandle
     : public NYTree::TYsonStruct
 {
     NObjectClient::TTransactionId TransactionId;
-    TString CoordinatorAddress;
-    TString Account;
+    std::string CoordinatorAddress;
+    std::string Account;
+    std::string MediumName;
     int PartitionCount;
+    int ReplicationFactor;
 
     REGISTER_YSON_STRUCT(TShuffleHandle);
 
@@ -21,15 +23,16 @@ struct TShuffleHandle
 
 DEFINE_REFCOUNTED_TYPE(TShuffleHandle)
 
+void FormatValue(TStringBuilderBase* builder, const TShuffleHandlePtr& shuffleHandle, TStringBuf spec);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TStartShuffleOptions
     : public TTimeoutOptions
-{ };
-
-struct TFinishShuffleOptions
-    : public TTimeoutOptions
-{ };
+{
+    std::optional<std::string> MediumName;
+    std::optional<int> ReplicationFactor;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -38,13 +41,10 @@ struct IShuffleClient
     virtual ~IShuffleClient() = default;
 
     virtual TFuture<TShuffleHandlePtr> StartShuffle(
-        const TString& account,
+        const std::string& account,
         int partitionCount,
+        NObjectClient::TTransactionId parentTransactionId,
         const TStartShuffleOptions& options) = 0;
-
-    virtual TFuture<void> FinishShuffle(
-        const TShuffleHandlePtr& shuffleHandle,
-        const TFinishShuffleOptions& options) = 0;
 
     virtual TFuture<IRowBatchReaderPtr> CreateShuffleReader(
         const TShuffleHandlePtr& shuffleHandle,
@@ -53,7 +53,7 @@ struct IShuffleClient
 
     virtual TFuture<IRowBatchWriterPtr> CreateShuffleWriter(
         const TShuffleHandlePtr& shuffleHandle,
-        const TString& partitionColumn,
+        const std::string& partitionColumn,
         const NTableClient::TTableWriterConfigPtr& config = New<NTableClient::TTableWriterConfig>()) = 0;
 };
 

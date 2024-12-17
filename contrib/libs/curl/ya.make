@@ -11,15 +11,17 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(8.10.1)
+VERSION(8.5.0)
 
-ORIGINAL_SOURCE(https://github.com/curl/curl/releases/download/curl-8_10_1/curl-8.10.1.tar.bz2)
+ORIGINAL_SOURCE(https://github.com/curl/curl/releases/download/curl-8_5_0/curl-8.5.0.tar.bz2)
 
 PEERDIR(
     contrib/libs/brotli/dec
     contrib/libs/brotli/enc
     contrib/libs/libc_compat
     contrib/libs/nghttp2
+    contrib/libs/nghttp3
+    contrib/libs/ngtcp2
     contrib/libs/openssl
     contrib/libs/zlib
     contrib/libs/zstd
@@ -92,17 +94,15 @@ SRCS(
     lib/curl_memrchr.c
     lib/curl_multibyte.c
     lib/curl_ntlm_core.c
+    lib/curl_ntlm_wb.c
     lib/curl_path.c
     lib/curl_range.c
     lib/curl_rtmp.c
     lib/curl_sasl.c
-    lib/curl_sha512_256.c
     lib/curl_sspi.c
     lib/curl_threads.c
     lib/curl_trc.c
-    lib/cw-out.c
     lib/dict.c
-    lib/dllmain.c
     lib/doh.c
     lib/dynbuf.c
     lib/dynhds.c
@@ -164,7 +164,6 @@ SRCS(
     lib/psl.c
     lib/rand.c
     lib/rename.c
-    lib/request.c
     lib/rtsp.c
     lib/select.c
     lib/sendf.c
@@ -210,15 +209,12 @@ SRCS(
     lib/version_win32.c
     lib/vquic/curl_msh3.c
     lib/vquic/curl_ngtcp2.c
-    lib/vquic/curl_osslq.c
     lib/vquic/curl_quiche.c
-    lib/vquic/vquic-tls.c
     lib/vquic/vquic.c
     lib/vssh/libssh.c
     lib/vssh/libssh2.c
     lib/vssh/wolfssh.c
     lib/vtls/bearssl.c
-    lib/vtls/cipher_suite.c
     lib/vtls/hostcheck.c
     lib/vtls/keylog.c
     lib/vtls/mbedtls_threadlock.c

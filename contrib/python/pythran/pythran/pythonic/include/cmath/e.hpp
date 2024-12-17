@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_CMATH_E_HPP
 #define PYTHONIC_INCLUDE_CMATH_E_HPP
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/include/types/complex.hpp"
+#include "pythonic/utils/functor.hpp"
 
 #include <cmath>
 

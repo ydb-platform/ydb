@@ -2,11 +2,11 @@
 
 #include <ydb/core/mind/bscontroller/group_geometry_info.h>
 
+#include <library/cpp/streams/zstd/zstd.h>
+
 namespace NKikimr::NStorage {
 
-    bool TDistributedConfigKeeper::GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config) {
-        bool changes = false;
-
+    void TDistributedConfigKeeper::GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID) {
         if (config->HasBlobStorageConfig()) {
             const auto& bsConfig = config->GetBlobStorageConfig();
             const bool noStaticGroup = !bsConfig.HasServiceSet() || !bsConfig.GetServiceSet().GroupsSize();
@@ -24,7 +24,6 @@ namespace NKikimr::NStorage {
                         settings.GetGeometry(), settings.GetPDiskFilter(),
                         settings.HasPDiskType() ? std::make_optional(settings.GetPDiskType()) : std::nullopt, {}, {}, 0,
                         nullptr, false, true, false);
-                    changes = true;
                     STLOG(PRI_DEBUG, BS_NODE, NWDC33, "Allocated static group", (Group, bsConfig.GetServiceSet().GetGroups(0)));
                 } catch (const TExConfigError& ex) {
                     STLOG(PRI_ERROR, BS_NODE, NWDC10, "Failed to allocate static group", (Reason, ex.what()));
@@ -44,12 +43,18 @@ namespace NKikimr::NStorage {
             GenerateStateStorageConfig(config->MutableSchemeBoardConfig(), *config);
         }
 
-        if (!config->GetSelfAssemblyUUID()) {
-            config->SetSelfAssemblyUUID(CreateGuidAsString());
-            changes = true;
-        }
+        config->SetSelfAssemblyUUID(selfAssemblyUUID);
 
-        return changes;
+        if (const auto& bsconfig = Cfg->BlobStorageConfig; bsconfig.HasAutoconfigSettings()) {
+            if (const auto& autoconfigSettings = bsconfig.GetAutoconfigSettings(); autoconfigSettings.HasInitialConfigYaml()) {
+                TStringStream ss;
+                {
+                    TZstdCompress zstd(&ss);
+                    zstd << autoconfigSettings.GetInitialConfigYaml();
+                }
+                config->SetStorageConfigCompressedYAML(ss.Str());
+            }
+        }
     }
 
     void TDistributedConfigKeeper::AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, ui32 groupId,

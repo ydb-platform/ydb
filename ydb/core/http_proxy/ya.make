@@ -30,7 +30,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/grpc_services/local_rpc
     ydb/core/security
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/library/http_proxy/authorization
     ydb/library/http_proxy/error
     ydb/library/ycloud/api

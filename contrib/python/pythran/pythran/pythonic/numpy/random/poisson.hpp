@@ -29,9 +29,9 @@ namespace numpy
     }
 
     inline auto poisson(double lam, long size)
-        -> decltype(poisson(lam, types::array<long, 1>{{size}}))
+        -> decltype(poisson(lam, types::array_tuple<long, 1>{{size}}))
     {
-      return poisson(lam, types::array<long, 1>{{size}});
+      return poisson(lam, types::array_tuple<long, 1>{{size}});
     }
 
     inline double poisson(double lam, types::none_type d)

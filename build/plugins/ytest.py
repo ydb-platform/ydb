@@ -759,7 +759,7 @@ def onadd_check(unit, *args):
         check_resource(unit, *args)
     elif check_type == "ktlint":
         ktlint(unit, *args)
-    elif check_type == "JAVA_STYLE" and (unit.get('YMAKE_JAVA_TEST') != 'yes' or unit.get('ALL_SRCDIRS')):
+    elif check_type == "JAVA_STYLE" and unit.get('ALL_SRCDIRS'):
         java_style(unit, *args)
     elif check_type == "gofmt":
         gofmt(unit, *args)
@@ -772,7 +772,7 @@ def onadd_check(unit, *args):
 def on_register_no_check_imports(unit):
     s = unit.get('NO_CHECK_IMPORTS_FOR_VALUE')
     if s not in ('', 'None'):
-        unit.onresource(['-', 'py/no_check_imports/{}="{}"'.format(_common.pathid(s), s)])
+        unit.onresource(['DONT_COMPRESS', '-', 'py/no_check_imports/{}="{}"'.format(_common.pathid(s), s)])
 
 
 @df.with_fields(
@@ -869,7 +869,6 @@ def onadd_pytest_bin(fields, unit, *args):
         df.JdkForTests.value,
         df.ModuleLang.value,
         df.TestClasspath.value,
-        df.TestClasspathOrigins.value,
         df.TestClasspathDeps.value,
         df.TestJar.value,
         df.DockerImage.value,
@@ -937,7 +936,7 @@ def onjava_test_deps(fields, unit, *args):
 def onsetup_pytest_bin(unit, *args):
     use_arcadia_python = unit.get('USE_ARCADIA_PYTHON') == "yes"
     if use_arcadia_python:
-        unit.onresource(['-', 'PY_MAIN={}'.format("library.python.pytest.main:main")])  # XXX
+        unit.onresource(['DONT_COMPRESS', '-', 'PY_MAIN={}'.format("library.python.pytest.main:main")])  # XXX
         unit.onadd_pytest_bin(list(args))
 
 
@@ -1015,6 +1014,7 @@ def on_add_cpp_linter_check(fields, unit, *args):
         "GLOBAL_RESOURCES": unlimited,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
+        "CONFIG_TYPE": 1,
     }
     _, spec_args = _common.sort_by_keywords(keywords, args)
 
@@ -1061,6 +1061,7 @@ def on_add_py_linter_check(fields, unit, *args):
         "PROJECT_TO_CONFIG_MAP": 1,
         "FLAKE_MIGRATIONS_CONFIG": 1,
         "CUSTOM_CONFIG": 1,
+        "CONFIG_TYPE": 1,
     }
     _, spec_args = _common.sort_by_keywords(keywords, args)
 

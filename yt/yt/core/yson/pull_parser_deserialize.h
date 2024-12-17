@@ -113,6 +113,9 @@ void Deserialize(
 template <class T>
     requires TEnumTraits<T>::IsEnum
 void Deserialize(T& value, TYsonPullParserCursor* cursor);
+template <class T>
+    requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
+void Deserialize(T& value, TYsonPullParserCursor* cursor);
 
 // TCompactVector.
 template <class T, size_t N>

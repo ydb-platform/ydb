@@ -6,7 +6,9 @@
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/docapi/traits.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
@@ -143,6 +145,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropSequence:
         case NKikimrSchemeOp::ESchemeOpDropReplication:
         case NKikimrSchemeOp::ESchemeOpDropReplicationCascade:
+        case NKikimrSchemeOp::ESchemeOpDropTransfer:
+        case NKikimrSchemeOp::ESchemeOpDropTransferCascade:
         case NKikimrSchemeOp::ESchemeOpDropBlobDepot:
         case NKikimrSchemeOp::ESchemeOpDropExternalTable:
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
@@ -314,12 +318,17 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpMoveIndex:
             Y_ABORT("no implementation for ESchemeOpMoveIndex");
 
+        case NKikimrSchemeOp::ESchemeOpMoveSequence:
+            Y_ABORT("no implementation for ESchemeOpMoveSequence");
+
         case NKikimrSchemeOp::ESchemeOpCreateSequence:
         case NKikimrSchemeOp::ESchemeOpAlterSequence:
             return *modifyScheme.MutableSequence()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpCreateReplication:
         case NKikimrSchemeOp::ESchemeOpAlterReplication:
+        case NKikimrSchemeOp::ESchemeOpCreateTransfer:
+        case NKikimrSchemeOp::ESchemeOpAlterTransfer:
             return *modifyScheme.MutableReplication()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpCreateBlobDepot:
@@ -359,9 +368,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
             return *modifyScheme.MutableCreateResourcePool()->MutableName();
 
-        case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup:
+        case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
-            return *modifyScheme.MutableRestoreIncrementalBackup()->MutableSrcTableName();
+        // TODO verify all logic based on this, it may be irrelevant
+            return *modifyScheme.MutableRestoreMultipleIncrementalBackups()->MutableSrcTablePaths(0);
 
         case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
             return *modifyScheme.MutableCreateBackupCollection()->MutableName();
@@ -371,7 +381,20 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpDropBackupCollection:
             return *modifyScheme.MutableDropBackupCollection()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpBackupBackupCollection:
+            return *modifyScheme.MutableBackupBackupCollection()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection:
+            return *modifyScheme.MutableBackupIncrementalBackupCollection()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection:
+            return *modifyScheme.MutableRestoreBackupCollection()->MutableName();
         }
+    }
+
+    static void SetPathNameForScheme(NKikimrSchemeOp::TModifyScheme& modifyScheme, const TString& name) {
+        GetPathNameForScheme(modifyScheme) = name;
     }
 
     static bool IsCreateRequest(const NKikimrSchemeOp::TModifyScheme& modifyScheme) {
@@ -405,8 +428,18 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         return IsCreateRequest(modifyScheme);
     }
 
+    static TVector<TString> GetFullPath(NKikimrSchemeOp::TModifyScheme& scheme) {
+        switch (scheme.GetOperationType()) {
+        case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
+        case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
+            return SplitPath(GetPathNameForScheme(scheme));
+        default:
+            return Merge(SplitPath(scheme.GetWorkingDir()), SplitPath(GetPathNameForScheme(scheme)));
+        }
+    }
+
     static THolder<NSchemeCache::TSchemeCacheNavigate> ResolveRequestForAdjustPathNames(NKikimrSchemeOp::TModifyScheme& scheme) {
-        auto parts = Merge(SplitPath(scheme.GetWorkingDir()), SplitPath(GetPathNameForScheme(scheme)));
+        auto parts = GetFullPath(scheme);
         if (parts.size() < 2) {
             return {};
         }
@@ -624,6 +657,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterColumnTable:
         case NKikimrSchemeOp::ESchemeOpAlterSequence:
         case NKikimrSchemeOp::ESchemeOpAlterReplication:
+        case NKikimrSchemeOp::ESchemeOpAlterTransfer:
         case NKikimrSchemeOp::ESchemeOpAlterBlobDepot:
         case NKikimrSchemeOp::ESchemeOpAlterExternalTable:
         case NKikimrSchemeOp::ESchemeOpAlterExternalDataSource:
@@ -631,11 +665,18 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
-        case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup:
         case NKikimrSchemeOp::ESchemeOpAlterBackupCollection:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+            toResolve.RequiredAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
+        {
+            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            toResolve.Path = SplitPath(GetPathNameForScheme(pbModifyScheme));
             toResolve.RequiredAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
             break;
@@ -652,6 +693,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropSequence:
         case NKikimrSchemeOp::ESchemeOpDropReplication:
         case NKikimrSchemeOp::ESchemeOpDropReplicationCascade:
+        case NKikimrSchemeOp::ESchemeOpDropTransfer:
+        case NKikimrSchemeOp::ESchemeOpDropTransferCascade:
         case NKikimrSchemeOp::ESchemeOpDropBlobDepot:
         case NKikimrSchemeOp::ESchemeOpDropExternalTable:
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
@@ -715,6 +758,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateSolomonVolume:
         case NKikimrSchemeOp::ESchemeOpCreateSequence:
         case NKikimrSchemeOp::ESchemeOpCreateReplication:
+        case NKikimrSchemeOp::ESchemeOpCreateTransfer:
         case NKikimrSchemeOp::ESchemeOpCreateBlobDepot:
         case NKikimrSchemeOp::ESchemeOpCreateExternalTable:
         case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:
@@ -744,6 +788,33 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                     ResolveForACL.push_back(toResolve);
                 }
             }
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpBackupBackupCollection: {
+            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            toResolve.Path = workingDir;
+            auto collectionPath = SplitPath(pbModifyScheme.GetBackupBackupCollection().GetName());
+            std::move(collectionPath.begin(), collectionPath.end(), std::back_inserter(toResolve.Path));
+            toResolve.RequiredAccess = NACLib::EAccessRights::GenericWrite;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection: {
+            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            toResolve.Path = workingDir;
+            auto collectionPath = SplitPath(pbModifyScheme.GetBackupIncrementalBackupCollection().GetName());
+            std::move(collectionPath.begin(), collectionPath.end(), std::back_inserter(toResolve.Path));
+            toResolve.RequiredAccess = NACLib::EAccessRights::GenericWrite;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection: {
+            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            toResolve.Path = workingDir;
+            auto collectionPath = SplitPath(pbModifyScheme.GetRestoreBackupCollection().GetName());
+            std::move(collectionPath.begin(), collectionPath.end(), std::back_inserter(toResolve.Path));
+            toResolve.RequiredAccess = NACLib::EAccessRights::GenericWrite;
+            ResolveForACL.push_back(toResolve);
             break;
         }
         case NKikimrSchemeOp::ESchemeOpMoveTable: {
@@ -795,6 +866,23 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = workingDir;
             toResolve.RequiredAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpMoveSequence: {
+            auto& descr = pbModifyScheme.GetMoveSequence();
+            {
+                auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+                toResolve.Path = SplitPath(descr.GetSrcPath());
+                toResolve.RequiredAccess = NACLib::EAccessRights::RemoveSchema;
+                ResolveForACL.push_back(toResolve);
+            }
+            {
+                auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+                auto dstDir = ToString(ExtractParent(descr.GetDstPath()));
+                toResolve.Path = SplitPath(dstDir);
+                toResolve.RequiredAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
+                ResolveForACL.push_back(toResolve);
+            }
             break;
         }
         case NKikimrSchemeOp::ESchemeOpCreateTableIndex:
@@ -1277,7 +1365,7 @@ void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetRe
         }
     }
 
-    auto parts = Merge(SplitPath(GetModifyScheme().GetWorkingDir()), SplitPath(GetPathNameForScheme(GetModifyScheme())));
+    auto parts = GetFullPath(GetModifyScheme());
 
     if (!workingDir || workingDir->size() >= parts.size()) {
         const TString errText = TStringBuilder()
@@ -1293,7 +1381,7 @@ void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetRe
     }
 
     GetModifyScheme().SetWorkingDir(CombinePath(workingDir->begin(), workingDir->end()));
-    GetPathNameForScheme(GetModifyScheme()) = CombinePath(parts.begin() + workingDir->size(), parts.end(), false);
+    SetPathNameForScheme(GetModifyScheme(), CombinePath(parts.begin() + workingDir->size(), parts.end(), false));
 
     ProcessRequest(ctx);
 }

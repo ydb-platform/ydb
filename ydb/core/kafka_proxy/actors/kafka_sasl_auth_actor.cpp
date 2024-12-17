@@ -134,12 +134,13 @@ bool TKafkaSaslAuthActor::TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& aut
     auto password = tokens[2];
     size_t atPos = userAndDatabase.rfind('@');
     if (atPos == TString::npos) {
-        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "Database not provided.", "", ctx);
-        return false;
+        authData.UserName = "";
+        authData.Database = userAndDatabase;
+    } else {
+        authData.UserName = userAndDatabase.substr(0, atPos);
+        authData.Database = userAndDatabase.substr(atPos + 1);
     }
 
-    authData.UserName = userAndDatabase.substr(0, atPos);
-    authData.Database = userAndDatabase.substr(atPos + 1);
     authData.Password = password;
     return true;
 }

@@ -4,7 +4,7 @@
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
+#include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
 
 #include <ydb/library/actors/core/actor.h>
 
@@ -150,7 +150,7 @@ public:
         return std::make_pair(Database, PoolId);
     }
 
-    TString ToString() const {
+    TString ToString(bool verbose = false) const {
         auto res = TStringBuilder() << "TxResourcesInfo { "
             << "TxId: " << TxId
             << ", Database: " << Database;
@@ -168,10 +168,10 @@ public:
             << ", started at: " << CreatedAt
             << " }" << Endl;
 
-        if (TxMaxAllocationBacktrace.load()) {
+        if (verbose && TxMaxAllocationBacktrace.load()) {
             res << "TxMaxAllocationBacktrace:" << Endl << TxMaxAllocationBacktrace.load()->PrintToString();
         }
-        if (TxFailedAllocationBacktrace.load()) {
+        if (verbose && TxFailedAllocationBacktrace.load()) {
             res << "TxFailedAllocationBacktrace:" << Endl << TxFailedAllocationBacktrace.load()->PrintToString();
         }
 

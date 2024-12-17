@@ -18,6 +18,10 @@
 
 #include <grpcpp/grpcpp.h>
 
+namespace NMonitoring {
+    struct TDynamicCounters;
+} // NMonitoring
+
 namespace NYdbGrpc {
 
 struct TSslData {
@@ -262,12 +266,18 @@ public:
     };
 
 public:
-    void SetGlobalLimiterHandle(TGlobalLimiter* /*limiter*/) override {}
+    void SetGlobalLimiterHandle(TGlobalLimiter* limiter) override {
+        Limiter_ = limiter;
+    }
+
     void StopService() noexcept override;
     size_t RequestsInProgress() const override;
 
     bool RegisterRequestCtx(ICancelableContext* req);
     void DeregisterRequestCtx(ICancelableContext* req);
+
+    virtual bool IncRequest();
+    virtual void DecRequest();
 
     TShutdownGuard ProtectShutdown() noexcept {
         AtomicIncrement(GuardCount_);
@@ -322,6 +332,8 @@ private:
     // Note: benchmarks showed 4 shards is enough to scale to ~30 threads
     TVector<TShard> Shards_{ size_t(4) };
     std::atomic<size_t> NextShard_{ 0 };
+
+    NYdbGrpc::TGlobalLimiter* Limiter_ = nullptr;
 };
 
 template<typename T>
@@ -341,8 +353,11 @@ protected:
 class TGRpcServer {
 public:
     using IGRpcServicePtr = TIntrusivePtr<IGRpcService>;
-    TGRpcServer(const TServerOptions& opts);
+
+    // TODO: remove default nullptr after migration
+    TGRpcServer(const TServerOptions& opts, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = nullptr);
     ~TGRpcServer();
+
     void AddService(IGRpcServicePtr service);
     void Start();
     // Send stop to registred services and call Shutdown on grpc server
@@ -357,6 +372,7 @@ private:
     using IThreadRef = TAutoPtr<IThreadFactory::IThread>;
 
     const TServerOptions Options_;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
     std::unique_ptr<grpc::Server> Server_;
     std::vector<std::unique_ptr<grpc::ServerCompletionQueue>> CQS_;
     TVector<IThreadRef> Ts;

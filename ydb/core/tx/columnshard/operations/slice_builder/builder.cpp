@@ -76,14 +76,14 @@ private:
     const ui64 DataSize;
     void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override {
         std::vector<NColumnShard::TInsertedPortion> portions;
-        std::vector<NColumnShard::TFailedWrite> fails;
+        std::vector<NColumnShard::TNoDataWrite> noDataWrites;
         for (auto&& i : Portions) {
             portions.emplace_back(i.ExtractPortion(), i.GetPKBatch());
         }
         NColumnShard::TInsertedPortions pack(std::move(WriteMeta), std::move(portions), DataSize);
         std::vector<NColumnShard::TInsertedPortions> packs = { pack };
         auto result = std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(
-            putResult->GetPutStatus(), Action, std::move(packs), std::move(fails));
+            putResult->GetPutStatus(), Action, std::move(packs), std::move(noDataWrites));
         ctx.Send(DstActor, result.release());
     }
     virtual void DoOnStartSending() override {
@@ -119,9 +119,9 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
     if (WriteData.GetWritePortions()) {
         if (OriginalBatch->num_rows() == 0) {
             std::vector<NColumnShard::TInsertedPortions> portions;
-            std::vector<NColumnShard::TFailedWrite> fails = { NColumnShard::TFailedWrite(WriteData.GetWriteMeta(), WriteData.GetSize()) };
+            std::vector<NColumnShard::TNoDataWrite> noDataWrites = { NColumnShard::TNoDataWrite(WriteData.GetWriteMeta(), WriteData.GetSize()) };
             auto result = std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(
-                NKikimrProto::EReplyStatus::OK, nullptr, std::move(portions), std::move(fails));
+                NKikimrProto::EReplyStatus::OK, nullptr, std::move(portions), std::move(noDataWrites));
             NActors::TActivationContext::AsActorContext().Send(Context.GetTabletActorId(), result.release());
         } else {
             auto batches = NArrow::NMerger::TRWSortableBatchPosition::SplitByBordersInIntervalPositions(OriginalBatch,
@@ -155,7 +155,7 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
         const auto& indexSchema = Context.GetActualSchema()->GetIndexInfo().ArrowSchema();
         auto subsetConclusion = NArrow::TColumnOperator().IgnoreOnDifferentFieldTypes().BuildSequentialSubset(OriginalBatch, indexSchema);
         if (subsetConclusion.IsFail()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unadaptable schemas")("index", indexSchema->ToString())(
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unadaptable schemas")("index", indexSchema.ToString())(
                 "problem", subsetConclusion.GetErrorMessage());
             ReplyError("unadaptable schema: " + subsetConclusion.GetErrorMessage(),
                 NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
@@ -163,13 +163,13 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
         }
         NArrow::TSchemaSubset subset = subsetConclusion.DetachResult();
 
-        if (OriginalBatch->num_columns() != indexSchema->num_fields()) {
-            AFL_VERIFY(OriginalBatch->num_columns() < indexSchema->num_fields())("original", OriginalBatch->num_columns())(
-                                                          "index", indexSchema->num_fields());
+        if (OriginalBatch->num_columns() != indexSchema.num_fields()) {
+            AFL_VERIFY(OriginalBatch->num_columns() < indexSchema.num_fields())("original", OriginalBatch->num_columns())(
+                                                          "index", indexSchema.num_fields());
             if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableOptionalColumnsInColumnShard() &&
                 WriteData.GetWriteMeta().GetModificationType() != NEvWrite::EModificationType::Delete) {
                 subset = NArrow::TSchemaSubset::AllFieldsAccepted();
-                const std::vector<ui32>& columnIdsVector = Context.GetActualSchema()->GetIndexInfo().GetColumnIds(false);
+                const auto columnIdsVector = Context.GetActualSchema()->GetIndexInfo().GetColumnIds(false);
                 const std::set<ui32> columnIdsSet(columnIdsVector.begin(), columnIdsVector.end());
                 auto normalized =
                     Context.GetActualSchema()

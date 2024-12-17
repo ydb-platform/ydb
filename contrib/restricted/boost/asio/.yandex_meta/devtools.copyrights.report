@@ -36,7 +36,7 @@
 KEEP     COPYRIGHT_SERVICE_LABEL 09b747b5492c0054ccb0805469599656
 BELONGS ya.make
     License text:
-        // Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+        // Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
         // Copyright (c) 2008 Roelof Naude (roelof.naude at gmail dot com)
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
@@ -46,135 +46,25 @@ BELONGS ya.make
         include/boost/asio/detail/eventfd_select_interrupter.hpp [5:6]
         include/boost/asio/detail/impl/eventfd_select_interrupter.ipp [5:6]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 1c595f63ea7712179f9a8b6862388b47
+KEEP     COPYRIGHT_SERVICE_LABEL 12ad79d2498da6784ac2af33bef3dca5
 BELONGS ya.make
     License text:
-        // Copyright (c) 2003-2011 Christopher M. Kohlhoff (chris at kohlhoff dot com)
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/asio/detail/limits.hpp [5:5]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 266d0bf761289539d88d2d0c479f3e6c
-BELONGS ya.make
-    License text:
-        // Copyright (c) 2005 Voipster / Indrek dot Juhani at voipster dot com
-        // Copyright (c) 2005-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/asio/ssl/detail/impl/openssl_init.ipp [5:6]
-        include/boost/asio/ssl/impl/context.hpp [5:6]
-        include/boost/asio/ssl/impl/context.ipp [5:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 6495f2e3736232dcde6616b6b4fc2659
-BELONGS ya.make
-    License text:
-        // Copyright (c) 2021 Klemens D. Morgenstern
-        //                    (klemens dot morgenstern at gmx dot net)
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/asio/experimental/co_spawn.hpp [5:6]
-        include/boost/asio/experimental/coro.hpp [5:6]
-        include/boost/asio/experimental/coro_traits.hpp [5:6]
-        include/boost/asio/experimental/detail/completion_handler_erasure.hpp [5:6]
-        include/boost/asio/experimental/detail/coro_promise_allocator.hpp [5:6]
-        include/boost/asio/experimental/detail/partial_promise.hpp [5:6]
-        include/boost/asio/experimental/impl/coro.hpp [5:6]
-        include/boost/asio/experimental/impl/promise.hpp [5:6]
-        include/boost/asio/experimental/impl/use_coro.hpp [5:6]
-        include/boost/asio/experimental/promise.hpp [5:6]
-        include/boost/asio/experimental/use_coro.hpp [5:6]
-        include/boost/asio/impl/connect_pipe.ipp [5:7]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 67070452cde17b413c77230ec724a239
-BELONGS ya.make
-    License text:
-        // Copyright (c) 2005 Voipster / Indrek dot Juhani at voipster dot com
-        // Copyright (c) 2005-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/asio/ssl/detail/impl/openssl_init.ipp [5:6]
-        include/boost/asio/ssl/impl/context.hpp [5:6]
-        include/boost/asio/ssl/impl/context.ipp [5:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 77248a96a79940a9fa1d82b59477d791
-BELONGS ya.make
-    License text:
-        // Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
-        // Copyright (c) 2005 Stefan Arentz (stefan at soze dot com)
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/asio/detail/impl/kqueue_reactor.hpp [5:6]
-        include/boost/asio/detail/impl/kqueue_reactor.ipp [5:6]
-        include/boost/asio/detail/kqueue_reactor.hpp [5:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 77f9dd6047adac3aadfc4e429a97736b
-BELONGS ya.make
-    License text:
-        // Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
-        // Copyright (c) 2008 Rep Invariant Systems, Inc. (info@repinvariant.com)
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/asio/basic_serial_port.hpp [5:6]
-        include/boost/asio/detail/impl/posix_serial_port_service.ipp [5:6]
-        include/boost/asio/detail/impl/win_iocp_handle_service.ipp [5:6]
-        include/boost/asio/detail/impl/win_iocp_serial_port_service.ipp [5:6]
-        include/boost/asio/detail/posix_serial_port_service.hpp [5:6]
-        include/boost/asio/detail/win_iocp_handle_read_op.hpp [5:6]
-        include/boost/asio/detail/win_iocp_handle_service.hpp [5:6]
-        include/boost/asio/detail/win_iocp_handle_write_op.hpp [5:6]
-        include/boost/asio/detail/win_iocp_serial_port_service.hpp [5:6]
-        include/boost/asio/impl/serial_port_base.hpp [5:6]
-        include/boost/asio/impl/serial_port_base.ipp [5:6]
-        include/boost/asio/serial_port.hpp [5:6]
-        include/boost/asio/serial_port_base.hpp [5:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL cec519351b68fb385bc916223bd0753a
-BELONGS ya.make
-    License text:
-        // Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
-        // Copyright (c) 2011 Boris Schaeling (boris@highscore.de)
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/asio/detail/impl/win_object_handle_service.ipp [5:6]
-        include/boost/asio/detail/win_object_handle_service.hpp [5:6]
-        include/boost/asio/windows/basic_object_handle.hpp [5:6]
-        include/boost/asio/windows/object_handle.hpp [5:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL df8df461fa7e2a5ea50074779380a9e8
-BELONGS ya.make
-    License text:
-        // Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+        // Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/asio.hpp [5:5]
+        include/boost/asio/any_completion_executor.hpp [5:5]
+        include/boost/asio/any_completion_handler.hpp [5:5]
         include/boost/asio/any_io_executor.hpp [5:5]
+        include/boost/asio/append.hpp [5:5]
+        include/boost/asio/as_tuple.hpp [5:5]
         include/boost/asio/associated_allocator.hpp [5:5]
         include/boost/asio/associated_cancellation_slot.hpp [5:5]
         include/boost/asio/associated_executor.hpp [5:5]
+        include/boost/asio/associated_immediate_executor.hpp [5:5]
         include/boost/asio/associator.hpp [5:5]
         include/boost/asio/async_result.hpp [5:5]
         include/boost/asio/awaitable.hpp [5:5]
@@ -198,8 +88,10 @@ BELONGS ya.make
         include/boost/asio/basic_streambuf_fwd.hpp [5:5]
         include/boost/asio/basic_waitable_timer.hpp [5:5]
         include/boost/asio/basic_writable_pipe.hpp [5:5]
+        include/boost/asio/bind_allocator.hpp [5:5]
         include/boost/asio/bind_cancellation_slot.hpp [5:5]
         include/boost/asio/bind_executor.hpp [5:5]
+        include/boost/asio/bind_immediate_executor.hpp [5:5]
         include/boost/asio/buffer.hpp [5:5]
         include/boost/asio/buffer_registration.hpp [5:5]
         include/boost/asio/buffered_read_stream.hpp [5:5]
@@ -209,17 +101,24 @@ BELONGS ya.make
         include/boost/asio/buffered_write_stream.hpp [5:5]
         include/boost/asio/buffered_write_stream_fwd.hpp [5:5]
         include/boost/asio/buffers_iterator.hpp [5:5]
+        include/boost/asio/cancel_after.hpp [5:5]
+        include/boost/asio/cancel_at.hpp [5:5]
         include/boost/asio/cancellation_signal.hpp [5:5]
         include/boost/asio/cancellation_state.hpp [5:5]
         include/boost/asio/cancellation_type.hpp [5:5]
+        include/boost/asio/co_composed.hpp [5:5]
         include/boost/asio/co_spawn.hpp [5:5]
         include/boost/asio/completion_condition.hpp [5:5]
         include/boost/asio/compose.hpp [5:5]
+        include/boost/asio/composed.hpp [5:5]
         include/boost/asio/connect.hpp [5:5]
         include/boost/asio/connect_pipe.hpp [5:5]
+        include/boost/asio/consign.hpp [5:5]
         include/boost/asio/coroutine.hpp [5:5]
         include/boost/asio/deadline_timer.hpp [5:5]
+        include/boost/asio/default_completion_token.hpp [5:5]
         include/boost/asio/defer.hpp [5:5]
+        include/boost/asio/deferred.hpp [5:5]
         include/boost/asio/detached.hpp [5:5]
         include/boost/asio/detail/array.hpp [5:5]
         include/boost/asio/detail/array_fwd.hpp [5:5]
@@ -232,11 +131,14 @@ BELONGS ya.make
         include/boost/asio/detail/buffer_resize_guard.hpp [5:5]
         include/boost/asio/detail/buffer_sequence_adapter.hpp [5:5]
         include/boost/asio/detail/buffered_stream_storage.hpp [5:5]
-        include/boost/asio/detail/bulk_executor_op.hpp [5:5]
         include/boost/asio/detail/call_stack.hpp [5:5]
         include/boost/asio/detail/chrono.hpp [5:5]
         include/boost/asio/detail/chrono_time_traits.hpp [5:5]
         include/boost/asio/detail/completion_handler.hpp [5:5]
+        include/boost/asio/detail/completion_message.hpp [5:5]
+        include/boost/asio/detail/completion_payload.hpp [5:5]
+        include/boost/asio/detail/completion_payload_handler.hpp [5:5]
+        include/boost/asio/detail/composed_work.hpp [5:5]
         include/boost/asio/detail/concurrency_hint.hpp [5:5]
         include/boost/asio/detail/conditionally_enabled_event.hpp [5:5]
         include/boost/asio/detail/conditionally_enabled_mutex.hpp [5:5]
@@ -254,20 +156,16 @@ BELONGS ya.make
         include/boost/asio/detail/epoll_reactor.hpp [5:5]
         include/boost/asio/detail/event.hpp [5:5]
         include/boost/asio/detail/eventfd_select_interrupter.hpp [5:6]
+        include/boost/asio/detail/exception.hpp [5:5]
         include/boost/asio/detail/executor_function.hpp [5:5]
         include/boost/asio/detail/executor_op.hpp [5:5]
         include/boost/asio/detail/fd_set_adapter.hpp [5:5]
         include/boost/asio/detail/fenced_block.hpp [5:5]
         include/boost/asio/detail/functional.hpp [5:5]
         include/boost/asio/detail/future.hpp [5:5]
-        include/boost/asio/detail/gcc_arm_fenced_block.hpp [5:5]
-        include/boost/asio/detail/gcc_hppa_fenced_block.hpp [5:5]
-        include/boost/asio/detail/gcc_sync_fenced_block.hpp [5:5]
-        include/boost/asio/detail/gcc_x86_fenced_block.hpp [5:5]
         include/boost/asio/detail/global.hpp [5:5]
         include/boost/asio/detail/handler_alloc_helpers.hpp [5:5]
         include/boost/asio/detail/handler_cont_helpers.hpp [5:5]
-        include/boost/asio/detail/handler_invoke_helpers.hpp [5:5]
         include/boost/asio/detail/handler_tracking.hpp [5:5]
         include/boost/asio/detail/handler_type_requirements.hpp [5:5]
         include/boost/asio/detail/handler_work.hpp [5:5]
@@ -329,6 +227,10 @@ BELONGS ya.make
         include/boost/asio/detail/impl/winrt_timer_scheduler.hpp [5:5]
         include/boost/asio/detail/impl/winrt_timer_scheduler.ipp [5:5]
         include/boost/asio/detail/impl/winsock_init.ipp [5:5]
+        include/boost/asio/detail/initiate_defer.hpp [5:5]
+        include/boost/asio/detail/initiate_dispatch.hpp [5:5]
+        include/boost/asio/detail/initiate_post.hpp [5:5]
+        include/boost/asio/detail/initiation_base.hpp [5:5]
         include/boost/asio/detail/io_control.hpp [5:5]
         include/boost/asio/detail/io_object_impl.hpp [5:5]
         include/boost/asio/detail/io_uring_descriptor_read_at_op.hpp [5:5]
@@ -355,7 +257,6 @@ BELONGS ya.make
         include/boost/asio/detail/keyword_tss_ptr.hpp [5:5]
         include/boost/asio/detail/kqueue_reactor.hpp [5:6]
         include/boost/asio/detail/local_free_on_block_exit.hpp [5:5]
-        include/boost/asio/detail/macos_fenced_block.hpp [5:5]
         include/boost/asio/detail/memory.hpp [5:5]
         include/boost/asio/detail/mutex.hpp [5:5]
         include/boost/asio/detail/non_const_lvalue.hpp [5:5]
@@ -399,7 +300,6 @@ BELONGS ya.make
         include/boost/asio/detail/reactive_socket_service_base.hpp [5:5]
         include/boost/asio/detail/reactive_wait_op.hpp [5:5]
         include/boost/asio/detail/reactor.hpp [5:5]
-        include/boost/asio/detail/reactor_fwd.hpp [5:5]
         include/boost/asio/detail/reactor_op.hpp [5:5]
         include/boost/asio/detail/reactor_op_queue.hpp [5:5]
         include/boost/asio/detail/recycling_allocator.hpp [5:5]
@@ -428,7 +328,6 @@ BELONGS ya.make
         include/boost/asio/detail/socket_option.hpp [5:5]
         include/boost/asio/detail/socket_select_interrupter.hpp [5:5]
         include/boost/asio/detail/socket_types.hpp [5:5]
-        include/boost/asio/detail/solaris_fenced_block.hpp [5:5]
         include/boost/asio/detail/source_location.hpp [5:5]
         include/boost/asio/detail/static_mutex.hpp [5:5]
         include/boost/asio/detail/std_event.hpp [5:5]
@@ -446,6 +345,7 @@ BELONGS ya.make
         include/boost/asio/detail/thread_info_base.hpp [5:5]
         include/boost/asio/detail/throw_error.hpp [5:5]
         include/boost/asio/detail/throw_exception.hpp [5:5]
+        include/boost/asio/detail/timed_cancel_op.hpp [5:5]
         include/boost/asio/detail/timer_queue.hpp [5:5]
         include/boost/asio/detail/timer_queue_base.hpp [5:5]
         include/boost/asio/detail/timer_queue_ptime.hpp [5:5]
@@ -454,12 +354,11 @@ BELONGS ya.make
         include/boost/asio/detail/timer_scheduler_fwd.hpp [5:5]
         include/boost/asio/detail/tss_ptr.hpp [5:5]
         include/boost/asio/detail/type_traits.hpp [5:5]
-        include/boost/asio/detail/variadic_templates.hpp [5:5]
+        include/boost/asio/detail/utility.hpp [5:5]
         include/boost/asio/detail/wait_handler.hpp [5:5]
         include/boost/asio/detail/wait_op.hpp [5:5]
         include/boost/asio/detail/win_event.hpp [5:5]
         include/boost/asio/detail/win_fd_set_adapter.hpp [5:5]
-        include/boost/asio/detail/win_fenced_block.hpp [5:5]
         include/boost/asio/detail/win_global.hpp [5:5]
         include/boost/asio/detail/win_iocp_file_service.hpp [5:5]
         include/boost/asio/detail/win_iocp_handle_read_op.hpp [5:6]
@@ -510,38 +409,16 @@ BELONGS ya.make
         include/boost/asio/execution/bad_executor.hpp [5:5]
         include/boost/asio/execution/blocking.hpp [5:5]
         include/boost/asio/execution/blocking_adaptation.hpp [5:5]
-        include/boost/asio/execution/bulk_execute.hpp [5:5]
-        include/boost/asio/execution/bulk_guarantee.hpp [5:5]
-        include/boost/asio/execution/connect.hpp [5:5]
         include/boost/asio/execution/context.hpp [5:5]
         include/boost/asio/execution/context_as.hpp [5:5]
-        include/boost/asio/execution/detail/as_invocable.hpp [5:5]
-        include/boost/asio/execution/detail/as_operation.hpp [5:5]
-        include/boost/asio/execution/detail/as_receiver.hpp [5:5]
-        include/boost/asio/execution/detail/bulk_sender.hpp [5:5]
-        include/boost/asio/execution/detail/submit_receiver.hpp [5:5]
-        include/boost/asio/execution/detail/void_receiver.hpp [5:5]
-        include/boost/asio/execution/execute.hpp [5:5]
         include/boost/asio/execution/executor.hpp [5:5]
         include/boost/asio/execution/impl/bad_executor.ipp [5:5]
-        include/boost/asio/execution/impl/receiver_invocation_error.ipp [5:5]
         include/boost/asio/execution/invocable_archetype.hpp [5:5]
         include/boost/asio/execution/mapping.hpp [5:5]
         include/boost/asio/execution/occupancy.hpp [5:5]
-        include/boost/asio/execution/operation_state.hpp [5:5]
         include/boost/asio/execution/outstanding_work.hpp [5:5]
         include/boost/asio/execution/prefer_only.hpp [5:5]
-        include/boost/asio/execution/receiver.hpp [5:5]
-        include/boost/asio/execution/receiver_invocation_error.hpp [5:5]
         include/boost/asio/execution/relationship.hpp [5:5]
-        include/boost/asio/execution/schedule.hpp [5:5]
-        include/boost/asio/execution/scheduler.hpp [5:5]
-        include/boost/asio/execution/sender.hpp [5:5]
-        include/boost/asio/execution/set_done.hpp [5:5]
-        include/boost/asio/execution/set_error.hpp [5:5]
-        include/boost/asio/execution/set_value.hpp [5:5]
-        include/boost/asio/execution/start.hpp [5:5]
-        include/boost/asio/execution/submit.hpp [5:5]
         include/boost/asio/execution_context.hpp [5:5]
         include/boost/asio/executor.hpp [5:5]
         include/boost/asio/executor_work_guard.hpp [5:5]
@@ -555,25 +432,19 @@ BELONGS ya.make
         include/boost/asio/experimental/channel.hpp [5:5]
         include/boost/asio/experimental/channel_error.hpp [5:5]
         include/boost/asio/experimental/channel_traits.hpp [5:5]
+        include/boost/asio/experimental/co_composed.hpp [5:5]
         include/boost/asio/experimental/concurrent_channel.hpp [5:5]
         include/boost/asio/experimental/deferred.hpp [5:5]
-        include/boost/asio/experimental/detail/channel_handler.hpp [5:5]
-        include/boost/asio/experimental/detail/channel_message.hpp [5:5]
         include/boost/asio/experimental/detail/channel_operation.hpp [5:5]
-        include/boost/asio/experimental/detail/channel_payload.hpp [5:5]
         include/boost/asio/experimental/detail/channel_receive_op.hpp [5:5]
         include/boost/asio/experimental/detail/channel_send_functions.hpp [5:5]
         include/boost/asio/experimental/detail/channel_send_op.hpp [5:5]
         include/boost/asio/experimental/detail/channel_service.hpp [5:5]
         include/boost/asio/experimental/detail/has_signature.hpp [5:5]
         include/boost/asio/experimental/detail/impl/channel_service.hpp [5:5]
-        include/boost/asio/experimental/impl/append.hpp [5:5]
         include/boost/asio/experimental/impl/as_single.hpp [5:5]
-        include/boost/asio/experimental/impl/as_tuple.hpp [5:5]
         include/boost/asio/experimental/impl/channel_error.ipp [5:5]
-        include/boost/asio/experimental/impl/deferred.hpp [5:5]
         include/boost/asio/experimental/impl/parallel_group.hpp [5:5]
-        include/boost/asio/experimental/impl/prepend.hpp [5:5]
         include/boost/asio/experimental/parallel_group.hpp [5:5]
         include/boost/asio/experimental/prepend.hpp [5:5]
         include/boost/asio/file_base.hpp [5:5]
@@ -584,33 +455,35 @@ BELONGS ya.make
         include/boost/asio/generic/raw_protocol.hpp [5:5]
         include/boost/asio/generic/seq_packet_protocol.hpp [5:5]
         include/boost/asio/generic/stream_protocol.hpp [5:5]
-        include/boost/asio/handler_alloc_hook.hpp [5:5]
         include/boost/asio/handler_continuation_hook.hpp [5:5]
-        include/boost/asio/handler_invoke_hook.hpp [5:5]
         include/boost/asio/high_resolution_timer.hpp [5:5]
+        include/boost/asio/immediate.hpp [5:5]
+        include/boost/asio/impl/any_completion_executor.ipp [5:5]
         include/boost/asio/impl/any_io_executor.ipp [5:5]
+        include/boost/asio/impl/append.hpp [5:5]
+        include/boost/asio/impl/as_tuple.hpp [5:5]
         include/boost/asio/impl/awaitable.hpp [5:5]
         include/boost/asio/impl/buffered_read_stream.hpp [5:5]
         include/boost/asio/impl/buffered_write_stream.hpp [5:5]
+        include/boost/asio/impl/cancel_after.hpp [5:5]
+        include/boost/asio/impl/cancel_at.hpp [5:5]
         include/boost/asio/impl/cancellation_signal.ipp [5:5]
         include/boost/asio/impl/co_spawn.hpp [5:5]
-        include/boost/asio/impl/compose.hpp [5:5]
         include/boost/asio/impl/connect.hpp [5:5]
         include/boost/asio/impl/connect_pipe.hpp [5:5]
         include/boost/asio/impl/connect_pipe.ipp [5:7]
-        include/boost/asio/impl/defer.hpp [5:5]
+        include/boost/asio/impl/consign.hpp [5:5]
+        include/boost/asio/impl/deferred.hpp [5:5]
         include/boost/asio/impl/detached.hpp [5:5]
-        include/boost/asio/impl/dispatch.hpp [5:5]
         include/boost/asio/impl/error.ipp [5:5]
         include/boost/asio/impl/execution_context.hpp [5:5]
         include/boost/asio/impl/execution_context.ipp [5:5]
         include/boost/asio/impl/executor.hpp [5:5]
         include/boost/asio/impl/executor.ipp [5:5]
-        include/boost/asio/impl/handler_alloc_hook.ipp [5:5]
         include/boost/asio/impl/io_context.hpp [5:5]
         include/boost/asio/impl/io_context.ipp [5:5]
         include/boost/asio/impl/multiple_exceptions.ipp [5:5]
-        include/boost/asio/impl/post.hpp [5:5]
+        include/boost/asio/impl/prepend.hpp [5:5]
         include/boost/asio/impl/read.hpp [5:5]
         include/boost/asio/impl/read_at.hpp [5:5]
         include/boost/asio/impl/read_until.hpp [5:5]
@@ -673,6 +546,7 @@ BELONGS ya.make
         include/boost/asio/ip/unicast.hpp [5:5]
         include/boost/asio/ip/v6_only.hpp [5:5]
         include/boost/asio/is_applicable_property.hpp [5:5]
+        include/boost/asio/is_contiguous_iterator.hpp [5:5]
         include/boost/asio/is_executor.hpp [5:5]
         include/boost/asio/is_read_buffered.hpp [5:5]
         include/boost/asio/is_write_buffered.hpp [5:5]
@@ -681,6 +555,7 @@ BELONGS ya.make
         include/boost/asio/local/datagram_protocol.hpp [5:5]
         include/boost/asio/local/detail/endpoint.hpp [5:6]
         include/boost/asio/local/detail/impl/endpoint.ipp [5:6]
+        include/boost/asio/local/seq_packet_protocol.hpp [5:5]
         include/boost/asio/local/stream_protocol.hpp [5:5]
         include/boost/asio/multiple_exceptions.hpp [5:5]
         include/boost/asio/packaged_task.hpp [5:5]
@@ -692,12 +567,14 @@ BELONGS ya.make
         include/boost/asio/posix/stream_descriptor.hpp [5:5]
         include/boost/asio/post.hpp [5:5]
         include/boost/asio/prefer.hpp [5:5]
+        include/boost/asio/prepend.hpp [5:5]
         include/boost/asio/query.hpp [5:5]
         include/boost/asio/random_access_file.hpp [5:5]
         include/boost/asio/read.hpp [5:5]
         include/boost/asio/read_at.hpp [5:5]
         include/boost/asio/read_until.hpp [5:5]
         include/boost/asio/readable_pipe.hpp [5:5]
+        include/boost/asio/recycling_allocator.hpp [5:5]
         include/boost/asio/redirect_error.hpp [5:5]
         include/boost/asio/registered_buffer.hpp [5:5]
         include/boost/asio/require.hpp [5:5]
@@ -705,6 +582,7 @@ BELONGS ya.make
         include/boost/asio/serial_port.hpp [5:6]
         include/boost/asio/serial_port_base.hpp [5:6]
         include/boost/asio/signal_set.hpp [5:5]
+        include/boost/asio/signal_set_base.hpp [5:5]
         include/boost/asio/socket_base.hpp [5:5]
         include/boost/asio/spawn.hpp [5:5]
         include/boost/asio/ssl.hpp [5:5]
@@ -745,12 +623,7 @@ BELONGS ya.make
         include/boost/asio/this_coro.hpp [5:5]
         include/boost/asio/thread_pool.hpp [5:5]
         include/boost/asio/time_traits.hpp [5:5]
-        include/boost/asio/traits/bulk_execute_free.hpp [5:5]
-        include/boost/asio/traits/bulk_execute_member.hpp [5:5]
-        include/boost/asio/traits/connect_free.hpp [5:5]
-        include/boost/asio/traits/connect_member.hpp [5:5]
         include/boost/asio/traits/equality_comparable.hpp [5:5]
-        include/boost/asio/traits/execute_free.hpp [5:5]
         include/boost/asio/traits/execute_member.hpp [5:5]
         include/boost/asio/traits/prefer_free.hpp [5:5]
         include/boost/asio/traits/prefer_member.hpp [5:5]
@@ -761,21 +634,9 @@ BELONGS ya.make
         include/boost/asio/traits/require_concept_member.hpp [5:5]
         include/boost/asio/traits/require_free.hpp [5:5]
         include/boost/asio/traits/require_member.hpp [5:5]
-        include/boost/asio/traits/schedule_free.hpp [5:5]
-        include/boost/asio/traits/schedule_member.hpp [5:5]
-        include/boost/asio/traits/set_done_free.hpp [5:5]
-        include/boost/asio/traits/set_done_member.hpp [5:5]
-        include/boost/asio/traits/set_error_free.hpp [5:5]
-        include/boost/asio/traits/set_error_member.hpp [5:5]
-        include/boost/asio/traits/set_value_free.hpp [5:5]
-        include/boost/asio/traits/set_value_member.hpp [5:5]
-        include/boost/asio/traits/start_free.hpp [5:5]
-        include/boost/asio/traits/start_member.hpp [5:5]
         include/boost/asio/traits/static_query.hpp [5:5]
         include/boost/asio/traits/static_require.hpp [5:5]
         include/boost/asio/traits/static_require_concept.hpp [5:5]
-        include/boost/asio/traits/submit_free.hpp [5:5]
-        include/boost/asio/traits/submit_member.hpp [5:5]
         include/boost/asio/ts/buffer.hpp [5:5]
         include/boost/asio/ts/executor.hpp [5:5]
         include/boost/asio/ts/internet.hpp [5:5]
@@ -804,10 +665,139 @@ BELONGS ya.make
         include/boost/asio/write_at.hpp [5:5]
         include/boost/asio/yield.hpp [5:5]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 1c595f63ea7712179f9a8b6862388b47
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2003-2011 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/asio/detail/limits.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 266d0bf761289539d88d2d0c479f3e6c
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2005 Voipster / Indrek dot Juhani at voipster dot com
+        // Copyright (c) 2005-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/asio/ssl/detail/impl/openssl_init.ipp [5:6]
+        include/boost/asio/ssl/impl/context.hpp [5:6]
+        include/boost/asio/ssl/impl/context.ipp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 529d2406b1955604206f10bc3d44afc8
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2021-2023 Klemens D. Morgenstern
+        //                         (klemens dot morgenstern at gmx dot net)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/asio/experimental/co_spawn.hpp [5:6]
+        include/boost/asio/experimental/coro.hpp [5:6]
+        include/boost/asio/experimental/coro_traits.hpp [5:6]
+        include/boost/asio/experimental/detail/coro_completion_handler.hpp [5:6]
+        include/boost/asio/experimental/detail/coro_promise_allocator.hpp [5:6]
+        include/boost/asio/experimental/detail/partial_promise.hpp [5:6]
+        include/boost/asio/experimental/impl/coro.hpp [5:6]
+        include/boost/asio/experimental/impl/promise.hpp [5:6]
+        include/boost/asio/experimental/impl/use_coro.hpp [5:6]
+        include/boost/asio/experimental/impl/use_promise.hpp [5:6]
+        include/boost/asio/experimental/promise.hpp [5:6]
+        include/boost/asio/experimental/use_coro.hpp [5:6]
+        include/boost/asio/experimental/use_promise.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5a6828962cedc8b6b328de21b7c73256
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2005 Voipster / Indrek dot Juhani at voipster dot com
+        // Copyright (c) 2005-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/asio/ssl/detail/impl/openssl_init.ipp [5:6]
+        include/boost/asio/ssl/impl/context.hpp [5:6]
+        include/boost/asio/ssl/impl/context.ipp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6495f2e3736232dcde6616b6b4fc2659
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+        // Copyright (c) 2021 Klemens D. Morgenstern
+        //                    (klemens dot morgenstern at gmx dot net)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/asio/impl/connect_pipe.ipp [5:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 77248a96a79940a9fa1d82b59477d791
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+        // Copyright (c) 2005 Stefan Arentz (stefan at soze dot com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/asio/detail/impl/kqueue_reactor.hpp [5:6]
+        include/boost/asio/detail/impl/kqueue_reactor.ipp [5:6]
+        include/boost/asio/detail/kqueue_reactor.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 77f9dd6047adac3aadfc4e429a97736b
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+        // Copyright (c) 2008 Rep Invariant Systems, Inc. (info@repinvariant.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/asio/basic_serial_port.hpp [5:6]
+        include/boost/asio/detail/impl/posix_serial_port_service.ipp [5:6]
+        include/boost/asio/detail/impl/win_iocp_handle_service.ipp [5:6]
+        include/boost/asio/detail/impl/win_iocp_serial_port_service.ipp [5:6]
+        include/boost/asio/detail/posix_serial_port_service.hpp [5:6]
+        include/boost/asio/detail/win_iocp_handle_read_op.hpp [5:6]
+        include/boost/asio/detail/win_iocp_handle_service.hpp [5:6]
+        include/boost/asio/detail/win_iocp_handle_write_op.hpp [5:6]
+        include/boost/asio/detail/win_iocp_serial_port_service.hpp [5:6]
+        include/boost/asio/impl/serial_port_base.hpp [5:6]
+        include/boost/asio/impl/serial_port_base.ipp [5:6]
+        include/boost/asio/serial_port.hpp [5:6]
+        include/boost/asio/serial_port_base.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cec519351b68fb385bc916223bd0753a
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+        // Copyright (c) 2011 Boris Schaeling (boris@highscore.de)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/asio/detail/impl/win_object_handle_service.ipp [5:6]
+        include/boost/asio/detail/win_object_handle_service.hpp [5:6]
+        include/boost/asio/windows/basic_object_handle.hpp [5:6]
+        include/boost/asio/windows/object_handle.hpp [5:6]
+
 KEEP     COPYRIGHT_SERVICE_LABEL f5e28497f7d46b75936cac4feeb981f4
 BELONGS ya.make
     License text:
-        // Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+        // Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
         // Copyright (c) 2014 Oliver Kowalke (oliver dot kowalke at gmail dot com)
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL

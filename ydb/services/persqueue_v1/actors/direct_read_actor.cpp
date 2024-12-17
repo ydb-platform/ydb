@@ -474,10 +474,9 @@ void TDirectReadSessionActor::HandleDestroyPartitionSession(TEvPQProxy::TEvDirec
     result.set_status(Ydb::StatusIds::SUCCESS);
     auto* stop = result.mutable_stop_direct_read_partition_session();
     stop->set_partition_session_id(ev->Get()->ReadKey.PartitionSessionId);
-    result.set_status(ConvertPersQueueInternalCodeToStatus(ev->Get()->Code));
+    stop->set_status(ConvertPersQueueInternalCodeToStatus(ev->Get()->Code));
     FillIssue(stop->add_issues(), ev->Get()->Code, ev->Get()->Reason);
     WriteToStreamOrDie(ActorContext(), std::move(result));
-
 }
 
 void TDirectReadSessionActor::HandleSessionKilled(TEvPQProxy::TEvDirectReadCloseSession::TPtr& ev) {

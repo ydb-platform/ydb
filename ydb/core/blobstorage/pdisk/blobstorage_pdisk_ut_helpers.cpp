@@ -4,6 +4,7 @@
 #include "blobstorage_pdisk_ut_helpers.h"
 
 #include <ydb/core/blobstorage/crypto/default.h>
+#include <ydb/core/util/random.h>
 
 #include <util/folder/dirut.h>
 #include <util/generic/ptr.h>
@@ -66,9 +67,9 @@ void FormatPDiskForTest(TString path, ui64 guid, ui32& chunkSize, ui64 diskSize,
     NPDisk::TKey chunkKey;
     NPDisk::TKey logKey;
     NPDisk::TKey sysLogKey;
-    EntropyPool().Read(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
-    EntropyPool().Read(&logKey, sizeof(NKikimr::NPDisk::TKey));
-    EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
+    SafeEntropyPoolRead(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
+    SafeEntropyPoolRead(&logKey, sizeof(NKikimr::NPDisk::TKey));
+    SafeEntropyPoolRead(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
 
     if (enableSmallDiskOptimization) {
         try {

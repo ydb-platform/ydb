@@ -182,9 +182,16 @@ private:
 
             TSharedRef httpRequestBody;
             try {
+                THROW_ERROR_EXCEPTION_IF(
+                    request->IsAttachmentCompressionEnabled(),
+                    "Compression codecs are not supported in HTTP");
                 auto requestBody = request->Serialize();
                 THROW_ERROR_EXCEPTION_UNLESS(requestBody.Size() == 2, "Attachments are not supported in HTTP");
-                httpRequestBody = NGrpc::ExtractMessageFromEnvelopedMessage(requestBody[1]);
+                if (request->IsLegacyRpcCodecsEnabled()) {
+                    httpRequestBody = NGrpc::ExtractMessageFromEnvelopedMessage(requestBody[1]);
+                } else {
+                    httpRequestBody = requestBody[1];
+                }
             } catch (const std::exception& ex) {
                 responseHandler->HandleError(TError(NRpc::EErrorCode::TransportError, "Request serialization failed")
                     << ex);
@@ -193,7 +200,12 @@ private:
 
             Response_ = client->Post(url, httpRequestBody, httpRequestHeaders);
             Response_.Subscribe(
-                BIND(&TCallHandler::OnResponse, channel->EndpointAddress_, request->GetRequestId(), std::move(responseHandler))
+                BIND(&TCallHandler::OnResponse,
+                    channel->EndpointAddress_,
+                    request->GetRequestId(),
+                    request->GetService(),
+                    request->GetMethod(),
+                    std::move(responseHandler))
                     .Via(NRpc::TDispatcher::Get()->GetHeavyInvoker()));
         }
 
@@ -219,6 +231,8 @@ private:
         static void OnResponse(
             const TString& address,
             TRequestId requestId,
+            const std::string& service,
+            const std::string& method,
             const IClientResponseHandlerPtr& responseHandler,
             const TErrorOr<IResponsePtr>& responseOrError)
         {
@@ -250,6 +264,8 @@ private:
 
                 NRpc::NProto::TResponseHeader responseHeader;
                 ToProto(responseHeader.mutable_request_id(), requestId);
+                NYT::ToProto(responseHeader.mutable_service(), service);
+                NYT::ToProto(responseHeader.mutable_method(), method);
 
                 auto responseMessage = CreateResponseMessage(
                     responseHeader,
@@ -272,7 +288,7 @@ private:
             THeadersPtr httpHeaders = New<THeaders>();
 
             if (rpcHeader.has_request_format()) {
-                auto format = CheckedEnumCast<EMessageFormat>(rpcHeader.request_format());
+                auto format = FromProto<EMessageFormat>(rpcHeader.request_format());
                 httpHeaders->Add(ContentTypeHeaderName, ToHttpContentType(format));
             }
 
@@ -281,7 +297,7 @@ private:
             }
 
             if (rpcHeader.has_response_format()) {
-                auto format = CheckedEnumCast<EMessageFormat>(rpcHeader.response_format());
+                auto format = FromProto<EMessageFormat>(rpcHeader.response_format());
                 httpHeaders->Add(AcceptHeaderName, ToHttpContentType(format));
             }
 

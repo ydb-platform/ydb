@@ -1,19 +1,21 @@
 #include "logical_optimize.h"
 #include "dqs_opt.h"
 
-#include <ydb/library/yql/core/yql_aggregate_expander.h>
+#include <yql/essentials/core/yql_aggregate_expander.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/common/transform/yql_optimize.h>
+#include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
-#include <ydb/library/yql/dq/integration/yql_dq_optimization.h>
+#include <yql/essentials/core/dq_integration/yql_dq_optimization.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cost_based.h>
 #include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/optimizer.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/parser/pg_wrapper/interface/optimizer.h>
 
 #include <util/generic/bitmap.h>
 
@@ -261,15 +263,16 @@ protected:
                 YQL_CLOG(INFO, ProviderDq) << str;
             };
 
-            std::unique_ptr<IOptimizerNew> opt;
+            auto factory = MakeCBOOptimizerFactory();
+            std::shared_ptr<IOptimizerNew> opt;
             TDqCBOProviderContext pctx(TypesCtx, Config);
 
             switch (TypesCtx.CostBasedOptimizer) {
             case ECostBasedOptimizerType::Native:
-                opt = std::unique_ptr<IOptimizerNew>(NDq::MakeNativeOptimizerNew(pctx, 100000));
+                opt = factory->MakeJoinCostBasedOptimizerNative(pctx, ctx, {.MaxDPhypDPTableSize = 100000});
                 break;
             case ECostBasedOptimizerType::PG:
-                opt = std::unique_ptr<IOptimizerNew>(MakePgOptimizerNew(pctx, ctx, log));
+                opt = factory->MakeJoinCostBasedOptimizerPG(pctx, ctx, {.Logger = log});
                 break;
             default:
                 YQL_ENSURE(false, "Unknown CBO type");
@@ -277,7 +280,7 @@ protected:
             }
             std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)> providerCollect = [](auto& rels, auto label, auto node, auto stats) {
                 Y_UNUSED(node);
-                auto rel = std::make_shared<TRelOptimizerNode>(TString(label), stats);
+                auto rel = std::make_shared<TRelOptimizerNode>(TString(label), *stats);
                 rels.push_back(rel);
             };
 

@@ -5,7 +5,7 @@
 #include <util/generic/map.h>
 #include <util/string/cast.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 
 
@@ -75,7 +75,12 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         {
             ToString(NYql::EDatabaseType::Oracle),
             CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC"}, {"database_name", "use_tls", "service_name"}, hostnamePatternsRegEx)
-        }}); 
+        },
+        {
+            ToString(NYql::EDatabaseType::Logging),
+            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"SERVICE_ACCOUNT"}, {"folder_id"}, hostnamePatternsRegEx)
+        }
+    }); 
 }
 
 }

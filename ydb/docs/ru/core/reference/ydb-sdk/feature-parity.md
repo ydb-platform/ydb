@@ -145,3 +145,5 @@
 |URL Shortener (serverless yandex function)|?|?|\+|?|\+|\-|\-|\-|
 |Topic reader|\+||\+||\-|\-|\-|\-|
 |Topic writer|\-||\+||\-|\-|\-|\-|
+
+{wide-content}

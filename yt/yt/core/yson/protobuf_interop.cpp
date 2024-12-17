@@ -148,11 +148,12 @@ TString ToUnderscoreCase(const TString& protobufName)
 
 TString DeriveYsonName(const TString& protobufName, const google::protobuf::FileDescriptor* fileDescriptor)
 {
-    if (fileDescriptor->options().GetExtension(NYT::NYson::NProto::derive_underscore_case_names)) {
+    if (fileDescriptor->options().GetExtension(NYT::NYson::NProto::derive_underscore_case_names)
+        || GetProtobufInteropConfig()->ForceSnakeCaseNames)
+    {
         return ToUnderscoreCase(protobufName);
-    } else {
-        return protobufName;
     }
+    return protobufName;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -167,9 +168,13 @@ TProtobufInteropConfigSingleton* GlobalProtobufInteropConfig()
     return LeakySingleton<TProtobufInteropConfigSingleton>();
 }
 
-TProtobufInteropConfigPtr GetProtobufInteropConfig()
+////////////////////////////////////////////////////////////////////////////////
+
+auto TryGetExtension(const auto* descriptor, const auto& id)
 {
-    return GlobalProtobufInteropConfig()->Config.Acquire();
+    return descriptor->options().HasExtension(id)
+        ? std::optional(descriptor->options().GetExtension(id))
+        : std::nullopt;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -177,6 +182,11 @@ TProtobufInteropConfigPtr GetProtobufInteropConfig()
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
+
+TProtobufInteropConfigPtr GetProtobufInteropConfig()
+{
+    return GlobalProtobufInteropConfig()->Config.Acquire();
+}
 
 void SetProtobufInteropConfig(TProtobufInteropConfigPtr config)
 {
@@ -389,9 +399,8 @@ public:
         , YsonMap_(descriptor->options().GetExtension(NYT::NYson::NProto::yson_map))
         , Required_(descriptor->options().GetExtension(NYT::NYson::NProto::required))
         , Converter_(registry->FindMessageBytesFieldConverter(descriptor->containing_type(), descriptor->index()))
-        , EnumYsonStorageType_(descriptor->options().HasExtension(NYT::NYson::NProto::enum_yson_storage_type) ?
-            std::optional(descriptor->options().GetExtension(NYT::NYson::NProto::enum_yson_storage_type)) :
-            std::nullopt)
+        , EnumYsonStorageType_(TryGetExtension(descriptor, NYT::NYson::NProto::enum_yson_storage_type))
+        , StrictEnumValueCheck_(TryGetExtension(descriptor, NYT::NYson::NProto::strict_enum_value_check))
     {
         if (YsonMap_ && !descriptor->is_map()) {
             THROW_ERROR_EXCEPTION("Field %v is not a map and cannot be annotated with \"yson_map\" option",
@@ -517,6 +526,11 @@ public:
         return config->DefaultEnumYsonStorageType;
     }
 
+    bool IsEnumValueCheckStrict() const
+    {
+        return StrictEnumValueCheck_.value_or(true);
+    }
+
     void WriteSchema(IYsonConsumer* consumer) const
     {
         if (IsYsonMap()) {
@@ -600,6 +614,7 @@ private:
     const bool Required_;
     const std::optional<TProtobufMessageBytesFieldConverter> Converter_;
     const std::optional<NYT::NYson::NProto::EEnumYsonStorageType> EnumYsonStorageType_;
+    const std::optional<bool> StrictEnumValueCheck_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1150,6 +1165,8 @@ private:
             switch (field->GetType()) {
                 case FieldDescriptor::TYPE_STRING:
                     ValidateString(value, field->GetFullName());
+                    [[fallthrough]];
+
                 case FieldDescriptor::TYPE_BYTES:
                     BodyCodedStream_.WriteVarint64(value.length());
                     BodyCodedStream_.WriteRaw(value.begin(), static_cast<int>(value.length()));
@@ -1833,8 +1850,7 @@ private:
             case FieldDescriptor::TYPE_ENUM: {
                 auto i32Value = CheckedCastField<i32>(value, TStringBuf("i32"), field);
                 const auto* enumType = field->GetEnumType();
-                auto literal = enumType->FindLiteralByValue(i32Value);
-                if (!literal) {
+                if (field->IsEnumValueCheckStrict() && !enumType->FindLiteralByValue(i32Value)) {
                     THROW_ERROR_EXCEPTION("Unknown value %v for field %v",
                         i32Value,
                         YPathStack_.GetHumanReadablePath())
@@ -1877,8 +1893,8 @@ private:
     template <class TTo, class TFrom>
     TTo CheckedCastField(TFrom value, TStringBuf toTypeName, const TProtobufField* field)
     {
-        TTo result;
-        if (!TryIntegralCast<TTo>(value, &result)) {
+        auto result = TryCheckedIntegralCast<TTo>(value);
+        if (!result) {
             THROW_ERROR_EXCEPTION("Value %v of field %v cannot fit into %Qv",
                 value,
                 YPathStack_.GetHumanReadablePath(),
@@ -1886,7 +1902,7 @@ private:
                 << TErrorAttribute("ypath", YPathStack_.GetPath())
                 << TErrorAttribute("proto_field", field->GetFullName());
         }
-        return result;
+        return *result;
     }
 
     void TryWriteCustomlyConvertibleType()
@@ -2481,7 +2497,7 @@ private:
     {
         auto storeEnumAsInt = [this, field] (auto value) {
             const auto* enumType = field->GetEnumType();
-            if (!enumType->FindLiteralByValue(value)) {
+            if (field->IsEnumValueCheckStrict() && !enumType->FindLiteralByValue(value)) {
                 THROW_ERROR_EXCEPTION("Unknown value %v for field %v",
                     value,
                     YPathStack_.GetHumanReadablePath())
@@ -2693,7 +2709,7 @@ private:
                             PooledString_.resize(length);
                             CodedStream_.ReadRaw(PooledString_.data(), PooledString_.size());
                             Y_UNUSED(message->ParseFromArray(PooledString_.data(), PooledString_.size()));
-                            converter.Serializer(Consumer_, message.get());
+                            converter.Serializer(Consumer_, message.get(), Options_);
                             YPathStack_.Pop();
                         } else {
                             LimitStack_.push_back(CodedStream_.PushLimit(static_cast<int>(length)));

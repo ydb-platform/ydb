@@ -9,11 +9,11 @@ $avg_discount_by_item = (
             {{catalog_sales}} as catalog_sales
            cross join {{date_dim}} as date_dim
            cross join {{item}} as item
-         where cast (d_date as date) between cast('2002-03-29' as date) and
-                             (cast('2002-03-29' as date) + DateTime::IntervalFromDays(90))
+         where cast (d_date as date) between cast('2000-01-27' as date) and
+                             (cast('2000-01-27' as date) + DateTime::IntervalFromDays(90))
           and i_item_sk = cs_item_sk
           and d_date_sk = cs_sold_date_sk
-          and i_manufact_id = 66
+          and i_manufact_id = 977
           group by item.i_item_sk
       );
 
@@ -25,10 +25,10 @@ from
    cross join {{date_dim}} as date_dim
    join $avg_discount_by_item adi on cs.cs_item_sk = adi.i_item_sk
 where
-i_manufact_id = 66
+i_manufact_id = 977
 and item.i_item_sk = cs.cs_item_sk
-and cast (d_date as date) between cast('2002-03-29' as date) and
-        (cast('2002-03-29' as date) + DateTime::IntervalFromDays(90))
+and cast (d_date as date) between cast('2000-01-27' as date) and
+        (cast('2000-01-27' as date) + DateTime::IntervalFromDays(90))
 and d_date_sk = cs_sold_date_sk
 and cs_ext_discount_amt
      > $z1_3 * adi.avg_discout

@@ -1,6 +1,7 @@
 #include "memory_controller.h"
 #include "memory_controller_config.h"
 #include "memtable_collection.h"
+
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/base/memory_controller_iface.h>
@@ -10,16 +11,21 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/memory_controller_config.pb.h>
 #include <ydb/core/protos/memory_stats.pb.h>
-#include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
+#include <ydb/core/tablet/resource_broker.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/process_stats.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
+#include <yql/essentials/public/udf/arrow/memory_pool.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/memory_pool.h>
-#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
+
+#include <util/stream/format.h>
+
+#include <tcmalloc/malloc_extension.h>
 
 namespace NKikimr::NMemory {
 
@@ -27,6 +33,14 @@ namespace {
 
 ui64 SafeDiff(ui64 a, ui64 b) {
     return a - Min(a, b);
+}
+
+::NFormatPrivate::THumanReadableSize HumanReadableBytes(ui64 bytes) {
+    return HumanReadableSize(bytes, SF_BYTES);
+}
+
+TString HumanReadableBytes(std::optional<ui64> bytes) {
+    return bytes.has_value() ? TString(TStringBuilder() << HumanReadableBytes(bytes.value())) : "none";
 }
 
 }
@@ -117,6 +131,18 @@ public:
             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
                     NKikimrConsole::TConfigItem::MemoryControllerConfigItem}));
 
+        // When profiling memory it's convenient to set initial tcmalloc soft limit
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+        auto processMemoryInfo = ProcessMemoryInfoProvider->Get();
+        bool hasMemTotalHardLimit = false;
+        ui64 hardLimitBytes = GetHardLimitBytes(Config, processMemoryInfo, hasMemTotalHardLimit);
+
+        tcmalloc::MallocExtension::MemoryLimit limit;
+        limit.hard = false;
+        limit.limit = GetSoftLimitBytes(Config, hardLimitBytes);
+        tcmalloc::MallocExtension::SetMemoryLimit(limit);
+#endif
+
         HandleWakeup(ctx);
 
         LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Bootstrapped with config " << Config.ShortDebugString());
@@ -191,13 +217,13 @@ private:
         }
 
         LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Periodic memory stats:"
-            << " AnonRss: " << processMemoryInfo.AnonRss << " CGroupLimit: " << processMemoryInfo.CGroupLimit
-            << " MemTotal: " << processMemoryInfo.MemTotal << " MemAvailable: " << processMemoryInfo.MemAvailable
-            << " AllocatedMemory: " << processMemoryInfo.AllocatedMemory << " AllocatorCachesMemory: " << processMemoryInfo.AllocatorCachesMemory
-            << " HardLimit: " << hardLimitBytes << " SoftLimit: " << softLimitBytes << " TargetUtilization: " << targetUtilizationBytes
-            << " ActivitiesLimitBytes: " << activitiesLimitBytes
-            << " ConsumersConsumption: " << consumersConsumption << " OtherConsumption: " << otherConsumption << " ExternalConsumption: " << externalConsumption
-            << " TargetConsumersConsumption: " << targetConsumersConsumption << " ResultingConsumersConsumption: " << resultingConsumersConsumption
+            << " AnonRss: " << HumanReadableBytes(processMemoryInfo.AnonRss) << " CGroupLimit: " << HumanReadableBytes(processMemoryInfo.CGroupLimit)
+            << " MemTotal: " << HumanReadableBytes(processMemoryInfo.MemTotal) << " MemAvailable: " << HumanReadableBytes(processMemoryInfo.MemAvailable)
+            << " AllocatedMemory: " << HumanReadableBytes(processMemoryInfo.AllocatedMemory) << " AllocatorCachesMemory: " << HumanReadableBytes(processMemoryInfo.AllocatorCachesMemory)
+            << " HardLimit: " << HumanReadableBytes(hardLimitBytes) << " SoftLimit: " << HumanReadableBytes(softLimitBytes) << " TargetUtilization: " << HumanReadableBytes(targetUtilizationBytes)
+            << " ActivitiesLimitBytes: " << HumanReadableBytes(activitiesLimitBytes)
+            << " ConsumersConsumption: " << HumanReadableBytes(consumersConsumption) << " OtherConsumption: " << HumanReadableBytes(otherConsumption) << " ExternalConsumption: " << HumanReadableBytes(externalConsumption)
+            << " TargetConsumersConsumption: " << HumanReadableBytes(targetConsumersConsumption) << " ResultingConsumersConsumption: " << HumanReadableBytes(resultingConsumersConsumption)
             << " Coefficient: " << coefficient);
 
         Counters->GetCounter("Stats/AnonRss")->Set(processMemoryInfo.AnonRss.value_or(0));
@@ -241,8 +267,8 @@ private:
             consumersLimitBytes += limitBytes;
 
             LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer " << consumer.Kind << " state:"
-                << " Consumption: " << consumer.Consumption << " Limit: " << limitBytes
-                << " Min: " << consumer.MinBytes << " Max: " << consumer.MaxBytes);
+                << " Consumption: " << HumanReadableBytes(consumer.Consumption) << " Limit: " << HumanReadableBytes(limitBytes)
+                << " Min: " << HumanReadableBytes(consumer.MinBytes) << " Max: " << HumanReadableBytes(consumer.MaxBytes));
             auto& counters = GetConsumerCounters(consumer.Kind);
             counters.Consumption->Set(consumer.Consumption);
             counters.Reservation->Set(SafeDiff(limitBytes, consumer.Consumption));
@@ -261,7 +287,7 @@ private:
             ? ResourceBrokerSelfConfig.QueryExecutionLimitBytes // for backward compatibility
             : GetQueryExecutionLimitBytes(Config, hardLimitBytes);
         LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer QueryExecution state:"
-            << " Consumption: " << queryExecutionConsumption << " Limit: " << queryExecutionLimitBytes);
+            << " Consumption: " << HumanReadableBytes(queryExecutionConsumption) << " Limit: " << HumanReadableBytes(queryExecutionLimitBytes));
         Counters->GetCounter("Consumer/QueryExecution/Consumption")->Set(queryExecutionConsumption);
         Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(queryExecutionLimitBytes);
         memoryStats.SetQueryExecutionConsumption(queryExecutionConsumption);
@@ -353,7 +379,7 @@ private:
         auto consumers = MemTables->SelectForCompaction(limitBytes);
         for (const auto& consumer : consumers) {
             LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::MEMORY_CONTROLLER, "Request MemTable compaction of table " <<
-                consumer.first->Table << " with " << consumer.second << " bytes");
+                consumer.first->Table << " with " << HumanReadableBytes(consumer.second));
             Send(consumer.first->Owner, new TEvMemTableCompact(consumer.first->Table, consumer.second));
         }
     }

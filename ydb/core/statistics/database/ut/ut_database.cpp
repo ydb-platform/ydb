@@ -33,14 +33,14 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         auto saveResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvSaveStatisticsQueryResponse>(sender);
         UNIT_ASSERT(saveResponse->Get()->Success);
 
-        runtime.Register(CreateLoadStatisticsQuery(sender, "/Root/Database", pathId, statType, 1, 1),
+        runtime.Register(CreateLoadStatisticsQuery(sender, "/Root/Database", pathId, statType, 1),
             0, 0, TMailboxType::Simple, 0, sender);
         auto loadResponseA = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
         UNIT_ASSERT(loadResponseA->Get()->Success);
         UNIT_ASSERT(loadResponseA->Get()->Data);
         UNIT_ASSERT_VALUES_EQUAL(*loadResponseA->Get()->Data, "dataA");
 
-        runtime.Register(CreateLoadStatisticsQuery(sender, "/Root/Database", pathId, statType, 2, 1),
+        runtime.Register(CreateLoadStatisticsQuery(sender, "/Root/Database", pathId, statType, 2),
             0, 0, TMailboxType::Simple, 0, sender);
         auto loadResponseB = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
         UNIT_ASSERT(loadResponseB->Get()->Success);
@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         auto deleteResponse = runtime.GrabEdgeEvent<TEvStatistics::TEvDeleteStatisticsQueryResponse>(sender);
         UNIT_ASSERT(deleteResponse->Get()->Success);
 
-        runtime.Register(CreateLoadStatisticsQuery(sender, "/Root/Database", pathId, statType, 1, 1),
+        runtime.Register(CreateLoadStatisticsQuery(sender, "/Root/Database", pathId, statType, 1),
             0, 0, TMailboxType::Simple, 0, sender);
         auto loadResponseA = runtime.GrabEdgeEvent<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
         UNIT_ASSERT(!loadResponseA->Get()->Success);

@@ -19,7 +19,6 @@ PEERDIR(
     ydb/core/blobstorage
     ydb/core/protos
     ydb/core/tx/schemeshard
-    ydb/core/tx/tiering/rule
     ydb/core/tx/tiering/tier
     ydb/core/tablet_flat/protos
     ydb/core/wrappers

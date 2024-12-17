@@ -8,6 +8,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/table_profiles.h>
@@ -109,7 +110,6 @@ private:
         tableDesc->SetName(tableName);
 
         auto schema = tableDesc->MutableSchema();
-        schema->SetEngine(NKikimrSchemeOp::EColumnTableEngine::COLUMN_ENGINE_REPLACING_TIMESERIES);
 
         TString error;
         if (!FillColumnDescription(*tableDesc, req.columns(), code, error)) {
@@ -136,7 +136,6 @@ private:
                 return false;
             }
         }
-        tableDesc->MutableTtlSettings()->SetUseTiering(req.tiering());
 
         return true;
     }

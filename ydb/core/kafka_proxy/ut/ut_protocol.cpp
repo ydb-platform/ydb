@@ -1000,6 +1000,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TString topicName = "/Root/topic-0-test";
         TString shortTopicName = "topic-0-test";
         TString notExistsTopicName = "/Root/not-exists";
+
+        TString tableName = "/Root/table-0-test";
+        TString feedName = "feed";
+        TString feedPath = tableName + "/" + feedName;
+
         ui64 minActivePartitions = 10;
 
         TString key = "record-key";
@@ -1205,6 +1210,60 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 auto dataStr = TString(data.data(), data.size());
                 UNIT_ASSERT_VALUES_EQUAL(dataStr, value);
             }
+        }
+
+        {
+            NYdb::NTable::TTableClient tableClient(*testServer.Driver);
+            tableClient.RetryOperationSync([&](TSession session)
+                {
+                    NYdb::NTable::TTableBuilder builder;
+                    builder.AddNonNullableColumn("key", NYdb::EPrimitiveType::Int64).SetPrimaryKeyColumn("key");
+                    builder.AddNonNullableColumn("value", NYdb::EPrimitiveType::Int64);
+
+                    auto createResult = session.CreateTable(tableName, builder.Build()).ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL(createResult.IsTransportError(), false);
+                    Cerr << createResult.GetIssues().ToString() << "\n";
+                    UNIT_ASSERT_VALUES_EQUAL(createResult.GetStatus(), EStatus::SUCCESS);
+
+                    auto alterResult = session.AlterTable(tableName, NYdb::NTable::TAlterTableSettings()
+                                    .AppendAddChangefeeds(NYdb::NTable::TChangefeedDescription(feedName,
+                                                                                           NYdb::NTable::EChangefeedMode::Updates,
+                                                                                           NYdb::NTable::EChangefeedFormat::Json))
+                                                     ).ExtractValueSync();
+                    Cerr << alterResult.GetIssues().ToString() << "\n";
+                    UNIT_ASSERT_VALUES_EQUAL(alterResult.IsTransportError(), false);
+                    UNIT_ASSERT_VALUES_EQUAL(alterResult.GetStatus(), EStatus::SUCCESS);
+                    return alterResult;
+                }
+            );
+
+            TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember("key").Int64(1)
+                    .AddMember("value").Int64(2)
+                .EndStruct();
+            rows.EndList();
+
+            auto upsertResult = tableClient.BulkUpsert(tableName, rows.Build()).GetValueSync();
+            UNIT_ASSERT_EQUAL(upsertResult.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            // Check CDC
+            std::vector<std::pair<TString, std::vector<i32>>> topics {{feedPath, {0}}};
+            auto msg = client.Fetch(topics);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records.has_value(), true);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records->Records.size(), 1);
+            auto record = msg->Responses[0].Partitions[0].Records->Records[0];
+
+            auto data = record.Value.value();
+            auto dataStr = TString(data.data(), data.size());
+            UNIT_ASSERT_VALUES_EQUAL(dataStr, "{\"update\":{\"value\":2},\"key\":[1]}");
         }
 
     } // Y_UNIT_TEST(FetchScenario)
@@ -2294,6 +2353,55 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {
             auto msg = client.SaslAuthenticate("@/Root", "ApiKey-value-valid");
+            Cerr << msg->ErrorMessage << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        Sleep(TDuration::Seconds(1));
+    }
+
+    Y_UNIT_TEST(LoginWithApiKeyWithoutAt) {
+        TInsecureTestServer testServer;
+
+        TString topicName = "/Root/topic-0-test";
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        {
+            auto result =
+                pqClient
+                    .CreateTopic(topicName,
+                                 NYdb::NTopic::TCreateTopicSettings()
+                                    .PartitioningSettings(10, 100)
+                                    .BeginAddConsumer("consumer-0").EndAddConsumer())
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        auto settings = NTopic::TReadSessionSettings()
+                            .AppendTopics(NTopic::TTopicReadSettings(topicName))
+                            .ConsumerName("consumer-0");
+        auto topicReader = pqClient.CreateReadSession(settings);
+
+        TTestClient client(testServer.Port);
+
+        {
+            auto msg = client.ApiVersions();
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
+        }
+
+        {
+            auto msg = client.SaslHandshake();
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->Mechanisms.size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[0], "PLAIN");
+        }
+
+        {
+            auto msg = client.SaslAuthenticate("/Root", "ApiKey-value-valid");
             Cerr << msg->ErrorMessage << "\n";
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         }

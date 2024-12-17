@@ -21,6 +21,7 @@
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/base.pb.h>
+#include <ydb/core/util/random.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/schlab/mon/mon.h>
 
@@ -30,7 +31,6 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/generic/algorithm.h>
-#include <util/random/entropy.h>
 #include <util/string/split.h>
 #include <util/system/sanitizers.h>
 
@@ -413,13 +413,21 @@ public:
                     auto [actor, actorSystem, pDiskActor, metadata] = *params;
                     delete params;
 
+                    TPDiskConfig *cfg = actor->Cfg.Get();
+
+                    if (cfg->ReadOnly) {
+                        TString readOnlyError = "PDisk is in read-only mode";
+                        STLOGX(*actorSystem, PRI_ERROR, BS_PDISK, BSP01, "Formatting error", (What, readOnlyError));
+                        actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(false, readOnlyError));
+                        return nullptr;
+                    }
+
                     NPDisk::TKey chunkKey;
                     NPDisk::TKey logKey;
                     NPDisk::TKey sysLogKey;
-                    EntropyPool().Read(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
-                    EntropyPool().Read(&logKey, sizeof(NKikimr::NPDisk::TKey));
-                    EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
-                    TPDiskConfig *cfg = actor->Cfg.Get();
+                    SafeEntropyPoolRead(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
+                    SafeEntropyPoolRead(&logKey, sizeof(NKikimr::NPDisk::TKey));
+                    SafeEntropyPoolRead(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
 
                     try {
                         try {
@@ -463,6 +471,13 @@ public:
                 TIntrusivePtr<TPDiskConfig> cfg = std::get<2>(*params);
                 const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
                 std::shared_ptr<TPDiskCtx> pCtx = std::get<3>(*params);
+
+                if (cfg->ReadOnly) {
+                    TString readOnlyError = "PDisk is in read-only mode";
+                    STLOGX(*pCtx->ActorSystem, PRI_ERROR, BS_PDISK, BSP01, "Formatting error", (What, readOnlyError));
+                    pCtx->ActorSystem->Send(pCtx->PDiskActor, new TEvPDiskFormattingFinished(false, readOnlyError));
+                    return nullptr;
+                }
 
                 THolder<NPDisk::TPDisk> pDisk(new NPDisk::TPDisk(pCtx, cfg, counters));
 
@@ -1085,7 +1100,7 @@ public:
             }
 
             Send(ev->Sender, new TEvBlobStorage::TEvNotifyWardenPDiskRestarted(PCtx->PDiskId, NKikimrProto::EReplyStatus::NOTREADY));
-            
+
             return;
         }
 
@@ -1098,7 +1113,7 @@ public:
             NPDisk::TMainKey newMainKey = ev->Get()->MainKey;
 
             SecureWipeBuffer((ui8*)ev->Get()->MainKey.Keys.data(), sizeof(NPDisk::TKey) * ev->Get()->MainKey.Keys.size());
-            
+
             P_LOG(PRI_NOTICE, BSP01, "Going to restart PDisk since received TEvAskWardenRestartPDiskResult");
 
             const TActorIdentity& thisActorId = SelfId();
@@ -1111,7 +1126,7 @@ public:
             TIntrusivePtr<TPDiskConfig> actorCfg = std::move(Cfg);
 
             auto& newCfg = ev->Get()->Config;
-            
+
             if (newCfg) {
                 Y_VERIFY_S(newCfg->PDiskId == pdiskId,
                         "New config's PDiskId# " << newCfg->PDiskId << " is not equal to real PDiskId# " << pdiskId);
@@ -1126,7 +1141,7 @@ public:
             TGenericExecutorThread& executorThread = actorCtx.ExecutorThread;
 
             PassAway();
-            
+
             CreatePDiskActor(executorThread, counters, actorCfg, newMainKey, pdiskId, poolId, nodeId);
 
             Send(ev->Sender, new TEvBlobStorage::TEvNotifyWardenPDiskRestarted(pdiskId));

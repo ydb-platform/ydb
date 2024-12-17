@@ -5,7 +5,7 @@
 #include <library/cpp/monlib/counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-namespace NKikimr::NCache {
+namespace NKikimr::NSharedCache {
 
 // TODO: remove template args and make some page base class
 
@@ -64,7 +64,7 @@ public:
     {}
 
     TIntrusiveList<TPage> EvictNext() override {
-        if (SizeHot + SizeCold == 0) {
+        if (GetSize() == 0) {
             return {};
         }
 
@@ -118,7 +118,11 @@ public:
         }
     }
 
-    TString Dump() const {
+    ui64 GetSize() const override {
+        return SizeHot + SizeCold;
+    }
+
+    TString Dump() const override {
         TStringBuilder result;
 
         size_t count = 0;

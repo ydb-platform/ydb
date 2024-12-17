@@ -110,6 +110,13 @@ TStringBuf GetServiceHostName(TStringBuf address)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TString FormatNetworkAddress(TStringBuf address, int port)
+{
+    return Format("[%v]:%v", address, port);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 const TNetworkAddress NullNetworkAddress;
 
 TNetworkAddress::TNetworkAddress()
@@ -980,7 +987,7 @@ public:
         : TAsyncExpiringCache(
             config,
             /*logger*/ {},
-            DnsProfiler.WithPrefix("/resolve_cache"))
+            DnsProfiler().WithPrefix("/resolve_cache"))
     {
         Configure(std::move(config));
     }

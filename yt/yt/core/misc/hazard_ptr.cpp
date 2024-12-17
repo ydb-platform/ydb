@@ -1,8 +1,5 @@
 #include "hazard_ptr.h"
 
-#include "private.h"
-
-#include <yt/yt/core/misc/singleton.h>
 #include <yt/yt/core/misc/proc.h>
 #include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/shutdown.h>
@@ -16,16 +13,13 @@
 #include <library/cpp/yt/small_containers/compact_vector.h>
 
 #include <library/cpp/yt/memory/free_list.h>
+#include <library/cpp/yt/memory/leaky_singleton.h>
 
 #include <library/cpp/yt/misc/tls.h>
 
 namespace NYT {
 
 using namespace NConcurrency;
-
-////////////////////////////////////////////////////////////////////////////////
-
-static constexpr auto& Logger = LockFreeLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -324,16 +318,6 @@ bool THazardPointerManager::DoReclaimHazardPointers(THazardThreadState* threadSt
     RetireQueue_.DequeueAll([&] (auto item) {
         retireList.push(item);
     });
-
-    YT_LOG_TRACE_IF(
-        !protectedPointers.empty(),
-        "Scanning hazard pointers (Candidates: %v, Protected: %v)",
-        MakeFormattableView(TRingQueueIterableWrapper(retireList), [&] (auto* builder, auto item) {
-            builder->AppendFormat("%v", TTaggedPtr<void>::Unpack(item.PackedPtr).Ptr);
-        }),
-        MakeFormattableView(protectedPointers, [&] (auto* builder, auto ptr) {
-            builder->AppendFormat("%v", ptr);
-        }));
 
     size_t pushedCount = 0;
     auto popCount = retireList.size();

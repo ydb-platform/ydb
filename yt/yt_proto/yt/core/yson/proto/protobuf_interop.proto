@@ -19,6 +19,7 @@ extend google.protobuf.FieldOptions
     optional bool yson_map = 3002;
     optional bool required = 3004;
     optional EEnumYsonStorageType enum_yson_storage_type = 3005;
+    optional bool strict_enum_value_check = 3006;
 }
 
 extend google.protobuf.EnumValueOptions

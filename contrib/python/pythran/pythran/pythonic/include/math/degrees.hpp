@@ -12,7 +12,7 @@ namespace math
   double degrees(T x);
 
   DEFINE_FUNCTOR(pythonic::math, degrees);
-}
+} // namespace math
 PYTHONIC_NS_END
 
 #endif

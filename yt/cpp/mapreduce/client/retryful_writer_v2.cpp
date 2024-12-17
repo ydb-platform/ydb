@@ -291,6 +291,7 @@ struct TRetryfulWriterV2::TSendTask
 ////////////////////////////////////////////////////////////////////////////////
 
 TRetryfulWriterV2::TRetryfulWriterV2(
+    const IRawClientPtr& rawClient,
     IClientRetryPolicyPtr clientRetryPolicy,
     ITransactionPingerPtr transactionPinger,
     const TClientContext& context,
@@ -311,6 +312,7 @@ TRetryfulWriterV2::TRetryfulWriterV2(
 
     if (createTransaction) {
         WriteTransaction_ = MakeHolder<TPingableTransaction>(
+            rawClient,
             clientRetryPolicy,
             context,
             parentId,
@@ -319,16 +321,15 @@ TRetryfulWriterV2::TRetryfulWriterV2(
         );
         auto append = path.Append_.GetOrElse(false);
         auto lockMode = (append  ? LM_SHARED : LM_EXCLUSIVE);
-        NDetail::NRawClient::Lock(
+        NDetail::RequestWithRetry<void>(
             clientRetryPolicy->CreatePolicyForGenericRequest(),
-            context,
-            WriteTransaction_->GetId(),
-            path.Path_,
-            lockMode
-        );
+            [this, &rawClient, &path, &lockMode] (TMutationId& mutationId) {
+                rawClient->Lock(mutationId, WriteTransaction_->GetId(), path.Path_, lockMode);
+            });
     }
 
     THeavyRequestRetrier::TParameters parameters = {
+        .RawClientPtr = rawClient,
         .ClientRetryPolicy = clientRetryPolicy,
         .TransactionPinger = transactionPinger,
         .Context = context,

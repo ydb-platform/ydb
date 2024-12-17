@@ -2,15 +2,15 @@
 #include "dq_opt_join.h"
 #include "dq_opt.h"
 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_type_helpers.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_type_helpers.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/dq/integration/yql_dq_optimization.h>
+#include <yql/essentials/core/dq_integration/yql_dq_optimization.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/core/yql_cost_function.h>
+#include <yql/essentials/core/yql_cost_function.h>
 
 namespace NYql::NDq {
 
@@ -761,6 +761,8 @@ TExprBase DqBuildPureFlatmapStage(TExprBase node, TExprContext& ctx) {
 TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
+    Y_UNUSED(optCtx);
+    
     if (!node.Maybe<TCoFlatMapBase>().Input().Maybe<TDqCnUnionAll>()) {
         return node;
     }
@@ -792,14 +794,25 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
             return TExprBase(ctx.ChangeChild(*node.Raw(), TCoFlatMapBase::idx_Input, std::move(connToPushableStage)));
         }
 
-        auto lambda = TCoLambda(ctx.Builder(flatmap.Lambda().Pos())
-            .Lambda()
-                .Param("stream")
-                .Callable(flatmap.Ref().Content())
-                    .Arg(0, "stream")
-                    .Add(1, ctx.DeepCopyLambda(flatmap.Lambda().Ref()))
-                .Seal()
-            .Seal().Build());
+        TCoLambda lambda = flatmap.Lambda();
+
+        if (flatmap.Maybe<TCoFlatMap>()) {
+            lambda = Build<TCoLambda>(ctx, flatmap.Lambda().Pos())
+                .Args({"stream"})
+                .Body<TCoFlatMap>()
+                    .Input("stream")
+                    .Lambda(ctx.DeepCopyLambda(flatmap.Lambda().Ref()))
+                .Build()
+                .Done();
+        } else {
+            lambda = Build<TCoLambda>(ctx, flatmap.Lambda().Pos())
+                .Args({"stream"})
+                .Body<TCoOrderedFlatMap>()
+                    .Input("stream")
+                    .Lambda(ctx.DeepCopyLambda(flatmap.Lambda().Ref()))
+                .Build()
+                .Done();
+        }
 
         auto pushResult = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
         if (pushResult) {
@@ -823,6 +836,66 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
             .Index().Build("0")
             .Build()
         .Done();
+}
+
+TExprBase DqPushFlatmapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+{
+    if (!node.Maybe<TCoFlatMapBase>().Input().Maybe<TDqCnUnionAll>()) {
+        return node;
+    }
+
+    auto flatmap = node.Cast<TCoFlatMapBase>();
+    if (!IsDqSelfContainedExpr(flatmap.Lambda())) {
+        return node;
+    }
+    auto dqUnion = flatmap.Input().Cast<TDqCnUnionAll>();
+    if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
+        return node;
+    }
+
+    bool isPure;
+    TVector<TDqConnection> innerConnections;
+    FindDqConnections(flatmap.Lambda(), innerConnections, isPure);
+    if (!isPure) {
+        return node;
+    }
+
+    TMaybeNode<TDqStage> flatmapStage;
+    if (!innerConnections.empty()) {
+        return node;
+    } else {
+        if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
+            return TExprBase(ctx.ChangeChild(*node.Raw(), TCoFlatMapBase::idx_Input, std::move(connToPushableStage)));
+        }
+
+        TCoLambda lambda = flatmap.Lambda();
+
+        if (flatmap.Maybe<TCoFlatMap>()) {
+            lambda = Build<TCoLambda>(ctx, flatmap.Lambda().Pos())
+                .Args({"stream"})
+                .Body<TCoFlatMap>()
+                    .Input("stream")
+                    .Lambda(ctx.DeepCopyLambda(flatmap.Lambda().Ref()))
+                .Build()
+                .Done();
+        } else {
+            lambda = Build<TCoLambda>(ctx, flatmap.Lambda().Pos())
+                .Args({"stream"})
+                .Body<TCoOrderedFlatMap>()
+                    .Input("stream")
+                    .Lambda(ctx.DeepCopyLambda(flatmap.Lambda().Ref()))
+                .Build()
+                .Done();
+        }
+
+        auto pushResult = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
+        if (pushResult) {
+            return pushResult.Cast();
+        }
+    }
+
+    return node;
 }
 
 template <typename BaseLMap>
@@ -2741,6 +2814,17 @@ TExprBase DqPropagatePrecomuteTake(TExprBase node, TExprContext& ctx, IOptimizat
     }
 
     if (!CanPushDqExpr(take.Count(), precompute.Connection())) {
+        return node;
+    }
+
+    auto* typeAnn = precompute.Connection().Raw()->GetTypeAnn();
+
+    YQL_ENSURE(typeAnn);
+    typeAnn = GetSeqItemType(typeAnn);
+    if (typeAnn->GetKind() != ETypeAnnotationKind::List &&
+        typeAnn->GetKind() != ETypeAnnotationKind::Flow &&
+        typeAnn->GetKind() != ETypeAnnotationKind::Stream)
+    {
         return node;
     }
 

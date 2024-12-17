@@ -5,6 +5,7 @@
 #include <ydb/library/grpc/server/actors/logger.h>
 #include <library/cpp/http/misc/parsed_request.h>
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/logger/global/global.h>
 #include <library/cpp/resource/resource.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -17,6 +18,7 @@
 #include <ydb/core/http_proxy/http_service.h>
 #include <ydb/core/http_proxy/metrics_actor.h>
 #include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/ymq/actor/auth_multi_factory.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/tests/counters.h>
@@ -67,7 +69,6 @@ T GetByPath(const NJson::TJsonValue& msg, TStringBuf path) {
     }
 }
 
-
 class THttpProxyTestMock : public NUnitTest::TBaseFixture {
 public:
     THttpProxyTestMock() = default;
@@ -81,12 +82,12 @@ public:
         InitAll();
     }
 
-    void InitAll() {
+    void InitAll(bool yandexCloudMode = true, bool enableMetering = false) {
         AccessServicePort = PortManager.GetPort(8443);
         AccessServiceEndpoint = "127.0.0.1:" + ToString(AccessServicePort);
-        InitKikimr();
+        InitKikimr(yandexCloudMode, enableMetering);
         InitAccessServiceService();
-        InitHttpServer();
+        InitHttpServer(yandexCloudMode);
     }
 
     static TString FormAuthorizationStr(const TString& region) {
@@ -365,7 +366,9 @@ public:
 
     NJson::TJsonMap SendMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         auto json = SendJsonRequest("SendMessage", request, expectedHttpCode);
-        UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+        if (expectedHttpCode == 200) {
+            UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+        }
         return json;
     }
 
@@ -467,7 +470,7 @@ private:
         return resultSet;
     }
 
-    void InitKikimr() {
+    void InitKikimr(bool yandexCloudMode, bool enableMetering) {
         AuthFactory = std::make_shared<TIamAuthFactory>();
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
@@ -478,8 +481,23 @@ private:
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
 
         appConfig.MutableSqsConfig()->SetEnableSqs(true);
-        appConfig.MutableSqsConfig()->SetYandexCloudMode(true);
+        appConfig.MutableSqsConfig()->SetYandexCloudMode(yandexCloudMode);
         appConfig.MutableSqsConfig()->SetEnableDeadLetterQueues(true);
+
+        if (enableMetering) {
+            auto& sqsConfig = *appConfig.MutableSqsConfig();
+
+            sqsConfig.SetMeteringFlushingIntervalMs(100);
+            sqsConfig.SetMeteringLogFilePath("sqs_metering.log");
+            TFsPath(sqsConfig.GetMeteringLogFilePath()).DeleteIfExists();
+
+            sqsConfig.AddMeteringCloudNetCidr("5.45.196.0/24");
+            sqsConfig.AddMeteringCloudNetCidr("2a0d:d6c0::/29");
+            sqsConfig.AddMeteringYandexNetCidr("127.0.0.0/8");
+            sqsConfig.AddMeteringYandexNetCidr("5.45.217.0/24");
+
+            DoInitGlobalLog(CreateOwningThreadedLogBackend(sqsConfig.GetMeteringLogFilePath(), 0));
+        }
 
         auto limit = appConfig.MutablePQConfig()->AddValidRetentionLimits();
         limit->SetMinPeriodSeconds(0);
@@ -515,6 +533,13 @@ private:
         ActorRuntime->SetLogPriority(NKikimrServices::HTTP_PROXY, NLog::PRI_DEBUG);
         ActorRuntime->SetLogPriority(NActorsServices::EServiceCommon::HTTP, NLog::PRI_DEBUG);
         ActorRuntime->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+
+        if (enableMetering) {
+            ActorRuntime->RegisterService(
+                NSQS::MakeSqsMeteringServiceID(),
+                ActorRuntime->Register(NSQS::CreateSqsMeteringService())
+            );
+        }
 
         NYdb::TClient client(*(KikimrServer->ServerSettings));
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
@@ -794,7 +819,7 @@ private:
         AccessServiceServer = builder.BuildAndStart();
     }
 
-    void InitHttpServer() {
+    void InitHttpServer(bool yandexCloudMode = true) {
         NKikimrConfig::TServerlessProxyConfig config;
         config.MutableHttpConfig()->AddYandexCloudServiceRegion("ru-central1");
         config.MutableHttpConfig()->AddYandexCloudServiceRegion("ru-central-1");
@@ -804,7 +829,7 @@ private:
         config.MutableHttpConfig()->SetAccessServiceEndpoint(TStringBuilder() << "127.0.0.1:" << AccessServicePort);
         config.SetTestMode(true);
         config.MutableHttpConfig()->SetPort(HttpServicePort);
-        config.MutableHttpConfig()->SetYandexCloudMode(true);
+        config.MutableHttpConfig()->SetYandexCloudMode(yandexCloudMode);
         config.MutableHttpConfig()->SetYmqEnabled(true);
 
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYdb::CreateOAuthCredentialsProviderFactory("proxy_sa@builtin");
@@ -859,6 +884,11 @@ private:
         actorId = as->Register(NKikimr::NFolderService::CreateFolderServiceActor(folderServiceConfig, "cloud4"));
         as->RegisterLocalService(NSQS::MakeSqsFolderServiceID(), actorId);
 
+        NActors::TActorSystemSetup::TLocalServices services {};
+        MultiAuthFactory = std::make_unique<NKikimr::NSQS::TMultiAuthFactory>();
+        MultiAuthFactory->Initialize(services, *AppData(as), AppData(as)->SqsConfig);
+        AppData(as)->SqsAuthFactory = MultiAuthFactory.get();
+
         for (ui32 i = 0; i < ActorRuntime->GetNodeCount(); i++) {
             auto nodeId = ActorRuntime->GetNodeId(i);
 
@@ -898,6 +928,7 @@ public:
     std::unique_ptr<grpc::Server> AccessServiceServer;
     std::unique_ptr<grpc::Server> IamTokenServer;
     std::unique_ptr<grpc::Server> DatabaseServiceServer;
+    std::unique_ptr<NKikimr::NSQS::TMultiAuthFactory> MultiAuthFactory;
     TAutoPtr<TMon> Monitoring;
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters = {};
     THolder<NYdbGrpc::TGRpcServer> GRpcServer;
@@ -908,4 +939,16 @@ public:
     ui16 DatabaseServicePort = 0;
     ui16 MonPort = 0;
     ui16 KikimrGrpcPort = 0;
+};
+
+class THttpProxyTestMockForSQS : public THttpProxyTestMock {
+    void SetUp(NUnitTest::TTestContext&) override {
+        InitAll(false);
+    }
+};
+
+class THttpProxyTestMockWithMetering : public THttpProxyTestMock {
+    void SetUp(NUnitTest::TTestContext&) override {
+        InitAll(true, true);
+    }
 };

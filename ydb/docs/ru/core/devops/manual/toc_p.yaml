@@ -1,8 +1,6 @@
 items:
-- name: Развертывание
-  include:
-    mode: link
-    path: ../../deploy/toc_p.yaml
+- name: Первоначальное развёртывание
+  href: initial-deployment.md
 - name: Управление дисковой подсистемой кластера
   include:
     mode: link
@@ -22,7 +20,7 @@ items:
   - name: Обзор конфигурации
     href: ../../maintenance/manual/config-overview.md
   - name: Статическая конфигурация кластера
-    href: ../../deploy/configuration/config.md
+    href: ../../reference/configuration/index.md
   - name: Динамическая конфигурация кластера
     href: ../../maintenance/manual/dynamic-config.md
   - name: DSL конфигурации кластера
@@ -35,3 +33,8 @@ items:
   href: system-views.md
 - name: Обслуживание без потери доступности
   href: maintenance-without-downtime.md
+- name: Федеративные запросы
+  href: federated-queries/index.md
+  include:
+    mode: link
+    path: federated-queries/toc_p.yaml

@@ -151,7 +151,10 @@ private:
                 continue;
             }
 
-            auto addresses = AddressesFromEndpointSet(endpointSetOrError.Value());
+            auto addresses = AddressesFromEndpointSet(
+                endpointSetOrError.Value(),
+                Config_->Endpoints->UseIPv4,
+                Config_->Endpoints->UseIPv6);
             allAddresses.insert(allAddresses.end(), addresses.begin(), addresses.end());
         }
 

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import datetime
 from typing import Sequence
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind, EGenericProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
@@ -76,9 +76,9 @@ class Factory:
             # [3, '2038-01-19', '2038-01-19T03:14:07.000000Z', '2038-01-19T03:14:07.000009Z'],
             [
                 3,
-                datetime.date(2038, 1, 18),
+                datetime.date(2038, 1, 19),
                 datetime.datetime(2038, 1, 19, 3, 14, 7, 0),
-                datetime.datetime(2038, 1, 19, 3, 14, 7, 0),
+                datetime.datetime(2038, 1, 19, 3, 14, 7, 9),
             ],
             [4, None, None, None],
         ]
@@ -90,8 +90,8 @@ class Factory:
             data_out_=data_out,
             select_what=SelectWhat.asterisk(self._schema.columns),
             select_where=None,
-            data_source_kind=EDataSourceKind.MYSQL,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.MYSQL,
+            protocol=EGenericProtocol.NATIVE,
             schema=self._schema,
             pragmas=dict(),
         )
@@ -107,10 +107,10 @@ class Factory:
             [
                 2,
                 '1988-11-20',
-                '1988-11-20T12:23:45.67891',
-                '1988-11-20T12:23:45.67891Z',
+                '1988-11-20T12:55:28.123',
+                '1988-11-20T12:55:28.123Z',
             ],
-            [3, '2038-01-19', '2038-01-19T03:14:07.000000', '2038-01-19T03:14:07.000009Z'],
+            [3, '2038-01-19', '2038-01-19T03:14:07', '2038-01-19T03:14:07.000009Z'],
             [4, '9999-12-31', '9999-12-31T23:59:59.999999', None],
         ]
 
@@ -121,8 +121,8 @@ class Factory:
             data_out_=data_out,
             select_what=SelectWhat.asterisk(self._schema.columns),
             select_where=None,
-            data_source_kind=EDataSourceKind.MYSQL,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.MYSQL,
+            protocol=EGenericProtocol.NATIVE,
             schema=self._schema,
             pragmas=dict(),
         )

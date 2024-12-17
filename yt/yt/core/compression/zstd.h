@@ -31,12 +31,16 @@ IDictionaryCompressorPtr ZstdCreateDictionaryCompressor(
 IDictionaryDecompressorPtr ZstdCreateDictionaryDecompressor(
     const IDigestedDecompressionDictionaryPtr& digestedDecompressionDictionary);
 
-IDigestedCompressionDictionaryPtr ZstdCreateDigestedCompressionDictionary(
-    const TSharedRef& compressionDictionary,
-    int compressionLevel);
+i64 ZstdEstimateDigestedCompressionDictionarySize(i64 dictionarySize, int compressionLevel);
+i64 ZstdEstimateDigestedDecompressionDictionarySize(i64 dictionarySize);
 
-IDigestedDecompressionDictionaryPtr ZstdCreateDigestedDecompressionDictionary(
-    const TSharedRef& compressionDictionary);
+IDigestedCompressionDictionaryPtr ZstdConstructDigestedCompressionDictionary(
+    const TSharedRef& compressionDictionary,
+    TSharedMutableRef storage,
+    int compressionLevel);
+IDigestedDecompressionDictionaryPtr ZstdConstructDigestedDecompressionDictionary(
+    const TSharedRef& decompressionDictionary,
+    TSharedMutableRef storage);
 
 TDictionaryCompressionFrameInfo ZstdGetFrameInfo(TRef input);
 

@@ -1,5 +1,5 @@
-#include <ydb/library/yql/minikql/mkql_runtime_version.h>
-#include <ydb/library/yql/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
+#include <yql/essentials/minikql/mkql_runtime_version.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <chrono>
@@ -15,7 +15,7 @@
 #include <ydb/library/yql/minikql/comp_nodes/packed_tuple/hashes_calc.h>
 #include <ydb/library/yql/minikql/comp_nodes/packed_tuple/tuple.h>
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_rh_hash.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -177,6 +177,114 @@ Y_UNIT_TEST(Pack) {
 
     UNIT_ASSERT(true);
 
+}
+
+Y_UNIT_TEST(Unpack) {
+
+    TScopedAlloc alloc(__LOCATION__);
+
+    TColumnDesc kc1, kc2,  pc1, pc2;
+
+    kc1.Role = EColumnRole::Key;
+    kc1.DataSize = 8;
+
+    kc2.Role = EColumnRole::Key;
+    kc2.DataSize = 4;
+
+    pc1.Role = EColumnRole::Payload;
+    pc1.DataSize = 8;
+
+    pc2.Role = EColumnRole::Payload;
+    pc2.DataSize = 4;
+
+    std::vector<TColumnDesc> columns{kc1, kc2, pc1, pc2};
+
+    auto tl = TTupleLayout::Create(columns);
+    UNIT_ASSERT(tl->TotalRowSize == 29);
+
+    const ui64 NTuples1 = 10e6;
+
+    const ui64 Tuples1DataBytes = (tl->TotalRowSize) * NTuples1;
+
+    std::vector<ui64> col1(NTuples1, 0);
+    std::vector<ui32> col2(NTuples1, 0);
+    std::vector<ui64> col3(NTuples1, 0);
+    std::vector<ui32> col4(NTuples1, 0);
+
+    std::vector<ui8> res(Tuples1DataBytes + 64, 0);
+
+    for (ui32 i = 0; i < NTuples1; ++i) {
+        col1[i] = i;
+        col2[i] = i;
+        col3[i] = i;
+        col4[i] = i;
+    }
+
+    const ui8* cols[4];
+
+    cols[0] = (ui8*) col1.data();
+    cols[1] = (ui8*) col2.data();
+    cols[2] = (ui8*) col3.data();
+    cols[3] = (ui8*) col4.data();
+
+    std::vector<ui8> colValid1((NTuples1 + 7)/8, ~0);
+    std::vector<ui8> colValid2((NTuples1 + 7)/8, ~0);
+    std::vector<ui8> colValid3((NTuples1 + 7)/8, ~0);
+    std::vector<ui8> colValid4((NTuples1 + 7)/8, ~0);
+    const ui8 *colsValid[4] = {
+            colValid1.data(),
+            colValid2.data(),
+            colValid3.data(),
+            colValid4.data(),
+    };
+
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    tl->Pack(cols, colsValid, res.data(), overflow, 0, NTuples1);
+
+    std::vector<ui64> col1_new(NTuples1, 0);
+    std::vector<ui32> col2_new(NTuples1, 0);
+    std::vector<ui64> col3_new(NTuples1, 0);
+    std::vector<ui32> col4_new(NTuples1, 0);
+
+    ui8* cols_new[4];
+    cols_new[0] = (ui8*) col1_new.data();
+    cols_new[1] = (ui8*) col2_new.data();
+    cols_new[2] = (ui8*) col3_new.data();
+    cols_new[3] = (ui8*) col4_new.data();
+
+    std::vector<ui8> colValid1_new((NTuples1 + 7)/8, 0);
+    std::vector<ui8> colValid2_new((NTuples1 + 7)/8, 0);
+    std::vector<ui8> colValid3_new((NTuples1 + 7)/8, 0);
+    std::vector<ui8> colValid4_new((NTuples1 + 7)/8, 0);
+
+    ui8 *colsValid_new[4] = {
+        colValid1_new.data(),
+        colValid2_new.data(),
+        colValid3_new.data(),
+        colValid4_new.data(),
+    };
+
+    std::chrono::steady_clock::time_point begin02 = std::chrono::steady_clock::now();
+    tl->Unpack(cols_new, colsValid_new, res.data(), overflow, 0, NTuples1);
+    std::chrono::steady_clock::time_point end02 = std::chrono::steady_clock::now();
+    ui64 microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end02 - begin02).count();
+
+    if (microseconds == 0) microseconds = 1;
+
+    CTEST  << "Time for " << (NTuples1) << " transpose (external cycle)= " << microseconds  << "[microseconds]" << Endl;
+    CTEST  << "Data size =  " << Tuples1DataBytes / (1024 * 1024) << "[MB]" << Endl;
+    CTEST  << "Calculating speed = " << Tuples1DataBytes / microseconds << "MB/sec" << Endl;
+    CTEST  << Endl;
+
+    UNIT_ASSERT(std::memcmp(col1.data(), col1_new.data(), sizeof(ui64) * col1.size()) == 0);
+    UNIT_ASSERT(std::memcmp(col2.data(), col2_new.data(), sizeof(ui32) * col2.size()) == 0);
+    UNIT_ASSERT(std::memcmp(col3.data(), col3_new.data(), sizeof(ui64) * col3.size()) == 0);
+    UNIT_ASSERT(std::memcmp(col4.data(), col4_new.data(), sizeof(ui32) * col4.size()) == 0);
+
+    UNIT_ASSERT(std::memcmp(colValid1.data(), colValid1_new.data(), colValid1.size()) == 0);
+    UNIT_ASSERT(std::memcmp(colValid2.data(), colValid2_new.data(), colValid2.size()) == 0);
+    UNIT_ASSERT(std::memcmp(colValid3.data(), colValid3_new.data(), colValid3.size()) == 0);
+    UNIT_ASSERT(std::memcmp(colValid4.data(), colValid4_new.data(), colValid4.size()) == 0);
 }
 
 Y_UNIT_TEST(PackVarSize) {
@@ -347,6 +455,197 @@ Y_UNIT_TEST(PackVarSize) {
         UNIT_ASSERT_VALUES_EQUAL(expected_data[i], res[i]);
     for (ui32 i = 0; i < sizeof(expected_overflow); ++i)
         UNIT_ASSERT_VALUES_EQUAL(expected_overflow[i], overflow[i]);
+}
+
+Y_UNIT_TEST(UnpackVarSize) {
+
+    TScopedAlloc alloc(__LOCATION__);
+
+    TColumnDesc kc1, kcv1, kcv2, kc2,  pc1, pc2;
+
+    kc1.Role = EColumnRole::Key;
+    kc1.DataSize = 8;
+
+    kc2.Role = EColumnRole::Key;
+    kc2.DataSize = 4;
+
+    pc1.Role = EColumnRole::Payload;
+    pc1.DataSize = 8;
+
+    pc2.Role = EColumnRole::Payload;
+    pc2.DataSize = 4;
+
+    kcv1.Role = EColumnRole::Key;
+    kcv1.DataSize = 8;
+    kcv1.SizeType = EColumnSizeType::Variable;
+
+    kcv2.Role = EColumnRole::Key;
+    kcv2.DataSize = 16;
+    kcv2.SizeType = EColumnSizeType::Variable;
+
+    pc1.Role = EColumnRole::Payload;
+    pc1.DataSize = 8;
+
+    pc2.Role = EColumnRole::Payload;
+    pc2.DataSize = 4;
+
+    std::vector<TColumnDesc> columns{kc1, kc2, kcv1, kcv2, pc1, pc2};
+
+    auto tl = TTupleLayout::Create(columns);
+    CTEST << "TotalRowSize = " << tl->TotalRowSize << Endl;
+    UNIT_ASSERT_VALUES_EQUAL(tl->TotalRowSize, 54);
+
+    const ui64 NTuples1 = 3;
+
+    const ui64 Tuples1DataBytes = (tl->TotalRowSize) * NTuples1;
+
+    std::vector<ui64> col1(NTuples1, 0);
+    std::vector<ui32> col2(NTuples1, 0);
+    std::vector<ui64> col3(NTuples1, 0);
+    std::vector<ui32> col4(NTuples1, 0);
+    
+    std::vector<ui32> vcol1(1, 0);
+    std::vector<ui8> vcol1data;
+    std::vector<ui32> vcol2(1, 0);
+    std::vector<ui8> vcol2data;
+
+    std::vector<ui8> res(Tuples1DataBytes + 64, 0);
+    std::vector<TString> vcol1str {
+        "abc",
+        "ABCDEFGHIJKLMNO",
+        "ZYXWVUTSPR"
+    };
+    std::vector<TString> vcol2str {
+        "ABC",
+        "abcdefghijklmno",
+        "zyxwvutspr"
+    };
+    for (auto &&str: vcol1str) {
+        for (auto c: str)
+            vcol1data.push_back(c);
+        vcol1.push_back(vcol1data.size());
+    }
+    UNIT_ASSERT_VALUES_EQUAL(vcol1.size(), NTuples1 + 1);
+    for (auto &&str: vcol2str) {
+        for (auto c: str)
+            vcol2data.push_back(c);
+        vcol2.push_back(vcol2data.size());
+    }
+    UNIT_ASSERT_VALUES_EQUAL(vcol2.size(), NTuples1 + 1);
+    for (ui32 i = 0; i < NTuples1; ++i) {
+        col1[i] = (1ull<<(sizeof(col1[0])*8 - 4)) + i + 1;
+        col2[i] = (2ull<<(sizeof(col2[0])*8 - 4)) + i + 1;
+        col3[i] = (3ull<<(sizeof(col3[0])*8 - 4)) + i + 1;
+        col4[i] = (4ull<<(sizeof(col4[0])*8 - 4)) + i + 1;
+    }
+
+    const ui8* cols[4 + 2*2];
+
+    cols[0] = (ui8*) col1.data();
+    cols[1] = (ui8*) col2.data();
+    cols[2] = (ui8*) vcol1.data();
+    cols[3] = (ui8*) vcol1data.data();
+    cols[4] = (ui8*) vcol2.data();
+    cols[5] = (ui8*) vcol2data.data();
+    cols[6] = (ui8*) col3.data();
+    cols[7] = (ui8*) col4.data();
+ 
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    std::vector<ui8> colValid((NTuples1 + 7)/8, ~0);
+    const ui8 *colsValid[8] = {
+            colValid.data(),
+            colValid.data(),
+            colValid.data(),
+            nullptr,
+            colValid.data(),
+            nullptr,
+            colValid.data(),
+            colValid.data(),
+    };
+
+    tl->Pack(cols, colsValid, res.data(), overflow, 0, NTuples1);
+
+    std::vector<ui64> col1_new(NTuples1, 0);
+    std::vector<ui32> col2_new(NTuples1, 0);
+    std::vector<ui64> col3_new(NTuples1, 0);
+    std::vector<ui32> col4_new(NTuples1, 0);
+    
+    std::vector<ui32> vcol1_new(NTuples1 + 1, 0);
+    std::vector<ui8>  vcol1data_new(vcol1data.size());
+    std::vector<ui32> vcol2_new(NTuples1 + 1, 0);
+    std::vector<ui8>  vcol2data_new(vcol2data.size());
+
+    ui8* cols_new[4 + 2 * 2];
+    cols_new[0] = (ui8*) col1_new.data();
+    cols_new[1] = (ui8*) col2_new.data();
+    cols_new[2] = (ui8*) vcol1_new.data();
+    cols_new[3] = (ui8*) vcol1data_new.data();
+    cols_new[4] = (ui8*) vcol2_new.data();
+    cols_new[5] = (ui8*) vcol2data_new.data();
+    cols_new[6] = (ui8*) col3_new.data();
+    cols_new[7] = (ui8*) col4_new.data();
+
+    std::vector<ui8> colValid1_new((NTuples1 + 7)/8, 0);
+    colValid1_new.back() = ~0;
+    std::vector<ui8> colValid2_new((NTuples1 + 7)/8, 0);
+    colValid2_new.back() = ~0;
+    std::vector<ui8> colValid3_new((NTuples1 + 7)/8, 0);
+    colValid3_new.back() = ~0;
+    std::vector<ui8> colValid4_new((NTuples1 + 7)/8, 0);
+    colValid4_new.back() = ~0;
+    std::vector<ui8> colValid5_new((NTuples1 + 7)/8, 0);
+    colValid5_new.back() = ~0;
+    std::vector<ui8> colValid6_new((NTuples1 + 7)/8, 0);
+    colValid6_new.back() = ~0;
+
+    ui8 *colsValid_new[8] = {
+        colValid1_new.data(),
+        colValid2_new.data(),
+        colValid3_new.data(),
+        nullptr,
+        colValid4_new.data(),
+        nullptr,
+        colValid5_new.data(),
+        colValid6_new.data(),
+    };
+
+    std::chrono::steady_clock::time_point begin02 = std::chrono::steady_clock::now();
+    tl->Unpack(cols_new, colsValid_new, res.data(), overflow, 0, NTuples1);
+    std::chrono::steady_clock::time_point end02 = std::chrono::steady_clock::now();
+    ui64 microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end02 - begin02).count();
+
+    if (microseconds == 0)
+        microseconds = 1;
+
+    CTEST  << "Time for " << (NTuples1) << " transpose (external cycle)= " << microseconds  << "[microseconds]" << Endl;
+#ifndef NDEBUG
+    CTEST << "Result size = " << Tuples1DataBytes << Endl;
+    CTEST << "Result = ";
+    for (ui32 i = 0; i < Tuples1DataBytes; ++i)
+        CTEST << int(res[i]) << ' ';
+    CTEST << Endl;
+    CTEST << "Overflow size = " << overflow.size() << Endl;
+    CTEST << "Overflow = ";
+    for (auto c: overflow)
+        CTEST << int(c) << ' ';
+    CTEST << Endl;
+#endif
+
+    UNIT_ASSERT(std::memcmp(cols[0], cols_new[0], sizeof(ui64) * col1.size()) == 0);
+    UNIT_ASSERT(std::memcmp(cols[1], cols_new[1], sizeof(ui32) * col2.size()) == 0);
+    UNIT_ASSERT(std::memcmp(cols[2], cols_new[2], sizeof(ui32) * vcol1.size()) == 0);
+    UNIT_ASSERT(std::memcmp(cols[3], cols_new[3], vcol1data.size()) == 0);
+    UNIT_ASSERT(std::memcmp(cols[4], cols_new[4], sizeof(ui32) * vcol2.size()) == 0);
+    UNIT_ASSERT(std::memcmp(cols[5], cols_new[5], vcol1data.size()) == 0);
+    UNIT_ASSERT(std::memcmp(cols[6], cols_new[6], sizeof(ui64) * col3.size()) == 0);
+    UNIT_ASSERT(std::memcmp(cols[7], cols_new[7], sizeof(ui32) * col4.size()) == 0);
+
+    UNIT_ASSERT(std::memcmp(colValid.data(), colValid1_new.data(), colValid.size()) == 0);
+    UNIT_ASSERT(std::memcmp(colValid.data(), colValid2_new.data(), colValid.size()) == 0);
+    UNIT_ASSERT(std::memcmp(colValid.data(), colValid3_new.data(), colValid.size()) == 0);
+    UNIT_ASSERT(std::memcmp(colValid.data(), colValid4_new.data(), colValid.size()) == 0);
+    UNIT_ASSERT(std::memcmp(colValid.data(), colValid5_new.data(), colValid.size()) == 0);
+    UNIT_ASSERT(std::memcmp(colValid.data(), colValid6_new.data(), colValid.size()) == 0);
 }
 
 Y_UNIT_TEST(PackVarSizeBig) {

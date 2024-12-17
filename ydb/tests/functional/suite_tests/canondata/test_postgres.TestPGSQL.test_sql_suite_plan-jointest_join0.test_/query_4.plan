@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-Filter-LeftJoin (MapJoin)",
+                                        "Node Type": "Limit-Filter-LeftJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -59,7 +59,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "Not Exist(item.b.unique2) And item.a.ten == 2 Or item.b.hundred == 3"
+                                                "Predicate": "NOT Exist(item.b.unique2) AND item.a.ten == 2 OR item.b.hundred == 3"
                                             },
                                             {
                                                 "Condition": "a.unique2 = b.tenthous",
@@ -68,10 +68,19 @@
                                                         "ExternalPlanNodeId": 8
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 5
+                                                        "InternalOperatorId": 3
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 5
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.tenthous)"
                                             }
                                         ],
                                         "PlanNodeId": 9,

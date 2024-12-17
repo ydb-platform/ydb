@@ -11,7 +11,7 @@ namespace __dispatch__
   auto copy(Any const &any) -> decltype(any.copy());
 
   DEFINE_FUNCTOR(pythonic::__dispatch__, copy);
-}
+} // namespace __dispatch__
 PYTHONIC_NS_END
 
 #endif

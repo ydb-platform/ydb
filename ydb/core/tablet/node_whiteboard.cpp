@@ -470,7 +470,7 @@ protected:
         }
     }
 
-    static void SelectiveCopy(::google::protobuf::Message& protoTo, const ::google::protobuf::Message& protoFrom, const ::google::protobuf::RepeatedField<arc_i32>& fields) {
+    static void SelectiveCopy(::google::protobuf::Message& protoTo, const ::google::protobuf::Message& protoFrom, const ::google::protobuf::RepeatedField<int>& fields) {
         using namespace ::google::protobuf;
         const Descriptor& descriptor = *protoTo.GetDescriptor();
         const Reflection& reflectionTo = *protoTo.GetReflection();
@@ -483,24 +483,6 @@ protected:
         }
     }
 
-    template<typename TMessage>
-    static ::google::protobuf::RepeatedField<arc_i32> GetDefaultFields(const TMessage& message) {
-        using namespace ::google::protobuf;
-        const Descriptor& descriptor = *message.GetDescriptor();
-        ::google::protobuf::RepeatedField<arc_i32> defaultFields;
-        int fieldCount = descriptor.field_count();
-        for (int index = 0; index < fieldCount; ++index) {
-            const FieldDescriptor* field = descriptor.field(index);
-            const auto& options(field->options());
-            if (options.HasExtension(NKikimrWhiteboard::DefaultField)) {
-                if (options.GetExtension(NKikimrWhiteboard::DefaultField)) {
-                    defaultFields.Add(field->number());
-                }
-            }
-        }
-        return defaultFields;
-    }
-
     template<typename TMessage, typename TRequest>
     static void Copy(TMessage& to, const TMessage& from, const TRequest& request) {
         if (request.FieldsRequiredSize() > 0) {
@@ -510,8 +492,7 @@ protected:
                 SelectiveCopy(to, from, request.GetFieldsRequired());
             }
         } else {
-            static auto defaultFields = GetDefaultFields(to);
-            SelectiveCopy(to, from, defaultFields);
+            SelectiveCopy(to, from, GetDefaultWhiteboardFields<TMessage>());
         }
     }
 
@@ -581,9 +562,17 @@ protected:
 
     void Handle(TEvWhiteboard::TEvNodeStateUpdate::TPtr &ev, const TActorContext &ctx) {
         auto& nodeStateInfo = NodeStateInfo[ev->Get()->Record.GetPeerName()];
-        if (CheckedMerge(nodeStateInfo, ev->Get()->Record) >= 100) {
-            nodeStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+        ui64 previousChangeTime = nodeStateInfo.GetChangeTime();
+        ui64 currentChangeTime = ctx.Now().MilliSeconds();
+        ui64 previousBytesWritten = nodeStateInfo.GetBytesWritten();
+        ui64 currentBytesWritten = ev->Get()->Record.GetBytesWritten();
+        if (previousChangeTime && previousBytesWritten < currentBytesWritten && previousChangeTime < currentChangeTime) {
+            nodeStateInfo.SetWriteThroughput((currentBytesWritten - previousBytesWritten) * 1000 / (currentChangeTime - previousChangeTime));
+        } else {
+            nodeStateInfo.ClearWriteThroughput();
         }
+        nodeStateInfo.MergeFrom(ev->Get()->Record);
+        nodeStateInfo.SetChangeTime(currentChangeTime);
     }
 
     void Handle(TEvWhiteboard::TEvNodeStateDelete::TPtr &ev, const TActorContext &ctx) {
@@ -1144,6 +1133,30 @@ protected:
         ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateClockSkew());
     }
 };
+
+template<typename TMessage>
+::google::protobuf::RepeatedField<int> InitDefaultWhiteboardFields() {
+    using namespace ::google::protobuf;
+    const Descriptor& descriptor = *TMessage::GetDescriptor();
+    ::google::protobuf::RepeatedField<int> defaultFields;
+    int fieldCount = descriptor.field_count();
+    for (int index = 0; index < fieldCount; ++index) {
+        const FieldDescriptor* field = descriptor.field(index);
+        const auto& options(field->options());
+        if (options.HasExtension(NKikimrWhiteboard::DefaultField)) {
+            if (options.GetExtension(NKikimrWhiteboard::DefaultField)) {
+                defaultFields.Add(field->number());
+            }
+        }
+    }
+    return defaultFields;
+}
+
+template<typename TMessage>
+::google::protobuf::RepeatedField<int> GetDefaultWhiteboardFields() {
+    static ::google::protobuf::RepeatedField<int> defaultFields = InitDefaultWhiteboardFields<TMessage>();
+    return defaultFields;
+}
 
 IActor* CreateNodeWhiteboardService() {
     return new TNodeWhiteboardService();

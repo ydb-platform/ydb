@@ -338,6 +338,8 @@ namespace {
         Cout << Endl << "MeteringMode: " << (TStringBuilder() << topicDescription.GetMeteringMode());
         if (!topicDescription.GetSupportedCodecs().empty()) {
             Cout << Endl << "SupportedCodecs: " << FormatCodecs(topicDescription.GetSupportedCodecs()) << Endl;
+        } else {
+            Cout << Endl;
         }
     }
 
@@ -352,6 +354,8 @@ namespace {
                 Cout << Endl << "DownUtilizationPercent: " << topicDescription.GetPartitioningSettings().GetAutoPartitioningSettings().GetDownUtilizationPercent();
                 Cout << Endl << "UpUtilizationPercent: " << topicDescription.GetPartitioningSettings().GetAutoPartitioningSettings().GetUpUtilizationPercent();
                 Cout << Endl << "StabilizationWindowSeconds: " << topicDescription.GetPartitioningSettings().GetAutoPartitioningSettings().GetStabilizationWindow().Seconds() << Endl;
+            } else {
+                Cout << Endl;
             }
         }
     }
@@ -1090,6 +1094,8 @@ TCommandPermissions::TCommandPermissions()
     AddCommand(std::make_unique<TCommandPermissionSet>());
     AddCommand(std::make_unique<TCommandChangeOwner>());
     AddCommand(std::make_unique<TCommandPermissionClear>());
+    AddCommand(std::make_unique<TCommandPermissionSetInheritance>());
+    AddCommand(std::make_unique<TCommandPermissionClearInheritance>());
     AddCommand(std::make_unique<TCommandPermissionList>());
 }
 
@@ -1275,6 +1281,66 @@ int TCommandPermissionClear::Run(TConfig& config) {
             FillSettings(
                 NScheme::TModifyPermissionsSettings()
                 .AddClearAcl()
+            )
+        ).GetValueSync()
+    );
+    return EXIT_SUCCESS;
+}
+
+TCommandPermissionSetInheritance::TCommandPermissionSetInheritance()
+    : TYdbOperationCommand("set-inheritance", std::initializer_list<TString>(), "Set to inherit permissions from the parent")
+{}
+
+void TCommandPermissionSetInheritance::Config(TConfig& config) {
+    TYdbOperationCommand::Config(config);
+
+    config.SetFreeArgsNum(1);
+    SetFreeArgTitle(0, "<path>", "Path to set interrupt-inheritance flag for");
+}
+
+void TCommandPermissionSetInheritance::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    ParsePath(config, 0);
+}
+
+int TCommandPermissionSetInheritance::Run(TConfig& config) {
+    NScheme::TSchemeClient client(CreateDriver(config));
+    ThrowOnError(
+        client.ModifyPermissions(
+            Path,
+            FillSettings(
+                NScheme::TModifyPermissionsSettings()
+                .AddInterruptInheritance(false)
+            )
+        ).GetValueSync()
+    );
+    return EXIT_SUCCESS;
+}
+
+TCommandPermissionClearInheritance::TCommandPermissionClearInheritance()
+    : TYdbOperationCommand("clear-inheritance", std::initializer_list<TString>(), "Set to do not inherit permissions from the parent")
+{}
+
+void TCommandPermissionClearInheritance::Config(TConfig& config) {
+    TYdbOperationCommand::Config(config);
+
+    config.SetFreeArgsNum(1);
+    SetFreeArgTitle(0, "<path>", "Path to set interrupt-inheritance flag for");
+}
+
+void TCommandPermissionClearInheritance::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    ParsePath(config, 0);
+}
+
+int TCommandPermissionClearInheritance::Run(TConfig& config) {
+    NScheme::TSchemeClient client(CreateDriver(config));
+    ThrowOnError(
+        client.ModifyPermissions(
+            Path,
+            FillSettings(
+                NScheme::TModifyPermissionsSettings()
+                .AddInterruptInheritance(true)
             )
         ).GetValueSync()
     );

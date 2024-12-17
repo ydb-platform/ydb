@@ -10,9 +10,9 @@
 
 #include <yt/yt/core/ytree/convert.h>
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/library/quantile_digest/config.h>
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 namespace NYT::NTableClient {
 
@@ -463,6 +463,8 @@ void TChunkWriterOptions::Register(TRegistrar registrar)
     registrar.Parameter("enable_segment_meta_in_blocks", &TThis::EnableSegmentMetaInBlocks)
         .Default(false);
     registrar.Parameter("enable_column_meta_in_chunk_meta", &TThis::EnableColumnMetaInChunkMeta)
+        .Default(true);
+    registrar.Parameter("consider_min_row_range_data_weight", &TThis::ConsiderMinRowRangeDataWeight)
         .Default(true);
 
     registrar.Parameter("schema_modification", &TThis::SchemaModification)

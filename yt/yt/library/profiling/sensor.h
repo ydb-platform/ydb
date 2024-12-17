@@ -23,6 +23,19 @@ namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TTesting;
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NDetail {
+
+template <bool>
+class TProfiler;
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TCounter
 {
 public:
@@ -35,10 +48,11 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
     friend struct TTesting;
 
-    ICounterImplPtr Counter_;
+    ICounterPtr Counter_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -51,10 +65,11 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
     friend struct TTesting;
 
-    ITimeCounterImplPtr Counter_;
+    ITimeCounterPtr Counter_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -67,10 +82,11 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
     friend struct TTesting;
 
-    IGaugeImplPtr Gauge_;
+    IGaugePtr Gauge_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -83,10 +99,11 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
     friend struct TTesting;
 
-    ITimeGaugeImplPtr Gauge_;
+    ITimeGaugePtr Gauge_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -99,9 +116,10 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
 
-    ISummaryImplPtr Summary_;
+    ISummaryPtr Summary_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -114,9 +132,10 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
 
-    ITimerImplPtr Timer_;
+    ITimerPtr Timer_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -152,9 +171,10 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
 
-    IHistogramImplPtr Histogram_;
+    IHistogramPtr Histogram_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -167,10 +187,11 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
     friend struct TTesting;
 
-    IHistogramImplPtr Histogram_;
+    IHistogramPtr Histogram_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -225,9 +246,43 @@ void FormatValue(TStringBuilderBase* builder, const TSensorOptions& options, TSt
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! TProfiler stores common settings of profiling counters.
-class TProfiler
+namespace NDetail {
+
+template <bool UseWeakPtr>
+class TRegistryHolderBase
 {
+public:
+    explicit TRegistryHolderBase(const IRegistryPtr& impl = nullptr);
+
+    const IRegistryPtr& GetRegistry() const;
+
+private:
+    IRegistryPtr Impl_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <>
+class TRegistryHolderBase<true>
+{
+public:
+    explicit TRegistryHolderBase(const IRegistryPtr& impl = nullptr);
+
+    IRegistryPtr GetRegistry() const;
+
+private:
+    TWeakPtr<IRegistry> Impl_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <bool UseWeakPtr>
+class TProfiler
+    : private TRegistryHolderBase<UseWeakPtr>
+{
+private:
+    using TBase = TRegistryHolderBase<UseWeakPtr>;
+
 public:
     //! Default constructor creates null registry. Every method of null registry is no-op.
     /*!
@@ -246,7 +301,7 @@ public:
     static constexpr auto DefaultNamespace = "yt";
 
     TProfiler(
-        const IRegistryImplPtr& impl,
+        const IRegistryPtr& impl,
         const std::string& prefix,
         const std::string& _namespace = DefaultNamespace);
 
@@ -254,7 +309,7 @@ public:
         const std::string& prefix,
         const std::string& _namespace = DefaultNamespace,
         const TTagSet& tags = {},
-        const IRegistryImplPtr& impl = nullptr,
+        const IRegistryPtr& impl = nullptr,
         TSensorOptions options = {});
 
     TProfiler WithPrefix(const std::string& prefix) const;
@@ -409,18 +464,24 @@ public:
         const std::string& prefix,
         const ISensorProducerPtr& producer) const;
 
-    const IRegistryImplPtr& GetRegistry() const;
+    using TBase::GetRegistry;
 
 private:
-    friend struct TTesting;
+    friend struct ::NYT::NProfiling::TTesting;
 
     bool Enabled_ = false;
     std::string Prefix_;
     std::string Namespace_;
     TTagSet Tags_;
     TSensorOptions Options_;
-    IRegistryImplPtr Impl_;
 };
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
+using TProfiler = NDetail::TProfiler</*UseWeakPtr*/false>;
+using TWeakProfiler = NDetail::TProfiler</*UseWeakPtr*/true>;
 
 using TRegistry = TProfiler;
 

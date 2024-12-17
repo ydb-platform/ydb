@@ -55,6 +55,12 @@ WINDOWS_SRCS = [
     "windows-tls.h",
 ]
 
+MUSL_SRCS = [
+    "error.c",
+    "obstack.c",
+    "obstack_printf.c",
+]
+
 DARWIN_SRCS = [
     "error.c",
     "fpending.c",
@@ -101,15 +107,30 @@ EXCESSIVE_SRCS = [
 
 def post_install(self):
     with self.yamakes["lib"] as gnulib:
+        # musl-libc has fseterr
+        gnulib.SRCS.remove("fseterr.c")
+        gnulib.after(
+            "SRCS",
+            """
+            IF (NOT MUSL)
+                SRCS(
+                    fseterr.c
+                )
+            ENDIF()
+            """,
+        )
         gnulib.after(
             "SRCS",
             Switch(
-                OS_WINDOWS=Linkable(
-                    SRCS=[src for src in WINDOWS_SRCS if pathutil.is_source(src)],
-                    ADDINCL=[GLOBAL(f"{self.arcdir}/lib/platform/win64")],
+                MUSL=Linkable(
+                    SRCS=MUSL_SRCS,
                 ),
                 OS_DARWIN=Linkable(
                     SRCS=DARWIN_SRCS,
+                ),
+                OS_WINDOWS=Linkable(
+                    SRCS=[src for src in WINDOWS_SRCS if pathutil.is_source(src)],
+                    ADDINCL=[GLOBAL(f"{self.arcdir}/lib/platform/win64")],
                 ),
             ),
         )
@@ -162,7 +183,7 @@ bison = NixProject(
         "src/scan-skel.l",
         "src/parse-gram.y",
     ]
-    + [f"lib/{src}" for src in itertools.chain(WINDOWS_SRCS, DARWIN_SRCS)],
+    + [f"lib/{src}" for src in itertools.chain(MUSL_SRCS, DARWIN_SRCS, WINDOWS_SRCS)],
     copy_sources_except=[
         # Don't need them for now, reduce import footprint
         "data/skeletons/d.m4",
@@ -179,6 +200,7 @@ bison = NixProject(
     disable_includes=[
         "InnoTekLIBC/backend.h",
         "bits/libc-lock.h",
+        "libio/",
         "synch.h",
         "random.h",
         "OS.h",
@@ -190,6 +212,7 @@ bison = NixProject(
         "mbrtowc-impl.h",
         "lc-charset-dispatch.h",
         "unistring-notinline.h",
+        "vasprintf.h",
     ],
     post_install=post_install,
 )

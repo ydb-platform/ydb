@@ -29,6 +29,8 @@ const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ
 // The graph of split-merge operations.
 class TPartitionGraph {
 public:
+    using TPtr = std::shared_ptr<TPartitionGraph>;
+
     struct Node {
 
         Node() = default;
@@ -49,6 +51,7 @@ public:
         std::set<Node*> HierarhicalParents;
 
         bool IsRoot() const;
+        bool IsParent(ui32 partitionId) const;
     };
 
     TPartitionGraph();
@@ -60,6 +63,11 @@ public:
     void Travers(const std::function<bool (ui32 id)>& func) const;
     void Travers(ui32 id, const std::function<bool (ui32 id)>& func, bool includeSelf = false) const;
 
+    bool Empty() const;
+    operator bool() const;
+
+    TString DebugString() const;
+
 private:
     std::unordered_map<ui32, Node> Partitions;
 };
@@ -67,6 +75,9 @@ private:
 TPartitionGraph MakePartitionGraph(const NKikimrPQ::TPQTabletConfig& config);
 TPartitionGraph MakePartitionGraph(const NKikimrPQ::TUpdateBalancerConfig& config);
 TPartitionGraph MakePartitionGraph(const NKikimrSchemeOp::TPersQueueGroupDescription& config);
+
+TPartitionGraph::TPtr MakeSharedPartitionGraph(const NKikimrPQ::TPQTabletConfig& config);
+TPartitionGraph::TPtr MakeSharedPartitionGraph(const NKikimrSchemeOp::TPersQueueGroupDescription& config);
 
 class TLastCounter {
     static constexpr size_t MaxValueCount = 2;

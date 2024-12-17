@@ -10,8 +10,8 @@ select
 from
     {{orders}}
 where
-    o_orderdate >= date '1994-03-01'
-    and o_orderdate < date '1994-03-01' + interval '3' month
+    o_orderdate >= date '1993-07-01'
+    and o_orderdate < date '1993-07-01' + interval '3' month
     and exists (
         select
             *

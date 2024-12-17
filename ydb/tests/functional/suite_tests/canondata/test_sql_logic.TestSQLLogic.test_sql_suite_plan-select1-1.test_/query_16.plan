@@ -98,7 +98,7 @@
                                                                     }
                                                                 ],
                                                                 "Name": "Filter",
-                                                                "Predicate": "item.e + item.d >= item.a + item.b - 10 And item.e + item.d <= item.c + 130 And item.c > item.d"
+                                                                "Predicate": "item.e + item.d >= item.a + item.b - 10 AND item.e + item.d <= item.c + 130 AND item.c > item.d"
                                                             }
                                                         ],
                                                         "PlanNodeId": 10,
@@ -155,7 +155,7 @@
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
-                        "Node Type": "Aggregate-Limit",
+                        "Node Type": "Aggregate-Limit-Aggregate",
                         "Operators": [
                             {
                                 "Inputs": [
@@ -163,7 +163,17 @@
                                         "InternalOperatorId": 1
                                     }
                                 ],
-                                "Name": "Aggregate"
+                                "Name": "Aggregate",
+                                "Phase": "Final"
+                            },
+                            {
+                                "Inputs": [
+                                    {
+                                        "InternalOperatorId": 2
+                                    }
+                                ],
+                                "Limit": "1",
+                                "Name": "Limit"
                             },
                             {
                                 "Inputs": [
@@ -171,8 +181,8 @@
                                         "ExternalPlanNodeId": 3
                                     }
                                 ],
-                                "Limit": "1",
-                                "Name": "Limit"
+                                "Name": "Aggregate",
+                                "Phase": "Final"
                             }
                         ],
                         "PlanNodeId": 4,
@@ -191,7 +201,8 @@
                                                         "ExternalPlanNodeId": 1
                                                     }
                                                 ],
-                                                "Name": "Aggregate"
+                                                "Name": "Aggregate",
+                                                "Phase": "Intermediate"
                                             }
                                         ],
                                         "PlanNodeId": 2,

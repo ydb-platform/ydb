@@ -354,7 +354,6 @@ public:
 
 struct TExecutorStats {
     bool IsActive = false;
-    bool IsFollower = false;
     bool IsAnyChannelYellowMove = false;
     bool IsAnyChannelYellowStop = false;
     ui64 TxInFly = 0;
@@ -366,6 +365,11 @@ struct TExecutorStats {
     TVector<ui32> YellowStopChannels;
 
     ui32 FollowersCount = 0;
+
+    ui32 FollowerId = 0;
+    bool IsFollower() const {
+        return FollowerId != 0;
+    }
 
     bool IsYellowMoveChannel(ui32 channel) const {
         auto it = std::lower_bound(YellowMoveChannels.begin(), YellowMoveChannels.end(), channel);
@@ -581,6 +585,7 @@ namespace NFlatExecutorSetup {
 
         // edge and ts of last full compaction
         virtual TFinishedCompactionInfo GetFinishedCompactionInfo(ui32 tableId) const = 0;
+        virtual bool HasSchemaChanges(ui32 table) const = 0;
 
         // Forces full compaction of the specified table in the near future
         // Returns 0 if can't compact, otherwise compaction ID

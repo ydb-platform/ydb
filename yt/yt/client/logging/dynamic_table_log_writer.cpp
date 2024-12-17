@@ -24,10 +24,14 @@
 #include <yt/yt/core/logging/formatter.h>
 #include <yt/yt/core/logging/system_log_event_provider.h>
 
-#include <yt/yt/core/misc/atomic_object.h>
 #include <yt/yt/core/misc/proc.h>
 
+#include <library/cpp/yt/misc/static_initializer.h>
+
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
+
+#include <library/cpp/yt/threading/atomic_object.h>
 
 #include <util/stream/length.h>
 
@@ -49,7 +53,7 @@ using namespace NYson;
 // We use this logger to (try our best) to avoid perpetual log message production.
 // Currently it is impossible to disable logging along a chain of invocations completely,
 // so some induced log messages will loop back into our writer.
-YT_DEFINE_GLOBAL(const NLogging::TLogger, SystemLogger, SystemLoggingCategoryName);
+static YT_DEFINE_GLOBAL(const NLogging::TLogger, SystemLogger, SystemLoggingCategoryName);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -401,17 +405,17 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void RegisterDynamicTableLogWriterFactory()
-{
-    TLogManager::Get()->RegisterWriterFactory(
-        TString(TDynamicTableLogWriterConfig::WriterType),
-        GetDynamicTableLogWriterFactory());
-}
-
 IDynamicTableLogWriterFactoryPtr GetDynamicTableLogWriterFactory()
 {
     return LeakyRefCountedSingleton<TDynamicTableLogWriterFactory>();
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+YT_STATIC_INITIALIZER(
+    TLogManager::Get()->RegisterWriterFactory(
+        TString(TDynamicTableLogWriterConfig::WriterType),
+        GetDynamicTableLogWriterFactory()));
 
 ////////////////////////////////////////////////////////////////////////////////
 

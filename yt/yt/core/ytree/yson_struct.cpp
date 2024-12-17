@@ -5,8 +5,6 @@
 #include <yt/yt/core/ytree/node.h>
 #include <yt/yt/core/ytree/ypath_detail.h>
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <util/generic/algorithm.h>
 
 namespace NYT::NYTree {
@@ -161,6 +159,50 @@ void TYsonStruct::InitializeRefCounted()
     if (!TYsonStructRegistry::InitializationInProgress()) {
         SetDefaults();
     }
+}
+
+bool TYsonStruct::IsSet(const TString& key) const
+{
+    return SetFields_[Meta_->GetParameter(key)->GetFieldIndex()];
+}
+
+TCompactBitmap* TYsonStruct::GetSetFieldsBitmap()
+{
+    return &SetFields_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TCompactBitmap* TYsonStructLite::GetSetFieldsBitmap()
+{
+    return nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool TYsonStructLiteWithFieldTracking::IsSet(const TString& key) const
+{
+    return SetFields_[Meta_->GetParameter(key)->GetFieldIndex()];
+}
+
+TCompactBitmap* TYsonStructLiteWithFieldTracking::GetSetFieldsBitmap()
+{
+    return &SetFields_;
+}
+
+TYsonStructLiteWithFieldTracking::TYsonStructLiteWithFieldTracking(const TYsonStructLiteWithFieldTracking& other)
+    : TYsonStructFinalClassHolder(other.FinalType_)
+    , TYsonStructLite(other)
+{
+    SetFields_.CopyFrom(other.SetFields_, GetParameterCount());
+}
+
+TYsonStructLiteWithFieldTracking& TYsonStructLiteWithFieldTracking::operator=(const TYsonStructLiteWithFieldTracking& other)
+{
+    TYsonStructLite::operator=(other);
+
+    SetFields_.CopyFrom(other.SetFields_, GetParameterCount());
+    return *this;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

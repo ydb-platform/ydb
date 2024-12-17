@@ -4,7 +4,7 @@
 
 [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) is a command line utility for working with {{ ydb-short-name }} databases.
 
-{% list tabs %}
+{% list tabs group=os %}
 
 - Linux
 
@@ -28,7 +28,7 @@
 
 {{ ydb-short-name }} Server is a build for running a [YDB cluster](../concepts/glossary.md#cluster) node.
 
-{% list tabs %}
+{% list tabs group=os %}
 
 - Linux
 
@@ -49,3 +49,24 @@
 {{ ydb-short-name }} DSTool is a command line utility for [managing a {{ ydb-short-name }} cluster's disk subsystem](../maintenance/manual/index.md).
 
 To use the utility, install the [ydb-dstool](https://pypi.org/project/ydb-dstool/) Python package.
+
+## {{ ydb-short-name }} Ops {#ydbops}
+
+{{ ydb-short-name }} Ops is a command line utility for [operating {{ ydb-short-name }} clusters](../reference/ydbops/index.md).
+
+{% list tabs group=os %}
+
+- Linux
+
+  {% include notitle [linux](_includes/ydbops/linux.md) %}
+
+- macOS (Intel)
+
+  {% include notitle [linux](_includes/ydbops/darwin_amd64.md) %}
+
+- macOS (M1 Arm)
+
+  {% include notitle [linux](_includes/ydbops/darwin_arm64.md) %}
+
+
+{% endlist %}

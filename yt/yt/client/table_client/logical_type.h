@@ -71,7 +71,8 @@ public:
     const TTaggedLogicalType& AsTaggedTypeRef() const;
     Y_FORCE_INLINE const TTaggedLogicalType& UncheckedAsTaggedTypeRef() const;
 
-    virtual size_t GetMemoryUsage() const = 0;
+    virtual i64 GetMemoryUsage() const = 0;
+    virtual i64 GetMemoryUsage(i64 limit) const = 0;
     virtual int GetTypeComplexity() const = 0;
 
     // This function doesn't validate children of current node.
@@ -170,12 +171,13 @@ class TDecimalLogicalType
 {
 public:
     static constexpr int MinPrecision = 1;
-    static constexpr int MaxPrecision = 35;
+    static constexpr int MaxPrecision = 76;
 
 public:
     TDecimalLogicalType(int precision, int scale);
 
-    size_t GetMemoryUsage() const override;
+    i64 GetMemoryUsage() const override;
+    i64 GetMemoryUsage(i64 limit) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
     bool IsNullable() const override;
@@ -203,7 +205,8 @@ public:
     // Cached value of GetElement()->IsNullable(), useful for performance reasons.
     Y_FORCE_INLINE bool IsElementNullable() const;
 
-    size_t GetMemoryUsage() const override;
+    i64 GetMemoryUsage() const override;
+    i64 GetMemoryUsage(i64 limit) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
     bool IsNullable() const override;
@@ -223,7 +226,8 @@ public:
 
     Y_FORCE_INLINE ESimpleLogicalValueType GetElement() const;
 
-    size_t GetMemoryUsage() const override;
+    i64 GetMemoryUsage() const override;
+    i64 GetMemoryUsage(i64 limit) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
     bool IsNullable() const override;
@@ -242,7 +246,8 @@ public:
 
     Y_FORCE_INLINE const TLogicalTypePtr& GetElement() const;
 
-    size_t GetMemoryUsage() const override;
+    i64 GetMemoryUsage() const override;
+    i64 GetMemoryUsage(i64 limit) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
     bool IsNullable() const override;
@@ -260,7 +265,7 @@ class TComplexTypeFieldDescriptor
 public:
     explicit TComplexTypeFieldDescriptor(TLogicalTypePtr type);
     explicit TComplexTypeFieldDescriptor(const TColumnSchema& column);
-    TComplexTypeFieldDescriptor(TString columnName, TLogicalTypePtr type);
+    TComplexTypeFieldDescriptor(const std::string& columnName, TLogicalTypePtr type);
 
     TComplexTypeFieldDescriptor OptionalElement() const;
     TComplexTypeFieldDescriptor ListElement() const;
@@ -276,11 +281,11 @@ public:
 
     TComplexTypeFieldDescriptor Detag() const;
 
-    const TString& GetDescription() const;
+    const std::string& GetDescription() const;
     const TLogicalTypePtr& GetType() const;
 
 private:
-    TString Descriptor_;
+    std::string Description_;
     TLogicalTypePtr Type_;
 };
 
@@ -288,7 +293,7 @@ private:
 
 struct TStructField
 {
-    TString Name;
+    std::string Name;
     TLogicalTypePtr Type;
 };
 
@@ -299,12 +304,11 @@ class TStructLogicalTypeBase
     : public TLogicalType
 {
 public:
-
-public:
     TStructLogicalTypeBase(ELogicalMetatype metatype, std::vector<TStructField> fields);
     Y_FORCE_INLINE const std::vector<TStructField>& GetFields() const;
 
-    size_t GetMemoryUsage() const override;
+    i64 GetMemoryUsage() const override;
+    i64 GetMemoryUsage(i64 limit) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
     bool IsNullable() const override;
@@ -323,7 +327,8 @@ public:
 
     Y_FORCE_INLINE const std::vector<TLogicalTypePtr>& GetElements() const;
 
-    size_t GetMemoryUsage() const override;
+    i64 GetMemoryUsage() const override;
+    i64 GetMemoryUsage(i64 limit) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
     bool IsNullable() const override;
@@ -379,7 +384,8 @@ public:
     Y_FORCE_INLINE const TLogicalTypePtr& GetKey() const;
     Y_FORCE_INLINE const TLogicalTypePtr& GetValue() const;
 
-    size_t GetMemoryUsage() const override;
+    i64 GetMemoryUsage() const override;
+    i64 GetMemoryUsage(i64 limit) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
     bool IsNullable() const override;
@@ -400,7 +406,8 @@ public:
     Y_FORCE_INLINE const TString& GetTag() const;
     Y_FORCE_INLINE const TLogicalTypePtr& GetElement() const;
 
-    size_t GetMemoryUsage() const override;
+    i64 GetMemoryUsage() const override;
+    i64 GetMemoryUsage(i64 limit) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
     bool IsNullable() const override;

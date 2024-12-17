@@ -1,8 +1,8 @@
 diff --git a/include/vector b/include/vector
-index 4ec6b60..559b7fd 100644
+index d010a1f..40b248b 100644
 --- a/include/vector
 +++ b/include/vector
-@@ -343,6 +343,7 @@ template<class T, class charT> requires is-vector-bool-reference<T> // Since C++
+@@ -347,6 +347,7 @@ template<class T, class charT> requires is-vector-bool-reference<T> // Since C++
  #include <__type_traits/is_allocator.h>
  #include <__type_traits/is_constructible.h>
  #include <__type_traits/is_nothrow_move_assignable.h>
@@ -10,7 +10,7 @@ index 4ec6b60..559b7fd 100644
  #include <__type_traits/noexcept_move_assign_container.h>
  #include <__type_traits/type_identity.h>
  #include <__utility/exception_guard.h>
-@@ -716,7 +717,7 @@ public:
+@@ -720,7 +721,7 @@ public:
      _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI iterator erase(const_iterator __position);
      _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI iterator erase(const_iterator __first, const_iterator __last);
  
@@ -19,7 +19,7 @@ index 4ec6b60..559b7fd 100644
      void clear() _NOEXCEPT
      {
          size_type __old_size = size();
-@@ -724,6 +725,15 @@ public:
+@@ -728,6 +729,15 @@ public:
          __annotate_shrink(__old_size);
      }
  
@@ -35,7 +35,7 @@ index 4ec6b60..559b7fd 100644
      _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void resize(size_type __sz);
      _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void resize(size_type __sz, const_reference __x);
  
-@@ -809,7 +819,7 @@ private:
+@@ -813,7 +823,7 @@ private:
      template <class _InputIterator, class _Sentinel>
      _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI
      void __construct_at_end(_InputIterator __first, _Sentinel __last, size_type __n);
@@ -44,7 +44,7 @@ index 4ec6b60..559b7fd 100644
      _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void __append(size_type __n);
      _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void __append(size_type __n, const_reference __x);
      _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI
-@@ -1145,6 +1155,23 @@ vector<_Tp, _Allocator>::__construct_at_end(_InputIterator __first, _Sentinel __
+@@ -1152,6 +1162,23 @@ vector<_Tp, _Allocator>::__construct_at_end(_InputIterator __first, _Sentinel __
    __tx.__pos_ = std::__uninitialized_allocator_copy(__alloc(), __first, __last, __tx.__pos_);
  }
  
@@ -68,7 +68,7 @@ index 4ec6b60..559b7fd 100644
  //  Default constructs __n objects starting at __end_
  //  throws if construction throws
  //  Postcondition:  size() == size() + __n
-@@ -2003,6 +2030,26 @@ vector<_Tp, _Allocator>::resize(size_type __sz, const_reference __x)
+@@ -2010,6 +2037,26 @@ vector<_Tp, _Allocator>::resize(size_type __sz, const_reference __x)
          this->__destruct_at_end(this->__begin_ + __sz);
  }
  
@@ -95,7 +95,7 @@ index 4ec6b60..559b7fd 100644
  template <class _Tp, class _Allocator>
  _LIBCPP_CONSTEXPR_SINCE_CXX20
  void
-@@ -2047,6 +2094,7 @@ vector<_Tp, _Allocator>::__invariants() const
+@@ -2054,6 +2101,7 @@ vector<_Tp, _Allocator>::__invariants() const
      return true;
  }
  
@@ -103,7 +103,7 @@ index 4ec6b60..559b7fd 100644
  // vector<bool>
  
  template <class _Allocator> class vector<bool, _Allocator>;
-@@ -2360,7 +2408,7 @@ public:
+@@ -2367,7 +2415,7 @@ public:
      _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 iterator erase(const_iterator __position);
      _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 iterator erase(const_iterator __first, const_iterator __last);
  
@@ -112,7 +112,7 @@ index 4ec6b60..559b7fd 100644
      void clear() _NOEXCEPT {__size_ = 0;}
  
      _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 void swap(vector&)
-@@ -3294,6 +3342,32 @@ struct _LIBCPP_TEMPLATE_VIS hash<vector<bool, _Allocator> >
+@@ -3301,6 +3349,32 @@ struct _LIBCPP_TEMPLATE_VIS hash<vector<bool, _Allocator> >
      size_t operator()(const vector<bool, _Allocator>& __vec) const _NOEXCEPT
          {return __vec.__hash_code();}
  };

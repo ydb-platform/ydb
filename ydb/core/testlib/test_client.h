@@ -13,10 +13,10 @@
 #include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/mind/local.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -123,7 +123,6 @@ namespace Tests {
         ui32 NodeCount = 1;
         ui32 DynamicNodeCount = 0;
         NFake::TStorage CustomDiskParams;
-        NFake::TCaches CacheParams;
         TControls Controls;
         TAppPrepare::TFnReg FrFactory = &DefaultFrFactory;
         TIntrusivePtr<TFormatFactory> Formats;
@@ -179,7 +178,6 @@ namespace Tests {
         TServerSettings& SetNodeCount(ui32 value) { NodeCount = value; return *this; }
         TServerSettings& SetDynamicNodeCount(ui32 value) { DynamicNodeCount = value; return *this; }
         TServerSettings& SetCustomDiskParams(const NFake::TStorage& value) { CustomDiskParams = value; return *this; }
-        TServerSettings& SetCacheParams(const NFake::TCaches& value) { CacheParams = value; return *this; }
         TServerSettings& SetControls(const TControls& value) { Controls = value; return *this; }
         TServerSettings& SetFrFactory(const TAppPrepare::TFnReg& value) { FrFactory = value; return *this; }
         TServerSettings& SetEnableMockOnSingleNode(bool value) { EnableMockOnSingleNode = value; return *this; }
@@ -229,6 +227,10 @@ namespace Tests {
             DataStreamsAuthFactory = factory;
             return *this;
         }
+        TServerSettings& SetEnableOltpSink(bool withOltpSink) {
+            AppConfig->MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);
+            return *this;
+        }
 
 
         // Add additional grpc services
@@ -260,8 +262,8 @@ namespace Tests {
             AppConfig->MutableHiveConfig()->SetObjectImbalanceToBalance(100);
             AppConfig->MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
             FeatureFlags.SetEnableSeparationComputeActorsFromRead(true);
-            FeatureFlags.SetEnableImmediateWritingOnBulkUpsert(true);
             FeatureFlags.SetEnableWritePortionsOnInsert(true);
+            FeatureFlags.SetEnableFollowerStats(true);
         }
 
         TServerSettings(const TServerSettings& settings) = default;
@@ -500,7 +502,9 @@ namespace Tests {
         NKikimrBlobStorage::TDefineStoragePool DescribeStoragePool(const TString& name);
         void RemoveStoragePool(const TString& name);
 
-
+        void Grant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights);
+        void GrantConnect(const TString& subject);
+        
         TAutoPtr<NMsgBusProxy::TBusResponse> HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type,
                 const TVector<ui32>& allowed_node_ids, const TVector<TSubDomainKey>& allowed_domains = {}, const TChannelsBindings& binding = {});
 

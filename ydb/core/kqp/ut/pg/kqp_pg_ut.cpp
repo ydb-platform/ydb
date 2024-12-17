@@ -5,9 +5,9 @@
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/parser/pg_catalog/catalog.h>
+#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
+#include <yql/essentials/utils/log/log.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <util/system/env.h>
 
@@ -2650,7 +2650,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             UNIT_ASSERT(!resultAlter.IsSuccess());
         }
 
-         {
+        {
             auto session = client.GetSession().GetValueSync().GetSession();
             auto id = session.GetId();
 
@@ -2658,6 +2658,34 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 --!syntax_pg
                 ALTER SEQUENCE IF EXISTS seq
                     MAXVALUE 2147483647;
+            )";
+
+            auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
+        }
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryAlter = R"(
+                --!syntax_pg
+                ALTER SEQUENCE IF EXISTS seq
+                    RESTART WITH 101;
+            )";
+
+            auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
+        }
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryAlter = R"(
+                --!syntax_pg
+                ALTER SEQUENCE seq
+                    RESTART;
             )";
 
             auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -2734,7 +2762,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                     START WITH 10
                     INCREMENT BY 2
                     MINVALUE 1
-                    CACHE 3
                     CYCLE;
             )";
 
@@ -2879,6 +2906,89 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 [["1";"1"];["5";"4"];["8";"5"];["10";"2"];["12";"3"];["13";"14"];["14";"16"]]
             )", FormatResultSetYson(result.GetResultSet(0)));
         }
+
+        {
+            const auto queryAlter = R"(
+                --!syntax_pg
+                ALTER SEQUENCE IF EXISTS seq1
+                    RESTART WITH 105;
+            )";
+
+            auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO Pg (key) values (105), (107);
+            )");
+
+            auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                SELECT * FROM Pg;
+            )");
+
+            auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [["1";"1"];["5";"4"];["8";"5"];["10";"2"];["12";"3"];["13";"14"];["14";"16"];["105"; "105"];["107";"107"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const auto queryAlter = R"(
+                --!syntax_pg
+                ALTER SEQUENCE IF EXISTS seq1
+                    START WITH 206;
+            )";
+
+            auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
+        } 
+
+        {
+            const auto queryAlter = R"(
+                --!syntax_pg
+                ALTER SEQUENCE IF EXISTS seq1
+                    RESTART;
+            )";
+
+            auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO Pg (key) values (206), (208);
+            )");
+
+            auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                SELECT * FROM Pg;
+            )");
+
+            auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [["1";"1"];["5";"4"];["8";"5"];["10";"2"];["12";"3"];["13";"14"];["14";"16"];["105"; "105"];["107";"107"];["206"; "206"];["208";"208"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        } 
     }
 
     Y_UNIT_TEST(TempTablesSessionsIsolation) {
@@ -5075,10 +5185,10 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             SELECT 2 y, 1 x;
         )");
 
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetResponse().GetYdbResults().size(), 1);
-        Cerr << reply->Get()->Record.GetRef().GetResponse().DebugString() << Endl;
-        auto ydbResults = reply->Get()->Record.GetRef().GetResponse().GetYdbResults();
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetResponse().GetYdbResults().size(), 1);
+        Cerr << reply->Get()->Record.GetResponse().DebugString() << Endl;
+        auto ydbResults = reply->Get()->Record.GetResponse().GetYdbResults();
         TVector <TString> colNames = {"y", "x"};
         UNIT_ASSERT_VALUES_EQUAL(colNames.size(), ydbResults.begin()->Getcolumns().size());
         for (size_t i = 0; i < colNames.size(); i++) {

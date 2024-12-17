@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         TExecuteScriptSettings settings;
 
         {  // Existing pool
-            settings.PoolId("default");
+            settings.ResourcePool("default");
 
             auto scripOp = db.ExecuteScript("SELECT 42", settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(scripOp.Status().GetStatus(), EStatus::SUCCESS, scripOp.Status().GetIssues().ToString());
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         }
 
         {  // Not existing pool (check workload manager enabled)
-            settings.PoolId("another_pool_id");
+            settings.ResourcePool("another_pool_id");
 
             auto scripOp = db.ExecuteScript("SELECT 42", settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(scripOp.Status().GetStatus(), EStatus::SUCCESS, scripOp.Status().GetIssues().ToString());

@@ -14,6 +14,7 @@ message TQueryStatistics
     required uint64 write_time = 7;
     required uint64 codegen_time = 10;
     optional uint64 wait_on_ready_event_time = 14 [ default = 0 ];
+    optional int64 total_grouped_row_count = 15;
 
     required bool incomplete_input = 8;
     required bool incomplete_output = 9;

@@ -1,8 +1,0 @@
-159,163d158
-< func(gf_2vect_mad_avx)
-< %ifidn __OUTPUT_FORMAT__, macho64
-< global _gf_2vect_mad_avx:ISAL_SYM_TYPE_FUNCTION
-< func(_gf_2vect_mad_avx)
-< %endif
-164a160
-> func(gf_2vect_mad_avx)

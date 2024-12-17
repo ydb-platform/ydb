@@ -152,15 +152,18 @@ TEST_F(TQuantizedExecutorTest, Simple)
 
 TEST_F(TQuantizedExecutorTest, Timeout)
 {
-    InitSimple(/*workerCount*/ 4, /*iterationCount*/ std::numeric_limits<i64>::max());
+    InitSimple(/*workerCount*/ 2, /*iterationCount*/ std::numeric_limits<i64>::max());
 
-    for (int index = 1; index <= 10; ++index) {
-        WaitFor(Executor_->Run(TDuration::MilliSeconds(100)))
-            .ThrowOnError();
+    WaitFor(Executor_->Run(TDuration::MilliSeconds(100)))
+        .ThrowOnError();
 
-        auto counter = SimpleCallbackProvider_->GetCounter();
-        EXPECT_LE(counter, /*workerCount*/ 4 * /*milliseconds*/ 100.0 / /*period*/ 5 * index * 1.25);
-    }
+    auto oldCounter = SimpleCallbackProvider_->GetCounter();
+
+    TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(100));
+
+    auto newCounter = SimpleCallbackProvider_->GetCounter();
+
+    EXPECT_EQ(oldCounter, newCounter);
 }
 
 TEST_F(TQuantizedExecutorTest, LongCallback1)

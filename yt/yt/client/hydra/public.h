@@ -6,6 +6,8 @@
 
 #include <yt/yt/core/rpc/public.h>
 
+#include <library/cpp/yt/misc/strong_typedef.h>
+
 namespace NYT::NHydra {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -41,8 +43,8 @@ DEFINE_ENUM(EPeerKind,
     ((LeaderOrFollower)  (2))
 );
 
-using TRevision = ui64;
-constexpr TRevision NullRevision = 0;
+YT_DEFINE_STRONG_TYPEDEF(TRevision, ui64);
+constexpr auto NullRevision = TRevision();
 
 struct TVersion;
 struct TReachableState;

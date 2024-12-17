@@ -75,7 +75,7 @@ public:
             BIND_NO_PROPAGATE(&TServer::Shutdown, MakeWeak(this), /*graceful*/ true),
             /*priority*/ GrpcServerShutdownPriority))
         , LibraryLock_(TDispatcher::Get()->GetLibraryLock())
-        , Profiler_(GrpcServerProfiler.WithTag("name", Config_->ProfilingName))
+        , Profiler_(GrpcServerProfiler().WithTag("name", Config_->ProfilingName))
         , CompletionQueue_(TDispatcher::Get()->PickRandomGuardedCompletionQueue()->UnwrapUnsafe())
     {
         Profiler_.AddFuncGauge("/call_handler_count", MakeStrong(this), [this] {
@@ -673,21 +673,21 @@ private:
                 return;
             }
 
-            NCompression::ECodec codecId;
             int intCodecId;
             if (!TryFromString(requestCodecString, intCodecId)) {
                 YT_LOG_WARNING("Failed to parse request codec from request metadata (RequestId: %v)",
                     RequestId_);
                 return;
             }
-            if (!TryEnumCast(intCodecId, &codecId)) {
+            auto codecId = TryCheckedEnumCast<NCompression::ECodec>(intCodecId);
+            if (!codecId) {
                 YT_LOG_WARNING("Request codec %v is not supported (RequestId: %v)",
                     intCodecId,
                     RequestId_);
                 return;
             }
 
-            RequestCodec_ = codecId;
+            RequestCodec_ = *codecId;
         }
 
         void ParseResponseCodec()
@@ -697,21 +697,21 @@ private:
                 return;
             }
 
-            NCompression::ECodec codecId;
             int intCodecId;
             if (!TryFromString(responseCodecString, intCodecId)) {
                 YT_LOG_WARNING("Failed to parse response codec from request metadata (RequestId: %v)",
                     RequestId_);
                 return;
             }
-            if (!TryEnumCast(intCodecId, &codecId)) {
-                YT_LOG_WARNING("Response codec %v is not supported (RequestId: %v)",
-                    intCodecId,
-                    RequestId_);
+            auto codecId = TryCheckedEnumCast<NCompression::ECodec>(intCodecId);
+            if (!codecId) {
+                YT_LOG_WARNING("Response codec is not supported (RequestId: %v, Codec: %v)",
+                    RequestId_,
+                    intCodecId);
                 return;
             }
 
-            ResponseCodec_ = codecId;
+            ResponseCodec_ = *codecId;
         }
 
         void ParseRpcCredentials()
@@ -946,11 +946,11 @@ private:
             header->set_method(MethodName_);
             header->set_protocol_version_major(ProtocolVersion_.Major);
             header->set_protocol_version_minor(ProtocolVersion_.Minor);
-            header->set_request_codec(ToProto<int>(RequestCodec_));
-            header->set_response_codec(ToProto<int>(ResponseCodec_));
+            header->set_request_codec(ToProto(RequestCodec_));
+            header->set_response_codec(ToProto(ResponseCodec_));
 
             if (Timeout_) {
-                header->set_timeout(ToProto<i64>(*Timeout_));
+                header->set_timeout(ToProto(*Timeout_));
             }
             if (SslCredentialsExt_) {
                 *header->MutableExtension(NGrpc::NProto::TSslCredentialsExt::ssl_credentials_ext) = std::move(*SslCredentialsExt_);

@@ -12,7 +12,7 @@ namespace builtins
   bool all(Iterable &&s);
 
   DEFINE_FUNCTOR(pythonic::builtins, all);
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

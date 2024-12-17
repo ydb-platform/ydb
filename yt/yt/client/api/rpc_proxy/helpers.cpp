@@ -1,5 +1,6 @@
 #include "helpers.h"
 
+#include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/table_client.h>
 
@@ -58,6 +59,17 @@ void ToProto(
     proto->set_suppress_upstream_sync(options.SuppressUpstreamSync);
 }
 
+void FromProto(
+    NApi::TTransactionalOptions* options,
+    const NProto::TTransactionalOptions& proto)
+{
+    FromProto(&options->TransactionId, proto.transaction_id());
+    options->Ping = proto.ping();
+    options->PingAncestors = proto.ping_ancestors();
+    options->SuppressTransactionCoordinatorSync = proto.suppress_transaction_coordinator_sync();
+    options->SuppressUpstreamSync = proto.suppress_upstream_sync();
+}
+
 void ToProto(
     NProto::TPrerequisiteOptions* proto,
     const NApi::TPrerequisiteOptions& options)
@@ -69,7 +81,7 @@ void ToProto(
     for (const auto& item : options.PrerequisiteRevisions) {
         auto* protoItem = proto->add_revisions();
         protoItem->set_path(item->Path);
-        protoItem->set_revision(item->Revision);
+        protoItem->set_revision(ToProto(item->Revision));
     }
 }
 
@@ -79,9 +91,9 @@ void ToProto(
 {
     proto->set_read_from(static_cast<NProto::EMasterReadKind>(options.ReadFrom));
     proto->set_disable_per_user_cache(options.DisablePerUserCache);
-    proto->set_expire_after_successful_update_time(ToProto<i64>(options.ExpireAfterSuccessfulUpdateTime));
-    proto->set_expire_after_failed_update_time(ToProto<i64>(options.ExpireAfterFailedUpdateTime));
-    proto->set_success_staleness_bound(ToProto<i64>(options.SuccessStalenessBound));
+    proto->set_expire_after_successful_update_time(ToProto(options.ExpireAfterSuccessfulUpdateTime));
+    proto->set_expire_after_failed_update_time(ToProto(options.ExpireAfterFailedUpdateTime));
+    proto->set_success_staleness_bound(ToProto(options.SuccessStalenessBound));
     if (options.CacheStickyGroupSize) {
         proto->set_cache_sticky_group_size(*options.CacheStickyGroupSize);
     }
@@ -122,7 +134,7 @@ void ToProto(
 {
     protoOptions->set_read_from(static_cast<NProto::ETabletReadKind>(options.ReadFrom));
     if (options.CachedSyncReplicasTimeout) {
-        protoOptions->set_cached_sync_replicas_timeout(ToProto<i64>(*options.CachedSyncReplicasTimeout));
+        protoOptions->set_cached_sync_replicas_timeout(ToProto(*options.CachedSyncReplicasTimeout));
     }
 }
 
@@ -395,6 +407,9 @@ void ToProto(
     if (result.ArchiveJobCount) {
         proto->set_archive_job_count(*result.ArchiveJobCount);
     }
+    if (result.ContinuationToken) {
+        proto->set_continuation_token(*result.ContinuationToken);
+    }
 
     ToProto(proto->mutable_statistics(), result.Statistics);
     ToProto(proto->mutable_errors(), result.Errors);
@@ -421,9 +436,38 @@ void FromProto(
     } else {
         result->ArchiveJobCount.reset();
     }
+    if (proto.has_continuation_token()) {
+        result->ContinuationToken = proto.continuation_token();
+    } else {
+        result->ContinuationToken.reset();
+    }
 
     FromProto(&result->Statistics, proto.statistics());
     FromProto(&result->Errors, proto.errors());
+}
+
+void ToProto(
+    NProto::TJobTraceEvent* proto,
+    const NApi::TJobTraceEvent& result)
+{
+    ToProto(proto->mutable_operation_id(), result.OperationId);
+    ToProto(proto->mutable_job_id(), result.JobId);
+    ToProto(proto->mutable_trace_id(), result.TraceId);
+    proto->set_event_index(result.EventIndex);
+    proto->set_event(result.Event);
+    proto->set_event_time(ToProto(result.EventTime));
+}
+
+void FromProto(
+    NApi::TJobTraceEvent* result,
+    const NProto::TJobTraceEvent& proto)
+{
+    FromProto(&result->OperationId, proto.operation_id());
+    FromProto(&result->JobId, proto.job_id());
+    FromProto(&result->TraceId, proto.trace_id());
+    result->EventIndex = proto.event_index();
+    result->Event = proto.event();
+    result->EventTime = TInstant::FromValue(proto.event_time());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -432,13 +476,13 @@ void FromProto(
 
 void ToProto(NProto::TColumnSchema* protoSchema, const NTableClient::TColumnSchema& schema)
 {
-    protoSchema->set_stable_name(schema.StableName().Underlying());
-    protoSchema->set_name(schema.Name());
-    protoSchema->set_type(ToProto<int>(GetPhysicalType(schema.CastToV1Type())));
+    protoSchema->set_stable_name(ToProto(schema.StableName()));
+    protoSchema->set_name(ToProto(schema.Name()));
+    protoSchema->set_type(ToProto(GetPhysicalType(schema.CastToV1Type())));
     auto typeV3Yson = ConvertToYsonString(TTypeV3LogicalTypeWrapper{schema.LogicalType()});
     protoSchema->set_type_v3(typeV3Yson.ToString());
     if (schema.Lock()) {
-        protoSchema->set_lock(*schema.Lock());
+        protoSchema->set_lock(ToProto(*schema.Lock()));
     } else {
         protoSchema->clear_lock();
     }
@@ -453,17 +497,17 @@ void ToProto(NProto::TColumnSchema* protoSchema, const NTableClient::TColumnSche
         protoSchema->clear_materialized();
     }
     if (schema.Aggregate()) {
-        protoSchema->set_aggregate(*schema.Aggregate());
+        protoSchema->set_aggregate(ToProto(*schema.Aggregate()));
     } else {
         protoSchema->clear_aggregate();
     }
     if (schema.SortOrder()) {
-        protoSchema->set_sort_order(ToProto<int>(*schema.SortOrder()));
+        protoSchema->set_sort_order(ToProto(*schema.SortOrder()));
     } else {
         protoSchema->clear_sort_order();
     }
     if (schema.Group()) {
-        protoSchema->set_group(*schema.Group());
+        protoSchema->set_group(ToProto(*schema.Group()));
     } else {
         protoSchema->clear_group();
     }
@@ -487,7 +531,7 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
         ? TColumnStableName(protoSchema.stable_name())
         : TColumnStableName(protoSchema.name()));
 
-    auto physicalType = CheckedEnumCast<EValueType>(protoSchema.type());
+    auto physicalType = FromProto<EValueType>(protoSchema.type());
 
     TLogicalTypePtr columnType;
     if (protoSchema.has_type_v3()) {
@@ -509,7 +553,7 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
                 << TErrorAttribute("type", protoSchema.type());
         }
     } else if (protoSchema.has_logical_type()) {
-        auto logicalType = CheckedEnumCast<ESimpleLogicalValueType>(protoSchema.logical_type());
+        auto logicalType = FromProto<ESimpleLogicalValueType>(protoSchema.logical_type());
         columnType = MakeLogicalType(logicalType, protoSchema.required());
         if (protoSchema.has_type() && GetPhysicalType(logicalType) != physicalType) {
             THROW_ERROR_EXCEPTION("Fields \"logical_type\" and \"type\" do not match")
@@ -529,7 +573,7 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
     schema->SetExpression(YT_PROTO_OPTIONAL(protoSchema, expression));
     schema->SetMaterialized(YT_PROTO_OPTIONAL(protoSchema, materialized));
     schema->SetAggregate(YT_PROTO_OPTIONAL(protoSchema, aggregate));
-    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, CheckedEnumCast<ESortOrder>));
+    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, FromProto<ESortOrder>));
     schema->SetGroup(YT_PROTO_OPTIONAL(protoSchema, group));
     schema->SetMaxInlineHunkSize(YT_PROTO_OPTIONAL(protoSchema, max_inline_hunk_size));
 }
@@ -563,8 +607,8 @@ void FromProto(NTableClient::TTableSchemaPtr* schema, const NProto::TTableSchema
 void ToProto(NProto::TTabletInfo* protoTabletInfo, const NTabletClient::TTabletInfo& tabletInfo)
 {
     ToProto(protoTabletInfo->mutable_tablet_id(), tabletInfo.TabletId);
-    protoTabletInfo->set_mount_revision(tabletInfo.MountRevision);
-    protoTabletInfo->set_state(static_cast<i32>(tabletInfo.State));
+    protoTabletInfo->set_mount_revision(ToProto(tabletInfo.MountRevision));
+    protoTabletInfo->set_state(ToProto(tabletInfo.State));
     ToProto(protoTabletInfo->mutable_pivot_key(), tabletInfo.PivotKey);
     if (tabletInfo.CellId) {
         ToProto(protoTabletInfo->mutable_cell_id(), tabletInfo.CellId);
@@ -573,14 +617,11 @@ void ToProto(NProto::TTabletInfo* protoTabletInfo, const NTabletClient::TTabletI
 
 void FromProto(NTabletClient::TTabletInfo* tabletInfo, const NProto::TTabletInfo& protoTabletInfo)
 {
-    tabletInfo->TabletId =
-        FromProto<TTabletId>(protoTabletInfo.tablet_id());
-    tabletInfo->MountRevision = protoTabletInfo.mount_revision();
-    tabletInfo->State = CheckedEnumCast<ETabletState>(protoTabletInfo.state());
+    tabletInfo->TabletId = FromProto<TTabletId>(protoTabletInfo.tablet_id());
+    tabletInfo->MountRevision = FromProto<NHydra::TRevision>(protoTabletInfo.mount_revision());
+    tabletInfo->State = FromProto<ETabletState>(protoTabletInfo.state());
     tabletInfo->PivotKey = FromProto<NTableClient::TLegacyOwningKey>(protoTabletInfo.pivot_key());
-    if (protoTabletInfo.has_cell_id()) {
-        tabletInfo->CellId = FromProto<TTabletCellId>(protoTabletInfo.cell_id());
-    }
+    tabletInfo->CellId = FromProto<TTabletCellId>(protoTabletInfo.cell_id());
 }
 
 void ToProto(
@@ -640,10 +681,10 @@ void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operati
     }
 
     if (operation.StartTime) {
-        protoOperation->set_start_time(ToProto<i64>(*operation.StartTime));
+        protoOperation->set_start_time(ToProto(*operation.StartTime));
     }
     if (operation.FinishTime) {
-        protoOperation->set_finish_time(ToProto<i64>(*operation.FinishTime));
+        protoOperation->set_finish_time(ToProto(*operation.FinishTime));
     }
 
     if (operation.AuthenticatedUser) {
@@ -895,10 +936,10 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     }
 
     if (job.StartTime) {
-        protoJob->set_start_time(ToProto<i64>(*job.StartTime));
+        protoJob->set_start_time(ToProto(*job.StartTime));
     }
     if (job.FinishTime) {
-        protoJob->set_finish_time(ToProto<i64>(*job.FinishTime));
+        protoJob->set_finish_time(ToProto(*job.FinishTime));
     }
 
     if (job.Address) {
@@ -1191,7 +1232,7 @@ void ToProto(
     const NChunkClient::TFetcherConfigPtr& fetcherConfig)
 {
     protoFetcherConfig->set_node_rpc_timeout(
-        ToProto<i64>(fetcherConfig->NodeRpcTimeout));
+        ToProto(fetcherConfig->NodeRpcTimeout));
 }
 
 void FromProto(
@@ -1278,7 +1319,7 @@ void FromProto(
     const NProto::TMultiTablePartition& protoMultiTablePartition)
 {
     for (const auto& range : protoMultiTablePartition.table_ranges()) {
-        multiTablePartition->TableRanges.emplace_back(NYPath::TRichYPath::Parse(range));
+        multiTablePartition->TableRanges.emplace_back(NYPath::TRichYPath::Parse(FromProto<TString>(range)));
     }
 
     if (protoMultiTablePartition.has_aggregate_statistics()) {
@@ -1326,7 +1367,7 @@ void ToProto(
 {
     protoManifest->set_source_path(manifest->SourcePath);
     protoManifest->set_destination_path(manifest->DestinationPath);
-    protoManifest->set_ordered_mode(ToProto<i32>(manifest->OrderedMode));
+    protoManifest->set_ordered_mode(ToProto(manifest->OrderedMode));
 }
 
 void FromProto(
@@ -1337,7 +1378,7 @@ void FromProto(
 
     (*manifest)->SourcePath = protoManifest.source_path();
     (*manifest)->DestinationPath = protoManifest.destination_path();
-    (*manifest)->OrderedMode = CheckedEnumCast<EOrderedTableBackupMode>(protoManifest.ordered_mode());
+    (*manifest)->OrderedMode = FromProto<EOrderedTableBackupMode>(protoManifest.ordered_mode());
 }
 
 void ToProto(
@@ -1388,10 +1429,10 @@ void ToProto(
         protoQuery->set_files(query.Files->ToString());
     }
     if (query.StartTime) {
-        protoQuery->set_start_time(NYT::ToProto<i64>(*query.StartTime));
+        protoQuery->set_start_time(NYT::ToProto(*query.StartTime));
     }
     if (query.FinishTime) {
-        protoQuery->set_finish_time(NYT::ToProto<i64>(*query.FinishTime));
+        protoQuery->set_finish_time(NYT::ToProto(*query.FinishTime));
     }
     if (query.Settings) {
         protoQuery->set_settings(query.Settings.ToString());
@@ -1922,28 +1963,22 @@ void FillRequest(
     const NYPath::TRichYPath& path,
     const TDistributedWriteSessionStartOptions& options)
 {
-    Y_UNUSED(req, path, options);
+    ToProto(req->mutable_path(), path);
+
+    if (options.TransactionId) {
+        ToProto(req->mutable_transactional_options(), options);
+    }
 }
 
-void FromProto(
+void ParseRequest(
+    NYPath::TRichYPath* mutablePath,
     TDistributedWriteSessionStartOptions* mutableOptions,
     const TReqStartDistributedWriteSession& req)
 {
-    Y_UNUSED(req, mutableOptions);
-}
-
-void FromProto(
-    TDistributedWriteSession* mutableSession,
-    TRspStartDistributedWriteSession&& rsp)
-{
-    Y_UNUSED(mutableSession, rsp);
-}
-
-void ToProto(
-    TRspStartDistributedWriteSession* rsp,
-    const TDistributedWriteSessionPtr& session)
-{
-    Y_UNUSED(rsp, session);
+    *mutablePath = FromProto<NYPath::TRichYPath>(req.path());
+    if (req.has_transactional_options()) {
+        FromProto(mutableOptions, req.transactional_options());
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1953,52 +1988,44 @@ void FillRequest(
     TDistributedWriteSessionPtr session,
     const TDistributedWriteSessionFinishOptions& options)
 {
-    Y_UNUSED(req, session, options);
+    req->set_session(ConvertToYsonString(session).ToString());
+    req->set_max_children_per_attach_request(options.MaxChildrenPerAttachRequest);
 }
 
-void FromProto(
+void ParseRequest(
+    TDistributedWriteSessionPtr* mutableSession,
     TDistributedWriteSessionFinishOptions* mutableOptions,
     const TReqFinishDistributedWriteSession& req)
 {
-    Y_UNUSED(req, mutableOptions);
-}
-
-void FromProto(
-    TDistributedWriteSession* mutableSession,
-    const TReqFinishDistributedWriteSession& req)
-{
-    Y_UNUSED(mutableSession, req);
+    *mutableSession = ConvertTo<TDistributedWriteSessionPtr>(TYsonString(req.session()));
+    mutableOptions->MaxChildrenPerAttachRequest = req.max_children_per_attach_request();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void FillRequest(
-    TReqParticipantWriteTable* req,
-    const TDistributedWriteCookiePtr& cookie,
-    const TParticipantTableWriterOptions& options)
+    TReqWriteTableFragment* req,
+    const TFragmentWriteCookiePtr& cookie,
+    const TFragmentTableWriterOptions& options)
 {
-    Y_UNUSED(req, cookie, options);
+    req->set_cookie(ConvertToYsonString(cookie).ToString());
+
+    if (options.Config) {
+        req->set_config(ConvertToYsonString(*options.Config).ToString());
+    }
 }
 
-void FromProto(
-    TParticipantTableWriterOptions* mutableOptions,
-    const TReqParticipantWriteTable& req)
+void ParseRequest(
+    TFragmentWriteCookiePtr* mutableCookie,
+    TFragmentTableWriterOptions* mutableOptions,
+    const TReqWriteTableFragment& req)
 {
-    Y_UNUSED(req, mutableOptions);
-}
-
-void FromProto(
-    TDistributedWriteCookie* cookie,
-    const TReqParticipantWriteTable& req)
-{
-    Y_UNUSED(cookie, req);
-}
-
-void ToProto(
-    TRspParticipantWriteTable* rsp,
-    const TDistributedWriteCookiePtr& cookie)
-{
-    Y_UNUSED(rsp, cookie);
+    *mutableCookie = ConvertTo<TFragmentWriteCookiePtr>(TYsonString(req.cookie()));
+    if (req.has_config()) {
+        mutableOptions->Config = ConvertTo<TTableWriterConfigPtr>(TYsonString(req.config()));
+    } else {
+        mutableOptions->Config = ConvertTo<TTableWriterConfigPtr>(TYsonString(TStringBuf("{}")));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2136,12 +2163,12 @@ std::vector<TSharedRef> SerializeRowset(
     // COMPAT(babenko)
     for (const auto& column : schema.Columns()) {
         auto* entry = descriptor->add_name_table_entries();
-        entry->set_name(column.Name());
+        entry->set_name(ToProto(column.Name()));
         // we save physical type for backward compatibility
         // COMPAT(babenko)
-        entry->set_type(ToProto<int>(column.GetWireType()));
+        entry->set_type(ToProto(column.GetWireType()));
         // COMPAT(babenko)
-        entry->set_logical_type(ToProto<int>(column.CastToV1Type()));
+        entry->set_logical_type(ToProto(column.CastToV1Type()));
     }
 
     auto writer = CreateWireProtocolWriter();
@@ -2176,10 +2203,10 @@ TTableSchemaPtr DeserializeRowsetSchema(
             columns[i].SetStableName(TColumnStableName(entry.name()));
         }
         if (entry.has_logical_type()) {
-            auto simpleLogicalType = CheckedEnumCast<NTableClient::ESimpleLogicalValueType>(entry.logical_type());
+            auto simpleLogicalType = FromProto<NTableClient::ESimpleLogicalValueType>(entry.logical_type());
             columns[i].SetLogicalType(OptionalLogicalType(SimpleLogicalType(simpleLogicalType)));
         } else if (entry.has_type()) {
-            auto simpleLogicalType = CheckedEnumCast<NTableClient::ESimpleLogicalValueType>(entry.type());
+            auto simpleLogicalType = FromProto<NTableClient::ESimpleLogicalValueType>(entry.type());
             columns[i].SetLogicalType(OptionalLogicalType(SimpleLogicalType(simpleLogicalType)));
         }
     }

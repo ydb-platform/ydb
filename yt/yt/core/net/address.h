@@ -3,11 +3,12 @@
 #include "public.h"
 
 #include <yt/yt/core/misc/error.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <yt/yt/core/dns/public.h>
 
 #include <yt/yt/core/actions/future.h>
+
+#include <library/cpp/yt/memory/leaky_singleton.h>
 
 #include <util/generic/hash.h>
 
@@ -42,6 +43,9 @@ int GetServicePort(TStringBuf address);
 TStringBuf GetServiceHostName(TStringBuf address);
 
 ////////////////////////////////////////////////////////////////////////////////
+
+//! Constructs an address of the form |[address]:port|.
+TString FormatNetworkAddress(TStringBuf address, int port);
 
 class TIP6Address;
 

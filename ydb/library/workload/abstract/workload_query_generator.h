@@ -72,7 +72,10 @@ public:
             TString Schema;
         };
 
-        using TDataType = std::variant<NYdb::TValue, TCsv, TArrow>;
+        struct TSkip {
+        };
+
+        using TDataType = std::variant<NYdb::TValue, TCsv, TArrow, TSkip>;
 
         template<class T>
         TDataPortion(const TString& table, T&& data, ui64 size)
@@ -99,7 +102,7 @@ public:
 
     virtual TDataPortions GenerateDataPortion() = 0;
     YDB_READONLY_DEF(std::string, Name);
-    YDB_READONLY(ui64, Size, 0);
+    YDB_READONLY_PROTECT(ui64, Size, 0);
 };
 
 using TBulkDataGeneratorList = std::vector<std::shared_ptr<IBulkDataGenerator>>;

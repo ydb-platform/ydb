@@ -37,7 +37,7 @@ class FrameInfoTest(unittest.TestCase):
          f_locals, f_globals) = advisory_testing.moduleLevelFrameInfo
         self.assertEqual(kind, "module")
         for d in module.__dict__, f_locals, f_globals:
-            self.assertTrue(d is advisory_testing.my_globals)
+            self.assertIs(d, advisory_testing.my_globals)
 
     def test_w_class(self):
         from . import advisory_testing
@@ -48,7 +48,7 @@ class FrameInfoTest(unittest.TestCase):
         self.assertEqual(kind, "class")
 
         for d in module.__dict__, f_globals:
-            self.assertTrue(d is advisory_testing.my_globals)
+            self.assertIs(d, advisory_testing.my_globals)
 
     def test_inside_function_call(self):
         from zope.interface.advice import getFrameInfo
@@ -60,7 +60,7 @@ class FrameInfoTest(unittest.TestCase):
         self.assertEqual(f_locals, locals())
 
         for d in module.__dict__, f_globals:
-            self.assertTrue(d is globals())
+            self.assertIs(d, globals())
 
     def test_inside_exec(self):
         from zope.interface.advice import getFrameInfo
@@ -68,9 +68,9 @@ class FrameInfoTest(unittest.TestCase):
         _locals = {}
         exec(_FUNKY_EXEC, _globals, _locals)
         self.assertEqual(_locals['kind'], "exec")
-        self.assertTrue(_locals['f_locals'] is _locals)
-        self.assertTrue(_locals['module'] is None)
-        self.assertTrue(_locals['f_globals'] is _globals)
+        self.assertIs(_locals['f_locals'], _locals)
+        self.assertIsNone(_locals['module'])
+        self.assertIs(_locals['f_globals'], _globals)
 
 
 _FUNKY_EXEC = """\

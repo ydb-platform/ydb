@@ -3,7 +3,7 @@
 
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <ydb/library/uuid/uuid.h>
+#include <yql/essentials/types/uuid/uuid.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 namespace NKikimr {
@@ -276,7 +276,7 @@ private:
                     inserter(name, cell.AsValue<ui32>());
                 } else if constexpr (std::is_same_v<T, TUuidHolder>) {
                     TStringStream ss;
-                    NUuid::UuidBytesToString(cell.Data(), ss);
+                    NUuid::UuidBytesToString(TString(cell.Data(), cell.Size()), ss);
                     inserter(name, TUuidHolder(ss.Str()));
                 }
             }
@@ -669,7 +669,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     template <typename SK = ui32>
-    void Run(const NFake::TCaches& cacheParams, const TString& path,
+    void Run(const NSharedCache::TSharedCacheConfig& sharedCacheConfig, const TString& path,
             const TShardedTableOptions& opts, const TVector<TCdcStream>& streams,
             const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
@@ -686,14 +686,15 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             .SetDomainName(domainName)
             .SetUseRealThreads(false)
             .SetEnableDataColumnForIndexTable(true)
-            .SetCacheParams(cacheParams)
             .SetEnableUuidAsPrimaryKey(true);
+        serverSettings.AppConfig->MutableSharedCacheConfig()->CopyFrom(sharedCacheConfig);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
         const TActorId sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_INFO);
         InitRoot(server, sender);
 
         // prevent change sending
@@ -768,14 +769,16 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         }
     }
 
-    NFake::TCaches DefaultCacheParams() {
-        return {};
+    const NSharedCache::TSharedCacheConfig DefaultCacheParams() {
+        NSharedCache::TSharedCacheConfig config;
+        config.SetMemoryLimit(32_MB);
+        return config;
     }
 
-    NFake::TCaches TinyCacheParams() {
-        auto params = DefaultCacheParams();
-        params.Shared = 1; // byte
-        return params;
+    const NSharedCache::TSharedCacheConfig TinyCacheParams() {
+        NSharedCache::TSharedCacheConfig config;
+        config.SetMemoryLimit(0);
+        return config;
     }
 
     template <typename SK = ui32>
@@ -851,8 +854,8 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(InsertSingleUuidRow) {
-        Run<TUuidHolder>("/Root/path", UuidTable(), KeysOnly(), "INSERT INTO `/Root/path` (key, value) VALUES (Uuid(\"65df1ec1-a97d-47b2-ae56-3c023da6ee8c\"), 10);", {
-            {"keys_stream", {TStructRecordBase<TUuidHolder>(NTable::ERowOp::Upsert, {{"key", TUuidHolder("65df1ec1-a97d-47b2-ae56-3c023da6ee8c")}})}},
+        Run<TUuidHolder>("/Root/path", UuidTable(), KeysOnly(), "INSERT INTO `/Root/path` (key, value) VALUES (Uuid(\"65df1ec1-0000-47b2-ae56-3c023da6ee8c\"), 10);", {
+            {"keys_stream", {TStructRecordBase<TUuidHolder>(NTable::ERowOp::Upsert, {{"key", TUuidHolder("65df1ec1-0000-47b2-ae56-3c023da6ee8c")}})}},
         });
     }
 

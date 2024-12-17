@@ -2,7 +2,7 @@
 
 #include "abstract_scheme.h"
 
-#include <ydb/core/tx/columnshard/engines/index_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 
 namespace NKikimr::NOlap {
 
@@ -23,7 +23,7 @@ protected:
 public:
     TSnapshotSchema(TIndexInfo&& indexInfo, const TSnapshot& snapshot);
 
-    virtual const std::vector<ui32>& GetColumnIds() const override {
+    virtual TColumnIdsView GetColumnIds() const override {
         return IndexInfo.GetColumnIds();
     }
 

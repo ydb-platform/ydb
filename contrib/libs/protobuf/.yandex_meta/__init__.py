@@ -147,12 +147,14 @@ ENDIF()
         libprotobuf.RECURSE = ["builtin_proto"]
 
         libprotobuf.PEERDIR.add("library/cpp/sanitizer/include")
-        
+
         # Dont use full y_absl library
+        # fmt: off
         libprotobuf.PEERDIR = set([
             lib for lib in libprotobuf.PEERDIR
             if 'abseil-cpp-tstring' not in lib
         ])
+        # fmt: on
         libprotobuf.PEERDIR.add("contrib/restricted/abseil-cpp-tstring/y_absl/status")
         libprotobuf.PEERDIR.add("contrib/restricted/abseil-cpp-tstring/y_absl/log")
 

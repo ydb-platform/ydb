@@ -50,4 +50,17 @@
 #endif
 #endif
 
+#ifdef __has_include
+#if __has_include(<version>)
+#include <version>
+#endif
+#endif
+
+#if defined(__cpp_concepts) && !defined(SIMDJSON_CONCEPT_DISABLED)
+#include <utility>
+#define SIMDJSON_SUPPORTS_DESERIALIZATION 1
+#else // defined(__cpp_concepts) && !defined(SIMDJSON_CONCEPT_DISABLED)
+#define SIMDJSON_SUPPORTS_DESERIALIZATION 0
+#endif // defined(__cpp_concepts) && !defined(SIMDJSON_CONCEPT_DISABLED)
+
 #endif // SIMDJSON_COMPILER_CHECK_H

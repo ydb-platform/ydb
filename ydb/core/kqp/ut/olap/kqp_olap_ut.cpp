@@ -116,7 +116,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                                              Columns { Name: "Datetime_column" Type: "Datetime" }
                                              #Columns { Name: "Interval_column" Type: "Interval" }
                                              KeyColumnNames: "key"
-                                             Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                                          }
                                      }
         )");
@@ -1404,9 +1403,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     Y_ASSERT(record.GetResultSet().rows().size() == 1);
                     result = 1;
 
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                     resp->Record.SetEnough(false);
-                    resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo());
                     resp->Record.SetFreeSpace(100);
                     runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                     return TTestActorRuntime::EEventAction::DROP;
@@ -1472,9 +1470,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
                     result = record.GetResultSet().rows().at(0).items().at(0).uint64_value();
 
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                     resp->Record.SetEnough(false);
-                    resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo());
                     resp->Record.SetFreeSpace(100);
                     runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                     return TTestActorRuntime::EEventAction::DROP;
@@ -1535,9 +1532,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     Y_ASSERT(record.GetResultSet().rows().size() == 0);
                     hasResult = true;
 
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                     resp->Record.SetEnough(false);
-                    resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo());
                     resp->Record.SetFreeSpace(100);
                     runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                     return TTestActorRuntime::EEventAction::DROP;
@@ -1606,9 +1602,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
                     result = record.GetResultSet().rows().at(0).items().at(0).uint64_value();
 
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                     resp->Record.SetEnough(false);
-                    resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo());
                     resp->Record.SetFreeSpace(100);
                     runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                     return TTestActorRuntime::EEventAction::DROP;
@@ -1825,7 +1820,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     void TestOlapUpsert(ui32 numShards) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -1868,27 +1867,20 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ORDER BY CounterID, WatchID
             )";
 
-            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            auto it = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
+            TString result = FormatResultSetYson(it.GetResultSet(0));
             Cout << result << Endl;
-            //CompareYson(result, R"([[0;15];[1;15]])");
-            CompareYson(result, R"([])"); // FIXME
+            CompareYson(result, R"([[15;0];[15;1]])");
         }
     }
 
     Y_UNIT_TEST(OlapUpsertImmediate) {
-        // Should be fixed in KIKIMR-17646
-        return;
-
         TestOlapUpsert(1);
     }
 
     Y_UNIT_TEST(OlapUpsert) {
-        // Should be fixed in KIKIMR-17646
-        return;
-
         TestOlapUpsert(2);
     }
 
@@ -2210,7 +2202,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
                         auto result = CollectStreamResult(it);
                         auto ast = result.QueryStats->Getquery_ast();
-                        
+
                         pushdown = ast.find("KqpOlapFilter") != std::string::npos;
                     } else {
                         // Error means that predicate not pushed down
@@ -2448,7 +2440,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 //            Cout << "Wait indexation..." << Endl;
 //            Sleep(TDuration::Seconds(2));
 //        }
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=2", "[[2;\"test_res_2\";#;[\"val1\"]]]");
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=2", "[[2;\"test_res_2\";#;[\"val2\"]]]");
     }
 
     Y_UNIT_TEST(BulkUpsertUpdate) {
@@ -2704,6 +2696,18 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
 
         {
+            auto alterQuery =
+                TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                  {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "180s", "expected_blobs_size" : 2048000}, 
+                               {"class_name" : "Zero", "expected_blobs_size" : 2048000}, {"class_name" : "Zero"}]}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        {
             auto it = tableClient.StreamExecuteScanQuery(R"(
                 --!syntax_v1
 
@@ -2718,6 +2722,64 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(result, R"([[120000u;]])");
         }
 
+    }
+
+    Y_UNIT_TEST(MetadataMemoryManager) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        //        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
+        {
+            auto it = tableClient
+                          .StreamExecuteScanQuery(R"(
+                --!syntax_v1
+
+                SELECT
+                    COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+            )")
+                          .GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([[20000u;]])");
+        }
+        {
+            auto alterQuery =
+                TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `METADATA_MEMORY_MANAGER.CLASS_NAME`=`local_db`,
+                    `METADATA_MEMORY_MANAGER.FEATURES`=`{"memory_cache_size" : 0}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        {
+            auto it = tableClient
+                          .StreamExecuteScanQuery(R"(
+                --!syntax_v1
+
+                SELECT
+                    COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+            )")
+                          .GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([[20000u;]])");
+        }
     }
 
     Y_UNIT_TEST(NormalizeAbsentColumn) {
@@ -2906,6 +2968,31 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
+    }
+
+    Y_UNIT_TEST(ScanFailedSnapshotTooOld) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableColumnShardConfig()->SetMaxReadStaleness_ms(5000);
+        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
+
+        TTestHelper::TColumnTable cnt;
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("key").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("c").SetType(NScheme::NTypeIds::Int32).SetNullable(true)
+        };
+        cnt.SetName("/Root/cnt").SetPrimaryKey({ "key" }).SetSchema(schema);
+        testHelper.CreateTable(cnt);
+        Sleep(TDuration::Seconds(10));
+        auto client = testHelper.GetKikimr().GetQueryClient();
+        auto result =
+            client
+                .ExecuteQuery(
+                    TStringBuilder() << "$v = SELECT CAST(COUNT(*) AS INT32) FROM `/Root/cnt`; INSERT INTO `/Root/cnt` (key, c) values(1, $v);",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
     }
 }
 

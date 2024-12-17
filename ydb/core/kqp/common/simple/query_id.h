@@ -1,7 +1,7 @@
 #pragma once
 #include "settings.h"
 
-#include <ydb/library/yql/core/pg_settings/guc_settings.h>
+#include <yql/essentials/core/pg_settings/guc_settings.h>
 
 #include <util/generic/string.h>
 

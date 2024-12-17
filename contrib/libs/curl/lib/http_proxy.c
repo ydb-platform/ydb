@@ -131,8 +131,8 @@ CURLcode Curl_http_proxy_create_CONNECT(struct httpreq **preq,
       goto out;
   }
 
-  if(!Curl_checkProxyheaders(data, cf->conn, STRCONST("User-Agent")) &&
-     data->set.str[STRING_USERAGENT] && *data->set.str[STRING_USERAGENT]) {
+  if(!Curl_checkProxyheaders(data, cf->conn, STRCONST("User-Agent"))
+     && data->set.str[STRING_USERAGENT]) {
     result = Curl_dynhds_cadd(&req->headers, "User-Agent",
                               data->set.str[STRING_USERAGENT]);
     if(result)
@@ -293,12 +293,11 @@ static void http_proxy_cf_close(struct Curl_cfilter *cf,
 
 struct Curl_cftype Curl_cft_http_proxy = {
   "HTTP-PROXY",
-  CF_TYPE_IP_CONNECT|CF_TYPE_PROXY,
+  CF_TYPE_IP_CONNECT,
   0,
   http_proxy_cf_destroy,
   http_proxy_cf_connect,
   http_proxy_cf_close,
-  Curl_cf_def_shutdown,
   Curl_cf_http_proxy_get_host,
   Curl_cf_def_adjust_pollset,
   Curl_cf_def_data_pending,

@@ -26,9 +26,9 @@ public:
     void Finish() override;
 
 private:
-    IYsonConsumer* Consumer_;
-    TSchemafulDsvFormatConfigPtr Config_;
-    const std::vector<TString>& Columns_;
+    IYsonConsumer* const Consumer_;
+    const TSchemafulDsvFormatConfigPtr Config_;
+    const std::vector<std::string>& Columns_;
 
     TEscapeTable EscapeTable_;
 
@@ -49,8 +49,8 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TSchemafulDsvParser::TSchemafulDsvParser(
-        IYsonConsumer* consumer,
-        TSchemafulDsvFormatConfigPtr config)
+    IYsonConsumer* consumer,
+    TSchemafulDsvFormatConfigPtr config)
     : Consumer_(consumer)
     , Config_(config)
     , Columns_(Config_->GetColumnsOrThrow())

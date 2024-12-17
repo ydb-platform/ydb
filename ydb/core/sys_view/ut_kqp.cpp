@@ -338,8 +338,6 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(Nodes) {
-        return; // table is currenty switched off
-
         TTestEnv env;
         CreateTenantsAndTables(env, false);
         TTableClient client(env.GetDriver());
@@ -386,11 +384,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             ui32 offset = env.GetServer().GetRuntime()->GetNodeId(0);
             auto expected = Sprintf(R"([
                 [["::1"];[%du]];
-                [["::1"];[%du]];
-                [["::1"];[%du]];
-                [["::1"];[%du]];
-                [["::1"];[%du]];
-            ])", offset, offset + 1, offset + 2, offset + 3, offset + 4);
+            ])", offset);
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
@@ -768,14 +762,14 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 TabletId,
                 TxRejectedByOutOfStorage,
                 TxRejectedByOverload,
+                FollowerId,
                 UpdateTime
             FROM `/Root/.sys/partition_stats`;
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         auto ysonString = NKqp::StreamResultToYson(it);
-
-        TYsonFieldChecker check(ysonString, 23);
+        TYsonFieldChecker check(ysonString, 24);
 
         check.Uint64GreaterOrEquals(nowUs); // AccessTime
         check.DoubleGreaterOrEquals(0.0); // CPUCores
@@ -799,6 +793,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64Greater(0u); // TabletId
         check.Uint64(0u); // TxRejectedByOutOfStorage
         check.Uint64(0u); // TxRejectedByOverload
+        check.Uint64(0u); // FollowerId
         check.Uint64GreaterOrEquals(nowUs); // UpdateTime
     }
 
@@ -906,6 +901,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     Path,
                     ReadCentric,
                     SharedWithOS,
+                    State,
                     Status,
                     StatusChangeTimestamp,
                     TotalSize,
@@ -929,7 +925,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 16);
+        TYsonFieldChecker check(ysonString, 17);
 
         check.Uint64(0u); // AvailableSize
         check.Uint64(999u); // BoxId
@@ -940,6 +936,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.StringContains("pdisk_1.dat"); // Path
         check.Bool(false); // ReadCentric
         check.Bool(false); // SharedWithOS
+        check.String("Initial"); // State
         check.String("ACTIVE"); // Status
         check.Null(); // StatusChangeTimestamp
         check.Uint64(0u); // TotalSize
@@ -961,6 +958,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 SELECT
                     AllocatedSize,
                     AvailableSize,
+                    DiskSpace,
                     FailDomain,
                     FailRealm,
                     GroupGeneration,
@@ -968,6 +966,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     Kind,
                     NodeId,
                     PDiskId,
+                    Replicated,
+                    State,
                     Status,
                     VDisk,
                     VSlotId
@@ -986,10 +986,11 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 12);
+        TYsonFieldChecker check(ysonString, 15);
 
         check.Uint64(0u, true); // AllocatedSize
         check.Uint64(0u, true); // AvailableSize
+        check.Null(); // DiskSpace
         check.Uint64(0u); // FailDomain
         check.Uint64(0u); // FailRealm
         check.Uint64(1u); // GroupGeneration
@@ -997,6 +998,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.String("Default"); // Kind
         check.Uint64(env.GetServer().GetRuntime()->GetNodeId(0)); // NodeId
         check.Uint64(1u); // PDiskId
+        check.Null(); // Replicated
+        check.Null(); // State
         check.Null(); // Status
         check.Uint64(0u); // VDisk
         check.Uint64(1000u); // VSlotId
@@ -1107,7 +1110,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(StoragePoolsRanges) {
-        TTestEnv env(1, 0, 3);
+        TTestEnv env(1, 0, {.StoragePools = 3});
 
         TTableClient client(env.GetDriver());
         size_t rowCount = 0;
@@ -1178,9 +1181,11 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
-    size_t GetRowCount(TTableClient& client, const TString& name) {
+    size_t GetRowCount(TTableClient& client, const TString& tableName, const TString& condition = {}) {
         TStringBuilder query;
-        query << "SELECT * FROM `" << name << "`";
+        query << "SELECT * FROM `" << tableName << "`";
+        if (!condition.empty())
+            query << " WHERE " << condition;
         auto it = client.StreamExecuteScanQuery(query).GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         auto ysonString = NKqp::StreamResultToYson(it);
@@ -1212,7 +1217,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         auto nowUs = TInstant::Now().MicroSeconds();
 
-        TTestEnv env(1, 4, 0, 0, true);
+        TTestEnv env(1, 4, {.EnableSVP = true});
         CreateTenantsAndTables(env);
 
         TTableClient client(env.GetDriver());
@@ -1264,7 +1269,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         constexpr ui64 partitionCount = 5;
 
-        TTestEnv env(1, 4, 0, 0, true);
+        TTestEnv env(1, 4, {.EnableSVP = true});
         CreateTenantsAndTables(env, true, partitionCount);
 
         TTableClient client(env.GetDriver());
@@ -1294,7 +1299,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         constexpr ui64 partitionCount = 5;
 
-        TTestEnv env(1, 4, 0, 0, true);
+        TTestEnv env(1, 4, {.EnableSVP = true});
         CreateTenantsAndTables(env, true, partitionCount);
 
         TTableClient client(env.GetDriver());
@@ -1370,6 +1375,181 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
+    Y_UNIT_TEST(TopPartitionsFollowers) {
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+
+        auto nowUs = TInstant::Now().MicroSeconds();
+
+        TTestEnv env(1, 4, {.EnableSVP = true, .EnableForceFollowers = true});
+
+        auto& runtime = *env.GetServer().GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
+
+        TTableClient client(env.GetDriver());
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        CreateTenant(env, "Tenant1", true);
+        auto desc = TTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::Uint64)
+            .SetPrimaryKeyColumn("Key")
+            .Build();
+
+        auto settings = TCreateTableSettings()
+            .ReplicationPolicy(TReplicationPolicy().ReplicasCount(3));
+
+        auto result = session.CreateTable("/Root/Tenant1/Table1",
+            std::move(desc), settings).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        Cerr << "... UPSERT" << Endl;
+        NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
+            UPSERT INTO `Root/Tenant1/Table1` (Key) VALUES (1u), (2u), (3u);
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+
+        Cerr << "... SELECT from leader" << Endl;
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT * FROM `Root/Tenant1/Table1` WHERE Key = 1;
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            NKqp::AssertSuccessResult(result);
+            
+            TString actual = FormatResultSetYson(result.GetResultSet(0));
+            NKqp::CompareYson(R"([
+                [[1u]]
+            ])", actual);
+        }
+
+        Cerr << "... SELECT from follower" << Endl;
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT * FROM `Root/Tenant1/Table1` WHERE Key = 2;
+            )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
+            NKqp::AssertSuccessResult(result);
+            
+            TString actual = FormatResultSetYson(result.GetResultSet(0));
+            NKqp::CompareYson(R"([
+                [[2u]]
+            ])", actual);
+        }        
+
+        size_t rowCount = 0;
+        for (size_t iter = 0; iter < 30; ++iter) {
+            if (rowCount = GetRowCount(client, "/Root/Tenant1/.sys/top_partitions_one_minute", "FollowerId != 0"))
+                break;
+            Sleep(TDuration::Seconds(5));
+        }
+        UNIT_ASSERT_GE(rowCount, 0);
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT                     
+                    IntervalEnd,
+                    Rank,
+                    TabletId,
+                    Path,
+                    PeakTime,
+                    CPUCores,
+                    NodeId,
+                    DataSize,
+                    RowCount,
+                    IndexSize,
+                    InFlightTxCount,
+                    FollowerId,
+                    IF(FollowerId = 0, 'L', 'F') AS LeaderFollower
+                FROM `/Root/Tenant1/.sys/top_partitions_one_minute`
+                ORDER BY IntervalEnd, Rank;
+            )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            NKqp::AssertSuccessResult(result);
+
+            auto rs = result.GetResultSet(0);
+
+            TString actual = FormatResultSetYson(rs);
+            Cerr << "\n\n\n\n\n\n\n\n" << actual << "\n\n\n\n\n\n\n\n" << Endl;
+        }
+
+        ui64 intervalEnd = GetIntervalEnd(client, "/Root/Tenant1/.sys/top_partitions_one_minute");
+
+
+
+        Cerr << "... SELECT leader from .sys/top_partitions_one_minute" << Endl;
+        {
+            TStringBuilder query;
+            query << R"(
+                SELECT
+                    IntervalEnd,
+                    Rank,
+                    TabletId,
+                    Path,
+                    PeakTime,
+                    CPUCores,
+                    NodeId,
+                    DataSize,
+                    RowCount,
+                    IndexSize,
+                    InFlightTxCount,
+                    FollowerId
+                FROM `/Root/Tenant1/.sys/top_partitions_one_minute`)"
+                << "WHERE IntervalEnd = CAST(" << intervalEnd << "ul as Timestamp) AND FollowerId = 0";
+            auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto ysonString = NKqp::StreamResultToYson(it);
+
+            TYsonFieldChecker check(ysonString, 12);
+            check.Uint64(intervalEnd); // IntervalEnd
+            check.Uint64(1); // Rank
+            check.Uint64Greater(0); // TabletId
+            check.String("/Root/Tenant1/Table1"); // Path
+            check.Uint64GreaterOrEquals(nowUs); // PeakTime
+            check.DoubleGreaterOrEquals(0.); // CPUCores
+            check.Uint64Greater(0); // NodeId
+            check.Uint64Greater(0); // DataSize
+            check.Uint64(3); // RowCount
+            check.Uint64(0); // IndexSize
+            check.Uint64(0); // InFlightTxCount
+            check.Uint64(0); // FollowerId
+        }
+
+        Cerr << "... SELECT follower from .sys/top_partitions_one_minute" << Endl;
+        {
+            TStringBuilder query;
+            query << R"(
+                SELECT
+                    IntervalEnd,
+                    Rank,
+                    TabletId,
+                    Path,
+                    PeakTime,
+                    CPUCores,
+                    NodeId,
+                    DataSize,
+                    RowCount,
+                    IndexSize,
+                    InFlightTxCount,
+                    FollowerId
+                FROM `/Root/Tenant1/.sys/top_partitions_one_minute`)"
+                << "WHERE IntervalEnd = CAST(" << intervalEnd << "ul as Timestamp) AND FollowerId != 0";
+            auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto ysonString = NKqp::StreamResultToYson(it);
+
+            TYsonFieldChecker check(ysonString, 12);
+            check.Uint64(intervalEnd); // IntervalEnd
+            check.Uint64(2); // Rank
+            check.Uint64Greater(0); // TabletId
+            check.String("/Root/Tenant1/Table1"); // Path
+            check.Uint64GreaterOrEquals(nowUs); // PeakTime
+            check.DoubleGreaterOrEquals(0.); // CPUCores
+            check.Uint64Greater(0); // NodeId
+            check.Uint64Greater(0); // DataSize
+            check.Uint64(3); // RowCount
+            check.Uint64(0); // IndexSize
+            check.Uint64(0); // InFlightTxCount
+            check.Uint64Greater(0); // FollowerId
+        }        
+    }    
+
     Y_UNIT_TEST(Describe) {
         TTestEnv env;
         CreateRootTable(env);
@@ -1389,11 +1569,11 @@ Y_UNIT_TEST_SUITE(SystemView) {
             const auto& columns = table.GetTableColumns();
             const auto& keyColumns = table.GetPrimaryKeyColumns();
 
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 26);
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 27);
             UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
             UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
 
-            UNIT_ASSERT_VALUES_EQUAL(keyColumns.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(keyColumns.size(), 4);
             UNIT_ASSERT_STRINGS_EQUAL(keyColumns[0], "OwnerId");
 
             UNIT_ASSERT_VALUES_EQUAL(table.GetPartitionStats().size(), 0);

@@ -9,7 +9,7 @@
 
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 
-#include <ydb/core/util/testactorsys.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
 
 using namespace NActors;
 using namespace NKikimr;

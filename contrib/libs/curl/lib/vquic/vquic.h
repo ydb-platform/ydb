@@ -26,7 +26,7 @@
 
 #include "curl_setup.h"
 
-#ifdef USE_HTTP3
+#ifdef ENABLE_QUIC
 struct Curl_cfilter;
 struct Curl_easy;
 struct connectdata;
@@ -52,11 +52,11 @@ bool Curl_conn_is_http3(const struct Curl_easy *data,
 
 extern struct Curl_cftype Curl_cft_http3;
 
-#else /* USE_HTTP3 */
+#else /* ENABLE_QUIC */
 
 #define Curl_conn_is_http3(a,b,c)   FALSE
 
-#endif /* !USE_HTTP3 */
+#endif /* !ENABLE_QUIC */
 
 CURLcode Curl_conn_may_http3(struct Curl_easy *data,
                              const struct connectdata *conn);

@@ -74,7 +74,7 @@ public:
         , Writer_(new grpc::ServerAsyncResponseWriter<TUniversalResponseRef<TOut>>(&this->Context))
         , StateFunc_(&TThis::SetRequestDone)
         , Request_(google::protobuf::Arena::CreateMessage<TIn>(&Arena_))
-        , AuthState_(Server_->NeedAuth())
+        , AuthState_(server->NeedAuth())
     {
         Y_ABORT_UNLESS(Request_);
         GRPC_LOG_DEBUG(Logger_, "[%p] created request Name# %s", this, Name_);
@@ -101,7 +101,7 @@ public:
         , StreamWriter_(new grpc::ServerAsyncWriter<TUniversalResponse<TOut>>(&this->Context))
         , StateFunc_(&TThis::SetRequestDone)
         , Request_(google::protobuf::Arena::CreateMessage<TIn>(&Arena_))
-        , AuthState_(Server_->NeedAuth())
+        , AuthState_(server->NeedAuth())
         , StreamAdaptor_(CreateStreamAdaptor())
     {
         Y_ABORT_UNLESS(Request_);
@@ -251,10 +251,10 @@ private:
         if (!Server_->IsShuttingDown()) {
             if (RequestCallback_) {
                 MakeIntrusive<TThis>(
-                    Server_, this->Service, this->CQ, Cb_, RequestCallback_, Name_, Logger_, Counters_->Clone(), RequestLimiter_)->Run();
+                    static_cast<TService*>(Server_), this->Service, this->CQ, Cb_, RequestCallback_, Name_, Logger_, Counters_->Clone(), RequestLimiter_)->Run();
             } else {
                 MakeIntrusive<TThis>(
-                    Server_, this->Service, this->CQ, Cb_, StreamRequestCallback_, Name_, Logger_, Counters_->Clone(), RequestLimiter_)->Run();
+                    static_cast<TService*>(Server_), this->Service, this->CQ, Cb_, StreamRequestCallback_, Name_, Logger_, Counters_->Clone(), RequestLimiter_)->Run();
             }
         }
     }
@@ -543,7 +543,7 @@ private:
     }
 
     using TStateFunc = bool (TThis::*)(bool);
-    TService* Server_ = nullptr;
+    TGrpcServiceProtectiable* Server_ = nullptr;
     TOnRequest Cb_;
     TRequestCallback RequestCallback_;
     TStreamRequestCallback StreamRequestCallback_;

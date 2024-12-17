@@ -1,4 +1,5 @@
 #include "logging.h"
+#include "service.h"
 #include "worker.h"
 
 #include <ydb/core/base/appdata.h>
@@ -74,6 +75,21 @@ TEvWorker::TEvStatus::TEvStatus(TDuration lag)
 TString TEvWorker::TEvStatus::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
         << " Lag: " << Lag
+    << " }";
+}
+
+TEvWorker::TEvDataEnd::TEvDataEnd(ui64 partitionId, TVector<ui64>&& adjacentPartitionsIds, TVector<ui64>&& childPartitionsIds)
+    : PartitionId(partitionId)
+    , AdjacentPartitionsIds(std::move(adjacentPartitionsIds))
+    , ChildPartitionsIds(std::move(childPartitionsIds))
+{
+}
+
+TString TEvWorker::TEvDataEnd::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " PartitionId: " << PartitionId
+        << " AdjacentPartitionsIds: " << JoinSeq(", ", AdjacentPartitionsIds)
+        << " ChildPartitionsIds: " << JoinSeq(", ", ChildPartitionsIds)
     << " }";
 }
 
@@ -234,6 +250,19 @@ class TWorker: public TActorBootstrapped<TWorker> {
         PassAway();
     }
 
+    void Handle(TEvService::TEvTxIdResult::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+        Send(ev->Forward(Writer));
+    }
+
+    template <typename TEventPtr>
+    void Forward(TEventPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
+        ev->Sender = SelfId();
+        Send(ev->Forward(Parent));
+    }
+
     void ScheduleLagReport() {
         const auto random = TDuration::MicroSeconds(TAppData::RandomProvider->GenRand64() % LagReportInterval.MicroSeconds());
         Schedule(LagReportInterval + random, new TEvents::TEvWakeup());
@@ -264,7 +293,7 @@ public:
     }
 
     explicit TWorker(
-            const TActorId& parent, 
+            const TActorId& parent,
             std::function<IActor*(void)>&& createReaderFn,
             std::function<IActor*(void)>&& createWriterFn)
         : Parent(parent)
@@ -288,7 +317,11 @@ public:
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvPoll, Handle);
             hFunc(TEvWorker::TEvData, Handle);
+            hFunc(TEvWorker::TEvDataEnd, Forward);
             hFunc(TEvWorker::TEvGone, Handle);
+            hFunc(TEvService::TEvGetTxId, Forward);
+            hFunc(TEvService::TEvTxIdResult, Handle);
+            hFunc(TEvService::TEvHeartbeat, Forward);
             sFunc(TEvents::TEvWakeup, ReportLag);
             sFunc(TEvents::TEvPoison, PassAway);
         }

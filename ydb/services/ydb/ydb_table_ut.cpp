@@ -12,9 +12,9 @@
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/console_base.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -756,7 +756,6 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 
     Y_UNIT_TEST(ConnectDbAclIsStrictlyChecked) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true);
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
@@ -875,7 +874,6 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 
     Y_UNIT_TEST(ConnectDbAclIsOffWhenYdbRequestsWithoutDatabase) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true);
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(true);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
@@ -924,7 +922,6 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 
     Y_UNIT_TEST(ConnectDbAclIsOffWhenTokenIsOptionalAndNull) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true);
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
@@ -1787,7 +1784,13 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         UseSnapshot,
     };
 
-    void TestReadTableMultiShard(EReadTableMultiShardMode mode, bool wholeTable) {
+    enum class EReadTableRangeMode {
+        OneRow,
+        TwoRows,
+        WholeTable
+    };
+
+    void TestReadTableMultiShard(EReadTableMultiShardMode mode, EReadTableRangeMode rangeMode) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -1833,15 +1836,23 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             .EndTuple();
 
         TValueBuilder valueTo;
-        valueTo.BeginTuple()
-            .AddElement()
-                .OptionalUint32(1000000000u)
-            .AddElement()
-                .OptionalUint64(2000000000u)
-            .EndTuple();
+
+        if (rangeMode == EReadTableRangeMode::OneRow) {
+            valueTo.BeginTuple()
+                .AddElement()
+                    .OptionalUint32(1u)
+                .EndTuple();
+        } else {
+            valueTo.BeginTuple()
+                .AddElement()
+                    .OptionalUint32(1000000000u)
+                .AddElement()
+                    .OptionalUint64(2000000000u)
+                .EndTuple();
+        }
 
         TReadTableSettings readTableSettings =
-            wholeTable ? TReadTableSettings().Ordered() :
+            rangeMode == EReadTableRangeMode::WholeTable ? TReadTableSettings().Ordered() :
             TReadTableSettings()
                 .Ordered()
                 .From(TKeyBound::Inclusive(valueFrom.Build()))
@@ -1865,7 +1876,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         TVector<TRows> expected;
         expected.push_back({1u, 1u, "One"});
         expected.push_back({1000000000u, 2u, "Two"});
-        if (wholeTable) {
+        if (rangeMode == EReadTableRangeMode::WholeTable) {
             expected.push_back({4294967295u, 4u, "Last"});
         }
         int row = 0;
@@ -1895,26 +1906,39 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 UNIT_ASSERT_VALUES_EQUAL(val, exp.Value);
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(row, wholeTable ? 3 : 2);
+        switch (rangeMode) {
+            case EReadTableRangeMode::OneRow:
+                UNIT_ASSERT_VALUES_EQUAL(row, 1);
+                break;
+            case EReadTableRangeMode::TwoRows:
+                UNIT_ASSERT_VALUES_EQUAL(row, 2);
+                break;
+            case EReadTableRangeMode::WholeTable:
+                UNIT_ASSERT_VALUES_EQUAL(row, 3);
+        }
 
         // Attempt to call ReadNext on finished iterator causes ContractViolation
         UNIT_ASSERT_EXCEPTION(it.ReadNext().GetValueSync().EOS(), NYdb::TContractViolation);
     }
 
     Y_UNIT_TEST(TestReadTableMultiShard) {
-        TestReadTableMultiShard(EReadTableMultiShardMode::Normal, false);
+        TestReadTableMultiShard(EReadTableMultiShardMode::Normal, EReadTableRangeMode::TwoRows);
     }
 
     Y_UNIT_TEST(TestReadTableMultiShardUseSnapshot) {
-        TestReadTableMultiShard(EReadTableMultiShardMode::UseSnapshot, false);
+        TestReadTableMultiShard(EReadTableMultiShardMode::UseSnapshot, EReadTableRangeMode::TwoRows);
     }
 
     Y_UNIT_TEST(TestReadTableMultiShardWholeTable) {
-        TestReadTableMultiShard(EReadTableMultiShardMode::Normal, true);
+        TestReadTableMultiShard(EReadTableMultiShardMode::Normal, EReadTableRangeMode::WholeTable);
     }
 
     Y_UNIT_TEST(TestReadTableMultiShardWholeTableUseSnapshot) {
-        TestReadTableMultiShard(EReadTableMultiShardMode::UseSnapshot, true);
+        TestReadTableMultiShard(EReadTableMultiShardMode::UseSnapshot, EReadTableRangeMode::WholeTable);
+    }
+
+    Y_UNIT_TEST(TestReadTableMultiShardOneRow) {
+        TestReadTableMultiShard(EReadTableMultiShardMode::Normal, EReadTableRangeMode::OneRow);
     }
 
     void TestReadTableMultiShardWithDescribe(bool rowLimit) {
@@ -3843,6 +3867,8 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
     Y_UNIT_TEST(TestDescribeTableWithShardStats) {
         TKikimrWithGrpcAndRootSchema server;
+        auto nodeId = server.Server_->GetRuntime()->GetNodeId(0);
+        UNIT_ASSERT(nodeId > 0);
 
         auto connection = NYdb::TDriver(
             TDriverConfig()
@@ -3902,7 +3928,26 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionsCount(), 2);
             UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats()[0].LeaderNodeId, 0);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats()[1].LeaderNodeId, 0);
         }
+
+        {
+            TDescribeTableSettings describeTableSettings =
+                TDescribeTableSettings()
+                    .WithTableStatistics(true)
+                    .WithPartitionStatistics(true)
+                    .WithShardNodesInfo(true);
+
+            auto res = session.DescribeTable("Root/Foo", describeTableSettings).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionsCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats()[0].LeaderNodeId, nodeId);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats()[1].LeaderNodeId, nodeId);
+        }
+
     }
 
     Y_UNIT_TEST(TestExplicitPartitioning) {

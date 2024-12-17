@@ -83,6 +83,9 @@ namespace boost { namespace locale { namespace impl_posix {
             case char_facet_t::nochar: break;
             case char_facet_t::char_f: return std::locale(in, new collator<char>(std::move(lc)));
             case char_facet_t::wchar_f: return std::locale(in, new collator<wchar_t>(std::move(lc)));
+#ifdef __cpp_char8_t
+            case char_facet_t::char8_f: break; // std-facet not available (yet)
+#endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
             case char_facet_t::char16_f: return std::locale(in, new collator<char16_t>(std::move(lc)));
 #endif

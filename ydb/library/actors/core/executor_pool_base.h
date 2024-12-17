@@ -36,12 +36,12 @@ namespace NActors {
     public:
         explicit TExecutorPoolBaseMailboxed(ui32 poolId);
         ~TExecutorPoolBaseMailboxed();
-        void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingWriteCounter) override;
-        TMailboxHeader *ResolveMailbox(ui32 hint) override;
+        TMailbox* ResolveMailbox(ui32 hint) override;
         bool Send(TAutoPtr<IEventHandle>& ev) override;
         bool SpecificSend(TAutoPtr<IEventHandle>& ev) override;
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingWriteCounter, const TActorId& parentId) override;
-        TActorId Register(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId) override;
+        TActorId Register(IActor* actor, TMailboxCache& cache, ui64 revolvingWriteCounter, const TActorId& parentId) override;
+        TActorId Register(IActor* actor, TMailbox* mailbox, const TActorId& parentId) override;
         bool Cleanup() override;
     };
 
@@ -58,8 +58,8 @@ namespace NActors {
     public:
         TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue);
         ~TExecutorPoolBase();
-        void ScheduleActivation(ui32 activation) override;
-        void SpecificScheduleActivation(ui32 activation) override;
+        void ScheduleActivation(TMailbox* mailbox) override;
+        void SpecificScheduleActivation(TMailbox* mailbox) override;
         TAffinity* Affinity() const override;
         ui32 GetThreads() const override;
     };

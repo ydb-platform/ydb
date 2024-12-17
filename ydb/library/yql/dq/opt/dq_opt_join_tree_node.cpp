@@ -3,6 +3,7 @@
 namespace NYql::NDq {
 
 std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
+    TOptimizerStatistics&& stats,
     std::shared_ptr<IBaseOptimizerNode> left,
     std::shared_ptr<IBaseOptimizerNode> right,
     const TVector<TJoinColumn>& leftJoinKeys,
@@ -10,16 +11,15 @@ std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
     EJoinKind joinKind,
     EJoinAlgoType joinAlgo,
     bool leftAny,
-    bool rightAny,
-    IProviderContext& ctx,
-    TCardinalityHints::TCardinalityHint* maybeHint) {
+    bool rightAny
+) {
 
     auto res = std::make_shared<TJoinOptimizerNodeInternal>(left, right, leftJoinKeys, rightJoinKeys, joinKind, joinAlgo, leftAny, rightAny);
-    res->Stats = std::make_shared<TOptimizerStatistics>(ctx.ComputeJoinStats(*left->Stats, *right->Stats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint));
+    res->Stats = std::move(stats);
     return res;
 }
 
-std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(const std::shared_ptr<IBaseOptimizerNode> internal) {
+std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(const std::shared_ptr<IBaseOptimizerNode>& internal) {
     Y_ENSURE(internal->Kind == EOptimizerNodeKind::JoinNodeType);
 
     if (dynamic_cast<TJoinOptimizerNode*>(internal.get()) != nullptr) {
@@ -39,7 +39,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(const std::shared_ptr<IB
     }
 
     auto newJoin = std::make_shared<TJoinOptimizerNode>(left, right, join->LeftJoinKeys, join->RightJoinKeys, join->JoinType, join->JoinAlgo, join->LeftAny, join->RightAny);
-    newJoin->Stats = join->Stats;
+    newJoin->Stats = std::move(join->Stats);
     return newJoin;
 }
 

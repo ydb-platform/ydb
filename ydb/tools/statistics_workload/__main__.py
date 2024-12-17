@@ -6,7 +6,7 @@ import time
 import os
 import random
 import string
-from ydb.tests.library.harness.kikimr_client import kikimr_client_factory
+from ydb.tests.library.clients.kikimr_client import kikimr_client_factory
 from ydb.tests.library.common.protobuf_ss import SchemeDescribeRequest
 
 ydb.interceptor.monkey_patch_event_handler()

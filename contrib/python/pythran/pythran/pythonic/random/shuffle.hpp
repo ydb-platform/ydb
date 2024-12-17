@@ -3,9 +3,9 @@
 
 #include "pythonic/include/random/shuffle.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/builtins/None.hpp"
 #include "pythonic/random/random.hpp"
+#include "pythonic/utils/functor.hpp"
 
 #include <limits>
 
@@ -47,7 +47,7 @@ namespace random
 
       function randf;
     };
-  }
+  } // namespace details
 
   template <class T, class function>
   types::none_type shuffle(T &seq, function &&randf)
@@ -56,7 +56,7 @@ namespace random
                  details::URG<function>(std::forward<function>(randf)));
     return builtins::None;
   }
-}
+} // namespace random
 
 PYTHONIC_NS_END
 

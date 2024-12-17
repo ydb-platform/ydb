@@ -19,6 +19,7 @@ public:
     YDB_READONLY_DEF(TFsPath, ExternalQueriesDir);
     YDB_READONLY_DEF(TFsPath, DataFiles);
     YDB_READONLY_FLAG(CheckCanonical, false);
+    YDB_READONLY(EQuerySyntax, Syntax, EQuerySyntax::YQL);
 };
 
 class TClickbenchWorkloadGenerator final: public TWorkloadGeneratorBase {
@@ -29,7 +30,8 @@ public:
 
     class TBulkDataGenerator;
 protected:
-    TString DoGetDDLQueries() const override;
+    TString GetTablesYaml() const override;
+    TWorkloadGeneratorBase::TSpecialDataTypes GetSpecialDataTypes() const override;
     TQueryInfoList GetInitialData() override;
 
 private:

@@ -30,13 +30,13 @@ namespace scipy
 
         return (chbevl(32.0 / x - 2.0, B) / sqrt(x));
       }
-    }
+    } // namespace details
 
 #define NUMPY_NARY_FUNC_NAME i0e
 #define NUMPY_NARY_FUNC_SYM details::i0e
 #include "pythonic/types/numpy_nary_expr.hpp"
-  }
-}
+  } // namespace special
+} // namespace scipy
 PYTHONIC_NS_END
 
 #endif

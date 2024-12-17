@@ -10,8 +10,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_monitoring/monitoring.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 using namespace NYdb;
 

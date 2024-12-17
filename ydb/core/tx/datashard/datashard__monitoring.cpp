@@ -9,193 +9,126 @@
 
 #include <library/cpp/html/pcdata/pcdata.h>
 
-namespace NKikimr {
-namespace NDataShard {
+namespace NKikimr::NDataShard {
 
-class TDataShard::TTxMonitoring : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-    NMon::TEvRemoteHttpInfo::TPtr Ev;
+void TDataShard::HandleMonIndexPage(NMon::TEvRemoteHttpInfo::TPtr& ev) {
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS,
+                "HTTP request at " << TabletID() << " url="
+                << ev->Get()->PathInfo());
 
-public:
-    TTxMonitoring(TDataShard *self, NMon::TEvRemoteHttpInfo::TPtr ev)
-        : TBase(self)
-        , Ev(ev)
-    {}
+    TString blob;
+    NResource::FindExact("datashard/index.html", &blob);
 
-    bool Execute(NTabletFlatExecutor::TTransactionContext &, const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                    "HTTP request at " << Self->TabletID() << " url="
-                    << Ev->Get()->PathInfo());
-
-        ReplyWithIndex(ctx);
-
-        return true;
+    if (blob.empty()) {
+        Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPNOTFOUND));
+        return;
     }
 
-    void ReplyWithIndex(const TActorContext &ctx)
-    {
-        TString blob;
-        NResource::FindExact("datashard/index.html", &blob);
+    TStringBuilder response;
+    response << "HTTP/1.1 200 Ok\r\n";
+    response << "Content-Type: text/html\r\n";
+    response << "Content-Length: " << blob.size() << "\r\n";
+    response << "\r\n";
+    response.Out.Write(blob.data(), blob.size());
+    Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(std::move(response)));
+}
 
-        if (blob.empty()) {
-            ctx.Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPNOTFOUND));
-            return;
+void TDataShard::Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev) {
+    auto* response = new TEvDataShard::TEvGetInfoResponse;
+    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
+
+    for (auto& pr : GetUserTables()) {
+        auto& rec = *response->Record.AddUserTables();
+        rec.SetName(pr.second->Name);
+        rec.SetPath(pr.second->Path);
+        rec.SetLocalId(pr.second->LocalTid);
+        rec.SetPathId(pr.first);
+        rec.SetSchemaVersion(pr.second->GetTableSchemaVersion());
+        pr.second->GetSchema(*rec.MutableDescription());
+
+        if (pr.second->Stats.StatsUpdateTime) {
+            auto &stats = *rec.MutableStats();
+            stats.SetRowCount(pr.second->Stats.DataStats.RowCount);
+            stats.SetDataSize(pr.second->Stats.DataStats.DataSize.Size);
+            stats.SetLastAccessTime(pr.second->Stats.AccessTime.ToStringLocalUpToSeconds());
+            stats.SetLastUpdateTime(pr.second->Stats.UpdateTime.ToStringLocalUpToSeconds());
+            stats.SetLastStatsUpdateTime(LastDbStatsUpdateTime.ToStringLocalUpToSeconds());
+            stats.SetLastStatsReportTime(LastDbStatsReportTime.ToStringLocalUpToSeconds());
         }
 
-        TStringStream response;
-        response << "HTTP/1.1 200 Ok\r\n";
-        response << "Content-Type: text/html\r\n";
-        response << "Content-Length: " << blob.size() << "\r\n";
-        response << "\r\n";
-        response.Write(blob.data(), blob.size());
-        ctx.Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(response.Str()));
-    }
-
-    void Complete(const TActorContext &ctx) override {
-        Y_UNUSED(ctx);
-    }
-
-    TTxType GetTxType() const override { return TXTYPE_MONITORING; }
-};
-
-class TDataShard::TTxGetInfo : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public:
-    TTxGetInfo(TDataShard *self,
-               TEvDataShard::TEvGetInfoRequest::TPtr ev)
-        : TBase(self)
-        , Ev(ev)
-    {}
-
-    bool Execute(NTabletFlatExecutor::TTransactionContext &,
-                 const TActorContext &ctx) override
-    {
-        auto *response = new TEvDataShard::TEvGetInfoResponse;
-        response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
-
-        for (auto &pr : Self->GetUserTables()) {
-            auto &rec = *response->Record.AddUserTables();
-            rec.SetName(pr.second->Name);
-            rec.SetPath(pr.second->Path);
-            rec.SetLocalId(pr.second->LocalTid);
-            rec.SetPathId(pr.first);
-            rec.SetSchemaVersion(pr.second->GetTableSchemaVersion());
-            pr.second->GetSchema(*rec.MutableDescription());
-
-            if (pr.second->Stats.StatsUpdateTime) {
-                auto &stats = *rec.MutableStats();
-                stats.SetRowCount(pr.second->Stats.DataStats.RowCount);
-                stats.SetDataSize(pr.second->Stats.DataStats.DataSize.Size);
-                stats.SetLastAccessTime(pr.second->Stats.AccessTime.ToStringLocalUpToSeconds());
-                stats.SetLastUpdateTime(pr.second->Stats.UpdateTime.ToStringLocalUpToSeconds());
-                stats.SetLastStatsUpdateTime(Self->LastDbStatsUpdateTime.ToStringLocalUpToSeconds());
-                stats.SetLastStatsReportTime(Self->LastDbStatsReportTime.ToStringLocalUpToSeconds());
-            }
-
-            auto *resourceMetrics = Self->Executor()->GetResourceMetrics();
-            if (resourceMetrics) {
-                auto &metrics = *rec.MutableMetrics();
-                resourceMetrics->Fill(metrics);
-            }
+        auto *resourceMetrics = Executor()->GetResourceMetrics();
+        if (resourceMetrics) {
+            auto &metrics = *rec.MutableMetrics();
+            resourceMetrics->Fill(metrics);
         }
-
-        auto &info = *response->Record.MutableTabletInfo();
-        info.SetSchemeShard(Self->PathOwnerId);
-        info.SetMediator(Self->LastKnownMediator);
-        info.SetGeneration(Self->Generation());
-        info.SetIsFollower(Self->IsFollower());
-        info.SetState(DatashardStateName(Self->State));
-        info.SetIsActive(Self->IsStateActive());
-        info.SetHasSharedBlobs(Self->HasSharedBlobs());
-
-        AddControl(Self->MaxTxInFly, "DataShardControls.MaxTxInFly", response->Record);
-        AddControl(Self->DisableByKeyFilter, "DataShardControls.DisableByKeyFilter", response->Record);
-        AddControl(Self->MaxTxLagMilliseconds, "DataShardControls.MaxTxLagMilliseconds", response->Record);
-        AddControl(Self->CanCancelROWithReadSets, "DataShardControls.CanCancelROWithReadSets", response->Record);
-        AddControl(Self->DataTxProfileLogThresholdMs, "DataShardControls.DataTxProfile.LogThresholdMs", response->Record);
-        AddControl(Self->DataTxProfileBufferThresholdMs, "DataShardControls.DataTxProfile.BufferThresholdMs", response->Record);
-        AddControl(Self->DataTxProfileBufferSize, "DataShardControls.DataTxProfile.BufferSize", response->Record);
-        AddControl(Self->PerShardReadSizeLimit, "TxLimitControls.PerShardReadSizeLimit", response->Record);
-
-        auto completed = Self->Pipeline.GetExecutionUnit(EExecutionUnitKind::CompletedOperations).GetInFly();
-        auto waiting = Self->Pipeline.GetExecutionUnit(EExecutionUnitKind::BuildAndWaitDependencies).GetInFly();
-        auto executing = Self->Pipeline.GetActiveOps().size() - waiting - completed;
-        auto &activities = *response->Record.MutableActivities();
-        activities.SetInFlyPlanned(Self->TxInFly());
-        activities.SetInFlyImmediate(Self->ImmediateInFly());
-        activities.SetExecutingOps(executing);
-        activities.SetWaitingOps(waiting);
-        activities.SetExecuteBlockers(Self->Pipeline.GetExecuteBlockers().size());
-        activities.SetDataTxCached(Self->Pipeline.GetDataTxCacheSize());
-        activities.SetOutReadSets(Self->OutReadSets.CountReadSets());
-        activities.SetOutReadSetsAcks(Self->OutReadSets.CountAcks());
-        activities.SetDelayedAcks(Self->Pipeline.GetDelayedAcks().size());
-        activities.SetLocks(Self->SysLocks.LocksCount());
-        activities.SetBrokenLocks(Self->SysLocks.BrokenLocksCount());
-        activities.SetLastPlannedTx(Self->Pipeline.GetLastPlannedTx().TxId);
-        activities.SetLastPlannedStep(Self->Pipeline.GetLastPlannedTx().Step);
-        activities.SetLastCompletedTx(Self->Pipeline.GetLastCompleteTx().TxId);
-        activities.SetLastCompletedStep(Self->Pipeline.GetLastCompleteTx().Step);
-        activities.SetUtmostCompletedTx(Self->Pipeline.GetUtmostCompleteTx().TxId);
-        activities.SetUtmostCompletedStep(Self->Pipeline.GetUtmostCompleteTx().Step);
-        activities.SetDataTxCompleteLag(Self->GetDataTxCompleteLag().MilliSeconds());
-        activities.SetScanTxCompleteLag(Self->GetScanTxCompleteLag().MilliSeconds());
-
-        auto &pcfg = *response->Record.MutablePipelineConfig();
-        pcfg.SetOutOfOrderEnabled(Self->Pipeline.GetConfig().OutOfOrder());
-        pcfg.SetActiveTxsLimit(Self->Pipeline.GetConfig().LimitActiveTx);
-        pcfg.SetAllowImmediate(!Self->Pipeline.GetConfig().NoImmediate());
-        pcfg.SetForceOnlineRW(Self->Pipeline.GetConfig().ForceOnlineRW());
-        pcfg.SetDirtyOnline(Self->Pipeline.GetConfig().DirtyOnline());
-        pcfg.SetDirtyImmediate(Self->Pipeline.GetConfig().DirtyImmediate());
-        pcfg.SetDataTxCacheSize(Self->Pipeline.GetConfig().LimitDataTxCache);
-
-        ctx.Send(Ev->Sender, response);
-        return true;
     }
 
-    void AddControl(ui64 value,
-                    const TString &name,
-                    NKikimrTxDataShard::TEvGetInfoResponse &rec)
-    {
-        auto &control = *rec.AddControls();
+    auto& info = *response->Record.MutableTabletInfo();
+    info.SetSchemeShard(PathOwnerId);
+    info.SetMediator(LastKnownMediator);
+    info.SetGeneration(Generation());
+    info.SetIsFollower(IsFollower());
+    info.SetState(DatashardStateName(State));
+    info.SetIsActive(IsStateActive());
+    info.SetHasSharedBlobs(HasSharedBlobs());
+
+    auto addControl = [&](ui64 value, const TString& name) {
+        auto& control = *response->Record.AddControls();
         control.SetName(name);
         control.SetValue(ToString(value));
-    }
+    };
 
-    void Complete(const TActorContext &) override {}
+    addControl(MaxTxInFly, "DataShardControls.MaxTxInFly");
+    addControl(DisableByKeyFilter, "DataShardControls.DisableByKeyFilter");
+    addControl(MaxTxLagMilliseconds, "DataShardControls.MaxTxLagMilliseconds");
+    addControl(CanCancelROWithReadSets, "DataShardControls.CanCancelROWithReadSets");
+    addControl(DataTxProfileLogThresholdMs, "DataShardControls.DataTxProfile.LogThresholdMs");
+    addControl(DataTxProfileBufferThresholdMs, "DataShardControls.DataTxProfile.BufferThresholdMs");
+    addControl(DataTxProfileBufferSize, "DataShardControls.DataTxProfile.BufferSize");
+    addControl(PerShardReadSizeLimit, "TxLimitControls.PerShardReadSizeLimit");
 
-    TTxType GetTxType() const override { return TXTYPE_MONITORING; }
+    auto completed = Pipeline.GetExecutionUnit(EExecutionUnitKind::CompletedOperations).GetInFly();
+    auto waiting = Pipeline.GetExecutionUnit(EExecutionUnitKind::BuildAndWaitDependencies).GetInFly();
+    auto executing = Pipeline.GetActiveOps().size() - waiting - completed;
+    auto& activities = *response->Record.MutableActivities();
+    activities.SetInFlyPlanned(TxInFly());
+    activities.SetInFlyImmediate(ImmediateInFly());
+    activities.SetExecutingOps(executing);
+    activities.SetWaitingOps(waiting);
+    activities.SetExecuteBlockers(Pipeline.GetExecuteBlockers().size());
+    activities.SetDataTxCached(Pipeline.GetDataTxCacheSize());
+    activities.SetOutReadSets(OutReadSets.CountReadSets());
+    activities.SetOutReadSetsAcks(OutReadSets.CountAcks());
+    activities.SetDelayedAcks(Pipeline.GetDelayedAcks().size());
+    activities.SetLocks(SysLocks.LocksCount());
+    activities.SetBrokenLocks(SysLocks.BrokenLocksCount());
+    activities.SetLastPlannedTx(Pipeline.GetLastPlannedTx().TxId);
+    activities.SetLastPlannedStep(Pipeline.GetLastPlannedTx().Step);
+    activities.SetLastCompletedTx(Pipeline.GetLastCompleteTx().TxId);
+    activities.SetLastCompletedStep(Pipeline.GetLastCompleteTx().Step);
+    activities.SetUtmostCompletedTx(Pipeline.GetUtmostCompleteTx().TxId);
+    activities.SetUtmostCompletedStep(Pipeline.GetUtmostCompleteTx().Step);
+    activities.SetDataTxCompleteLag(GetDataTxCompleteLag().MilliSeconds());
+    activities.SetScanTxCompleteLag(GetScanTxCompleteLag().MilliSeconds());
 
-private:
-    TEvDataShard::TEvGetInfoRequest::TPtr Ev;
-};
+    auto& pcfg = *response->Record.MutablePipelineConfig();
+    pcfg.SetOutOfOrderEnabled(Pipeline.GetConfig().OutOfOrder());
+    pcfg.SetActiveTxsLimit(Pipeline.GetConfig().LimitActiveTx);
+    pcfg.SetAllowImmediate(!Pipeline.GetConfig().NoImmediate());
+    pcfg.SetForceOnlineRW(Pipeline.GetConfig().ForceOnlineRW());
+    pcfg.SetDirtyOnline(Pipeline.GetConfig().DirtyOnline());
+    pcfg.SetDirtyImmediate(Pipeline.GetConfig().DirtyImmediate());
+    pcfg.SetDataTxCacheSize(Pipeline.GetConfig().LimitDataTxCache);
 
-class TDataShard::TTxListOperations : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public:
-    TTxListOperations(TDataShard *self,
-                      TEvDataShard::TEvListOperationsRequest::TPtr ev)
-        : TBase(self)
-        , Ev(ev)
-    {}
+    Send(ev->Sender, response);
+}
 
-    bool Execute(NTabletFlatExecutor::TTransactionContext &,
-                 const TActorContext &ctx) override
-    {
-        auto *response = new TEvDataShard::TEvListOperationsResponse;
-        response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
+void TDataShard::Handle(TEvDataShard::TEvListOperationsRequest::TPtr& ev) {
+    auto* response = new TEvDataShard::TEvListOperationsResponse;
+    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
-        for (auto &pr : Self->Pipeline.GetImmediateOps())
-            AddOperation(pr.second, response->Record);
-        for (auto &pr : Self->TransQueue.GetTxsInFly())
-            AddOperation(pr.second, response->Record);
-
-        ctx.Send(Ev->Sender, response);
-        return true;
-    }
-
-    void AddOperation(TOperation::TPtr op,
-                      NKikimrTxDataShard::TEvListOperationsResponse &resp)
-    {
-        auto &rec = *resp.AddOperations();
+    auto addOperation = [&](const TOperation::TPtr& op) {
+        auto& rec = *response->Record.AddOperations();
         rec.SetTxId(op->GetTxId());
         rec.SetStep(op->GetStep());
         rec.SetKind(ToString(op->GetKind()));
@@ -206,136 +139,203 @@ public:
         rec.SetIsCompleted(op->IsCompleted());
         rec.SetExecutionUnit(ToString(op->GetCurrentUnit()));
         rec.SetReceivedAt(op->GetReceivedAt().GetValue());
+    };
+
+    for (auto& pr : Pipeline.GetImmediateOps())
+        addOperation(pr.second);
+    for (auto& pr : TransQueue.GetTxsInFly())
+        addOperation(pr.second);
+
+    Send(ev->Sender, response);
+}
+
+void TDataShard::Handle(TEvDataShard::TEvGetOperationRequest::TPtr& ev) {
+    auto* response = new TEvDataShard::TEvGetOperationResponse;
+
+    auto op = Pipeline.FindOp(ev->Get()->Record.GetTxId());
+    if (!op) {
+        response->Record.MutableStatus()->SetCode(Ydb::StatusIds::NOT_FOUND);
+        Send(ev->Sender, response);
+        return;
     }
 
-    void Complete(const TActorContext &) override {}
+    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
-    TTxType GetTxType() const override { return TXTYPE_MONITORING; }
+    auto& resp = response->Record;
 
-private:
-    TEvDataShard::TEvListOperationsRequest::TPtr Ev;
-};
+    op->Serialize(*resp.MutableBasicInfo());
 
-class TDataShard::TTxGetOperation : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public:
-    TTxGetOperation(TDataShard *self,
-                    TEvDataShard::TEvGetOperationRequest::TPtr ev)
-        : TBase(self)
-        , Ev(ev)
-    {}
-
-    bool Execute(NTabletFlatExecutor::TTransactionContext &,
-                 const TActorContext &ctx) override
-    {
-        auto *response = new TEvDataShard::TEvGetOperationResponse;
-
-        auto op = Self->Pipeline.FindOp(Ev->Get()->Record.GetTxId());
-        if (!op)
-            response->Record.MutableStatus()->SetCode(Ydb::StatusIds::NOT_FOUND);
-        else {
-            response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
-            FillOpInfo(op, response->Record);
-        }
-
-        ctx.Send(Ev->Sender, response);
-        return true;
+    auto& plan = *resp.MutableExecutionPlan();
+    for (auto kind : op->GetExecutionPlan()) {
+        plan.AddUnits(ToString(kind));
     }
+    plan.SetIsFinished(op->IsExecutionPlanFinished());
+    plan.SetCurrentUnit(static_cast<ui32>(op->GetCurrentUnitIndex()));
 
-    void FillOpInfo(TOperation::TPtr op,
-                    NKikimrTxDataShard::TEvGetOperationResponse &resp)
+    auto& protoDeps = *resp.MutableDependencies();
+
+    auto fillOpDependencies = [&](
+        const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>>& deps,
+        ::google::protobuf::RepeatedPtrField<NKikimrTxDataShard::TEvGetOperationResponse_TDependency>& arr)
     {
-        op->Serialize(*resp.MutableBasicInfo());
-
-        auto &plan = *resp.MutableExecutionPlan();
-        for (auto kind : op->GetExecutionPlan())
-            plan.AddUnits(ToString(kind));
-        plan.SetIsFinished(op->IsExecutionPlanFinished());
-        plan.SetCurrentUnit(static_cast<ui32>(op->GetCurrentUnitIndex()));
-
-        auto &deps = *resp.MutableDependencies();
-        FillDependencies(op->GetDependencies(), *deps.MutableDependencies());
-        FillDependencies(op->GetDependents(), *deps.MutableDependents());
-        FillDependencies(op->GetVolatileDependencies(), *deps.MutableDependencies());
-
-        if (op->IsExecuting() && !op->InReadSets().empty()) {
-            auto &inData = *resp.MutableInputData();
-            for (auto &pr : op->InReadSets()) {
-                auto &rs = *inData.AddInputRS();
-                rs.SetFrom(pr.first.first);
-                rs.SetReceived(pr.second.size());
-            }
-            inData.SetRemainedInputRS(op->GetRemainReadSets());
-        }
-
-        auto &profile = *resp.MutableExecutionProfile();
-        for (auto &pr : op->GetExecutionProfile().UnitProfiles) {
-            auto &unit = *profile.AddUnitProfiles();
-            unit.SetUnitKind(ToString(pr.first));
-            if (pr.first == op->GetCurrentUnit()) {
-                auto waitTime = AppData()->TimeProvider->Now() - pr.second.ExecuteTime
-                    - pr.second.CommitTime - pr.second.CompleteTime
-                    - op->GetExecutionProfile().StartUnitAt;
-                unit.SetWaitTime(waitTime.GetValue());
-            } else {
-                unit.SetWaitTime(pr.second.WaitTime.GetValue());
-            }
-            unit.SetExecuteTime(pr.second.ExecuteTime.GetValue());
-            unit.SetCommitTime(pr.second.CommitTime.GetValue());
-            unit.SetCompleteTime(pr.second.CompleteTime.GetValue());
-            unit.SetExecuteCount(pr.second.ExecuteCount);
-        }
-
-        TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        if (tx)
-            tx->FillState(resp);
-    }
-
-    void FillDependencies(const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &deps,
-                          ::google::protobuf::RepeatedPtrField<NKikimrTxDataShard::TEvGetOperationResponse_TDependency> &arr)
-    {
-        for (auto &op : deps) {
-            auto &dep = *arr.Add();
+        for (auto& op : deps) {
+            auto& dep = *arr.Add();
             dep.SetTarget(op->GetTxId());
             dep.AddTypes("Data");
         }
-    }
+    };
 
-    void FillDependencies(const absl::flat_hash_set<ui64> &deps,
-                          ::google::protobuf::RepeatedPtrField<NKikimrTxDataShard::TEvGetOperationResponse_TDependency> &arr)
+    auto fillVolatileDependencies = [&](
+        const absl::flat_hash_set<ui64>& deps,
+        ::google::protobuf::RepeatedPtrField<NKikimrTxDataShard::TEvGetOperationResponse_TDependency>& arr)
     {
         for (ui64 txId : deps) {
-            auto &dep = *arr.Add();
+            auto& dep = *arr.Add();
             dep.SetTarget(txId);
             dep.AddTypes("Data");
         }
+    };
+
+    fillOpDependencies(op->GetDependencies(), *protoDeps.MutableDependencies());
+    fillOpDependencies(op->GetDependents(), *protoDeps.MutableDependents());
+    fillVolatileDependencies(op->GetVolatileDependencies(), *protoDeps.MutableDependencies());
+
+    if (op->IsExecuting() && !op->InReadSets().empty()) {
+        auto& inData = *resp.MutableInputData();
+        for (auto& pr : op->InReadSets()) {
+            auto& rs = *inData.AddInputRS();
+            rs.SetFrom(pr.first.first);
+            rs.SetReceived(pr.second.size());
+        }
+        inData.SetRemainedInputRS(op->GetRemainReadSets());
     }
 
-    void Complete(const TActorContext &) override {}
+    auto& profile = *resp.MutableExecutionProfile();
+    for (auto& pr : op->GetExecutionProfile().UnitProfiles) {
+        auto& unit = *profile.AddUnitProfiles();
+        unit.SetUnitKind(ToString(pr.first));
+        if (pr.first == op->GetCurrentUnit()) {
+            auto waitTime = AppData()->TimeProvider->Now() - pr.second.ExecuteTime
+                - pr.second.CommitTime - pr.second.CompleteTime
+                - op->GetExecutionProfile().StartUnitAt;
+            unit.SetWaitTime(waitTime.GetValue());
+        } else {
+            unit.SetWaitTime(pr.second.WaitTime.GetValue());
+        }
+        unit.SetExecuteTime(pr.second.ExecuteTime.GetValue());
+        unit.SetCommitTime(pr.second.CommitTime.GetValue());
+        unit.SetCompleteTime(pr.second.CompleteTime.GetValue());
+        unit.SetExecuteCount(pr.second.ExecuteCount);
+    }
 
-    TTxType GetTxType() const override { return TXTYPE_MONITORING; }
+    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
+    if (tx) {
+        tx->FillState(resp);
+    }
 
-private:
-    TEvDataShard::TEvGetOperationRequest::TPtr Ev;
-};
-
-ITransaction *TDataShard::CreateTxMonitoring(TDataShard *self, NMon::TEvRemoteHttpInfo::TPtr ev)
-{
-    return new TTxMonitoring(self, ev);
+    Send(ev->Sender, response);
 }
 
-ITransaction *TDataShard::CreateTxGetInfo(TDataShard *self, TEvDataShard::TEvGetInfoRequest::TPtr ev)
-{
-    return new TTxGetInfo(self, ev);
+void TDataShard::Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr& ev) {
+    auto* response = new TEvDataShard::TEvGetDataHistogramResponse;
+    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
+    const auto& rec = ev->Get()->Record;
+
+    if (rec.GetCollectKeySampleMs() > 0) {
+        EnableKeyAccessSampling(ActorContext(),
+            AppData()->TimeProvider->Now() + TDuration::MilliSeconds(rec.GetCollectKeySampleMs()));
+    }
+
+    if (rec.GetActualData()) {
+        if (CurrentKeySampler == DisabledKeySampler) {
+            // datashard stores expired stats
+            Send(ev->Sender, response);
+            return;
+        }
+    }
+
+    for (const auto& pr : TableInfos) {
+        const auto& tinfo = *pr.second;
+        const NTable::TStats& stats = tinfo.Stats.DataStats;
+
+        auto& hist = *response->Record.AddTableHistograms();
+        hist.SetTableName(pr.second->Name);
+        for (ui32 ki : tinfo.KeyColumnIds) {
+            hist.AddKeyNames(tinfo.Columns.FindPtr(ki)->Name);
+        }
+        SerializeHistogram(tinfo, stats.DataSizeHistogram, *hist.MutableSizeHistogram());
+        SerializeHistogram(tinfo, stats.RowCountHistogram, *hist.MutableCountHistogram());
+        SerializeKeySample(tinfo, tinfo.Stats.AccessStats, *hist.MutableKeyAccessSample());
+    }
+
+    Send(ev->Sender, response);
 }
 
-ITransaction *TDataShard::CreateTxListOperations(TDataShard *self, TEvDataShard::TEvListOperationsRequest::TPtr ev)
-{
-    return new TTxListOperations(self, ev);
+void TDataShard::Handle(TEvDataShard::TEvGetRSInfoRequest::TPtr& ev) {
+    auto* response = new TEvDataShard::TEvGetRSInfoResponse;
+    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
+
+    for (auto& pr : OutReadSets.CurrentReadSets) {
+        auto& rs = *response->Record.AddOutReadSets();
+        rs.SetTxId(pr.second.TxId);
+        rs.SetOrigin(pr.second.Origin);
+        rs.SetSource(pr.second.From);
+        rs.SetDestination(pr.second.To);
+        rs.SetSeqNo(pr.first);
+    }
+
+    for (auto& p : OutReadSets.ReadSetAcks) {
+        auto& rec = p->Record;
+        auto& ack = *response->Record.AddOutRSAcks();
+        ack.SetTxId(rec.GetTxId());
+        ack.SetStep(rec.GetStep());
+        ack.SetOrigin(rec.GetTabletConsumer());
+        ack.SetSource(rec.GetTabletSource());
+        ack.SetDestination(rec.GetTabletDest());
+        ack.SetSeqNo(rec.GetSeqno());
+    }
+
+    for (auto& pr : Pipeline.GetDelayedAcks()) {
+        for (auto& ack : pr.second) {
+            auto* ev = ack->CastAsLocal<TEvTxProcessing::TEvReadSetAck>();
+            if (ev) {
+                auto& rec = ev->Record;
+                auto& ack = *response->Record.AddDelayedRSAcks();
+                ack.SetTxId(rec.GetTxId());
+                ack.SetStep(rec.GetStep());
+                ack.SetOrigin(rec.GetTabletConsumer());
+                ack.SetSource(rec.GetTabletSource());
+                ack.SetDestination(rec.GetTabletDest());
+                ack.SetSeqNo(rec.GetSeqno());
+            }
+        }
+    }
+
+    for (auto& e : OutReadSets.Expectations) {
+        ui64 source = e.first;
+        for (auto& pr : e.second) {
+            auto& p = *response->Record.AddExpectations();
+            p.SetSource(source);
+            p.SetTxId(pr.first);
+            p.SetStep(pr.second);
+        }
+    }
+
+    for (auto& pr : PersistentTablets) {
+        auto& p = *response->Record.AddPipes();
+        p.SetDestination(pr.first);
+        p.SetOutReadSets(pr.second.OutReadSets.size());
+        p.SetSubscribed(pr.second.Subscribed);
+    }
+
+    Send(ev->Sender, response);
 }
 
-ITransaction *TDataShard::CreateTxGetOperation(TDataShard *self, TEvDataShard::TEvGetOperationRequest::TPtr ev)
-{
-    return new TTxGetOperation(self, ev);
+void TDataShard::Handle(TEvDataShard::TEvGetSlowOpProfilesRequest::TPtr& ev) {
+    auto* response = new TEvDataShard::TEvGetSlowOpProfilesResponse;
+    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
+    Pipeline.FillStoredExecutionProfiles(response->Record);
+    Send(ev->Sender, response);
 }
 
-}}
+} // namespace NKikimr::NDataShard

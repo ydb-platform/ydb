@@ -1,9 +1,0 @@
-items:
-- name: VM / Baremetal
-  href: manual/deploy-ydb-on-premises.md
-- name: Configuration
-  href: configuration/config.md
-- include:
-  mode: link
-  path: manual/toc_p.yaml
-

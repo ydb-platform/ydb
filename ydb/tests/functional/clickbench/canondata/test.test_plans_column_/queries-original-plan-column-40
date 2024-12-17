@@ -64,17 +64,26 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "TopSort",
+                                                                "Node Type": "TopSort-Aggregate",
                                                                 "Operators": [
+                                                                    {
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "InternalOperatorId": 1
+                                                                            }
+                                                                        ],
+                                                                        "Limit": "SUM(10,100)",
+                                                                        "Name": "TopSort",
+                                                                        "TopSortBy": "argument.Count0"
+                                                                    },
                                                                     {
                                                                         "Inputs": [
                                                                             {
                                                                                 "ExternalPlanNodeId": 2
                                                                             }
                                                                         ],
-                                                                        "Limit": "SUM(10,100)",
-                                                                        "Name": "TopSort",
-                                                                        "TopSortBy": "argument.Count0"
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Final"
                                                                     }
                                                                 ],
                                                                 "PlanNodeId": 3,
@@ -98,7 +107,8 @@
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Filter",
-                                                                                        "Predicate": "IsRefresh == 0 And TraficSourceID == -1 Or TraficSourceID == 6 And RefererHash == 3594120000172545465"
+                                                                                        "Predicate": "IsRefresh == 0 AND TraficSourceID == -1 OR TraficSourceID == 6 AND RefererHash == 3594120000172545465",
+                                                                                        "Pushdown": "True"
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [],

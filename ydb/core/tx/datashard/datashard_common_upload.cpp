@@ -131,11 +131,6 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         ui64 keyBytes = 0;
         for (const auto& kt : tableInfo.KeyColumnTypes) {
             const TCell& c = keyCells.GetCells()[ki];
-            if (kt.GetTypeId() == NScheme::NTypeIds::Uint8 && !c.IsNull() && c.AsValue<ui8>() > 127) {
-                SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT, "Keys with Uint8 column values >127 are currently prohibited");
-                return true;
-            }
-
             keyBytes += c.Size();
             key.emplace_back(TRawTypeValue(c.AsRef(), kt.GetTypeId()));
             ++ki;

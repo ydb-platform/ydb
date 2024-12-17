@@ -23,15 +23,15 @@ TEST(TStaticAnalysisTest, ValidFormats)
 }
 
 // Uncomment this test to see that we don't have false negatives!
-// TEST(TStaticAnalysisTest, InvalidFormats)
-// {
-//     YT_LOG_INFO("Hello", 1);
-//     YT_LOG_INFO("Hello %");
-//     YT_LOG_INFO("Hello %false");
-//     YT_LOG_INFO("Hello ", "World");
-//     YT_LOG_INFO("Hello ", "(World: %v)", 42);
-//     YT_LOG_INFO("Hello %lbov", 42); // There is no 'b' flag.
-// }
+TEST(TStaticAnalysisTest, InvalidFormats)
+{
+    // YT_LOG_INFO("Hello", 1);
+    // YT_LOG_INFO("Hello %");
+    // YT_LOG_INFO("Hello %false");
+    // YT_LOG_INFO("Hello ", "World");
+    // YT_LOG_INFO("Hello ", "(World: %v)", 42);
+    // YT_LOG_INFO("Hello %lbov", 42); // There is no 'b' flag.
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -7,13 +7,16 @@ bool TConfig::DeserializeFromProto(const NKikimrConfig::TGroupedMemoryLimiterCon
     if (config.HasMemoryLimit()) {
         MemoryLimit = config.GetMemoryLimit();
     }
+    if (config.HasHardMemoryLimit()) {
+        HardMemoryLimit = config.GetHardMemoryLimit();
+    }
     Enabled = config.GetEnabled();
     return true;
 }
 
 TString TConfig::DebugString() const {
     TStringBuilder sb;
-    sb << "MemoryLimit=" << MemoryLimit << ";Enabled=" << Enabled << ";";
+    sb << "MemoryLimit=" << MemoryLimit << ";HardMemoryLimit=" << HardMemoryLimit << ";Enabled=" << Enabled << ";";
     return sb;
 }
 

@@ -1,6 +1,6 @@
 #include "kqp_arrow_memory_pool.h"
 
-#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
 
 #include <util/generic/yexception.h>
 

@@ -10,7 +10,7 @@ namespace NKikimr::NColumnShard {
 bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorContext&) {
     TMemoryProfileGuard mpg("TTxBlobsWritingFinished::Execute");
     txc.DB.NoMoreReadsForTx();
-    CommitSnapshot = NOlap::TSnapshot::MaxForPlanStep(Self->GetOutdatedStep());
+    CommitSnapshot = Self->GetCurrentSnapshotForInternalModification();
     NActors::TLogContextGuard logGuard =
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "execute");
     ACFL_DEBUG("event", "start_execute");
@@ -25,11 +25,11 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
         for (auto&& portion : pack.MutablePortions()) {
             if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
                 static TAtomicCounter Counter = 0;
-                portion.GetPortionInfoConstructor()->SetInsertWriteId((TInsertWriteId)Counter.Inc());
+                portion.GetPortionInfoConstructor()->MutablePortionConstructor().SetInsertWriteId((TInsertWriteId)Counter.Inc());
             } else {
-                portion.GetPortionInfoConstructor()->SetInsertWriteId(Self->InsertTable->BuildNextWriteId(txc));
+                portion.GetPortionInfoConstructor()->MutablePortionConstructor().SetInsertWriteId(Self->InsertTable->BuildNextWriteId(txc));
             }
-            pack.AddInsertWriteId(portion.GetPortionInfoConstructor()->GetInsertWriteIdVerified());
+            pack.AddInsertWriteId(portion.GetPortionInfoConstructor()->GetPortionConstructor().GetInsertWriteIdVerified());
             portion.Finalize(Self, txc);
             if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
                 granule.CommitImmediateOnExecute(txc, *CommitSnapshot, portion.GetPortionInfo());
@@ -84,10 +84,12 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
         i.DoSendReply(ctx);
     }
     auto& index = Self->MutableIndexAs<NOlap::TColumnEngineForLogs>();
+    std::set<ui64> pathIds;
     for (auto&& pack : Packs) {
         const auto& writeMeta = pack.GetWriteMeta();
         AFL_VERIFY(!writeMeta.HasLongTxId());
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
+        pathIds.emplace(op->GetPathId());
         auto& granule = index.MutableGranuleVerified(op->GetPathId());
         for (auto&& portion : pack.GetPortions()) {
             if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock || op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
@@ -97,32 +99,57 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
                     Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
                 }
             }
-            if (op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
-                AFL_VERIFY(CommitSnapshot);
-                granule.CommitImmediateOnComplete(portion.GetPortionInfo(), index);
-            } else {
-                granule.InsertPortionOnComplete(portion.GetPortionInfo());
-            }
+            granule.InsertPortionOnComplete(portion.GetPortionInfo(), index);
+        }
+        if (op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
+            AFL_VERIFY(CommitSnapshot);
+            Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
+            Self->OperationsManager->CommitTransactionOnComplete(*Self, op->GetLockId(), *CommitSnapshot);
+            Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
         }
         Self->Counters.GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
         Self->Counters.GetCSCounters().OnSuccessWriteResponse();
     }
-    Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
-    Self->SetupCompaction();
+    Self->SetupCompaction(pathIds);
 }
 
 TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKikimrProto::EReplyStatus writeStatus,
     const std::shared_ptr<NOlap::IBlobsWritingAction>& writingActions, std::vector<TInsertedPortions>&& packs,
-    const std::vector<TFailedWrite>& fails)
+    const std::vector<TNoDataWrite>& noDataWrites)
     : TBase(self, "TTxBlobsWritingFinished")
-    , PutBlobResult(writeStatus)
     , Packs(std::move(packs))
     , WritingActions(writingActions) {
-    Y_UNUSED(PutBlobResult);
-    for (auto&& i : fails) {
+    for (auto&& i : noDataWrites) {
         auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)i.GetWriteMeta().GetWriteId());
         Results.emplace_back(std::move(ev), i.GetWriteMeta().GetSource(), op->GetCookie());
+    }
+}
+
+bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& txc, const TActorContext& ctx) {
+    for (auto&& pack : Packs) {
+        const auto& writeMeta = pack.GetWriteMeta();
+        AFL_VERIFY(!writeMeta.HasLongTxId());
+        auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
+        Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
+        Self->OperationsManager->AbortTransactionOnExecute(*Self, op->GetLockId(), txc);
+
+        auto ev = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), op->GetLockId(),
+            NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, "cannot write blob: " + ::ToString(PutBlobResult));
+        Results.emplace_back(std::move(ev), writeMeta.GetSource(), op->GetCookie());
+    }
+    return true;
+}
+
+void TTxBlobsWritingFailed::DoComplete(const TActorContext& ctx) {
+    for (auto&& i : Results) {
+        i.DoSendReply(ctx);
+        Self->Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::PutBlob);
+    }
+    for (auto&& pack : Packs) {
+        const auto& writeMeta = pack.GetWriteMeta();
+        auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
+        Self->OperationsManager->AbortTransactionOnComplete(*Self, op->GetLockId());
     }
 }
 

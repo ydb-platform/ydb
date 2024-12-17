@@ -9,6 +9,8 @@
 
 #include <yt/yt/core/yson/public.h>
 
+#include <yt/yt/core/misc/bitmap.h>
+
 #include <yt/yt/library/syncmap/map.h>
 
 #include <library/cpp/yt/misc/enum.h>
@@ -123,6 +125,7 @@ private:
     friend class TYsonStructMeta;
 
     friend class TYsonStruct;
+    friend class TYsonStructLiteWithFieldTracking;
 
     IYsonStructMeta* Meta_ = nullptr;
 
@@ -131,6 +134,8 @@ private:
     std::optional<EUnrecognizedStrategy> InstanceUnrecognizedStrategy_;
 
     bool CachedDynamicCastAllowed_ = false;
+
+    virtual TCompactBitmap* GetSetFieldsBitmap() = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -141,6 +146,13 @@ class TYsonStruct
 {
 public:
     void InitializeRefCounted();
+
+    bool IsSet(const TString& key) const;
+
+private:
+    TCompactBitmap SetFields_;
+
+    virtual TCompactBitmap* GetSetFieldsBitmap() override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -162,7 +174,32 @@ protected:
 class TYsonStructLite
     : public virtual TYsonStructFinalClassHolder
     , public TYsonStructBase
-{ };
+{
+private:
+    virtual TCompactBitmap* GetSetFieldsBitmap() override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TYsonStructLiteWithFieldTracking
+    : public TYsonStructLite
+{
+public:
+    TYsonStructLiteWithFieldTracking() = default;
+
+    TYsonStructLiteWithFieldTracking(const TYsonStructLiteWithFieldTracking& other);
+    TYsonStructLiteWithFieldTracking& operator=(const TYsonStructLiteWithFieldTracking& other);
+
+    TYsonStructLiteWithFieldTracking(TYsonStructLiteWithFieldTracking&& other) = default;
+    TYsonStructLiteWithFieldTracking& operator=(TYsonStructLiteWithFieldTracking&& other) = default;
+
+    bool IsSet(const TString& key) const;
+
+private:
+    TCompactBitmap SetFields_;
+
+    virtual TCompactBitmap* GetSetFieldsBitmap() override;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -195,7 +232,7 @@ protected:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T, class S>
-concept CYsonStructFieldFor =
+concept CYsonStructLoadableFieldFor =
     CYsonStructSource<S> &&
     requires (
         T& parameter,
@@ -205,10 +242,6 @@ concept CYsonStructFieldFor =
         const NYPath::TYPath& path,
         std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
     {
-        // NB(arkady-e1ppa): This alias serves no purpose other
-        // than an easy way to grep for every implementation.
-        typename T::TImplementsYsonStructField;
-
         // For YsonStruct.
         parameter.Load(
             source,
@@ -216,6 +249,15 @@ concept CYsonStructFieldFor =
             setDefaults,
             path,
             recursiveUnrecognizedStrategy);
+    };
+
+template <class T, class S>
+concept CYsonStructFieldFor =
+    CYsonStructLoadableFieldFor<T, S> &&
+    requires {
+        // NB(arkady-e1ppa): This alias serves no purpose other
+        // than an easy way to grep for every implementation.
+        typename T::TImplementsYsonStructField;
     };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -313,6 +355,9 @@ public:
         // requires std::derived_from<TStruct, TExternalizedYsonStruct<TExternal, TStruct>>
     TYsonStructParameter<TValue>& ExternalClassParameter(const TString& key, TValue(TExternal::*field));
 
+    template <class TBase, class TValue>
+    TYsonStructParameter<TValue>& ExternalBaseClassParameter(const TString& key, TValue(TBase::*field));
+
     template <class TExternalPreprocessor>
         // requires (CInvocable<TExternalPreprocessor, void(typename TStruct::TExternal*)>)
     void ExternalPreprocessor(TExternalPreprocessor preprocessor);
@@ -348,7 +393,7 @@ void Deserialize(TYsonStructBase& value, NYson::TYsonPullParserCursor* cursor);
 template <CExternallySerializable T>
 void Serialize(const T& value, NYson::IYsonConsumer* consumer);
 template <CExternallySerializable T, CYsonStructSource TSource>
-void Deserialize(T& value, TSource source, bool postprocess = true, bool setDefaults = true);
+void Deserialize(T& value, TSource source, bool postprocess = true, bool setDefaults = true, std::optional<EUnrecognizedStrategy> strategy = {});
 
 template <class T>
 TIntrusivePtr<T> UpdateYsonStruct(

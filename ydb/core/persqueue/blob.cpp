@@ -172,7 +172,7 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
     Y_ABORT_UNLESS(data < end, "size %u SeqNo %" PRIu64 " SourceId %s", size, seqNo, sourceId.c_str());
     TString dt(data, end - data);
 
-    return TClientBlob(sourceId, seqNo, dt, std::move(partData), writeTimestamp, createTimestamp, us, partitionKey, explicitHashKey);
+    return TClientBlob(sourceId, seqNo, std::move(dt), std::move(partData), writeTimestamp, createTimestamp, us, partitionKey, explicitHashKey);
 }
 
 void TBatch::SerializeTo(TString& res) const{
@@ -399,6 +399,10 @@ void TBatch::Pack() {
         Header.SetPayloadSize(PackedData.size());
     }
 
+    for (auto& b : Blobs) {
+        EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
+    }
+
 
     TVector<TClientBlob> tmp;
     Blobs.swap(tmp);
@@ -414,11 +418,14 @@ void TBatch::Unpack() {
     UnpackTo(&Blobs);
     Y_ABORT_UNLESS(InternalPartsPos.empty());
     for (ui32 i = 0; i < Blobs.size(); ++i) {
-        if (!Blobs[i].IsLastPart())
+        auto& b = Blobs[i];
+        if (!b.IsLastPart()) {
             InternalPartsPos.push_back(i);
+        }
+        EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
     }
     Y_ABORT_UNLESS(InternalPartsPos.size() == GetInternalPartsCount());
-    
+
     PackedData.Clear();
 }
 
@@ -459,7 +466,7 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) const {
     ui32 sourceIdCount = 0;
     TVector<TString> sourceIds;
 
-    NScheme::TTypeCodecs ui32Codecs(NScheme::NTypeIds::Uint32), ui64Codecs(NScheme::NTypeIds::Uint64), stringCodecs(NScheme::NTypeIds::String);
+    static const NScheme::TTypeCodecs ui32Codecs(NScheme::NTypeIds::Uint32), ui64Codecs(NScheme::NTypeIds::Uint64), stringCodecs(NScheme::NTypeIds::String);
     //read order
     {
         auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui32Codecs);
@@ -599,7 +606,7 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) const {
         auto it = partData.find(pos[i]);
         if (it != partData.end())
             pd = it->second;
-        (*blobs)[pos[i]] = TClientBlob(sourceIds[currentSID], seqNo[i], dt[i], std::move(pd), wtime[pos[i]], ctime[pos[i]], uncompressedSize[pos[i]],
+        (*blobs)[pos[i]] = TClientBlob(sourceIds[currentSID], seqNo[i], std::move(dt[i]), std::move(pd), wtime[pos[i]], ctime[pos[i]], uncompressedSize[pos[i]],
                                        partitionKey[i], explicitHash[i]);
         if (i + 1 == end[currentSID])
             ++currentSID;
@@ -660,6 +667,7 @@ ui32 THead::GetCount() const
 
     //how much offsets before last batch and how much offsets in last batch
     Y_ABORT_UNLESS(Batches.front().GetOffset() == Offset);
+
     return Batches.back().GetOffset() - Offset + Batches.back().GetCount();
 }
 
@@ -933,16 +941,23 @@ auto TPartitionedBlob::Add(TClientBlob&& blob) -> std::optional<TFormedBlobInfo>
 
 auto TPartitionedBlob::Add(const TKey& oldKey, ui32 size) -> std::optional<TFormedBlobInfo>
 {
+    if (HeadSize + BlobsSize == 0) { //if nothing to compact at all
+        NeedCompactHead = false;
+    }
+
     std::optional<TFormedBlobInfo> res;
     if (NeedCompactHead) {
         NeedCompactHead = false;
-        GlueNewHead = false;
         res = CreateFormedBlob(0, false);
+
+        StartOffset = NewHead.Offset + NewHead.GetCount();
+        NewHead.Clear();
+        NewHead.Offset = StartOffset;
     }
 
     TKey newKey(TKeyPrefix::TypeData,
                 Partition,
-                NewHead.Offset + oldKey.GetOffset(),
+                StartOffset,
                 oldKey.GetPartNo(),
                 oldKey.GetCount(),
                 oldKey.GetInternalPartsCount(),
@@ -978,4 +993,3 @@ bool TPartitionedBlob::IsNextPart(const TString& sourceId, const ui64 seqNo, con
 
 }// NPQ
 }// NKikimr
-

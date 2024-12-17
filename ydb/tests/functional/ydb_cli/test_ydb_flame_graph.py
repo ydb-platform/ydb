@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from ydb.tests.library.common import yatest_common
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.oss.canonical import set_canondata_root
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -9,12 +8,14 @@ import os
 import logging
 import pathlib
 
+import yatest
+
 logger = logging.getLogger(__name__)
 
 
 def ydb_bin():
     if os.getenv("YDB_CLI_BINARY"):
-        return yatest_common.binary_path(os.getenv("YDB_CLI_BINARY"))
+        return yatest.common.binary_path(os.getenv("YDB_CLI_BINARY"))
     raise RuntimeError("YDB_CLI_BINARY enviroment variable is not specified")
 
 
@@ -50,7 +51,7 @@ class BaseTestFlameGraphService(object):
     @classmethod
     def execute_ydb_cli_command(cls, args, stdin=None):
         try:
-            execution = yatest_common.execute([ydb_bin()] + args, stdin=stdin)
+            execution = yatest.common.execute([ydb_bin()] + args, stdin=stdin)
             result = execution.std_out.decode('utf-8') + '\n' + execution.std_err.decode('utf-8')
         except Exception as exc:
             result = str(exc)
@@ -62,7 +63,7 @@ class BaseTestFlameGraphService(object):
         output_file_name = "result.output"
         with open(output_file_name, "w") as f:
             f.write(output_result.decode('utf-8'))
-        return yatest_common.canonical_file(output_file_name, local=True, universal_lines=True)
+        return yatest.common.canonical_file(output_file_name, local=True, universal_lines=True)
 
 
 class BaseTestFlameGraphServiceWithDatabase(BaseTestFlameGraphService):
@@ -70,7 +71,7 @@ class BaseTestFlameGraphServiceWithDatabase(BaseTestFlameGraphService):
     def setup_class(cls):
         set_canondata_root('ydb/tests/functional/ydb_cli/canondata')
 
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
         cls.root_dir = "/Root"
         driver_config = ydb.DriverConfig(

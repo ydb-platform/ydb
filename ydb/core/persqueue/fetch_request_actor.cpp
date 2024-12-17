@@ -93,6 +93,9 @@ private:
     TActorId RequesterId;
     ui64 PendingQuotaAmount;
 
+    std::unordered_map<TString, TString> PrivateTopicPathToCdcPath;
+    std::unordered_map<TString, TString> CdcPathToPrivateTopicPath;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PQ_FETCH_REQUEST;
@@ -176,16 +179,24 @@ public:
         schemeCacheRequest->DatabaseName = Settings.Database;
 
         THashSet<TString> topicsRequested;
-        for (const auto& part : Settings.Partitions) {
-            auto ins = topicsRequested.insert(part.Topic).second;
-            if (!ins)
-                continue;
-            auto split = NKikimr::SplitPath(part.Topic);
+
+        if (PrivateTopicPathToCdcPath.empty()) {
+            for (const auto& part : Settings.Partitions) {
+                topicsRequested.insert(part.Topic);
+            }
+        } else {
+            for (const auto& [key, value] : PrivateTopicPathToCdcPath) {
+                topicsRequested.insert(key);
+            }
+        }
+
+        for (const auto& topicName : topicsRequested) {
+            auto split = NKikimr::SplitPath(topicName);
             TSchemeCacheNavigate::TEntry entry;
             entry.Path.insert(entry.Path.end(), split.begin(), split.end());
 
             entry.SyncVersion = true;
-            entry.ShowPrivatePath = false;
+            entry.ShowPrivatePath = true;
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
 
             schemeCacheRequest->ResultSet.emplace_back(std::move(entry));
@@ -197,6 +208,7 @@ public:
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "Handle SchemeCache response");
         auto& result = ev->Get()->Request;
+        bool anyCdcTopicInRequest = false;
         for (const auto& entry : result->ResultSet) {
             auto path = CanonizePath(NKikimr::JoinPath(entry.Path));
             switch (entry.Status) {
@@ -218,6 +230,16 @@ public:
                                 TStringBuilder() << "Got error: " << ToString(entry.Status) << " trying to find topic: " << path
                             ), ctx
                     );
+            }
+            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
+                anyCdcTopicInRequest = true;
+                Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
+                auto privateTopicPath = CanonizePath(JoinPath(ChildPath(NKikimr::SplitPath(path), entry.ListNodeEntry->Children.at(0).Name)));
+                PrivateTopicPathToCdcPath[privateTopicPath] = path;
+                CdcPathToPrivateTopicPath[path] = privateTopicPath;
+                TopicInfo[privateTopicPath] = TopicInfo[path];
+                TopicInfo.erase(path);
+                continue;
             }
             if (entry.Kind != TSchemeCacheNavigate::EKind::KindTopic) {
                 return SendReplyAndDie(
@@ -256,6 +278,12 @@ public:
             topicInfo.BalancerTabletId = description.GetBalancerTabletID();
             topicInfo.PQInfo = entry.PQGroupInfo;
         }
+
+        if (anyCdcTopicInRequest) {
+            SendSchemeCacheRequest(ctx);
+            return;
+        }
+
         for (auto& p: TopicInfo) {
             ProcessMetadata(p.first, p.second, ctx);
         }
@@ -393,8 +421,15 @@ public:
             return SendReplyAndDie(std::move(Response), ctx);
         }
         Y_ABORT_UNLESS(FetchRequestReadsDone < Settings.Partitions.size());
-        const auto& req = Settings.Partitions[FetchRequestReadsDone];
-        const auto& topic = req.Topic;
+        auto& req = Settings.Partitions[FetchRequestReadsDone];
+
+        auto& topic = req.Topic;
+
+        auto cdcToPrivateIt = CdcPathToPrivateTopicPath.find(req.Topic);
+        if (cdcToPrivateIt != CdcPathToPrivateTopicPath.end()) {
+            topic = cdcToPrivateIt->second;
+        }
+
         const auto& offset = req.Offset;
         const auto& part = req.Partition;
         const auto& maxBytes = req.MaxBytes;
@@ -462,7 +497,13 @@ public:
         const auto& topic = req.Topic;
         const auto& part = req.Partition;
 
-        res->SetTopic(topic);
+        auto privateTopicToCdcIt = PrivateTopicPathToCdcPath.find(topic);
+        if (privateTopicToCdcIt == PrivateTopicPathToCdcPath.end()) {
+            res->SetTopic(topic);
+        } else {
+            res->SetTopic(PrivateTopicPathToCdcPath[topic]);
+        }
+
         res->SetPartition(part);
         auto read = res->MutableReadResult();
         if (record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult())

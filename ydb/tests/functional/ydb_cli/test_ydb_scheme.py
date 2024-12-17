@@ -2,7 +2,8 @@ import json
 import os
 import pytest
 
-from ydb.tests.library.common import yatest_common
+import yatest
+
 from ydb.tests.oss.canonical import set_canondata_root
 
 CLUSTER_CONFIG = dict(extra_feature_flags=["enable_views"], extra_grpc_services=["view"])
@@ -10,7 +11,7 @@ CLUSTER_CONFIG = dict(extra_feature_flags=["enable_views"], extra_grpc_services=
 
 def bin_from_env(var):
     if os.getenv(var):
-        return yatest_common.binary_path(os.getenv(var))
+        return yatest.common.binary_path(os.getenv(var))
     raise RuntimeError(f"{var} environment variable is not specified")
 
 
@@ -22,11 +23,11 @@ def canonical_result(output_result, tmp_path):
     output_path = tmp_path / "result.output"
     with output_path.open("w") as f:
         f.write(output_result)
-    return yatest_common.canonical_file(output_path, local=True, universal_lines=True)
+    return yatest.common.canonical_file(output_path, local=True, universal_lines=True)
 
 
 def execute_ydb_cli_command(node, database, args, stdin=None):
-    execution = yatest_common.execute(
+    execution = yatest.common.execute(
         [ydb_bin(), "--endpoint", f"grpc://{node.host}:{node.grpc_port}", "--database", database] + args, stdin=stdin
     )
     return execution.std_out.decode("utf-8")

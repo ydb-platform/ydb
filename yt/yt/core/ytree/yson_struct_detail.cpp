@@ -29,6 +29,10 @@ bool ShouldThrow(EUnrecognizedStrategy strategy)
 
 void TYsonStructMeta::SetDefaultsOfInitializedStruct(TYsonStructBase* target) const
 {
+    if (auto* bitmap = target->GetSetFieldsBitmap()) {
+        bitmap->Initialize(ssize(Parameters_));
+    }
+
     for (const auto& [_, parameter] : SortedParameters_) {
         parameter->SetDefaultsInitialized(target);
     }

@@ -451,6 +451,12 @@ message TMoveIndex {
     optional TRemapIndexPathId ReMapIndex = 3;
 }
 
+
+message TCreateIncrementalBackupSrc {
+    optional TSendSnapshot SendSnapshot = 1;
+    optional TCreateCdcStreamNotice CreateCdcStreamNotice = 2;
+}
+
 message TFlatSchemeTransaction {
     optional NKikimrSchemeOp.TTableDescription CreateTable = 1;
     optional NKikimrSchemeOp.TTableDescription DropTable = 2;
@@ -482,6 +488,7 @@ message TFlatSchemeTransaction {
     optional TMoveIndex MoveIndex = 21;
 
     optional NKikimrSchemeOp.TRestoreIncrementalBackup CreateIncrementalRestoreSrc = 22;
+    optional TCreateIncrementalBackupSrc CreateIncrementalBackupSrc = 23;
 }
 
 message TDistributedEraseTransaction {
@@ -811,6 +818,7 @@ message TEvPeriodicTableStats {
     optional bool IsDstSplit = 13;
 
     repeated TEvPeriodicTableStats Tables = 14;
+    optional uint32 FollowerId = 15;
 }
 
 message TObjectStorageListingFilter {
@@ -846,7 +854,7 @@ message TEvObjectStorageListingResponse {
     optional uint32 Status = 2;
     optional string ErrorDescription = 3;
     repeated string CommonPrefixesRows = 4;
-    repeated bytes ContentsRows = 5;        // TSerializedCellVec
+    repeated bytes ContentsRows = 5; // TSerializedCellVec
     optional bool MoreRows = 6;
 }
 
@@ -1197,10 +1205,24 @@ message TEvGetRSInfoResponse {
         optional uint64 SeqNo = 6;
     }
 
+    message TExpectation {
+        optional uint64 Source = 1;
+        optional uint64 TxId = 2;
+        optional uint64 Step = 3;
+    }
+
+    message TPipe {
+        optional uint64 Destination = 1;
+        optional uint64 OutReadSets = 2;
+        optional bool Subscribed = 3;
+    }
+
     optional TStatus Status = 1;
     repeated TOutRSInfo OutReadSets = 2;
     repeated TRSAckInfo OutRSAcks = 3;
     repeated TRSAckInfo DelayedRSAcks = 4;
+    repeated TExpectation Expectations = 5;
+    repeated TPipe Pipes = 6;
 }
 
 message TEvGetDataHistogramRequest {
@@ -1478,8 +1500,8 @@ message TEvSampleKResponse {
     optional NKikimrIndexBuilder.EBuildStatus Status = 4;
     repeated Ydb.Issue.IssueMessage Issues = 5;
 
-    optional uint64 RowsDelta = 6;
-    optional uint64 BytesDelta = 7;
+    optional uint64 ReadRows = 6;
+    optional uint64 ReadBytes = 7;
 
     optional uint64 RequestSeqNoGeneration = 8;
     optional uint64 RequestSeqNoRound = 9;
@@ -1546,12 +1568,14 @@ message TEvLocalKMeansResponse {
     optional NKikimrIndexBuilder.EBuildStatus Status = 6;
     repeated Ydb.Issue.IssueMessage Issues = 7;
 
-    // TODO(mbkkt) implement slow-path (reliable-path)
-    // optional uint64 RowsDelta = 8;
-    // optional uint64 BytesDelta = 9;
+    optional uint64 UploadRows = 8;
+    optional uint64 UploadBytes = 9;
+    optional uint64 ReadRows = 10;
+    optional uint64 ReadBytes = 11;
 
-    // optional TEvLocalKMeansRequest.EState State = 10;
-    // optional uint32 DoneRounds = 11;
+    // TODO(mbkkt) implement slow-path (reliable-path)
+    // optional TEvLocalKMeansRequest.EState State
+    // optional uint32 DoneRounds
 }
 
 message TEvReshuffleKMeansRequest {
@@ -1595,9 +1619,12 @@ message TEvReshuffleKMeansResponse {
     optional NKikimrIndexBuilder.EBuildStatus Status = 6;
     repeated Ydb.Issue.IssueMessage Issues = 7;
 
+    optional uint64 UploadRows = 8;
+    optional uint64 UploadBytes = 9;
+    optional uint64 ReadRows = 10;
+    optional uint64 ReadBytes = 11;
+
     // TODO(mbkkt) implement slow-path (reliable-path)
-    // optional uint64 RowsDelta = 8;
-    // optional uint64 BytesDelta = 9;
     // optional last written primary key
 }
 
@@ -1673,6 +1700,8 @@ message TEvKqpScan {
     optional TComputeShardingPolicy ComputeShardingPolicy = 23;
     optional uint64 LockTxId = 24;
     optional uint32 LockNodeId = 25;
+    optional string CSScanPolicy = 26;
+    optional NKikimrKqp.TEvKqpScanCursor ScanCursor = 27;
 }
 
 message TEvCompactTable {

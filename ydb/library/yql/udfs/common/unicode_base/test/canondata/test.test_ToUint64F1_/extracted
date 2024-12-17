@@ -1,8 +1,0 @@
-<tmp_path>/program.sql:<main>: Fatal: Execution
-
-    <tmp_path>/program.sql:<main>:2:1: Fatal: Execution of node: Result
-    	SELECT
-	^
-        <tmp_path>/program.sql:<main>:2:1: Fatal: Input string contains junk after the number
-        	SELECT
-	^

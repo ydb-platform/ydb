@@ -464,7 +464,7 @@ BELONGS ya.make
         Match type      : TAG
         Links           : http://docs.python.org/license.html, http://spdx.org/licenses/Python-2.0, https://spdx.org/licenses/Python-2.0
     Files with this license:
-        Python/deepfreeze/deepfreeze.c [127626:127626]
+        Python/deepfreeze/deepfreeze.c [127606:127606]
 
 KEEP     LicenseRef-scancode-warranty-disclaimer 50a3e16ca7c1aaf79e69114d558b25a0
 BELONGS Lib/ya.make

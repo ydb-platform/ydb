@@ -16,6 +16,8 @@
 #include <yt/yt/core/ytree/fluent.h>
 #include <yt/yt/core/ytree/yson_struct.h>
 
+#include <yt/yt/core/actions/new_with_offloaded_dtor.h>
+
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/chunk_meta.pb.h>
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/wire_protocol.pb.h>
 
@@ -148,33 +150,33 @@ void FromProto(TLockMask* lockMask, const NTabletClient::NProto::TLockMask& prot
 
 TColumnSchema::TColumnSchema()
     : TColumnSchema(
-        TString(),
+        std::string(),
         NullLogicalType(),
         std::nullopt)
 { }
 
 TColumnSchema::TColumnSchema(
-    TString name,
+    const std::string& name,
     EValueType type,
     std::optional<ESortOrder> sortOrder)
     : TColumnSchema(
-        std::move(name),
+        name,
         MakeLogicalType(GetLogicalType(type), /*required*/ false),
         sortOrder)
 { }
 
 TColumnSchema::TColumnSchema(
-    TString name,
+    const std::string& name,
     ESimpleLogicalValueType type,
     std::optional<ESortOrder> sortOrder)
     : TColumnSchema(
-        std::move(name),
+        name,
         MakeLogicalType(type, /*required*/ false),
         sortOrder)
 { }
 
 TColumnSchema::TColumnSchema(
-    TString name,
+    const std::string& name,
     TLogicalTypePtr type,
     std::optional<ESortOrder> sortOrder)
     : StableName_(name)
@@ -184,13 +186,13 @@ TColumnSchema::TColumnSchema(
     SetLogicalType(std::move(type));
 }
 
-TColumnSchema& TColumnSchema::SetStableName(TColumnStableName value)
+TColumnSchema& TColumnSchema::SetStableName(const TColumnStableName& value)
 {
-    StableName_ = std::move(value);
+    StableName_ = value;
     return *this;
 }
 
-TColumnSchema& TColumnSchema::SetName(TString value)
+TColumnSchema& TColumnSchema::SetName(const std::string& value)
 {
     Name_ = value;
     return *this;
@@ -202,21 +204,21 @@ TColumnSchema& TColumnSchema::SetSortOrder(std::optional<ESortOrder> value)
     return *this;
 }
 
-TColumnSchema& TColumnSchema::SetLock(std::optional<TString> value)
+TColumnSchema& TColumnSchema::SetLock(const std::optional<std::string>& value)
 {
-    Lock_ = std::move(value);
+    Lock_ = value;
     return *this;
 }
 
-TColumnSchema& TColumnSchema::SetGroup(std::optional<TString> value)
+TColumnSchema& TColumnSchema::SetGroup(const std::optional<std::string>& value)
 {
-    Group_ = std::move(value);
+    Group_ = value;
     return *this;
 }
 
-TColumnSchema& TColumnSchema::SetExpression(std::optional<TString> value)
+TColumnSchema& TColumnSchema::SetExpression(const std::optional<TString>& value)
 {
-    Expression_ = std::move(value);
+    Expression_ = value;
     return *this;
 }
 
@@ -226,9 +228,9 @@ TColumnSchema& TColumnSchema::SetMaterialized(std::optional<bool> value)
     return *this;
 }
 
-TColumnSchema& TColumnSchema::SetAggregate(std::optional<TString> value)
+TColumnSchema& TColumnSchema::SetAggregate(const std::optional<std::string>& value)
 {
-    Aggregate_ = std::move(value);
+    Aggregate_ = value;
     return *this;
 }
 
@@ -280,6 +282,26 @@ i64 TColumnSchema::GetMemoryUsage() const
         (Group_ ? Group_->size() : 0);
 }
 
+i64 TColumnSchema::GetMemoryUsage(i64 limit) const
+{
+    YT_ASSERT(limit > 0);
+
+    auto usage = static_cast<i64>(
+        sizeof(TColumnSchema) +
+        StableName_.Underlying().size() +
+        Name_.size() +
+        (Lock_ ? Lock_->size() : 0) +
+        (Expression_ ? Expression_->size() : 0) +
+        (Aggregate_ ? Aggregate_->size() : 0) +
+        (Group_ ? Group_->size() : 0));
+
+    if (usage >= limit) {
+        return usage;
+    }
+
+    return usage + LogicalType_->GetMemoryUsage(limit - usage);
+}
+
 bool TColumnSchema::IsOfV1Type() const
 {
     return IsOfV1Type_;
@@ -300,7 +322,7 @@ bool TColumnSchema::IsRenamed() const
     return Name() != StableName().Underlying();
 }
 
-TString TColumnSchema::GetDiagnosticNameString() const
+std::string TColumnSchema::GetDiagnosticNameString() const
 {
     if (IsRenamed()) {
         return Format("%Qv (stable name %Qv)", Name(), StableName().Underlying());
@@ -355,7 +377,7 @@ void FormatValue(TStringBuilderBase* builder, const TColumnSchema& schema, TStri
     }
 
     if (const auto& materialized = schema.Materialized()) {
-        builder->AppendFormat("; materialized=%Qv", *materialized);
+        builder->AppendFormat("; materialized=%v", *materialized);
     }
 
     if (const auto& aggregate = schema.Aggregate()) {
@@ -389,15 +411,15 @@ void FormatValue(TStringBuilderBase* builder, const TDeletedColumn& schema, TStr
 
 void ToProto(NProto::TColumnSchema* protoSchema, const TColumnSchema& schema)
 {
-    protoSchema->set_name(schema.Name());
+    protoSchema->set_name(ToProto(schema.Name()));
     if (schema.IsRenamed()) {
-        protoSchema->set_stable_name(schema.StableName().Underlying());
+        protoSchema->set_stable_name(ToProto(schema.StableName()));
     }
 
-    protoSchema->set_type(static_cast<int>(GetPhysicalType(schema.CastToV1Type())));
+    protoSchema->set_type(ToProto(GetPhysicalType(schema.CastToV1Type())));
 
     if (schema.IsOfV1Type()) {
-        protoSchema->set_simple_logical_type(static_cast<int>(schema.CastToV1Type()));
+        protoSchema->set_simple_logical_type(ToProto(schema.CastToV1Type()));
     } else {
         protoSchema->clear_simple_logical_type();
     }
@@ -408,7 +430,7 @@ void ToProto(NProto::TColumnSchema* protoSchema, const TColumnSchema& schema)
     }
     ToProto(protoSchema->mutable_logical_type(), schema.LogicalType());
     if (schema.Lock()) {
-        protoSchema->set_lock(*schema.Lock());
+        protoSchema->set_lock(ToProto(*schema.Lock()));
     } else {
         protoSchema->clear_lock();
     }
@@ -423,17 +445,17 @@ void ToProto(NProto::TColumnSchema* protoSchema, const TColumnSchema& schema)
         protoSchema->clear_materialized();
     }
     if (schema.Aggregate()) {
-        protoSchema->set_aggregate(*schema.Aggregate());
+        protoSchema->set_aggregate(ToProto(*schema.Aggregate()));
     } else {
         protoSchema->clear_aggregate();
     }
     if (schema.SortOrder()) {
-        protoSchema->set_sort_order(static_cast<int>(*schema.SortOrder()));
+        protoSchema->set_sort_order(ToProto(*schema.SortOrder()));
     } else {
         protoSchema->clear_sort_order();
     }
     if (schema.Group()) {
-        protoSchema->set_group(*schema.Group());
+        protoSchema->set_group(ToProto(*schema.Group()));
     } else {
         protoSchema->clear_group();
     }
@@ -446,7 +468,7 @@ void ToProto(NProto::TColumnSchema* protoSchema, const TColumnSchema& schema)
 
 void ToProto(NProto::TDeletedColumn* protoSchema, const TDeletedColumn& schema)
 {
-    protoSchema->set_stable_name(schema.StableName().Underlying());
+    protoSchema->set_stable_name(ToProto(schema.StableName()));
 }
 
 void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema)
@@ -463,10 +485,10 @@ void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema)
     } else if (protoSchema.has_simple_logical_type()) {
         schema->SetLogicalType(
             MakeLogicalType(
-                CheckedEnumCast<ESimpleLogicalValueType>(protoSchema.simple_logical_type()),
+                FromProto<ESimpleLogicalValueType>(protoSchema.simple_logical_type()),
                 protoSchema.required()));
     } else {
-        auto physicalType = CheckedEnumCast<EValueType>(protoSchema.type());
+        auto physicalType = FromProto<EValueType>(protoSchema.type());
         schema->SetLogicalType(MakeLogicalType(GetLogicalType(physicalType), protoSchema.required()));
     }
 
@@ -474,7 +496,7 @@ void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema)
     schema->SetExpression(YT_PROTO_OPTIONAL(protoSchema, expression));
     schema->SetMaterialized(YT_PROTO_OPTIONAL(protoSchema, materialized));
     schema->SetAggregate(YT_PROTO_OPTIONAL(protoSchema, aggregate));
-    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, CheckedEnumCast<ESortOrder>));
+    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, FromProto<ESortOrder>));
     schema->SetGroup(YT_PROTO_OPTIONAL(protoSchema, group));
     schema->SetMaxInlineHunkSize(YT_PROTO_OPTIONAL(protoSchema, max_inline_hunk_size));
 }
@@ -500,7 +522,7 @@ bool TTableSchema::TNameMapping::IsDeleted(const TColumnStableName& stableName) 
     return Schema_.FindDeletedColumn(stableName) != nullptr;
 }
 
-TString TTableSchema::TNameMapping::StableNameToName(const TColumnStableName& stableName) const
+std::string TTableSchema::TNameMapping::StableNameToName(const TColumnStableName& stableName) const
 {
     auto* column = Schema_.FindColumnByStableName(stableName);
     if (!column) {
@@ -523,7 +545,7 @@ TColumnStableName TTableSchema::TNameMapping::NameToStableName(TStringBuf name) 
                 THROW_ERROR_EXCEPTION("No column with name %Qv in strict schema", name);
             }
         }
-        return TColumnStableName(TString(name));
+        return TColumnStableName(std::string(name));
     }
     return column->StableName();
 }
@@ -705,7 +727,7 @@ TTableSchemaPtr TTableSchema::Filter(const TColumnFilter& columnFilter, bool dis
         DeletedColumns());
 }
 
-TTableSchemaPtr TTableSchema::Filter(const THashSet<TString>& columnNames, bool discardSortOrder) const
+TTableSchemaPtr TTableSchema::Filter(const THashSet<std::string>& columnNames, bool discardSortOrder) const
 {
     TColumnFilter::TIndexes indexes;
     for (const auto& column : Columns()) {
@@ -716,13 +738,13 @@ TTableSchemaPtr TTableSchema::Filter(const THashSet<TString>& columnNames, bool 
     return Filter(TColumnFilter(std::move(indexes)), discardSortOrder);
 }
 
-TTableSchemaPtr TTableSchema::Filter(const std::optional<std::vector<TString>>& columnNames, bool discardSortOrder) const
+TTableSchemaPtr TTableSchema::Filter(const std::optional<std::vector<std::string>>& columnNames, bool discardSortOrder) const
 {
     if (!columnNames) {
         return Filter(TColumnFilter(), discardSortOrder);
     }
 
-    return Filter(THashSet<TString>(columnNames->begin(), columnNames->end()), discardSortOrder);
+    return Filter(THashSet<std::string>(columnNames->begin(), columnNames->end()), discardSortOrder);
 }
 
 bool TTableSchema::HasMaterializedComputedColumns() const
@@ -835,12 +857,12 @@ int TTableSchema::GetColumnCount() const
     return ssize(Columns());
 }
 
-std::vector<TString> TTableSchema::GetColumnNames() const
+std::vector<std::string> TTableSchema::GetColumnNames() const
 {
     if (!ColumnInfo_) {
-        return std::vector<TString>();
+        return std::vector<std::string>();
     }
-    std::vector<TString> result;
+    std::vector<std::string> result;
     const auto& info = *ColumnInfo_;
     result.reserve(info.Columns.size());
     for (const auto& column : info.Columns) {
@@ -870,8 +892,8 @@ const THunkColumnIds& TTableSchema::GetHunkColumnIds() const
 
 std::vector<TColumnStableName> MapNamesToStableNames(
     const TTableSchema& schema,
-    std::vector<TString> names,
-    const std::optional<TStringBuf>& missingColumnReplacement)
+    const std::vector<std::string>& names,
+    std::optional<TStringBuf> missingColumnReplacement)
 {
     std::vector<TColumnStableName> stableNames;
     stableNames.reserve(names.size());
@@ -882,7 +904,7 @@ std::vector<TColumnStableName> MapNamesToStableNames(
         } else if (!schema.GetStrict()) {
             stableNames.push_back(TColumnStableName(name));
         } else if (missingColumnReplacement) {
-            stableNames.push_back(TColumnStableName(TString(*missingColumnReplacement)));
+            stableNames.push_back(TColumnStableName(std::string(*missingColumnReplacement)));
         } else {
             THROW_ERROR_EXCEPTION("Column %Qv is missing in strict schema",
                 name);
@@ -914,7 +936,7 @@ TSortColumns TTableSchema::GetSortColumns(const std::optional<TNameMapping>& nam
         if (column.SortOrder()) {
             const auto& name = actualNameMapping.StableNameToName(column.StableName());
             sortColumns.push_back(TColumnSortSchema{
-                .Name = TString(name),
+                .Name = std::string(name),
                 .SortOrder = *column.SortOrder(),
             });
         }
@@ -1430,9 +1452,24 @@ void TTableSchema::Load(TStreamLoadContext& context)
 
 i64 TTableSchema::GetMemoryUsage() const
 {
-    i64 usage = sizeof(TTableSchema);
+    auto usage = static_cast<i64>(sizeof(TTableSchema));
     for (const auto& column : Columns()) {
         usage += column.GetMemoryUsage();
+    }
+    return usage;
+}
+
+i64 TTableSchema::GetMemoryUsage(i64 limit) const
+{
+    YT_ASSERT(limit > 0);
+
+    auto usage = static_cast<i64>(sizeof(TTableSchema));
+    for (const auto& column : Columns()) {
+        if (usage >= limit) {
+            return usage;
+        }
+
+        usage += column.GetMemoryUsage(limit - usage);
     }
     return usage;
 }
@@ -1483,14 +1520,14 @@ void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TSt
     }
 }
 
-TString SerializeToWireProto(const TTableSchemaPtr& schema)
+std::string SerializeToWireProto(const TTableSchemaPtr& schema)
 {
     NTableClient::NProto::TTableSchemaExt protoSchema;
     ToProto(&protoSchema, schema);
     return protoSchema.SerializeAsString();
 }
 
-void DeserializeFromWireProto(TTableSchemaPtr* schema, const TString& serializedProto)
+void DeserializeFromWireProto(TTableSchemaPtr* schema, const std::string& serializedProto)
 {
     NTableClient::NProto::TTableSchemaExt protoSchema;
     if (!protoSchema.ParseFromString(serializedProto)) {
@@ -1505,7 +1542,7 @@ void ToProto(NProto::TTableSchemaExt* protoSchema, const TTableSchema& schema)
     ToProto(protoSchema->mutable_deleted_columns(), schema.DeletedColumns());
     protoSchema->set_strict(schema.GetStrict());
     protoSchema->set_unique_keys(schema.GetUniqueKeys());
-    protoSchema->set_schema_modification(static_cast<int>(schema.GetSchemaModification()));
+    protoSchema->set_schema_modification(ToProto(schema.GetSchemaModification()));
 }
 
 void FromProto(TTableSchema* schema, const NProto::TTableSchemaExt& protoSchema)
@@ -1514,7 +1551,7 @@ void FromProto(TTableSchema* schema, const NProto::TTableSchemaExt& protoSchema)
         FromProto<std::vector<TColumnSchema>>(protoSchema.columns()),
         protoSchema.strict(),
         protoSchema.unique_keys(),
-        CheckedEnumCast<ETableSchemaModification>(protoSchema.schema_modification()),
+        FromProto<ETableSchemaModification>(protoSchema.schema_modification()),
         FromProto<std::vector<TDeletedColumn>>(protoSchema.deleted_columns()));
 }
 
@@ -1574,6 +1611,35 @@ void PrintTo(const TTableSchema& tableSchema, std::ostream* os)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TTableSchemaTruncatedFormatter::TTableSchemaTruncatedFormatter(
+    const TTableSchemaPtr& schema,
+    i64 memoryLimit)
+    : Schema_(schema.Get())
+    , Limit_(memoryLimit)
+{
+    YT_ASSERT(Limit_ >= 0);
+}
+
+void TTableSchemaTruncatedFormatter::operator()(TStringBuilderBase* builder) const
+{
+    if (!Schema_) {
+        builder->AppendString(ToString(nullptr));
+    } else if (Limit_ > 0 && Schema_->GetMemoryUsage(Limit_) <= Limit_) {
+        builder->AppendFormat("%v", *Schema_);
+    } else {
+        builder->AppendString("<schema memory usage is over the logging threshold>");
+    }
+}
+
+TFormatterWrapper<TTableSchemaTruncatedFormatter> MakeTableSchemaTruncatedFormatter(
+    const TTableSchemaPtr& schema,
+    i64 memoryLimit)
+{
+    return {TTableSchemaTruncatedFormatter(schema, memoryLimit)};
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 bool operator==(const TColumnSchema& lhs, const TColumnSchema& rhs)
 {
     return
@@ -1626,7 +1692,7 @@ bool IsEqualIgnoringRequiredness(const TTableSchema& lhs, const TTableSchema& rh
 // Parses description of the following form nested_key.name or nested_value.name or nested_value.name.sum
 std::optional<TNestedColumn> TryParseNestedAggregate(TStringBuf description)
 {
-    if (!description.StartsWith("nested")) {
+    if (!description.starts_with("nested")) {
         return std::nullopt;
     }
 
@@ -1658,7 +1724,7 @@ std::optional<TNestedColumn> TryParseNestedAggregate(TStringBuf description)
     };
 
     auto parseToken = [&] (TStringBuf token) {
-        if (TStringBuf(ptr, ptrEnd).StartsWith(token)) {
+        if (TStringBuf(ptr, ptrEnd).starts_with(token)) {
             ptr += token.size();
             return true;
         }
@@ -1749,7 +1815,7 @@ void ValidateKeyColumns(const TKeyColumns& keyColumns)
 {
     ValidateKeyColumnCount(keyColumns.size());
 
-    THashSet<TString> names;
+    THashSet<std::string> names;
     for (const auto& name : keyColumns) {
         if (!names.insert(name).second) {
             THROW_ERROR_EXCEPTION("Duplicate key column name %Qv",
@@ -1776,12 +1842,12 @@ void ValidateSystemColumnSchema(
     bool allowUnversionedUpdateColumns,
     bool allowTimestampColumns)
 {
-    static const auto allowedSortedTablesSystemColumns = THashMap<TString, ESimpleLogicalValueType>{
+    static const auto allowedSortedTablesSystemColumns = THashMap<std::string, ESimpleLogicalValueType>{
         {EmptyValueColumnName, ESimpleLogicalValueType::Int64},
         {TtlColumnName, ESimpleLogicalValueType::Uint64},
     };
 
-    static const auto allowedOrderedTablesSystemColumns = THashMap<TString, ESimpleLogicalValueType>{
+    static const auto allowedOrderedTablesSystemColumns = THashMap<std::string, ESimpleLogicalValueType>{
         {TimestampColumnName, ESimpleLogicalValueType::Uint64},
         {CumulativeDataWeightColumnName, ESimpleLogicalValueType::Int64},
     };
@@ -1819,17 +1885,17 @@ void ValidateSystemColumnSchema(
         if (name == TUnversionedUpdateSchema::ChangeTypeColumnName) {
             validateType(ESimpleLogicalValueType::Uint64);
             return;
-        } else if (name.StartsWith(TUnversionedUpdateSchema::FlagsColumnNamePrefix)) {
+        } else if (name.starts_with(TUnversionedUpdateSchema::FlagsColumnNamePrefix)) {
             validateType(ESimpleLogicalValueType::Uint64);
             return;
-        } else if (name.StartsWith(TUnversionedUpdateSchema::ValueColumnNamePrefix)) {
+        } else if (name.starts_with(TUnversionedUpdateSchema::ValueColumnNamePrefix)) {
             // Value can have any type.
             return;
         }
     }
 
     if (allowTimestampColumns) {
-        if (name.StartsWith(TimestampColumnPrefix)) {
+        if (name.starts_with(TimestampColumnPrefix)) {
             validateType(ESimpleLogicalValueType::Uint64);
             return;
         }
@@ -1840,7 +1906,7 @@ void ValidateSystemColumnSchema(
         name);
 }
 
-void ValidateColumnName(const TString& name)
+void ValidateColumnName(const std::string& name)
 {
     if (name.empty()) {
         THROW_ERROR_EXCEPTION("Column name cannot be empty");
@@ -1861,7 +1927,7 @@ void ValidateColumnSchema(
     bool allowUnversionedUpdateColumns,
     bool allowTimestampColumns)
 {
-    static const auto allowedAggregates = THashSet<TString>{
+    static const auto allowedAggregates = THashSet<std::string, THash<TStringBuf>, TEqualTo<>>{
         "sum",
         "min",
         "max",
@@ -1872,7 +1938,7 @@ void ValidateColumnSchema(
         "dict_sum",
     };
 
-    static const auto allowedNestedAggregates = THashSet<TString>{
+    static const auto allowedNestedAggregates = THashSet<std::string, THash<TStringBuf>, TEqualTo<>>{
         "sum",
         "max"
     };
@@ -1884,7 +1950,7 @@ void ValidateColumnSchema(
         const auto& name = columnSchema.Name();
         ValidateColumnName(name);
 
-        if (stableName.Underlying().StartsWith(SystemColumnNamePrefix) || name.StartsWith(SystemColumnNamePrefix)) {
+        if (stableName.Underlying().starts_with(SystemColumnNamePrefix) || name.starts_with(SystemColumnNamePrefix)) {
             ValidateSystemColumnSchema(
                 columnSchema,
                 isTableSorted,
@@ -2093,7 +2159,7 @@ void ValidatePivotKey(
 //! Validates that number of locks doesn't exceed #MaxColumnLockCount.
 void ValidateLocks(const TTableSchema& schema)
 {
-    THashSet<TString> lockNames;
+    THashSet<std::string> lockNames;
     YT_VERIFY(lockNames.insert(PrimaryLockName).second);
     for (const auto& column : schema.Columns()) {
         if (column.Lock()) {
@@ -2323,11 +2389,11 @@ void ValidateNoRenamedColumns(const TTableSchema& schema)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-THashMap<TString, int> GetLocksMapping(
+THashMap<std::string, int> GetLocksMapping(
     const NTableClient::TTableSchema& schema,
     bool fullAtomicity,
     std::vector<int>* columnIndexToLockIndex,
-    std::vector<TString>* lockIndexToName)
+    std::vector<std::string>* lockIndexToName)
 {
     if (columnIndexToLockIndex) {
         // Assign dummy lock indexes to key components.
@@ -2338,7 +2404,7 @@ THashMap<TString, int> GetLocksMapping(
         lockIndexToName->push_back(PrimaryLockName);
     }
 
-    THashMap<TString, int> groupToIndex;
+    THashMap<std::string, int> groupToIndex;
     if (fullAtomicity) {
         // Assign lock indexes to data components.
         for (int index = schema.GetKeyColumnCount(); index < std::ssize(schema.Columns()); ++index) {
@@ -2370,7 +2436,7 @@ THashMap<TString, int> GetLocksMapping(
 TLockMask GetLockMask(
     const NTableClient::TTableSchema& schema,
     bool fullAtomicity,
-    const std::vector<TString>& locks,
+    const std::vector<std::string>& locks,
     ELockType lockType)
 {
     auto groupToIndex = GetLocksMapping(schema, fullAtomicity);
@@ -2444,7 +2510,7 @@ TCellTaggedTableSchemaPtr::TCellTaggedTableSchemaPtr(TTableSchemaPtr tableSchema
 
 size_t THash<NYT::NTableClient::TColumnStableName>::operator()(const NYT::NTableClient::TColumnStableName& stableName) const
 {
-    return THash<TString>()(stableName.Underlying());
+    return THash<std::string>()(stableName.Underlying());
 }
 
 size_t THash<NYT::NTableClient::TColumnSchema>::operator()(const NYT::NTableClient::TColumnSchema& columnSchema) const

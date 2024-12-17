@@ -195,14 +195,21 @@ bool TLogger::IsEssential() const
     return Essential_;
 }
 
-void TLogger::UpdateAnchor(TLoggingAnchor* anchor) const
+void TLogger::UpdateStaticAnchor(
+    TLoggingAnchor* anchor,
+    std::atomic<bool>* anchorRegistered,
+    ::TSourceLocation sourceLocation,
+    TStringBuf message) const
 {
+    if (!anchorRegistered->exchange(true)) {
+        LogManager_->RegisterStaticAnchor(anchor, sourceLocation, message);
+    }
     LogManager_->UpdateAnchor(anchor);
 }
 
-void TLogger::RegisterStaticAnchor(TLoggingAnchor* anchor, ::TSourceLocation sourceLocation, TStringBuf message) const
+void TLogger::UpdateDynamicAnchor(TLoggingAnchor* anchor) const
 {
-    LogManager_->RegisterStaticAnchor(anchor, sourceLocation, message);
+    LogManager_->UpdateAnchor(anchor);
 }
 
 void TLogger::Write(TLogEvent&& event) const

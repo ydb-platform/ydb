@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_BISECT_BISECT_HPP
 #define PYTHONIC_BISECT_BISECT_HPP
 
-#include "pythonic/include/bisect/bisect.hpp"
 #include "pythonic/builtins/ValueError.hpp"
+#include "pythonic/include/bisect/bisect.hpp"
 
 #include "pythonic/utils/functor.hpp"
 
@@ -29,7 +29,7 @@ namespace bisect
       throw types::ValueError("lo must be non-negative");
     return std::distance(x.begin(), fun(x.begin() + lo, x.begin() + hi, a));
   }
-}
+} // namespace bisect
 PYTHONIC_NS_END
 
 #endif

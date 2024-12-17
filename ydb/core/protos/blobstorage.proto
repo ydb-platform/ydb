@@ -25,7 +25,7 @@ message TVDiskCostSettings {
     optional uint64 WriteSpeedBps = 3;
     optional uint64 ReadBlockSize = 4;
     optional uint64 WriteBlockSize = 5;
-    optional uint32 MinREALHugeBlobInBytes = 6;
+    optional uint32 MinHugeBlobInBytes = 6;
 };
 
 message TWindowFeedback {
@@ -1010,6 +1010,7 @@ message TNodeWardenServiceSet {
 
         optional TSerialManagementStage.E ManagementStage = 12;
         optional TPDiskSpaceColor.E SpaceColorBorder = 13;
+        optional bool ReadOnly = 14;
     }
 
     message TVDisk {

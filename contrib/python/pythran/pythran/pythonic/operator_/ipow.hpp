@@ -3,8 +3,8 @@
 
 #include "pythonic/include/operator_/ipow.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/builtins/pow.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -21,7 +21,7 @@ namespace operator_
   {
     return a = builtins::pow(a, std::forward<B>(b));
   }
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

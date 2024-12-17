@@ -12,7 +12,7 @@ namespace numpy
 #define NUMPY_NARY_FUNC_NAME double_
 #define NUMPY_NARY_FUNC_SYM details::float64
 #include "pythonic/types/numpy_nary_expr.hpp"
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

@@ -38,10 +38,10 @@ void TServerConfig::Register(TRegistrar registrar)
         .Default(80);
 
     registrar.Parameter("max_simultaneous_connections", &TThis::MaxSimultaneousConnections)
-        .Default(50000);
+        .Default(50'000);
 
     registrar.Parameter("max_backlog_size", &TThis::MaxBacklogSize)
-        .Default(8192);
+        .Default(8'192);
 
     registrar.Parameter("bind_retry_count", &TThis::BindRetryCount)
         .Default(5);

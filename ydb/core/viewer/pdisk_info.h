@@ -112,45 +112,64 @@ public:
     }
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr&) {
-        WhiteboardPDisk.Error("NodeDisconnected");
-        WhiteboardVDisk.Error("NodeDisconnected");
+        ui32 requestsDone = 0;
+        if (WhiteboardPDisk.Error("NodeDisconnected")) {
+            ++requestsDone;
+        }
+        if (WhiteboardVDisk.Error("NodeDisconnected")) {
+            ++requestsDone;
+        }
         if (!RetryRequest()) {
-            TBase::RequestDone(2);
+            TBase::RequestDone(requestsDone);
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
-            SysViewPDisks.Error("ClientNotConnected");
-            SysViewVSlots.Error("ClientNotConnected");
-            TBase::RequestDone(2);
+            ui32 requestsDone = 0;
+            if (SysViewPDisks.Error("ClientNotConnected")) {
+                ++requestsDone;
+            }
+            if (SysViewVSlots.Error("ClientNotConnected")) {
+                ++requestsDone;
+            }
+            TBase::RequestDone(requestsDone);
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
-        SysViewPDisks.Error("ClientDestroyed");
-        SysViewVSlots.Error("ClientDestroyed");
-        TBase::RequestDone(2);
+        ui32 requestsDone = 0;
+        if (SysViewPDisks.Error("ClientDestroyed")) {
+            ++requestsDone;
+        }
+        if (SysViewVSlots.Error("ClientDestroyed")) {
+            ++requestsDone;
+        }
+        TBase::RequestDone(requestsDone);
     }
 
     void Handle(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr& ev) {
-        SysViewPDisks.Set(std::move(ev));
-        TBase::RequestDone();
+        if (SysViewPDisks.Set(std::move(ev))) {
+            TBase::RequestDone();
+        }
     }
 
     void Handle(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
-        SysViewVSlots.Set(std::move(ev));
-        TBase::RequestDone();
+        if (SysViewVSlots.Set(std::move(ev))) {
+            TBase::RequestDone();
+        }
     }
 
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
-        WhiteboardPDisk.Set(std::move(ev));
-        TBase::RequestDone();
+        if (WhiteboardPDisk.Set(std::move(ev))) {
+            TBase::RequestDone();
+        }
     }
 
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
-        WhiteboardVDisk.Set(std::move(ev));
-        TBase::RequestDone();
+        if (WhiteboardVDisk.Set(std::move(ev))) {
+            TBase::RequestDone();
+        }
     }
 
     void HandleRetry() {

@@ -1,7 +1,7 @@
 #include "yql_s3_mkql_compiler.h"
 
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
-#include <ydb/library/yql/providers/common/mkql/parser.h>
+#include <ydb/library/yql/providers/dq/mkql/parser.h>
 
 #include <library/cpp/json/json_writer.h>
 #include <util/stream/str.h>

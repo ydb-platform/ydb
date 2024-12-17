@@ -1,9 +1,3 @@
 RECURSE(
-    decimal
-    embedded
-    fastcheck
-    issue
-    purecalc
-    result_format
-    udf
+    ydb_issue
 )

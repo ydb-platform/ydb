@@ -164,7 +164,7 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             Self->PersistUnknownShardDeleted(db, ShardIdx);
         }
 
-        Self->ShardRemoved(ShardIdx);
+        Self->OnShardRemoved(ShardIdx);
     }
 
     void DoComplete(const TActorContext &ctx) override {

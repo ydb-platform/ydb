@@ -6,6 +6,7 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/hash.h>
 #include <util/generic/intrlist.h>
+#include <util/system/hp_timer.h>
 
 namespace NKikimr::NTabletFlatExecutor {
 
@@ -42,13 +43,11 @@ namespace NKikimr::NDataShard {
     };
 
     struct TVolatileTxInfoCommitOrderListTag {};
-    struct TVolatileTxInfoPendingCommitListTag {};
-    struct TVolatileTxInfoPendingAbortListTag {};
+
+    class TVolatileTxPersistence;
 
     struct TVolatileTxInfo
         : public TIntrusiveListItem<TVolatileTxInfo, TVolatileTxInfoCommitOrderListTag>
-        , public TIntrusiveListItem<TVolatileTxInfo, TVolatileTxInfoPendingCommitListTag>
-        , public TIntrusiveListItem<TVolatileTxInfo, TVolatileTxInfoPendingAbortListTag>
     {
         ui64 CommitOrder;
         ui64 TxId;
@@ -74,6 +73,14 @@ namespace NKikimr::NDataShard {
         // transaction is decided. These readsets will be replaced with a
         // DECISION_ABORT on abort.
         std::vector<ui64> ArbiterReadSets;
+
+        // A pending commit or abort persistence transaction
+        TVolatileTxPersistence* Persistence = nullptr;
+
+        // Calculates Waiting and Total latency
+        THPTimer LatencyTimer;
+
+        ~TVolatileTxInfo() noexcept;
 
         template<class TTag>
         bool IsInList() const {
@@ -257,8 +264,8 @@ namespace NKikimr::NDataShard {
 
     private:
         void RollbackAddVolatileTx(ui64 txId);
-        void PersistRemoveVolatileTx(ui64 txId, TTransactionContext& txc);
-        void RemoveVolatileTx(ui64 txId);
+        void PersistRemoveVolatileTx(TVolatileTxInfo* info, TTransactionContext& txc);
+        void RemoveVolatileTx(TVolatileTxInfo* info);
 
         bool LoadTxDetails(NIceDb::TNiceDb& db);
         bool LoadTxParticipants(NIceDb::TNiceDb& db);
@@ -268,13 +275,16 @@ namespace NKikimr::NDataShard {
         void UnblockDependents(TVolatileTxInfo* info);
         void UnblockOperations(TVolatileTxInfo* info, bool success);
         void UnblockWaitingRemovalOperations(TVolatileTxInfo* info);
-        void AddPendingCommit(ui64 txId);
-        void AddPendingAbort(ui64 txId);
-        void RunPendingCommitTx();
-        void RunPendingAbortTx();
+        void ScheduleCommitTx(TVolatileTxInfo* info);
+        void ScheduleAbortTx(TVolatileTxInfo* info);
 
-        void RemoveFromCommitOrder(TVolatileTxInfo* info);
+        bool RemoveFromCommitOrder(TVolatileTxInfo* info);
+        void ScheduleReadyCommitOrdered();
         bool ReadyToDbCommit(TVolatileTxInfo* info) const;
+
+        void UpdateCountersAdd(TVolatileTxInfo* info);
+        void UpdateCountersRemove(TVolatileTxInfo* info);
+        void ChangeState(TVolatileTxInfo* info, EVolatileTxState state);
 
     private:
         TDataShard* const Self;
@@ -284,11 +294,7 @@ namespace NKikimr::NDataShard {
         TIntrusiveList<TVolatileTxInfo, TVolatileTxInfoCommitOrderListTag> VolatileTxByCommitOrder;
         std::vector<TWaitingSnapshotEvent> WaitingSnapshotEvents;
         TIntrusivePtr<TTxMap> TxMap;
-        TIntrusiveList<TVolatileTxInfo, TVolatileTxInfoPendingCommitListTag> PendingCommits;
-        TIntrusiveList<TVolatileTxInfo, TVolatileTxInfoPendingAbortListTag> PendingAborts;
         ui64 NextCommitOrder = 1;
-        bool PendingCommitTxScheduled = false;
-        bool PendingAbortTxScheduled = false;
     };
 
 } // namespace NKikimr::NDataShard

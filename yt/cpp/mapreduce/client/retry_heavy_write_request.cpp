@@ -25,6 +25,7 @@ using ::ToString;
 ////////////////////////////////////////////////////////////////////////////////
 
 void RetryHeavyWriteRequest(
+    const IRawClientPtr& rawClient,
     const IClientRetryPolicyPtr& clientRetryPolicy,
     const ITransactionPingerPtr& transactionPinger,
     const TClientContext& context,
@@ -44,7 +45,7 @@ void RetryHeavyWriteRequest(
     }
 
     for (int attempt = 0; attempt < retryCount; ++attempt) {
-        TPingableTransaction attemptTx(clientRetryPolicy, context, parentId, transactionPinger->GetChildTxPinger(), TStartTransactionOptions());
+        TPingableTransaction attemptTx(rawClient, clientRetryPolicy, context, parentId, transactionPinger->GetChildTxPinger(), TStartTransactionOptions());
 
         auto input = streamMaker();
         TString requestId;
@@ -167,6 +168,7 @@ void THeavyRequestRetrier::TryStartAttempt()
 {
     Attempt_ = std::make_unique<TAttempt>();
     Attempt_->Transaction = std::make_unique<TPingableTransaction>(
+        Parameters_.RawClientPtr,
         Parameters_.ClientRetryPolicy, Parameters_.Context,
         Parameters_.TransactionId,
         Parameters_.TransactionPinger->GetChildTxPinger(),

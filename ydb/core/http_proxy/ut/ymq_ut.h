@@ -2,7 +2,9 @@
 
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/scheme/scheme.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <ydb/core/ymq/actor/metering.h>
 
 #include <chrono>
 #include <thread>
@@ -179,6 +181,131 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             {"MessageBody", "MessageBody-1"},
             {"DelaySeconds", 900}
         });
+    }
+
+    Y_UNIT_TEST_F(BillingRecordsForJsonApi, THttpProxyTestMockWithMetering) {
+        auto meteringLogFilePath = KikimrServer->ServerSettings->AppConfig->GetSqsConfig().GetMeteringLogFilePath();
+
+        // loadBillingRecords was copied from metering_ut.cpp.
+        // Probably, that file is a better place for this test.
+        auto loadBillingRecords = [](const TString& filepath) -> TVector<NSc::TValue> {
+            TString data = TFileInput(filepath).ReadAll();
+            auto rawRecords = SplitString(data, "\n");
+            TVector<NSc::TValue> records;
+            for (auto& record : rawRecords) {
+                records.push_back(NSc::TValue::FromJson(record));
+            }
+            return records;
+        };
+
+        TVector<NSc::TValue> records;
+        auto waitBillingRecords = [&]() {
+            static size_t expectedCount = 0;
+            expectedCount += 3;  // 2 traffic records, 1 request record
+            while (records.size() != expectedCount) {
+                Sleep(TDuration::Seconds(1));
+                records = loadBillingRecords(meteringLogFilePath);
+            }
+        };
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+        waitBillingRecords();
+
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", TString(1_KB, 'x')},  // 1 request unit
+        });
+        waitBillingRecords();
+
+        json = ReceiveMessage({
+            {"QueueUrl", queueUrl},
+            {"WaitTimeSeconds", 20},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        waitBillingRecords();
+
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", TString(150_KB, 'x')},  // 3 request units
+        });
+        waitBillingRecords();
+
+        json = ReceiveMessage({
+            {"QueueUrl", queueUrl},
+            {"WaitTimeSeconds", 20},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        waitBillingRecords();
+
+        auto makeTags = [](TVector<std::pair<TString, TString>> pairs) {
+            NSc::TValue tags;
+            tags.SetDict();
+            for (auto const& [k, v] : pairs) {
+                tags[k] = v;
+            }
+            return tags;
+        };
+        auto makeRecord = [&makeTags](TString type, TString resourceId, size_t quantity, TVector<std::pair<TString, TString>> tags) {
+            return NKikimr::NSQS::CreateMeteringBillingRecord(
+                "folder4",
+                resourceId,
+                type,
+                "fqdn",
+                TInstant::Now(),
+                quantity,
+                type == "ymq.traffic.v1" ? "byte" : "request",
+                makeTags(tags)
+            );
+        };
+        auto asExpected = [](NSc::TValue record, NSc::TValue expected) {
+            return record["folder_id"] == expected["folder_id"] &&
+                   record["resource_id"] == expected["resource_id"] &&
+                   record["schema"] == expected["schema"] &&
+                   record["usage"]["unit"] == expected["usage"]["unit"] &&
+                   (record["schema"] != "ymq.requests.v1" || record["usage"]["quantity"] == expected["usage"]["quantity"]) &&
+                   record["tags"]["direction"] == expected["tags"]["direction"] &&
+                   record["tags"]["type"] == expected["tags"]["type"] &&
+                   record["tags"]["queue_type"] == expected["tags"]["queue_type"];
+        };
+
+        TVector<NSc::TValue> expectedRecords{
+            // CreateQueue
+            makeRecord("ymq.traffic.v1", "", 0, {{"direction", "ingress"}, {"type", "inet"}}),
+            makeRecord("ymq.traffic.v1", "", 0, {{"direction", "egress"}, {"type", "inet"}}),
+            makeRecord("ymq.requests.v1", "", 1, {{"queue_type", "other"}}),
+
+            // SendMessage 1 KB
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}, {"type", "inet"}}),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}, {"type", "inet"}}),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 1, {{"queue_type", "std"}}),
+
+            // ReceiveMessage 1 KB
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}, {"type", "inet"}}),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}, {"type", "inet"}}),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 1, {{"queue_type", "std"}}),
+
+            // SendMessage 150 KB
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}, {"type", "inet"}}),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}, {"type", "inet"}}),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 3, {{"queue_type", "std"}}),
+
+            // ReceiveMessage 150 KB
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}, {"type", "inet"}}),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}, {"type", "inet"}}),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 3, {{"queue_type", "std"}}),
+        };
+        for (size_t i = 0; i < records.size(); ++i) {
+            UNIT_ASSERT(asExpected(records[i], expectedRecords[i]));
+        }
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageEmptyQueueUrl, THttpProxyTestMockForSQS) {
+        // We had a bug that crashed the server if QueueUrl was empty in a request.
+        SendMessage({
+            {"QueueUrl", ""},
+            {"MessageBody", "MessageBody-0"}
+        }, 400);
     }
 
     Y_UNIT_TEST_F(TestSendMessageFifoQueue, THttpProxyTestMock) {
@@ -559,7 +686,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body);
 
         auto receiptHandle = json["Messages"][0]["ReceiptHandle"].GetString();
-        UNIT_ASSERT(!receiptHandle.Empty());
+        UNIT_ASSERT(!receiptHandle.empty());
 
         DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", receiptHandle}, {"UnknownParameter", 123}}, 400);
 
@@ -785,9 +912,9 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
 
         auto receiptHandle0 = messages[0]["ReceiptHandle"].GetString();
-        UNIT_ASSERT(!receiptHandle0.Empty());
+        UNIT_ASSERT(!receiptHandle0.empty());
         auto receiptHandle1 = messages[1]["ReceiptHandle"].GetString();
-        UNIT_ASSERT(!receiptHandle1.Empty());
+        UNIT_ASSERT(!receiptHandle1.empty());
 
         json = DeleteMessageBatch({
             {"QueueUrl", queueUrl},
@@ -885,7 +1012,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
         json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
         auto receiptHandle = json["Messages"][0]["ReceiptHandle"].GetString();
-        UNIT_ASSERT(!receiptHandle.Empty());
+        UNIT_ASSERT(!receiptHandle.empty());
 
         ChangeMessageVisibility({
             {"QueueUrl", queueUrl},
@@ -933,9 +1060,9 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
 
         auto receiptHandle0 = messages[0]["ReceiptHandle"].GetString();
-        UNIT_ASSERT(!receiptHandle0.Empty());
+        UNIT_ASSERT(!receiptHandle0.empty());
         auto receiptHandle1 = messages[1]["ReceiptHandle"].GetString();
-        UNIT_ASSERT(!receiptHandle1.Empty());
+        UNIT_ASSERT(!receiptHandle1.empty());
 
         ChangeMessageVisibilityBatch({
             {"QueueUrl", queueUrl},

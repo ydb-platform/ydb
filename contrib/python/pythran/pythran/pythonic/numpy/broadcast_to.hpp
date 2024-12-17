@@ -2,9 +2,9 @@
 #define PYTHONIC_NUMPY_BROADCAST_TO_HPP
 
 #include "pythonic/include/numpy/broadcast_to.hpp"
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/types/ndarray.hpp"
 #include "pythonic/numpy/empty.hpp"
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -29,7 +29,7 @@ namespace numpy
         out, bexpr);
     return out;
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

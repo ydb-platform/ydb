@@ -1,8 +1,0 @@
-34c34
-< // #include "types.h"
----
-> #include "types.h"
-217c217
-< 				s ^= gf_mul_erasure(invert_matrix[j * k + i],
----
-> 				s ^= gf_mul(invert_matrix[j * k + i],

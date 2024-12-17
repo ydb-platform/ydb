@@ -70,6 +70,8 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto analyzeRequest = MakeAnalyzeRequest({{tableInfo.PathId, {1, 2}}}, operationId);
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest.release());
 
+        runtime.WaitFor("TEvAnalyzeTableResponse", [&]{ return block.size(); });
+
         AnalyzeStatus(runtime, sender, tableInfo.SaTabletId, operationId, NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED);
 
         // Check EvRemoteHttpInfo

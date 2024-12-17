@@ -8,14 +8,14 @@ namespace NKikimr::NColumnShard {
 
 class TInsertedPortion {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<NOlap::TPortionInfoConstructor>, PortionInfoConstructor);
-    std::shared_ptr<NOlap::TPortionInfo> PortionInfo;
+    YDB_READONLY_DEF(std::shared_ptr<NOlap::TPortionAccessorConstructor>, PortionInfoConstructor);
+    std::optional<NOlap::TPortionDataAccessor> PortionInfo;
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, PKBatch);
 
 public:
-    const std::shared_ptr<NOlap::TPortionInfo>& GetPortionInfo() const {
+    const NOlap::TPortionDataAccessor& GetPortionInfo() const {
         AFL_VERIFY(PortionInfo);
-        return PortionInfo;
+        return *PortionInfo;
     }
     TInsertedPortion(NOlap::TWritePortionInfoWithBlobsResult&& portion, const std::shared_ptr<arrow::RecordBatch>& pkBatch)
         : PortionInfoConstructor(portion.DetachPortionConstructor())
@@ -34,6 +34,14 @@ private:
     YDB_READONLY_DEF(std::vector<NOlap::TInsertWriteId>, InsertWriteIds);
 
 public:
+    ui64 GetRecordsCount() const {
+        ui64 result = 0;
+        for (auto&& i : Portions) {
+            result += i.GetPKBatch()->num_rows();
+        }
+        return result;
+    }
+
     const NEvWrite::TWriteMeta& GetWriteMeta() const {
         return WriteMeta;
     }
@@ -55,7 +63,7 @@ public:
     }
 };
 
-class TFailedWrite {
+class TNoDataWrite {
 private:
     NEvWrite::TWriteMeta WriteMeta;
     YDB_READONLY(ui64, DataSize, 0);
@@ -65,7 +73,7 @@ public:
         return WriteMeta;
     }
 
-    TFailedWrite(const NEvWrite::TWriteMeta& writeMeta, const ui64 dataSize)
+    TNoDataWrite(const NEvWrite::TWriteMeta& writeMeta, const ui64 dataSize)
         : WriteMeta(writeMeta)
         , DataSize(dataSize) {
         AFL_VERIFY(!WriteMeta.HasLongTxId());
@@ -81,22 +89,22 @@ private:
     YDB_READONLY_DEF(NKikimrProto::EReplyStatus, WriteStatus);
     YDB_READONLY_DEF(std::shared_ptr<NOlap::IBlobsWritingAction>, WriteAction);
     std::vector<TInsertedPortions> InsertedPacks;
-    std::vector<TFailedWrite> Fails;
+    std::vector<TNoDataWrite> NoData;
 
 public:
     std::vector<TInsertedPortions>&& DetachInsertedPacks() {
         return std::move(InsertedPacks);
     }
-    std::vector<TFailedWrite>&& DetachFails() {
-        return std::move(Fails);
+    std::vector<TNoDataWrite>&& DetachNoDataWrites() {
+        return std::move(NoData);
     }
 
     TEvWritePortionResult(const NKikimrProto::EReplyStatus writeStatus, const std::shared_ptr<NOlap::IBlobsWritingAction>& writeAction,
-        std::vector<TInsertedPortions>&& portions, std::vector<TFailedWrite>&& fails)
+        std::vector<TInsertedPortions>&& portions, std::vector<TNoDataWrite>&& noData)
         : WriteStatus(writeStatus)
         , WriteAction(writeAction)
         , InsertedPacks(portions)
-        , Fails(fails) {
+        , NoData(noData) {
     }
 };
 

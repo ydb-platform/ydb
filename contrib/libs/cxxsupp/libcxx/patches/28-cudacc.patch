@@ -1,3 +1,42 @@
+diff --git a/include/__config b/include/__config
+index aac112a..a067add 100644
+--- a/include/__config
++++ b/include/__config
+@@ -1204,12 +1204,21 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
+ #    define _LIBCPP_CONSTINIT
+ #  endif
+ 
++#if defined(__CUDACC__) && defined(__noinline__)
++#  pragma push_macro("__noinline__")
++#  define __noinline__ __noinline__
++#endif
++
+ #  if __has_attribute(__noinline__)
+ #    define _LIBCPP_NOINLINE __attribute__((__noinline__))
+ #  else
+ #    define _LIBCPP_NOINLINE
+ #  endif
+ 
++#if defined(__CUDACC__) && defined(__noinline__)
++#  pragma pop_macro("__noinline__")
++#endif
++
+ // We often repeat things just for handling wide characters in the library.
+ // When wide characters are disabled, it can be useful to have a quick way of
+ // disabling it without having to resort to #if-#endif, which has a larger
+diff --git a/include/__iterator/reverse_iterator.h b/include/__iterator/reverse_iterator.h
+index 552699b..05f3e74 100644
+--- a/include/__iterator/reverse_iterator.h
++++ b/include/__iterator/reverse_iterator.h
+@@ -144,7 +144,7 @@ public:
+     _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX17
+     reference operator*() const {_Iter __tmp = current; return *--__tmp;}
+ 
+-#if _LIBCPP_STD_VER >= 20
++#if _LIBCPP_STD_VER >= 20 && !defined(__CUDACC__)
+     _LIBCPP_HIDE_FROM_ABI
+     constexpr pointer operator->() const
+       requires is_pointer_v<_Iter> || requires(const _Iter __i) { __i.operator->(); }
 diff --git a/include/__iterator/segmented_iterator.h b/include/__iterator/segmented_iterator.h
 index f3cd1e5..c0a77ef 100644
 --- a/include/__iterator/segmented_iterator.h
@@ -36,19 +75,19 @@ index da585af..bc68e78 100644
    return __builtin_isnan(__x);
  }
 diff --git a/include/complex b/include/complex
-index c8ffde9..7f44242 100644
+index 44579b1..6012025 100644
 --- a/include/complex
 +++ b/include/complex
-@@ -1526,7 +1526,7 @@ inline namespace literals
+@@ -1524,7 +1524,7 @@ inline namespace literals
          return { 0.0, static_cast<double>(__im) };
      }
  
 -
 +#if !defined(__CUDACC__)
-     _LIBCPP_HIDE_FROM_ABI constexpr complex<float> operator""if(long double __im)
+     _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double __im)
      {
          return { 0.0f, static_cast<float>(__im) };
-@@ -1536,6 +1536,7 @@ inline namespace literals
+@@ -1534,6 +1534,7 @@ inline namespace literals
      {
          return { 0.0f, static_cast<float>(__im) };
      }
@@ -57,10 +96,10 @@ index c8ffde9..7f44242 100644
  } // namespace literals
  #endif
 diff --git a/include/tuple b/include/tuple
-index e7fc1e2..eb1785c 100644
+index 194138f..9d0e079 100644
 --- a/include/tuple
 +++ b/include/tuple
-@@ -308,7 +308,7 @@ class __tuple_leaf
+@@ -312,7 +312,7 @@ class __tuple_leaf
  
      template <class _Tp>
      static _LIBCPP_HIDE_FROM_ABI constexpr bool __can_bind_reference() {
@@ -69,3 +108,16 @@ index e7fc1e2..eb1785c 100644
        return !__reference_binds_to_temporary(_Hp, _Tp);
  #else
        return true;
+@@ -674,6 +674,12 @@ _LIBCPP_GCC_DIAGNOSTIC_IGNORED("-Wc++20-extensions")
+         _And<
+             _BoolConstant<sizeof...(_Up) == sizeof...(_Tp)>,
+             _EnableUTypesCtor<_Up...>
++// nvcc 12.2 cannot choose between tuple(const T& ... t) and tuple(U&&... u)
++// so we have to added an explicit requires in enable_if
++#ifdef __CUDACC__
++            ,
++            _Not<_And<is_copy_constructible<_Tp>..., _Lazy<_And, is_convertible<_Up, const _Tp&>...>> >
++#endif
+         >::value
+     , int> = 0>
+     _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14

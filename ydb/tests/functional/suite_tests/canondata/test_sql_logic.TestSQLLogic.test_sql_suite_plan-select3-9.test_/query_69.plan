@@ -57,7 +57,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[row.col2,row.col1]"
                                             },
                                             {
                                                 "Inputs": [
@@ -66,7 +66,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "item.a > item.b And item.b > item.c"
+                                                "Predicate": "item.a > item.b AND item.b > item.c"
                                             }
                                         ],
                                         "PlanNodeId": 2,

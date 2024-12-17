@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: anyio
-Version: 4.6.0
+Version: 4.6.2.post1
 Summary: High level compatibility layer for multiple asynchronous event loop implementations
 Author-email: Alex Grönholm <alex.gronholm@nextday.fi>
 License: MIT
@@ -42,6 +42,7 @@ Requires-Dist: pytest >=7.0 ; extra == 'test'
 Requires-Dist: pytest-mock >=3.6.1 ; extra == 'test'
 Requires-Dist: trustme ; extra == 'test'
 Requires-Dist: uvloop >=0.21.0b1 ; (platform_python_implementation == "CPython" and platform_system != "Windows") and extra == 'test'
+Requires-Dist: truststore >=0.9.1 ; (python_version >= "3.10") and extra == 'test'
 Provides-Extra: trio
 Requires-Dist: trio >=0.26.1 ; extra == 'trio'
 

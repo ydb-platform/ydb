@@ -29,46 +29,10 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
+                                        "Node Type": "TopSort-LeftJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
                                                     {
                                                         "InternalOperatorId": 1
                                                     }
@@ -84,10 +48,19 @@
                                                         "ExternalPlanNodeId": 17
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 14
+                                                        "InternalOperatorId": 2
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 14
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.a.code)"
                                             }
                                         ],
                                         "PlanNodeId": 18,
@@ -107,7 +80,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "LeftJoin (MapJoin)",
+                                                                        "Node Type": "LeftJoin (MapJoin)-Filter",
                                                                         "Operators": [
                                                                             {
                                                                                 "Condition": "a.code = b_grp.a",
@@ -116,10 +89,19 @@
                                                                                         "ExternalPlanNodeId": 10
                                                                                     },
                                                                                     {
-                                                                                        "ExternalPlanNodeId": 7
+                                                                                        "InternalOperatorId": 1
                                                                                     }
                                                                                 ],
                                                                                 "Name": "LeftJoin (MapJoin)"
+                                                                            },
+                                                                            {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "ExternalPlanNodeId": 7
+                                                                                    }
+                                                                                ],
+                                                                                "Name": "Filter",
+                                                                                "Predicate": "Exist(item.a)"
                                                                             }
                                                                         ],
                                                                         "PlanNodeId": 11,
@@ -139,7 +121,18 @@
                                                                                                 "PlanNodeType": "Connection",
                                                                                                 "Plans": [
                                                                                                     {
-                                                                                                        "Node Type": "Stage",
+                                                                                                        "Node Type": "Aggregate",
+                                                                                                        "Operators": [
+                                                                                                            {
+                                                                                                                "Inputs": [
+                                                                                                                    {
+                                                                                                                        "ExternalPlanNodeId": 3
+                                                                                                                    }
+                                                                                                                ],
+                                                                                                                "Name": "Aggregate",
+                                                                                                                "Phase": "Final"
+                                                                                                            }
+                                                                                                        ],
                                                                                                         "PlanNodeId": 4,
                                                                                                         "Plans": [
                                                                                                             {
@@ -154,14 +147,15 @@
                                                                                                                         "Node Type": "Aggregate",
                                                                                                                         "Operators": [
                                                                                                                             {
-                                                                                                                                "Aggregation": "{_yql_agg_0: Inc(state._yql_agg_0)}",
+                                                                                                                                "Aggregation": "{Inc(state._yql_agg_0)}",
                                                                                                                                 "GroupBy": "item.a",
                                                                                                                                 "Inputs": [
                                                                                                                                     {
                                                                                                                                         "ExternalPlanNodeId": 1
                                                                                                                                     }
                                                                                                                                 ],
-                                                                                                                                "Name": "Aggregate"
+                                                                                                                                "Name": "Aggregate",
+                                                                                                                                "Phase": "Intermediate"
                                                                                                                             }
                                                                                                                         ],
                                                                                                                         "PlanNodeId": 2,

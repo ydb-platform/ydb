@@ -96,7 +96,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[row.col4,row.col1,row.col5,row.col2,row.col3]"
                                             },
                                             {
                                                 "Inputs": [
@@ -146,7 +146,7 @@
                                                                     }
                                                                 ],
                                                                 "Name": "Filter",
-                                                                "Predicate": "item.e > item.c Or item.e < item.d Or item.c > item.d Or item.e > item.a And item.e < item.b"
+                                                                "Predicate": "item.e > item.c OR item.e < item.d OR item.c > item.d OR item.e > item.a AND item.e < item.b"
                                                             }
                                                         ],
                                                         "PlanNodeId": 10,
@@ -207,7 +207,7 @@
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
-                        "Node Type": "Aggregate-Limit",
+                        "Node Type": "Aggregate-Limit-Aggregate",
                         "Operators": [
                             {
                                 "Inputs": [
@@ -215,7 +215,17 @@
                                         "InternalOperatorId": 1
                                     }
                                 ],
-                                "Name": "Aggregate"
+                                "Name": "Aggregate",
+                                "Phase": "Final"
+                            },
+                            {
+                                "Inputs": [
+                                    {
+                                        "InternalOperatorId": 2
+                                    }
+                                ],
+                                "Limit": "1",
+                                "Name": "Limit"
                             },
                             {
                                 "Inputs": [
@@ -223,8 +233,8 @@
                                         "ExternalPlanNodeId": 3
                                     }
                                 ],
-                                "Limit": "1",
-                                "Name": "Limit"
+                                "Name": "Aggregate",
+                                "Phase": "Final"
                             }
                         ],
                         "PlanNodeId": 4,
@@ -243,7 +253,8 @@
                                                         "ExternalPlanNodeId": 1
                                                     }
                                                 ],
-                                                "Name": "Aggregate"
+                                                "Name": "Aggregate",
+                                                "Phase": "Intermediate"
                                             }
                                         ],
                                         "PlanNodeId": 2,

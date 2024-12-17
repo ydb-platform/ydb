@@ -33,11 +33,13 @@ int main(int argc, char *argv[])
 	ret = io_uring_queue_init_params(2, &ring, &p);
 	if (ret == -EINVAL) {
 		/*  kernel doesn't support SETUP_NO_MMAP */
+		free(addr);
 		return T_EXIT_SKIP;
 	} else if (ret && (ret != -EFAULT && ret != -ENOMEM)) {
 		fprintf(stderr, "Got %d, wanted -EFAULT\n", ret);
 		return T_EXIT_FAIL;
 	}
 
+	free(addr);
 	return T_EXIT_PASS;
 }

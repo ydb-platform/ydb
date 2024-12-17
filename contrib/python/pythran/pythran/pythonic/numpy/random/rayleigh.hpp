@@ -29,9 +29,9 @@ namespace numpy
     }
 
     inline auto rayleigh(double scale, long size)
-        -> decltype(rayleigh(scale, types::array<long, 1>{{size}}))
+        -> decltype(rayleigh(scale, types::array_tuple<long, 1>{{size}}))
     {
-      return rayleigh(scale, types::array<long, 1>{{size}});
+      return rayleigh(scale, types::array_tuple<long, 1>{{size}});
     }
 
     inline double rayleigh(double scale, types::none_type d)

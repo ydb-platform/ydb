@@ -12,7 +12,6 @@
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
 
 #include <yt/yt/core/misc/finally.h>
-#include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/public.h>
 
 #include <yt/yt/core/ytree/convert.h>
@@ -63,7 +62,6 @@ public:
         IPollerPtr poller,
         IPollerPtr acceptor,
         IInvokerPtr invoker,
-        IMemoryUsageTrackerPtr memoryUsageTracker,
         IRequestPathMatcherPtr requestPathMatcher,
         bool ownPoller = false)
         : Config_(std::move(config))
@@ -71,7 +69,6 @@ public:
         , Poller_(std::move(poller))
         , Acceptor_(std::move(acceptor))
         , Invoker_(std::move(invoker))
-        , MemoryUsageTracker_(std::move(memoryUsageTracker))
         , OwnPoller_(ownPoller)
         , RequestPathMatcher_(std::move(requestPathMatcher))
     { }
@@ -126,7 +123,6 @@ private:
     const IPollerPtr Poller_;
     const IPollerPtr Acceptor_;
     const IInvokerPtr Invoker_;
-    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
     const bool OwnPoller_ = false;
 
     IRequestPathMatcherPtr RequestPathMatcher_;
@@ -223,14 +219,6 @@ private:
                 SetTraceId(response, traceContext->GetTraceId());
 
                 SetRequestId(response, request->GetRequestId());
-
-                if (MemoryUsageTracker_ && MemoryUsageTracker_->IsExceeded()) {
-                    THROW_ERROR_EXCEPTION(
-                        EStatusCode::TooManyRequests,
-                        "Request is dropped due to high memory pressure")
-                        << TErrorAttribute("total_memory_limit", MemoryUsageTracker_->GetLimit())
-                        << TErrorAttribute("memory_usage", MemoryUsageTracker_->GetUsed());
-                }
 
                 handler->HandleRequest(request, response);
 
@@ -393,7 +381,6 @@ IServerPtr CreateServer(
     IPollerPtr poller,
     IPollerPtr acceptor,
     IInvokerPtr invoker,
-    IMemoryUsageTrackerPtr memoryUsageTracker,
     bool ownPoller)
 {
     auto handlers = New<TRequestPathMatcher>();
@@ -403,7 +390,6 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
-        std::move(memoryUsageTracker),
         std::move(handlers),
         ownPoller);
 }
@@ -413,7 +399,6 @@ IServerPtr CreateServer(
     IPollerPtr poller,
     IPollerPtr acceptor,
     IInvokerPtr invoker,
-    IMemoryUsageTrackerPtr memoryUsageTracker,
     bool ownPoller)
 {
     auto address = TNetworkAddress::CreateIPv6Any(config->Port);
@@ -426,7 +411,6 @@ IServerPtr CreateServer(
                 std::move(poller),
                 std::move(acceptor),
                 std::move(invoker),
-                std::move(memoryUsageTracker),
                 ownPoller);
         } catch (const std::exception& ex) {
             if (i + 1 == config->BindRetryCount) {
@@ -456,7 +440,6 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
-        /*memoryUsageTracker*/ GetNullMemoryUsageTracker(),
         /*ownPoller*/ false);
 }
 
@@ -464,8 +447,7 @@ IServerPtr CreateServer(
     TServerConfigPtr config,
     IListenerPtr listener,
     IPollerPtr poller,
-    IPollerPtr acceptor,
-    IMemoryUsageTrackerPtr memoryUsageTracker)
+    IPollerPtr acceptor)
 {
     auto invoker = poller->GetInvoker();
     return CreateServer(
@@ -474,15 +456,13 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
-        std::move(memoryUsageTracker),
         /*ownPoller*/ false);
 }
 
 IServerPtr CreateServer(
     TServerConfigPtr config,
     IPollerPtr poller,
-    IPollerPtr acceptor,
-    IMemoryUsageTrackerPtr memoryUsageTracker)
+    IPollerPtr acceptor)
 {
     auto invoker = poller->GetInvoker();
     return CreateServer(
@@ -490,7 +470,6 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
-        std::move(memoryUsageTracker),
         /*ownPoller*/ false);
 }
 
@@ -520,7 +499,6 @@ IServerPtr CreateServer(TServerConfigPtr config, int pollerThreadCount)
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
-        /*memoryUsageTracker*/ GetNullMemoryUsageTracker(),
         /*ownPoller*/ true);
 }
 
@@ -535,7 +513,6 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
-        /*memoryUsageTracker*/ GetNullMemoryUsageTracker(),
         /*ownPoller*/ false);
 }
 

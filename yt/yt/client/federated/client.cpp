@@ -15,6 +15,8 @@
 
 #include <yt/yt/client/object_client/helpers.h>
 
+#include <yt/yt/client/security_client/public.h>
+
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
 #include <yt/yt/core/net/address.h>
@@ -40,19 +42,20 @@ DECLARE_REFCOUNTED_CLASS(TClient)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::optional<TString> GetDataCenterByClient(const IClientPtr& client)
+TFuture<std::optional<TString>> GetDataCenterByClient(const IClientPtr& client)
 {
     TListNodeOptions options;
     options.MaxSize = 1;
 
-    auto items = NConcurrency::WaitFor(client->ListNode(RpcProxiesPath, options))
-        .ValueOrThrow();
-    auto itemsList = NYTree::ConvertTo<NYTree::IListNodePtr>(items);
-    if (!itemsList->GetChildCount()) {
-        return std::nullopt;
-    }
-    auto host = itemsList->GetChildren()[0];
-    return NNet::InferYPClusterFromHostName(host->GetValue<TString>());
+    return client->ListNode(RpcProxiesPath, options)
+        .Apply(BIND([] (const NYson::TYsonString& items) {
+            auto itemsList = NYTree::ConvertTo<NYTree::IListNodePtr>(items);
+            if (!itemsList->GetChildCount()) {
+                return std::optional<TString>();
+            }
+            auto host = itemsList->GetChildren()[0];
+            return NNet::InferYPClusterFromHostName(host->GetValue<TString>());
+        }));
 }
 
 class TTransaction
@@ -158,17 +161,17 @@ public:
         return Underlying_->GetStartTimestamp();
     }
 
-    virtual NTransactionClient::EAtomicity GetAtomicity() const override
+    NTransactionClient::EAtomicity GetAtomicity() const override
     {
         return Underlying_->GetAtomicity();
     }
 
-    virtual NTransactionClient::EDurability GetDurability() const override
+    NTransactionClient::EDurability GetDurability() const override
     {
         return Underlying_->GetDurability();
     }
 
-    virtual TDuration GetTimeout() const override
+    TDuration GetTimeout() const override
     {
         return Underlying_->GetTimeout();
     }
@@ -248,17 +251,24 @@ DECLARE_REFCOUNTED_TYPE(TTransaction)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+enum class EClientPriority : ui8
+{
+    Local,
+    Remote,
+    Undefined,
+};
+
 DECLARE_REFCOUNTED_STRUCT(TClientDescription)
 
 struct TClientDescription final
 {
-    TClientDescription(IClientPtr client, int priority)
+    TClientDescription(IClientPtr client, EClientPriority priority)
         : Client(std::move(client))
         , Priority(priority)
     { }
 
     IClientPtr Client;
-    int Priority;
+    EClientPriority Priority;
     std::atomic<bool> HasErrors{false};
 };
 
@@ -407,6 +417,7 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<NYson::TYsonString>, GetJobInputPaths, (NJobTrackerClient::TJobId, const TGetJobInputPathsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<NYson::TYsonString>, GetJobSpec, (NJobTrackerClient::TJobId, const TGetJobSpecOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TGetJobStderrResponse>, GetJobStderr, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobStderrOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<std::vector<TJobTraceEvent>>, GetJobTrace, (const NScheduler::TOperationIdOrAlias&, const TGetJobTraceOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TSharedRef>, GetJobFailContext, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobFailContextOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TListOperationsResult>, ListOperations, (const TListOperationsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TListJobsResult>, ListJobs, (const NScheduler::TOperationIdOrAlias&, const TListJobsOptions&));
@@ -475,11 +486,10 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (const NYPath::TYPath&, const NYPath::TYPath&, const TGetFlowViewOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TDistributedWriteSessionPtr>, StartDistributedWriteSession, (const NYPath::TRichYPath&, const TDistributedWriteSessionStartOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, FinishDistributedWriteSession, (TDistributedWriteSessionPtr, const TDistributedWriteSessionFinishOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<ITableWriterPtr>, CreateParticipantTableWriter, (const TDistributedWriteCookiePtr&, const TParticipantTableWriterOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<TShuffleHandlePtr>, StartShuffle, (const TString& , int, const TStartShuffleOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<void>, FinishShuffle, (const TShuffleHandlePtr&, const TFinishShuffleOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<ITableWriterPtr>, CreateFragmentTableWriter, (const TFragmentWriteCookiePtr&, const TFragmentTableWriterOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TShuffleHandlePtr>, StartShuffle, (const std::string& , int, NObjectClient::TTransactionId, const TStartShuffleOptions&));
     UNIMPLEMENTED_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (const TShuffleHandlePtr&, int, const NTableClient::TTableReaderConfigPtr&));
-    UNIMPLEMENTED_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (const TShuffleHandlePtr&, const TString&, const NTableClient::TTableWriterConfigPtr&));
+    UNIMPLEMENTED_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (const TShuffleHandlePtr&, const std::string&, const NTableClient::TTableWriterConfigPtr&));
 
 private:
     friend class TTransaction;
@@ -502,6 +512,7 @@ private:
 private:
     const TFederationConfigPtr Config_;
     const NConcurrency::TPeriodicExecutorPtr Executor_;
+    const TString LocalDatacenter_;
 
     std::vector<TClientDescriptionPtr> UnderlyingClients_;
     IClientPtr ActiveClient_;
@@ -592,19 +603,14 @@ TClient::TClient(const std::vector<IClientPtr>& underlyingClients, TFederationCo
         NRpc::TDispatcher::Get()->GetLightInvoker(),
         BIND(&TClient::CheckClustersHealth, MakeWeak(this)),
         Config_->ClusterHealthCheckPeriod))
+    , LocalDatacenter_(NNet::GetLocalYPCluster())
 {
     YT_VERIFY(!underlyingClients.empty());
 
     UnderlyingClients_.reserve(underlyingClients.size());
-    const auto& localDatacenter = NNet::GetLocalYPCluster();
     for (const auto& client : underlyingClients) {
-        int priority = GetDataCenterByClient(client) == localDatacenter ? 1 : 0;
-        UnderlyingClients_.push_back(New<TClientDescription>(client, priority));
+        UnderlyingClients_.push_back(New<TClientDescription>(client, EClientPriority::Undefined));
     }
-    std::stable_sort(UnderlyingClients_.begin(), UnderlyingClients_.end(), [] (const auto& lhs, const auto& rhs) {
-        return lhs->Priority > rhs->Priority;
-    });
-
     ActiveClient_ = UnderlyingClients_[0]->Client;
     ActiveClientIndex_ = 0;
 
@@ -614,43 +620,54 @@ TClient::TClient(const std::vector<IClientPtr>& underlyingClients, TFederationCo
 void TClient::CheckClustersHealth()
 {
     TCheckClusterLivenessOptions options;
-    options.CheckCypressRoot = true;
+    options.CheckCypressRoot = Config_->CheckCypressRoot;
     options.CheckTabletCellBundle = Config_->BundleName;
-
-    int activeClientIndex = ActiveClientIndex_.load();
-    std::optional<int> betterClientIndex;
 
     std::vector<TFuture<void>> checks;
     checks.reserve(UnderlyingClients_.size());
-
     for (const auto& clientDescription : UnderlyingClients_) {
         checks.emplace_back(clientDescription->Client->CheckClusterLiveness(options));
     }
 
-    for (int index = 0; index < std::ssize(checks); ++index) {
+    for (int index = 0; index != std::ssize(checks); ++index) {
         const auto& check = checks[index];
-        bool hasErrors = !NConcurrency::WaitFor(check).IsOK();
-        UnderlyingClients_[index]->HasErrors = hasErrors;
-        if (!betterClientIndex && !hasErrors && index < activeClientIndex) {
+        auto error = NConcurrency::WaitFor(check);
+        YT_LOG_DEBUG_UNLESS(error.IsOK(), error, "Cluster %Qv is marked as unhealthy",
+            UnderlyingClients_[index]->Client->GetClusterName(/*fetchIfNull*/ false));
+        UnderlyingClients_[index]->HasErrors = !error.IsOK()
+            && !error.FindMatching(NSecurityClient::EErrorCode::AuthorizationError); // Ignore authorization errors.
+    }
+
+    for (int index = 0; index != std::ssize(UnderlyingClients_); ++index) {
+        auto& client = UnderlyingClients_[index];
+        // `Priority` accessed only from this thread so it is not require synchronization.
+        if (client->Priority == EClientPriority::Undefined) {
+            auto clientDatacenter = NConcurrency::WaitFor(GetDataCenterByClient(client->Client));
+            if (clientDatacenter.IsOK()) {
+                client->Priority = clientDatacenter.Value() == LocalDatacenter_
+                    ? EClientPriority::Local
+                    : EClientPriority::Remote;
+            }
+        }
+    }
+    // Compute better activeClientIndex.
+    int betterClientIndex = ActiveClientIndex_.load();
+    auto betterPriority = UnderlyingClients_[betterClientIndex]->HasErrors
+        ? EClientPriority::Undefined
+        : UnderlyingClients_[betterClientIndex]->Priority;
+
+    for (int index  = 0; index != std::ssize(UnderlyingClients_); ++index) {
+        const auto& client = UnderlyingClients_[index];
+        if (!client->HasErrors && client->Priority < betterPriority) {
             betterClientIndex = index;
+            betterPriority = client->Priority;
         }
     }
 
-    if (betterClientIndex && ActiveClientIndex_ == activeClientIndex) {
-        int newClientIndex = *betterClientIndex;
+    if (ActiveClientIndex_ != betterClientIndex) {
         auto guard = NThreading::WriterGuard(Lock_);
-        ActiveClient_ = UnderlyingClients_[newClientIndex]->Client;
-        ActiveClientIndex_ = newClientIndex;
-        return;
-    }
-
-    // If active cluster is not healthy, try changing it.
-    if (UnderlyingClients_[activeClientIndex]->HasErrors) {
-        auto guard = NThreading::WriterGuard(Lock_);
-        // Check that active client wasn't changed.
-        if (ActiveClientIndex_ == activeClientIndex && UnderlyingClients_[activeClientIndex]->HasErrors) {
-            UpdateActiveClient();
-        }
+        ActiveClient_ = UnderlyingClients_[betterClientIndex]->Client;
+        ActiveClientIndex_ = betterClientIndex;
     }
 }
 
@@ -751,42 +768,34 @@ void TClient::HandleError(const TErrorOr<void>& error, int clientIndex)
     if (ActiveClientIndex_ != clientIndex) {
         return;
     }
-
-    auto guard = WriterGuard(Lock_);
-    if (ActiveClientIndex_ != clientIndex) {
-        return;
-    }
-
     UpdateActiveClient();
 }
 
 void TClient::UpdateActiveClient()
 {
-    VERIFY_WRITER_SPINLOCK_AFFINITY(Lock_);
-
-    int activeClientIndex = ActiveClientIndex_.load();
+    VERIFY_THREAD_AFFINITY_ANY();
 
     for (int index = 0; index < std::ssize(UnderlyingClients_); ++index) {
         const auto& clientDescription = UnderlyingClients_[index];
         if (!clientDescription->HasErrors) {
-            if (activeClientIndex != index) {
+            if (ActiveClientIndex_ != index) {
                 YT_LOG_DEBUG("Active client was changed (PreviousClientIndex: %v, NewClientIndex: %v)",
-                    activeClientIndex,
+                    ActiveClientIndex_.load(),
                     index);
+                auto guard = NThreading::WriterGuard(Lock_);
+                ActiveClientIndex_ = index;
+                ActiveClient_ = clientDescription->Client;
             }
-
-            ActiveClient_ = clientDescription->Client;
-            ActiveClientIndex_ = index;
-            break;
+            return;
         }
     }
 }
 
 TClient::TActiveClientInfo TClient::GetActiveClient()
 {
-    auto guard = ReaderGuard(Lock_);
     YT_LOG_TRACE("Request will be send to the active client (ClientIndex: %v)",
         ActiveClientIndex_.load());
+    auto guard = ReaderGuard(Lock_);
     return {ActiveClient_, ActiveClientIndex_.load()};
 }
 

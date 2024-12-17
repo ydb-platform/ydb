@@ -6,6 +6,9 @@ import subprocess
 import optparse
 import textwrap
 
+# Explicitly enable local imports
+# Don't forget to add imported scripts to inputs of the calling command!
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import process_command_files as pcf
 import thinlto_cache
 
@@ -31,6 +34,12 @@ CUDA_LIBRARIES = {
     '-lcublasLt_static': '-lcublasLt',
     '-lcudart_static': '-lcudart',
     '-lcudnn_static': '-lcudnn',
+    '-lcudnn_adv_infer_static': '-lcudnn',
+    '-lcudnn_adv_train_static': '-lcudnn',
+    '-lcudnn_cnn_infer_static': '-lcudnn',
+    '-lcudnn_cnn_train_static': '-lcudnn',
+    '-lcudnn_ops_infer_static': '-lcudnn',
+    '-lcudnn_ops_train_static': '-lcudnn',
     '-lcufft_static_nocallback': '-lcufft',
     '-lcupti_static': '-lcupti',
     '-lcurand_static': '-lcurand',

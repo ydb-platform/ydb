@@ -113,6 +113,8 @@ public:
     //! Factors to calculate peer load as linear combination of disk queue and net queue.
     double NetQueueSizeFactor;
     double DiskQueueSizeFactor;
+    double CachedBlockCountFactor;
+    double CachedBlockSizeFactor;
 
     //! Will locate new replicas from master
     //! if node was suspicious for at least the period (unless null).
@@ -269,6 +271,9 @@ public:
 
     //! If |True| block fetcher will try to fetch block from local uncompressed block cache.
     bool UseUncompressedBlockCache;
+
+    //! If |True| block fetcher will try to fetch multiple blocks using less data node requests.
+    bool GroupOutOfOrderBlocks;
 
     REGISTER_YSON_STRUCT(TBlockFetcherConfig);
 

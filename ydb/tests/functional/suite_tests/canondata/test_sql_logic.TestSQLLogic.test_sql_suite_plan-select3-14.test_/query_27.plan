@@ -54,7 +54,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[row.col2,row.col4,row.col3,row.col1]"
                                             },
                                             {
                                                 "Inputs": [
@@ -63,7 +63,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "item.d < 110 Or item.d > 150"
+                                                "Predicate": "item.d < 110 OR item.d > 150"
                                             }
                                         ],
                                         "PlanNodeId": 2,

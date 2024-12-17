@@ -48,7 +48,7 @@ static constexpr auto ContextBufferCapacity = 1_MB;
 class TWebJsonColumnFilter
 {
 public:
-    TWebJsonColumnFilter(int maxSelectedColumnCount, std::optional<THashSet<TString>> names)
+    TWebJsonColumnFilter(int maxSelectedColumnCount, std::optional<THashSet<std::string, THash<TStringBuf>, TEqualTo<>>> names)
         : MaxSelectedColumnCount_(maxSelectedColumnCount)
         , Names_(std::move(names))
     { }
@@ -68,7 +68,7 @@ public:
 
 private:
     const int MaxSelectedColumnCount_;
-    std::optional<THashSet<TString>> Names_;
+    const std::optional<THashSet<std::string, THash<TStringBuf>, TEqualTo<>>> Names_;
 
     THashSet<ui16> AcceptedColumnIds_;
 
@@ -91,7 +91,7 @@ private:
 
 TWebJsonColumnFilter CreateWebJsonColumnFilter(const TWebJsonFormatConfigPtr& webJsonConfig)
 {
-    std::optional<THashSet<TString>> columnNames;
+    std::optional<THashSet<std::string, THash<TStringBuf>, TEqualTo<>>> columnNames;
     if (webJsonConfig->ColumnNames) {
         columnNames.emplace();
         for (const auto& columnName : *webJsonConfig->ColumnNames) {
@@ -794,7 +794,7 @@ ISchemalessFormatWriterPtr CreateWriterForWebJson(
             schemas,
             std::move(output));
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(EErrorCode::InvalidFormat, "Failed to parse config for web JSON format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for web JSON format") << ex;
     }
 }
 

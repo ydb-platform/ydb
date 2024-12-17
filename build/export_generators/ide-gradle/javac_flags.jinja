@@ -1,0 +1,12 @@
+{%- if target.javac.flags|length -%}
+{#-     skip errorprone options -#}
+{%-     set javac_flags = target.javac.flags|reject('startsWith', '-Xep:')|reject('startsWith', '-XepOpt:') -%}
+{%-     if javac_flags|length and javac_flags != ['-parameters'] %}
+
+tasks.withType<JavaCompile> {
+{%-         for javac_flag in javac_flags %}
+    options.compilerArgs.add("{{ javac_flag }}")
+{%-         endfor %}
+}
+{%      endif -%}
+{%- endif -%}

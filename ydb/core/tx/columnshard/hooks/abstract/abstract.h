@@ -24,6 +24,7 @@ namespace NKikimr::NOlap {
 class TColumnEngineChanges;
 class IBlobsGCAction;
 class TPortionInfo;
+class TDataAccessorsResult;
 namespace NIndexes {
 class TIndexMetaContainer;
 }
@@ -61,6 +62,9 @@ public:
     };
 
 protected:
+    virtual std::optional<TDuration> DoGetStalenessLivetimePing() const {
+        return {};
+    }
     virtual void DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
         return;
     }
@@ -85,7 +89,7 @@ protected:
     virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString& /*sessionId*/) {
     }
 
-    virtual TDuration DoGetPingCheckPeriod(const TDuration defaultValue) const {
+    virtual TDuration DoGetUsedSnapshotLivetime(const TDuration defaultValue) const {
         return defaultValue;
     }
     virtual TDuration DoGetOverridenGCPeriod(const TDuration defaultValue) const {
@@ -103,13 +107,16 @@ protected:
     virtual ui64 DoGetRejectMemoryIntervalLimit(const ui64 defaultValue) const {
         return defaultValue;
     }
+    virtual ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 defaultValue) const {
+        return defaultValue;
+    }
     virtual ui64 DoGetReadSequentiallyBufferSize(const ui64 defaultValue) const {
         return defaultValue;
     }
     virtual ui64 DoGetSmallPortionSizeDetector(const ui64 defaultValue) const {
         return defaultValue;
     }
-    virtual TDuration DoGetReadTimeoutClean(const TDuration defaultValue) const {
+    virtual TDuration DoGetMaxReadStaleness(const TDuration defaultValue) const {
         return defaultValue;
     }
     virtual TDuration DoGetGuaranteeIndexationInterval(const TDuration defaultValue) const {
@@ -130,6 +137,9 @@ protected:
     virtual TDuration DoGetLagForCompactionBeforeTierings(const TDuration defaultValue) const {
         return defaultValue;
     }
+    virtual ui64 DoGetMemoryLimitScanPortion(const ui64 defaultValue) const {
+        return defaultValue;
+    }
 
 private:
     inline static const NKikimrConfig::TColumnShardConfig DefaultConfig = {};
@@ -146,9 +156,22 @@ public:
         const std::set<NOlap::TSnapshot>& /*snapshotsToSave*/, const std::set<NOlap::TSnapshot>& /*snapshotsToRemove*/) {
     }
 
-    TDuration GetPingCheckPeriod() const {
-        const TDuration defaultValue = 0.6 * GetReadTimeoutClean();
-        return DoGetPingCheckPeriod(defaultValue);
+    virtual NKikimrProto::EReplyStatus OverrideBlobPutResultOnWrite(const NKikimrProto::EReplyStatus originalStatus) const {
+        return originalStatus;
+    }
+
+    ui64 GetMemoryLimitScanPortion() const {
+        return DoGetMemoryLimitScanPortion(GetConfig().GetMemoryLimitScanPortion());
+    }
+    virtual bool CheckPortionForEvict(const NOlap::TPortionInfo& portion) const;
+
+    TDuration GetStalenessLivetimePing(const TDuration defValue) const {
+        const auto val = DoGetStalenessLivetimePing();
+        if (!val || defValue < *val) {
+            return defValue;
+        } else {
+            return *val;
+        }
     }
 
     virtual bool IsBackgroundEnabled(const EBackground /*id*/) const {
@@ -189,6 +212,10 @@ public:
         const ui64 defaultValue = NOlap::TGlobalLimits::DefaultRejectMemoryIntervalLimit;
         return DoGetRejectMemoryIntervalLimit(defaultValue);
     }
+    ui64 GetMetadataRequestSoftMemoryLimit() const {
+        const ui64 defaultValue = 100 * (1 << 20);
+        return DoGetMetadataRequestSoftMemoryLimit(defaultValue);
+    }
     virtual bool NeedForceCompactionBacketsConstruction() const {
         return false;
     }
@@ -214,6 +241,8 @@ public:
     virtual void OnStatisticsUsage(const NOlap::NIndexes::TIndexMetaContainer& /*statOperator*/) {
     }
     virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) {
+    }
+    virtual void OnTieringMetadataActualized() {
     }
     virtual void OnMaxValueUsage() {
     }
@@ -249,9 +278,16 @@ public:
     }
     virtual void OnIndexSelectProcessed(const std::optional<bool> /*result*/) {
     }
-    TDuration GetReadTimeoutClean() const {
+    TDuration GetMaxReadStaleness() const {
         const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetMaxReadStaleness_ms());
-        return DoGetReadTimeoutClean(defaultValue);
+        return DoGetMaxReadStaleness(defaultValue);
+    }
+    TDuration GetMaxReadStalenessInMem() const {
+        return 0.9 * GetMaxReadStaleness();
+    }
+    TDuration GetUsedSnapshotLivetime() const {
+        const TDuration defaultValue = 0.6 * GetMaxReadStaleness();
+        return DoGetUsedSnapshotLivetime(defaultValue);
     }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const {
         return EOptimizerCompactionWeightControl::Force;
@@ -273,8 +309,8 @@ public:
     }
 
     virtual NMetadata::NFetcher::ISnapshot::TPtr GetFallbackTiersSnapshot() const {
-        static std::shared_ptr<NColumnShard::NTiers::TConfigsSnapshot> result =
-            std::make_shared<NColumnShard::NTiers::TConfigsSnapshot>(TInstant::Now());
+        static std::shared_ptr<NColumnShard::NTiers::TTiersSnapshot> result =
+            std::make_shared<NColumnShard::NTiers::TTiersSnapshot>(TInstant::Now());
         return result;
     }
 

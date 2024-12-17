@@ -83,6 +83,11 @@ void TRemoteReaderConfigBase::Register(TRegistrar registrar)
     registrar.Parameter("net_queue_size_factor", &TThis::NetQueueSizeFactor)
         .Default(0.5);
 
+    registrar.Parameter("cached_block_count_factor", &TThis::CachedBlockCountFactor)
+        .Default(0.0);
+    registrar.Parameter("cached_block_size_factor", &TThis::CachedBlockSizeFactor)
+        .Default(0.0);
+
     registrar.Parameter("suspicious_node_grace_period", &TThis::SuspiciousNodeGracePeriod)
         .Default();
 
@@ -203,6 +208,8 @@ void TBlockFetcherConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("use_uncompressed_block_cache", &TThis::UseUncompressedBlockCache)
         .Default(true);
+    registrar.Parameter("group_out_of_order_blocks", &TThis::GroupOutOfOrderBlocks)
+        .Default(false);
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->GroupSize > config->WindowSize) {

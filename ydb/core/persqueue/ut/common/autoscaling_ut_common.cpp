@@ -96,7 +96,9 @@ TTopicSdkTestSetup CreateSetup() {
     NKikimrConfig::TFeatureFlags ff;
     ff.SetEnableTopicSplitMerge(true);
     ff.SetEnablePQConfigTransactionsAtSchemeShard(true);
-    //ff.SetEnableTopicServiceTx(true);
+    ff.SetEnableTopicServiceTx(true);
+    ff.SetEnableTopicAutopartitioningForCDC(true);
+    ff.SetEnableTopicAutopartitioningForReplication(true);
 
     auto settings = TTopicSdkTestSetup::MakeServerSettings();
     settings.SetFeatureFlags(ff);
@@ -217,7 +219,8 @@ template<>
 std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadSession<SdkVersion::Topic>::Create(const TestReadSessionSettings& settings) {
     auto readSettings = TReadSessionSettings()
         .ConsumerName(TEST_CONSUMER)
-        .AutoPartitioningSupport(settings.AutoPartitioningSupport);
+        .AutoPartitioningSupport(settings.AutoPartitioningSupport)
+        .MaxLag(settings.ReadLag);
     for (auto& topic : settings.Topics) {
         readSettings.AppendTopics(topic);
     }
@@ -335,7 +338,8 @@ std::shared_ptr<TTestReadSession<SdkVersion::PQv1>::TSdkReadSession> TTestReadSe
 
     NYdb::NPersQueue::TReadSessionSettings readSettings;
     readSettings
-        .ConsumerName(TEST_CONSUMER);
+        .ConsumerName(TEST_CONSUMER)
+        .MaxTimeLag(settings.ReadLag);
     for (auto& topic : settings.Topics) {
         readSettings.AppendTopics(topic);
     }

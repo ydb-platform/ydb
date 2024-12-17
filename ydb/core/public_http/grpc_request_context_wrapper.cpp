@@ -1,5 +1,7 @@
 #include "grpc_request_context_wrapper.h"
 
+#include <util/generic/set.h>
+
 namespace NKikimr::NPublicHttp {
 
     TGrpcRequestContextWrapper::TGrpcRequestContextWrapper(const THttpRequestContext& requestContext, std::unique_ptr<NProtoBuf::Message> request, TReplySender replySender)

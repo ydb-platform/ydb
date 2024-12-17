@@ -18,19 +18,15 @@ namespace NActors {
         : TNonCopyable {
     protected:
         // for compatibility with virtual actors
-        virtual bool DoExecute(IActor* /*actor*/, std::unique_ptr<IEventHandle> /*eventPtr*/) {
-            Y_DEBUG_ABORT_UNLESS(false);
-            return false;
-        }
+        virtual bool DoExecute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr);
+
     public:
         // actual typing is performed by IEventHandle
 
         virtual ~IEventBase() {
         }
 
-        bool Execute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr) {
-            return DoExecute(actor, std::move(eventPtr));
-        }
+        bool Execute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr);
 
         virtual TString ToStringHeader() const = 0;
         virtual TString ToString() const {
@@ -64,6 +60,10 @@ namespace NActors {
 
     public:
         typedef TAutoPtr<IEventHandle> TPtr;
+
+    public:
+        // Used by a mailbox intrusive list
+        std::atomic<uintptr_t> NextLinkPtr;
 
     public:
         template <typename TEv>

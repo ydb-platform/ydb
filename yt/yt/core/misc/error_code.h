@@ -2,12 +2,11 @@
 
 #include <library/cpp/yt/misc/enum.h>
 #include <library/cpp/yt/misc/port.h>
+#include <library/cpp/yt/misc/static_initializer.h>
 
 #include <library/cpp/yt/string/format.h>
 
 #include <util/generic/hash_set.h>
-
-#include <library/cpp/yt/misc/preprocessor.h>
 
 namespace NYT {
 
@@ -90,10 +89,12 @@ void FormatValue(
 
 //! NB: This macro should only by used in cpp files.
 #define YT_DEFINE_ERROR_CODE_RANGE(from, to, namespaceName, formatter) \
-    YT_ATTRIBUTE_USED static const void* PP_ANONYMOUS_VARIABLE(RegisterErrorCodeRange) = [] { \
-        ::NYT::TErrorCodeRegistry::Get()->RegisterErrorCodeRange(from, to, namespaceName, formatter); \
-        return nullptr; \
-    } ()
+    YT_STATIC_INITIALIZER( \
+        ::NYT::TErrorCodeRegistry::Get()->RegisterErrorCodeRange( \
+            from, \
+            to, \
+            namespaceName, \
+            formatter));
 
 ////////////////////////////////////////////////////////////////////////////////
 

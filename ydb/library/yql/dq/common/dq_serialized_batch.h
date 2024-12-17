@@ -1,8 +1,9 @@
 #pragma once
 
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
-#include <ydb/library/yql/minikql/mkql_buffer.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/minikql/mkql_buffer.h>
+#include <yql/essentials/utils/chunked_buffer.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <ydb/library/actors/util/rope.h>
 
@@ -17,35 +18,39 @@ inline bool IsOOBTransport(NDqProto::EDataTransportVersion version) {
 
 struct TDqSerializedBatch {
     NDqProto::TData Proto;
-    TRope Payload;
+    TChunkedBuffer Payload;
 
     size_t Size() const {
-        return Proto.GetRaw().size() + Payload.size();
+        return Proto.GetRaw().size() + Payload.Size();
     }
 
     ui32 RowCount() const {
         return Proto.GetRows();
     }
 
+    ui32 ChunkCount() const {
+        return Proto.GetChunks();
+    }
+
     void Clear() {
-        Payload.clear();
+        Payload.Clear();
         Proto.Clear();
     }
 
     bool IsOOB() const {
         const bool oob = IsOOBTransport((NDqProto::EDataTransportVersion)Proto.GetTransportVersion());
-        YQL_ENSURE(oob || Payload.IsEmpty());
+        YQL_ENSURE(oob || Payload.Empty());
         return oob;
     }
 
-    void SetPayload(TRope&& payload);
+    void SetPayload(TChunkedBuffer&& payload);
 
-    TRope PullPayload() {
-        TRope result;
+    TChunkedBuffer PullPayload() {
+        TChunkedBuffer result;
         if (IsOOB()) {
             result = std::move(Payload);
         } else {
-            result = TRope(std::move(*Proto.MutableRaw()));
+            result = TChunkedBuffer(std::move(*Proto.MutableRaw()));
         }
         Clear();
         return result;
@@ -54,7 +59,7 @@ struct TDqSerializedBatch {
     void ConvertToNoOOB();
 };
 
-TRope SaveForSpilling(TDqSerializedBatch&& batch);
+TChunkedBuffer SaveForSpilling(TDqSerializedBatch&& batch);
 TDqSerializedBatch LoadSpilled(TBuffer&& blob);
 
 }

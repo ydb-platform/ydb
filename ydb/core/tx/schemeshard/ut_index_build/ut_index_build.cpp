@@ -1,4 +1,5 @@
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
@@ -299,7 +300,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
         UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
 
-        const TString meteringData = R"({"usage":{"start":0,"quantity":179,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"106-72075186233409549-2-101-1818-101-1818","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
+        const TString meteringData = R"({"usage":{"start":0,"quantity":179,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"106-72075186233409549-2-0-0-0-0-101-101-1818-1818","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
 
         UNIT_ASSERT_NO_DIFF(meteringMessages, meteringData + "\n");
 
@@ -932,6 +933,78 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                 break;
             }
         }
+    }
+
+    Y_UNIT_TEST(IndexPartitioningIsPersisted) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: [ "key" ]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::Table::GlobalIndexSettings settings;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+            partition_at_keys {
+                split_points {
+                    type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                    value { items { text_value: "alice" } }
+                }
+                split_points {
+                    type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                    value { items { text_value: "bob" } }
+                }
+            }
+            partitioning_settings {
+                min_partitions_count: 3
+                max_partitions_count: 3
+            }
+        )", &settings));
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> indexCreationBlocker(runtime, [](const auto& ev) {
+            const auto& modifyScheme = ev->Get()->Record.GetTransaction(0);
+            return modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexBuild;
+        });
+
+        const ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+            "Index", NKikimrSchemeOp::EIndexTypeGlobal, { "value" }, {},
+            { NYdb::NTable::TGlobalIndexSettings::FromProto(settings) }
+        });
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        indexCreationBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+            buildIndexOperation.DebugString()
+        );
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::IsTable,
+            NLs::IndexesCount(1)
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index"), {
+            NLs::PathExist,
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable", true, true), {
+            NLs::IsTable,
+            NLs::PartitionCount(3),
+            NLs::MinPartitionsCountEqual(3),
+            NLs::MaxPartitionsCountEqual(3),
+            NLs::PartitionKeys({"alice", "bob", ""})
+        });
     }
 
     Y_UNIT_TEST(DropIndex) {

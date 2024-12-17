@@ -25,6 +25,7 @@ You can click any of the methods below to go to the source code of an example in
   | Access Token | [ydb.AccessTokenCredentials(token)](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/access-token-credentials) |
   | Metadata | [ydb.iam.MetadataUrlCredentials()](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/metadata-credentials) |
   | Service Account Key | [ydb.iam.ServiceAccountCredentials.from_file(<br/>key_file, iam_endpoint=None, iam_channel_credentials=None)](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/service-account-credentials) |
+  Static Credentials | [ydb.StaticCredentials.from_user_password(user, password)](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/static-credentials/example.py) |
   | OAuth 2.0 token exchange | [ydb.oauth2_token_exchange.Oauth2TokenExchangeCredentials()](https://github.com/ydb-platform/ydb-python-sdk/blob/main/ydb/oauth2_token_exchange/token_exchange.py),<br/>[ydb.oauth2_token_exchange.Oauth2TokenExchangeCredentials.from_file(cfg_file, iam_endpoint=None)](https://github.com/ydb-platform/ydb-python-sdk/blob/main/ydb/oauth2_token_exchange/token_exchange.py) |
   | Determined by environment variables | `ydb.credentials_from_env_variables()` |
 
@@ -109,30 +110,94 @@ In the table below, `creds_json` means a JSON with parameters for exchanging the
 
 Fields not described in this table are ignored.
 
-| Field | Type | Description | Default value/optionality |
-|:-----:|:----:|:-----------:|:-------------------------:|
-|`grant-type`|string|Grant type|`urn:ietf:params:oauth:grant-type:token-exchange`|
-|`res`|string \| list of strings|Resource|optional|
-|`aud`|string \| list of strings|Audience option for [token exchange request](https://www.rfc-editor.org/rfc/rfc8693)|optional|
-|`scope`|string \| list of strings|Scope|optional|
-|`requested-token-type`|string|Requested token type|`urn:ietf:params:oauth:token-type:access_token`|
-|`subject-credentials`|creds_json|Subject credentials|optional|
-|`actor-credentials`|creds_json|Actor credentials|optional|
-|`token-endpoint`|string|Token endpoint. In the case of {{ ydb-short-name }} CLI, it is overridden by the `--iam-endpoint` option.|optional|
-|**Description of fields of `creds_json` (JWT)**|||||
-|`type`|string|Token source type. Set `JWT`||
-|`alg`|string|Algorithm for JWT signature. Supported algorithms: ES256, ES384, ES512, HS256, HS384, HS512, PS256, PS384, PS512, RS256, RS384, RS512||
-|`private-key`|string|(Private) key in PEM format (for algorithms `ES*`, `PS*`, `RS*`) or Base64 format (for algorithms `HS*`) for JWT signature||
-|`kid`|string|`kid` JWT standard claim (key id)|optional|
-|`iss`|string|`iss` JWT standard claim (issuer)|optional|
-|`sub`|string|`sub` JWT standard claim (subject)|optional|
-|`aud`|string|`aud` JWT standard claim (audience)|optional|
-|`jti`|string|`jti` JWT standard claim (JWT id)|optional|
-|`ttl`|string|JWT token TTL|`1h`|
-|**Description of fields of `creds_json` (FIXED)**|||||
-|`type`|string|Token source type. Set `FIXED`||
-|`token`|string|Token value||
-|`token-type`|string|Token type value. It will become `subject_token_type/actor_token_type` parameter in [token exchange request](https://www.rfc-editor.org/rfc/rfc8693).||
+#|
+|| Field
+| Type
+| Description
+| Default value/optionality ||
+|| `grant-type`
+| string
+| Grant type
+| `urn:ietf:params:oauth:grant-type:token-exchange` ||
+|| `res`
+| string \| list of strings
+| Resource
+| optional ||
+|| `aud`
+| string \| list of strings
+| Audience option for [token exchange request](https://www.rfc-editor.org/rfc/rfc8693)
+| optional ||
+|| `scope`
+| string \| list of strings
+| Scope
+| optional ||
+|| `requested-token-type`
+| string
+| Requested token type
+| `urn:ietf:params:oauth:token-type:access_token` ||
+|| `subject-credentials`
+| creds_json
+| Subject credentials
+| optional ||
+|| `actor-credentials`
+| creds_json
+| Actor credentials
+| optional ||
+|| `token-endpoint`
+| string
+| Token endpoint. In the case of {{ ydb-short-name }} CLI, it is overridden by the `--iam-endpoint` option.
+| optional ||
+|| **Description of fields of `creds_json` (JWT)** | > | > | > ||
+|| `type`
+| string
+| Token source type. Set `JWT`
+|  ||
+|| `alg`
+| string
+| Algorithm for JWT signature. Supported algorithms: ES256, ES384, ES512, HS256, HS384, HS512, PS256, PS384, PS512, RS256, RS384, RS512
+|  ||
+|| `private-key`
+| string
+| (Private) key in PEM format (for algorithms `ES*`, `PS*`, `RS*`) or Base64 format (for algorithms `HS*`) for JWT signature
+|  ||
+|| `kid`
+| string
+| `kid` JWT standard claim (key id)
+| optional ||
+|| `iss`
+| string
+| `iss` JWT standard claim (issuer)
+| optional ||
+|| `sub`
+| string
+| `sub` JWT standard claim (subject)
+| optional ||
+|| `aud`
+| string
+| `aud` JWT standard claim (audience)
+| optional ||
+|| `jti`
+| string
+| `jti` JWT standard claim (JWT id)
+| optional ||
+|| `ttl`
+| string
+| JWT token TTL
+| `1h` ||
+|| **Description of fields of `creds_json` (FIXED)** | > | > | > ||
+|| `type`
+| string
+| Token source type. Set `FIXED`
+|  ||
+|| `token`
+| string
+| Token value
+|  ||
+|| `token-type`
+| string
+| Token type value. It will become `subject_token_type/actor_token_type` parameter in [token exchange request](https://www.rfc-editor.org/rfc/rfc8693).
+|  ||
+|# {wide-content}
 
 ### Example
 

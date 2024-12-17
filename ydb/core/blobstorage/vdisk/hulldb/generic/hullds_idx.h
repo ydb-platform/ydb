@@ -183,6 +183,7 @@ namespace NKikimr {
         ui64 CurEntryPointLsn = ui64(-1);
         ui64 PrevEntryPointLsn = ui64(-1);
 
+        TAtomic FreshCompReadsInFlight = 0;
         TAtomic FreshCompWritesInFlight = 0;
         TAtomic HullCompReadsInFlight = 0;
         TAtomic HullCompWritesInFlight = 0;

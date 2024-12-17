@@ -11,7 +11,7 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(8.10.1)
+VERSION(8.5.0)
 
 PEERDIR(
     contrib/libs/c-ares
@@ -46,16 +46,13 @@ SRCS(
     lib/version_win32.c
     lib/warnless.c
     src/slist_wc.c
-    src/terminal.c
     src/tool_binmode.c
     src/tool_bname.c
-    src/tool_ca_embed.c
     src/tool_cb_dbg.c
     src/tool_cb_hdr.c
     src/tool_cb_prg.c
     src/tool_cb_rea.c
     src/tool_cb_see.c
-    src/tool_cb_soc.c
     src/tool_cb_wrt.c
     src/tool_cfgable.c
     src/tool_dirhie.c

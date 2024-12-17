@@ -54,6 +54,8 @@ class TGetImpl {
 
     THistory History;
 
+    bool AtLeastOneResponseWasNotOk = false;
+
     friend class TBlobStorageGroupGetRequest;
     friend class THistory;
 
@@ -238,6 +240,7 @@ public:
                 DSP_LOG_DEBUG_SX(logCtx, "BPG60", "Got# " << NKikimrProto::EReplyStatus_Name(replyStatus).data()
                     << " orderNumber# " << orderNumber << " vDiskId# " << vdisk.ToString());
                 Blackboard.AddErrorResponse(blobId, orderNumber);
+                AtLeastOneResponseWasNotOk = true;
             } else if (replyStatus == NKikimrProto::NOT_YET) {
                 DSP_LOG_DEBUG_SX(logCtx, "BPG67", "Got# NOT_YET orderNumber# " << orderNumber
                         << " vDiskId# " << vdisk.ToString());
@@ -294,6 +297,10 @@ public:
 
     TString PrintHistory() const {
         return History.Print((QuerySize == 0) ? nullptr : &Queries[0].Id);
+    }
+
+    bool WasNotOkResponses() {
+        return AtLeastOneResponseWasNotOk;
     }
 
 protected:

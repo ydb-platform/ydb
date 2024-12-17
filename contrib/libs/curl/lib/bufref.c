@@ -25,7 +25,6 @@
 #include "curl_setup.h"
 #include "urldata.h"
 #include "bufref.h"
-#include "strdup.h"
 
 #include "curl_memory.h"
 #include "memdebug.h"
@@ -48,7 +47,7 @@ void Curl_bufref_init(struct bufref *br)
 }
 
 /*
- * Free the buffer and re-init the necessary fields. It does not touch the
+ * Free the buffer and re-init the necessary fields. It doesn't touch the
  * 'signature' field and thus this buffer reference can be reused.
  */
 
@@ -117,9 +116,12 @@ CURLcode Curl_bufref_memdup(struct bufref *br, const void *ptr, size_t len)
   DEBUGASSERT(len <= CURL_MAX_INPUT_LENGTH);
 
   if(ptr) {
-    cpy = Curl_memdup0(ptr, len);
+    cpy = malloc(len + 1);
     if(!cpy)
       return CURLE_OUT_OF_MEMORY;
+    if(len)
+      memcpy(cpy, ptr, len);
+    cpy[len] = '\0';
   }
 
   Curl_bufref_set(br, cpy, len, curl_free);

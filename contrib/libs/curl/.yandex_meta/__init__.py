@@ -83,6 +83,9 @@ def post_install(self):
 
         # add ifaddrs implementation if needed
         m.PEERDIR.add("contrib/libs/libc_compat")
+        m.PEERDIR.add("contrib/libs/openssl")
+        m.PEERDIR.add("contrib/libs/ngtcp2")
+        m.PEERDIR.add("contrib/libs/nghttp3")
 
         # make c-ares dependency conditional,
         # but leave ADDINCL in place to make CONFIGURE work
@@ -178,13 +181,12 @@ curl = GNUMakeNixProject(
         "nspr.h",
         "netinet/in6.h",
         "nettle/",
-        "nghttp3/",
-        "ngtcp2.h",
-        "ngtcp2/",
+        "ngtcp2/ngtcp2_crypto_boringssl.h",
+        "ngtcp2/ngtcp2_crypto_gnutls.h",
+        "ngtcp2/ngtcp2_crypto_wolfssl.h",
         "nwconio.h",
         # NB: openssl/core_names.h appeared in OpenSSL 3.0, while we have only 1.1.1l at the time
         "openssl/core_names.h",
-        "openssl/ech.h",
         "plarenas.h",
         "proto/",
         "quiche.h",
@@ -192,18 +194,16 @@ curl = GNUMakeNixProject(
         "setup-vms.h",
         "stabs.h",
         "subauth.h",
-        "unicode/uidna.h",
-        "uv.h",
-        "vquic-*",
-        "wolfssh/*",
-        "wolfssl/*",
+        "vquic/msh3.h",
+        "vquic/ngtcp2.h",
+        "vquic/quiche.h",
+        "wolfssh/",
+        "wolfssl/",
         "hyper.h",
         "gsasl.h",
         "descrip",
         "iodef",
         "starlet",
-        "x509asn1.h",
-        "cipher_suite.h",
         # Disable system includes of these headers, yet allow including lib/vtls/{rustls,bearssl}.h
         "<rustls.h>",
         "<bearssl.h>",

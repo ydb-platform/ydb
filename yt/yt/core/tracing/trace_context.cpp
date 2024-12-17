@@ -1,6 +1,6 @@
 #include "trace_context.h"
+
 #include "private.h"
-#include "config.h"
 #include "allocation_tags.h"
 
 #include <yt/yt/core/concurrency/scheduler_api.h>
@@ -8,7 +8,6 @@
 #include <yt/yt/core/profiling/timing.h>
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <yt/yt/core/ytree/convert.h>
 
@@ -31,7 +30,7 @@ namespace NYT::NConcurrency::NDetail {
 
 YT_DECLARE_THREAD_LOCAL(TFls*, PerThreadFls);
 
-} // NYT::NConcurrency::NDetail
+} // namespace NYT::NConcurrency::NDetail
 
 namespace NYT::NTracing {
 
@@ -82,28 +81,6 @@ void SetGlobalTracer(const ITracerPtr& tracer)
     if (oldTracer) {
         oldTracer->Stop();
     }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TTracingConfigStorage
-{
-    TAtomicIntrusivePtr<TTracingTransportConfig> Config{New<TTracingTransportConfig>()};
-};
-
-static TTracingConfigStorage* GlobalTracingConfig()
-{
-    return LeakySingleton<TTracingConfigStorage>();
-}
-
-void SetTracingTransportConfig(TTracingTransportConfigPtr config)
-{
-    GlobalTracingConfig()->Config.Store(std::move(config));
-}
-
-TTracingTransportConfigPtr GetTracingTransportConfig()
-{
-    return GlobalTracingConfig()->Config.Acquire();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -377,7 +354,7 @@ TSpanContext TTraceContext::GetSpanContext() const
         .TraceId = GetTraceId(),
         .SpanId = GetSpanId(),
         .Sampled = IsSampled(),
-        .Debug = Debug_,
+        .Debug = IsDebug(),
     };
 }
 
@@ -476,10 +453,16 @@ void TTraceContext::AddProfilingTag(const std::string& name, i64 value)
     ProfilingTags_.emplace_back(name, value);
 }
 
-std::vector<std::pair<std::string, std::variant<std::string, i64>>> TTraceContext::GetProfilingTags()
+std::vector<std::pair<std::string, TTraceContext::TProfilingTagValue>> TTraceContext::GetProfilingTags()
 {
     auto guard = Guard(Lock_);
     return ProfilingTags_;
+}
+
+void TTraceContext::SetProfilingTags(std::vector<std::pair<std::string, TTraceContext::TProfilingTagValue>> profilingTags)
+{
+    auto guard = Guard(Lock_);
+    ProfilingTags_ = std::move(profilingTags);
 }
 
 bool TTraceContext::AddAsyncChild(TTraceId traceId)
@@ -613,7 +596,10 @@ void FormatValue(TStringBuilderBase* builder, const TTraceContextPtr& context, T
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ToProto(NProto::TTracingExt* ext, const TTraceContextPtr& context)
+void ToProto(
+    NProto::TTracingExt* ext,
+    const TTraceContextPtr& context,
+    bool sendBaggage)
 {
     if (!context || !context->IsPropagated()) {
         ext->Clear();
@@ -628,7 +614,8 @@ void ToProto(NProto::TTracingExt* ext, const TTraceContextPtr& context)
     if (auto endpoint = context->GetTargetEndpoint()){
         ext->set_target_endpoint(endpoint.value());
     }
-    if (GetTracingTransportConfig()->SendBaggage) {
+
+    if (sendBaggage) {
         if (auto baggage = context->GetBaggage()) {
             ext->set_baggage(baggage.ToString());
         }

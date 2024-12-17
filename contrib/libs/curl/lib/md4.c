@@ -28,7 +28,6 @@
 
 #include <string.h>
 
-#include "strdup.h"
 #include "curl_md4.h"
 #include "warnless.h"
 
@@ -37,9 +36,6 @@
 #if (OPENSSL_VERSION_NUMBER >= 0x30000000L) && !defined(USE_AMISSL)
 /* OpenSSL 3.0.0 marks the MD4 functions as deprecated */
 #define OPENSSL_NO_MD4
-#else
-/* Cover also OPENSSL_NO_MD4 configured in openssl */
-#include <openssl/opensslconf.h>
 #endif
 #endif /* USE_OPENSSL */
 
@@ -58,8 +54,7 @@
 #else
 #error #include <mbedtls/config.h>
 #endif
-#if(MBEDTLS_VERSION_NUMBER >= 0x02070000) && \
-   (MBEDTLS_VERSION_NUMBER < 0x03000000)
+#if(MBEDTLS_VERSION_NUMBER >= 0x02070000)
   #define HAS_MBEDTLS_RESULT_CODE_BASED_FUNCTIONS
 #endif
 #endif /* USE_MBEDTLS */
@@ -199,9 +194,11 @@ static int MD4_Init(MD4_CTX *ctx)
 static void MD4_Update(MD4_CTX *ctx, const void *data, unsigned long size)
 {
   if(!ctx->data) {
-    ctx->data = Curl_memdup(data, size);
-    if(ctx->data)
+    ctx->data = malloc(size);
+    if(ctx->data) {
+      memcpy(ctx->data, data, size);
       ctx->size = size;
+    }
   }
 }
 
@@ -220,7 +217,7 @@ static void MD4_Final(unsigned char *result, MD4_CTX *ctx)
 }
 
 #else
-/* When no other crypto library is available, or the crypto library does not
+/* When no other crypto library is available, or the crypto library doesn't
  * support MD4, we use this code segment this implementation of it
  *
  * This is an OpenSSL-compatible implementation of the RSA Data Security, Inc.
@@ -232,8 +229,8 @@ static void MD4_Final(unsigned char *result, MD4_CTX *ctx)
  * Author:
  * Alexander Peslyak, better known as Solar Designer <solar at openwall.com>
  *
- * This software was written by Alexander Peslyak in 2001. No copyright is
- * claimed, and the software is hereby placed in the public domain. In case
+ * This software was written by Alexander Peslyak in 2001.  No copyright is
+ * claimed, and the software is hereby placed in the public domain.  In case
  * this attempt to disclaim copyright and place the software in the public
  * domain is deemed null and void, then the software is Copyright (c) 2001
  * Alexander Peslyak and it is hereby released to the general public under the
@@ -242,19 +239,19 @@ static void MD4_Final(unsigned char *result, MD4_CTX *ctx)
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted.
  *
- * There is ABSOLUTELY NO WARRANTY, express or implied.
+ * There's ABSOLUTELY NO WARRANTY, express or implied.
  *
  * (This is a heavily cut-down "BSD license".)
  *
  * This differs from Colin Plumb's older public domain implementation in that
  * no exactly 32-bit integer data type is required (any 32-bit or wider
- * unsigned integer data type will do), there is no compile-time endianness
- * configuration, and the function prototypes match OpenSSL's. No code from
+ * unsigned integer data type will do), there's no compile-time endianness
+ * configuration, and the function prototypes match OpenSSL's.  No code from
  * Colin Plumb's implementation has been reused; this comment merely compares
  * the properties of the two independent implementations.
  *
  * The primary goals of this implementation are portability and ease of use.
- * It is meant to be fast, but not as fast as possible. Some known
+ * It is meant to be fast, but not as fast as possible.  Some known
  * optimizations are not included to reduce source code size and avoid
  * compile-time configuration.
  */
@@ -280,14 +277,14 @@ static void MD4_Final(unsigned char *result, MD4_CTX *ctx);
  * F and G are optimized compared to their RFC 1320 definitions, with the
  * optimization for F borrowed from Colin Plumb's MD5 implementation.
  */
-#define MD4_F(x, y, z)                  ((z) ^ ((x) & ((y) ^ (z))))
-#define MD4_G(x, y, z)                  (((x) & ((y) | (z))) | ((y) & (z)))
-#define MD4_H(x, y, z)                  ((x) ^ (y) ^ (z))
+#define F(x, y, z)                      ((z) ^ ((x) & ((y) ^ (z))))
+#define G(x, y, z)                      (((x) & ((y) | (z))) | ((y) & (z)))
+#define H(x, y, z)                      ((x) ^ (y) ^ (z))
 
 /*
  * The MD4 transformation for all three rounds.
  */
-#define MD4_STEP(f, a, b, c, d, x, s) \
+#define STEP(f, a, b, c, d, x, s) \
         (a) += f((b), (c), (d)) + (x); \
         (a) = (((a) << (s)) | (((a) & 0xffffffff) >> (32 - (s))));
 
@@ -296,31 +293,30 @@ static void MD4_Final(unsigned char *result, MD4_CTX *ctx);
  * in a properly aligned word in host byte order.
  *
  * The check for little-endian architectures that tolerate unaligned
- * memory accesses is just an optimization. Nothing will break if it
- * does not work.
+ * memory accesses is just an optimization.  Nothing will break if it
+ * doesn't work.
  */
 #if defined(__i386__) || defined(__x86_64__) || defined(__vax__)
-#define MD4_SET(n) \
+#define SET(n) \
         (*(MD4_u32plus *)(void *)&ptr[(n) * 4])
-#define MD4_GET(n) \
-        MD4_SET(n)
+#define GET(n) \
+        SET(n)
 #else
-#define MD4_SET(n) \
+#define SET(n) \
         (ctx->block[(n)] = \
         (MD4_u32plus)ptr[(n) * 4] | \
         ((MD4_u32plus)ptr[(n) * 4 + 1] << 8) | \
         ((MD4_u32plus)ptr[(n) * 4 + 2] << 16) | \
         ((MD4_u32plus)ptr[(n) * 4 + 3] << 24))
-#define MD4_GET(n) \
+#define GET(n) \
         (ctx->block[(n)])
 #endif
 
 /*
  * This processes one or more 64-byte data blocks, but does NOT update
- * the bit counters. There are no alignment requirements.
+ * the bit counters.  There are no alignment requirements.
  */
-static const void *my_md4_body(MD4_CTX *ctx,
-                               const void *data, unsigned long size)
+static const void *body(MD4_CTX *ctx, const void *data, unsigned long size)
 {
   const unsigned char *ptr;
   MD4_u32plus a, b, c, d;
@@ -341,58 +337,58 @@ static const void *my_md4_body(MD4_CTX *ctx,
     saved_d = d;
 
 /* Round 1 */
-    MD4_STEP(MD4_F, a, b, c, d, MD4_SET(0), 3)
-    MD4_STEP(MD4_F, d, a, b, c, MD4_SET(1), 7)
-    MD4_STEP(MD4_F, c, d, a, b, MD4_SET(2), 11)
-    MD4_STEP(MD4_F, b, c, d, a, MD4_SET(3), 19)
-    MD4_STEP(MD4_F, a, b, c, d, MD4_SET(4), 3)
-    MD4_STEP(MD4_F, d, a, b, c, MD4_SET(5), 7)
-    MD4_STEP(MD4_F, c, d, a, b, MD4_SET(6), 11)
-    MD4_STEP(MD4_F, b, c, d, a, MD4_SET(7), 19)
-    MD4_STEP(MD4_F, a, b, c, d, MD4_SET(8), 3)
-    MD4_STEP(MD4_F, d, a, b, c, MD4_SET(9), 7)
-    MD4_STEP(MD4_F, c, d, a, b, MD4_SET(10), 11)
-    MD4_STEP(MD4_F, b, c, d, a, MD4_SET(11), 19)
-    MD4_STEP(MD4_F, a, b, c, d, MD4_SET(12), 3)
-    MD4_STEP(MD4_F, d, a, b, c, MD4_SET(13), 7)
-    MD4_STEP(MD4_F, c, d, a, b, MD4_SET(14), 11)
-    MD4_STEP(MD4_F, b, c, d, a, MD4_SET(15), 19)
+    STEP(F, a, b, c, d, SET(0), 3)
+    STEP(F, d, a, b, c, SET(1), 7)
+    STEP(F, c, d, a, b, SET(2), 11)
+    STEP(F, b, c, d, a, SET(3), 19)
+    STEP(F, a, b, c, d, SET(4), 3)
+    STEP(F, d, a, b, c, SET(5), 7)
+    STEP(F, c, d, a, b, SET(6), 11)
+    STEP(F, b, c, d, a, SET(7), 19)
+    STEP(F, a, b, c, d, SET(8), 3)
+    STEP(F, d, a, b, c, SET(9), 7)
+    STEP(F, c, d, a, b, SET(10), 11)
+    STEP(F, b, c, d, a, SET(11), 19)
+    STEP(F, a, b, c, d, SET(12), 3)
+    STEP(F, d, a, b, c, SET(13), 7)
+    STEP(F, c, d, a, b, SET(14), 11)
+    STEP(F, b, c, d, a, SET(15), 19)
 
 /* Round 2 */
-    MD4_STEP(MD4_G, a, b, c, d, MD4_GET(0) + 0x5a827999, 3)
-    MD4_STEP(MD4_G, d, a, b, c, MD4_GET(4) + 0x5a827999, 5)
-    MD4_STEP(MD4_G, c, d, a, b, MD4_GET(8) + 0x5a827999, 9)
-    MD4_STEP(MD4_G, b, c, d, a, MD4_GET(12) + 0x5a827999, 13)
-    MD4_STEP(MD4_G, a, b, c, d, MD4_GET(1) + 0x5a827999, 3)
-    MD4_STEP(MD4_G, d, a, b, c, MD4_GET(5) + 0x5a827999, 5)
-    MD4_STEP(MD4_G, c, d, a, b, MD4_GET(9) + 0x5a827999, 9)
-    MD4_STEP(MD4_G, b, c, d, a, MD4_GET(13) + 0x5a827999, 13)
-    MD4_STEP(MD4_G, a, b, c, d, MD4_GET(2) + 0x5a827999, 3)
-    MD4_STEP(MD4_G, d, a, b, c, MD4_GET(6) + 0x5a827999, 5)
-    MD4_STEP(MD4_G, c, d, a, b, MD4_GET(10) + 0x5a827999, 9)
-    MD4_STEP(MD4_G, b, c, d, a, MD4_GET(14) + 0x5a827999, 13)
-    MD4_STEP(MD4_G, a, b, c, d, MD4_GET(3) + 0x5a827999, 3)
-    MD4_STEP(MD4_G, d, a, b, c, MD4_GET(7) + 0x5a827999, 5)
-    MD4_STEP(MD4_G, c, d, a, b, MD4_GET(11) + 0x5a827999, 9)
-    MD4_STEP(MD4_G, b, c, d, a, MD4_GET(15) + 0x5a827999, 13)
+    STEP(G, a, b, c, d, GET(0) + 0x5a827999, 3)
+    STEP(G, d, a, b, c, GET(4) + 0x5a827999, 5)
+    STEP(G, c, d, a, b, GET(8) + 0x5a827999, 9)
+    STEP(G, b, c, d, a, GET(12) + 0x5a827999, 13)
+    STEP(G, a, b, c, d, GET(1) + 0x5a827999, 3)
+    STEP(G, d, a, b, c, GET(5) + 0x5a827999, 5)
+    STEP(G, c, d, a, b, GET(9) + 0x5a827999, 9)
+    STEP(G, b, c, d, a, GET(13) + 0x5a827999, 13)
+    STEP(G, a, b, c, d, GET(2) + 0x5a827999, 3)
+    STEP(G, d, a, b, c, GET(6) + 0x5a827999, 5)
+    STEP(G, c, d, a, b, GET(10) + 0x5a827999, 9)
+    STEP(G, b, c, d, a, GET(14) + 0x5a827999, 13)
+    STEP(G, a, b, c, d, GET(3) + 0x5a827999, 3)
+    STEP(G, d, a, b, c, GET(7) + 0x5a827999, 5)
+    STEP(G, c, d, a, b, GET(11) + 0x5a827999, 9)
+    STEP(G, b, c, d, a, GET(15) + 0x5a827999, 13)
 
 /* Round 3 */
-    MD4_STEP(MD4_H, a, b, c, d, MD4_GET(0) + 0x6ed9eba1, 3)
-    MD4_STEP(MD4_H, d, a, b, c, MD4_GET(8) + 0x6ed9eba1, 9)
-    MD4_STEP(MD4_H, c, d, a, b, MD4_GET(4) + 0x6ed9eba1, 11)
-    MD4_STEP(MD4_H, b, c, d, a, MD4_GET(12) + 0x6ed9eba1, 15)
-    MD4_STEP(MD4_H, a, b, c, d, MD4_GET(2) + 0x6ed9eba1, 3)
-    MD4_STEP(MD4_H, d, a, b, c, MD4_GET(10) + 0x6ed9eba1, 9)
-    MD4_STEP(MD4_H, c, d, a, b, MD4_GET(6) + 0x6ed9eba1, 11)
-    MD4_STEP(MD4_H, b, c, d, a, MD4_GET(14) + 0x6ed9eba1, 15)
-    MD4_STEP(MD4_H, a, b, c, d, MD4_GET(1) + 0x6ed9eba1, 3)
-    MD4_STEP(MD4_H, d, a, b, c, MD4_GET(9) + 0x6ed9eba1, 9)
-    MD4_STEP(MD4_H, c, d, a, b, MD4_GET(5) + 0x6ed9eba1, 11)
-    MD4_STEP(MD4_H, b, c, d, a, MD4_GET(13) + 0x6ed9eba1, 15)
-    MD4_STEP(MD4_H, a, b, c, d, MD4_GET(3) + 0x6ed9eba1, 3)
-    MD4_STEP(MD4_H, d, a, b, c, MD4_GET(11) + 0x6ed9eba1, 9)
-    MD4_STEP(MD4_H, c, d, a, b, MD4_GET(7) + 0x6ed9eba1, 11)
-    MD4_STEP(MD4_H, b, c, d, a, MD4_GET(15) + 0x6ed9eba1, 15)
+    STEP(H, a, b, c, d, GET(0) + 0x6ed9eba1, 3)
+    STEP(H, d, a, b, c, GET(8) + 0x6ed9eba1, 9)
+    STEP(H, c, d, a, b, GET(4) + 0x6ed9eba1, 11)
+    STEP(H, b, c, d, a, GET(12) + 0x6ed9eba1, 15)
+    STEP(H, a, b, c, d, GET(2) + 0x6ed9eba1, 3)
+    STEP(H, d, a, b, c, GET(10) + 0x6ed9eba1, 9)
+    STEP(H, c, d, a, b, GET(6) + 0x6ed9eba1, 11)
+    STEP(H, b, c, d, a, GET(14) + 0x6ed9eba1, 15)
+    STEP(H, a, b, c, d, GET(1) + 0x6ed9eba1, 3)
+    STEP(H, d, a, b, c, GET(9) + 0x6ed9eba1, 9)
+    STEP(H, c, d, a, b, GET(5) + 0x6ed9eba1, 11)
+    STEP(H, b, c, d, a, GET(13) + 0x6ed9eba1, 15)
+    STEP(H, a, b, c, d, GET(3) + 0x6ed9eba1, 3)
+    STEP(H, d, a, b, c, GET(11) + 0x6ed9eba1, 9)
+    STEP(H, c, d, a, b, GET(7) + 0x6ed9eba1, 11)
+    STEP(H, b, c, d, a, GET(15) + 0x6ed9eba1, 15)
 
     a += saved_a;
     b += saved_b;
@@ -446,11 +442,11 @@ static void MD4_Update(MD4_CTX *ctx, const void *data, unsigned long size)
     memcpy(&ctx->buffer[used], data, available);
     data = (const unsigned char *)data + available;
     size -= available;
-    my_md4_body(ctx, ctx->buffer, 64);
+    body(ctx, ctx->buffer, 64);
   }
 
   if(size >= 64) {
-    data = my_md4_body(ctx, data, size & ~(unsigned long)0x3f);
+    data = body(ctx, data, size & ~(unsigned long)0x3f);
     size &= 0x3f;
   }
 
@@ -469,7 +465,7 @@ static void MD4_Final(unsigned char *result, MD4_CTX *ctx)
 
   if(available < 8) {
     memset(&ctx->buffer[used], 0, available);
-    my_md4_body(ctx, ctx->buffer, 64);
+    body(ctx, ctx->buffer, 64);
     used = 0;
     available = 64;
   }
@@ -486,7 +482,7 @@ static void MD4_Final(unsigned char *result, MD4_CTX *ctx)
   ctx->buffer[62] = curlx_ultouc((ctx->hi >> 16)&0xff);
   ctx->buffer[63] = curlx_ultouc(ctx->hi >> 24);
 
-  my_md4_body(ctx, ctx->buffer, 64);
+  body(ctx, ctx->buffer, 64);
 
   result[0] = curlx_ultouc((ctx->a)&0xff);
   result[1] = curlx_ultouc((ctx->a >> 8)&0xff);

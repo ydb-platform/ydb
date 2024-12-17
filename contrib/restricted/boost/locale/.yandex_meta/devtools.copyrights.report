@@ -56,12 +56,12 @@ BELONGS ya.make
         include/boost/locale/date_time_facet.hpp [2:2]
         include/boost/locale/encoding.hpp [2:2]
         include/boost/locale/encoding_errors.hpp [2:2]
-        include/boost/locale/encoding_utf.hpp [2:2]
+        include/boost/locale/encoding_utf.hpp [2:3]
         include/boost/locale/format.hpp [2:3]
         include/boost/locale/formatting.hpp [2:3]
         include/boost/locale/generator.hpp [2:2]
         include/boost/locale/gnu_gettext.hpp [2:2]
-        include/boost/locale/info.hpp [2:2]
+        include/boost/locale/info.hpp [2:3]
         include/boost/locale/localization_backend.hpp [2:2]
         include/boost/locale/message.hpp [2:3]
         include/boost/locale/time_zone.hpp [2:2]
@@ -78,7 +78,7 @@ BELONGS ya.make
         src/boost/locale/icu/codecvt.cpp [2:3]
         src/boost/locale/icu/codecvt.hpp [2:2]
         src/boost/locale/icu/collator.cpp [2:2]
-        src/boost/locale/icu/conversion.cpp [2:2]
+        src/boost/locale/icu/conversion.cpp [2:3]
         src/boost/locale/icu/date_time.cpp [2:3]
         src/boost/locale/icu/formatter.cpp [2:3]
         src/boost/locale/icu/formatter.hpp [2:2]
@@ -98,13 +98,13 @@ BELONGS ya.make
         src/boost/locale/posix/numeric.cpp [2:2]
         src/boost/locale/posix/posix_backend.cpp [2:3]
         src/boost/locale/posix/posix_backend.hpp [2:2]
-        src/boost/locale/shared/date_time.cpp [2:2]
+        src/boost/locale/shared/date_time.cpp [2:3]
         src/boost/locale/shared/format.cpp [2:2]
         src/boost/locale/shared/formatting.cpp [2:2]
         src/boost/locale/shared/generator.cpp [2:2]
         src/boost/locale/shared/iconv_codecvt.cpp [2:3]
         src/boost/locale/shared/iconv_codecvt.hpp [2:2]
-        src/boost/locale/shared/ids.cpp [2:2]
+        src/boost/locale/shared/ids.cpp [2:3]
         src/boost/locale/shared/ios_prop.hpp [2:3]
         src/boost/locale/shared/localization_backend.cpp [2:2]
         src/boost/locale/shared/mo_hash.hpp [2:2]
@@ -124,7 +124,7 @@ BELONGS ya.make
         src/boost/locale/util/gregorian.cpp [2:2]
         src/boost/locale/util/gregorian.hpp [2:2]
         src/boost/locale/util/iconv.hpp [2:2]
-        src/boost/locale/util/info.cpp [2:2]
+        src/boost/locale/util/info.cpp [2:3]
         src/boost/locale/util/locale_data.cpp [2:3]
         src/boost/locale/util/numeric.hpp [2:2]
         src/boost/locale/util/timezone.hpp [2:2]
@@ -150,6 +150,19 @@ BELONGS ya.make
     Files with this license:
         src/boost/locale/icu/uconv.hpp [2:3]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 187d73eada66cef6d5d08ed727437603
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2024 Alexander Grund
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/locale/detail/allocator_traits.hpp [2:2]
+        src/boost/locale/shared/ids.cpp [2:3]
+        src/boost/locale/shared/std_collate_adapter.hpp [2:2]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 5f6f0ebf2d6180caac56d446585150fe
 BELONGS ya.make
     License text:
@@ -162,6 +175,18 @@ BELONGS ya.make
     Files with this license:
         include/boost/locale/generic_codecvt.hpp [2:3]
         include/boost/locale/utf8_codecvt.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 70211eab6462dd6308fa5b813ba0f2c0
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+        // Copyright (c) 2022-2024 Alexander Grund
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/locale/encoding_utf.hpp [2:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 8d04644911f5fff0cef0ea7eeadf74ee
 BELONGS ya.make
@@ -182,14 +207,15 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL a999dc6b43b371fa616fd4c0c30cf6f3
 BELONGS ya.make
     License text:
-        // Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
         // Copyright (c) 2023 Alexander Grund
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        include/boost/locale/detail/any_string.hpp [2:2]
         include/boost/locale/util/locale_data.hpp [2:3]
+        src/boost/locale/shared/message.hpp [2:2]
         src/boost/locale/util/make_std_unique.hpp [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL c75aae6c76ff96e098e51412b5d4691b
@@ -206,18 +232,22 @@ BELONGS ya.make
         include/boost/locale/detail/facet_id.hpp [2:2]
         include/boost/locale/detail/is_supported_char.hpp [2:2]
         include/boost/locale/formatting.hpp [2:3]
+        include/boost/locale/info.hpp [2:3]
         include/boost/locale/util.hpp [2:3]
         include/boost/locale/util/string.hpp [2:2]
         src/boost/locale/encoding/codepage.cpp [2:3]
         src/boost/locale/icu/codecvt.cpp [2:3]
+        src/boost/locale/icu/conversion.cpp [2:3]
         src/boost/locale/icu/icu_backend.cpp [2:3]
         src/boost/locale/posix/codecvt.cpp [2:3]
         src/boost/locale/posix/posix_backend.cpp [2:3]
+        src/boost/locale/shared/date_time.cpp [2:3]
         src/boost/locale/shared/iconv_codecvt.cpp [2:3]
         src/boost/locale/std/std_backend.cpp [2:3]
         src/boost/locale/util/codecvt_converter.cpp [2:3]
         src/boost/locale/util/encoding.cpp [2:3]
         src/boost/locale/util/encoding.hpp [2:3]
+        src/boost/locale/util/info.cpp [2:3]
         src/boost/locale/util/locale_data.cpp [2:3]
         src/boost/locale/win32/win_backend.cpp [2:3]
 

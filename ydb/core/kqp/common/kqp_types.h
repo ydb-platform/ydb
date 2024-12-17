@@ -2,7 +2,7 @@
 
 #include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 namespace NKikimr::NScheme {
 

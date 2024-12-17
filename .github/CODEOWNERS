@@ -9,6 +9,7 @@
 /tools @ydb-platform/ci
 /util @ydb-platform/ci
 /vendor @ydb-platform/ci
+/yql @ydb-platform/ci
 /yt @ydb-platform/ci
 
 /ydb/core/fq/ @ydb-platform/fq
@@ -18,12 +19,16 @@
 
 /ydb/library/yql/ @ydb-platform/yql
 /ydb/library/yql/dq @ydb-platform/yql @ydb-platform/qp
+/ydb/library/yql/dq/actors/common @ydb-platform/fq
 /ydb/library/yql/providers/common/http_gateway @ydb-platform/fq
 /ydb/library/yql/providers/common/db_id_async_resolver @ydb-platform/fq
+/ydb/library/yql/providers/common/pushdown @ydb-platform/fq
 /ydb/library/yql/providers/generic @ydb-platform/fq
 /ydb/library/yql/providers/pq @ydb-platform/fq
 /ydb/library/yql/providers/s3 @ydb-platform/fq
 /ydb/library/yql/providers/solomon @ydb-platform/fq
+/ydb/library/yql/tests/sql/solomon @ydb-platform/fq
+/ydb/library/yql/tests/sql/suites/solomon @ydb-platform/fq
 /ydb/library/yql/udfs/common/clickhouse/client @ydb-platform/fq
 
 /ydb/library/yql/yt @Krock21 @Krisha11 @zlobober @gritukan
@@ -44,3 +49,6 @@
 /ydb/core/formats/arrow @ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
 
+/ydb/apps/ydb @ydb-platform/cli
+/ydb/public/lib/ydb_cli @ydb-platform/cli
+/ydb/public/sdk/cpp @ydb-platform/cpp-sdk

@@ -59,7 +59,8 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
     }
 
     TString MemoryConsumptionDetails() const override {
-        return Tx->ToString();
+        // NOTE: don't forget to disable verbosity in stable branches.
+        return Tx->ToString(true);
     }
 
     void TerminateHandler(bool success, const NYql::TIssues& issues) {
@@ -117,6 +118,7 @@ public:
         memoryLimits.MkqlHeavyProgramMemoryLimit = MkqlHeavyProgramMemoryLimit.load();
         memoryLimits.MinMemAllocSize = MinMemAllocSize.load();
         memoryLimits.MinMemFreeSize = MinMemFreeSize.load();
+        memoryLimits.ArrayBufferMinFillPercentage = args.Task->GetArrayBufferMinFillPercentage();
 
         auto estimation = ResourceManager_->EstimateTaskResources(*args.Task, args.NumberOfTasks);
         NRm::TKqpResourcesRequest resourcesRequest;

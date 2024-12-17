@@ -7,12 +7,12 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
-#include <ydb/library/yql/core/yql_data_provider.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
-#include <ydb/library/yql/public/udf/udf_helpers.h>
-#include <ydb/library/yql/public/udf/udf_value_builder.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/public/udf/udf_helpers.h>
+#include <yql/essentials/public/udf/udf_value_builder.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/testing/common/env.h>
 
@@ -123,7 +123,6 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
     ServerSettings->SetAppConfig(appConfig);
     ServerSettings->SetFeatureFlags(settings.FeatureFlags);
-    ServerSettings->FeatureFlags.SetEnableImmediateWritingOnBulkUpsert(true);
     ServerSettings->SetNodeCount(settings.NodeCount);
     ServerSettings->SetEnableKqpSpilling(enableSpilling);
     ServerSettings->SetEnableDataColumnForIndexTable(true);
@@ -135,6 +134,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableTablePgTypes(true);
     ServerSettings->SetEnablePgSyntax(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
+    ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
 
     if (!settings.FeatureFlags.HasEnableOlapCompression()) {
         ServerSettings->SetEnableOlapCompression(true);
@@ -525,12 +525,17 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::KQP_BLOBS_STORAGE);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_WORKLOAD_SERVICE);
     SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD);
+    SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD_SCAN);
     SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);
         return true;
     });
+
+    if (settings.AuthToken) {
+        this->Client->GrantConnect(settings.AuthToken);
+    }
 
     if (settings.WithSampleTables) {
         RunCall([this] {
@@ -907,6 +912,11 @@ static void FillPlan(const NYdb::NTable::TScanQueryPart& streamPart, TCollectedS
         if (!plan.empty()) {
             res.PlanJson = plan;
         }
+
+        auto ast = res.QueryStats->query_ast();
+        if (!ast.empty()) {
+            res.Ast = ast;
+        }
     }
 }
 
@@ -918,6 +928,11 @@ static void FillPlan(const NYdb::NScripting::TYqlResultPart& streamPart, TCollec
         if (!plan.empty()) {
             res.PlanJson = plan;
         }
+
+        auto ast = res.QueryStats->query_ast();
+        if (!ast.empty()) {
+            res.Ast = ast;
+        }
     }
 }
 
@@ -928,6 +943,11 @@ static void FillPlan(const NYdb::NQuery::TExecuteQueryPart& streamPart, TCollect
         auto plan = res.QueryStats->query_plan();
         if (!plan.empty()) {
             res.PlanJson = plan;
+        }
+
+        auto ast = res.QueryStats->query_ast();
+        if (!ast.empty()) {
+            res.Ast = ast;
         }
     }
 }
@@ -1186,7 +1206,7 @@ std::vector<NJson::TJsonValue> FindPlanStages(const NJson::TJsonValue& plan) {
     return stages;
 }
 
-void CreateSampleTablesWithIndex(TSession& session, bool populateTables) {
+void CreateSampleTablesWithIndex(TSession& session, bool populateTables, bool withPgTypes) {
     auto res = session.ExecuteSchemeQuery(R"(
         --!syntax_v1
         CREATE TABLE `/Root/SecondaryKeys` (
@@ -1212,10 +1232,25 @@ void CreateSampleTablesWithIndex(TSession& session, bool populateTables) {
             PRIMARY KEY (Key),
             INDEX Index GLOBAL ON (Index2)
             COVER (Value)
-        )
+        );
 
     )").GetValueSync();
     UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+    if (withPgTypes) {
+        auto res = session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/SecondaryPgTypeKeys` (
+                Key pgint4,
+                Fk pgint4,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX Index GLOBAL ON (Fk)
+            );
+
+        )").GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    }
 
     if (!populateTables)
         return;
@@ -1255,6 +1290,19 @@ void CreateSampleTablesWithIndex(TSession& session, bool populateTables) {
             ("Primary1", "Secondary1", "Value1");
 
     )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+    if (withPgTypes) {
+        auto result = session.ExecuteDataQuery(R"(
+
+            REPLACE INTO `/Root/SecondaryPgTypeKeys` (Key, Fk, Value) VALUES
+                (1pi,  1pi,  "Payload1"),
+                (2pi,  2pi,  "Payload2"),
+                (5pi,  5pi,  "Payload5"),
+                (NULL, 6pi,  "Payload6"),
+                (7pi,  NULL, "Payload7");
+
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+    }
 
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
@@ -1468,6 +1516,24 @@ NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan) {
     return GetJoinOrderImpl(optRoot);
 }
 
+NJson::TJsonValue GetJoinOrderFromDetailedJoinOrderImpl(const NJson::TJsonValue& opt) {
+    if (!opt.GetMapSafe().contains("table")) {
+        NJson::TJsonValue res;
+        auto args = opt.GetMapSafe().at("args").GetArraySafe();
+        for (size_t i = 0; i < args.size(); ++i) {
+            res.AppendValue(GetJoinOrderFromDetailedJoinOrderImpl(args[i]));
+        }
+        return res;
+    }
+
+    return opt.GetMapSafe().at("table");
+}
+
+NJson::TJsonValue GetJoinOrderFromDetailedJoinOrder(const TString& deserializedDetailedJoinOrder) {
+    NJson::TJsonValue optRoot;
+    NJson::ReadJsonTree(deserializedDetailedJoinOrder, &optRoot, true);
+    return GetJoinOrderFromDetailedJoinOrderImpl(optRoot);
+}
 
 } // namspace NKqp
 } // namespace NKikimr

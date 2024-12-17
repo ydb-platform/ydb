@@ -3,11 +3,11 @@
 
 #include <yt/yt/core/concurrency/thread_affinity.h>
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/core/profiling/timing.h>
 
 #include <yt/yt/core/tracing/trace_context.h>
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 #include <queue>
 
@@ -212,6 +212,18 @@ public:
         VERIFY_THREAD_AFFINITY_ANY();
 
         DoReconfigure(limit, Period_);
+    }
+
+    std::optional<double> GetLimit() const override
+    {
+        VERIFY_THREAD_AFFINITY_ANY();
+
+        auto limit = Limit_.load();
+        if (limit == -1) {
+            return std::nullopt;
+        }
+
+        return limit;
     }
 
     i64 GetQueueTotalAmount() const override
@@ -653,6 +665,13 @@ public:
     void SetLimit(std::optional<double> /*limit*/) override
     {
         VERIFY_THREAD_AFFINITY_ANY();
+    }
+
+    std::optional<double> GetLimit() const override
+    {
+        VERIFY_THREAD_AFFINITY_ANY();
+
+        return std::nullopt;
     }
 
     TFuture<void> GetAvailableFuture() override

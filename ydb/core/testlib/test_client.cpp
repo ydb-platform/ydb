@@ -69,6 +69,7 @@
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/stream.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -94,9 +95,9 @@
 #include <ydb/core/mind/node_broker.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 
@@ -119,6 +120,7 @@
 #include <ydb/services/ext_index/service/executor.h>
 #include <ydb/core/tx/conveyor/service/service.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 
@@ -195,12 +197,15 @@ namespace Tests {
         app.SetChangesQueueBytesLimit(Settings->ChangesQueueBytesLimit);
         app.SetAwsRegion(Settings->AwsRegion);
         app.CompactionConfig = Settings->CompactionConfig;
-        app.FeatureFlags = Settings->FeatureFlags;
         app.ImmediateControlsConfig = Settings->Controls;
         app.InitIcb(StaticNodes() + DynamicNodes());
         if (Settings->AppConfig->HasResourceBrokerConfig()) {
             app.ResourceBrokerConfig = Settings->AppConfig->GetResourceBrokerConfig();
         }
+
+        // forcibly turn on some feature flags
+        app.FeatureFlags = Settings->FeatureFlags;
+        app.FeatureFlags.SetCheckDatabaseAccessPermission(true);
 
         if (!Settings->UseRealThreads)
             Runtime->SetRegistrationObserverFunc([](TTestActorRuntimeBase& runtime, const TActorId&, const TActorId& actorId) {
@@ -266,6 +271,7 @@ namespace Tests {
             appData.HiveConfig.MergeFrom(Settings->AppConfig->GetHiveConfig());
             appData.GraphConfig.MergeFrom(Settings->AppConfig->GetGraphConfig());
             appData.SqsConfig.MergeFrom(Settings->AppConfig->GetSqsConfig());
+            appData.SharedCacheConfig.MergeFrom(Settings->AppConfig->GetSharedCacheConfig());
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;
@@ -275,7 +281,10 @@ namespace Tests {
         });
 
         const bool mockDisk = (StaticNodes() + DynamicNodes()) == 1 && Settings->EnableMockOnSingleNode;
-        SetupTabletServices(*Runtime, &app, mockDisk, Settings->CustomDiskParams, Settings->CacheParams, Settings->EnableForceFollowers);
+        if (!Settings->AppConfig->HasSharedCacheConfig()) {
+            Settings->AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(32_MB);
+        }
+        SetupTabletServices(*Runtime, &app, mockDisk, Settings->CustomDiskParams, &Settings->AppConfig->GetSharedCacheConfig(), Settings->EnableForceFollowers);
 
         // WARNING: must be careful about modifying app data after actor system starts
 
@@ -341,6 +350,9 @@ namespace Tests {
     }
 
     void TServer::EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId) {
+        GRpcServerRootCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto& counters = GRpcServerRootCounters;
+
         GRpcServer.reset(new NYdbGrpc::TGRpcServer(options));
         auto grpcService = new NGRpcProxy::TGRpcService();
 
@@ -355,26 +367,21 @@ namespace Tests {
         grpcRequestProxies.reserve(proxyCount);
 
         auto& appData = Runtime->GetAppData(grpcServiceNodeId);
-        NJaegerTracing::TSamplingThrottlingConfigurator tracingConfigurator(appData.TimeProvider, appData.RandomProvider);
-
         for (size_t i = 0; i < proxyCount; ++i) {
-            auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(*Settings->AppConfig, tracingConfigurator.GetControl());
+            auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(*Settings->AppConfig);
             auto grpcRequestProxyId = system->Register(grpcRequestProxy, TMailboxType::ReadAsFilled, appData.UserPoolId);
             system->RegisterLocalService(NGRpcService::CreateGRpcRequestProxyId(), grpcRequestProxyId);
             grpcRequestProxies.push_back(grpcRequestProxyId);
         }
 
         system->Register(
-            NConsole::CreateJaegerTracingConfigurator(std::move(tracingConfigurator), Settings->AppConfig->GetTracingConfig()),
+            NConsole::CreateJaegerTracingConfigurator(appData.TracingConfigurator, Settings->AppConfig->GetTracingConfig()),
             TMailboxType::ReadAsFilled,
             appData.UserPoolId
         );
 
         auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled, appData.UserPoolId);
         system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);
-
-        GRpcServerRootCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-        auto& counters = GRpcServerRootCounters;
 
         // Setup discovery for typically used services on the node
         {
@@ -666,7 +673,7 @@ namespace Tests {
         {
             // Compaction policy:
             NLocalDb::TCompactionPolicyPtr defaultPolicy = NLocalDb::CreateDefaultUserTablePolicy();
-            NKikimrSchemeOp::TCompactionPolicy defaultflatSchemePolicy;
+            NKikimrCompaction::TCompactionPolicy defaultflatSchemePolicy;
             defaultPolicy->Serialize(defaultflatSchemePolicy);
             auto &defaultCompactionPolicy = *profiles.AddCompactionPolicies();
             defaultCompactionPolicy.SetName("default");
@@ -674,7 +681,7 @@ namespace Tests {
 
             NLocalDb::TCompactionPolicy policy1;
             policy1.Generations.push_back({ 0, 8, 8, 128 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true });
-            NKikimrSchemeOp::TCompactionPolicy flatSchemePolicy1;
+            NKikimrCompaction::TCompactionPolicy flatSchemePolicy1;
             policy1.Serialize(flatSchemePolicy1);
             auto &compactionPolicy1 = *profiles.AddCompactionPolicies();
             compactionPolicy1.SetName("compaction1");
@@ -683,7 +690,7 @@ namespace Tests {
             NLocalDb::TCompactionPolicy policy2;
             policy2.Generations.push_back({ 0, 8, 8, 128 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true });
             policy2.Generations.push_back({ 40 * 1024 * 1024, 5, 16, 512 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(2), false });
-            NKikimrSchemeOp::TCompactionPolicy flatSchemePolicy2;
+            NKikimrCompaction::TCompactionPolicy flatSchemePolicy2;
             policy2.Serialize(flatSchemePolicy2);
             auto &compactionPolicy2 = *profiles.AddCompactionPolicies();
             compactionPolicy2.SetName("compaction2");
@@ -831,6 +838,11 @@ namespace Tests {
             auto* actor = NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(NOlap::NGroupedMemoryManager::TConfig(), new ::NMonitoring::TDynamicCounters());
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+        }
+        {
+            auto* actor = NPrioritiesQueue::TCompServiceOperator::CreateService(NPrioritiesQueue::TConfig(), new ::NMonitoring::TDynamicCounters());
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NPrioritiesQueue::TCompServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
             auto* actor = NConveyor::TScanServiceOperator::CreateService(NConveyor::TConfig(), new ::NMonitoring::TDynamicCounters());
@@ -2122,6 +2134,16 @@ namespace Tests {
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
     }
+
+    void TClient::Grant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights) {
+        NACLib::TDiffACL acl;
+        acl.AddAccess(NACLib::EAccessType::Allow, rights, subject);
+        ModifyACL(parent, name, acl.SerializeAsString());
+    }
+
+    void TClient::GrantConnect(const TString& subject) {
+        Grant("/", DomainName, subject, NACLib::EAccessRights::ConnectDatabase);
+    } 
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type,
                                                                const TVector<ui32>& allowed_node_ids,

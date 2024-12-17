@@ -214,6 +214,12 @@ void IterateTestOverEveryRightOperand(TOverloadTest& tester)
     }
 }
 
+template <class T>
+void SetErrorAttribute(TError* error, TString key, const T& value)
+{
+    error->MutableAttributes()->SetYson(key, ConvertToYsonString(value));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TEST(TErrorTest, BitshiftOverloadsExplicitLeftOperand)
@@ -315,18 +321,18 @@ TEST(TErrorTest, WrapRValue)
 {
     TError error("Error");
 
-    // TError errorCopy = error;
-    // auto wrapped = std::move(errorCopy).Wrap("Wrapped error");
-    // EXPECT_TRUE(errorCopy.IsOK());
-    // EXPECT_EQ(wrapped.GetCode(), NYT::EErrorCode::Generic);
-    // EXPECT_EQ(wrapped.GetMessage(), "Wrapped error");
-    // EXPECT_EQ(wrapped.InnerErrors().size(), 1u);
-    // EXPECT_EQ(wrapped.InnerErrors()[0], error);
+    TError errorCopy = error;
+    auto wrapped = std::move(errorCopy).Wrap("Wrapped error");
+    EXPECT_TRUE(errorCopy.IsOK());
+    EXPECT_EQ(wrapped.GetCode(), NYT::EErrorCode::Generic);
+    EXPECT_EQ(wrapped.GetMessage(), "Wrapped error");
+    EXPECT_EQ(wrapped.InnerErrors().size(), 1u);
+    EXPECT_EQ(wrapped.InnerErrors()[0], error);
 
-    // TError anotherErrorCopy = error;
-    // auto trviallyWrapped = std::move(anotherErrorCopy).Wrap();
-    // EXPECT_TRUE(anotherErrorCopy.IsOK());
-    // EXPECT_EQ(trviallyWrapped, error);
+    TError anotherErrorCopy = error;
+    auto trviallyWrapped = std::move(anotherErrorCopy).Wrap();
+    EXPECT_TRUE(anotherErrorCopy.IsOK());
+    EXPECT_EQ(trviallyWrapped, error);
 }
 
 TEST(TErrorTest, ThrowErrorExceptionIfFailedMacroJustWorks)
@@ -528,7 +534,7 @@ TEST(TErrorTest, TruncateLarge)
         << TError("Second inner error")
         << TError("Third inner error")
         << TError("Fourth inner error");
-    error.MutableAttributes()->Set("my_attr", "Some long long attr");
+    SetErrorAttribute(&error, "my_attr", "Some long long attr");
 
     auto truncatedError = error.Truncate(/*maxInnerErrorCount*/ 3, /*stringLimit*/ 10);
     EXPECT_EQ(error.GetCode(), truncatedError.GetCode());
@@ -568,7 +574,7 @@ TEST(TErrorTest, TruncateLargeRValue)
         << TError("Second inner error")
         << TError("Third inner error")
         << TError("Fourth inner error");
-    error.MutableAttributes()->Set("my_attr", "Some long long attr");
+    SetErrorAttribute(&error, "my_attr", "Some long long attr");
 
     auto errorCopy = error;
     auto truncatedError = std::move(errorCopy).Truncate(/*maxInnerErrorCount*/ 3, /*stringLimit*/ 10);
@@ -591,7 +597,7 @@ TEST(TErrorTest, TruncateConsistentOverloads)
         << TError("Second inner error")
         << TError("Third inner error")
         << TError("Fourth inner error");
-    error.MutableAttributes()->Set("my_attr", "Some long long attr");
+    SetErrorAttribute(&error, "my_attr", "Some long long attr");
 
     auto errorCopy = error;
     auto truncatedRValueError = std::move(errorCopy).Truncate(/*maxInnerErrorCount*/ 3, /*stringLimit*/ 10);
@@ -604,8 +610,8 @@ TEST(TErrorTest, TruncateConsistentOverloads)
 TEST(TErrorTest, TruncateWhitelist)
 {
     auto error = TError("Some error");
-    error.MutableAttributes()->Set("attr1", "Some long long attr");
-    error.MutableAttributes()->Set("attr2", "Some long long attr");
+    SetErrorAttribute(&error, "attr1", "Some long long attr");
+    SetErrorAttribute(&error, "attr2", "Some long long attr");
 
     THashSet<TStringBuf> myWhitelist = {"attr2"};
 
@@ -621,8 +627,8 @@ TEST(TErrorTest, TruncateWhitelist)
 TEST(TErrorTest, TruncateWhitelistRValue)
 {
     auto error = TError("Some error");
-    error.MutableAttributes()->Set("attr1", "Some long long attr");
-    error.MutableAttributes()->Set("attr2", "Some long long attr");
+    SetErrorAttribute(&error, "attr1", "Some long long attr");
+    SetErrorAttribute(&error, "attr2", "Some long long attr");
 
     THashSet<TStringBuf> myWhitelist = {"attr2"};
 
@@ -640,8 +646,8 @@ TEST(TErrorTest, TruncateWhitelistRValue)
 TEST(TErrorTest, TruncateWhitelistInnerErrors)
 {
     auto innerError = TError("Inner error");
-    innerError.MutableAttributes()->Set("attr1", "Some long long attr");
-    innerError.MutableAttributes()->Set("attr2", "Some long long attr");
+    SetErrorAttribute(&innerError, "attr1", "Some long long attr");
+    SetErrorAttribute(&innerError, "attr2", "Some long long attr");
 
     auto error = TError("Error") << innerError;
 
@@ -660,8 +666,8 @@ TEST(TErrorTest, TruncateWhitelistInnerErrors)
 TEST(TErrorTest, TruncateWhitelistInnerErrorsRValue)
 {
     auto innerError = TError("Inner error");
-    innerError.MutableAttributes()->Set("attr1", "Some long long attr");
-    innerError.MutableAttributes()->Set("attr2", "Some long long attr");
+    SetErrorAttribute(&innerError, "attr1", "Some long long attr");
+    SetErrorAttribute(&innerError, "attr2", "Some long long attr");
 
     auto error = TError("Error") << innerError;
 

@@ -36,12 +36,13 @@ private:
         class TTsvFile;
         class TCsvFile;
         void AddFile(const TFsPath& path);
-        static ui64 CalcSize(const TClickbenchWorkloadDataInitializerGenerator& owner);
 
     private:
         const TClickbenchWorkloadDataInitializerGenerator& Owner;
         TVector<TFile::TPtr> Files;
         TAdaptiveLock Lock;
+        bool FirstPortion = true;
+        static constexpr ui64 DataSetSize = 99997497;
     };
 };
 

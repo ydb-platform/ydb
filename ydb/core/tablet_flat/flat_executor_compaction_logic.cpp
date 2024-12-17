@@ -222,7 +222,7 @@ void TCompactionLogic::TriggerSharedPageCacheMemTableCompaction(ui32 table, ui64
                 MemTableMemoryConsumersCollection->CompactionComplete(consumer);
             }
         }
-    }    
+    }
 }
 
 TFinishedCompactionInfo TCompactionLogic::GetFinishedCompactionInfo(ui32 table) {
@@ -261,10 +261,10 @@ TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
         table.Policy = info.CompactionPolicy;
 
         auto newStrategyType = scheme.CompactionStrategyFor(info.Id);
-        Y_ABORT_UNLESS(newStrategyType != NKikimrSchemeOp::CompactionStrategyUnset);
+        Y_ABORT_UNLESS(newStrategyType != NKikimrCompaction::CompactionStrategyUnset);
 
         if (table.StrategyType != newStrategyType) {
-            if (table.StrategyType != NKikimrSchemeOp::CompactionStrategyUnset) {
+            if (table.StrategyType != NKikimrCompaction::CompactionStrategyUnset) {
                 result.StrategyChanges.push_back({ info.Id, newStrategyType });
                 StrategyChanging(table);
             }
@@ -335,15 +335,15 @@ void TCompactionLogic::ReflectRemovedRowVersions(ui32 table)
 
 THolder<NTable::ICompactionStrategy> TCompactionLogic::CreateStrategy(
         ui32 tableId,
-        NKikimrSchemeOp::ECompactionStrategy strategy)
+        NKikimrCompaction::ECompactionStrategy strategy)
 {
     switch (strategy) {
-        case NKikimrSchemeOp::CompactionStrategyGenerational:
+        case NKikimrCompaction::CompactionStrategyGenerational:
             return NTable::CreateGenCompactionStrategy(
                     tableId, Backend, Broker, Time, Logger, TaskNameSuffix);
 
         default:
-            Y_ABORT("Unsupported strategy %s", NKikimrSchemeOp::ECompactionStrategy_Name(strategy).c_str());
+            Y_ABORT("Unsupported strategy %s", NKikimrCompaction::ECompactionStrategy_Name(strategy).c_str());
     }
 }
 

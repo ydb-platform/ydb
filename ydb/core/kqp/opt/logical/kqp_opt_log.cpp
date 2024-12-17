@@ -6,13 +6,14 @@
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_rules.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
-#include <ydb/library/yql/core/yql_opt_match_recognize.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_match_recognize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 #include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/providers/common/transform/yql_optimize.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cost_based.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -160,13 +161,13 @@ protected:
     }
 
     TMaybeNode<TExprBase> OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx) {
-        auto maxDPccpDPTableSize = Config->MaxDPccpDPTableSize.Get().GetOrElse(TDqSettings::TDefault::MaxDPccpDPTableSize);
+        auto maxDPhypDPTableSize = Config->MaxDPHypDPTableSize.Get().GetOrElse(TDqSettings::TDefault::MaxDPHypDPTableSize);
         auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel);
         auto providerCtx = TKqpProviderContext(KqpCtx, optLevel);
-        auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, maxDPccpDPTableSize));
+        auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, maxDPhypDPTableSize, ctx));
         TExprBase output = DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, optLevel,
             *opt, [](auto& rels, auto label, auto node, auto stat) {
-                rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), stat, node));
+                rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), *stat, node));
             },
             KqpCtx.EquiJoinsCount,
             KqpCtx.GetOptimizerHints()
@@ -177,14 +178,14 @@ protected:
 
     TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {
         bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel) >= 2;
-        TExprBase output = DqRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.JoinsCount);
+        TExprBase output = DqRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.JoinsCount, KqpCtx.GetOptimizerHints());
         DumpAppliedRule("RewriteEquiJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
     TMaybeNode<TExprBase> JoinToIndexLookup(TExprBase node, TExprContext& ctx) {
         bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel) >= 2;
-        TExprBase output = KqpJoinToIndexLookup(node, ctx, KqpCtx, useCBO);
+        TExprBase output = KqpJoinToIndexLookup(node, ctx, KqpCtx, useCBO, KqpCtx.GetOptimizerHints());
         DumpAppliedRule("JoinToIndexLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

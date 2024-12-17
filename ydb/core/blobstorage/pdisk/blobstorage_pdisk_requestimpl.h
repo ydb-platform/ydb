@@ -321,7 +321,6 @@ public:
         if (OnDestroy) {
             OnDestroy();
         }
-        delete NextInBatch;
     }
 
     ERequestType GetType() const override {
@@ -351,11 +350,10 @@ public:
     }
 
     void Abort(TActorSystem* actorSystem) override {
-        actorSystem->Send(Sender, new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, "TLogWrite is being aborted"));
+        auto *result = new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, "TLogWrite is being aborted");
+        result->Results.emplace_back(Lsn, Cookie);
+        actorSystem->Send(Sender, result);
         Replied = true;
-        if (NextInBatch) {
-            NextInBatch->Abort(actorSystem);
-        }
     }
 
     TString ToString() const {

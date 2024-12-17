@@ -14,7 +14,7 @@ To aggregate disparate spans into traces, they are sent to a *collector*. This s
 
 ## Minimal configuration
 
-To enable tracing in {{ ydb-short-name }}, add the following section to the [configuration](../../../deploy/configuration/config.md):
+To enable tracing in {{ ydb-short-name }}, add the following section to the [configuration](../../../reference/configuration/index.md):
 
 ```yaml
 tracing_config:

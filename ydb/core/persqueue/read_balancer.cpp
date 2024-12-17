@@ -2,6 +2,7 @@
 #include "read_balancer__balancing.h"
 #include "read_balancer__txpreinit.h"
 #include "read_balancer__txwrite.h"
+#include "read_balancer_log.h"
 
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/counters_pq.pb.h>
@@ -102,7 +103,7 @@ void TPersQueueReadBalancer::Die(const TActorContext& ctx) {
 void TPersQueueReadBalancer::OnActivateExecutor(const TActorContext &ctx) {
     ResourceMetrics = Executor()->GetResourceMetrics();
     Become(&TThis::StateWork);
-    if (Executor()->GetStats().IsFollower)
+    if (Executor()->GetStats().IsFollower())
         Y_ABORT("is follower works well with Balancer?");
     else
         Execute(new TTxPreInit(this), ctx);
@@ -134,7 +135,7 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
     for (auto& p : PartitionsInfo) {
         s << "(" << p.first << ", " << p.second.TabletId << ") ";
     }
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, s);
+    PQ_LOG_D(s);
 
     for (auto &ev : UpdateEvents) {
         ctx.Send(ctx.SelfID, ev.Release());
@@ -153,7 +154,7 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
 }
 
 void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TActorContext &ctx) {
-    LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, TStringBuilder() << "TPersQueueReadBalancer::HandleWakeup");
+    PQ_LOG_D("TPersQueueReadBalancer::HandleWakeup");
 
     switch (ev->Get()->Tag) {
         case TPartitionScaleManager::TRY_SCALE_REQUEST_WAKE_UP_TAG: {
@@ -173,161 +174,6 @@ void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TA
 void TPersQueueReadBalancer::HandleUpdateACL(TEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx) {
     GetACL(ctx);
 }
-
-
-bool TPersQueueReadBalancer::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) {
-    if (!ev) {
-        return true;
-    }
-
-    TString str = GenerateStat();
-    ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(str));
-    return true;
-}
-
-TString TPersQueueReadBalancer::GenerateStat() {
-    auto& metrics = AggregatedStats.Metrics;
-
-    TStringStream str;
-    HTML(str) {
-        str << "<style>"
-            << " .properties { border-bottom-style: solid; border-top-style: solid; border-width: 1px; border-color: darkgrey; padding-bottom: 10px; } "
-            << " .properties>tbody>tr>td { padding-left: 10px; padding-right: 10px; } "
-            << " .tgrid { width: 100%; border: 0; }"
-            << " .tgrid>tbody>tr>td { vertical-align: top; }"
-            << "</style>";
-
-        TAG(TH3) {str << "PersQueueReadBalancer " << TabletID() << " (" << Path << ")";}
-
-        auto property = [&](const TString& name, const auto value) {
-            TABLER() {
-                TABLED() { str << name;}
-                TABLED() { str << value; }
-            }
-        };
-
-        UL_CLASS("nav nav-tabs") {
-            LI_CLASS("active") {
-                str << "<a href=\"#generic\" data-toggle=\"tab\">Generic Info</a>";
-            }
-            LI() {
-                str << "<a href=\"#partitions\" data-toggle=\"tab\">Partitions</a>";
-            }
-            for (auto& [consumerName, _] : Balancer->GetConsumers()) {
-                LI() {
-                    str << "<a href=\"#c_" << EncodeAnchor(consumerName) << "\" data-toggle=\"tab\">" << NPersQueue::ConvertOldConsumerName(consumerName) << "</a>";
-                }
-            }
-        }
-
-        DIV_CLASS("tab-content") {
-            DIV_CLASS_ID("tab-pane fade in active", "generic") {
-                TABLE_CLASS("tgrid") {
-                    TABLEBODY() {
-                        TABLER() {
-                            TABLED() {
-                                TABLE_CLASS("properties") {
-                                    CAPTION() { str << "Tablet info"; }
-                                    TABLEBODY() {
-                                        property("Topic", Topic);
-                                        property("Path", Path);
-                                        property("Initialized", Inited ? "yes" : "no");
-                                        property("SchemeShard", TStringBuilder() << "<a href=\"?TabletID=" << SchemeShardId << "\">" << SchemeShardId << "</a>");
-                                        property("PathId", PathId);
-                                        property("Version", Version);
-                                        property("Generation", Generation);
-                                    }
-                                }
-                            }
-                            TABLED() {
-                                if (Inited) {
-                                    TABLE_CLASS("properties") {
-                                        CAPTION() { str << "Statistics"; }
-                                        TABLEBODY() {
-                                            property("Active pipes", Balancer->GetSessions().size());
-                                            property("Active partitions", NumActiveParts);
-                                            property("Total data size", AggregatedStats.TotalDataSize);
-                                            property("Reserve size", PartitionReserveSize());
-                                            property("Used reserve size", AggregatedStats.TotalUsedReserveSize);
-                                            property("[Total/Max/Avg]WriteSpeedSec", TStringBuilder() << metrics.TotalAvgWriteSpeedPerSec << "/" << metrics.MaxAvgWriteSpeedPerSec << "/" << metrics.TotalAvgWriteSpeedPerSec / NumActiveParts);
-                                            property("[Total/Max/Avg]WriteSpeedMin", TStringBuilder() << metrics.TotalAvgWriteSpeedPerMin << "/" << metrics.MaxAvgWriteSpeedPerMin << "/" << metrics.TotalAvgWriteSpeedPerMin / NumActiveParts);
-                                            property("[Total/Max/Avg]WriteSpeedHour", TStringBuilder() << metrics.TotalAvgWriteSpeedPerHour << "/" << metrics.MaxAvgWriteSpeedPerHour << "/" << metrics.TotalAvgWriteSpeedPerHour / NumActiveParts);
-                                            property("[Total/Max/Avg]WriteSpeedDay", TStringBuilder() << metrics.TotalAvgWriteSpeedPerDay << "/" << metrics.MaxAvgWriteSpeedPerDay << "/" << metrics.TotalAvgWriteSpeedPerDay / NumActiveParts);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            DIV_CLASS_ID("tab-pane fade", "partitions") {
-                auto partitionAnchor = [&](const ui32 partitionId) {
-                    return TStringBuilder() << "P" << partitionId;
-                };
-
-                TABLE_CLASS("table") {
-                    TABLEHEAD() {
-                        TABLER() {
-                            TABLEH() { str << "Partition"; }
-                            TABLEH() { str << "Status"; }
-                            TABLEH() { str << "TabletId"; }
-                            TABLEH() { str << "Parents"; }
-                            TABLEH() { str << "Children"; }
-                            TABLEH() { str << "Size"; }
-                        }
-                    }
-                    TABLEBODY() {
-                        for (auto& [partitionId, partitionInfo] : PartitionsInfo) {
-                            const auto& stats = AggregatedStats.Stats[partitionId];
-                            const auto* node = PartitionGraph.GetPartition(partitionId);
-                            TString style = node && node->Children.empty() ? "text-success" : "text-muted";
-
-                            TABLER() {
-                                TABLED() {
-                                     DIV_CLASS_ID(style, partitionAnchor(partitionId)) {
-                                         str << partitionId;
-                                    }
-                                }
-                                TABLED() {
-                                    if (node) {
-                                        str << (node->Children.empty() ? "Active" : "Inactive");
-                                        if (node->IsRoot()) {
-                                            str << " (root)";
-                                        }
-                                    }
-                                }
-                                TABLED() { HREF(TStringBuilder() << "?TabletID=" << partitionInfo.TabletId) { str << partitionInfo.TabletId; } }
-                                TABLED() {
-                                    if (node) {
-                                        for (auto* parent : node->Parents) {
-                                            HREF("#" + partitionAnchor(parent->Id)) { str << parent->Id; }
-                                            str << ", ";
-                                        }
-                                    }
-                                }
-                                TABLED() {
-                                    if (node) {
-                                        for (auto* child : node->Children) {
-                                            HREF("#" + partitionAnchor(child->Id)) { str << child->Id; }
-                                            str << ", ";
-                                        }
-                                    }
-                                }
-                                TABLED() { str << stats.DataSize; }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Balancer->RenderApp(str);
-        }
-    }
-    return str.Str();
-}
-
 
 void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvUpdateBalancerConfig::TPtr &ev, const TActorContext&) {
 
@@ -456,9 +302,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         if (!WaitingResponse.empty()) { //got transaction infly
             WaitingResponse.push_back(ev->Sender);
         } else { //version already applied
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "BALANCER Topic " << Topic << "Tablet " << TabletID()
-                            << " Config already applied version " << record.GetVersion() << " actor " << ev->Sender
-                            << " txId " << record.GetTxId());
+            PQ_LOG_D("BALANCER Topic " << Topic << "Tablet " << TabletID()
+                    << " Config already applied version " << record.GetVersion() << " actor " << ev->Sender
+                    << " txId " << record.GetTxId());
             THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
             res->Record.SetStatus(NKikimrPQ::OK);
             res->Record.SetTxId(record.GetTxId());
@@ -527,6 +373,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         auto it = oldConsumers.find(consumer.GetName());
         if (it != oldConsumers.end()) {
             Consumers[consumer.GetName()] = std::move(it->second);
+        } else {
+            Consumers.insert(std::make_pair(consumer.GetName(), TConsumerInfo{}));
         }
     }
 
@@ -537,7 +385,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 
     if (SplitMergeEnabled(TabletConfig)) {
         if (!PartitionsScaleManager) {
-            PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Topic, DatabasePath, PathId, Version, TabletConfig, PartitionGraph);
+            PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Topic, Path, DatabasePath, PathId, Version, TabletConfig, PartitionGraph);
         } else {
             PartitionsScaleManager->UpdateBalancerConfig(PathId, Version, TabletConfig);
         }
@@ -606,15 +454,15 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 }
 
 
-TStringBuilder TPersQueueReadBalancer::GetPrefix() const {
-    return TStringBuilder() << "tablet " << TabletID() << " topic " << Topic << " ";
+TStringBuilder TPersQueueReadBalancer::LogPrefix() const {
+    return TStringBuilder() << "[" << TabletID() << "][" << Topic << "] ";
 }
 
 
 void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx)
 {
     auto tabletId = ev->Get()->TabletId;
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "TEvClientDestroyed " << tabletId);
+    PQ_LOG_D("TEvClientDestroyed " << tabletId);
 
     ClosePipe(tabletId, ctx);
     RequestTabletIfNeeded(tabletId, ctx, true);
@@ -631,7 +479,7 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
         ClosePipe(ev->Get()->TabletId, ctx);
         RequestTabletIfNeeded(ev->Get()->TabletId, ctx, true);
 
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "TEvClientConnected Status " << ev->Get()->Status << ", TabletId " << tabletId);
+        PQ_LOG_ERROR("TEvClientConnected Status " << ev->Get()->Status << ", TabletId " << tabletId);
         return;
     }
 
@@ -642,10 +490,10 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
         it->second.Generation = ev->Get()->Generation;
         it->second.NodeId = ev->Get()->ServerId.NodeId();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "TEvClientConnected TabletId " << tabletId << ", NodeId " << ev->Get()->ServerId.NodeId() << ", Generation " << ev->Get()->Generation);
+        PQ_LOG_D("TEvClientConnected TabletId " << tabletId << ", NodeId " << ev->Get()->ServerId.NodeId() << ", Generation " << ev->Get()->Generation);
     }
     else
-        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "TEvClientConnected Pipe is not found, TabletId " << tabletId);
+        PQ_LOG_I("TEvClientConnected Pipe is not found, TabletId " << tabletId);
 }
 
 void TPersQueueReadBalancer::ClosePipe(const ui64 tabletId, const TActorContext& ctx)
@@ -696,7 +544,7 @@ void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TA
                 AggregatedStats.Cookies[tabletId] = cookie;
             }
 
-            LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+            PQ_LOG_D(
                 TStringBuilder() << "Send TEvPersQueue::TEvStatus TabletId: " << tabletId << " Cookie: " << cookie);
             NTabletPipe::SendData(ctx, pipeClient, new TEvPersQueue::TEvStatus("", true), cookie);
         }
@@ -815,7 +663,7 @@ void TPersQueueReadBalancer::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSch
 
         AnswerWaitingRequests(ctx);
     } else {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "couldn't receive ACL due to " << record.GetStatus());
+        PQ_LOG_D("couldn't receive ACL due to " << record.GetStatus());
         ctx.Schedule(ACL_ERROR_RETRY_TIMEOUT, new TEvPersQueue::TEvUpdateACL());
     }
 }
@@ -833,12 +681,11 @@ void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
     AggregatedStats.Metrics = AggregatedStats.NewMetrics;
 
     TEvPersQueue::TEvPeriodicTopicStats* ev = GetStatsEvent();
-    LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            TStringBuilder() << "Send TEvPeriodicTopicStats PathId: " << PathId
-                             << " Generation: " << Generation
-                             << " StatsReportRound: " << StatsReportRound
-                             << " DataSize: " << AggregatedStats.TotalDataSize
-                             << " UsedReserveSize: " << AggregatedStats.TotalUsedReserveSize);
+    PQ_LOG_D("Send TEvPeriodicTopicStats PathId: " << PathId
+            << " Generation: " << Generation
+            << " StatsReportRound: " << StatsReportRound
+            << " DataSize: " << AggregatedStats.TotalDataSize
+            << " UsedReserveSize: " << AggregatedStats.TotalUsedReserveSize);
 
     NTabletPipe::SendData(ctx, GetPipeClient(SchemeShardId, ctx), ev);
 
@@ -1053,9 +900,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr
         pResponse->SetNodeId(iter->second.NodeId.GetRef());
         pResponse->SetGeneration(iter->second.Generation.GetRef());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "addPartitionToResponse tabletId " << tabletId << ", partitionId " << partitionId
-                        << ", NodeId " << pResponse->GetNodeId() << ", Generation " << pResponse->GetGeneration());
+        PQ_LOG_D("addPartitionToResponse tabletId " << tabletId << ", partitionId " << partitionId
+                << ", NodeId " << pResponse->GetNodeId() << ", Generation " << pResponse->GetGeneration());
         return true;
     };
     auto sendResponse = [&](bool status) {
@@ -1136,8 +982,7 @@ void TPersQueueReadBalancer::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPa
     if (SchemeShardId == msg->SchemeShardId &&
        !SubDomainPathId || SubDomainPathId->OwnerId != msg->SchemeShardId)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            "Discovered subdomain " << msg->LocalPathId << " at RB " << TabletID());
+        PQ_LOG_D("Discovered subdomain " << msg->LocalPathId << " at RB " << TabletID());
 
         SubDomainPathId.emplace(msg->SchemeShardId, msg->LocalPathId);
         Execute(new TTxWriteSubDomainPathId(this), ctx);
@@ -1191,9 +1036,8 @@ void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated
             .GetDomainState()
             .GetDiskQuotaExceeded();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            "Discovered subdomain " << msg->PathId << " state, outOfSpace = " << outOfSpace
-            << " at RB " << TabletID());
+        PQ_LOG_D("Discovered subdomain " << msg->PathId << " state, outOfSpace = " << outOfSpace
+                << " at RB " << TabletID());
 
         SubDomainOutOfSpace = outOfSpace;
 
@@ -1266,16 +1110,20 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& 
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx) {
     if (!SplitMergeEnabled(TabletConfig)) {
+        PQ_LOG_D("Skip TEvPartitionScaleStatusChanged: autopartitioning disabled.");
         return;
     }
     auto& record = ev->Get()->Record;
     auto* node = PartitionGraph.GetPartition(record.GetPartitionId());
     if (!node) {
+        PQ_LOG_D("Skip TEvPartitionScaleStatusChanged: partition " << record.GetPartitionId() << " not found.");
         return;
     }
 
     if (PartitionsScaleManager) {
         PartitionsScaleManager->HandleScaleStatusChange(record.GetPartitionId(), record.GetScaleStatus(), ctx);
+    } else {
+        PQ_LOG_NOTICE("Skip TEvPartitionScaleStatusChanged: scale manager isn`t initialized.");
     }
 }
 

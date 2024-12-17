@@ -8,6 +8,10 @@
 #include <yt/cpp/mapreduce/common/retry_lib.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
 
+#include <yt/cpp/mapreduce/http/helpers.h>
+#include <yt/cpp/mapreduce/http/requests.h>
+#include <yt/cpp/mapreduce/http/retry_request.h>
+
 #include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/interface/tvm.h>
 
@@ -16,10 +20,7 @@
 #include <yt/cpp/mapreduce/io/helpers.h>
 #include <yt/cpp/mapreduce/io/yamr_table_reader.h>
 
-#include <yt/cpp/mapreduce/http/helpers.h>
-#include <yt/cpp/mapreduce/http/requests.h>
-#include <yt/cpp/mapreduce/http/retry_request.h>
-
+#include <yt/cpp/mapreduce/raw_client/raw_client.h>
 #include <yt/cpp/mapreduce/raw_client/raw_requests.h>
 
 #include <library/cpp/yson/node/serialize.h>
@@ -38,6 +39,7 @@ using ::ToString;
 
 TClientReader::TClientReader(
     const TRichYPath& path,
+    const IRawClientPtr& rawClient,
     IClientRetryPolicyPtr clientRetryPolicy,
     ITransactionPingerPtr transactionPinger,
     const TClientContext& context,
@@ -46,6 +48,7 @@ TClientReader::TClientReader(
     const TTableReaderOptions& options,
     bool useFormatFromTableAttributes)
     : Path_(path)
+    , RawClient_(rawClient)
     , ClientRetryPolicy_(std::move(clientRetryPolicy))
     , Context_(context)
     , ParentTransactionId_(transactionId)
@@ -56,21 +59,22 @@ TClientReader::TClientReader(
     if (options.CreateTransaction_) {
         Y_ABORT_UNLESS(transactionPinger, "Internal error: transactionPinger is null");
         ReadTransaction_ = MakeHolder<TPingableTransaction>(
+            RawClient_,
             ClientRetryPolicy_,
             Context_,
             transactionId,
             transactionPinger->GetChildTxPinger(),
             TStartTransactionOptions());
         Path_.Path(Snapshot(
+            RawClient_,
             ClientRetryPolicy_,
-            Context_,
             ReadTransaction_->GetId(),
             path.Path_));
     }
 
     if (useFormatFromTableAttributes) {
         auto transactionId2 = ReadTransaction_ ? ReadTransaction_->GetId() : ParentTransactionId_;
-        auto newFormat = GetTableFormat(ClientRetryPolicy_, Context_, transactionId2, Path_);
+        auto newFormat = GetTableFormat(ClientRetryPolicy_, RawClient_, transactionId2, Path_);
         if (newFormat) {
             Format_->Config = *newFormat;
         }

@@ -6,6 +6,8 @@ option cc_enable_arenas = true;
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/yql/providers/pq/proto/dq_io.proto";
 import "ydb/library/yql/dq/actors/protos/dq_events.proto";
+import "ydb/library/yql/dq/actors/protos/dq_status_codes.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
 
 message TEvGetAddressRequest {
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
@@ -53,8 +55,10 @@ message TEvStopSession {
 }
 
 message TEvMessage {
-    string Json = 1;
-    uint64 Offset = 2;
+    reserved 1;
+    reserved 2;
+    uint32 PayloadId = 3;
+    repeated uint64 Offsets = 4;
 }
 
 message TEvMessageBatch {
@@ -64,15 +68,29 @@ message TEvMessageBatch {
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
-message TEvStatus {
+message TEvStatistics {
     uint32 PartitionId = 1;
     uint64 NextMessageOffset = 2;
+    uint64 ReadBytes = 3;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
 message TEvSessionError {
-    string Message = 1;
+    reserved 1;
     uint32 PartitionId = 2;
+    NYql.NDqProto.StatusIds.StatusCode StatusCode = 3;
+    repeated Ydb.Issue.IssueMessage Issues = 4;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
+message TEvHeartbeat {
+    uint32 PartitionId = 1;
+    optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
+}
+
+message TEvGetInternalStateRequest {
+}
+
+message TEvGetInternalStateResponse {
+    string InternalState = 1;
+}

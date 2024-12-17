@@ -3,6 +3,7 @@
 #include <ydb/library/actors/helpers/selfping_actor.h>
 #include <util/stream/null.h>
 #include <util/datetime/cputimer.h>
+#include <util/system/compiler.h>
 #include "hive_impl.h"
 #include "balancer.h"
 
@@ -10,16 +11,6 @@
 #define Ctest Cnull
 #else
 #define Ctest Cerr
-#endif
-
-#ifdef address_sanitizer_enabled
-#define SANITIZER_TYPE address
-#endif
-#ifdef memory_sanitizer_enabled
-#define SANITIZER_TYPE memory
-#endif
-#ifdef thread_sanitizer_enabled
-#define SANITIZER_TYPE thread
 #endif
 
 using namespace NKikimr;
@@ -57,7 +48,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         double passed = timer.Get().SecondsFloat();
         Ctest << "Create = " << passed << Endl;
-#ifndef SANITIZER_TYPE
+#ifndef _san_enabled_
 #ifndef NDEBUG
         UNIT_ASSERT(passed < 3 * BASE_PERF);
 #else
@@ -80,7 +71,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         passed = timer.Get().SecondsFloat();
         Ctest << "Process = " << passed << Endl;
-#ifndef SANITIZER_TYPE
+#ifndef _san_enabled_
 #ifndef NDEBUG
         UNIT_ASSERT(passed < 10 * BASE_PERF);
 #else
@@ -94,7 +85,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         passed = timer.Get().SecondsFloat();
         Ctest << "Move = " << passed << Endl;
-#ifndef SANITIZER_TYPE
+#ifndef _san_enabled_
 #ifndef NDEBUG
         UNIT_ASSERT(passed < 2 * BASE_PERF);
 #else
@@ -124,7 +115,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             double passed = timer.Get().SecondsFloat();
 
             Ctest << "Time=" << passed << Endl;
-#ifndef SANITIZER_TYPE
+#ifndef _san_enabled_
 #ifndef NDEBUG
             UNIT_ASSERT(passed < 1 * BASE_PERF);
 #else

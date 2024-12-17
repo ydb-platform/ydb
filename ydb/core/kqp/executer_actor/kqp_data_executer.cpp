@@ -198,14 +198,14 @@ public:
     }
 
     void Finalize() {
-        YQL_ENSURE(!AlreadyReplied);
-
         if (LocksBroken) {
             YQL_ENSURE(ResponseEv->BrokenLockShardId);
             return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
         }
 
-        ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::SUCCESS);
+        auto& response = *ResponseEv->Record.MutableResponse();
+
+        FillResponseStats(Ydb::StatusIds::SUCCESS);
         Counters->TxProxyMon->ReportStatusOK->Inc();
 
         auto addLocks = [this](const ui64 taskId, const auto& data) {
@@ -253,7 +253,7 @@ public:
             if (LockHandle) {
                 ResponseEv->LockHandle = std::move(LockHandle);
             }
-            BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
+            BuildLocks(*response.MutableResult()->MutableLocks(), Locks);
         }
 
         auto resultSize = ResponseEv->GetByteSize();
@@ -278,7 +278,9 @@ public:
 
         ExecuterSpan.EndOk();
 
-        AlreadyReplied = true;
+        Request.Transactions.crop(0);
+        LOG_D("Sending response to: " << Target << ", results: " << ResponseEv->ResultsSize());
+        Send(Target, ResponseEv.release());
         PassAway();
     }
 
@@ -318,8 +320,6 @@ private:
             return "WaitSnapshotState";
         } else if (func == &TThis::WaitResolveState) {
             return "WaitResolveState";
-        } else if (func == &TThis::WaitShutdownState) {
-            return "WaitShutdownState";
         } else {
             return TBase::CurrentStateFuncName();
         }
@@ -544,7 +544,7 @@ private:
         if (ev->Get()->Record.GetState() == NDqProto::COMPUTE_STATE_FAILURE) {
             CancelProposal(0);
         }
-        HandleComputeState(ev);
+        HandleComputeStats(ev);
     }
 
     void HandlePrepare(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -1013,7 +1013,7 @@ private:
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, HandleExecute);
-                hFunc(TEvDqCompute::TEvState, HandleComputeState);
+                hFunc(TEvDqCompute::TEvState, HandleComputeStats);
                 hFunc(NYql::NDq::TEvDqCompute::TEvChannelData, HandleChannelData);
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvKqp::TEvAbortExecution, HandleExecute);
@@ -2255,7 +2255,7 @@ private:
             // Volatile transactions must always use generic readsets
             VolatileTx ||
             // Transactions with topics must always use generic readsets
-            !topicTxs.empty() || 
+            !topicTxs.empty() ||
             // HTAP transactions always use generic readsets
             !evWriteTxs.empty());
 
@@ -2633,23 +2633,6 @@ private:
         }
     }
 
-    void Shutdown() override {
-        if (Planner) {
-            if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
-                LOG_I("Shutdown immediately - nothing to wait");
-                PassAway();
-            } else {
-                this->Become(&TThis::WaitShutdownState);
-                LOG_I("Waiting for shutdown of " << Planner->GetPendingComputeTasks().size() << " tasks and "
-                                                 << Planner->GetPendingComputeActors().size() << " compute actors");
-                // TODO(ilezhankin): the CA awaiting timeout should be configurable.
-                TActivationContext::Schedule(TDuration::Seconds(10), new IEventHandle(SelfId(), SelfId(), new TEvents::TEvPoison));
-            }
-        } else {
-            PassAway();
-        }
-    }
-
     void PassAway() override {
         auto totalTime = TInstant::Now() - StartTime;
         Counters->Counters->DataTxTotalTimeHistogram->Collect(totalTime.MilliSeconds());
@@ -2665,54 +2648,6 @@ private:
         }
 
         TBase::PassAway();
-    }
-
-    STATEFN(WaitShutdownState) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvDqCompute::TEvState, HandleShutdown);
-            hFunc(TEvInterconnect::TEvNodeDisconnected, HandleShutdown);
-            hFunc(TEvents::TEvPoison, HandleShutdown);
-            default:
-                LOG_E("Unexpected event: " << ev->GetTypeName()); // ignore all other events
-        }
-    }
-
-    void HandleShutdown(TEvDqCompute::TEvState::TPtr& ev) {
-        HandleComputeStats(ev);
-
-        if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
-            PassAway();
-        }
-    }
-
-    void HandleShutdown(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-        const auto nodeId = ev->Get()->NodeId;
-        LOG_N("Node has disconnected while shutdown: " << nodeId);
-
-        YQL_ENSURE(Planner);
-
-        for (const auto& task : TasksGraph.GetTasks()) {
-            if (task.Meta.NodeId == nodeId && !task.Meta.Completed) {
-                if (task.ComputeActorId) {
-                    Planner->CompletedCA(task.Id, task.ComputeActorId);
-                } else {
-                    Planner->TaskNotStarted(task.Id);
-                }
-            }
-        }
-
-        if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
-            PassAway();
-        }
-    }
-
-    void HandleShutdown(TEvents::TEvPoison::TPtr& ev) {
-        // Self-poison means timeout - don't wait anymore.
-        LOG_I("Timed out on waiting for Compute Actors to finish - forcing shutdown");
-
-        if (ev->Sender == SelfId()) {
-            PassAway();
-        }
     }
 
 private:

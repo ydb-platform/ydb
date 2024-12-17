@@ -110,7 +110,7 @@ private:
     STATEFN(ExecuteState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvDqCompute::TEvState, HandleComputeState);
+                hFunc(TEvDqCompute::TEvState, HandleComputeStats);
                 hFunc(TEvDqCompute::TEvChannelData, HandleChannelData); // from CA
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
@@ -273,10 +273,7 @@ private:
 public:
 
     void Finalize() {
-        YQL_ENSURE(!AlreadyReplied);
-        AlreadyReplied = true;
-
-        ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::SUCCESS);
+        FillResponseStats(Ydb::StatusIds::SUCCESS);
 
         LWTRACK(KqpScanExecuterFinalize, ResponseEv->Orbit, TxId, LastTaskId, LastComputeActorId, ResponseEv->ResultsSize());
 
@@ -284,6 +281,8 @@ public:
             ExecuterSpan.EndOk();
         }
 
+        LOG_D("Sending response to: " << Target);
+        Send(Target, ResponseEv.release());
         PassAway();
     }
 

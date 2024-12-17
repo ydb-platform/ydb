@@ -626,11 +626,11 @@ bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::
     return false;
 }
 
-bool TKqpPlanner::CompletedCA(ui64 taskId, TActorId computeActor) {
+void TKqpPlanner::CompletedCA(ui64 taskId, TActorId computeActor) {
     auto& task = TasksGraph.GetTask(taskId);
     if (task.Meta.Completed) {
         YQL_ENSURE(!PendingComputeActors.contains(computeActor));
-        return false;
+        return;
     }
 
     task.Meta.Completed = true;
@@ -638,21 +638,7 @@ bool TKqpPlanner::CompletedCA(ui64 taskId, TActorId computeActor) {
     YQL_ENSURE(it != PendingComputeActors.end());
     LastStats.emplace_back(std::move(it->second));
     PendingComputeActors.erase(it);
-
-    LOG_I("Compute actor has finished execution: " << computeActor.ToString());
-
-    return true;
-}
-
-void TKqpPlanner::TaskNotStarted(ui64 taskId) {
-    // NOTE: should be invoked only while shutting down - when node is disconnected.
-
-    auto& task = TasksGraph.GetTask(taskId);
-
-    YQL_ENSURE(!task.ComputeActorId);
-    YQL_ENSURE(!task.Meta.Completed);
-
-    PendingComputeTasks.erase(taskId);
+    return;
 }
 
 TProgressStat::TEntry TKqpPlanner::CalculateConsumptionUpdate() {

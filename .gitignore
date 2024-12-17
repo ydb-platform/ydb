@@ -28,9 +28,6 @@ __pycache__/
 *.pb.h
 *.pb.cc
 
-# Other generated
-*.fbs.h
-
 # MacOS specific
 .DS_Store
 

@@ -175,10 +175,10 @@ public:
     }
 
     void ReportEventElapsedTime() {
-        YQL_ENSURE(Stats);
-
-        ui64 elapsedMicros = TlsActivationContext->GetCurrentEventTicksAsSeconds() * 1'000'000;
-        Stats->ExecuterCpuTime += TDuration::MicroSeconds(elapsedMicros);
+        if (Stats) {
+            ui64 elapsedMicros = TlsActivationContext->GetCurrentEventTicksAsSeconds() * 1'000'000;
+            Stats->ExecuterCpuTime += TDuration::MicroSeconds(elapsedMicros);
+        }
     }
 
 protected:
@@ -328,10 +328,11 @@ protected:
         }
 
         YQL_ENSURE(channel.DstTask == 0);
-        YQL_ENSURE(Stats);
 
-        Stats->ResultBytes += batch.Size();
-        Stats->ResultRows += batch.RowCount();
+        if (Stats) {
+            Stats->ResultBytes += batch.Size();
+            Stats->ResultRows += batch.RowCount();
+        }
 
         LOG_T("Got result, channelId: " << channel.Id << ", shardId: " << task.Meta.ShardId
             << ", inputIndex: " << channel.DstInputIndex << ", from: " << ev->Sender
@@ -377,7 +378,7 @@ protected:
         this->Send(channelComputeActorId, ackEv.Release(), /* TODO: undelivery */ 0, /* cookie */ channelId);
     }
 
-    bool HandleComputeStats(NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {
+    void HandleComputeStats(NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {
         TActorId computeActor = ev->Sender;
         auto& state = ev->Get()->Record;
         ui64 taskId = state.GetTaskId();
@@ -388,9 +389,7 @@ protected:
             << ", state: " << NYql::NDqProto::EComputeState_Name((NYql::NDqProto::EComputeState) state.GetState())
             << ", stats: " << state.GetStats());
 
-        YQL_ENSURE(Stats);
-
-        if (state.HasStats() && Request.ProgressStatsPeriod) {
+        if (Stats && state.HasStats() && Request.ProgressStatsPeriod) {
             Stats->UpdateTaskStats(taskId, state.GetStats());
             auto now = TInstant::Now();
             if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
@@ -408,40 +407,7 @@ protected:
         }
 
         YQL_ENSURE(Planner);
-        bool ack = Planner->AcknowledgeCA(taskId, computeActor, &state);
-
-        switch (state.GetState()) {
-            case NYql::NDqProto::COMPUTE_STATE_FAILURE:
-            case NYql::NDqProto::COMPUTE_STATE_FINISHED:
-                // Don't finalize stats twice.
-                if (Planner->CompletedCA(taskId, computeActor)) {
-                    auto& extraData = ExtraData[computeActor];
-                    extraData.TaskId = taskId;
-                    extraData.Data.Swap(state.MutableExtraData());
-                    
-
-                    Stats->AddComputeActorStats(
-                        computeActor.NodeId(),
-                        std::move(*state.MutableStats()),
-                        TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs())
-                    );
-
-                    LastTaskId = taskId;
-                    LastComputeActorId = computeActor.ToString();
-                }
-            default:
-                ; // ignore all other states.
-        }
-
-        return ack;
-    }
-
-    void HandleComputeState(NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {
-        TActorId computeActor = ev->Sender;
-        auto& state = ev->Get()->Record;
-        ui64 taskId = state.GetTaskId();
-
-        bool populateChannels = HandleComputeStats(ev);
+        bool populateChannels = Planner->AcknowledgeCA(taskId, computeActor, &state);
 
         switch (state.GetState()) {
             case NYql::NDqProto::COMPUTE_STATE_UNKNOWN: {
@@ -459,8 +425,24 @@ protected:
                 break;
             }
 
-            default:
-                ; // ignore all other states.
+            case NYql::NDqProto::COMPUTE_STATE_FAILURE:
+            case NYql::NDqProto::COMPUTE_STATE_FINISHED: {
+                auto& extraData = ExtraData[computeActor];
+                extraData.TaskId = taskId;
+                extraData.Data.Swap(state.MutableExtraData());
+                if (Stats) {
+                    Stats->AddComputeActorStats(
+                        computeActor.NodeId(),
+                        std::move(*state.MutableStats()),
+                        TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs())
+                    );
+                }
+
+                LastTaskId = taskId;
+                LastComputeActorId = computeActor.ToString();
+                YQL_ENSURE(Planner);
+                Planner->CompletedCA(taskId, computeActor);
+            }
         }
 
         if (state.GetState() == NYql::NDqProto::COMPUTE_STATE_FAILURE) {
@@ -513,9 +495,9 @@ protected:
         auto now = TAppData::TimeProvider->Now();
         StartResolveTime = now;
 
-        YQL_ENSURE(Stats);
-
-        Stats->StartTs = now;
+        if (Stats) {
+            Stats->StartTs = now;
+        }
     }
 
     TMaybe<size_t> FindReadRangesSource(const NKqpProto::TKqpPhyStage& stage) {
@@ -686,7 +668,7 @@ protected:
         if (statusCode == Ydb::StatusIds::INTERNAL_ERROR) {
             InternalError(issues);
         } else if (statusCode == Ydb::StatusIds::TIMEOUT) {
-            TimeoutError(ev->Sender);
+            AbortExecutionAndDie(ev->Sender, NYql::NDqProto::StatusIds::TIMEOUT, "Request timeout exceeded");
         } else {
             RuntimeError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), issues);
         }
@@ -1148,9 +1130,8 @@ protected:
                 : Nothing();
 
             YQL_ENSURE(!shardsResolved || nodeId);
-            YQL_ENSURE(Stats);
 
-            if (shardId) {
+            if (shardId && Stats) {
                 Stats->AffectedShards.insert(*shardId);
             }
 
@@ -1218,13 +1199,11 @@ protected:
 
         if (partitions.size() > 0 && source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards()) {
             auto [startShard, shardInfo] = MakeVirtualTablePartition(source, stageInfo, HolderFactory(), TypeEnv());
-
-            YQL_ENSURE(Stats);
-
-            for (auto& [shardId, _] : partitions) {
-                Stats->AffectedShards.insert(shardId);
+            if (Stats) {
+                for (auto& [shardId, _] : partitions) {
+                    Stats->AffectedShards.insert(shardId);
+                }
             }
-
             if (shardInfo.KeyReadRanges) {
                 addPartiton(startShard, {}, shardInfo, source.GetSequentialInFlightShards());
                 fillRangesForTasks();
@@ -1487,8 +1466,6 @@ protected:
         THashMap<ui64, ui64> assignedShardsCount;
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
-        YQL_ENSURE(Stats);
-
         const auto& tableInfo = stageInfo.Meta.TableConstInfo;
         const auto& keyTypes = tableInfo->KeyColumnTypes;
         ui32 metaId = 0;
@@ -1517,7 +1494,7 @@ protected:
                 nodeShards[nodeId].emplace_back(TShardInfoWithId(i.first, std::move(i.second)));
             }
 
-            if (CollectProfileStats(Request.StatsMode)) {
+            if (Stats && CollectProfileStats(Request.StatsMode)) {
                 for (auto&& i : nodeShards) {
                     Stats->AddNodeShardsCount(stageInfo.Id.StageId, i.first, i.second.size());
                 }
@@ -1624,14 +1601,14 @@ protected:
 protected:
     void TerminateComputeActors(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
         for (const auto& task : this->TasksGraph.GetTasks()) {
-            if (task.ComputeActorId && !task.Meta.Completed) {
+            if (task.ComputeActorId) {
                 LOG_I("aborting compute actor execution, message: " << issues.ToOneLineString()
                     << ", compute actor: " << task.ComputeActorId << ", task: " << task.Id);
 
                 auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDq::YdbStatusToDqStatus(code), issues);
                 this->Send(task.ComputeActorId, ev.Release());
             } else {
-                LOG_I("task: " << task.Id << ", does not have the CA id yet or is already complete");
+                LOG_I("task: " << task.Id << ", does not have Compute ActorId yet");
             }
         }
     }
@@ -1649,6 +1626,7 @@ protected:
 
     void InternalError(const NYql::TIssues& issues) {
         LOG_E(issues.ToOneLineString());
+        TerminateComputeActors(Ydb::StatusIds::INTERNAL_ERROR, issues);
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
         for (const NYql::TIssue& i : issues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
@@ -1662,6 +1640,7 @@ protected:
 
     void ReplyUnavailable(const TString& message) {
         LOG_E("UNAVAILABLE: " << message);
+        TerminateComputeActors(Ydb::StatusIds::UNAVAILABLE, message);
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE);
         issue.AddSubIssue(new NYql::TIssue(message));
         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, issue);
@@ -1669,6 +1648,7 @@ protected:
 
     void RuntimeError(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
         LOG_E(Ydb::StatusIds_StatusCode_Name(code) << ": " << issues.ToOneLineString());
+        TerminateComputeActors(code, issues);
         ReplyErrorAndDie(code, issues);
     }
 
@@ -1684,51 +1664,81 @@ protected:
         ReplyErrorAndDie(status, &issues);
     }
 
-    void TimeoutError(TActorId abortSender) {
+    void AbortExecutionAndDie(TActorId abortSender, NYql::NDqProto::StatusIds::StatusCode status, const TString& message) {
         if (AlreadyReplied) {
-            LOG_E("Timeout when we already replied - not good" << Endl << TBackTrace().PrintToString() << Endl);
             return;
         }
-
-        const auto status = NYql::NDqProto::StatusIds::TIMEOUT;
-        const TString message = "Request timeout exceeded";
-
-        TerminateComputeActors(Ydb::StatusIds::TIMEOUT, message);
-
-        AlreadyReplied = true;
 
         LOG_E("Abort execution: " << NYql::NDqProto::StatusIds_StatusCode_Name(status) << "," << message);
         if (ExecuterSpan) {
             ExecuterSpan.EndError(TStringBuilder() << NYql::NDqProto::StatusIds_StatusCode_Name(status));
         }
 
-        ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::TIMEOUT);
+        FillResponseStats(Ydb::StatusIds::TIMEOUT);
 
         // TEvAbortExecution can come from either ComputeActor or SessionActor (== Target).
         if (abortSender != Target) {
-            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(status, message);
+            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(status, "Request timeout exceeded");
             this->Send(Target, abortEv.Release());
         }
 
+        AlreadyReplied = true;
         LOG_E("Sending timeout response to: " << Target);
+        this->Send(Target, ResponseEv.release());
 
-        this->Shutdown();
+        Request.Transactions.crop(0);
+        TerminateComputeActors(Ydb::StatusIds::TIMEOUT, message);
+        this->PassAway();
+    }
+
+    void FillResponseStats(Ydb::StatusIds::StatusCode status) {
+        auto& response = *ResponseEv->Record.MutableResponse();
+
+        response.SetStatus(status);
+
+        if (Stats) {
+            ReportEventElapsedTime();
+
+            Stats->FinishTs = TInstant::Now();
+            Stats->Finish();
+
+            if (Stats->CollectStatsByLongTasks || CollectFullStats(Request.StatsMode)) {
+                for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
+                    const auto& tx = Request.Transactions[txId].Body;
+                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
+                    response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
+                }
+            }
+
+            if (Stats->CollectStatsByLongTasks) {
+                const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
+                if (!txPlansWithStats.empty()) {
+                    LOG_N("Full stats: " << txPlansWithStats);
+                }
+            }
+        }
     }
 
     virtual void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status,
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues)
     {
         if (AlreadyReplied) {
-            LOG_E("Error when we already replied - not good" << Endl << TBackTrace().PrintToString() << Endl);
             return;
         }
 
-        TerminateComputeActors(status, "Terminate execution");
+        if (Planner) {
+            for (auto computeActor : Planner->GetPendingComputeActors()) {
+                LOG_D("terminate compute actor " << computeActor.first);
+
+                auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDq::YdbStatusToDqStatus(status), "Terminate execution");
+                this->Send(computeActor.first, ev.Release());
+            }
+        }
 
         AlreadyReplied = true;
         auto& response = *ResponseEv->Record.MutableResponse();
 
-        response.SetStatus(status);
+        FillResponseStats(status);
         if (issues) {
             response.MutableIssues()->Swap(issues);
         }
@@ -1749,7 +1759,9 @@ protected:
         ExecuterSpan.EndError(response.DebugString());
         ExecuterStateSpan.EndError(response.DebugString());
 
-        this->Shutdown();
+        Request.Transactions.crop(0);
+        this->Send(Target, ResponseEv.release());
+        this->PassAway();
     }
 
 protected:
@@ -1817,46 +1829,7 @@ protected:
     }
 
 protected:
-    // Introduced separate method from `PassAway()` - to not get confused with expectations from other actors,
-    // that `PassAway()` should kill actor immediately.
-    virtual void Shutdown() {
-        PassAway();
-    }
-
     void PassAway() override {
-        YQL_ENSURE(AlreadyReplied && ResponseEv);
-
-        // Fill response stats
-        {
-            auto& response = *ResponseEv->Record.MutableResponse();
-
-            YQL_ENSURE(Stats);
-
-            ReportEventElapsedTime();
-
-            Stats->FinishTs = TInstant::Now();
-            Stats->Finish();
-
-            if (Stats->CollectStatsByLongTasks || CollectFullStats(Request.StatsMode)) {
-                response.MutableResult()->MutableStats()->ClearTxPlansWithStats();
-                for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
-                    const auto& tx = Request.Transactions[txId].Body;
-                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
-                    response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
-                }
-            }
-
-            if (Stats->CollectStatsByLongTasks) {
-                const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
-                if (!txPlansWithStats.empty()) {
-                    LOG_N("Full stats: " << response.GetResult().GetStats());
-                }
-            }
-        }
-
-        Request.Transactions.crop(0);
-        this->Send(Target, ResponseEv.release());
-
         for (auto channelPair: ResultChannelProxies) {
             LOG_D("terminate result channel " << channelPair.first << " proxy at " << channelPair.second->SelfId());
 
@@ -1877,11 +1850,12 @@ protected:
 
         if (KqpTableResolverId) {
             this->Send(KqpTableResolverId, new TEvents::TEvPoison);
+            this->Send(this->SelfId(), new TEvents::TEvPoison);
+            LOG_T("Terminate, become ZombieState");
+            this->Become(&TKqpExecuterBase::ZombieState);
+        } else {
+            IActor::PassAway();
         }
-
-        this->Send(this->SelfId(), new TEvents::TEvPoison);
-        LOG_T("Terminate, become ZombieState");
-        this->Become(&TKqpExecuterBase::ZombieState);
     }
 
     STATEFN(ZombieState) {

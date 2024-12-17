@@ -59,6 +59,7 @@ private:
     YDB_READONLY_DEF(std::optional<ui32>, GranuleShardingVersionId);
     YDB_READONLY(NEvWrite::EModificationType, ModificationType, NEvWrite::EModificationType::Upsert);
     bool WritePortions = false;
+    const std::shared_ptr<TAtomicCounter> Activity = std::make_shared<TAtomicCounter>();
 
 public:
     using TPtr = std::shared_ptr<TWriteOperation>;
@@ -75,6 +76,10 @@ public:
     void CommitOnComplete(TColumnShard& owner, const NOlap::TSnapshot& snapshot) const;
     void AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const;
     void AbortOnComplete(TColumnShard& owner) const;
+
+    std::shared_ptr<const TAtomicCounter> GetActivityChecker() const {
+        return Activity;
+    }
 
     void Out(IOutputStream& out) const {
         out << "write_id=" << (ui64)WriteId << ";lock_id=" << LockId;

@@ -18,14 +18,14 @@ std::optional<std::vector<NKikimr::NArrow::TSerializedBatch>> TBuildSlicesTask::
     context.SetFieldsForSpecialKeys(WriteData.GetPrimaryKeySchema());
     auto splitResult = NArrow::SplitByBlobSize(OriginalBatch, context);
     if (splitResult.IsFail()) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)(
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_WRITE)(
             "event", TStringBuilder() << "cannot split batch in according to limits: " + splitResult.GetErrorMessage());
         return {};
     }
     auto result = splitResult.DetachResult();
     if (result.size() > 1) {
         for (auto&& i : result) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "strange_blobs_splitting")("blob", i.DebugString())(
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "strange_blobs_splitting")("blob", i.DebugString())(
                 "original_size", WriteData.GetSize());
         }
     }
@@ -108,11 +108,15 @@ public:
 };
 
 TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
-    NActors::TLogContextGuard g(
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", Context.GetTabletActorId()));
+    NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)("tablet_id", TabletId)("parent_id",
+        Context.GetTabletActorId()))("write_id", WriteData.GetWriteMeta().GetWriteId())("table_id", WriteData.GetWriteMeta().GetTableId());
+    if (!Context.IsActive()) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "abort_execution");
+        ReplyError("execution aborted", NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
+        return TConclusionStatus::Fail("execution aborted");
+    }
     if (!OriginalBatch) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_bad_data")("write_id", WriteData.GetWriteMeta().GetWriteId())(
-            "table_id", WriteData.GetWriteMeta().GetTableId());
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "ev_write_bad_data");
         ReplyError("no data in batch", NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
         return TConclusionStatus::Fail("no data in batch");
     }
@@ -155,7 +159,7 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
         const auto& indexSchema = Context.GetActualSchema()->GetIndexInfo().ArrowSchema();
         auto subsetConclusion = NArrow::TColumnOperator().IgnoreOnDifferentFieldTypes().BuildSequentialSubset(OriginalBatch, indexSchema);
         if (subsetConclusion.IsFail()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unadaptable schemas")("index", indexSchema.ToString())(
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "unadaptable schemas")("index", indexSchema.ToString())(
                 "problem", subsetConclusion.GetErrorMessage());
             ReplyError("unadaptable schema: " + subsetConclusion.GetErrorMessage(),
                 NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);

@@ -56,34 +56,33 @@ Pear,15,33'''
         )
         logging.debug(str(metrics))
 
-        query_id_label = "manual"
         assert (
             metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id_label, "name": "query.running_tasks"}
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.running_tasks"}
             )
             >= 0
         )
         assert (
             metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id_label, "name": "query.cpu_usage_us"}
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.cpu_usage_us"}
             )
             >= 0
         )
         assert (
             metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id_label, "name": "query.memory_usage_bytes"}
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.memory_usage_bytes"}
             )
             > 0
         )
         assert (
             metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id_label, "name": "query.input_bytes"}
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.input_bytes"}
             )
             > 0
         )
         assert (
             metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id_label, "name": "query.uptime_seconds"}
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.uptime_seconds"}
             )
             >= 0
         )
@@ -92,7 +91,7 @@ Pear,15,33'''
                 {
                     "cloud_id": cloud_id,
                     "folder_id": folder_id,
-                    "query_id": query_id_label,
+                    "query_id": query_id,
                     "name": "query.source_input_records",
                 }
             )
@@ -104,7 +103,7 @@ Pear,15,33'''
                     {
                         "cloud_id": cloud_id,
                         "folder_id": folder_id,
-                        "query_id": query_id_label,
+                        "query_id": query_id,
                         "name": "query.sink_output_records",
                     }
                 )
@@ -112,7 +111,7 @@ Pear,15,33'''
             )
             assert (
                 metrics.find_sensor(
-                    {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id_label, "name": "query.output_bytes"}
+                    {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.output_bytes"}
                 )
                 is None
             )
@@ -122,7 +121,7 @@ Pear,15,33'''
                     {
                         "cloud_id": cloud_id,
                         "folder_id": folder_id,
-                        "query_id": query_id_label,
+                        "query_id": query_id,
                         "name": "query.sink_output_records",
                     }
                 )
@@ -130,7 +129,7 @@ Pear,15,33'''
             )
             assert (
                 metrics.find_sensor(
-                    {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id_label, "name": "query.output_bytes"}
+                    {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.output_bytes"}
                 )
                 == 0
             )
@@ -157,37 +156,37 @@ Pear,15,33'''
 
         assert (
             metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id_label, "name": "query.running_tasks"}
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.running_tasks"}
             )
             >= 0
         )
         assert (
             metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id_label, "name": "query.cpu_usage_us"}
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.cpu_usage_us"}
             )
             >= 0
         )
         assert (
             metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id_label, "name": "query.memory_usage_bytes"}
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.memory_usage_bytes"}
             )
             > 0
         )
         assert (
             metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id_label, "name": "query.input_bytes"}
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.input_bytes"}
             )
             > 0
         )
         assert (
             metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id_label, "name": "query.uptime_seconds"}
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.uptime_seconds"}
             )
             >= 0
         )
         assert (
             metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id_label, "name": "query.output_bytes"}
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.output_bytes"}
             )
             > 0
         )
@@ -196,7 +195,7 @@ Pear,15,33'''
                 {
                     "cloud_id": cloud_id,
                     "folder_id": folder_id,
-                    "query_id": query_id_label,
+                    "query_id": query_id,
                     "name": "query.source_input_records",
                 }
             )
@@ -207,7 +206,7 @@ Pear,15,33'''
                 {
                     "cloud_id": cloud_id,
                     "folder_id": folder_id,
-                    "query_id": query_id_label,
+                    "query_id": query_id,
                     "name": "query.sink_output_records",
                 }
             )

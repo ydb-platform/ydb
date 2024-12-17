@@ -184,30 +184,59 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(BillingRecordsForJsonApi, THttpProxyTestMockWithMetering) {
+        auto meteringLogFilePath = KikimrServer->ServerSettings->AppConfig->GetSqsConfig().GetMeteringLogFilePath();
+
+        // loadBillingRecords was copied from metering_ut.cpp.
+        // Probably, that file is a better place for this test.
+        auto loadBillingRecords = [](const TString& filepath) -> TVector<NSc::TValue> {
+            TString data = TFileInput(filepath).ReadAll();
+            auto rawRecords = SplitString(data, "\n");
+            TVector<NSc::TValue> records;
+            for (auto& record : rawRecords) {
+                records.push_back(NSc::TValue::FromJson(record));
+            }
+            return records;
+        };
+
+        TVector<NSc::TValue> records;
+        auto waitBillingRecords = [&]() {
+            static size_t expectedCount = 0;
+            expectedCount += 3;  // 2 traffic records, 1 request record
+            while (records.size() != expectedCount) {
+                Sleep(TDuration::Seconds(1));
+                records = loadBillingRecords(meteringLogFilePath);
+            }
+        };
+
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
         auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+        waitBillingRecords();
 
         SendMessage({
             {"QueueUrl", queueUrl},
             {"MessageBody", TString(1_KB, 'x')},  // 1 request unit
         });
+        waitBillingRecords();
 
         json = ReceiveMessage({
             {"QueueUrl", queueUrl},
             {"WaitTimeSeconds", 20},
         });
         UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        waitBillingRecords();
 
         SendMessage({
             {"QueueUrl", queueUrl},
             {"MessageBody", TString(150_KB, 'x')},  // 3 request units
         });
+        waitBillingRecords();
 
         json = ReceiveMessage({
             {"QueueUrl", queueUrl},
             {"WaitTimeSeconds", 20},
         });
         UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        waitBillingRecords();
 
         auto makeTags = [](TVector<std::pair<TString, TString>> pairs) {
             NSc::TValue tags;
@@ -240,18 +269,6 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
                    record["tags"]["queue_type"] == expected["tags"]["queue_type"];
         };
 
-        // loadBillingRecords was copied from metering_ut.cpp.
-        // Probably, that file is a better place for this test.
-        auto loadBillingRecords = [](const TString& filepath) -> TVector<NSc::TValue> {
-            TString data = TFileInput(filepath).ReadAll();
-            auto rawRecords = SplitString(data, "\n");
-            TVector<NSc::TValue> records;
-            for (auto& record : rawRecords) {
-                records.push_back(NSc::TValue::FromJson(record));
-            }
-            return records;
-        };
-
         TVector<NSc::TValue> expectedRecords{
             // CreateQueue
             makeRecord("ymq.traffic.v1", "", 0, {{"direction", "ingress"}, {"type", "inet"}}),
@@ -278,14 +295,6 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}, {"type", "inet"}}),
             makeRecord("ymq.requests.v1", "000000000000000101v0", 3, {{"queue_type", "std"}}),
         };
-
-        auto filePath = KikimrServer->ServerSettings->AppConfig->GetSqsConfig().GetMeteringLogFilePath();
-
-        TVector<NSc::TValue> records;
-        while (records.size() != expectedRecords.size()) {
-            Sleep(TDuration::Seconds(1));
-            records = loadBillingRecords(filePath);
-        }
         for (size_t i = 0; i < records.size(); ++i) {
             UNIT_ASSERT(asExpected(records[i], expectedRecords[i]));
         }

@@ -4,14 +4,14 @@ The file structure outlined below is used to export data both to the file system
 
 ## Directories {#dir}
 
-Each database directory has a corresponding directory in the file structure. Each of them includes a `permissions.pb` file, which describes the directory's ACL and owner in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format. The directory hierarchy in the file structure mirrors the hierarchy in the database. If a database directory contains no items (neither tables nor subdirectories), directory in the file structure includes a zero-size file named `empty_dir`.
+Each database directory has a corresponding directory in the file structure. Each of them includes a `permissions.pb` file, which describes the directory ACL and owner in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format. The directory hierarchy in the file structure mirrors the hierarchy in the database. If a database directory contains no items (neither tables nor subdirectories), directory in the file structure includes an empty file named `empty_dir`.
 
 ## Tables {#tables}
 
 For each table in the database, there's a same-name directory in the file structure's directory hierarchy that includes:
 
 - The `scheme.pb` file describing the table structure and parameters in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format
-- The `permissions.pb` file describes the table's ACL and owner in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format
+- The `permissions.pb` file describes the table ACL and owner in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format
 - One or more `data_XX.csv` files with the table data in `csv` format, where `XX` is the file's sequence number. The export starts with the `data_00.csv` file, with a next file created whenever the current file exceeds 100 MB.
 
 ## Files with data {#datafiles}

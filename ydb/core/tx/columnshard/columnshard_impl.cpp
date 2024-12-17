@@ -84,7 +84,8 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , PeriodicWakeupActivationPeriod(NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod())
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval())
     , InFlightReadsTracker(StoragesManager, Counters.GetRequestsTracingCounters())
-    , TablesManager(StoragesManager, std::make_shared<NOlap::NDataAccessorControl::TLocalManager>(nullptr), info->TabletID)
+    , TablesManager(StoragesManager, std::make_shared<NOlap::NDataAccessorControl::TLocalManager>(nullptr),
+          std::make_shared<NOlap::TSchemaObjectsCache>(), info->TabletID)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , InsertTable(std::make_unique<NOlap::TInsertTable>())
@@ -354,15 +355,13 @@ void TColumnShard::RunInit(const NKikimrTxColumnShard::TInitShard& proto, const 
 
     NIceDb::TNiceDb db(txc.DB);
 
-    if (proto.HasOwnerPathId()) {
-        OwnerPathId = proto.GetOwnerPathId();
-        Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, OwnerPathId);
-    }
+    AFL_VERIFY(proto.HasOwnerPathId());
+    OwnerPathId = proto.GetOwnerPathId();
+    Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, OwnerPathId);
 
-    if (proto.HasOwnerPath()) {
-        OwnerPath = proto.GetOwnerPath();
-        Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPath, OwnerPath);
-    }
+    AFL_VERIFY(proto.HasOwnerPathId());
+    OwnerPath = proto.GetOwnerPath();
+    Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPath, OwnerPath);
 
     for (auto& createTable : proto.GetTables()) {
         RunEnsureTable(createTable, version, txc);

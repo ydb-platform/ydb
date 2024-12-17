@@ -26,12 +26,13 @@
 
 namespace NKikimr::NOlap {
 
-TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId,
+TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const TSchemaInitializationData& schema)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
     , DataAccessorsManager(dataAccessorsManager)
     , StoragesManager(storagesManager)
+    , SchemaObjectsCache(schemaCache)
     , TabletId(tabletId)
     , LastPortion(0)
     , LastGranule(0) {
@@ -39,12 +40,13 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId,
     RegisterSchemaVersion(snapshot, schema);
 }
 
-TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId,
+TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
     , DataAccessorsManager(dataAccessorsManager)
     , StoragesManager(storagesManager)
+    , SchemaObjectsCache(schemaCache)
     , TabletId(tabletId)
     , LastPortion(0)
     , LastGranule(0) {
@@ -150,7 +152,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
     }
 
     const bool isCriticalScheme = indexInfo.GetSchemeNeedActualization();
-    auto* indexInfoActual = VersionedIndex.AddIndex(snapshot, std::move(indexInfo));
+    auto* indexInfoActual = VersionedIndex.AddIndex(snapshot, SchemaObjectsCache->GetIndexInfoCache(std::move(indexInfo)));
     if (isCriticalScheme) {
         StartActualization({});
         for (auto&& i : GranulesStorage->GetTables()) {
@@ -215,7 +217,7 @@ void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, c
     }
 
     AFL_VERIFY(indexInfoOptional);
-    VersionedIndex.AddIndex(snapshot, std::move(*indexInfoOptional));
+    VersionedIndex.AddIndex(snapshot, SchemaObjectsCache->GetIndexInfoCache(std::move(*indexInfoOptional)));
 }
 
 std::shared_ptr<ITxReader> TColumnEngineForLogs::BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) {

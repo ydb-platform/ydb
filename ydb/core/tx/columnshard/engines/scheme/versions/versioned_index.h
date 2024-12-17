@@ -123,7 +123,7 @@ public:
         return PrimaryKey;
     }
 
-    const TIndexInfo* AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo);
+    const TIndexInfo* AddIndex(const TSnapshot& snapshot, const std::shared_ptr<const TIndexInfo>& indexInfo);
 
     bool LoadShardingInfo(IDbWrapper& db);
 };

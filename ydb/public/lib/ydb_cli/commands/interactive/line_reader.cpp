@@ -90,7 +90,7 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath)
     Rx.set_highlighter_callback(highlighter_callback);
     Rx.enable_bracketed_paste();
     Rx.set_unique_history(true);
-    Rx.set_complete_on_empty(false);
+    Rx.set_complete_on_empty(true);
     Rx.set_word_break_characters(WordBreakCharacters.data());
     Rx.bind_key(replxx::Replxx::KEY::control('N'), [&](char32_t code) { return Rx.invoke(replxx::Replxx::ACTION::HISTORY_NEXT, code); });
     Rx.bind_key(replxx::Replxx::KEY::control('P'), [&](char32_t code) { return Rx.invoke(replxx::Replxx::ACTION::HISTORY_PREVIOUS, code); });

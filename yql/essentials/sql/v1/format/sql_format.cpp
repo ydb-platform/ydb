@@ -117,6 +117,12 @@ TStringBuf SkipQuotes(const TString& content) {
     return str;
 }
 
+TStringBuf SkipNewline(const TString& content) {
+    TStringBuf str = content;
+    str.ChopSuffix("\n");
+    return str;
+}
+
 bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQuery) {
     auto in = query.begin();
     auto out = formattedQuery.begin();
@@ -142,16 +148,7 @@ bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQu
                     return false;
                 }
             } else if (inToken.Name == "COMMENT") {
-                TStringBuf inContent = inToken.Content;
-                TStringBuf outContent = outToken.Content;
-
-                auto inNextToken = SkipWS(in + 1, inEnd);
-                if (inNextToken != inEnd && inNextToken->Name == "EOF") {
-                    inContent.ChopSuffix("\n");
-                    outContent.ChopSuffix("\n");
-                }
-
-                if (inContent != outContent) {
+                if (SkipNewline(inToken.Content) != SkipNewline(outToken.Content)) {
                     return false;
                 }
             } else {

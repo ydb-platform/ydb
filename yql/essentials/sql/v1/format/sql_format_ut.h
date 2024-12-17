@@ -209,6 +209,8 @@ Y_UNIT_TEST(NamedNode) {
             "$a = (\n\tSELECT\n\t\t1\n\tFROM\n\t\t$as\n);\n"},
         {"$a = select * from $t -- comment",
             "$a = (\n\tSELECT\n\t\t*\n\tFROM\n\t\t$t -- comment\n);\n"},
+        {"-- comment\r\r\r$a=1;",
+            "-- comment\r\n$a = 1;\n"},
     };
 
     TSetup setup;

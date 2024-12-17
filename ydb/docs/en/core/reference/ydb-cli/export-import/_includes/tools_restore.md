@@ -26,8 +26,6 @@ To import data to the table, use the [YQL `REPLACE` command](../../../../yql/ref
 
 `--restore-indexes VAL`: Enables/disables import of indexes, 1 (yes) or 0 (no), defaults to 1. If set to 0, the import won't either register secondary indexes in the data schema or populate them with data.
 
-`--restore-acl VAL`: Enables/disables import of access control lists (ACL) and owners for database objects, 1 (yes) or 0 (no), defaults to 1.
-
 `--dry-run`: Matching the data schemas in the database and file system without updating the database, 1 (yes) or 0 (no), defaults to 0. When enabled, the system checks that:
 
 - All tables in the file system are present in the database
@@ -51,7 +49,7 @@ Some of the below parameters have default values. This means that the workload w
 `--bandwidth VAL`: Limit the workload per second, defaults to 0 (not set). `VAL` specifies the data amount with a unit, for example, 2MiB. If this value is set, the `--rps` limit (see above) is not applied.
 `--in-flight VAL`: Limits the number of queries that can be run in parallel, the default value is 10. To achieve maximum parallelism, set the parameter value to the number of cores allocated for the restore process.
 `--upload-batch-rows VAL`: Limits the number of records in the uploaded batch, the default value is 0 (unlimited). `VAL` determines the number of records and is set as a number with an optional unit, for example, 1K.
-`--upload-batch-bytes VAL`: Limits the batch size of uploaded data, the default value is 512KB. `VAL` specifies the data amount with a unit, for example, 1MiB. It is not recommended to set the value higher than 15 MiB.
+`--upload-batch-bytes VAL`: Limits the batch size of uploaded data, the default value is 512KB. `VAL` specifies the data amount with a unit, for example, 1MiB. Maximum value is 15 MiB.
 `--upload-batch-rus VAL`: Applies only to Serverless databases to limit Request Units (RU) that can be consumed to upload one batch, defaults to 30 RU. The batch size is selected to match the specified value. `VAL` determines the number of RU and is set as a number with an optional unit, for example, 100 or 1K.
 
 ## Examples {#examples}
@@ -95,5 +93,5 @@ Matching schemas between the database and file system:
 ### Example options for better performance
 
 ```bash
-{{ ydb-cli }} -p quickstart tools restore -p . -i . --import-data --bandwidth=10GiB --in-flight=4 --upload-batch-bytes=15MiB
+{{ ydb-cli }} -p quickstart tools restore -p . -i . --import-data --bandwidth=10GiB --in-flight=16 --upload-batch-bytes=16MiB
 ```

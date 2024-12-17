@@ -253,12 +253,20 @@ namespace NPQ {
         {
             auto reqData = MakeHolder<TCacheL2Request>(TabletId);
 
+            SaveBlobs(kvReq, *reqData, ctx);
+
+            auto l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
+            ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
+        }
+
+        void SaveBlobs(const TKvRequest& kvReq, TCacheL2Request& reqData, const TActorContext& ctx)
+        {
             for (const TRequestedBlob& reqBlob : kvReq.Blobs) {
                 TBlobId blob(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
 
                 // there could be a new blob with same id (for big messages)
                 if (RemoveExists(ctx, blob)) {
-                    reqData->RemovedBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, nullptr);
+                    reqData.RemovedBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, nullptr);
                 }
 
                 auto cached = std::make_shared<TCacheValue>(reqBlob.Value, ctx.SelfID, TAppData::TimeProvider->Now());
@@ -268,15 +276,12 @@ namespace NPQ {
                 if (L1Strategy)
                     L1Strategy->SaveHeadBlob(blob);
 
-                reqData->StoredBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, cached);
+                reqData.StoredBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, cached);
 
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Caching head blob in L1. Partition "
                     << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
                     << " size " << reqBlob.Value.size() << " actorID " << ctx.SelfID);
             }
-
-            auto l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
-            ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
         }
 
         void SavePrefetchBlobs(const TActorContext& ctx, const TKvRequest& kvReq, const TVector<bool>& store)

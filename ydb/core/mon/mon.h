@@ -42,6 +42,7 @@ public:
         TString RedirectMainPageTo;
         TString Certificate;
         ui32 MaxRequestsPerSecond = 0;
+        TDuration InactivityTimeout = TDuration::Minutes(2);
     };
 
     virtual ~TMon() = default;

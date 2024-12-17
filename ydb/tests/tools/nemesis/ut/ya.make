@@ -8,7 +8,6 @@ TEST_SRCS(
     test_tablet.py
 )
 
-TIMEOUT(600)
 SIZE(MEDIUM)
 
 

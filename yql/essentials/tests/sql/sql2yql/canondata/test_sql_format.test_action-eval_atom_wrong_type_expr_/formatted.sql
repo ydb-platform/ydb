@@ -1,7 +1,11 @@
-/* yt can not *//* custom error: Expected data or optional of data, but got: List<String> */
+/* yt can not */
+/* custom error: Expected data or optional of data, but got: List<String> */
 USE plato;
-$n = ["foo"];
+
+$n = ['foo'];
 
 SELECT
     *
-FROM $n;
+FROM
+    $n
+;

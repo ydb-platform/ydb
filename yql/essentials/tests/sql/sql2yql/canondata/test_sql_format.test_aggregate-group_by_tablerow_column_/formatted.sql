@@ -1,10 +1,13 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
 SELECT
     *
-FROM Input
+FROM
+    Input
 GROUP BY
     TableRow().key AS k
 ORDER BY
-    k;
+    k
+;

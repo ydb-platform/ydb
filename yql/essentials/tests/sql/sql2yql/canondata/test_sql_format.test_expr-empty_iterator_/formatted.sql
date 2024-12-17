@@ -1,13 +1,18 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
-$train =
+$train = (
     SELECT
         *
-    FROM Input
-    WHERE key > "900"
+    FROM
+        Input
+    WHERE
+        key > '900'
     GROUP BY
-        value;
+        value
+);
+
 $method = ($stream) -> {
     $func = CALLABLE (
         CallableType(0, TypeOf($stream), TypeOf($stream)),
@@ -18,10 +23,13 @@ $method = ($stream) -> {
     RETURN $func($stream);
 };
 
-$prediction =
+$prediction = (
     PROCESS $train
-    USING $method(TableRows());
+    USING $method(TableRows())
+);
 
 SELECT
     *
-FROM $prediction;
+FROM
+    $prediction
+;

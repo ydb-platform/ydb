@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 SELECT
     key,
     ToDict(items) AS `dict`,
@@ -10,14 +11,17 @@ FROM (
     FROM (
         SELECT
             *
-        FROM plato.Input
+        FROM
+            plato.Input
         UNION ALL
         SELECT
             *
-        FROM plato.Input
+        FROM
+            plato.Input
     )
     GROUP BY
         key
 )
 ORDER BY
-    key;
+    key
+;

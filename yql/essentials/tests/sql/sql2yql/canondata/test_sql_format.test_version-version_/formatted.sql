@@ -1,5 +1,7 @@
-/* postgres can not *//* yt can not */
+/* postgres can not */
+/* yt can not */
 USE plato;
 
 SELECT
-    length(version()) > 1;
+    length(version()) > 1
+;

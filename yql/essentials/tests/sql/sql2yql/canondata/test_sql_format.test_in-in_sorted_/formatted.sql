@@ -1,13 +1,20 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
 
-$in =
+$in = (
     SELECT
         key
-    FROM InputSorted
-    WHERE key < "100";
+    FROM
+        InputSorted
+    WHERE
+        key < '100'
+);
 
 SELECT
     *
-FROM InputSorted
-WHERE key IN $in;
+FROM
+    InputSorted
+WHERE
+    key IN $in
+;

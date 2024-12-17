@@ -1,13 +1,20 @@
-PRAGMA config.flags("OptimizerFlags", "FilterPushdownEnableMultiusage");
+PRAGMA config.flags('OptimizerFlags', 'FilterPushdownEnableMultiusage');
+
 USE plato;
 
-$src =
+$src = (
     SELECT DISTINCT
         key
-    FROM Input
-    WHERE value = 'ddd';
+    FROM
+        Input
+    WHERE
+        value == 'ddd'
+);
 
 SELECT
     *
-FROM Input
-WHERE key = $src;
+FROM
+    Input
+WHERE
+    key == $src
+;

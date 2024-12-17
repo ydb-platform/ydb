@@ -1,11 +1,13 @@
-/* ytfile can not *//* custom error:Duplicate key*/
+/* ytfile can not */
+/* custom error:Duplicate key*/
 USE plato;
 
-INSERT INTO Output
-    WITH MONOTONIC_KEYS
+INSERT INTO Output WITH MONOTONIC_KEYS
 SELECT DISTINCT
     *
-FROM Input
+FROM
+    Input
 ORDER BY
     key,
-    subkey;
+    subkey
+;

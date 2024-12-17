@@ -1,15 +1,17 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
+
 $combineQueries = ($query, $list) -> {
     RETURN EvaluateCode(
         LambdaCode(
             ($world) -> {
                 $queries = ListMap(
                     $list, ($arg) -> {
-                        RETURN FuncCode("Apply", QuoteCode($query), $world, ReprCode($arg))
+                        RETURN FuncCode('Apply', QuoteCode($query), $world, ReprCode($arg));
                     }
                 );
-                RETURN FuncCode("UnionAll", $queries);
+                RETURN FuncCode('UnionAll', $queries);
             }
         )
     );
@@ -18,10 +20,15 @@ $combineQueries = ($query, $list) -> {
 DEFINE SUBQUERY $calc($table) AS
     SELECT
         *
-    FROM $table;
+    FROM
+        $table
+    ;
 END DEFINE;
-$fullQuery = $combineQueries($calc, AsList("Input", "Input"));
+
+$fullQuery = $combineQueries($calc, AsList('Input', 'Input'));
 
 SELECT
     count(*)
-FROM $fullQuery();
+FROM
+    $fullQuery()
+;

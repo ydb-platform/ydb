@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     user,
     ts,
@@ -6,7 +7,8 @@ SELECT
     AGGREGATE_LIST(ts) OVER w AS ts_session,
     COUNT(1) OVER w AS session_len,
     SessionStart() OVER w AS session_start,
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w AS (
         PARTITION BY
@@ -17,4 +19,5 @@ WINDOW
     )
 ORDER BY
     user,
-    payload;
+    payload
+;

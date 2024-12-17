@@ -4,6 +4,8 @@ USE plato;
 
 SELECT
     "key" || subkey AS "akey"
-FROM Input
+FROM
+    Input
 ORDER BY
-    akey;
+    akey
+;

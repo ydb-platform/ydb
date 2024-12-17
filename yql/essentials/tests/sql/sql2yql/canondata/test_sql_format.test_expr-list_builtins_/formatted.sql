@@ -1,28 +1,36 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 $list = AsList(3, 1, 2, 3);
 $other_list = AsList(4);
 $bool_list = AsList(TRUE, FALSE, TRUE);
+
 $struct_list = AsList(
     AsStruct(1 AS one, 2 AS two),
     AsStruct(-1 AS one, -2 AS two)
 );
+
 $script = @@
 def formula(a, b, c, d):
     return a * b + c // d
 @@;
+
 $udf = Python3::formula(
     Callable<(Int64, Int64, Int64, Int64) -> Int64>,
     $script
 );
+
 $lambdaSum = ($x, $y) -> {
     RETURN $x + $y;
 };
+
 $lambdaMult = ($x) -> {
     RETURN 4 * $x;
 };
+
 $lambdaTuple = ($i, $s) -> {
     RETURN ($i * $s, $i + $s);
 };
+
 $lambdaInc = ($i) -> {
     RETURN ($i + 1, $i + 2);
 };
@@ -71,14 +79,14 @@ SELECT
             }
         )
     ) AS concat,
-    ListExtract($struct_list, "two") AS extract,
+    ListExtract($struct_list, 'two') AS extract,
     ListMap(
         $list, ($item) -> {
             RETURN CAST($item AS Double);
         }
     ),
     ListCreate(Tuple<Int64, Double>),
-    ListCreate(TypeOf("foo")),
+    ListCreate(TypeOf('foo')),
     ListFold($list, 6, $lambdaSum),
     ListFold([], 3, $lambdaSum),
     ListFold(Just($list), 6, $lambdaSum),
@@ -98,4 +106,5 @@ SELECT
     ListFold1Map([], $lambdaInc, $lambdaTuple),
     ListFold1Map(Just($list), $lambdaInc, $lambdaTuple),
     ListFold1Map(Just([]), $lambdaInc, $lambdaTuple),
-    ListFold1Map(NULL, $lambdaInc, $lambdaTuple);
+    ListFold1Map(NULL, $lambdaInc, $lambdaTuple)
+;

@@ -61,7 +61,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     for (ui32 i = 0; i < inputsCount; ++i) {
         const auto* originalInputType = MakeTypeFromSchema(inputSchemas[i], ExprContext_);
         if (!ValidateInputSchema(originalInputType, ExprContext_)) {
-            ythrow TCompileError("", ExprContext_.IssueManager.GetIssues().ToString()) << "invalid schema for #" << i << " input";
+            ythrow TCompileError("", GetIssues().ToString()) << "invalid schema for #" << i << " input";
         }
 
         const auto* originalStructType = originalInputType->template Cast<TStructExprType>();
@@ -76,7 +76,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
             columnsSet.insert(TString(structItem->GetName()));
 
             if (!UseSystemColumns_ && structItem->GetName().StartsWith(PurecalcSysColumnsPrefix)) {
-                ythrow TCompileError("", ExprContext_.IssueManager.GetIssues().ToString())
+                ythrow TCompileError("", GetIssues().ToString())
                     << "#" << i << " input provides system column " << structItem->GetName()
                     << ", but it is forbidden by options";
             }
@@ -89,7 +89,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     if (!outputSchema.IsNull()) {
         OutputType_ = MakeTypeFromSchema(outputSchema, ExprContext_);
         if (!ValidateOutputSchema(OutputType_, ExprContext_)) {
-            ythrow TCompileError("", ExprContext_.IssueManager.GetIssues().ToString()) << "invalid output schema";
+            ythrow TCompileError("", GetIssues().ToString()) << "invalid output schema";
         }
     } else {
         OutputType_ = nullptr;
@@ -121,7 +121,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
             }
         }
         if (!OutputType_) {
-            ythrow TCompileError("", ExprContext_.IssueManager.GetIssues().ToString()) << "cannot deduce output schema";
+            ythrow TCompileError("", GetIssues().ToString()) << "cannot deduce output schema";
         }
     }
 }
@@ -130,7 +130,7 @@ template <typename TBase>
 TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     TStringBuf query,
     ETranslationMode mode,
-    IModuleResolver::TPtr moduleResolver,
+    IModuleResolver::TPtr factoryModuleResolver,
     ui16 syntaxVersion,
     const THashMap<TString, TString>& modules,
     const TInputSpecBase& inputSpec,
@@ -145,6 +145,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
 
     TTypeAnnotationContextPtr typeContext;
 
+    IModuleResolver::TPtr moduleResolver = factoryModuleResolver ? factoryModuleResolver->CreateMutableChild() : nullptr;
     typeContext = MakeIntrusive<TTypeAnnotationContext>();
     typeContext->RandomProvider = CreateDefaultRandomProvider();
     typeContext->TimeProvider = DeterministicTimeProviderSeed_ ?
@@ -207,11 +208,10 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         astRes = ParseAst(TString(query));
     }
 
-    if (!astRes.IsOk()) {
-        ythrow TCompileError(TString(query), astRes.Issues.ToString()) << "failed to parse " << mode;
-    }
-
     ExprContext_.IssueManager.AddIssues(astRes.Issues);
+    if (!astRes.IsOk()) {
+        ythrow TCompileError(TString(query), GetIssues().ToString()) << "failed to parse " << mode;
+    }
 
     if (ETraceLevel::TRACE_DETAIL <= StdDbgLevel()) {
         Cdbg << "Before optimization:" << Endl;
@@ -224,7 +224,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     if (!CompileExpr(*astRes.Root, exprRoot, ExprContext_, moduleResolver.get(), nullptr, 0, syntaxVersion)) {
         TStringStream astStr;
         astRes.Root->PrettyPrintTo(astStr, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
-        ythrow TCompileError(astStr.Str(), ExprContext_.IssueManager.GetIssues().ToString()) << "failed to compile";
+        ythrow TCompileError(astStr.Str(), GetIssues().ToString()) << "failed to compile";
     }
 
 
@@ -342,7 +342,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     NCommon::TransformerStatsToYson("", transformStats, writer);
     YQL_CLOG(DEBUG, Core) << "Transform stats: " << out.Str();
     if (status == IGraphTransformer::TStatus::Error) {
-        ythrow TCompileError("", ExprContext_.IssueManager.GetIssues().ToString()) << "Failed to optimize";
+        ythrow TCompileError("", GetIssues().ToString()) << "Failed to optimize";
     }
 
     IOutputStream* exprOut = nullptr;
@@ -462,7 +462,9 @@ const THashSet<TString>& TWorkerFactory<TBase>::GetUsedColumns() const {
 
 template <typename TBase>
 TIssues TWorkerFactory<TBase>::GetIssues() const {
-    return ExprContext_.IssueManager.GetCompletedIssues();
+    auto issues = ExprContext_.IssueManager.GetCompletedIssues();
+    CheckFatalIssues(issues);
+    return issues;
 }
 
 template <typename TBase>

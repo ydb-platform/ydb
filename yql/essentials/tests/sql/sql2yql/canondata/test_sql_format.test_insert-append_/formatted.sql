@@ -1,5 +1,8 @@
-/* postgres can not *//* multirun can not */
+/* postgres can not */
+/* multirun can not */
 INSERT INTO plato.Output
 SELECT
     *
-FROM plato.Input;
+FROM
+    plato.Input
+;

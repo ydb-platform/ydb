@@ -1,6 +1,7 @@
-/* syntax version 1 *//* postgres can not */
-PRAGMA warning("disable", "4520");
-PRAGMA warning("disable", "4521");
+/* syntax version 1 */
+/* postgres can not */
+PRAGMA warning('disable', '4520');
+PRAGMA warning('disable', '4521');
 PRAGMA AnsiRankForNullableKeys;
 
 SELECT
@@ -10,7 +11,8 @@ SELECT
     DENSE_RANK() OVER w1 AS r2,
     RANK() OVER w2 AS r3,
     DENSE_RANK() OVER w2 AS r4,
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w1 AS (
         PARTITION BY
@@ -22,4 +24,5 @@ WINDOW
     )
 ORDER BY
     key,
-    subkey;
+    subkey
+;

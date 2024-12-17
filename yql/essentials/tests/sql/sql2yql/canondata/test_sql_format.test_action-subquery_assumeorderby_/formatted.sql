@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 DEFINE SUBQUERY $sub() AS
     SELECT
         *
@@ -7,11 +8,11 @@ DEFINE SUBQUERY $sub() AS
             (1),
             (2),
             (3)
-    )
-        AS a (
-            x
-        );
+    ) AS a (
+        x
+    );
 END DEFINE;
-$sub2 = SubqueryAssumeOrderBy($sub, [("x", TRUE)]);
+
+$sub2 = SubqueryAssumeOrderBy($sub, [('x', TRUE)]);
 
 PROCESS $sub2();

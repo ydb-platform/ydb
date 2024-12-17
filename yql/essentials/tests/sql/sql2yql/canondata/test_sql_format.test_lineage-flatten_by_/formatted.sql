@@ -1,34 +1,39 @@
 USE plato;
 
-$subquery1 =
+$subquery1 = (
     SELECT
         key,
         subkey,
         z
-    FROM Input
-        FLATTEN LIST BY
-            value AS z;
+    FROM
+        Input
+        FLATTEN LIST BY value AS z
+);
 
-$subquery2 =
+$subquery2 = (
     SELECT
         key,
         subkey,
         value AS z,
         value2
-    FROM Input
+    FROM
+        Input
         FLATTEN LIST BY (
             value,
             value2
-        );
+        )
+);
 
-INSERT INTO @tmp1
-    WITH TRUNCATE
+INSERT INTO @tmp1 WITH TRUNCATE
 SELECT
     *
-FROM $subquery1;
+FROM
+    $subquery1
+;
 
-INSERT INTO @tmp2
-    WITH TRUNCATE
+INSERT INTO @tmp2 WITH TRUNCATE
 SELECT
     *
-FROM $subquery2;
+FROM
+    $subquery2
+;

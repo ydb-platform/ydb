@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $s = (
     SELECT
         1 AS x,
@@ -8,9 +9,11 @@ $s = (
 SELECT
     x AS x2,
     y
-FROM $s
+FROM
+    $s
 GROUP BY
     ROLLUP (x, y)
 ORDER BY
     x2,
-    y;
+    y
+;

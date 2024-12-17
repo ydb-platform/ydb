@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     min(x),
     count(x),
@@ -31,4 +32,5 @@ FROM (
         2 AS y
 )
 GROUP BY
-    y;
+    y
+;

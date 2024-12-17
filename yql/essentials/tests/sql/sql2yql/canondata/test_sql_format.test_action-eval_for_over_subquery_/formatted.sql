@@ -1,16 +1,20 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
 $list = (
     SELECT
         aggregate_list(key)
-    FROM Input
+    FROM
+        Input
 );
 
 DEFINE ACTION $echo($x) AS
     SELECT
-        $x;
+        $x
+    ;
 END DEFINE;
 
-EVALUATE FOR $a IN $list
-    DO $echo($a);
+EVALUATE FOR $a IN $list DO
+    $echo($a)
+;

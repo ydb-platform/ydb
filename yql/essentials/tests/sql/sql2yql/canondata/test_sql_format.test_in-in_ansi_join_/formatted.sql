@@ -1,5 +1,7 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
 USE plato;
 
 -- Input: optkeys are 1-10,null
@@ -8,116 +10,153 @@ USE plato;
 $lp = (
     SELECT
         Unwrap(optkey) AS optkey
-    FROM Input
-    WHERE optkey IS NOT NULL
+    FROM
+        Input
+    WHERE
+        optkey IS NOT NULL
 );
 
 $lo = (
     SELECT
         optkey
-    FROM Input
-    WHERE optkey IS NOT NULL
+    FROM
+        Input
+    WHERE
+        optkey IS NOT NULL
 );
 
 $ln = (
     SELECT
         optkey
-    FROM Input
+    FROM
+        Input
 );
 
 $rp = (
     SELECT
         Unwrap(key) AS key
-    FROM Dict
-    WHERE key IS NOT NULL
+    FROM
+        Dict
+    WHERE
+        key IS NOT NULL
 );
 
 $ro = (
     SELECT
         key
-    FROM Dict
-    WHERE key IS NOT NULL
+    FROM
+        Dict
+    WHERE
+        key IS NOT NULL
 );
 
 $rn = (
     SELECT
         key
-    FROM Dict
+    FROM
+        Dict
 );
 
 -- Right is P
 SELECT
     optkey
-FROM $lp
-WHERE optkey NOT IN $rp
+FROM
+    $lp
+WHERE
+    optkey NOT IN $rp
 ORDER BY
-    optkey;
+    optkey
+;
 
 -- [2,3,4,6,8,10]
 SELECT
     optkey
-FROM $lo
-WHERE optkey NOT IN $rp
+FROM
+    $lo
+WHERE
+    optkey NOT IN $rp
 ORDER BY
-    optkey;
+    optkey
+;
 
 -- [2,3,4,6,8,10]
 SELECT
     optkey
-FROM $ln
-WHERE optkey NOT IN $rp
+FROM
+    $ln
+WHERE
+    optkey NOT IN $rp
 ORDER BY
-    optkey;
+    optkey
+;
 
 -- [2,3,4,6,8,10]
 -- Right is O
 SELECT
     optkey
-FROM $lp
-WHERE optkey NOT IN $ro
+FROM
+    $lp
+WHERE
+    optkey NOT IN $ro
 ORDER BY
-    optkey;
+    optkey
+;
 
 -- [2,3,4,6,8,10]
 SELECT
     optkey
-FROM $lo
-WHERE optkey NOT IN $ro
+FROM
+    $lo
+WHERE
+    optkey NOT IN $ro
 ORDER BY
-    optkey;
+    optkey
+;
 
 -- [2,3,4,6,8,10]
 SELECT
     optkey
-FROM $ln
-WHERE optkey NOT IN $ro
+FROM
+    $ln
+WHERE
+    optkey NOT IN $ro
 ORDER BY
-    optkey;
+    optkey
+;
 
 -- [2,3,4,6,8,10]
 -- Right is N
 SELECT
     optkey
-FROM $lp
-WHERE optkey NOT IN $rn
+FROM
+    $lp
+WHERE
+    optkey NOT IN $rn
 ORDER BY
-    optkey;
+    optkey
+;
 
 -- []
 SELECT
     optkey
-FROM $lo
-WHERE optkey NOT IN $rn
+FROM
+    $lo
+WHERE
+    optkey NOT IN $rn
 ORDER BY
-    optkey;
+    optkey
+;
 
 -- []
 SELECT
     optkey
-FROM $ln
-WHERE optkey NOT IN $rn
+FROM
+    $ln
+WHERE
+    optkey NOT IN $rn
 ORDER BY
-    optkey;
+    optkey
+;
 
 -- []
 -- 2, 4, 6, null
@@ -137,31 +176,41 @@ $extraDict = (
 
 SELECT
     optkey
-FROM $lo
-WHERE optkey != 10 AND optkey NOT IN $ro AND optkey IN $extraDict AND optkey != 4
+FROM
+    $lo
+WHERE
+    optkey != 10 AND optkey NOT IN $ro AND optkey IN $extraDict AND optkey != 4
 ORDER BY
-    optkey;
+    optkey
+;
 
 -- [2,6]
 SELECT
     optkey
-FROM $ln
-WHERE optkey != 10 AND optkey NOT IN $rn AND optkey IN $extraDict AND optkey != 4
+FROM
+    $ln
+WHERE
+    optkey != 10 AND optkey NOT IN $rn AND optkey IN $extraDict AND optkey != 4
 ORDER BY
-    optkey;
+    optkey
+;
 
 -- []
 -- Empty dict
 SELECT
     optkey
-FROM $ln
-WHERE optkey NOT IN (
-    SELECT
-        *
-    FROM $rn
-    LIMIT 0
-)
+FROM
+    $ln
+WHERE
+    optkey NOT IN (
+        SELECT
+            *
+        FROM
+            $rn
+        LIMIT 0
+    )
 ORDER BY
-    optkey;
+    optkey
+;
 -- [1-10,null]
 

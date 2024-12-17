@@ -43,25 +43,106 @@ TTokenIterator SkipWSOrComment(TTokenIterator curr, TTokenIterator end) {
     return curr;
 }
 
+TTokenIterator SkipWSOrCommentBackward(TTokenIterator curr, TTokenIterator begin) {
+    while (curr != begin && (curr->Name == "WS" || curr->Name == "COMMENT")) {
+        --curr;
+    }
+    return curr;
+}
+
+void SkipForValidate(
+    TTokenIterator& in,
+    TTokenIterator& out,
+    const TParsedTokenList& query,
+    const TParsedTokenList& formattedQuery,
+    i32& parenthesesBalance
+) {
+    in = SkipWS(in, query.end());
+    out = SkipWS(out, formattedQuery.end());
+
+    auto skipDeletedToken = [&](const TString& deletedToken, const TVector<TString>& afterTokens) {
+        if (
+            in != query.end() && in->Name == deletedToken &&
+            (out == formattedQuery.end() || out->Name != deletedToken) &&
+            in != query.begin() && IsIn(afterTokens, SkipWSOrCommentBackward(in - 1, query.begin())->Name)
+        ) {
+            in = SkipWS(++in, query.end());
+            return true;
+        }
+        return false;
+    };
+
+    while (skipDeletedToken("SEMICOLON", {"AS", "BEGIN", "LBRACE_CURLY", "SEMICOLON"})) {}
+
+    auto inSkippedComments = SkipWSOrComment(in, query.end());
+
+    auto skipAddedToken = [&](const TString& addedToken, const TVector<TString>& beforeTokens, const TVector<TString>& afterTokens) {
+        if (
+            out != formattedQuery.end() && out->Name == addedToken &&
+            (in == query.end() || in->Name != addedToken) &&
+            (beforeTokens.empty() || (inSkippedComments != query.end() && IsIn(beforeTokens, inSkippedComments->Name))) &&
+            (afterTokens.empty() || (in != query.begin() && IsIn(afterTokens, SkipWSOrCommentBackward(in - 1, query.begin())->Name)))
+        ) {
+            out = SkipWS(++out, formattedQuery.end());
+            if (addedToken == "LPAREN") {
+                ++parenthesesBalance;
+            } else if (addedToken == "RPAREN") {
+                --parenthesesBalance;
+            }
+        }
+    };
+
+    skipAddedToken("LPAREN", {}, {"EQUALS"});
+    skipAddedToken("RPAREN", {"END", "EOF", "SEMICOLON"}, {});
+    skipAddedToken("SEMICOLON", {"END", "RBRACE_CURLY"}, {});
+}
+
+TParsedToken TransformTokenForValidate(TParsedToken token) {
+    if (token.Name == "EQUALS2") {
+        token.Name = "EQUALS";
+        token.Content = "=";
+    } else if (token.Name == "NOT_EQUALS2") {
+        token.Name = "NOT_EQUALS";
+        token.Content = "!=";
+    }
+    return token;
+}
+
+TStringBuf SkipQuotes(const TString& content) {
+    TStringBuf str = content;
+    str.SkipPrefix("\"");
+    str.ChopSuffix("\"");
+    str.SkipPrefix("'");
+    str.ChopSuffix("'");
+    return str;
+}
+
 bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQuery) {
     auto in = query.begin();
     auto out = formattedQuery.begin();
     auto inEnd = query.end();
     auto outEnd = formattedQuery.end();
 
+    i32 parenthesesBalance = 0;
+
     while (in != inEnd && out != outEnd) {
-        in = SkipWS(in, inEnd);
-        out = SkipWS(out, outEnd);
+        SkipForValidate(in, out, query, formattedQuery, parenthesesBalance);
         if (in != inEnd && out != outEnd) {
-            if (in->Name != out->Name) {
+            auto inToken = TransformTokenForValidate(*in);
+            auto outToken = TransformTokenForValidate(*out);
+            if (inToken.Name != outToken.Name) {
                 return false;
             }
-            if (IsProbablyKeyword(*in)) {
-                if (!AsciiEqualsIgnoreCase(in->Content, out->Content)) {
+            if (IsProbablyKeyword(inToken)) {
+                if (!AsciiEqualsIgnoreCase(inToken.Content, outToken.Content)) {
+                    return false;
+                }
+            } else if (inToken.Name == "STRING_VALUE") {
+                if (SkipQuotes(inToken.Content) != SkipQuotes(outToken.Content)) {
                     return false;
                 }
             } else {
-                if (in->Content != out->Content) {
+                if (inToken.Content != outToken.Content) {
                     return false;
                 }
             }
@@ -69,9 +150,9 @@ bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQu
             ++out;
         }
     }
-    in = SkipWS(in, inEnd);
-    out = SkipWS(out, outEnd);
-    return in == inEnd && out == outEnd;
+    SkipForValidate(in, out, query, formattedQuery, parenthesesBalance);
+
+    return in == inEnd && out == outEnd && parenthesesBalance == 0;
 }
 
 enum EParenType {
@@ -443,28 +524,35 @@ private:
 class TPrettyVisitor {
 friend struct TStaticData;
 public:
-    TPrettyVisitor(const TParsedTokenList& parsedTokens, const TParsedTokenList& comments)
+    TPrettyVisitor(const TParsedTokenList& parsedTokens, const TParsedTokenList& comments, bool ansiLexer)
         : StaticData(TStaticData::GetInstance())
         , ParsedTokens(parsedTokens)
         , Comments(comments)
+        , AnsiLexer(ansiLexer)
     {
     }
 
-    TString Process(const NProtoBuf::Message& msg, bool& addLine) {
+    TString Process(const NProtoBuf::Message& msg, bool& addLineBefore, bool& addLineAfter, TMaybe<ui32>& stmtCoreAltCase) {
         Scopes.push_back(EScope::Default);
         MarkedTokens.reserve(ParsedTokens.size());
         MarkTokens(msg);
         Y_ENSURE(MarkTokenStack.empty());
         Y_ENSURE(TokenIndex == ParsedTokens.size());
+
         TokenIndex = 0;
         Visit(msg);
         Y_ENSURE(TokenIndex == ParsedTokens.size());
         Y_ENSURE(MarkTokenStack.empty());
+
         for (; LastComment < Comments.size(); ++LastComment) {
             const auto text = Comments[LastComment].Content;
             AddComment(text);
         }
-        addLine = AddLine.GetOrElse(true);
+
+        ui32 lines = OutLine - (OutColumn == 0 ? 1 : 0);
+        addLineBefore = AddLine.GetOrElse(true) || lines > 1;
+        addLineAfter = AddLine.GetOrElse(true) || lines - CommentLines > 1;
+        stmtCoreAltCase = StmtCoreAltCase;
 
         return SB;
     }
@@ -508,17 +596,42 @@ private:
     }
 
     void NewLine() {
+        if (TokenIndex >= ParsedTokens.size() || ParsedTokens[TokenIndex].Line > LastLine) {
+            WriteComments(true);
+        }
+
+        if (AfterComment && Comments[LastComment - 1].Content.StartsWith("--")) {
+            return;
+        }
+
         if (OutColumn) {
             Out('\n');
         }
     }
 
     void AddComment(TStringBuf text) {
-        if (text.StartsWith("--") && !SB.empty() && SB.back() == '-') {
+        if (!AfterComment && OutLine > BlockFirstLine && OutColumn == 0) {
+            Out('\n');
+        }
+        AfterComment = true;
+
+        if (!SB.empty() && SB.back() != ' ' && SB.back() != '\n') {
             Out(' ');
         }
 
+        if (OutColumn == 0) {
+            ++CommentLines;
+        }
+
         Out(text);
+
+        if (!text.StartsWith("--") &&
+            TokenIndex < ParsedTokens.size() &&
+            Comments[LastComment].Line < ParsedTokens[TokenIndex].Line &&
+            (LastComment + 1 >= Comments.size() || Comments[LastComment].Line < Comments[LastComment + 1].Line)
+        ) {
+            Out('\n');
+        }
     }
 
     void MarkTokens(const NProtoBuf::Message& msg) {
@@ -538,7 +651,9 @@ private:
             MarkToken(token);
         } else if (descr == TRule_sql_stmt_core::GetDescriptor()) {
             if (AddLine.Empty()) {
-                AddLine = !IsSimpleStatement(dynamic_cast<const TRule_sql_stmt_core&>(msg)).GetOrElse(false);
+                const auto& rule = dynamic_cast<const TRule_sql_stmt_core&>(msg);
+                AddLine = !IsSimpleStatement(rule).GetOrElse(false);
+                StmtCoreAltCase = rule.Alt_case();
             }
         } else if (descr == TRule_lambda_body::GetDescriptor()) {
             Y_ENSURE(TokenIndex >= 1);
@@ -735,25 +850,38 @@ private:
         }
     }
 
+    template <typename T>
+    void SkipSemicolons(const ::google::protobuf::RepeatedPtrField<T>& field, bool printOne = false) {
+        for (const auto& m : field) {
+            if (printOne) {
+                Visit(m);
+                printOne = false;
+            } else {
+                ++TokenIndex;
+            }
+        }
+        if (printOne) {
+            Out(';');
+        }
+    }
+
     void VisitDefineActionOrSubqueryBody(const TRule_define_action_or_subquery_body& msg) {
-        VisitRepeated(msg.GetBlock1());
+        SkipSemicolons(msg.GetBlock1());
         if (msg.HasBlock2()) {
             const auto& b = msg.GetBlock2();
             Visit(b.GetRule_sql_stmt_core1());
             for (auto block : b.GetBlock2()) {
-                VisitRepeated(block.GetBlock1());
+                SkipSemicolons(block.GetBlock1(), /* printOne = */ true);
                 if (!IsSimpleStatement(block.GetRule_sql_stmt_core2()).GetOrElse(false)) {
                     Out('\n');
                 }
                 Visit(block.GetRule_sql_stmt_core2());
             }
-
-            VisitRepeated(b.GetBlock3());
+            SkipSemicolons(b.GetBlock3(), /* printOne = */ true);
         }
     }
 
     void VisitPragma(const TRule_pragma_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitKeyword(msg.GetToken1());
         auto prefix = msg.GetRule_opt_id_prefix_or_type2();
@@ -776,44 +904,7 @@ private:
         }
     }
 
-    void PosFromPartial(const TRule_select_kind_partial& partial) {
-        const auto& kind = partial.GetRule_select_kind1();
-        if (kind.HasBlock1()) { // DISCARD
-            PosFromToken(kind.GetBlock1().GetToken1());
-        } else {
-            switch (kind.GetBlock2().Alt_case()) {
-            case TRule_select_kind_TBlock2::kAlt1:
-                PosFromToken(kind.GetBlock2().GetAlt1().GetRule_process_core1().GetToken1());
-                break;
-            case TRule_select_kind_TBlock2::kAlt2:
-                PosFromToken(kind.GetBlock2().GetAlt2().GetRule_reduce_core1().GetToken1());
-                break;
-            case TRule_select_kind_TBlock2::kAlt3: {
-                const auto& selCore = kind.GetBlock2().GetAlt3().GetRule_select_core1();
-                if (selCore.HasBlock1()) {
-                    PosFromToken(selCore.GetBlock1().GetToken1());
-                } else {
-                    PosFromToken(selCore.GetToken2());
-                }
-
-                break;
-            }
-
-            default:
-                ythrow yexception() << "Alt is not supported";
-            }
-        }
-    }
-
     void VisitSelect(const TRule_select_stmt& msg) {
-        const auto& paren = msg.GetRule_select_kind_parenthesis1();
-        if (paren.Alt_case() == TRule_select_kind_parenthesis::kAltSelectKindParenthesis1) {
-            const auto& partial = paren.GetAlt_select_kind_parenthesis1().GetRule_select_kind_partial1();
-            PosFromPartial(partial);
-        } else {
-            PosFromToken(paren.GetAlt_select_kind_parenthesis2().GetToken1());
-        }
-
         NewLine();
         Visit(msg.GetRule_select_kind_parenthesis1());
         for (const auto& block : msg.GetBlock2()) {
@@ -825,8 +916,6 @@ private:
     }
 
     void VisitSelectUnparenthesized(const TRule_select_unparenthesized_stmt& msg) {
-        const auto& partial = msg.GetRule_select_kind_partial1();
-        PosFromPartial(partial);
         NewLine();
         Visit(msg.GetRule_select_kind_partial1());
         for (const auto& block : msg.GetBlock2()) {
@@ -838,10 +927,11 @@ private:
     }
 
     void VisitNamedNodes(const TRule_named_nodes_stmt& msg) {
-        PosFromToken(msg.GetRule_bind_parameter_list1().GetRule_bind_parameter1().GetToken1());
         NewLine();
         Visit(msg.GetRule_bind_parameter_list1());
         Visit(msg.GetToken2());
+        ExprLineIndent = CurrentIndent;
+
         switch (msg.GetBlock3().Alt_case()) {
         case TRule_named_nodes_stmt::TBlock3::kAlt1: {
             const auto& alt = msg.GetBlock3().GetAlt1();
@@ -867,10 +957,13 @@ private:
 
             case TRule_subselect_stmt::TBlock1::kAlt2: {
                 const auto& alt = subselect.GetBlock1().GetAlt2();
+                Out(" (");
                 NewLine();
                 PushCurrentIndent();
                 Visit(alt);
                 PopCurrentIndent();
+                NewLine();
+                Out(')');
                 break;
             }
 
@@ -884,10 +977,11 @@ private:
         default:
             ythrow yexception() << "Alt is not supported";
         }
+
+        ExprLineIndent = 0;
     }
 
     void VisitCreateTable(const TRule_create_table_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         Visit(msg.GetToken1());
         Visit(msg.GetBlock2());
@@ -933,31 +1027,26 @@ private:
     }
 
     void VisitDropTable(const TRule_drop_table_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_drop_table_stmt::GetDescriptor(), msg);
     }
 
     void VisitAnalyze(const TRule_analyze_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_analyze_stmt::GetDescriptor(), msg);
     }
 
     void VisitBackup(const TRule_backup_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_backup_stmt::GetDescriptor(), msg);
     }
 
     void VisitRestore(const TRule_restore_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_restore_stmt::GetDescriptor(), msg);
     }
 
     void VisitUse(const TRule_use_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_use_stmt::GetDescriptor(), msg);
     }
@@ -969,41 +1058,16 @@ private:
     }
 
     void VisitIntoTable(const TRule_into_table_stmt& msg) {
-        switch (msg.GetBlock1().Alt_case()) {
-        case TRule_into_table_stmt_TBlock1::AltCase::kAlt1:
-            PosFromToken(msg.GetBlock1().GetAlt1().GetToken1());
-            break;
-        case TRule_into_table_stmt_TBlock1::AltCase::kAlt2:
-            PosFromToken(msg.GetBlock1().GetAlt2().GetToken1());
-            break;
-        case TRule_into_table_stmt_TBlock1::AltCase::kAlt3:
-            PosFromToken(msg.GetBlock1().GetAlt3().GetToken1());
-            break;
-        case TRule_into_table_stmt_TBlock1::AltCase::kAlt4:
-            PosFromToken(msg.GetBlock1().GetAlt4().GetToken1());
-            break;
-        case TRule_into_table_stmt_TBlock1::AltCase::kAlt5:
-            PosFromToken(msg.GetBlock1().GetAlt5().GetToken1());
-            break;
-        case TRule_into_table_stmt_TBlock1::AltCase::kAlt6:
-            PosFromToken(msg.GetBlock1().GetAlt6().GetToken1());
-            break;
-        default:
-            ythrow yexception() << "Alt is not supported";
-        }
-
         NewLine();
         VisitAllFields(TRule_into_table_stmt::GetDescriptor(), msg);
     }
 
     void VisitCommit(const TRule_commit_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_commit_stmt::GetDescriptor(), msg);
     }
 
     void VisitUpdate(const TRule_update_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         Visit(msg.GetToken1());
         Visit(msg.GetRule_simple_table_ref2());
@@ -1018,6 +1082,7 @@ private:
             switch (choice.Alt_case()) {
             case TRule_set_clause_choice::kAltSetClauseChoice1: {
                 const auto& clauses = choice.GetAlt_set_clause_choice1().GetRule_set_clause_list1();
+                NewLine();
                 PushCurrentIndent();
                 Visit(clauses.GetRule_set_clause1());
                 for (auto& block : clauses.GetBlock2()) {
@@ -1027,6 +1092,7 @@ private:
                 }
 
                 PopCurrentIndent();
+                NewLine();
                 break;
             }
             case TRule_set_clause_choice::kAltSetClauseChoice2: {
@@ -1052,6 +1118,7 @@ private:
                 switch (simpleValues.Alt_case()) {
                 case TRule_simple_values_source::kAltSimpleValuesSource1: {
                     const auto& exprs = simpleValues.GetAlt_simple_values_source1().GetRule_expr_list1();
+                    NewLine();
                     PushCurrentIndent();
                     Visit(exprs.GetRule_expr1());
                     for (const auto& block : exprs.GetBlock2()) {
@@ -1061,12 +1128,15 @@ private:
                     }
 
                     PopCurrentIndent();
+                    NewLine();
                     break;
                 }
                 case TRule_simple_values_source::kAltSimpleValuesSource2: {
+                    NewLine();
                     PushCurrentIndent();
                     Visit(simpleValues.GetAlt_simple_values_source2());
                     PopCurrentIndent();
+                    NewLine();
                     break;
                 }
                 default:
@@ -1103,7 +1173,6 @@ private:
     }
 
     void VisitDelete(const TRule_delete_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         Visit(msg.GetToken1());
         Visit(msg.GetToken2());
@@ -1129,31 +1198,40 @@ private:
     }
 
     void VisitRollback(const TRule_rollback_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_rollback_stmt::GetDescriptor(), msg);
     }
 
     void VisitDeclare(const TRule_declare_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_declare_stmt::GetDescriptor(), msg);
     }
 
     void VisitImport(const TRule_import_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_import_stmt::GetDescriptor(), msg);
     }
 
     void VisitExport(const TRule_export_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
-        VisitAllFields(TRule_export_stmt::GetDescriptor(), msg);
+        VisitKeyword(msg.GetToken1());
+
+        NewLine();
+        PushCurrentIndent();
+
+        const auto& list = msg.GetRule_bind_parameter_list2();
+        Visit(list.GetRule_bind_parameter1());
+        for (auto& b : list.GetBlock2()) {
+            Visit(b.GetToken1());
+            NewLine();
+            Visit(b.GetRule_bind_parameter2());
+        }
+
+        PopCurrentIndent();
+        NewLine();
     }
 
     void VisitAlterTable(const TRule_alter_table_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitKeyword(msg.GetToken1());
         VisitKeyword(msg.GetToken2());
@@ -1168,16 +1246,15 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitAlterTableStore(const TRule_alter_table_store_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_alter_table_store_stmt::GetDescriptor(), msg);
     }
 
     void VisitAlterExternalTable(const TRule_alter_external_table_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitKeyword(msg.GetToken1());
         VisitKeyword(msg.GetToken2());
@@ -1193,14 +1270,15 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitDo(const TRule_do_stmt& msg) {
-        PosFromToken(msg.GetToken1());
-        NewLine();
         VisitKeyword(msg.GetToken1());
         switch (msg.GetBlock2().Alt_case()) {
         case TRule_do_stmt_TBlock2::kAlt1: { // CALL
+            PushCurrentIndent();
+            NewLine();
             const auto& alt = msg.GetBlock2().GetAlt1().GetRule_call_action1();
             Visit(alt.GetBlock1());
             AfterInvokeExpr = true;
@@ -1208,8 +1286,9 @@ private:
             if (alt.HasBlock3()) {
                 Visit(alt.GetBlock3());
             }
-
             Visit(alt.GetToken4());
+            PopCurrentIndent();
+            NewLine();
             break;
         }
         case TRule_do_stmt_TBlock2::kAlt2: { // INLINE
@@ -1230,7 +1309,6 @@ private:
     }
 
     void VisitAction(const TRule_define_action_or_subquery_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitKeyword(msg.GetToken1());
         VisitKeyword(msg.GetToken2());
@@ -1253,71 +1331,16 @@ private:
     }
 
     void VisitIf(const TRule_if_stmt& msg) {
-        if (msg.HasBlock1()) {
-            PosFromToken(msg.GetBlock1().GetToken1());
-        } else {
-            PosFromToken(msg.GetToken2());
-        }
-
         NewLine();
-        if (msg.HasBlock1()) {
-            Visit(msg.GetBlock1());
-        }
-
-        Visit(msg.GetToken2());
-        Visit(msg.GetRule_expr3());
-        NewLine();
-        PushCurrentIndent();
-        Visit(msg.GetRule_do_stmt4());
-        PopCurrentIndent();
-        if (msg.HasBlock5()) {
-            NewLine();
-            Visit(msg.GetBlock5().GetToken1());
-            NewLine();
-            PushCurrentIndent();
-            Visit(msg.GetBlock5().GetRule_do_stmt2());
-            PopCurrentIndent();
-        }
+        VisitAllFields(TRule_if_stmt::GetDescriptor(), msg);
     }
 
     void VisitFor(const TRule_for_stmt& msg) {
-        if (msg.HasBlock1()) {
-            PosFromToken(msg.GetBlock1().GetToken1());
-        } else if (msg.HasBlock2()) {
-            PosFromToken(msg.GetBlock2().GetToken1());
-        } else {
-            PosFromToken(msg.GetToken3());
-        }
-
         NewLine();
-        if (msg.HasBlock1()) {
-            Visit(msg.GetBlock1());
-        }
-
-        if (msg.HasBlock2()) {
-            Visit(msg.GetBlock2());
-        }
-
-        Visit(msg.GetToken3());
-        Visit(msg.GetRule_bind_parameter4());
-        Visit(msg.GetToken5());
-        Visit(msg.GetRule_expr6());
-        NewLine();
-        PushCurrentIndent();
-        Visit(msg.GetRule_do_stmt7());
-        PopCurrentIndent();
-        if (msg.HasBlock8()) {
-            NewLine();
-            Visit(msg.GetBlock8().GetToken1());
-            NewLine();
-            PushCurrentIndent();
-            Visit(msg.GetBlock8().GetRule_do_stmt2());
-            PopCurrentIndent();
-        }
+        VisitAllFields(TRule_for_stmt::GetDescriptor(), msg);
     }
 
     void VisitValues(const TRule_values_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitKeyword(msg.GetToken1());
         const auto& rowList = msg.GetRule_values_source_row_list2();
@@ -1331,86 +1354,75 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitGrantPermissions(const TRule_grant_permissions_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_grant_permissions_stmt::GetDescriptor(), msg);
     }
 
     void VisitRevokePermissions(const TRule_revoke_permissions_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_revoke_permissions_stmt::GetDescriptor(), msg);
     }
 
     void VisitCreateUser(const TRule_create_user_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_create_user_stmt::GetDescriptor(), msg);
     }
 
     void VisitAlterUser(const TRule_alter_user_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_alter_user_stmt::GetDescriptor(), msg);
     }
 
     void VisitCreateGroup(const TRule_create_group_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_create_group_stmt::GetDescriptor(), msg);
     }
 
     void VisitAlterGroup(const TRule_alter_group_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_alter_group_stmt::GetDescriptor(), msg);
     }
 
     void VisitDropRole(const TRule_drop_role_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_drop_role_stmt::GetDescriptor(), msg);
     }
 
     void VisitUpsertObject(const TRule_upsert_object_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_upsert_object_stmt::GetDescriptor(), msg);
     }
 
     void VisitCreateObject(const TRule_create_object_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_create_object_stmt::GetDescriptor(), msg);
     }
 
     void VisitAlterObject(const TRule_alter_object_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_alter_object_stmt::GetDescriptor(), msg);
     }
 
     void VisitDropObject(const TRule_drop_object_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_drop_object_stmt::GetDescriptor(), msg);
     }
 
     void VisitCreateTopic(const TRule_create_topic_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitKeyword(msg.GetToken1());
         VisitKeyword(msg.GetToken2());
         Visit(msg.GetBlock3());
         Visit(msg.GetRule_topic_ref4());
         if (msg.HasBlock5()) {
-            PushCurrentIndent();
             auto& b = msg.GetBlock5().GetRule_create_topic_entries1();
             Visit(b.GetToken1());
             NewLine();
+            PushCurrentIndent();
             Visit(b.GetRule_create_topic_entry2());
             for (auto& subEntry : b.GetBlock3()) {
                 Visit(subEntry.GetToken1());
@@ -1435,7 +1447,6 @@ private:
     }
 
     void VisitAlterTopic(const TRule_alter_topic_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitKeyword(msg.GetToken1());
         VisitKeyword(msg.GetToken2());
@@ -1451,22 +1462,20 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitDropTopic(const TRule_drop_topic_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_drop_topic_stmt::GetDescriptor(), msg);
     }
 
     void VisitCreateExternalDataSource(const TRule_create_external_data_source_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_create_external_data_source_stmt::GetDescriptor(), msg);
     }
 
     void VisitAlterExternalDataSource(const TRule_alter_external_data_source_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitToken(msg.GetToken1());
         VisitToken(msg.GetToken2());
@@ -1484,52 +1493,45 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitDropExternalDataSource(const TRule_drop_external_data_source_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_drop_external_data_source_stmt::GetDescriptor(), msg);
     }
 
     void VisitCreateView(const TRule_create_view_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_create_view_stmt::GetDescriptor(), msg);
     }
 
     void VisitDropView(const TRule_drop_view_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_drop_view_stmt::GetDescriptor(), msg);
     }
 
     void VisitCreateAsyncReplication(const TRule_create_replication_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_create_replication_stmt::GetDescriptor(), msg);
     }
 
     void VisitAlterAsyncReplication(const TRule_alter_replication_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_alter_replication_stmt::GetDescriptor(), msg);
     }
 
     void VisitDropAsyncReplication(const TRule_drop_replication_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_drop_replication_stmt::GetDescriptor(), msg);
     }
 
     void VisitCreateResourcePool(const TRule_create_resource_pool_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_create_resource_pool_stmt::GetDescriptor(), msg);
     }
 
     void VisitAlterResourcePool(const TRule_alter_resource_pool_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitToken(msg.GetToken1());
         VisitToken(msg.GetToken2());
@@ -1546,22 +1548,20 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitDropResourcePool(const TRule_drop_resource_pool_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_drop_resource_pool_stmt::GetDescriptor(), msg);
     }
 
     void VisitCreateBackupCollection(const TRule_create_backup_collection_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_create_backup_collection_stmt::GetDescriptor(), msg);
     }
 
     void VisitAlterBackupCollection(const TRule_alter_backup_collection_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitToken(msg.GetToken1());
         Visit(msg.GetRule_backup_collection2());
@@ -1592,22 +1592,20 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitDropBackupCollection(const TRule_drop_backup_collection_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_drop_backup_collection_stmt::GetDescriptor(), msg);
     }
 
     void VisitCreateResourcePoolClassifier(const TRule_create_resource_pool_classifier_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_create_resource_pool_classifier_stmt::GetDescriptor(), msg);
     }
 
     void VisitAlterResourcePoolClassifier(const TRule_alter_resource_pool_classifier_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitToken(msg.GetToken1());
         VisitToken(msg.GetToken2());
@@ -1625,10 +1623,10 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitDropResourcePoolClassifier(const TRule_drop_resource_pool_classifier_stmt& msg) {
-        PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_drop_resource_pool_classifier_stmt::GetDescriptor(), msg);
     }
@@ -1637,10 +1635,10 @@ private:
         VisitAllFieldsImpl<TPrettyVisitor, &TPrettyVisitor::Visit>(this, descr, msg);
     }
 
-    void WriteComments() {
+    void WriteComments(bool completeLine) {
         while (LastComment < Comments.size()) {
             const auto& c = Comments[LastComment];
-            if (c.Line > LastLine || c.Line == LastLine && c.LinePos > LastColumn) {
+            if (c.Line > LastLine || !completeLine && c.Line == LastLine && c.LinePos > LastColumn) {
                 break;
             }
 
@@ -1652,13 +1650,7 @@ private:
     void PosFromToken(const TToken& token) {
         LastLine = token.GetLine();
         LastColumn = token.GetColumn();
-        WriteComments();
-    }
-
-    void PosFromParsedToken(const TParsedToken& token) {
-        LastLine = token.Line;
-        LastColumn = token.LinePos;
-        WriteComments();
+        WriteComments(false);
     }
 
     void VisitToken(const TToken& token) {
@@ -1713,6 +1705,7 @@ private:
         AfterQuestion = (str == "?");
         AfterLess = (str == "<");
         AfterKeyExpr = false;
+        AfterComment = false;
 
         if (forceKeyword) {
             str = to_upper(str);
@@ -1737,9 +1730,29 @@ private:
             MarkTokenStack.pop_back();
         }
 
+        if (InCondExpr) {
+            if (str == "=") {
+                str = "==";
+            } else if (str == "<>") {
+                str = "!=";
+            }
+        }
+
+        if (!AnsiLexer && ParsedTokens[TokenIndex].Name == "STRING_VALUE") {
+            TStringBuf checkStr = str;
+            if (checkStr.SkipPrefix("\"") && checkStr.ChopSuffix("\"") && !checkStr.Contains("'")) {
+                str = TStringBuilder() << '\'' << checkStr << '\'';
+            }
+        }
+
         Out(str);
+
+        if (TokenIndex + 1 >= ParsedTokens.size() || ParsedTokens[TokenIndex + 1].Line > LastLine) {
+            WriteComments(true);
+        }
+
         if (str == ";") {
-            Out('\n');
+            NewLine();
         }
 
         if (markedInfo.OpeningBracket) {
@@ -1834,12 +1847,24 @@ private:
 
             if (block5.HasBlock5()) {
                 NewLine();
-                Visit(block5.GetBlock5());
+                const auto& whereBlock = block5.GetBlock5();
+                Visit(whereBlock.GetToken1());
+                NewLine();
+                PushCurrentIndent();
+                Visit(whereBlock.GetRule_expr2());
+                PopCurrentIndent();
+                NewLine();
             }
 
             if (block5.HasBlock6()) {
                 NewLine();
-                Visit(block5.GetBlock6());
+                const auto& havingBlock = block5.GetBlock6();
+                Visit(havingBlock.GetToken1());
+                NewLine();
+                PushCurrentIndent();
+                Visit(havingBlock.GetRule_expr2());
+                PopCurrentIndent();
+                NewLine();
             }
 
             if (block5.HasBlock7()) {
@@ -1889,12 +1914,24 @@ private:
 
         if (msg.HasBlock11()) {
             NewLine();
-            Visit(msg.GetBlock11());
+            const auto& whereBlock = msg.GetBlock11();
+            Visit(whereBlock.GetToken1());
+            NewLine();
+            PushCurrentIndent();
+            Visit(whereBlock.GetRule_expr2());
+            PopCurrentIndent();
+            NewLine();
         }
 
         if (msg.HasBlock12()) {
             NewLine();
-            Visit(msg.GetBlock12());
+            const auto& havingBlock = msg.GetBlock12();
+            Visit(havingBlock.GetToken1());
+            NewLine();
+            PushCurrentIndent();
+            Visit(havingBlock.GetRule_expr2());
+            PopCurrentIndent();
+            NewLine();
         }
 
         if (msg.HasBlock13()) {
@@ -1914,6 +1951,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitSelectCore(const TRule_select_core& msg) {
@@ -1941,12 +1979,14 @@ private:
             Visit(msg.GetBlock7());
         }
 
+        PopCurrentIndent();
+        NewLine();
+
         if (msg.HasBlock8()) {
             NewLine();
             Visit(msg.GetBlock8());
         }
 
-        PopCurrentIndent();
         if (msg.HasBlock9()) {
             NewLine();
             Visit(msg.GetBlock9());
@@ -1954,7 +1994,13 @@ private:
 
         if (msg.HasBlock10()) {
             NewLine();
-            Visit(msg.GetBlock10());
+            const auto& whereBlock = msg.GetBlock10();
+            Visit(whereBlock.GetToken1());
+            NewLine();
+            PushCurrentIndent();
+            Visit(whereBlock.GetRule_expr2());
+            PopCurrentIndent();
+            NewLine();
         }
 
         if (msg.HasBlock11()) {
@@ -1964,7 +2010,13 @@ private:
 
         if (msg.HasBlock12()) {
             NewLine();
-            Visit(msg.GetBlock12());
+            const auto& havingBlock = msg.GetBlock12();
+            Visit(havingBlock.GetToken1());
+            NewLine();
+            PushCurrentIndent();
+            Visit(havingBlock.GetRule_expr2());
+            PopCurrentIndent();
+            NewLine();
         }
 
         if (msg.HasBlock13()) {
@@ -1976,6 +2028,95 @@ private:
             NewLine();
             Visit(msg.GetBlock14());
         }
+    }
+
+    void VisitRowPatternRecognitionClause(const TRule_row_pattern_recognition_clause& msg) {
+        VisitToken(msg.GetToken1());
+        VisitToken(msg.GetToken2());
+
+        NewLine();
+        PushCurrentIndent();
+
+        if (msg.HasBlock3()) {
+            Visit(msg.GetBlock3());
+            NewLine();
+        }
+
+        if (msg.HasBlock4()) {
+            Visit(msg.GetBlock4());
+            NewLine();
+        }
+
+        if (msg.HasBlock5()) {
+            const auto& block = msg.GetBlock5().GetRule_row_pattern_measures1();
+            VisitToken(block.GetToken1());
+            NewLine();
+            PushCurrentIndent();
+            const auto& measureList = block.GetRule_row_pattern_measure_list2();
+            Visit(measureList.GetRule_row_pattern_measure_definition1());
+            for (const auto& measureDefinitionBlock : measureList.GetBlock2()) {
+                VisitToken(measureDefinitionBlock.GetToken1());
+                NewLine();
+                Visit(measureDefinitionBlock.GetRule_row_pattern_measure_definition2());
+            }
+            PopCurrentIndent();
+            NewLine();
+        }
+
+        if (msg.HasBlock6()) {
+            Visit(msg.GetBlock6());
+            NewLine();
+        }
+
+        const auto& common = msg.GetRule_row_pattern_common_syntax7();
+        if (common.HasBlock1()) {
+            Visit(common.GetBlock1());
+            NewLine();
+        }
+
+        if (common.HasBlock2()) {
+            Visit(common.GetBlock2());
+        }
+
+        VisitToken(common.GetToken3());
+        VisitToken(common.GetToken4());
+        Visit(common.GetRule_row_pattern5());
+        VisitToken(common.GetToken6());
+        NewLine();
+
+        if (common.HasBlock7()) {
+            const auto& block = common.GetBlock7().GetRule_row_pattern_subset_clause1();
+            VisitToken(block.GetToken1());
+            NewLine();
+            PushCurrentIndent();
+            const auto& subsetList = block.GetRule_row_pattern_subset_list2();
+            Visit(subsetList.GetRule_row_pattern_subset_item1());
+            for (const auto& subsetItemBlock : subsetList.GetBlock2()) {
+                VisitToken(subsetItemBlock.GetToken1());
+                NewLine();
+                Visit(subsetItemBlock.GetRule_row_pattern_subset_item2());
+            }
+            PopCurrentIndent();
+            NewLine();
+        }
+
+        VisitToken(common.GetToken8());
+        NewLine();
+        PushCurrentIndent();
+        const auto& definitionList = common.GetRule_row_pattern_definition_list9();
+        Visit(definitionList.GetRule_row_pattern_definition1());
+        for (const auto& definitionBlock : definitionList.GetBlock2()) {
+            VisitToken(definitionBlock.GetToken1());
+            NewLine();
+            Visit(definitionBlock.GetRule_row_pattern_definition2());
+        }
+        PopCurrentIndent();
+        NewLine();
+
+        PopCurrentIndent();
+        NewLine();
+
+        VisitToken(msg.GetToken8());
     }
 
     void VisitJoinSource(const TRule_join_source& msg) {
@@ -1999,6 +2140,20 @@ private:
         }
     }
 
+    void VisitJoinConstraint(const TRule_join_constraint& msg) {
+        if (msg.Alt_case() == TRule_join_constraint::kAltJoinConstraint1) {
+            const auto& alt = msg.GetAlt_join_constraint1();
+            Visit(alt.GetToken1());
+            NewLine();
+            PushCurrentIndent();
+            Visit(alt.GetRule_expr2());
+            PopCurrentIndent();
+            NewLine();
+        } else {
+            VisitAllFields(TRule_join_constraint::GetDescriptor(), msg);
+        }
+    }
+
     void VisitSingleSource(const TRule_single_source& msg) {
         switch (msg.Alt_case()) {
         case TRule_single_source::kAltSingleSource1: {
@@ -2009,6 +2164,7 @@ private:
         case TRule_single_source::kAltSingleSource2: {
             const auto& alt = msg.GetAlt_single_source2();
             Visit(alt.GetToken1());
+            NewLine();
             PushCurrentIndent();
             Visit(alt.GetRule_select_stmt2());
             PopCurrentIndent();
@@ -2019,6 +2175,7 @@ private:
         case TRule_single_source::kAltSingleSource3: {
             const auto& alt = msg.GetAlt_single_source3();
             Visit(alt.GetToken1());
+            NewLine();
             PushCurrentIndent();
             Visit(alt.GetRule_values_stmt2());
             PopCurrentIndent();
@@ -2032,26 +2189,34 @@ private:
     }
 
     void VisitFlattenSource(const TRule_flatten_source& msg) {
-        Visit(msg.GetRule_named_single_source1());
-        if (msg.HasBlock2()) {
-            PushCurrentIndent();
+        const auto& namedSingleSource = msg.GetRule_named_single_source1();
+        bool indentBeforeSource = namedSingleSource.GetRule_single_source1().Alt_case() == TRule_single_source::kAltSingleSource1;
+
+        if (indentBeforeSource) {
             NewLine();
+            PushCurrentIndent();
+        }
+        Visit(namedSingleSource);
+        if (indentBeforeSource) {
+            PopCurrentIndent();
+            NewLine();
+        }
+
+        if (msg.HasBlock2()) {
+            NewLine();
+            PushCurrentIndent();
             Visit(msg.GetBlock2());
             PopCurrentIndent();
+            NewLine();
         }
     }
 
     void VisitNamedSingleSource(const TRule_named_single_source& msg) {
         Visit(msg.GetRule_single_source1());
         if (msg.HasBlock2()) {
-            const auto& matchRecognize = msg.GetBlock2();
-            //TODO handle MATCH_RECOGNIZE block
-            //https://st.yandex-team.ru/YQL-16186
-            Visit(matchRecognize);
+            Visit(msg.GetBlock2());
         }
         if (msg.HasBlock3()) {
-            NewLine();
-            PushCurrentIndent();
             const auto& block3 = msg.GetBlock3();
             Visit(block3.GetBlock1());
             if (block3.HasBlock2()) {
@@ -2070,25 +2235,45 @@ private:
                 PopCurrentIndent();
                 Visit(columns.GetToken4());
             }
-
-            PopCurrentIndent();
         }
 
         if (msg.HasBlock4()) {
             NewLine();
-            PushCurrentIndent();
             Visit(msg.GetBlock4());
+        }
+    }
+
+    void VisitTableHints(const TRule_table_hints& msg) {
+        Visit(msg.GetToken1());
+        const auto& block2 = msg.GetBlock2();
+        if (block2.Alt_case() == TRule_table_hints::TBlock2::kAlt2) {
+            const auto& alt = block2.GetAlt2();
+
+            Visit(alt.GetToken1());
+
+            NewLine();
+            PushCurrentIndent();
+
+            Visit(alt.GetRule_table_hint2());
+            for (const auto& block : alt.GetBlock3()) {
+                Visit(block.GetToken1());
+                NewLine();
+                Visit(block.GetRule_table_hint2());
+            }
+
+            NewLine();
             PopCurrentIndent();
+
+            Visit(alt.GetToken4());
+        } else {
+            Visit(block2);
         }
     }
 
     void VisitSimpleTableRef(const TRule_simple_table_ref& msg) {
         Visit(msg.GetRule_simple_table_ref_core1());
         if (msg.HasBlock2()) {
-            NewLine();
-            PushCurrentIndent();
             Visit(msg.GetBlock2());
-            PopCurrentIndent();
         }
     }
 
@@ -2130,10 +2315,7 @@ private:
         switch (msg.Alt_case()) {
         case TRule_flatten_by_arg::kAltFlattenByArg1: {
             const auto& alt = msg.GetAlt_flatten_by_arg1();
-            NewLine();
-            PushCurrentIndent();
             Visit(alt);
-            PopCurrentIndent();
             break;
         }
         case TRule_flatten_by_arg::kAltFlattenByArg2: {
@@ -2178,6 +2360,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitTableRef(const TRule_table_ref& msg) {
@@ -2195,12 +2378,7 @@ private:
             const auto& alt = block3.GetAlt1();
             const auto& key = alt.GetRule_table_key1();
             Visit(key.GetRule_id_table_or_type1());
-            if (key.HasBlock2()) {
-                NewLine();
-                PushCurrentIndent();
-                Visit(key.GetBlock2());
-                PopCurrentIndent();
-            }
+            Visit(key.GetBlock2());
 
             break;
         }
@@ -2225,10 +2403,7 @@ private:
             }
 
             if (alt.HasBlock3()) {
-                NewLine();
-                PushCurrentIndent();
                 Visit(alt.GetBlock3());
-                PopCurrentIndent();
             }
 
             break;
@@ -2238,10 +2413,7 @@ private:
         }
 
         if (msg.HasBlock4()) {
-            NewLine();
-            PushCurrentIndent();
             Visit(msg.GetBlock4());
-            PopCurrentIndent();
         }
     }
 
@@ -2256,6 +2428,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitGroupByClause(const TRule_group_by_clause& msg) {
@@ -2272,6 +2445,7 @@ private:
             PushCurrentIndent();
             Visit(msg.GetBlock6());
             PopCurrentIndent();
+            NewLine();
         }
     }
 
@@ -2287,6 +2461,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitWindowSpecification(const TRule_window_specification& msg) {
@@ -2345,20 +2520,26 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitLambdaBody(const TRule_lambda_body& msg) {
         PushCurrentIndent();
         NewLine();
-        VisitRepeated(msg.GetBlock1());
+        SkipSemicolons(msg.GetBlock1());
         for (const auto& block : msg.GetBlock2()) {
-            Visit(block);
+            Visit(block.GetRule_lambda_stmt1());
+            SkipSemicolons(block.GetBlock2(), /* printOne = */ true);
             NewLine();
         }
 
         Visit(msg.GetToken3());
+        ExprLineIndent = CurrentIndent;
+
         Visit(msg.GetRule_expr4());
-        VisitRepeated(msg.GetBlock5());
+
+        SkipSemicolons(msg.GetBlock5(), /* printOne = */ true);
+        ExprLineIndent = 0;
 
         PopCurrentIndent();
         NewLine();
@@ -2466,17 +2647,6 @@ private:
         Visit(msg.GetToken5());
     }
 
-    void VisitWhenExpr(const TRule_when_expr& msg) {
-        VisitKeyword(msg.GetToken1());
-        Visit(msg.GetRule_expr2());
-
-        NewLine();
-        PushCurrentIndent();
-        VisitKeyword(msg.GetToken3());
-        Visit(msg.GetRule_expr4());
-        PopCurrentIndent();
-    }
-
     void VisitWithTableSettingsExpr(const TRule_with_table_settings& msg) {
         VisitKeyword(msg.GetToken1());
         Visit(msg.GetToken2());
@@ -2572,6 +2742,19 @@ private:
         VisitBinaryOp(orExpr.GetRule_or_subexpr1(), getOp, getExpr, orExpr.GetBlock2().begin(), orExpr.GetBlock2().end());
     }
 
+    void VisitCondExpr(const TRule_cond_expr& msg) {
+        if (msg.Alt_case() == TRule_cond_expr::kAltCondExpr5) {
+            for (const auto& block : msg.GetAlt_cond_expr5().GetBlock1()) {
+                InCondExpr = true;
+                Visit(block.GetBlock1());
+                InCondExpr = false;
+                Visit(block.GetRule_eq_subexpr2());
+            }
+        } else {
+            VisitAllFields(TRule_cond_expr::GetDescriptor(), msg);
+        }
+    }
+
     void VisitOrSubexpr(const TRule_or_subexpr& msg) {
         auto getExpr = [](const TRule_or_subexpr::TBlock2& b) -> const TRule_and_subexpr& { return b.GetRule_and_subexpr2(); };
         auto getOp = [](const TRule_or_subexpr::TBlock2& b) -> const TToken& { return b.GetToken1(); };
@@ -2609,7 +2792,6 @@ private:
                 const bool hasSecondNewline = ParsedTokens[TokenIndex].Line != ParsedTokens[TokenIndex + 2].Line;
                 const ui32 currentOutLine = OutLine;
 
-                PosFromParsedToken(ParsedTokens[TokenIndex]);
                 if (currentOutLine != OutLine || (hasFirstNewline && hasSecondNewline)) {
                     NewLine();
                     if (!pushedIndent) {
@@ -2619,7 +2801,6 @@ private:
                 }
 
                 Visit(alt.GetRule_double_question1());
-                PosFromParsedToken(ParsedTokens[TokenIndex]);
                 if (hasFirstNewline || hasSecondNewline) {
                     NewLine();
                     if (!pushedIndent) {
@@ -2701,8 +2882,8 @@ private:
     template <typename TExpr, typename TGetOp, typename TGetExpr, typename TIter>
     void VisitBinaryOp(const TExpr& expr, TGetOp getOp, TGetExpr getExpr, TIter begin, TIter end) {
         Visit(expr);
-        bool pushedIndent = false;
 
+        bool pushedIndent = false;
         for (; begin != end; ++begin) {
             const auto op = getOp(*begin);
             const auto opSize = BinaryOpTokenSize(op);
@@ -2710,23 +2891,18 @@ private:
             const bool hasSecondNewline = ParsedTokens[TokenIndex].Line != ParsedTokens[TokenIndex + opSize].Line;
             const ui32 currentOutLine = OutLine;
 
-            PosFromParsedToken(ParsedTokens[TokenIndex]);
-            if (currentOutLine != OutLine || (hasFirstNewline && hasSecondNewline)) {
+            if (currentOutLine != OutLine || hasFirstNewline || hasSecondNewline) {
                 NewLine();
-                if (!pushedIndent) {
+                if (!pushedIndent && CurrentIndent == ExprLineIndent) {
                     PushCurrentIndent();
                     pushedIndent = true;
                 }
             }
+
             Visit(op);
 
-            PosFromParsedToken(ParsedTokens[TokenIndex]);
-            if (hasFirstNewline || hasSecondNewline) {
+            if (hasFirstNewline && hasSecondNewline) {
                 NewLine();
-                if (!pushedIndent) {
-                    PushCurrentIndent();
-                    pushedIndent = true;
-                }
             }
 
             Visit(getExpr(*begin));
@@ -2739,6 +2915,11 @@ private:
 
     void PushCurrentIndent() {
         CurrentIndent += OneIndent;
+
+        BlockFirstLine = OutLine;
+        if (OutColumn > 0) {
+            ++BlockFirstLine;
+        }
     }
 
     void PopCurrentIndent() {
@@ -2749,15 +2930,18 @@ private:
     const TStaticData& StaticData;
     const TParsedTokenList& ParsedTokens;
     const TParsedTokenList& Comments;
+    const bool AnsiLexer;
     TStringBuilder SB;
     ui32 OutColumn = 0;
     ui32 OutLine = 1;
     ui32 LastLine = 0;
     ui32 LastColumn = 0;
     ui32 LastComment = 0;
+    ui32 CommentLines = 0;
     i32 CurrentIndent = 0;
     TVector<EScope> Scopes;
     TMaybe<bool> AddLine;
+    TMaybe<ui32> StmtCoreAltCase;
     ui64 InsideType = 0;
     bool AfterNamespace = false;
     bool AfterBracket = false;
@@ -2770,9 +2954,13 @@ private:
     bool AfterQuestion = false;
     bool AfterLess = false;
     bool AfterKeyExpr = false;
+    bool AfterComment = false;
     bool InMultiTokenOp = false;
+    bool InCondExpr = false;
     ui32 ForceExpandedLine = 0;
     ui32 ForceExpandedColumn = 0;
+    ui32 BlockFirstLine = 1;
+    i32 ExprLineIndent = 0;
 
     ui32 TokenIndex = 0;
     TMarkTokenStack MarkTokenStack;
@@ -2822,10 +3010,13 @@ TStaticData::TStaticData()
         {TRule_reduce_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitReduceCore)},
         {TRule_sort_specification_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSortSpecificationList)},
         {TRule_select_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectCore)},
+        {TRule_row_pattern_recognition_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRowPatternRecognitionClause)},
         {TRule_join_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitJoinSource)},
+        {TRule_join_constraint::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitJoinConstraint)},
         {TRule_single_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSingleSource)},
         {TRule_flatten_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitFlattenSource)},
         {TRule_named_single_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitNamedSingleSource)},
+        {TRule_table_hints::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTableHints)},
         {TRule_simple_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSimpleTableRef)},
         {TRule_into_simple_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIntoSimpleTableRef)},
         {TRule_select_kind_partial::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectKindPartial)},
@@ -2847,12 +3038,12 @@ TStaticData::TStaticData()
         {TRule_define_action_or_subquery_body::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDefineActionOrSubqueryBody)},
         {TRule_exists_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExistsExpr)},
         {TRule_case_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCaseExpr)},
-        {TRule_when_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWhenExpr)},
         {TRule_with_table_settings::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWithTableSettingsExpr)},
         {TRule_table_setting_value::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTableSettingValue)},
         {TRule_ttl_tier_action::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTtlTierAction)},
 
         {TRule_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExpr)},
+        {TRule_cond_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCondExpr)},
         {TRule_or_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitOrSubexpr)},
         {TRule_and_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAndSubexpr)},
         {TRule_eq_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitEqSubexpr)},
@@ -2996,6 +3187,8 @@ public:
         TVector<TTokenIterator> statements;
         SplitByStatements(allTokens.begin(), allTokens.end(), statements);
         TStringBuilder finalFormattedQuery;
+        bool prevAddLine = false;
+        TMaybe<ui32> prevStmtCoreAltCase;
         for (size_t i = 1; i < statements.size(); ++i) {
             TStringBuilder currentQueryBuilder;
             for (auto it = statements[i - 1]; it != statements[i]; ++it) {
@@ -3045,9 +3238,12 @@ public:
                 continue;
             }
 
-            TPrettyVisitor visitor(parsedTokens, comments);
-            bool addLine;
-            auto currentFormattedQuery = visitor.Process(*message, addLine);
+            TPrettyVisitor visitor(parsedTokens, comments, parsedSettings.AnsiLexer);
+            bool addLineBefore = false;
+            bool addLineAfter = false;
+            TMaybe<ui32> stmtCoreAltCase;
+            auto currentFormattedQuery = visitor.Process(*message, addLineBefore, addLineAfter, stmtCoreAltCase);
+
             TParsedTokenList stmtFormattedTokens;
             auto onNextFormattedToken = [&](NSQLTranslation::TParsedToken&& token) {
                 stmtFormattedTokens.push_back(token);
@@ -3057,14 +3253,17 @@ public:
                 return false;
             }
 
-            if (!Validate(stmtFormattedTokens, stmtTokens)) {
+            if (!Validate(stmtTokens, stmtFormattedTokens)) {
                 issues.AddIssue(NYql::TIssue({}, TStringBuilder() << "Validation failed: " << currentQuery.Quote() << " != " << currentFormattedQuery.Quote()));
                 return false;
             }
 
-            if (addLine && !finalFormattedQuery.empty()) {
+            const bool differentStmtAltCase = prevStmtCoreAltCase.Defined() && stmtCoreAltCase != prevStmtCoreAltCase;
+            if ((addLineBefore || prevAddLine || differentStmtAltCase) && !finalFormattedQuery.empty()) {
                 finalFormattedQuery << "\n";
             }
+            prevAddLine = addLineAfter;
+            prevStmtCoreAltCase = stmtCoreAltCase;
 
             finalFormattedQuery << currentFormattedQuery;
             if (parsedTokens.back().Name != "SEMICOLON") {

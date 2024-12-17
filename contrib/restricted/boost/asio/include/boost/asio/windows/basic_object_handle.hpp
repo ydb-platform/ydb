@@ -2,7 +2,7 @@
 // windows/basic_object_handle.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 // Copyright (c) 2011 Boris Schaeling (boris@highscore.de)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -21,6 +21,7 @@
 #if defined(BOOST_ASIO_HAS_WINDOWS_OBJECT_HANDLE) \
   || defined(GENERATING_DOCUMENTATION)
 
+#include <utility>
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/detail/io_object_impl.hpp>
@@ -28,10 +29,6 @@
 #include <boost/asio/detail/win_object_handle_service.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/asio/execution_context.hpp>
-
-#if defined(BOOST_ASIO_HAS_MOVE)
-# include <utility>
-#endif // defined(BOOST_ASIO_HAS_MOVE)
 
 #include <boost/asio/detail/push_options.hpp>
 
@@ -100,10 +97,10 @@ public:
    */
   template <typename ExecutionContext>
   explicit basic_object_handle(ExecutionContext& context,
-      typename constraint<
+      constraint_t<
         is_convertible<ExecutionContext&, execution_context&>::value,
         defaulted_constraint
-      >::type = defaulted_constraint())
+      > = defaulted_constraint())
     : impl_(0, 0, context)
   {
   }
@@ -146,9 +143,9 @@ public:
   template <typename ExecutionContext>
   basic_object_handle(ExecutionContext& context,
       const native_handle_type& native_handle,
-      typename constraint<
+      constraint_t<
         is_convertible<ExecutionContext&, execution_context&>::value
-      >::type = 0)
+      > = 0)
     : impl_(0, 0, context)
   {
     boost::system::error_code ec;
@@ -156,7 +153,6 @@ public:
     boost::asio::detail::throw_error(ec, "assign");
   }
 
-#if defined(BOOST_ASIO_HAS_MOVE) || defined(GENERATING_DOCUMENTATION)
   /// Move-construct an object handle from another.
   /**
    * This constructor moves an object handle from one object to another.
@@ -207,10 +203,10 @@ public:
    */
   template<typename Executor1>
   basic_object_handle(basic_object_handle<Executor1>&& other,
-      typename constraint<
+      constraint_t<
         is_convertible<Executor1, Executor>::value,
         defaulted_constraint
-      >::type = defaulted_constraint())
+      > = defaulted_constraint())
     : impl_(std::move(other.impl_))
   {
   }
@@ -227,18 +223,17 @@ public:
    * constructor.
    */
   template<typename Executor1>
-  typename constraint<
+  constraint_t<
     is_convertible<Executor1, Executor>::value,
     basic_object_handle&
-  >::type operator=(basic_object_handle<Executor1>&& other)
+  > operator=(basic_object_handle<Executor1>&& other)
   {
     impl_ = std::move(other.impl_);
     return *this;
   }
-#endif // defined(BOOST_ASIO_HAS_MOVE) || defined(GENERATING_DOCUMENTATION)
 
   /// Get the executor associated with the object.
-  const executor_type& get_executor() BOOST_ASIO_NOEXCEPT
+  const executor_type& get_executor() noexcept
   {
     return impl_.get_executor();
   }
@@ -421,22 +416,19 @@ public:
    * Regardless of whether the asynchronous operation completes immediately or
    * not, the completion handler will not be invoked from within this function.
    * On immediate completion, invocation of the handler will be performed in a
-   * manner equivalent to using boost::asio::post().
+   * manner equivalent to using boost::asio::async_immediate().
    *
    * @par Completion Signature
    * @code void(boost::system::error_code) @endcode
    */
   template <
       BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code))
-        WaitToken BOOST_ASIO_DEFAULT_COMPLETION_TOKEN_TYPE(executor_type)>
-  BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(WaitToken,
-      void (boost::system::error_code))
-  async_wait(
-      BOOST_ASIO_MOVE_ARG(WaitToken) token
-        BOOST_ASIO_DEFAULT_COMPLETION_TOKEN(executor_type))
-    BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_SUFFIX((
+        WaitToken = default_completion_token_t<executor_type>>
+  auto async_wait(
+      WaitToken&& token = default_completion_token_t<executor_type>())
+    -> decltype(
       async_initiate<WaitToken, void (boost::system::error_code)>(
-          declval<initiate_async_wait>(), token)))
+        declval<initiate_async_wait>(), token))
   {
     return async_initiate<WaitToken, void (boost::system::error_code)>(
         initiate_async_wait(this), token);
@@ -444,8 +436,8 @@ public:
 
 private:
   // Disallow copying and assignment.
-  basic_object_handle(const basic_object_handle&) BOOST_ASIO_DELETED;
-  basic_object_handle& operator=(const basic_object_handle&) BOOST_ASIO_DELETED;
+  basic_object_handle(const basic_object_handle&) = delete;
+  basic_object_handle& operator=(const basic_object_handle&) = delete;
 
   class initiate_async_wait
   {
@@ -457,13 +449,13 @@ private:
     {
     }
 
-    const executor_type& get_executor() const BOOST_ASIO_NOEXCEPT
+    const executor_type& get_executor() const noexcept
     {
       return self_->get_executor();
     }
 
     template <typename WaitHandler>
-    void operator()(BOOST_ASIO_MOVE_ARG(WaitHandler) handler) const
+    void operator()(WaitHandler&& handler) const
     {
       // If you get an error on the following line it means that your handler
       // does not meet the documented type requirements for a WaitHandler.

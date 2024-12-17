@@ -1,12 +1,16 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
 INSERT INTO @src
 SELECT
-    "\xff\xff" || key AS key
-FROM Input
+    '\xff\xff' || key AS key
+FROM
+    Input
 ORDER BY
-    key;
+    key
+;
+
 COMMIT;
 
 SELECT
@@ -14,6 +18,8 @@ SELECT
 FROM (
     SELECT
         *
-    FROM @src
-    WHERE StartsWith(key, "\xff\xff") AND EndsWith(key, "5")
+    FROM
+        @src
+    WHERE
+        StartsWith(key, '\xff\xff') AND EndsWith(key, '5')
 );

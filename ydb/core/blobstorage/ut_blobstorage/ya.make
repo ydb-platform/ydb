@@ -7,11 +7,9 @@ IF (SANITIZER_TYPE)
 ENDIF()
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -30,6 +28,7 @@ SRCS(
     gc.cpp
     gc_quorum_3dc.cpp
     get.cpp
+    get_block.cpp
     group_reconfiguration.cpp
     incorrect_queries.cpp
     index_restore_get.cpp
@@ -72,4 +71,5 @@ RECURSE_FOR_TESTS(
     ut_scrub
     ut_vdisk_restart
     ut_restart_pdisk
+    ut_read_only_pdisk
 )

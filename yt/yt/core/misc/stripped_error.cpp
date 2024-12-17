@@ -205,7 +205,7 @@ private:
 // which has minimal API of original dict with backend being the
 // actual original dict. Once API-related issues are fixed we are
 // free to implement a backend which doesn't depend on original dict.
-std::vector<TString> TErrorAttributes::ListKeys() const
+std::vector<TErrorAttributes::TKey> TErrorAttributes::ListKeys() const
 {
     auto* attributes = static_cast<IAttributeDictionary*>(Attributes_);
     if (!attributes) {
@@ -223,7 +223,7 @@ std::vector<TErrorAttributes::TKeyValuePair> TErrorAttributes::ListPairs() const
     return attributes->ListPairs();
 }
 
-NYson::TYsonString TErrorAttributes::FindYson(TStringBuf key) const
+TErrorAttributes::TValue TErrorAttributes::FindYson(TStringBuf key) const
 {
     auto* attributes = static_cast<IAttributeDictionary*>(Attributes_);
     if (!attributes) {
@@ -232,14 +232,14 @@ NYson::TYsonString TErrorAttributes::FindYson(TStringBuf key) const
     return attributes->FindYson(key);
 }
 
-void TErrorAttributes::SetYson(const TString& key, const NYson::TYsonString& value)
+void TErrorAttributes::SetYson(const TKey& key, const TValue& value)
 {
     auto* attributes = static_cast<IAttributeDictionary*>(Attributes_);
     YT_VERIFY(attributes);
     return attributes->SetYson(key, value);
 }
 
-bool TErrorAttributes::Remove(const TString& key)
+bool TErrorAttributes::Remove(const TKey& key)
 {
     auto* attributes = static_cast<IAttributeDictionary*>(Attributes_);
     if (!attributes) {
@@ -248,7 +248,7 @@ bool TErrorAttributes::Remove(const TString& key)
     return attributes->Remove(key);
 }
 
-NYson::TYsonString TErrorAttributes::GetYson(TStringBuf key) const
+TErrorAttributes::TValue TErrorAttributes::GetYson(TStringBuf key) const
 {
     auto result = FindYson(key);
     if (!result) {

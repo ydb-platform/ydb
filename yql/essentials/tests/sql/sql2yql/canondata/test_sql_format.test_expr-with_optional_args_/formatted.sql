@@ -1,5 +1,6 @@
-/* syntax version 1 *//* postgres can not */
-$f = Yql::WithOptionalArgs(($x, $y, $z) -> ($x + ($y ?? 0) + ($z ?? 0)), AsAtom("2"));
+/* syntax version 1 */
+/* postgres can not */
+$f = Yql::WithOptionalArgs(($x, $y, $z) -> ($x + ($y ?? 0) + ($z ?? 0)), AsAtom('2'));
 
 SELECT
     $f(1),
@@ -8,4 +9,5 @@ SELECT
     Yql::NamedApply($f, (1,), <||>),
     Yql::NamedApply($f, (1, 2), <||>),
     Yql::NamedApply($f, (1, 2, 3), <||>),
-    Yql::NamedApply($f, (1, 2, 3, 4), <||>);
+    Yql::NamedApply($f, (1, 2, 3, 4), <||>)
+;

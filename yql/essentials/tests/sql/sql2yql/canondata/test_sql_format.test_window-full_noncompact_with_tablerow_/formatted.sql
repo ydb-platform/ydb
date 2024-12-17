@@ -1,10 +1,12 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     key,
     subkey,
     value,
     AGGREGATE_LIST(TableRow()) OVER w AS frame,
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w AS (
         PARTITION BY
@@ -15,4 +17,5 @@ WINDOW
         ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
     )
 ORDER BY
-    value;
+    value
+;

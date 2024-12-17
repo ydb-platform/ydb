@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $key_text = AsDict(
     ('911', 'emergency'),
     ('200', 'two hundred'),
@@ -10,4 +11,6 @@ $key_text = AsDict(
 SELECT
     value,
     $key_text[key] AS key_text
-FROM plato.Input;
+FROM
+    plato.Input
+;

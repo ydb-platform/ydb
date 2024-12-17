@@ -1,11 +1,15 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
+
 $percent = Math::Ceil(0.2);
 
 SELECT
     *
-FROM Input
+FROM
+    Input
     TABLESAMPLE BERNOULLI (Math::Ceil(100 * $percent))
 ORDER BY
-    key;
+    key
+;
 -- 100% sample

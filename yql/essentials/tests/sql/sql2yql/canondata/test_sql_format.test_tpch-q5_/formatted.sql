@@ -6,11 +6,12 @@ $join1 = (
         o.o_orderkey AS o_orderkey,
         o.o_orderdate AS o_orderdate,
         c.c_nationkey AS c_nationkey
-    FROM plato.customer
-        AS c
-    JOIN plato.orders
-        AS o
-    ON c.c_custkey = o.o_custkey
+    FROM
+        plato.customer AS c
+    JOIN
+        plato.orders AS o
+    ON
+        c.c_custkey == o.o_custkey
 );
 
 $join2 = (
@@ -21,11 +22,12 @@ $join2 = (
         l.l_extendedprice AS l_extendedprice,
         l.l_discount AS l_discount,
         l.l_suppkey AS l_suppkey
-    FROM $join1
-        AS j
-    JOIN plato.lineitem
-        AS l
-    ON l.l_orderkey = j.o_orderkey
+    FROM
+        $join1 AS j
+    JOIN
+        plato.lineitem AS l
+    ON
+        l.l_orderkey == j.o_orderkey
 );
 
 $join3 = (
@@ -37,11 +39,12 @@ $join3 = (
         j.l_discount AS l_discount,
         j.l_suppkey AS l_suppkey,
         s.s_nationkey AS s_nationkey
-    FROM $join2
-        AS j
-    JOIN plato.supplier
-        AS s
-    ON j.l_suppkey = s.s_suppkey
+    FROM
+        $join2 AS j
+    JOIN
+        plato.supplier AS s
+    ON
+        j.l_suppkey == s.s_suppkey
 );
 
 $join4 = (
@@ -55,12 +58,13 @@ $join4 = (
         j.s_nationkey AS s_nationkey,
         n.n_regionkey AS n_regionkey,
         n.n_name AS n_name
-    FROM $join3
-        AS j
-    JOIN plato.nation
-        AS n
-    ON j.s_nationkey = n.n_nationkey AND
-        j.c_nationkey = n.n_nationkey
+    FROM
+        $join3 AS j
+    JOIN
+        plato.nation AS n
+    ON
+        j.s_nationkey == n.n_nationkey
+        AND j.c_nationkey == n.n_nationkey
 );
 
 $join5 = (
@@ -75,22 +79,27 @@ $join5 = (
         j.n_regionkey AS n_regionkey,
         j.n_name AS n_name,
         r.r_name AS r_name
-    FROM $join4
-        AS j
-    JOIN plato.region
-        AS r
-    ON j.n_regionkey = r.r_regionkey
+    FROM
+        $join4 AS j
+    JOIN
+        plato.region AS r
+    ON
+        j.n_regionkey == r.r_regionkey
 );
-$border = Date("1995-01-01");
+
+$border = Date('1995-01-01');
 
 SELECT
     n_name,
     sum(l_extendedprice * (1 - l_discount)) AS revenue
-FROM $join5
-WHERE r_name = 'AFRICA' AND
-    CAST(o_orderdate AS Timestamp) >= $border AND
-    CAST(o_orderdate AS Timestamp) < ($border + Interval("P365D"))
+FROM
+    $join5
+WHERE
+    r_name == 'AFRICA'
+    AND CAST(o_orderdate AS Timestamp) >= $border
+    AND CAST(o_orderdate AS Timestamp) < ($border + Interval('P365D'))
 GROUP BY
     n_name
 ORDER BY
-    revenue DESC;
+    revenue DESC
+;

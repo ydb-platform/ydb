@@ -1,11 +1,13 @@
-/* ytfile can not *//* custom error:job outputs overlap with original table*/
+/* ytfile can not */
+/* custom error:job outputs overlap with original table*/
 USE plato;
 
-INSERT INTO Output
-    WITH MONOTONIC_KEYS
+INSERT INTO Output WITH MONOTONIC_KEYS
 SELECT
     *
-FROM Input
+FROM
+    Input
 ORDER BY
     key,
-    subkey;
+    subkey
+;

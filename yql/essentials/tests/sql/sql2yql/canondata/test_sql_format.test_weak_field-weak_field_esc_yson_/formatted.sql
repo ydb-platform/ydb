@@ -5,7 +5,9 @@ USE plato;
 SELECT
     CAST(WeakField(subkey, 'string') AS uint32) AS subkey,
     WeakField(strE1, 'string'),
-    YQL::FromYsonSimpleType(WeakField(strE1, "Yson"), AsAtom("String")) AS strE1overYson
-FROM Input
+    YQL::FromYsonSimpleType(WeakField(strE1, 'Yson'), AsAtom('String')) AS strE1overYson
+FROM
+    Input
 ORDER BY
-    subkey;
+    subkey
+;

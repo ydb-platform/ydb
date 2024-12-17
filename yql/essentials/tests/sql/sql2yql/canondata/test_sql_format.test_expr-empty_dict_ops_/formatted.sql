@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     DictLength({}),
     DictHasItems({}),
@@ -15,4 +16,5 @@ SELECT
     DictKeys(Just({})),
     DictPayloads(Just({})),
     DictItems(Just({})),
-    3 IN Just({});
+    3 IN Just({})
+;

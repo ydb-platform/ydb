@@ -7,6 +7,7 @@
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
+#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/ydb_cli/dump/util/log.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 
@@ -35,15 +36,37 @@ bool IsFileExists(const TFsPath& path) {
     return path.Exists() && path.IsFile();
 }
 
-Ydb::Table::CreateTableRequest ReadTableScheme(const TString& fsPath, const TLog* log) {
-    LOG_IMPL(log, ELogPriority::TLOG_DEBUG, "Read scheme from " << fsPath.Quote());
-    Ydb::Table::CreateTableRequest proto;
-    Y_ENSURE(google::protobuf::TextFormat::ParseFromString(TFileInput(fsPath).ReadAll(), &proto));
+template <typename TProtoType>
+TProtoType ReadProtoFromFile(const TFsPath& fsDirPath, const TLog* log, const NDump::NFiles::TFileInfo& fileInfo) {
+    LOG_IMPL(log, ELogPriority::TLOG_DEBUG, "Read " << fileInfo.LogObjectType << " from " << fsDirPath.GetPath().Quote());
+    TProtoType proto;
+    Y_ENSURE(google::protobuf::TextFormat::ParseFromString(TFileInput(fsDirPath.Child(fileInfo.FileName)).ReadAll(), &proto));
     return proto;
+
+}
+
+Ydb::Table::CreateTableRequest ReadTableScheme(const TFsPath& fsDirPath, const TLog* log) {
+    return ReadProtoFromFile<Ydb::Table::CreateTableRequest>(fsDirPath, log, NDump::NFiles::TableScheme());
+}
+
+Ydb::Table::ChangefeedDescription ReadChangefeedDescription(const TFsPath& fsDirPath, const TLog* log) {
+    return ReadProtoFromFile<Ydb::Table::ChangefeedDescription>(fsDirPath, log, NDump::NFiles::Changefeed());
+}
+
+Ydb::Topic::DescribeTopicResult ReadTopicDescription(const TFsPath& fsDirPath, const TLog* log) {
+    return ReadProtoFromFile<Ydb::Topic::DescribeTopicResult>(fsDirPath, log, NDump::NFiles::Topic());
 }
 
 TTableDescription TableDescriptionFromProto(const Ydb::Table::CreateTableRequest& proto) {
     return TProtoAccessor::FromProto(proto);
+}
+
+TChangefeedDescription ChangefeedDescriptionFromProto(const Ydb::Table::ChangefeedDescription& proto) {
+    return TProtoAccessor::FromProto(proto);
+}
+
+NTopic::TTopicDescription TopicDescriptionFromProto(Ydb::Topic::DescribeTopicResult&& proto) {
+    return NTopic::TTopicDescription(std::move(proto));
 }
 
 TTableDescription TableDescriptionWithoutIndexesFromProto(Ydb::Table::CreateTableRequest proto) {
@@ -78,6 +101,26 @@ TStatus WaitForIndexBuild(TOperationClient& client, const TOperation::TOperation
 
 bool IsOperationStarted(TStatus operationStatus) {
     return operationStatus.IsSuccess() || operationStatus.GetStatus() == EStatus::STATUS_UNDEFINED;
+}
+
+TVector<TFsPath> CollectDataFiles(const TFsPath& fsPath) {
+    TVector<TFsPath> dataFiles;
+    ui32 dataFileId = 0;
+    TFsPath dataFile = fsPath.Child(DataFileName(dataFileId));
+    while (dataFile.Exists()) {
+        dataFiles.push_back(std::move(dataFile));
+        dataFile = fsPath.Child(DataFileName(++dataFileId));
+    }
+    return dataFiles;
+}
+
+TRestoreResult CombineResults(const TVector<TRestoreResult>& results) {
+    for (auto result : results) {
+        if (!result.IsSuccess()) {
+            return result;
+        }
+    }
+    return Result<TRestoreResult>();
 }
 
 } // anonymous
@@ -142,6 +185,7 @@ TRestoreClient::TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog
     , OperationClient(driver)
     , SchemeClient(driver)
     , TableClient(driver)
+    , TopicClient(driver)
     , Log(log)
 {
 }
@@ -255,16 +299,16 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
             TStringBuilder() << "Specified folder is not a directory: " << fsPath.GetPath());
     }
 
-    if (IsFileExists(fsPath.Child(INCOMPLETE_FILE_NAME))) {
+    if (IsFileExists(fsPath.Child(NFiles::Incomplete().FileName))) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST,
             TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
     }
 
-    if (IsFileExists(fsPath.Child(SCHEME_FILE_NAME))) {
+    if (IsFileExists(fsPath.Child(NFiles::TableScheme().FileName))) {
         return RestoreTable(fsPath, Join('/', dbPath, fsPath.GetName()), settings, oldEntries);
     }
 
-    if (IsFileExists(fsPath.Child(EMPTY_FILE_NAME))) {
+    if (IsFileExists(fsPath.Child(NFiles::Empty().FileName))) {
         return RestoreEmptyDir(fsPath, Join('/', dbPath, fsPath.GetName()), settings, oldEntries);
     }
 
@@ -273,9 +317,9 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
     TVector<TFsPath> children;
     fsPath.List(children);
     for (const auto& child : children) {
-        if (IsFileExists(child.Child(SCHEME_FILE_NAME))) {
+        if (IsFileExists(child.Child(NFiles::TableScheme().FileName))) {
             result = RestoreTable(child, Join('/', dbPath, child.GetName()), settings, oldEntries);
-        } else if (IsFileExists(child.Child(EMPTY_FILE_NAME))) {
+        } else if (IsFileExists(child.Child(NFiles::Empty().FileName))) {
             result = RestoreEmptyDir(child, Join('/', dbPath, child.GetName()), settings, oldEntries);
         } else if (child.IsDirectory()) {
             result = RestoreFolder(child, Join('/', dbPath, child.GetName()), settings, oldEntries);
@@ -294,12 +338,12 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
 
-    if (fsPath.Child(INCOMPLETE_FILE_NAME).Exists()) {
+    if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST,
             TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
     }
 
-    auto scheme = ReadTableScheme(fsPath.Child(SCHEME_FILE_NAME), Log.get());
+    auto scheme = ReadTableScheme(fsPath, Log.get());
     auto dumpedDesc = TableDescriptionFromProto(scheme);
 
     if (dumpedDesc.GetAttributes().contains(DOC_API_TABLE_VERSION_ATTR) && settings.SkipDocumentTables_) {
@@ -341,6 +385,22 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
         }
     } else if (!scheme.indexes().empty()) {
         LOG_D("Skip restoring indexes of " << dbPath.Quote());
+    }
+
+    if (settings.RestoreChangefeeds_) {
+        TVector<TFsPath> children;
+        fsPath.List(children);
+        for (const auto& fsChildPath : children) {
+            const bool isChangefeedDir = IsFileExists(fsChildPath.Child(NFiles::Changefeed().FileName));
+            if (isChangefeedDir) {
+                auto result = RestoreChangefeeds(fsChildPath, dbPath);
+                if (!result.IsSuccess()) {
+                    return result;
+                }
+            }
+        }
+    } else {
+        LOG_D("Skip restoring changefeeds of " << dbPath.Quote());
     }
 
     return RestorePermissions(fsPath, dbPath, settings, oldEntries);
@@ -392,31 +452,39 @@ TRestoreResult TRestoreClient::CheckSchema(const TString& dbPath, const TTableDe
     return Result<TRestoreResult>();
 }
 
-struct TWriterWaiter {
-    NPrivate::IDataWriter& Writer;
-
-    TWriterWaiter(NPrivate::IDataWriter& writer)
-        : Writer(writer)
-    {
-    }
-
-    ~TWriterWaiter() {
-        Writer.Wait();
-    }
-};
-
-TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const TTableDescription& desc) {
-    THolder<NPrivate::IDataAccumulator> accumulator;
+THolder<NPrivate::IDataWriter> TRestoreClient::CreateDataWriter(const TString& dbPath, const TRestoreSettings& settings,
+    const TTableDescription& desc, const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators)
+{   
     THolder<NPrivate::IDataWriter> writer;
-
     switch (settings.Mode_) {
         case TRestoreSettings::EMode::Yql:
         case TRestoreSettings::EMode::BulkUpsert: {
-            accumulator.Reset(CreateCompatAccumulator(dbPath, desc, settings));
-            writer.Reset(CreateCompatWriter(dbPath, TableClient, accumulator.Get(), settings));
-
+            // Need only one accumulator to initialize query string
+            writer.Reset(CreateCompatWriter(dbPath, TableClient, accumulators[0].Get(), settings));
             break;
         }
+
+        case TRestoreSettings::EMode::ImportData: {
+            writer.Reset(CreateImportDataWriter(dbPath, desc, ImportClient, TableClient, accumulators, settings, Log));
+            break;
+        }
+    }
+    return writer;
+}
+
+TRestoreResult TRestoreClient::CreateDataAccumulators(TVector<THolder<NPrivate::IDataAccumulator>>& outAccumulators,
+    const TString& dbPath, const TRestoreSettings& settings, const NTable::TTableDescription& desc, ui32 dataFilesCount)
+{
+    const ui32 accumulatorsCount = std::min(settings.InFly_, dataFilesCount);
+    outAccumulators.resize(accumulatorsCount);
+   
+    switch (settings.Mode_) {
+        case TRestoreSettings::EMode::Yql:
+        case TRestoreSettings::EMode::BulkUpsert:
+            for (size_t i = 0; i < accumulatorsCount; ++i) {
+                outAccumulators[i].Reset(CreateCompatAccumulator(dbPath, desc, settings));
+            }
+            break;
 
         case TRestoreSettings::EMode::ImportData: {
             TMaybe<TTableDescription> actualDesc;
@@ -424,63 +492,127 @@ TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString&
             if (!descResult.IsSuccess()) {
                 return Result<TRestoreResult>(dbPath, std::move(descResult));
             }
-
-            accumulator.Reset(CreateImportDataAccumulator(desc, *actualDesc, settings, Log));
-            writer.Reset(CreateImportDataWriter(dbPath, desc, ImportClient, TableClient, accumulator.Get(), settings, Log));
-
+            for (size_t i = 0; i < accumulatorsCount; ++i) {
+                outAccumulators[i].Reset(CreateImportDataAccumulator(desc, *actualDesc, settings, Log));
+            }
             break;
         }
     }
+    return Result<TRestoreResult>();
+}
 
-    TWriterWaiter waiter(*writer);
+TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const TTableDescription& desc) {
+    // Threads can access memory owned by this vector through pointers during restore operation 
+    TVector<TFsPath> dataFiles = CollectDataFiles(fsPath);
 
-    ui32 dataFileId = 0;
-    TFsPath dataFile = fsPath.Child(DataFileName(dataFileId));
-    TVector<TString> dataFileNames;
+    const ui32 dataFilesCount = dataFiles.size();
+    if (dataFilesCount == 0) {
+        return Result<TRestoreResult>();
+    }
 
-    while (dataFile.Exists()) {
-        LOG_D("Read data from " << dataFile.GetPath().Quote());
+    TVector<THolder<NPrivate::IDataAccumulator>> accumulators;
+    if (auto res = CreateDataAccumulators(accumulators, dbPath, settings, desc, dataFilesCount); !res.IsSuccess()) {
+        return res;
+    }
+    
+    THolder<NPrivate::IDataWriter> writer = CreateDataWriter(dbPath, settings, desc, accumulators);
 
-        dataFileNames.push_back(dataFile);
-        TFileInput input(dataFile, settings.FileBufferSize_);
-        TString line;
-        ui64 lineNo = 0;
+    TVector<TRestoreResult> accumulatorWorkersResults(accumulators.size(), Result<TRestoreResult>());
+    TThreadPool accumulatorWorkers(TThreadPool::TParams().SetBlocking(true));
+    accumulatorWorkers.Start(accumulators.size(), accumulators.size());  
 
-        while (input.ReadLine(line)) {
-            auto l = NPrivate::TLine(std::move(line), dataFileNames.back(), ++lineNo);
-            for (auto status = accumulator->Check(l); status != NPrivate::IDataAccumulator::OK; status = accumulator->Check(l)) {
-                if (status == NPrivate::IDataAccumulator::ERROR) {
-                    return Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR,
-                        TStringBuilder() << "Invalid data: " << l.GetLocation());
-                }
+    const ui32 dataFilesPerAccumulator = dataFilesCount / accumulators.size();
+    const ui32 dataFilesPerAccumulatorRemainder = dataFilesCount % accumulators.size();
+    for (ui32 i = 0; i < accumulators.size(); ++i) {
+        auto* accumulator = accumulators[i].Get();
 
-                if (!accumulator->Ready(true)) {
-                    LOG_E("Error reading data from " << dataFile.GetPath().Quote());
-                    return Result<TRestoreResult>(dbPath, EStatus::INTERNAL_ERROR, "Data is not ready");
-                }
+        ui32 dataFileIdStart = dataFilesPerAccumulator * i + std::min(i, dataFilesPerAccumulatorRemainder);
+        ui32 dataFileIdEnd = dataFilesPerAccumulator * (i + 1) + std::min(i + 1, dataFilesPerAccumulatorRemainder);
+        auto func = [&, i, dataFileIdStart, dataFileIdEnd, accumulator]() {
+            for (size_t id = dataFileIdStart; id < dataFileIdEnd; ++id) {
+                const TFsPath& dataFile = dataFiles[id];
 
-                if (!writer->Push(accumulator->GetData(true))) {
-                    LOG_E("Error writing data to " << dbPath.Quote() << ", file: " << dataFile.GetPath().Quote());
-                    return Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR, "Cannot write data #1");
+                LOG_D("Read data from " << dataFile.GetPath().Quote());
+
+                TFileInput input(dataFile, settings.FileBufferSize_);
+                TString line;
+                ui64 lineNo = 0;
+
+                while (input.ReadLine(line)) {
+                    auto l = NPrivate::TLine(std::move(line), dataFile.GetPath(), ++lineNo);
+
+                    for (auto status = accumulator->Check(l); status != NPrivate::IDataAccumulator::OK; status = accumulator->Check(l)) {
+                        if (status == NPrivate::IDataAccumulator::ERROR) {
+                            accumulatorWorkersResults[i] = Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR,
+                                TStringBuilder() << "Invalid data: " << l.GetLocation());
+                            return;
+                        }
+
+                        if (!accumulator->Ready(true)) {
+                            LOG_E("Error reading data from " << dataFile.GetPath().Quote());
+                            accumulatorWorkersResults[i] = Result<TRestoreResult>(dbPath, EStatus::INTERNAL_ERROR, "Data is not ready");
+                            return;
+                        }
+
+                        if (!writer->Push(accumulator->GetData(true))) {
+                            LOG_E("Error writing data to " << dbPath.Quote() << ", file: " << dataFile.GetPath().Quote());
+                            accumulatorWorkersResults[i] = Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR, "Cannot write data #1");
+                            return;
+                        }
+                    }
+
+                    accumulator->Feed(std::move(l));
+                    if (accumulator->Ready()) {
+                        if (!writer->Push(accumulator->GetData())) {
+                            LOG_E("Error writing data to " << dbPath.Quote() << ", file: " << dataFile.GetPath().Quote());
+                            accumulatorWorkersResults[i] = Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR, "Cannot write data #2");
+                            return;
+                        }
+                    }
                 }
             }
 
-            accumulator->Feed(std::move(l));
-            if (accumulator->Ready()) {
-                if (!writer->Push(accumulator->GetData())) {
-                    LOG_E("Error writing data to " << dbPath.Quote() << ", file: " << dataFile.GetPath().Quote());
-                    return Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR, "Cannot write data #2");
+            while (accumulator->Ready(true)) {
+                if (!writer->Push(accumulator->GetData(true))) {
+                    accumulatorWorkersResults[i] = Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR, "Cannot write data #3");
+                    return;
                 }
+            }
+        };
+    
+        if (!accumulatorWorkers.AddFunc(std::move(func))) {
+            return Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR, "Can't start restoring data: queue is full or shutting down");
+        }
+    }
+
+    accumulatorWorkers.Stop();
+    if (auto res = CombineResults(accumulatorWorkersResults); !res.IsSuccess()) {
+        return res;
+    }
+
+    // ensure that all data is restored
+    while (true) {
+        writer->Wait();
+
+        bool dataFound = false;
+        for (auto& acc : accumulators) {
+            if (acc->Ready(true)) {
+                dataFound = true;
+                break;
             }
         }
 
-        dataFile = fsPath.Child(DataFileName(++dataFileId));
-    }
-
-    while (accumulator->Ready(true)) {
-        if (!writer->Push(accumulator->GetData(true))) {
-            LOG_E("Error writing data to " << dbPath.Quote() << ", file: " << dataFile.GetPath().Quote());
-            return Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR, "Cannot write data #3");
+        if (dataFound) {
+            writer = CreateDataWriter(dbPath, settings, desc, accumulators);
+            for (auto& acc : accumulators) {
+                while (acc->Ready(true)) {
+                    if (!writer->Push(acc->GetData(true))) {
+                        return Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR, "Cannot write data #4");
+                    }
+                }
+            }
+        } else {
+            break;
         }
     }
 
@@ -534,10 +666,58 @@ TRestoreResult TRestoreClient::RestoreIndexes(const TString& dbPath, const TTabl
     return Result<TRestoreResult>();
 }
 
+TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const TString& dbPath) {
+    LOG_D("Process " << fsPath.GetPath().Quote());
+    if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
+        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
+            TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
+    }
+
+    auto changefeedProto = ReadChangefeedDescription(fsPath, Log.get());
+    auto topicProto = ReadTopicDescription(fsPath, Log.get());
+
+    auto changefeedDesc = ChangefeedDescriptionFromProto(changefeedProto);
+    auto topicDesc = TopicDescriptionFromProto(std::move(topicProto));
+
+    changefeedDesc = changefeedDesc.WithRetentionPeriod(topicDesc.GetRetentionPeriod());
+
+    auto createResult = TableClient.RetryOperationSync([&changefeedDesc, &dbPath](TSession session) {
+        return session.AlterTable(dbPath, TAlterTableSettings().AppendAddChangefeeds(changefeedDesc)).GetValueSync();
+    });
+    if (createResult.IsSuccess()) {
+        LOG_D("Created " << fsPath.GetPath().Quote());
+    } else {
+        LOG_E("Failed to create " << fsPath.GetPath().Quote());
+        return Result<TRestoreResult>(fsPath.GetPath(), std::move(createResult));
+    }
+
+    return RestoreConsumers(Join("/", dbPath, fsPath.GetName()), topicDesc.GetConsumers());;
+}
+
+TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const TVector<NTopic::TConsumer>& consumers) {
+    for (const auto& consumer : consumers) {
+        auto createResult = TopicClient.AlterTopic(topicPath,
+            NTopic::TAlterTopicSettings()
+                .BeginAddConsumer()
+                    .ConsumerName(consumer.GetConsumerName())
+                    .Important(consumer.GetImportant())
+                    .Attributes(consumer.GetAttributes())
+                .EndAddConsumer()
+        ).GetValueSync();
+        if (createResult.IsSuccess()) {
+            LOG_D("Created consumer " << consumer.GetConsumerName().Quote() << " for " << topicPath.Quote());
+        } else {
+            LOG_E("Failed to create " << consumer.GetConsumerName().Quote() << " for " << topicPath.Quote());
+            return Result<TRestoreResult>(topicPath, std::move(createResult));
+        }
+    }
+    return Result<TRestoreResult>();
+}
+
 TRestoreResult TRestoreClient::RestorePermissions(const TFsPath& fsPath, const TString& dbPath,
     const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
 {   
-    if (fsPath.Child(INCOMPLETE_FILE_NAME).Exists()) {
+    if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST,
             TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
     }
@@ -550,13 +730,13 @@ TRestoreResult TRestoreClient::RestorePermissions(const TFsPath& fsPath, const T
         return Result<TRestoreResult>();
     }
 
-    if (!fsPath.Child(PERMISSIONS_FILE_NAME).Exists()) {
+    if (!fsPath.Child(NFiles::Permissions().FileName).Exists()) {
         return Result<TRestoreResult>();
     }
 
     LOG_D("Restore ACL " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 
-    auto permissions = ReadPermissions(fsPath.Child(PERMISSIONS_FILE_NAME), Log.get());
+    auto permissions = ReadPermissions(fsPath.Child(NFiles::Permissions().FileName), Log.get());
     return ModifyPermissions(SchemeClient, dbPath, TModifyPermissionsSettings(permissions));
 }
 
@@ -565,7 +745,7 @@ TRestoreResult TRestoreClient::RestoreEmptyDir(const TFsPath& fsPath, const TStr
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
 
-    if (fsPath.Child(INCOMPLETE_FILE_NAME).Exists()) {
+    if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST,
             TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
     }

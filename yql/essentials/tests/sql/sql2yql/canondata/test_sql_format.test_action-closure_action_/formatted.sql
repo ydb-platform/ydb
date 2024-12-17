@@ -1,18 +1,27 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 DEFINE ACTION $action($b, $c) AS
     $d = $b + $c;
 
     SELECT
-        $b;
+        $b
+    ;
 
     SELECT
-        $c;
+        $c
+    ;
 
     SELECT
-        $d;
+        $d
+    ;
 END DEFINE;
 
 DEFINE ACTION $closure_action($a) AS
-    DO $a(3, 4);
+    DO
+        $a(3, 4)
+    ;
 END DEFINE;
-DO $closure_action($action);
+
+DO
+    $closure_action($action)
+;

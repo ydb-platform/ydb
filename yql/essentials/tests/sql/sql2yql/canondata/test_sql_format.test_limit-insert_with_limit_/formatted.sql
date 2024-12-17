@@ -1,7 +1,7 @@
 /* postgres can not */
-INSERT INTO plato.Output
-    WITH truncate
+INSERT INTO plato.Output WITH truncate
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 LIMIT 2;

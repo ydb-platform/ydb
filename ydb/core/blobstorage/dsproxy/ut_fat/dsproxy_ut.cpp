@@ -217,11 +217,13 @@ protected:
             , MessageVGetResult
             , MessageVPutResult
             , MessageVBlockResult
+            , MessageVGetBlockResult
             , MessageRangeResult
             , MessageDiscoverResult
             , MessageCollectGarbageResult
             , MessageStatusResult
             , MessageBlockResult
+            , MessageGetBlockResult
             , MessageStartProfilerResult
             , MessageStopProfilerResult
             , MessageVStatusResult
@@ -421,6 +423,14 @@ protected:
         ActTestFSM(ctx);
     }
 
+    void HandleGetBlockResult(TEvBlobStorage::TEvGetBlockResult::TPtr &ev, const TActorContext &ctx) {
+        LastResponse.Message = TResponseData::MessageGetBlockResult;
+        TEvBlobStorage::TEvGetBlockResult *msg = ev->Get();
+        VERBOSE_COUT("HandleGetBlockResult: " << StatusToString(msg->Status));
+        LastResponse.Status = msg->Status;
+        ActTestFSM(ctx);
+    }
+
     void HandlePutResult(TEvBlobStorage::TEvPutResult::TPtr &ev, const TActorContext &ctx) {
         LastResponse.Message = TResponseData::MessagePutResult;
         TEvBlobStorage::TEvPutResult *msg = ev->Get();
@@ -562,6 +572,16 @@ protected:
         ActTestFSM(ctx);
     }
 
+    void HandleVGetBlockResult(TEvBlobStorage::TEvVGetBlockResult::TPtr &ev, const TActorContext &ctx) {
+        LastResponse.Message = TResponseData::MessageVGetBlockResult;
+        const NKikimrBlobStorage::TEvVGetBlockResult &record = ev->Get()->Record;
+
+        VERBOSE_COUT("HandleVGetBlockResult: " << StatusToString(record.GetStatus()));
+
+        LastResponse.Status = record.GetStatus();
+        ActTestFSM(ctx);
+    }
+
     void HandleVStatusResult(TEvBlobStorage::TEvVStatusResult::TPtr &ev, const TActorContext &ctx) {
         LastResponse.Message = TResponseData::MessageVStatusResult;
         const NKikimrBlobStorage::TEvVStatusResult &record = ev->Get()->Record;
@@ -639,12 +659,14 @@ public:
             HFunc(TEvBlobStorage::TEvVGetResult, HandleVGetResult);
             HFunc(TEvBlobStorage::TEvVPutResult, HandleVPutResult);
             HFunc(TEvBlobStorage::TEvVBlockResult, HandleVBlockResult);
+            HFunc(TEvBlobStorage::TEvVGetBlockResult, HandleVGetBlockResult);
             HFunc(TEvBlobStorage::TEvVStatusResult, HandleVStatusResult);
             HFunc(TEvBlobStorage::TEvStatusResult, HandleStatusResult);
             HFunc(TEvBlobStorage::TEvVCompactResult, HandleVCompactResult);
             HFunc(TEvBlobStorage::TEvDiscoverResult, HandleDiscoverResult);
             HFunc(TEvBlobStorage::TEvCollectGarbageResult, HandleCollectGarbageResult);
             HFunc(TEvBlobStorage::TEvBlockResult, HandleBlockResult);
+            HFunc(TEvBlobStorage::TEvGetBlockResult, HandleGetBlockResult);
             HFunc(TEvProfiler::TEvStartResult, HandleStartProfilerResult);
             HFunc(TEvProfiler::TEvStopResult, HandleStopProfilerResult);
             HFunc(TEvProxyQueueState, HandleProxyQueueState);
@@ -3071,7 +3093,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                 break;
             case 230:
                 if (Env->ShouldBeUndiscoverable) {
-                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, nullptr);
+                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
                 } else {
                     TEST_RESPONSE(MessageDiscoverResult, OK, 1, testData2);
                 }
@@ -3080,7 +3102,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                 break;
             case 240:
                 if (Env->ShouldBeUndiscoverable) {
-                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, 0);
+                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
                 } else {
                     TEST_RESPONSE(MessageDiscoverResult, OK, 1, "");
                 }
@@ -3089,7 +3111,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                 break;
             case 250:
                 if (Env->ShouldBeUndiscoverable) {
-                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, 0);
+                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
                 } else {
                     TEST_RESPONSE(MessageDiscoverResult, NODATA, 0, "");
                 }
@@ -3098,7 +3120,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                 break;
             case 260:
                 if (Env->ShouldBeUndiscoverable) {
-                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, 0);
+                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
                 } else {
                     TEST_RESPONSE(MessageDiscoverResult, OK, 1, testData2);
                 }
@@ -3107,7 +3129,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                 break;
             case 270:
                 if (Env->ShouldBeUndiscoverable) {
-                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, 0);
+                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
                 } else {
                     TEST_RESPONSE(MessageDiscoverResult, OK, 1, "");
                 }
@@ -3117,7 +3139,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
             case 280:
             {
                 if (Env->ShouldBeUndiscoverable) {
-                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, 0);
+                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
                 } else {
                     TEST_RESPONSE(MessageDiscoverResult, NODATA, 0, "");
                 }

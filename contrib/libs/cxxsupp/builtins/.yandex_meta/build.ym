@@ -1,6 +1,6 @@
 {% extends '//builtin/bag.ym' %}
 
-{% block current_version %}18.1.8{% endblock %}
+{% block current_version %}19.1.4{% endblock %}
 
 {% block current_url %}
 https://github.com/llvm/llvm-project/releases/download/llvmorg-{{self.version().strip()}}/compiler-rt-{{self.version().strip()}}.src.tar.xz
@@ -8,6 +8,7 @@ https://github.com/llvm/llvm-project/releases/download/llvmorg-{{self.version().
 
 {% block patch_source %}
 (
+rm CMakeLists.txt
 cd lib/builtins
 rm CMakeLists.txt
 rm aarch64/lse.S
@@ -97,7 +98,7 @@ def it_srcs():
             continue
         if arch != 'x86_64_not_win' and n in x86_not_win:
             continue
-        if arch == 'x86_64_not_win' and not n in x86_not_win:
+        if arch == 'x86_64_not_win' and (not n in x86_not_win or n in ['floatdixf', 'floatundixf']):
             continue
         if n not in sset:
             yield x
@@ -130,7 +131,7 @@ echo '' > special
 python3 join.py common special other
 echo ')'
 echo 'ENDIF()'
-echo 'IF(OS_LINUX)'
+echo 'IF(OS_LINUX AND NOT WITH_MAPKIT)'
 echo 'SRCS(crtbegin.c crtend.c)'
 echo 'ENDIF()'
 

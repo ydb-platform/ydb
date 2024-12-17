@@ -1,13 +1,17 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
+
 PRAGMA EmitAggApply;
-PRAGMA yt.UseAggPhases = "1";
+PRAGMA yt.UseAggPhases = '1';
 
 SELECT
     key,
     count(DISTINCT value)
-FROM Input
+FROM
+    Input
 GROUP BY
     key
 ORDER BY
-    key;
+    key
+;

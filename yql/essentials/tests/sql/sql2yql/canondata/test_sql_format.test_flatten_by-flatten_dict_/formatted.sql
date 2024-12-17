@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 PRAGMA sampleselect;
 
 $data_dict = (
@@ -7,7 +8,8 @@ $data_dict = (
         YQL::ToIndexDict(ListSort(aggregate_list(key))) AS dk,
         ListSort(aggregate_list(subkey)) AS ls,
         ListSort(aggregate_list(value)) AS lv
-    FROM plato.Input
+    FROM
+        plato.Input
     GROUP BY
         CAST(key AS uint32) % 10 AS mod
 );
@@ -18,8 +20,8 @@ SELECT
     ls,
     dd.di.0 AS key,
     dd.di.1 AS value
-FROM $data_dict
-    AS dd
+FROM
+    $data_dict AS dd
     FLATTEN BY (
         dk AS di,
         lv AS iv,
@@ -30,4 +32,5 @@ ORDER BY
     iv,
     ls,
     key,
-    value;
+    value
+;

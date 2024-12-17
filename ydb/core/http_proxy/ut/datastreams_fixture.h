@@ -5,6 +5,7 @@
 #include <ydb/library/grpc/server/actors/logger.h>
 #include <library/cpp/http/misc/parsed_request.h>
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/logger/global/global.h>
 #include <library/cpp/resource/resource.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -69,7 +70,6 @@ T GetByPath(const NJson::TJsonValue& msg, TStringBuf path) {
 }
 
 class THttpProxyTestMock : public NUnitTest::TBaseFixture {
-    friend class THttpProxyTestMockForSQS;
 public:
     THttpProxyTestMock() = default;
     ~THttpProxyTestMock() = default;
@@ -82,10 +82,10 @@ public:
         InitAll();
     }
 
-    void InitAll(bool yandexCloudMode = true) {
+    void InitAll(bool yandexCloudMode = true, bool enableMetering = false) {
         AccessServicePort = PortManager.GetPort(8443);
         AccessServiceEndpoint = "127.0.0.1:" + ToString(AccessServicePort);
-        InitKikimr(yandexCloudMode);
+        InitKikimr(yandexCloudMode, enableMetering);
         InitAccessServiceService();
         InitHttpServer(yandexCloudMode);
     }
@@ -470,7 +470,7 @@ private:
         return resultSet;
     }
 
-    void InitKikimr(bool yandexCloudMode) {
+    void InitKikimr(bool yandexCloudMode, bool enableMetering) {
         AuthFactory = std::make_shared<TIamAuthFactory>();
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
@@ -483,6 +483,21 @@ private:
         appConfig.MutableSqsConfig()->SetEnableSqs(true);
         appConfig.MutableSqsConfig()->SetYandexCloudMode(yandexCloudMode);
         appConfig.MutableSqsConfig()->SetEnableDeadLetterQueues(true);
+
+        if (enableMetering) {
+            auto& sqsConfig = *appConfig.MutableSqsConfig();
+
+            sqsConfig.SetMeteringFlushingIntervalMs(100);
+            sqsConfig.SetMeteringLogFilePath("sqs_metering.log");
+            TFsPath(sqsConfig.GetMeteringLogFilePath()).DeleteIfExists();
+
+            sqsConfig.AddMeteringCloudNetCidr("5.45.196.0/24");
+            sqsConfig.AddMeteringCloudNetCidr("2a0d:d6c0::/29");
+            sqsConfig.AddMeteringYandexNetCidr("127.0.0.0/8");
+            sqsConfig.AddMeteringYandexNetCidr("5.45.217.0/24");
+
+            DoInitGlobalLog(CreateOwningThreadedLogBackend(sqsConfig.GetMeteringLogFilePath(), 0));
+        }
 
         auto limit = appConfig.MutablePQConfig()->AddValidRetentionLimits();
         limit->SetMinPeriodSeconds(0);
@@ -518,6 +533,13 @@ private:
         ActorRuntime->SetLogPriority(NKikimrServices::HTTP_PROXY, NLog::PRI_DEBUG);
         ActorRuntime->SetLogPriority(NActorsServices::EServiceCommon::HTTP, NLog::PRI_DEBUG);
         ActorRuntime->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+
+        if (enableMetering) {
+            ActorRuntime->RegisterService(
+                NSQS::MakeSqsMeteringServiceID(),
+                ActorRuntime->Register(NSQS::CreateSqsMeteringService())
+            );
+        }
 
         NYdb::TClient client(*(KikimrServer->ServerSettings));
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
@@ -922,5 +944,11 @@ public:
 class THttpProxyTestMockForSQS : public THttpProxyTestMock {
     void SetUp(NUnitTest::TTestContext&) override {
         InitAll(false);
+    }
+};
+
+class THttpProxyTestMockWithMetering : public THttpProxyTestMock {
+    void SetUp(NUnitTest::TTestContext&) override {
+        InitAll(true, true);
     }
 };

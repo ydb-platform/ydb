@@ -1,10 +1,12 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
 $sub = (
     SELECT
         *
-    FROM Input
+    FROM
+        Input
     LIMIT 5
 );
 
@@ -14,11 +16,14 @@ SELECT
     key,
     value,
     Grouping(key, value) AS grouping
-FROM $sub
+FROM
+    $sub
 GROUP BY
     GROUPING SETS (
         (key),
-        (value))
+        (value)
+    )
 ORDER BY
     key,
-    value;
+    value
+;

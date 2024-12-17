@@ -2,7 +2,7 @@
 // detail/deadline_timer_service.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -46,7 +46,7 @@ namespace detail {
 
 template <typename Time_Traits>
 class deadline_timer_service
-  : public execution_context_service_base<deadline_timer_service<Time_Traits> >
+  : public execution_context_service_base<deadline_timer_service<Time_Traits>>
 {
 public:
   // The time type.
@@ -68,7 +68,7 @@ public:
   // Constructor.
   deadline_timer_service(execution_context& context)
     : execution_context_service_base<
-        deadline_timer_service<Time_Traits> >(context),
+        deadline_timer_service<Time_Traits>>(context),
       scheduler_(boost::asio::use_service<timer_scheduler>(context))
   {
     scheduler_.init_task();
@@ -104,7 +104,11 @@ public:
   void move_construct(implementation_type& impl,
       implementation_type& other_impl)
   {
-    scheduler_.move_timer(timer_queue_, impl.timer_data, other_impl.timer_data);
+    if (other_impl.might_have_pending_waits)
+    {
+      scheduler_.move_timer(timer_queue_,
+          impl.timer_data, other_impl.timer_data);
+    }
 
     impl.expiry = other_impl.expiry;
     other_impl.expiry = time_type();
@@ -248,7 +252,7 @@ public:
   void async_wait(implementation_type& impl,
       Handler& handler, const IoExecutor& io_ex)
   {
-    typename associated_cancellation_slot<Handler>::type slot
+    associated_cancellation_slot_t<Handler> slot
       = boost::asio::get_associated_cancellation_slot(handler);
 
     // Allocate and construct an operation to wrap the handler.

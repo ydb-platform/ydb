@@ -1,8 +1,11 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 DEFINE SUBQUERY $t() AS
     SELECT
         *
-    FROM as_table([<|key: "0"|>, <|key: "1"|>]);
+    FROM
+        as_table([<|key: '0'|>, <|key: '1'|>])
+    ;
 END DEFINE;
 
 DEFINE SUBQUERY $split_formula_log($in) AS
@@ -15,10 +18,8 @@ DEFINE SUBQUERY $split_formula_log($in) AS
             )
         );
         RETURN CASE
-            WHEN $row.key = "0"
-                THEN VARIANT ($row, "0", $varType)
-            WHEN $row.key = "1"
-                THEN VARIANT ($row, "1", $varType)
+            WHEN $row.key == '0' THEN VARIANT ($row, '0', $varType)
+            WHEN $row.key == '1' THEN VARIANT ($row, '1', $varType)
             ELSE NULL
         END;
     };
@@ -33,8 +34,12 @@ $a, $b = (
 
 SELECT
     *
-FROM $a;
+FROM
+    $a
+;
 
 SELECT
     *
-FROM $b;
+FROM
+    $b
+;

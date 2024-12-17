@@ -7,8 +7,10 @@ SELECT
 FROM (
     SELECT
         *
-    FROM Input
-    WHERE key > "010" AND value IN []
+    FROM
+        Input
+    WHERE
+        key > '010' AND value IN []
 )
 GROUP BY
     key
@@ -19,8 +21,11 @@ SELECT
 FROM (
     SELECT
         *
-    FROM Input
-    WHERE key > "020" AND value IN []
+    FROM
+        Input
+    WHERE
+        key > '020' AND value IN []
 )
 GROUP BY
-    key;
+    key
+;

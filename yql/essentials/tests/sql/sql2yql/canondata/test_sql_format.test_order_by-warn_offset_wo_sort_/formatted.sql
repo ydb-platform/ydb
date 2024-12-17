@@ -1,7 +1,10 @@
-/* postgres can not *//* multirun can not *//* syntax version 1 */
+/* postgres can not */
+/* multirun can not */
+/* syntax version 1 */
 USE plato;
 
 SELECT
     *
-FROM Input
+FROM
+    Input
 LIMIT 5 OFFSET 10;

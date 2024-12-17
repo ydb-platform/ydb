@@ -1,8 +1,11 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     count(*) AS s
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
-    `dict`["a"]
+    `dict`['a']
 ORDER BY
-    s;
+    s
+;

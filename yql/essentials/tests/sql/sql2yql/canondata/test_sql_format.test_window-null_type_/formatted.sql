@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     min(x) OVER w,
     count(x) OVER w,
@@ -16,7 +17,8 @@ FROM (
 WINDOW
     w AS (
         ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-    );
+    )
+;
 
 SELECT
     min(x) OVER w,
@@ -35,4 +37,5 @@ FROM (
 WINDOW
     w AS (
         ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-    );
+    )
+;

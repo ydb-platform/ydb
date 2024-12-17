@@ -2,8 +2,9 @@
 USE plato;
 
 -- bad yson
-INSERT INTO Output
-    WITH column_groups = @@{g1="a"}@@
+INSERT INTO Output WITH column_groups = @@{g1="a"}@@
 SELECT
     *
-FROM Input;
+FROM
+    Input
+;

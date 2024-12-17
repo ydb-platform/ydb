@@ -1,22 +1,27 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 DEFINE SUBQUERY $bar() AS
     SELECT
-        [1, 2] AS ks;
+        [1, 2] AS ks
+    ;
 END DEFINE;
 
 SELECT
     key
-FROM $bar()
-    FLATTEN LIST BY
-        ks AS key
+FROM
+    $bar()
+    FLATTEN LIST BY ks AS key
 ORDER BY
-    key;
+    key
+;
 
 SELECT
     key
-FROM $bar()
+FROM
+    $bar()
     FLATTEN LIST BY (
         ListExtend(ks, [3]) AS key
     )
 ORDER BY
-    key;
+    key
+;

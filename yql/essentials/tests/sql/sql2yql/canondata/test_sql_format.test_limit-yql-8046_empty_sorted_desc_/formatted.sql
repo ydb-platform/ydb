@@ -6,8 +6,10 @@ $visitors = (
         key,
         subkey,
         value
-    FROM Input
-    WHERE subkey != ""
+    FROM
+        Input
+    WHERE
+        subkey != ''
 );
 
 $over_threshold = (
@@ -15,14 +17,17 @@ $over_threshold = (
         key,
         subkey,
         value
-    FROM $visitors
-    WHERE key > "070"
+    FROM
+        $visitors
+    WHERE
+        key > '070'
 );
 
 $clean = (
     SELECT
         COUNT(*)
-    FROM $over_threshold
+    FROM
+        $over_threshold
 );
 
 $tail = (
@@ -30,22 +35,25 @@ $tail = (
         key,
         subkey,
         value
-    FROM $visitors
+    FROM
+        $visitors
     ORDER BY
         key DESC
     LIMIT IF($clean ?? 0 < 2, 2 - $clean ?? 0, 0)
 );
 
-INSERT INTO Output
-    WITH TRUNCATE
+INSERT INTO Output WITH TRUNCATE
 SELECT
     key,
     subkey,
     value
-FROM $over_threshold
+FROM
+    $over_threshold
 UNION ALL
 SELECT
     key,
     subkey,
     value
-FROM $tail;
+FROM
+    $tail
+;

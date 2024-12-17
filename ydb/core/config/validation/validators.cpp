@@ -161,4 +161,18 @@ EValidationResult ValidateStaticGroup(const NKikimrConfig::TAppConfig& current, 
     return EValidationResult::Ok;
 }
 
+EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::vector<TString>& msg) {
+    if (config.HasAuthConfig()) {
+        NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateAuthConfig(config.GetAuthConfig(), msg);
+        if (result == NKikimr::NConfig::EValidationResult::Error) {
+            return EValidationResult::Error;
+        }
+    }
+    if (msg.size() > 0) {
+        return EValidationResult::Warn;
+    }
+
+    return EValidationResult::Ok;
+}
+
 } // namespace NKikimr::NConfig

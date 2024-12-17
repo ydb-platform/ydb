@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
 SELECT
@@ -6,8 +7,10 @@ SELECT
     count(value) AS cnt,
     min(value) AS min,
     max(value) AS max
-FROM Input
+FROM
+    Input
 GROUP COMPACT BY
     key
 ORDER BY
-    key;
+    key
+;

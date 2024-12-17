@@ -1,8 +1,8 @@
-/* postgres can not *//* multirun can not */
+/* postgres can not */
+/* multirun can not */
 USE plato;
 
-INSERT INTO Output
-    WITH truncate (
+INSERT INTO Output WITH truncate (
     a,
     b
 )
@@ -11,18 +11,26 @@ VALUES
     ('11', '20'),
     ('21', '30'),
     ('31', '40'),
-    ('41', '50');
+    ('41', '50')
+;
+
 COMMIT;
 
 INSERT INTO Output
 SELECT
     *
-FROM Output
+FROM
+    Output
 ORDER BY
-    a;
+    a
+;
+
 COMMIT;
 
 SELECT
     *
-FROM Output
-WHERE a > '11';
+FROM
+    Output
+WHERE
+    a > '11'
+;

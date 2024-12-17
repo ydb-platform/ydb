@@ -1,15 +1,25 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 DEFINE ACTION $action($b, $c) AS
     DEFINE ACTION $aaa() AS
         SELECT
-            $b;
+            $b
+        ;
     END DEFINE;
 
     DEFINE ACTION $bbb() AS
         SELECT
-            $c;
+            $c
+        ;
     END DEFINE;
-    DO $aaa();
-    DO $bbb();
+    DO
+        $aaa()
+    ;
+    DO
+        $bbb()
+    ;
 END DEFINE;
-DO $action(1, 2);
+
+DO
+    $action(1, 2)
+;

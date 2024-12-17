@@ -1,5 +1,6 @@
 USE plato;
-PRAGMA yt.UsePartitionsByKeysForFinalAgg = "false";
+
+PRAGMA yt.UsePartitionsByKeysForFinalAgg = 'false';
 
 SELECT
     Pg::count(),
@@ -10,5 +11,8 @@ SELECT
     Pg::min(c),
     Pg::max(c),
     Pg::avg(c),
-FROM Input
-WHERE d = "aaa";
+FROM
+    Input
+WHERE
+    d == 'aaa'
+;

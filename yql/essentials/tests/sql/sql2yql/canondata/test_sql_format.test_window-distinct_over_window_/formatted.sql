@@ -1,5 +1,7 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
+
 PRAGMA DistinctOverWindow;
 
 $input = (
@@ -7,13 +9,15 @@ $input = (
         CAST(key AS Int32) AS key,
         CAST(subkey AS Int32) AS subkey,
         value
-    FROM Input
+    FROM
+        Input
 );
 
 SELECT
     subkey,
     key,
     value,
+
     -- assuming ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
     count(DISTINCT key) OVER (
         PARTITION BY
@@ -21,7 +25,7 @@ SELECT
         ORDER BY
             key
     ) AS count_by_key,
-    count(DISTINCT value || "force_preagg") OVER (
+    count(DISTINCT value || 'force_preagg') OVER (
         PARTITION BY
             subkey
         ORDER BY
@@ -39,8 +43,10 @@ SELECT
         ORDER BY
             key
     ) AS median,
-FROM $input
+FROM
+    $input
 ORDER BY
     subkey,
     key,
-    value;
+    value
+;

@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
 INSERT INTO @foo
@@ -12,17 +13,21 @@ SELECT
 UNION ALL
 SELECT
     AsList(1, 2) AS x,
-    3 AS y;
+    3 AS y
+;
+
 COMMIT;
 
 SELECT
     x,
     count(*) AS c
-FROM @foo
+FROM
+    @foo
 GROUP BY
     x
 ORDER BY
-    c;
+    c
+;
 
 INSERT INTO @bar
 SELECT
@@ -53,76 +58,88 @@ UNION ALL
 SELECT
     AsList(1, 2) AS x,
     AsList(5) AS y,
-    6 AS z;
+    6 AS z
+;
+
 COMMIT;
 
 SELECT
     x,
     y,
     count(*) AS c
-FROM @bar
+FROM
+    @bar
 GROUP BY
     x,
     y
 ORDER BY
-    c;
+    c
+;
 
 SELECT
     x,
     y,
     count(DISTINCT z) AS c
-FROM @bar
+FROM
+    @bar
 GROUP BY
     x,
     y
 ORDER BY
-    c;
+    c
+;
 
 SELECT
     x,
     y,
     min(z) AS m,
     count(DISTINCT z) AS c
-FROM @bar
+FROM
+    @bar
 GROUP BY
     x,
     y
 ORDER BY
-    c;
+    c
+;
 
 SELECT
     x
-FROM @bar
-    AS t
+FROM
+    @bar AS t
 GROUP BY
     x
 ORDER BY
-    t.x[1];
+    t.x[1]
+;
 
 SELECT
     x,
     y
-FROM @bar
-    AS t
+FROM
+    @bar AS t
 GROUP BY
     x,
     y
 ORDER BY
     t.x[1],
-    t.y[0];
+    t.y[0]
+;
 
 SELECT DISTINCT
     x
-FROM @bar
-    AS t
+FROM
+    @bar AS t
 ORDER BY
-    t.x[1] DESC;
+    t.x[1] DESC
+;
 
 SELECT DISTINCT
     x,
     y
-FROM @bar
-    AS t
+FROM
+    @bar AS t
 ORDER BY
     t.x[1] DESC,
-    t.y[0] DESC;
+    t.y[0] DESC
+;

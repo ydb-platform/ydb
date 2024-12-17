@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 PRAGMA yt.PartitionByConstantKeysViaMap;
 
 SELECT
@@ -46,5 +47,6 @@ FROM (
         Unwrap(CAST(subkey AS int)) AS sub,
         value AS val,
         CAST(value AS int) AS empty
-    FROM plato.Input
+    FROM
+        plato.Input
 );

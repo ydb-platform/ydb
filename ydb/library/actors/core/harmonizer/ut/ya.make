@@ -1,6 +1,5 @@
 UNITTEST_FOR(ydb/library/actors/core/harmonizer)
 
-FORK_SUBTESTS()
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
     TIMEOUT(600)
@@ -17,6 +16,7 @@ PEERDIR(
 
 SRCS(
     harmonizer_ut.cpp
+    history_ut.cpp
 )
 
 END()

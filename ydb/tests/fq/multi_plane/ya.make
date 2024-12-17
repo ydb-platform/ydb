@@ -20,8 +20,6 @@ TEST_SRCS(
     test_retry_high_rate.py
 )
 
-TIMEOUT(600)
-
 SIZE(MEDIUM)
 
 END()

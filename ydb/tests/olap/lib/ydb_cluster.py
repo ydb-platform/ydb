@@ -53,6 +53,7 @@ class YdbCluster:
     _cluster_info = None
     ydb_endpoint = get_external_param('ydb-endpoint', 'grpc://ydb-olap-testing-vla-0002.search.yandex.net:2135')
     ydb_database = get_external_param('ydb-db', 'olap-testing/kikimr/testing/acceptance-2').lstrip('/')
+    ydb_mon_port = 8765
     tables_path = get_external_param('tables-path', 'olap_yatests')
     _monitoring_urls: list[YdbCluster.MonitoringUrl] = None
 
@@ -77,8 +78,7 @@ class YdbCluster:
     def _get_service_url(cls):
         host = cls.ydb_endpoint.split('://', 2)
         host = host[1 if len(host) > 1 else 0].split('/')[0].split(':')[0]
-        port = 8765
-        return f'http://{host}:{port}'
+        return f'http://{host}:{cls.ydb_mon_port}'
 
     @classmethod
     def get_cluster_nodes(cls, path: Optional[str] = None, db_only: bool = False) -> list[YdbCluster.Node]:
@@ -152,6 +152,13 @@ class YdbCluster:
                 f"Connect to YDB failed. \n Last reported errors by discovery: [{driver.discovery_debug_details()}]"
             )
             raise
+
+    @classmethod
+    def reset(cls, ydb_endpoint, ydb_database, ydb_mon_port):
+        cls.ydb_endpoint = ydb_endpoint
+        cls.ydb_database = ydb_database
+        cls.ydb_mon_port = ydb_mon_port
+        cls._ydb_driver = None
 
     @classmethod
     def get_ydb_driver(cls):

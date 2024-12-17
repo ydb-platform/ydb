@@ -1,4 +1,5 @@
-/* syntax version 1 *//* do not execute */
+/* syntax version 1 */
+/* do not execute */
 CREATE TABLE plato.Output (
     c_void Void,
     c_unit Unit,
@@ -40,7 +41,7 @@ CREATE TABLE plato.Output (
     c_tuple Tuple<bool, uint64>,
     c_struct Struct<foo: string, 'bar': float>,
     c_variant1 Variant<int, bool>,
-    c_variant2 Variant<foo: int, "bar": bool>,
+    c_variant2 Variant<foo: int, 'bar': bool>,
     c_list List<Yson>,
     c_stream Stream<Date>,
     c_flow Flow<Uuid>,

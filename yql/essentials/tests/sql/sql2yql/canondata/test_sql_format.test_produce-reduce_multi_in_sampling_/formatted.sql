@@ -1,5 +1,8 @@
-/* syntax version 1 *//* postgres can not *//* custom check: len(yt_res_yson[0]['Write'][0]['Data']) < 16 */
+/* syntax version 1 */
+/* postgres can not */
+/* custom check: len(yt_res_yson[0]['Write'][0]['Data']) < 16 */
 USE plato;
+
 $udf = YQL::@@
 (lambda '(key stream) 
     (PartitionByKey stream
@@ -17,8 +20,8 @@ $udf = YQL::@@
 
 $r = (
     REDUCE Input
-        SAMPLE (0.1), Input
-        SAMPLE (0.1)
+    SAMPLE (0.1), Input
+    SAMPLE (0.1)
     ON
         key
     USING $udf(TableRow())
@@ -28,8 +31,10 @@ SELECT
     key,
     src,
     cnt
-FROM $r
+FROM
+    $r
 ORDER BY
     key,
     src,
-    cnt;
+    cnt
+;

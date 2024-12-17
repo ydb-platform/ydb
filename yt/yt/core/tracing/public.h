@@ -22,8 +22,6 @@ class TTracingExt;
 
 DECLARE_REFCOUNTED_CLASS(TTraceContext)
 
-DECLARE_REFCOUNTED_CLASS(TTracingTransportConfig)
-
 constexpr int TypicalAllocationTagCount = 8;
 using TAllocationTags = TCompactVector<TAllocationTag, TypicalAllocationTagCount>;
 

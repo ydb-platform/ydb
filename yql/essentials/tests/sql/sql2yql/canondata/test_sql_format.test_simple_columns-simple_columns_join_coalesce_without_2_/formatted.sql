@@ -1,12 +1,13 @@
 /* syntax version 1 */
 USE plato;
+
 PRAGMA SimpleColumns;
 PRAGMA CoalesceJoinKeysOnQualifiedAll;
 
 SELECT
     b.*
-    WITHOUT
-        b.x
+WITHOUT
+    b.x
 FROM (
     SELECT
         *
@@ -19,8 +20,7 @@ FROM (
             x,
             y
         )
-)
-    AS a
+) AS a
 JOIN (
     SELECT
         *
@@ -33,14 +33,15 @@ JOIN (
             x,
             y
         )
-)
-    AS b
-ON a.x == b.x AND a.y == b.y;
+) AS b
+ON
+    a.x == b.x AND a.y == b.y
+;
 
 SELECT
     *
-    WITHOUT
-        b.x
+WITHOUT
+    b.x
 FROM (
     SELECT
         *
@@ -53,8 +54,7 @@ FROM (
             x,
             y
         )
-)
-    AS a
+) AS a
 JOIN (
     SELECT
         *
@@ -67,6 +67,7 @@ JOIN (
             x,
             y
         )
-)
-    AS b
-ON a.x == b.x AND a.y == b.y;
+) AS b
+ON
+    a.x == b.x AND a.y == b.y
+;

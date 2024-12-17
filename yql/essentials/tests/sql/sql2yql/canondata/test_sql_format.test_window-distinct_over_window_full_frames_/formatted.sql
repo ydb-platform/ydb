@@ -1,5 +1,7 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
+
 PRAGMA DistinctOverWindow;
 
 $input = (
@@ -7,13 +9,15 @@ $input = (
         CAST(key AS Int32) AS key,
         CAST(subkey AS Int32) AS subkey,
         value
-    FROM Input
+    FROM
+        Input
 );
 
 SELECT
     subkey,
     key,
     value,
+
     -- assuming ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
     count(DISTINCT key) OVER () AS cnt_distinct_total,
     sum(DISTINCT key) OVER () AS sum_distinct_total,
@@ -30,8 +34,10 @@ SELECT
         PARTITION BY
             subkey
     ) AS median_distinct_part,
-FROM $input
+FROM
+    $input
 ORDER BY
     subkey,
     key,
-    value;
+    value
+;

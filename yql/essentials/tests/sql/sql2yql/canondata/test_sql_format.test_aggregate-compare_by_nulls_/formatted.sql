@@ -1,42 +1,56 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
-$src =
+$src = (
     SELECT
         NULL AS key,
         value
-    FROM Input;
+    FROM
+        Input
+);
 
-$src_opt =
+$src_opt = (
     SELECT
         NULL AS key,
         Just(value) AS value
-    FROM Input;
+    FROM
+        Input
+);
 
-$src_null =
+$src_null = (
     SELECT
         NULL AS key,
         NULL AS value
-    FROM Input;
+    FROM
+        Input
+);
 
 SELECT
     min_by(value, key)
-FROM $src;
+FROM
+    $src
+;
 
 SELECT
     max_by(value, key)
-FROM $src_opt;
+FROM
+    $src_opt
+;
 
 SELECT
     min_by(value, key)
-FROM $src_null;
+FROM
+    $src_null
+;
 
 SELECT
     max_by(value, key)
 FROM (
     SELECT
         *
-    FROM $src
+    FROM
+        $src
     LIMIT 0
 );
 
@@ -45,7 +59,8 @@ SELECT
 FROM (
     SELECT
         *
-    FROM $src_opt
+    FROM
+        $src_opt
     LIMIT 0
 );
 
@@ -54,7 +69,8 @@ SELECT
 FROM (
     SELECT
         *
-    FROM $src_null
+    FROM
+        $src_null
     LIMIT 0
 );
 
@@ -64,5 +80,6 @@ FROM (
     SELECT
         Nothing(String?) AS key,
         value
-    FROM Input
+    FROM
+        Input
 );

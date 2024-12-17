@@ -66,7 +66,7 @@ TDiagnosableInvokerPoolPtr CreateProfiledFairShareInvokerPool(
     TDuration actionTimeRelevancyHalflife = TAdjustedExponentialMovingAverage::DefaultHalflife,
     const TString& poolName = "fair_share_invoker_pool",
     std::vector<TString> bucketNames = {},
-    NProfiling::IRegistryImplPtr registry = nullptr);
+    NProfiling::IRegistryPtr registry = nullptr);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -79,7 +79,7 @@ TDiagnosableInvokerPoolPtr CreateEnumIndexedProfiledFairShareInvokerPool(
     TFairShareCallbackQueueFactory callbackQueueFactory = CreateFairShareCallbackQueue,
     TDuration actionTimeRelevancyHalflife = TAdjustedExponentialMovingAverage::DefaultHalflife,
     const TString& poolName = "fair_share_invoker_pool",
-    NProfiling::IRegistryImplPtr registry = nullptr);
+    NProfiling::IRegistryPtr registry = nullptr);
 
 ////////////////////////////////////////////////////////////////////////////////
 

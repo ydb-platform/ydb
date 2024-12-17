@@ -21,6 +21,10 @@ namespace NKikimr::NStorage {
         using TQuery = NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot;
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
 
+        using TGatherCallback = std::function<std::optional<TString>(TEvGather*)>;
+        ui64 NextScatterCookie = 1;
+        THashMap<ui64, TGatherCallback> ScatterTasks;
+
     public:
         TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>>&& ev)
             : Self(self)
@@ -156,11 +160,24 @@ namespace NKikimr::NStorage {
                 case TQuery::kReplaceStorageConfig:
                     return ReplaceStorageConfig(record.GetReplaceStorageConfig().GetYAML());
 
+                case TQuery::kBootstrapCluster:
+                    return BootstrapCluster(record.GetBootstrapCluster().GetSelfAssemblyUUID());
+
                 case TQuery::REQUEST_NOT_SET:
                     return FinishWithError(TResult::ERROR, "Request field not set");
             }
 
             FinishWithError(TResult::ERROR, "unhandled request");
+        }
+
+        void IssueScatterTask(TEvScatter&& task, TGatherCallback callback) {
+            const ui64 cookie = NextScatterCookie++;
+            const auto [it, inserted] = ScatterTasks.try_emplace(cookie, std::move(callback));
+            Y_ABORT_UNLESS(inserted);
+
+            task.SetTaskId(RandomNumber<ui64>());
+            task.SetCookie(cookie);
+            Self->IssueScatterTask(SelfId(), std::move(task));
         }
 
         void Handle(TEvNodeConfigGather::TPtr ev) {
@@ -169,19 +186,14 @@ namespace NKikimr::NStorage {
             if (record.GetAborted()) {
                 return FinishWithError(TResult::ERROR, "scatter task was aborted due to loss of quorum or other error");
             }
-            switch (record.GetResponseCase()) {
-                case TEvGather::kProposeStorageConfig: {
-                    std::unique_ptr<TEvNodeConfigInvokeOnRootResult> ev;
-                    if (auto error = Self->ProcessProposeStorageConfig(record.MutableProposeStorageConfig())) {
-                        ev = PrepareResult(TResult::ERROR, *error);
-                    } else {
-                        ev = PrepareResult(TResult::OK, std::nullopt);
-                    }
-                    return Finish(Sender, SelfId(), ev.release(), 0, Cookie);
-                }
 
-                default:
-                    return FinishWithError(TResult::ERROR, "unexpected Response case in resulting TEvGather");
+            const auto it = ScatterTasks.find(record.GetCookie());
+            Y_ABORT_UNLESS(it != ScatterTasks.end());
+            TGatherCallback callback = std::move(it->second);
+            ScatterTasks.erase(it);
+
+            if (auto error = callback(&record)) {
+                FinishWithError(TResult::ERROR, std::move(*error));
             }
         }
 
@@ -658,6 +670,59 @@ namespace NKikimr::NStorage {
             StartProposition(&config);
         }
 
+        void BootstrapCluster(const TString& selfAssemblyUUID) {
+            if (!RunCommonChecks()) {
+                return;
+            } else if (Self->StorageConfig->GetGeneration()) {
+                if (Self->StorageConfig->GetSelfAssemblyUUID() == selfAssemblyUUID) { // repeated command, it's ok
+                    return Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
+                } else {
+                    return FinishWithError(TResult::ERROR, "bootstrap on already bootstrapped cluster");
+                }
+            } else if (!selfAssemblyUUID) {
+                return FinishWithError(TResult::ERROR, "SelfAssemblyUUID can't be empty");
+            }
+
+            const ERootState prevState = std::exchange(Self->RootState, ERootState::IN_PROGRESS);
+            Y_ABORT_UNLESS(prevState == ERootState::RELAX);
+
+            // issue scatter task to collect configs and then bootstrap cluster with specified cluster UUID
+            auto done = [this, selfAssemblyUUID = TString(selfAssemblyUUID)](TEvGather *res) -> std::optional<TString> {
+                Y_ABORT_UNLESS(res->HasCollectConfigs());
+                Y_ABORT_UNLESS(Self->StorageConfig); // it can't just disappear
+                if (Self->CurrentProposedStorageConfig) {
+                    FinishWithError(TResult::RACE, "config proposition request in flight");
+                    return std::nullopt;
+                } else if (Self->StorageConfig->GetGeneration()) {
+                    FinishWithError(TResult::RACE, "storage config generation regenerated while collecting configs");
+                    return std::nullopt;
+                }
+                TOverloaded handler{
+                    [&](std::monostate&&) {
+                        const ERootState prevState = std::exchange(Self->RootState, ERootState::RELAX);
+                        Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
+                        Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
+                        return std::nullopt;
+                    },
+                    [&](TString&& error) {
+                        const ERootState prevState = std::exchange(Self->RootState, ERootState::RELAX);
+                        Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
+                        return error;
+                    },
+                    [&](NKikimrBlobStorage::TStorageConfig&& proposedConfig) {
+                        StartProposition(&proposedConfig, false);
+                        return std::nullopt;
+                    }
+                };
+                return std::visit<std::optional<TString>>(handler,
+                    Self->ProcessCollectConfigs(res->MutableCollectConfigs(), &selfAssemblyUUID));
+            };
+
+            TEvScatter task;
+            task.MutableCollectConfigs();
+            IssueScatterTask(std::move(task), std::move(done));
+        }
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration proposition
 
@@ -669,10 +734,12 @@ namespace NKikimr::NStorage {
             }
         }
 
-        void StartProposition(NKikimrBlobStorage::TStorageConfig *config) {
-            config->MutablePrevConfig()->CopyFrom(*Self->StorageConfig);
-            config->MutablePrevConfig()->ClearPrevConfig();
-            UpdateFingerprint(config);
+        void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool updateFields = true) {
+            if (updateFields) {
+                config->MutablePrevConfig()->CopyFrom(*Self->StorageConfig);
+                config->MutablePrevConfig()->ClearPrevConfig();
+                UpdateFingerprint(config);
+            }
 
             if (auto error = ValidateConfigUpdate(*Self->StorageConfig, *config)) {
                 STLOG(PRI_DEBUG, BS_NODE, NW51, "proposed config validation failed", (SelfId, SelfId()), (Error, *error),
@@ -680,14 +747,28 @@ namespace NKikimr::NStorage {
                 return FinishWithError(TResult::ERROR, TStringBuilder() << "config validation failed: " << *error);
             }
 
-            Self->CurrentProposedStorageConfig.emplace();
-            Self->CurrentProposedStorageConfig->Swap(config);
+            Self->CurrentProposedStorageConfig.emplace(std::move(*config));
+
+            auto done = [&](TEvGather *res) -> std::optional<TString> {
+                Y_ABORT_UNLESS(res->HasProposeStorageConfig());
+                std::unique_ptr<TEvNodeConfigInvokeOnRootResult> ev;
+
+                const ERootState prevState = std::exchange(Self->RootState, ERootState::RELAX);
+                Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
+
+                if (auto error = Self->ProcessProposeStorageConfig(res->MutableProposeStorageConfig())) {
+                    return error;
+                }
+                Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
+                return std::nullopt;
+            };
 
             TEvScatter task;
             auto *propose = task.MutableProposeStorageConfig();
             propose->MutableConfig()->CopyFrom(*Self->CurrentProposedStorageConfig);
+            IssueScatterTask(std::move(task), done);
 
-            return Self->IssueScatterTask(SelfId(), std::move(task));
+            Self->RootState = ERootState::IN_PROGRESS; // forbid any concurrent activity
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

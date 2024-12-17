@@ -1237,6 +1237,7 @@ class StaticConfigGenerator(object):
             selectors = throttling.get("scope")
             if selectors is not None:
                 throttling_scope_pb.Scope.CopyFrom(get_selectors(selectors))
+            throttling_scope_pb.Level = throttling['level']
             throttling_scope_pb.MaxTracesPerMinute = throttling['max_traces_per_minute']
             throttling_scope_pb.MaxTracesBurst = throttling.get('max_traces_burst', 0)
             return throttling_scope_pb

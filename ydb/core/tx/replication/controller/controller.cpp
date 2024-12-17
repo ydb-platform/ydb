@@ -79,6 +79,9 @@ STFUNC(TController::StateWork) {
         HFunc(TEvService::TEvWorkerStatus, Handle);
         HFunc(TEvService::TEvRunWorker, Handle);
         HFunc(TEvService::TEvWorkerDataEnd, Handle);
+        HFunc(TEvService::TEvGetTxId, Handle);
+        HFunc(TEvService::TEvHeartbeat, Handle);
+        HFunc(TEvTxAllocatorClient::TEvAllocateResult, Handle);
         HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
     default:
         HandleDefaultEvents(ev, SelfId());
@@ -98,6 +101,10 @@ void TController::Cleanup(const TActorContext& ctx) {
         CloseSession(nodeId, ctx);
     }
 
+    if (auto actorId = std::exchange(TxAllocatorClient, {})) {
+        Send(actorId, new TEvents::TEvPoison());
+    }
+
     NodesManager.Shutdown(ctx);
 }
 
@@ -109,6 +116,10 @@ void TController::SwitchToWork(const TActorContext& ctx) {
 
     if (!DiscoveryCache) {
         DiscoveryCache = ctx.Register(CreateDiscoveryCache());
+    }
+
+    if (!TxAllocatorClient) {
+        TxAllocatorClient = ctx.RegisterWithSameMailbox(CreateTxAllocatorClient(AppData(ctx)));
     }
 
     for (auto& [_, replication] : Replications) {
@@ -506,7 +517,7 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
             return;
         }
         for (auto partitionId : record.GetChildPartitionsIds()) {
-            auto ev = MakeTEvRunWorker(replication, *target, partitionId);
+            auto ev = MakeRunWorkerEv(replication, *target, partitionId);
             Send(SelfId(), std::move(ev));
         }
     }
@@ -737,6 +748,55 @@ bool TController::MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ct
     return true;
 }
 
+void TController::Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+
+    const auto nodeId = ev->Sender.NodeId();
+    if (!Sessions.contains(nodeId)) {
+        return;
+    }
+
+    auto replication = GetSingle();
+    if (!replication) {
+        CLOG_E(ctx, "Cannot assign tx id: ambiguous replication instance");
+        return;
+    }
+
+    const auto& config = replication->GetConfig().GetConsistencySettings();
+    switch (config.GetLevelCase()) {
+    case NKikimrReplication::TConsistencySettings::kGlobal:
+        break;
+    default:
+        CLOG_E(ctx, "Cannot assign tx id: consistency level is not global");
+        return;
+    }
+
+    const auto intervalMs = config.GetGlobal().GetCommitIntervalMilliSeconds();
+    for (const auto& version : ev->Get()->Record.GetVersions()) {
+        const ui64 intervalNo = version.GetStep() / intervalMs;
+        const auto adjustedVersion = TRowVersion(intervalMs * (intervalNo + 1), 0);
+        PendingTxId[adjustedVersion].insert(nodeId);
+    }
+
+    RunTxAssignTxId(ctx);
+}
+
+void TController::Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+
+    const auto nodeId = ev->Sender.NodeId();
+    if (!Sessions.contains(nodeId)) {
+        return;
+    }
+
+    const auto& record = ev->Get()->Record;
+    const auto id = TWorkerId::Parse(record.GetWorker());
+    const auto version = TRowVersion::Parse(record.GetVersion());
+    PendingHeartbeats[id] = version;
+
+    RunTxHeartbeat(ctx);
+}
+
 void TController::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx) {
     const ui32 nodeId = ev->Get()->NodeId;
 
@@ -764,6 +824,14 @@ TReplication::TPtr TController::Find(const TPathId& pathId) const {
     }
 
     return it->second;
+}
+
+TReplication::TPtr TController::GetSingle() const {
+    if (Replications.size() != 1) {
+        return nullptr;
+    }
+
+    return Replications.begin()->second;
 }
 
 void TController::Remove(ui64 id) {

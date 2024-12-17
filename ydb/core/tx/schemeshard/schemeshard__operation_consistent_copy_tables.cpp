@@ -9,7 +9,7 @@
 
 #include <util/generic/algorithm.h>
 
-NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst, bool omitFollowers, bool isBackup, bool allowUnderSameOp) {
+NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst, const NKikimrSchemeOp::TCopyTableConfig& descr) {
     using namespace NKikimr::NSchemeShard;
 
     auto scheme = TransactionTemplate(dst.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
@@ -18,9 +18,13 @@ NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath& src, 
     auto operation = scheme.MutableCreateTable();
     operation->SetName(dst.LeafName());
     operation->SetCopyFromTable(src.PathString());
-    operation->SetOmitFollowers(omitFollowers);
-    operation->SetIsBackup(isBackup);
-    operation->SetAllowUnderSameOperation(allowUnderSameOp);
+    operation->SetOmitFollowers(descr.GetOmitFollowers());
+    operation->SetIsBackup(descr.GetIsBackup());
+    operation->SetAllowUnderSameOperation(descr.GetAllowUnderSameOperation());
+    if (descr.HasCreateSrcCdcStream()) {
+        auto* coOp = scheme.MutableCreateCdcStream();
+        coOp->CopyFrom(descr.GetCreateSrcCdcStream());
+    }
 
     return scheme;
 }
@@ -144,8 +148,10 @@ bool CreateConsistentCopyTables(
             sequences.emplace(sequenceName);
         }
 
-        result.push_back(CreateCopyTable(NextPartId(nextId, result),
-            CopyTableTask(srcPath, dstPath, descr.GetOmitFollowers(), descr.GetIsBackup(), descr.GetAllowUnderSameOperation()), sequences));
+        result.push_back(CreateCopyTable(
+                             NextPartId(nextId, result),
+                             CopyTableTask(srcPath, dstPath, descr),
+                             sequences));
 
         TVector<NKikimrSchemeOp::TSequenceDescription> sequenceDescriptions;
         for (const auto& child: srcPath.Base()->GetChildren()) {
@@ -190,8 +196,9 @@ bool CreateConsistentCopyTables(
             Y_ABORT_UNLESS(srcImplTable.Base()->PathId == srcIndexPath.Base()->GetChildren().begin()->second);
             TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 
-            result.push_back(CreateCopyTable(NextPartId(nextId, result),
-                CopyTableTask(srcImplTable, dstImplTable, descr.GetOmitFollowers(), descr.GetIsBackup(), descr.GetAllowUnderSameOperation())));
+            result.push_back(CreateCopyTable(
+                                 NextPartId(nextId, result),
+                                 CopyTableTask(srcImplTable, dstImplTable, descr)));
         }
 
         for (auto&& sequenceDescription : sequenceDescriptions) {

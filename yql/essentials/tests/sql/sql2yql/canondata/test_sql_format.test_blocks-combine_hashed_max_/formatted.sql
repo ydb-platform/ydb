@@ -6,8 +6,10 @@ SELECT
     max(subkey),
     max(1u),
     max(1u / 0u)
-FROM Input
+FROM
+    Input
 GROUP BY
     key
 ORDER BY
-    key;
+    key
+;

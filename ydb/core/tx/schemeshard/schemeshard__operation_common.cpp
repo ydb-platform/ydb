@@ -310,7 +310,7 @@ bool TCreateParts::ProgressState(TOperationContext& context) {
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 DebugHint() << " ProgressState"
                             << ", operation type: " << TTxState::TypeName(txState->TxType)
-                            << ", at tablet" << ssId);
+                            << ", at tablet# " << ssId);
 
     if (txState->TxType == TTxState::TxDropTable
         || txState->TxType == TTxState::TxAlterTable
@@ -984,6 +984,7 @@ TProposedWaitParts::TProposedWaitParts(TOperationId id, TTxState::ETxState nextS
     : OperationId(id)
     , NextState(nextState)
 {
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint() << " Constructed");
     IgnoreMessages(DebugHint(),
         { TEvHive::TEvCreateTabletReply::EventType
         , TEvDataShard::TEvProposeTransactionResult::EventType

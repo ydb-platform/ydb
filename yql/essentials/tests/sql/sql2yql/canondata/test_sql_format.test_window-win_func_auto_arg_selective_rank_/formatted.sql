@@ -1,5 +1,7 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
+
 PRAGMA DisableSimpleColumns;
 PRAGMA DisableAnsiRankForNullableKeys;
 
@@ -10,12 +12,13 @@ SELECT
     RANK(AsTuple(key, value)) OVER w AS rank,
     DENSE_RANK(AsTuple(key, value)) OVER w AS dense_rank,
     zz.*
-FROM Input4
-    AS zz
+FROM
+    Input4 AS zz
 WINDOW
     w AS (
         ORDER BY
             key,
             subkey,
             value
-    );
+    )
+;

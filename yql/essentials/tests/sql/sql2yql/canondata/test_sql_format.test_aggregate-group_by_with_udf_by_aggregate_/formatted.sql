@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $majority_vote = Python::majority_vote(
     Callable<(List<String?>) -> String>,
     @@
@@ -14,6 +15,8 @@ SELECT
     count(*),
     val,
     $majority_vote(aggregate_list(subkey))
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
-    CAST(key AS uint32) % 2 AS val;
+    CAST(key AS uint32) % 2 AS val
+;

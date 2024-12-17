@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 PRAGMA EmitAggApply;
 
 SELECT
@@ -8,7 +9,6 @@ FROM (
         (CAST(1 AS Interval)),
         (NULL),
         (CAST(3 AS Interval))
-)
-    AS a (
-        key
-    );
+) AS a (
+    key
+);

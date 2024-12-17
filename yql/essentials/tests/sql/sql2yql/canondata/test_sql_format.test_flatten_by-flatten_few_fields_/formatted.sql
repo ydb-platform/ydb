@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 PRAGMA sampleselect;
 
 $data_deep = (
@@ -7,7 +8,8 @@ $data_deep = (
         aggregate_list(key) AS lk,
         aggregate_list(subkey) AS ls,
         aggregate_list(value) AS lv
-    FROM plato.Input
+    FROM
+        plato.Input
     GROUP BY
         CAST(key AS uint32) % 10 AS mod
 );
@@ -15,7 +17,8 @@ $data_deep = (
 -- order to have same results on yamr and yt
 SELECT
     *
-FROM $data_deep
+FROM
+    $data_deep
     FLATTEN BY (
         lk AS ik,
         ls,
@@ -25,4 +28,5 @@ ORDER BY
     mod,
     ik,
     ls,
-    lv;
+    lv
+;

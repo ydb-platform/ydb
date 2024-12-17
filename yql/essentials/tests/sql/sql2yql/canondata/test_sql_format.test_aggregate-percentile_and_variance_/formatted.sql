@@ -5,5 +5,6 @@ SELECT
 FROM (
     SELECT
         CAST(value AS int) AS val
-    FROM plato.Input
+    FROM
+        plato.Input
 );

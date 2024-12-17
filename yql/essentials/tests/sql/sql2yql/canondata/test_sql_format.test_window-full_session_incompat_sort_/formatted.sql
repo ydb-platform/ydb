@@ -1,13 +1,15 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
 -- add non-optional partition key
-$src =
+$src = (
     SELECT
         t.*,
-        user ?? "u0" AS user_nonopt
-    FROM Input
-        AS t;
+        user ?? 'u0' AS user_nonopt
+    FROM
+        Input AS t
+);
 
 SELECT
     user,
@@ -16,7 +18,8 @@ SELECT
     payload,
     AGGREGATE_LIST(TableRow()) OVER w AS full_session,
     COUNT(1) OVER w AS session_len,
-FROM $src
+FROM
+    $src
 WINDOW
     w AS (
         PARTITION BY
@@ -29,4 +32,5 @@ WINDOW
     )
 ORDER BY
     user,
-    payload;
+    payload
+;

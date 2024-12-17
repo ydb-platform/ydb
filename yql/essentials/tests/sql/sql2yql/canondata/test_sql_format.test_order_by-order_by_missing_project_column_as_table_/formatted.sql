@@ -1,4 +1,8 @@
-/* syntax version 1 *//* postgres can not *//* dq can not *//* dqfile can not *//* yt can not */
+/* syntax version 1 */
+/* postgres can not */
+/* dq can not */
+/* dqfile can not */
+/* yt can not */
 $src = [
     <|a: 4, b: 4, date: 4|>,
     <|a: 3, b: 3, date: 3|>,
@@ -8,20 +12,24 @@ $src = [
 
 SELECT
     a
-FROM as_table($src)
+FROM
+    as_table($src)
 ORDER BY
-    date;
+    date
+;
 
 SELECT
     x.a
-FROM as_table($src)
-    AS x
+FROM
+    as_table($src) AS x
 ORDER BY
-    date;
+    date
+;
 
 SELECT
     x.a
-FROM as_table($src)
-    AS x
+FROM
+    as_table($src) AS x
 ORDER BY
-    x.date;
+    x.date
+;

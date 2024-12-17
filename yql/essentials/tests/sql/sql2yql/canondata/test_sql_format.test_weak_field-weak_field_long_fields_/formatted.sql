@@ -3,6 +3,8 @@ USE plato;
 
 --INSERT INTO Output
 SELECT
-    WeakField(email, "String"),
-    WeakField(yandexuid, "Uint64")
-FROM Input;
+    WeakField(email, 'String'),
+    WeakField(yandexuid, 'Uint64')
+FROM
+    Input
+;

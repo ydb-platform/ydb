@@ -327,13 +327,8 @@ class TTableDescription::TImpl {
         }
 
         // ttl settings
-        if (auto ttlSettings = TTtlSettings::DeserializeFromProto(proto.ttl_settings())) {
+        if (auto ttlSettings = TTtlSettings::FromProto(proto.ttl_settings())) {
             TtlSettings_ = std::move(*ttlSettings);
-        }
-
-        // tiering
-        if (proto.tiering().size()) {
-            Tiering_ = proto.tiering();
         }
 
         if (proto.store_type()) {
@@ -407,9 +402,7 @@ public:
         }
 
         for (const auto& shardStats : Proto_.table_stats().partition_stats()) {
-            PartitionStats_.emplace_back(
-                TPartitionStats{shardStats.rows_estimate(), shardStats.store_size(), shardStats.leader_node_id()}
-            );
+            PartitionStats_.emplace_back(TPartitionStats{ shardStats.rows_estimate(), shardStats.store_size(), shardStats.leader_node_id() });
         }
 
         TableStats.Rows = Proto_.table_stats().rows_estimate();
@@ -566,10 +559,6 @@ public:
         return TtlSettings_;
     }
 
-    const TMaybe<TString>& GetTiering() const {
-        return Tiering_;
-    }
-
     EStoreType GetStoreType() const {
         return StoreType_;
     }
@@ -650,7 +639,6 @@ private:
     TVector<TIndexDescription> Indexes_;
     TVector<TChangefeedDescription> Changefeeds_;
     TMaybe<TTtlSettings> TtlSettings_;
-    TMaybe<TString> Tiering_;
     TString Owner_;
     TVector<NScheme::TPermissions> Permissions_;
     TVector<NScheme::TPermissions> EffectivePermissions_;
@@ -717,7 +705,7 @@ TMaybe<TTtlSettings> TTableDescription::GetTtlSettings() const {
 }
 
 TMaybe<TString> TTableDescription::GetTiering() const {
-    return Impl_->GetTiering();
+    return Nothing();
 }
 
 EStoreType TTableDescription::GetStoreType() const {
@@ -940,10 +928,6 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
         ttl->SerializeTo(*request.mutable_ttl_settings());
     }
 
-    if (const auto& tiering = Impl_->GetTiering()) {
-        request.set_tiering(*tiering);
-    }
-
     if (Impl_->GetStoreType() == EStoreType::Column) {
         request.set_store_type(Ydb::Table::StoreType::STORE_TYPE_COLUMN);
     }
@@ -1112,6 +1096,11 @@ TColumnFamilyBuilder& TColumnFamilyBuilder::SetCompression(EColumnFamilyCompress
             Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
             break;
     }
+    return *this;
+}
+
+TColumnFamilyBuilder& TColumnFamilyBuilder::SetKeepInMemory(bool enabled) {
+    Impl_->Proto.set_keep_in_memory(enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
     return *this;
 }
 
@@ -2827,10 +2816,10 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     return ret;
 }
 
-void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
+template <typename TProto>
+void TChangefeedDescription::SerializeCommonFields(TProto& proto) const {
     proto.set_name(Name_);
     proto.set_virtual_timestamps(VirtualTimestamps_);
-    proto.set_initial_scan(InitialScan_);
     proto.set_aws_region(AwsRegion_);
 
     switch (Mode_) {
@@ -2871,12 +2860,35 @@ void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
         SetDuration(*ResolvedTimestamps_, *proto.mutable_resolved_timestamps_interval());
     }
 
+    for (const auto& [key, value] : Attributes_) {
+        (*proto.mutable_attributes())[key] = value;
+    }
+}
+
+void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
+    SerializeCommonFields(proto);
+    proto.set_initial_scan(InitialScan_);
+
     if (RetentionPeriod_) {
         SetDuration(*RetentionPeriod_, *proto.mutable_retention_period());
     }
+}
 
-    for (const auto& [key, value] : Attributes_) {
-        (*proto.mutable_attributes())[key] = value;
+void TChangefeedDescription::SerializeTo(Ydb::Table::ChangefeedDescription& proto) const {
+    SerializeCommonFields(proto);
+
+    switch (State_) {
+    case EChangefeedState::Enabled:
+        proto.set_state(Ydb::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_ENABLED);
+        break;
+    case EChangefeedState::Disabled:
+        proto.set_state(Ydb::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_DISABLED);
+        break;
+    case EChangefeedState::InitialScan:
+        proto.set_state(Ydb::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_INITIAL_SCAN);
+        break;
+    case EChangefeedState::Unknown:
+        break;
     }
 }
 
@@ -2927,13 +2939,13 @@ bool operator!=(const TChangefeedDescription& lhs, const TChangefeedDescription&
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTtlTierSettings::TTtlTierSettings(TDuration evictionDelay, const TAction& action)
-    : EvictAfter_(evictionDelay)
-    , Action_(action) {
-}
+TTtlTierSettings::TTtlTierSettings(TDuration applyAfter, const TAction& action)
+    : ApplyAfter_(applyAfter)
+    , Action_(action)
+{ }
 
 TTtlTierSettings::TTtlTierSettings(const Ydb::Table::TtlTier& tier)
-    : EvictAfter_(TDuration::Seconds(tier.apply_after_seconds())) {
+    : ApplyAfter_(TDuration::Seconds(tier.apply_after_seconds())) {
     switch (tier.action_case()) {
         case Ydb::Table::TtlTier::kDelete:
             Action_ = TTtlDeleteAction();
@@ -2947,7 +2959,7 @@ TTtlTierSettings::TTtlTierSettings(const Ydb::Table::TtlTier& tier)
 }
 
 void TTtlTierSettings::SerializeTo(Ydb::Table::TtlTier& proto) const {
-    proto.set_apply_after_seconds(EvictAfter_.Seconds());
+    proto.set_apply_after_seconds(ApplyAfter_.Seconds());
 
     std::visit(TOverloaded{
             [&proto](const TTtlDeleteAction&) { proto.mutable_delete_(); },
@@ -2959,8 +2971,8 @@ void TTtlTierSettings::SerializeTo(Ydb::Table::TtlTier& proto) const {
         Action_);
 }
 
-TDuration TTtlTierSettings::GetEvictAfter() const {
-    return EvictAfter_;
+TDuration TTtlTierSettings::GetApplyAfter() const {
+    return ApplyAfter_;
 }
 
 const TTtlTierSettings::TAction& TTtlTierSettings::GetAction() const {
@@ -3094,14 +3106,12 @@ const TValueSinceUnixEpochModeSettings& TTtlSettings::GetValueSinceUnixEpoch() c
     return std::get<TValueSinceUnixEpochModeSettings>(Mode_);
 }
 
-std::optional<TTtlSettings> TTtlSettings::DeserializeFromProto(const Ydb::Table::TtlSettings& proto) {
-    TDuration legacyExpireAfter = TDuration::Max();
+std::optional<TTtlSettings> TTtlSettings::FromProto(const Ydb::Table::TtlSettings& proto) {
+    TVector<TTtlTierSettings> tiers;
     for (const auto& tier : proto.tiers()) {
-        if (tier.has_delete_()) {
-            legacyExpireAfter = TDuration::Seconds(tier.apply_after_seconds());
-            break;
-        }
+        tiers.emplace_back(tier);
     }
+    TDuration legacyExpireAfter = GetExpireAfterFrom(tiers).value_or(TDuration::Max());
 
     switch(proto.mode_case()) {
     case Ydb::Table::TtlSettings::kDateTypeColumn:
@@ -3109,9 +3119,12 @@ std::optional<TTtlSettings> TTtlSettings::DeserializeFromProto(const Ydb::Table:
     case Ydb::Table::TtlSettings::kValueSinceUnixEpoch:
         return TTtlSettings(proto.value_since_unix_epoch(), proto.run_interval_seconds());
     case Ydb::Table::TtlSettings::kDateTypeColumnV1:
-        return TTtlSettings(TDateTypeColumnModeSettings(proto.date_type_column_v1().column_name(), legacyExpireAfter), proto.run_interval_seconds());
+        return TTtlSettings(
+            TDateTypeColumnModeSettings(proto.date_type_column_v1().column_name(), legacyExpireAfter), tiers, proto.run_interval_seconds());
     case Ydb::Table::TtlSettings::kValueSinceUnixEpochV1:
-        return TTtlSettings(TValueSinceUnixEpochModeSettings(proto.value_since_unix_epoch_v1().column_name(), TProtoAccessor::FromProto(proto.value_since_unix_epoch_v1().column_unit()), legacyExpireAfter), proto.run_interval_seconds());
+        return TTtlSettings(TValueSinceUnixEpochModeSettings(proto.value_since_unix_epoch_v1().column_name(),
+                                TProtoAccessor::FromProto(proto.value_since_unix_epoch_v1().column_unit()), legacyExpireAfter),
+            tiers, proto.run_interval_seconds());
     case Ydb::Table::TtlSettings::MODE_NOT_SET:
         return std::nullopt;
         break;
@@ -3119,17 +3132,29 @@ std::optional<TTtlSettings> TTtlSettings::DeserializeFromProto(const Ydb::Table:
 }
 
 void TTtlSettings::SerializeTo(Ydb::Table::TtlSettings& proto) const {
-    switch (GetMode()) {
-    case EMode::DateTypeColumn:
-        GetDateTypeColumn().SerializeTo(*proto.mutable_date_type_column_v1());
-        break;
-    case EMode::ValueSinceUnixEpoch:
-        GetValueSinceUnixEpoch().SerializeTo(*proto.mutable_value_since_unix_epoch_v1());
-        break;
-    }
+    if (Tiers_.size() == 1 && std::holds_alternative<TTtlDeleteAction>(Tiers_.back().GetAction())) {
+        // serialize DELETE-only TTL to legacy format for backwards-compatibility
+        switch (GetMode()) {
+        case EMode::DateTypeColumn:
+            GetDateTypeColumn().SerializeTo(*proto.mutable_date_type_column());
+            break;
+        case EMode::ValueSinceUnixEpoch:
+            GetValueSinceUnixEpoch().SerializeTo(*proto.mutable_value_since_unix_epoch());
+            break;
+        }
+    } else {
+        switch (GetMode()) {
+        case EMode::DateTypeColumn:
+            GetDateTypeColumn().SerializeTo(*proto.mutable_date_type_column_v1());
+            break;
+        case EMode::ValueSinceUnixEpoch:
+            GetValueSinceUnixEpoch().SerializeTo(*proto.mutable_value_since_unix_epoch_v1());
+            break;
+        }
 
-    for (const auto& tier : Tiers_) {
-        tier.SerializeTo(*proto.add_tiers());
+        for (const auto& tier : Tiers_) {
+            tier.SerializeTo(*proto.add_tiers());
+        }
     }
 
     if (RunInterval_) {
@@ -3161,13 +3186,17 @@ std::optional<TDuration> TTtlSettings::GetExpireAfter() const {
 std::optional<TDuration> TTtlSettings::GetExpireAfterFrom(const TVector<TTtlTierSettings>& tiers) {
     for (const auto& tier : tiers) {
         if (std::holds_alternative<TTtlDeleteAction>(tier.GetAction())) {
-            return tier.GetEvictAfter();
+            return tier.GetApplyAfter();
         }
     }
     return std::nullopt;
 }
 
-TTtlSettings::TTtlSettings(TMode mode, ui32 runIntervalSeconds) : Mode_(std::move(mode)), RunInterval_(TDuration::Seconds(runIntervalSeconds)) {}
+TTtlSettings::TTtlSettings(TMode mode, const TVector<TTtlTierSettings>& tiers, ui32 runIntervalSeconds)
+    : Mode_(std::move(mode))
+    , Tiers_(tiers)
+    , RunInterval_(TDuration::Seconds(runIntervalSeconds))
+{}
 
 TAlterTtlSettings::EAction TAlterTtlSettings::GetAction() const {
     return static_cast<EAction>(Action_.index());

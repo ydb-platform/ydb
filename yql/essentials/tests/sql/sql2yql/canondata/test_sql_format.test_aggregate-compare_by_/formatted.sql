@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     min_by(sub, key) AS min,
     max_by(value, sub) AS max,
@@ -11,5 +12,6 @@ FROM (
         Unwrap(CAST(subkey AS int)) AS sub,
         value AS value,
         CAST(value AS int) AS empty
-    FROM plato.Input
+    FROM
+        plato.Input
 );

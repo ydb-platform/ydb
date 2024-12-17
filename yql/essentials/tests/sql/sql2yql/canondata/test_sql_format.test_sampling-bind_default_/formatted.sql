@@ -1,12 +1,18 @@
-/* syntax version 1 *//* postgres can not *//* custom check: len(yt_res_yson[0]['Write'][0]['Data']) < 10 */
+/* syntax version 1 */
+/* postgres can not */
+/* custom check: len(yt_res_yson[0]['Write'][0]['Data']) < 10 */
 USE plato;
 
-$var =
+$var = (
     SELECT
         *
-    FROM Input;
+    FROM
+        Input
+);
 
 SELECT
     *
-FROM $var
-    TABLESAMPLE BERNOULLI (50);
+FROM
+    $var
+    TABLESAMPLE BERNOULLI (50)
+;

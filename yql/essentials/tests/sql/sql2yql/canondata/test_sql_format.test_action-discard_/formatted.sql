@@ -1,18 +1,23 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 DEFINE SUBQUERY $a() AS
-    $_x =
+    $_x = (
         SELECT
-            1;
+            1
+    );
 
     DISCARD SELECT
-        ensure(1, TRUE);
+        ensure(1, TRUE)
+    ;
 
     SELECT
-        2;
+        2
+    ;
 
-    $_y =
+    $_y = (
         SELECT
-            2;
+            2
+    );
 END DEFINE;
 
 PROCESS $a();
@@ -30,7 +35,8 @@ END DEFINE;
 
 SELECT
     *
-FROM $b()
+FROM
+    $b()
 ORDER BY
     b
 LIMIT 1;
@@ -52,7 +58,8 @@ END DEFINE;
 
 SELECT
     *
-FROM $c()
+FROM
+    $c()
 ORDER BY
     b
 LIMIT 1;

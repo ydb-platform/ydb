@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     user,
     ts,
@@ -6,7 +7,8 @@ SELECT
     SessionStart() OVER w AS ss,
     ListSort(AGGREGATE_LIST(ts) OVER w) AS ts_session,
     COUNT(1) OVER w AS session_len,
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w AS (
         PARTITION BY
@@ -20,4 +22,5 @@ WINDOW
     )
 ORDER BY
     user,
-    ts;
+    ts
+;

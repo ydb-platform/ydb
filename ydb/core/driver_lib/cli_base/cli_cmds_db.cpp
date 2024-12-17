@@ -273,6 +273,9 @@ public:
         case NKikimrSchemeOp::EPathTypeReplication:
             type = "<replication>";
             break;
+        case NKikimrSchemeOp::EPathTypeTransfer:
+            type = "<transfer>";
+            break;
         case NKikimrSchemeOp::EPathTypePersQueueGroup:
             type = "<pq group>";
             break;

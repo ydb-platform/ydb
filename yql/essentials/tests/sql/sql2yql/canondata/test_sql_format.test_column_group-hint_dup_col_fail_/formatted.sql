@@ -2,8 +2,9 @@
 USE plato;
 
 -- duplicate column
-INSERT INTO Output
-    WITH column_groups = "{g1=[a;a;b];def=#}"
+INSERT INTO Output WITH column_groups = '{g1=[a;a;b];def=#}'
 SELECT
     *
-FROM Input;
+FROM
+    Input
+;

@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
 SELECT
@@ -9,16 +10,19 @@ FROM (
         value,
         TablePath() AS path,
         TableRecordIndex() AS record
-    FROM Input
+    FROM
+        Input
     UNION ALL
     SELECT
         key,
         value,
-        "" AS path,
+        '' AS path,
         TableRecordIndex() AS record
-    FROM Input
+    FROM
+        Input
 )
 ORDER BY
     key,
     path,
-    record;
+    record
+;

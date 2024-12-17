@@ -1,13 +1,14 @@
-/* postgres can not */-- not supported on windows
-$value = "1000000000000";
+/* postgres can not */
+-- not supported on windows
+$value = '1000000000000';
 $negative = -1000000000000;
-$longint = YQL::StrictFromString($value, AsAtom("Decimal"), AsAtom("32"), AsAtom("0"));
+$longint = YQL::StrictFromString($value, AsAtom('Decimal'), AsAtom('32'), AsAtom('0'));
 $negative_longint = CAST($negative AS Decimal (32, 0));
-$add = $longint + CAST("1111111111111111111111111111111" AS Decimal (32, 0));
+$add = $longint + CAST('1111111111111111111111111111111' AS Decimal (32, 0));
 $div = $longint / CAST(1111 AS Decimal (32, 0));
 $mod = $longint % CAST(1111 AS Decimal (32, 0));
 $mul = $longint * CAST(333333333333333333 AS Decimal (32, 0));
-$sub = $longint - CAST("1111111111111111111111111111111" AS Decimal (32, 0));
+$sub = $longint - CAST('1111111111111111111111111111111' AS Decimal (32, 0));
 
 SELECT
     $longint AS binary,
@@ -19,4 +20,5 @@ SELECT
     CAST($mul AS String) AS mul,
     CAST($sub AS String) AS sub,
     $longint == YQL::Abs($negative_longint) AS eq,
-    $div <= $longint AS cmp;
+    $div <= $longint AS cmp
+;

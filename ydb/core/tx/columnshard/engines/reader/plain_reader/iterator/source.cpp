@@ -178,7 +178,7 @@ void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& in
             constructor.Add(false, p.GetRecordsCount());
         }
     }
-    AFL_VERIFY(constructor.Size() == Portion->GetRecordsCount());
+    AFL_VERIFY(constructor.GetRecordsCountVerified() == Portion->GetRecordsCount());
     if (constructor.IsTotalDenyFilter()) {
         StageData->AddFilter(NArrow::TColumnFilter::BuildDenyFilter());
     } else if (constructor.IsTotalAllowFilter()) {
@@ -237,7 +237,7 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<IDataSour
     AFL_VERIFY(!StageData->HasPortionAccessor());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
 
-    std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>();
+    std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>("PLAIN::" + step.GetName());
     request->AddPortion(Portion);
     request->RegisterSubscriber(std::make_shared<TPortionAccessorFetchingSubscriber>(step, sourcePtr));
     GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData(request);
@@ -273,8 +273,8 @@ void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>&
         AFL_VERIFY(GetStageData().GetBlobs().size() == 1);
         auto bData = MutableStageData().ExtractBlob(GetStageData().GetBlobs().begin()->first);
         auto schema = GetContext()->GetReadMetadata()->GetBlobSchema(CommittedBlob.GetSchemaVersion());
-        auto rBatch = NArrow::DeserializeBatch(bData, std::make_shared<arrow::Schema>(CommittedBlob.GetSchemaSubset().Apply(schema->fields())));
-        AFL_VERIFY(rBatch)("schema", schema->ToString());
+        auto rBatch = NArrow::DeserializeBatch(bData, std::make_shared<arrow::Schema>(CommittedBlob.GetSchemaSubset().Apply(schema.begin(), schema.end())));
+        AFL_VERIFY(rBatch)("schema", schema.ToString());
         auto batch = std::make_shared<NArrow::TGeneralContainer>(rBatch);
         std::set<ui32> columnIdsToDelete = batchSchema->GetColumnIdsToDelete(resultSchema);
         if (!columnIdsToDelete.empty()) {

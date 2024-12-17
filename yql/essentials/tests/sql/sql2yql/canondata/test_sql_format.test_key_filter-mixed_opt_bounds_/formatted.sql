@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 $makeOpt = Python::makeOpt(
     Callable<(String, Bool) -> String?>,
     @@
@@ -12,10 +13,16 @@ def makeOpt(arg, flag):
 
 SELECT
     *
-FROM plato.Input
-WHERE key >= $makeOpt("030", TRUE) AND key <= "100";
+FROM
+    plato.Input
+WHERE
+    key >= $makeOpt('030', TRUE) AND key <= '100'
+;
 
 SELECT
     *
-FROM plato.Input
-WHERE key >= $makeOpt("030", FALSE) AND key <= "100";
+FROM
+    plato.Input
+WHERE
+    key >= $makeOpt('030', FALSE) AND key <= '100'
+;

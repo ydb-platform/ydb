@@ -2,8 +2,8 @@
 SELECT
     i.key,
     i.subkey
-FROM plato.Input
-    AS i
+FROM
+    plato.Input AS i
 ORDER BY
     CAST(subkey AS uint32),
     CAST(i.key AS uint32) * CAST(i.subkey AS uint32) DESC

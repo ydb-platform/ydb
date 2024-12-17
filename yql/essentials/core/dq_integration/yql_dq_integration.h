@@ -21,7 +21,6 @@ class TJsonValue;
 
 namespace NYql {
 
-struct TDqSettings;
 class TTransformationPipeline;
 
 namespace NCommon {
@@ -45,12 +44,26 @@ class IDqIntegration {
 public:
     virtual ~IDqIntegration() {}
 
-    virtual ui64 Partition(const TDqSettings& config, size_t maxPartitions, const TExprNode& node,
-        TVector<TString>& partitions, TString* clusterName, TExprContext& ctx, bool canFallback) = 0;
+    struct TPartitionSettings {
+        TMaybe<ui64> DataSizePerJob;
+        size_t MaxPartitions = 0;
+        TMaybe<bool> EnableComputeActor;
+        bool CanFallback = false;
+    };
+
+    virtual ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString* clusterName, TExprContext& ctx, const TPartitionSettings& settings) = 0;
     virtual bool CheckPragmas(const TExprNode& node, TExprContext& ctx, bool skipIssues = false) = 0;
     virtual bool CanRead(const TExprNode& read, TExprContext& ctx, bool skipIssues = true) = 0;
     virtual TMaybe<ui64> EstimateReadSize(ui64 dataSizePerJob, ui32 maxTasksPerStage, const TVector<const TExprNode*>& nodes, TExprContext& ctx) = 0;
-    virtual TExprNode::TPtr WrapRead(const TDqSettings& config, const TExprNode::TPtr& read, TExprContext& ctx) = 0;
+
+    struct TWrapReadSettings {
+        TMaybe<TString> WatermarksMode;
+        TMaybe<ui64> WatermarksGranularityMs;
+        TMaybe<ui64> WatermarksLateArrivalDelayMs;
+        TMaybe<bool> WatermarksEnableIdlePartitions;
+    };
+
+    virtual TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& settings) = 0;
     virtual TMaybe<TOptimizerStatistics> ReadStatistics(const TExprNode::TPtr& readWrap, TExprContext& ctx) = 0;
     virtual TExprNode::TPtr RecaptureWrite(const TExprNode::TPtr& write, TExprContext& ctx) = 0;
 
@@ -77,6 +90,7 @@ public:
     virtual bool FillSinkPlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) = 0;
     // Called to configure DQ peephole
     virtual void ConfigurePeepholePipeline(bool beforeDqTransforms, const THashMap<TString, TString>& params, TTransformationPipeline* pipeline) = 0;
+    virtual void NotifyDqTimeout() = 0;
 };
 
 std::unordered_set<IDqIntegration*> GetUniqueIntegrations(const TTypeAnnotationContext& typesCtx);

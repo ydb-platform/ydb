@@ -20,7 +20,6 @@
 #include <util/string/escape.h>
 #include <util/string/printf.h>
 
-
 using namespace NActors;
 using namespace NKikimrClient;
 
@@ -444,7 +443,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
     LogSession(ctx);
 
     if (Request->GetSerializedToken().empty()) { // session without auth
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             Request->ReplyUnauthenticated("Unauthenticated access is forbidden, please provide credentials");
             Die(ctx);
             return;
@@ -631,7 +630,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
     SetMeteringMode(meteringMode);
 
     if (Request->GetSerializedToken().empty()) { // session without auth
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             Request->ReplyUnauthenticated("Unauthenticated access is forbidden, please provide credentials");
             Die(ctx);
             return;
@@ -992,7 +991,7 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
 
     ui32 partitionCmdWriteResultIndex = 0;
     // TODO: Send single batch write response for all user write requests up to some max size/count
-    for (const auto& userWriteRequest : writeRequest->UserWriteRequests) {
+    for (const auto& [userWriteRequest] : writeRequest->UserWriteRequests) {
         TServerMessage result;
         result.set_status(Ydb::StatusIds::SUCCESS);
 
@@ -1132,7 +1131,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
     } else if constexpr (!UseMigrationProtocol) {
         Y_ABORT_UNLESS(!PendingRequests.back()->UserWriteRequests.empty());
 
-        auto& last = PendingRequests.back()->UserWriteRequests.back()->Request.write_request();
+        auto& last = PendingRequests.back()->UserWriteRequests.back().Write->Request.write_request();
 
         if (writeRequest.has_tx()) {
             if (last.has_tx()) {
@@ -1206,7 +1205,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         }
     }
 
-    pendingRequest->UserWriteRequests.push_back(std::move(ev));
+    pendingRequest->UserWriteRequests.emplace_back(std::move(ev));
     pendingRequest->ByteSize = request.ByteSize();
 
     auto msgMetaEnabled = AppData(ctx)->FeatureFlags.GetEnableTopicMessageMeta();
@@ -1247,7 +1246,7 @@ void TWriteSessionActor<UseMigrationProtocol>::SendWriteRequest(typename TWriteR
     Y_ABORT_UNLESS(request->PartitionWriteRequest);
 
     i64 diff = 0;
-    for (const auto& w : request->UserWriteRequests) {
+    for (const auto& [w] : request->UserWriteRequests) {
         diff -= w->Request.ByteSize();
     }
 
@@ -1285,7 +1284,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvUpdateToken::T
     }
 
     const auto& token = ev->Get()->Request.update_token_request().token();
-    if (token == Auth || (token.empty() && !AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol())) {
+    if (token == Auth || (token.empty() && !(AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()))) {
         // Got same token or empty token with no non-empty token requirement, do not trigger any checks
         TServerMessage serverMessage;
         serverMessage.set_status(Ydb::StatusIds::SUCCESS);

@@ -1,3 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
-    FormatType(TypeHandle(TypeOf(1)));
+    FormatType(TypeHandle(TypeOf(1)))
+;

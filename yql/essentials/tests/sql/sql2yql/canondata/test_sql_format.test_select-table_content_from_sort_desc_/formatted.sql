@@ -1,21 +1,29 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
 
-INSERT INTO @tmp
-    WITH truncate
+INSERT INTO @tmp WITH truncate
 SELECT
     key
-FROM Input
+FROM
+    Input
 ORDER BY
-    key DESC;
+    key DESC
+;
+
 COMMIT;
 
-$key =
+$key = (
     SELECT
         key
-    FROM @tmp;
+    FROM
+        @tmp
+);
 
 SELECT
     *
-FROM Input
-WHERE key = $key;
+FROM
+    Input
+WHERE
+    key == $key
+;

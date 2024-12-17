@@ -3,22 +3,25 @@ USE plato;
 
 SELECT
     *
-FROM Input1
-    WITH SCHEMA Struct<key: String, value: String>
+FROM
+    Input1 WITH SCHEMA Struct<key: String, value: String>
 ORDER BY
-    key;
+    key
+;
 
 SELECT
     *
-FROM Input1
-    WITH SCHEMA Struct<key: String?, subkey: String>
+FROM
+    Input1 WITH SCHEMA Struct<key: String?, subkey: String>
 ORDER BY
-    key;
+    key
+;
 
 -- should reset sort
 SELECT
     *
-FROM Input2
-    WITH SCHEMA Struct<key: String, subkey: String>
+FROM
+    Input2 WITH SCHEMA Struct<key: String, subkey: String>
 ORDER BY
-    key DESC;
+    key DESC
+;

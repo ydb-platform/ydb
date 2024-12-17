@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
 SELECT
@@ -8,9 +9,11 @@ SELECT
             CAST(TableName() AS Utf8)
     ),
     CAST(TableName() AS Utf8),
-FROM Input
+FROM
+    Input
 ORDER BY
-    value;
+    value
+;
 
 SELECT
     value,
@@ -20,6 +23,8 @@ SELECT
         ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
     ),
     CAST(TableName() AS Utf8),
-FROM Input
+FROM
+    Input
 ORDER BY
-    value;
+    value
+;

@@ -1,5 +1,6 @@
-/* syntax version 1 *//* postgres can not */
-$in =
+/* syntax version 1 */
+/* postgres can not */
+$in = (
     SELECT
         value,
         SUM(unwrap(CAST(subkey AS uint32))) OVER w1 AS sum1,
@@ -9,8 +10,10 @@ $in =
     FROM (
         SELECT
             *
-        FROM plato.Input
-        WHERE key = '1'
+        FROM
+            plato.Input
+        WHERE
+            key == '1'
     )
     WINDOW
         w1 AS (
@@ -24,12 +27,15 @@ $in =
             ORDER BY
                 value DESC
             ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-        );
+        )
+);
 
 SELECT
     value,
     dvalue_lead1,
     value_lag2
-FROM $in
+FROM
+    $in
 ORDER BY
-    value;
+    value
+;

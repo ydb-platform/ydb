@@ -1,4 +1,5 @@
-/* syntax version 1 *//* do not execute */
+/* syntax version 1 */
+/* do not execute */
 DECLARE $c_void AS Void;
 DECLARE $c_unit AS Unit;
 DECLARE $c_bool AS Bool;
@@ -39,7 +40,7 @@ DECLARE $c_optional4 AS optional<string>?;
 DECLARE $c_tuple AS Tuple<bool, uint64>;
 DECLARE $c_struct AS Struct<foo: string, 'bar': float>;
 DECLARE $c_variant1 AS Variant<int, bool>;
-DECLARE $c_variant2 AS Variant<foo: int, "bar": bool>;
+DECLARE $c_variant2 AS Variant<foo: int, 'bar': bool>;
 DECLARE $c_list0 AS List<Yson>;
 DECLARE $c_list1 AS List<$c_yson>;
 DECLARE $c_stream AS Stream<Date>;

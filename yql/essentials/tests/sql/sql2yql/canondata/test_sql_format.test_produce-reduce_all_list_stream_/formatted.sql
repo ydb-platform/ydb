@@ -1,5 +1,7 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
+
 $udfScript = @@
 import functools
 from yql import TYieldIteration
@@ -16,6 +18,7 @@ def Sum(stream):
         yield {"sumByAllVal":functools.reduce(lambda x,y: x + y, sums, 0)}
     return Gen(stream)
 @@;
+
 $udf = Python3::Sum(Callable<(Stream<Tuple<String, Stream<Struct<key: String, subkey: String, value: String>>>>) -> Stream<Struct<sumByAllVal: Uint32>>>, $udfScript);
 
 --INSERT INTO Output

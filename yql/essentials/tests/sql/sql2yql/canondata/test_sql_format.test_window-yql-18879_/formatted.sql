@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $t1 = AsList(
     AsStruct(100 AS itemid, 20 AS duration, 2 AS start_shows, 1 AS day),
     AsStruct(1001 AS itemid, 10 AS duration, 2 AS start_shows, 1 AS day),
@@ -22,7 +23,9 @@ SELECT
         PARTITION BY
             day
     ) AS col2
-FROM AS_TABLE($t1);
+FROM
+    AS_TABLE($t1)
+;
 
 SELECT
     CUME_DIST() OVER (
@@ -35,7 +38,9 @@ SELECT
         PARTITION BY
             day
     ) AS col2
-FROM AS_TABLE($t1);
+FROM
+    AS_TABLE($t1)
+;
 
 SELECT
     NTILE(2) OVER (
@@ -48,4 +53,6 @@ SELECT
         PARTITION BY
             day
     ) AS col2
-FROM AS_TABLE($t1);
+FROM
+    AS_TABLE($t1)
+;

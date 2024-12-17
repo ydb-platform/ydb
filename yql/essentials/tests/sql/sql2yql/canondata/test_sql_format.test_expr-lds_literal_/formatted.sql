@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     [],
     [,],
@@ -7,4 +8,5 @@ SELECT
     {},
     {,},
     {1, 1,},
-    {"a": 1, "a": 2};
+    {'a': 1, 'a': 2}
+;

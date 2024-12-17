@@ -407,10 +407,6 @@ namespace NActors {
             poolStats.DecreasingThreadsByHoggishState = stats.DecreasingThreadsByHoggishState;
             poolStats.DecreasingThreadsByExchange = stats.DecreasingThreadsByExchange;
             poolStats.PotentialMaxThreadCount = stats.PotentialMaxThreadCount;
-            poolStats.MaxCpuUs = stats.MaxCpuUs;
-            poolStats.MinCpuUs = stats.MinCpuUs;
-            poolStats.MaxElapsedUs = stats.MaxElapsedUs;
-            poolStats.MinElapsedUs = stats.MinElapsedUs;
         }
 
         statsCopy.resize(MaxFullThreadCount + 1);
@@ -429,7 +425,7 @@ namespace NActors {
     void TBasicExecutorPool::GetExecutorPoolState(TExecutorPoolState &poolState) const {
         if (Harmonizer) {
             TPoolHarmonizerStats stats = Harmonizer->GetPoolStats(PoolId);
-            poolState.UsedCpu = stats.AvgElapsedUs;
+            poolState.ElapsedCpu = stats.AvgElapsedCpu;
             poolState.PossibleMaxLimit = stats.PotentialMaxThreadCount;
         } else {
             poolState.PossibleMaxLimit = poolState.MaxLimit;

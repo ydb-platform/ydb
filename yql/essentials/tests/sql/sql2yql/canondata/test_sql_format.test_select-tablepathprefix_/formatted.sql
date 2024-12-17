@@ -1,16 +1,23 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
-PRAGMA TablePathPrefix = "//";
-$input = "In" || "put";
+
+PRAGMA TablePathPrefix = '//';
+
+$input = 'In' || 'put';
 
 SELECT
     *
-FROM `Input`
+FROM
+    `Input`
 ORDER BY
-    subkey;
+    subkey
+;
 
 SELECT
     *
-FROM $input
+FROM
+    $input
 ORDER BY
-    subkey;
+    subkey
+;

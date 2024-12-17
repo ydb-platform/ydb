@@ -1,60 +1,79 @@
 USE plato;
-PRAGMA yt.ColumnGroupMode = "perusage";
 
-$s1 =
+PRAGMA yt.ColumnGroupMode = 'perusage';
+
+$s1 = (
     SELECT
         *
-    FROM Input
-    WHERE a != "";
+    FROM
+        Input
+    WHERE
+        a != ''
+);
 
-$s2 =
+$s2 = (
     SELECT
         *
-    FROM Input
-    WHERE a > "a1";
+    FROM
+        Input
+    WHERE
+        a > 'a1'
+);
 
-INSERT INTO @a
-    WITH column_groups = "{a=#}"
+INSERT INTO @a WITH column_groups = '{a=#}'
 SELECT
     *
-FROM $s1;
+FROM
+    $s1
+;
 
 INSERT INTO @b
 SELECT
     *
-FROM $s1;
+FROM
+    $s1
+;
 
 INSERT INTO @c
 SELECT
     *
-FROM $s1;
+FROM
+    $s1
+;
 
-INSERT INTO Output
-    WITH column_groups = "{a=#}"
+INSERT INTO Output WITH column_groups = '{a=#}'
 SELECT
     *
-FROM $s1;
+FROM
+    $s1
+;
+
 COMMIT;
 
-INSERT INTO @a
-    WITH column_groups = "{a=#}"
+INSERT INTO @a WITH column_groups = '{a=#}'
 SELECT
     *
-FROM $s2;
+FROM
+    $s2
+;
 
 INSERT INTO @b
 SELECT
     *
-FROM $s2;
+FROM
+    $s2
+;
 
-INSERT INTO @c
-    WITH column_groups = "{default=#}"
+INSERT INTO @c WITH column_groups = '{default=#}'
 SELECT
     *
-FROM $s2;
+FROM
+    $s2
+;
 
-INSERT INTO Output
-    WITH column_groups = "{a=#}"
+INSERT INTO Output WITH column_groups = '{a=#}'
 SELECT
     *
-FROM $s2;
+FROM
+    $s2
+;

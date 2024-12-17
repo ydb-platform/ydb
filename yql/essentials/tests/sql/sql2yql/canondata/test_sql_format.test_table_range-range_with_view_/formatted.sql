@@ -1,4 +1,7 @@
-/* postgres can not *//* kikimr can not - range not supported */
+/* postgres can not */
+/* kikimr can not - range not supported */
 SELECT
     *
-FROM plato.range("", "InputA", "InputD");
+FROM
+    plato.range('', 'InputA', 'InputD')
+;

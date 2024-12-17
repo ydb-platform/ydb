@@ -146,6 +146,7 @@ namespace NYdb::NTopic::NTests {
                         UNIT_ASSERT_GT(consumerStats->GetCommittedOffset(), 0);
                         UNIT_ASSERT_GE(consumerStats->GetReadSessionId(), 0);
                         UNIT_ASSERT_VALUES_EQUAL(consumerStats->GetReaderName(), "");
+                        UNIT_ASSERT_GE(consumerStats->GetMaxWriteTimeLag(), TDuration::Seconds(100));
                     } else {
                         UNIT_ASSERT_VALUES_EQUAL(stats->GetStartOffset(), 0);
                         UNIT_ASSERT_VALUES_EQUAL(consumerStats->GetLastReadOffset(), 0);
@@ -284,7 +285,7 @@ namespace NYdb::NTopic::NTests {
                 std::string message(32_MB, 'x');
 
                 for(size_t i = 0; i < messagesCount; ++i) {
-                    UNIT_ASSERT(writeSession->Write(message));
+                    UNIT_ASSERT(writeSession->Write(message, {}, TInstant::Now() - TDuration::Seconds(100)));
                 }
                 writeSession->Close();
             }
@@ -326,7 +327,21 @@ namespace NYdb::NTopic::NTests {
                 }
             }
 
+            // Additional write
+            {
+                auto writeSettings = TWriteSessionSettings().Path(TEST_TOPIC).MessageGroupId(TEST_MESSAGE_GROUP_ID).Codec(ECodec::RAW);
+                auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
+                std::string message(32, 'x');
+
+                for(size_t i = 0; i < messagesCount; ++i) {
+                    UNIT_ASSERT(writeSession->Write(message));
+                }
+                writeSession->Close();
+            }
+            Sleep(TDuration::Seconds(3));
+
             // Get non-empty description
+
             DescribeTopic(setup, client, true, true, false, false);
             DescribeConsumer(setup, client, true, true, false, false);
             DescribePartition(setup, client, true, true, false, false);
@@ -351,6 +366,8 @@ namespace NYdb::NTopic::NTests {
             Cerr << std::format("=== existingTopic={} allowUpdateRow={} allowDescribeSchema={} authToken={}\n",
                                 existingTopic, allowUpdateRow, allowDescribeSchema, std::string(authToken));
 
+            setup.GetServer().AnnoyingClient->GrantConnect(authToken);
+
             auto driverConfig = setup.MakeDriverConfig().SetAuthToken(authToken);
             auto client = TTopicClient(TDriver(driverConfig));
             auto settings = TDescribePartitionSettings().IncludeLocation(true);
@@ -365,7 +382,14 @@ namespace NYdb::NTopic::NTests {
             }
             setup.GetServer().AnnoyingClient->ModifyACL("/Root", TEST_TOPIC, acl.SerializeAsString());
 
-            return client.DescribePartition(existingTopic ? TEST_TOPIC : "bad-topic", testPartitionId, settings).GetValueSync();
+            while (true) { 
+                TDescribePartitionResult result = client.DescribePartition(existingTopic ? TEST_TOPIC : "bad-topic", testPartitionId, settings).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS || result.GetStatus() == EStatus::SCHEME_ERROR || result.GetStatus() == EStatus::UNAUTHORIZED, result.GetIssues());
+                // Connect access may appear later
+                if (result.GetStatus() != EStatus::UNAUTHORIZED)
+                    return result;
+                Sleep(TDuration::Seconds(1));
+            }
         }
 
         Y_UNIT_TEST(DescribePartitionPermissions) {

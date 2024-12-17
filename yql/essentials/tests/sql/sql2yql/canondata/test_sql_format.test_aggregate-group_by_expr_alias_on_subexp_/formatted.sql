@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
 --INSERT INTO Output
@@ -9,11 +10,13 @@ SELECT
 FROM (
     SELECT
         *
-    FROM Input
+    FROM
+        Input
 )
 GROUP BY
     key,
     CAST(subkey AS uint32) % 2 AS sk
 ORDER BY
     key,
-    sk;
+    sk
+;

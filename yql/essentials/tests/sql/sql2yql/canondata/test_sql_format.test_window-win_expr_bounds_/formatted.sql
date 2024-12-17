@@ -1,12 +1,15 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
+
 DECLARE $begin AS Int32;
 
 SELECT
     key,
     subkey,
     COUNT(*) OVER w AS cnt
-FROM Input4
+FROM
+    Input4
 WINDOW
     w AS (
         ORDER BY
@@ -16,4 +19,5 @@ WINDOW
     )
 ORDER BY
     key,
-    subkey;
+    subkey
+;

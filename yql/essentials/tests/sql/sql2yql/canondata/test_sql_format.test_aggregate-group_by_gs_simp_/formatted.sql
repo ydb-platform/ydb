@@ -1,15 +1,19 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     sum(length(value)),
     key,
     subkey,
     grouping(key, subkey)
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     GROUPING SETS (
         (key, subkey),
         key,
-        subkey)
+        subkey
+    )
 ORDER BY
     key,
-    subkey;
+    subkey
+;

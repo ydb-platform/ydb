@@ -1,18 +1,21 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $data_deep = (
     SELECT
         mod,
         aggregate_list(key) AS lk,
         aggregate_list(subkey) AS ls,
         aggregate_list(value) AS lv
-    FROM plato.Input
+    FROM
+        plato.Input
     GROUP BY
         CAST(key AS uint32) % 10 AS mod
 );
 
 SELECT
     *
-FROM $data_deep
+FROM
+    $data_deep
     FLATTEN BY (
         lk AS ik,
         lv
@@ -20,4 +23,5 @@ FROM $data_deep
 ORDER BY
     ik,
     lv,
-    mod;
+    mod
+;

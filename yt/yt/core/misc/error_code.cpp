@@ -2,8 +2,6 @@
 
 #include <yt/yt/core/logging/log.h>
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <library/cpp/yt/misc/global.h>
 
 #include <util/string/split.h>

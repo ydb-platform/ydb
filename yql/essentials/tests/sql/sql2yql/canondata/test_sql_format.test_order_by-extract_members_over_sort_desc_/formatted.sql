@@ -1,10 +1,12 @@
-/* postgres can not *//* multirun can not */
+/* postgres can not */
+/* multirun can not */
 USE plato;
 
 $top = (
     SELECT
         *
-    FROM Input
+    FROM
+        Input
     ORDER BY
         value DESC
     LIMIT 100
@@ -14,10 +16,14 @@ INSERT INTO Output
 SELECT
     key,
     value
-FROM $top
+FROM
+    $top
 ORDER BY
-    value DESC;
+    value DESC
+;
 
 SELECT
     *
-FROM $top;
+FROM
+    $top
+;

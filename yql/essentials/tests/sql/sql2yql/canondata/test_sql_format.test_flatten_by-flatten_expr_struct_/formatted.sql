@@ -1,7 +1,8 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
-$data =
+$data = (
     SELECT
         1 AS n,
         AsList(4, 5, 6) AS l,
@@ -10,45 +11,52 @@ $data =
     SELECT
         2 AS n,
         AsList(4, 5) AS l,
-        AsStruct(20 AS n, AsList(1, 2) AS l) AS s;
+        AsStruct(20 AS n, AsList(1, 2) AS l) AS s
+);
 
 SELECT
     n,
     l
-FROM $data
-    FLATTEN BY
-        s.l AS l
+FROM
+    $data
+    FLATTEN BY s.l AS l
 ORDER BY
     n,
-    l;
+    l
+;
 
 SELECT
     n,
     l
-FROM $data
+FROM
+    $data
     FLATTEN BY (
         s.l AS l
     )
 ORDER BY
     n,
-    l;
+    l
+;
 
 SELECT
     n,
     l
-FROM $data
+FROM
+    $data
     FLATTEN BY (
         ListExtend(s.l, AsList(100)) AS l
     )
 ORDER BY
     n,
-    l;
+    l
+;
 
 SELECT
     n,
     l,
     sl
-FROM $data
+FROM
+    $data
     FLATTEN BY (
         l,
         s.l AS sl
@@ -56,4 +64,5 @@ FROM $data
 ORDER BY
     n,
     l,
-    sl;
+    sl
+;

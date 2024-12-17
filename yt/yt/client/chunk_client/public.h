@@ -91,7 +91,7 @@ YT_DEFINE_ERROR_ENUM(
     ((ReadMetaTimeout)                       (763))
 );
 
-DEFINE_ENUM(EUpdateMode,
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EUpdateMode, i8,
     ((None)                     (0))
     ((Append)                   (1))
     ((Overwrite)                (2))
@@ -116,6 +116,7 @@ constexpr auto InvalidChunkLocationUuid = TChunkLocationUuid(-1, -1);
 constexpr int MinReplicationFactor = 1;
 constexpr int MaxReplicationFactor = 20;
 constexpr int DefaultReplicationFactor = 3;
+constexpr int DefaultIntermediateDataReplicationFactor = 2;
 
 constexpr int MaxMediumCount = 120; // leave some room for sentinels
 
@@ -193,7 +194,7 @@ DEFINE_ENUM(EChunkAvailabilityPolicy,
 );
 
 // Keep in sync with NChunkServer::ETableChunkFormat.
-DEFINE_ENUM(EChunkFormat,
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EChunkFormat, i8,
     // Sentinels.
     ((Unknown)                             (-1))
 

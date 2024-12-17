@@ -1,6 +1,7 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 $f = AggregationFactory(
-    "UDAF",
+    'UDAF',
     ($item, $_) -> ($item),
     ($state, $item, $_) -> ($state),
     NULL,
@@ -17,7 +18,6 @@ FROM (
         (1),
         (2),
         (3)
-)
-    AS a (
-        x
-    );
+) AS a (
+    x
+);

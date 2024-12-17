@@ -7,13 +7,15 @@ SELECT
     min(CAST(key AS int32)),
     min(1u / 0u),
     min(2),
-    min(if(key = 10u, key)),
-    min(if(key = 100u, key)),
+    min(if(key == 10u, key)),
+    min(if(key == 100u, key)),
     min(FALSE),
-    min(key = 10u),
+    min(key == 10u),
     min(key >= 10u),
-    min(key = 20u),
-    min(if(key = 10u, TRUE)),
-    min(if(key = 100u, TRUE)),
+    min(key == 20u),
+    min(if(key == 10u, TRUE)),
+    min(if(key == 100u, TRUE)),
     min(if(key >= 10u, TRUE)),
-FROM Input;
+FROM
+    Input
+;

@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
 
 SELECT
@@ -8,12 +9,16 @@ FROM (
     SELECT
         AsTuple(key, subkey, value) AS tpl,
         value
-    FROM InputSorted
+    FROM
+        InputSorted
 )
-WHERE value IN (
-    SELECT DISTINCT
-        value
-    FROM Input
-)
+WHERE
+    value IN (
+        SELECT DISTINCT
+            value
+        FROM
+            Input
+    )
 GROUP BY
-    value;
+    value
+;

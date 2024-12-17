@@ -143,6 +143,10 @@ struct TTxState {
         item(TxDropBackupCollection, 96) \
         item(TxAlterBackupCollection, 97) \
         item(TxMoveSequence, 98) \
+        item(TxCreateTransfer, 99) \
+        item(TxAlterTransfer, 100) \
+        item(TxDropTransfer, 101) \
+        item(TxDropTransferCascade, 102) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -276,6 +280,7 @@ struct TTxState {
 
     // TxCopy: Stores path for cdc stream to create in case of ContinuousBackup; uses ExtraData through proto
     TPathId CdcPathId = InvalidPathId;
+    ui64 LoopStep = 0;
 
     // persist - TxShards:
     TVector<TShardOperation> Shards; // shards + operations on them
@@ -357,6 +362,7 @@ struct TTxState {
         case TxCreateCdcStream:
         case TxCreateSequence:
         case TxCreateReplication:
+        case TxCreateTransfer:
         case TxCreateBlobDepot:
         case TxCreateExternalTable:
         case TxCreateExternalDataSource:
@@ -394,6 +400,8 @@ struct TTxState {
         case TxDropSequence:
         case TxDropReplication:
         case TxDropReplicationCascade:
+        case TxDropTransfer:
+        case TxDropTransferCascade:
         case TxDropBlobDepot:
         case TxUpdateMainTableOnIndexMove:
         case TxDropExternalTable:
@@ -429,6 +437,7 @@ struct TTxState {
         case TxAlterCdcStreamAtTableDropSnapshot:
         case TxAlterSequence:
         case TxAlterReplication:
+        case TxAlterTransfer:
         case TxAlterBlobDepot:
         case TxAlterExternalTable:
         case TxAlterExternalDataSource:
@@ -468,6 +477,8 @@ struct TTxState {
         case TxDropSequence:
         case TxDropReplication:
         case TxDropReplicationCascade:
+        case TxDropTransfer:
+        case TxDropTransferCascade:
         case TxDropBlobDepot:
         case TxDropExternalTable:
         case TxDropExternalDataSource:
@@ -496,6 +507,7 @@ struct TTxState {
         case TxCreateCdcStreamAtTableWithInitialScan:
         case TxCreateSequence:
         case TxCreateReplication:
+        case TxCreateTransfer:
         case TxCreateBlobDepot:
         case TxInitializeBuildIndex:
         case TxCreateLock:
@@ -540,6 +552,7 @@ struct TTxState {
         case TxAlterCdcStreamAtTableDropSnapshot:
         case TxAlterSequence:
         case TxAlterReplication:
+        case TxAlterTransfer:
         case TxAlterBlobDepot:
         case TxAlterExternalTable:
         case TxAlterExternalDataSource:
@@ -578,6 +591,8 @@ struct TTxState {
         case TxDropSequence:
         case TxDropReplication:
         case TxDropReplicationCascade:
+        case TxDropTransfer:
+        case TxDropTransferCascade:
         case TxDropBlobDepot:
         case TxDropContinuousBackup:
         case TxDropBackupCollection:
@@ -610,6 +625,7 @@ struct TTxState {
         case TxCreateSequence:
         case TxCopySequence:
         case TxCreateReplication:
+        case TxCreateTransfer:
         case TxCreateBlobDepot:
         case TxInitializeBuildIndex:
         case TxCreateLock:
@@ -654,6 +670,7 @@ struct TTxState {
         case TxMoveSequence:
         case TxAlterSequence:
         case TxAlterReplication:
+        case TxAlterTransfer:
         case TxAlterBlobDepot:
         case TxAlterExternalTable:
         case TxAlterExternalDataSource:
@@ -750,6 +767,10 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpAlterReplication: return TxAlterReplication;
             case NKikimrSchemeOp::ESchemeOpDropReplication: return TxDropReplication;
             case NKikimrSchemeOp::ESchemeOpDropReplicationCascade: return TxDropReplicationCascade;
+            case NKikimrSchemeOp::ESchemeOpCreateTransfer: return TxCreateTransfer;
+            case NKikimrSchemeOp::ESchemeOpAlterTransfer: return TxAlterTransfer;
+            case NKikimrSchemeOp::ESchemeOpDropTransfer: return TxDropTransfer;
+            case NKikimrSchemeOp::ESchemeOpDropTransferCascade: return TxDropTransferCascade;
             case NKikimrSchemeOp::ESchemeOpCreateBlobDepot: return TxCreateBlobDepot;
             case NKikimrSchemeOp::ESchemeOpAlterBlobDepot: return TxAlterBlobDepot;
             case NKikimrSchemeOp::ESchemeOpDropBlobDepot: return TxDropBlobDepot;
@@ -771,7 +792,6 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpCreateContinuousBackup: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpAlterContinuousBackup: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpDropContinuousBackup: return TxInvalid;
-            case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpCreateBackupCollection: return TxCreateBackupCollection;
             case NKikimrSchemeOp::ESchemeOpAlterBackupCollection: return TxAlterBackupCollection;
             case NKikimrSchemeOp::ESchemeOpDropBackupCollection: return TxDropBackupCollection;

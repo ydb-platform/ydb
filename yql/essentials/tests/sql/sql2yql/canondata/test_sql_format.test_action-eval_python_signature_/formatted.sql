@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $script = @@ 
 def f(x, y):
     """
@@ -9,8 +10,10 @@ def f(x, y):
     """
     return x + y
 @@;
+
 --$f = Python::f(EvaluateType(ParseTypeHandle(Core::PythonFuncSignature(AsAtom("Python"), $script, "f"))), $script);
 $f = Python::f($script);
 
 SELECT
-    $f(1, 2);
+    $f(1, 2)
+;

@@ -1,22 +1,25 @@
 PRAGMA DisableSimpleColumns;
+
 USE plato;
 
 SELECT
     A.key AS key,
     B.subkey,
     COUNT(*) AS count
-FROM Input2
-    AS A
+FROM
+    Input2 AS A
 LEFT JOIN (
     SELECT
         key,
         CAST(key AS INT) AS subkey
-    FROM Input3
-)
-    AS B
-ON A.key == B.key
+    FROM
+        Input3
+) AS B
+ON
+    A.key == B.key
 GROUP BY
     A.key,
     B.subkey
 ORDER BY
-    key;
+    key
+;

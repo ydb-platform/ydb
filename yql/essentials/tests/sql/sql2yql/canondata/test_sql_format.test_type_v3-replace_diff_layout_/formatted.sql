@@ -1,7 +1,10 @@
-/* multirun can not *//* postgres can not */
+/* multirun can not */
+/* postgres can not */
 USE plato;
-PRAGMA yt.UseNativeYtTypes = "1";
-PRAGMA yt.NativeYtTypeCompatibility = "complex";
+
+PRAGMA yt.UseNativeYtTypes = '1';
+PRAGMA yt.NativeYtTypeCompatibility = 'complex';
+
 $udf = YQL::@@(lambda '(x) (block '(
     (let structType (StructType '('key (DataType 'String)) '('subkey (StructType '('a (DataType 'String)) '('b (OptionalType (DataType 'Int32))) '('c (DataType 'String))))))
     (let varType (VariantType (TupleType structType structType structType)))
@@ -26,21 +29,32 @@ $i, $j, $k = (
     USING $udf(TableRows())
 );
 
-INSERT INTO Output1
-    WITH (truncate, keepmeta)
+INSERT INTO Output1 WITH (
+    truncate,
+    keepmeta
+)
 SELECT
     *
-FROM $i;
+FROM
+    $i
+;
 
-INSERT INTO Output2
-    WITH (truncate, keepmeta)
+INSERT INTO Output2 WITH (
+    truncate,
+    keepmeta
+)
 SELECT
     *
-FROM $j
+FROM
+    $j
 LIMIT 2;
 
-INSERT INTO Output3
-    WITH (truncate, keepmeta)
+INSERT INTO Output3 WITH (
+    truncate,
+    keepmeta
+)
 SELECT
     *
-FROM $k;
+FROM
+    $k
+;

@@ -1,11 +1,16 @@
-/* postgres can not *//* custom check: len(yt_res_yson[0]['Write'][0]['Data']) < 10 */
+/* postgres can not */
+/* custom check: len(yt_res_yson[0]['Write'][0]['Data']) < 10 */
 USE plato;
 
 INSERT INTO @a
 SELECT
     *
-FROM Input
-WHERE key > "020";
+FROM
+    Input
+WHERE
+    key > '020'
+;
+
 COMMIT;
 
 SELECT
@@ -13,7 +18,8 @@ SELECT
 FROM (
     SELECT
         *
-    FROM @a
+    FROM
+        @a
         TABLESAMPLE BERNOULLI (50.0) REPEATABLE (1)
 )
 LIMIT 10;

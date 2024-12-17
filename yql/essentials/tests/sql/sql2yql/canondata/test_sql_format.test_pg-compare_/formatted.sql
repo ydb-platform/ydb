@@ -3,9 +3,9 @@ SELECT
     1p <= 2p,
     CAST(NULL AS pgint4) < 1p,
     CAST(NULL AS pgint4) <= 1p,
-    1p = 2p,
+    1p == 2p,
     1p != 2p,
-    CAST(NULL AS pgint4) = 1p,
+    CAST(NULL AS pgint4) == 1p,
     CAST(NULL AS pgint4) != 1p,
     1p > 2p,
     1p >= 2p,
@@ -18,4 +18,5 @@ SELECT
     1p IS DISTINCT FROM CAST(NULL AS pgint4),
     1p IS NOT DISTINCT FROM CAST(NULL AS pgint4),
     CAST(NULL AS pgint4) IS DISTINCT FROM 1p,
-    CAST(NULL AS pgint4) IS NOT DISTINCT FROM 1p;
+    CAST(NULL AS pgint4) IS NOT DISTINCT FROM 1p
+;

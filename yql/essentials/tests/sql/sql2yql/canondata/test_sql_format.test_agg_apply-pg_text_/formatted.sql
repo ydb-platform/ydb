@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 PRAGMA EmitAggApply;
 
 SELECT
@@ -12,7 +13,6 @@ FROM (
         ("a"u),
         ("b"u),
         ("c"u)
-)
-    AS a (
-        key
-    );
+) AS a (
+    key
+);

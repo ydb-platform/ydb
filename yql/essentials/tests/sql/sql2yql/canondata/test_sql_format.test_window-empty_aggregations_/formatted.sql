@@ -1,5 +1,6 @@
-/* syntax version 1 *//* postgres can not */
-PRAGMA warning("disable", "4520");
+/* syntax version 1 */
+/* postgres can not */
+PRAGMA warning('disable', '4520');
 
 SELECT
     value,
@@ -8,7 +9,8 @@ SELECT
     ListSort(AGGREGATE_LIST_DISTINCT(subkey) OVER w1) AS agglist_distinct1,
     SUM(CAST(subkey AS uint32)) OVER w2 AS sum2,
     AGGREGATE_LIST(subkey) OVER w2 AS agglist2,
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w1 AS (
         PARTITION BY
@@ -21,4 +23,5 @@ WINDOW
         ROWS BETWEEN 3 FOLLOWING AND 2 FOLLOWING
     )
 ORDER BY
-    value;
+    value
+;

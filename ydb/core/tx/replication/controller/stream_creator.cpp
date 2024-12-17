@@ -217,9 +217,9 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
 
-    const auto& config = replication->GetConfig();
-    const auto resolvedTimestamps = config.HasStrongConsistency()
-        ? std::make_optional(TDuration::MilliSeconds(config.GetStrongConsistency().GetCommitIntervalMilliSeconds()))
+    const auto& config = replication->GetConfig().GetConsistencySettings();
+    const auto resolvedTimestamps = config.HasGlobal()
+        ? std::make_optional(TDuration::MilliSeconds(config.GetGlobal().GetCommitIntervalMilliSeconds()))
         : std::nullopt;
 
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),

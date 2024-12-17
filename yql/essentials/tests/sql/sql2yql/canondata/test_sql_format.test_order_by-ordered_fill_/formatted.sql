@@ -1,4 +1,5 @@
-/* postgres can not *//* multirun can not */
+/* postgres can not */
+/* multirun can not */
 USE plato;
 
 INSERT INTO Output
@@ -8,13 +9,17 @@ FROM (
     SELECT
         ListFromRange(0, 100) AS x
 )
-    FLATTEN BY
-        x
+    FLATTEN BY x
 ORDER BY
-    x;
+    x
+;
+
 COMMIT;
 
 SELECT
     *
-FROM Output
-WHERE x = 50;
+FROM
+    Output
+WHERE
+    x == 50
+;

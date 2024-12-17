@@ -71,7 +71,7 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
       -e grpc://localhost:2136 -d /Root/test
       ```
 
-- Docker
+- Docker x86_64
 
    1. Create a directory for {{ ydb-short-name }} and use it as the current working directory:
 
@@ -86,16 +86,16 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
       ```bash
       docker run -d --rm --name ydb-local -h localhost \
         --platform linux/amd64 \
-        -p 2135:2135 -p 2136:2136 -p 8765:8765 \
+        -p 2135:2135 -p 2136:2136 -p 8765:8765 -p 9092:9092 \
         -v $(pwd)/ydb_certs:/ydb_certs -v $(pwd)/ydb_data:/ydb_data \
         -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
-        -e YDB_USE_IN_MEMORY_PDISKS=true \
+        -e YDB_KAFKA_PROXY_PORT=9092 \
         {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
       ```
 
-      If the container starts successfully, you'll see the container's ID. The container might take a few minutes to initialize. The database will not be available until container initialization is complete.
+      If the container starts successfully, you'll see the container ID. The container might take a few seconds to initialize. The database will not be available until container initialization is complete.
 
-      The `YDB_USE_IN_MEMORY_PDISKS` setting makes all data volatile, stored only in RAM. Currently, data persistence by turning it off is supported only on x86_64 processors.
+      {% include [index.md](reference/docker/_includes/rosetta.md) %}
 
 - Minikube
 

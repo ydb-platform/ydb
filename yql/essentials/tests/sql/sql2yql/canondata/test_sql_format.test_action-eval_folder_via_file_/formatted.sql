@@ -1,6 +1,8 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
-PRAGMA yt.FolderInlineItemsLimit = "0";
+
+PRAGMA yt.FolderInlineItemsLimit = '0';
 
 $list = (
     SELECT
@@ -8,12 +10,16 @@ $list = (
     FROM (
         SELECT
             Path
-        FROM folder("")
-        WHERE Type = "table"
+        FROM
+            folder('')
+        WHERE
+            Type == 'table'
         LIMIT 30
     )
 );
 
 SELECT
     count(*)
-FROM each($list);
+FROM
+    each($list)
+;

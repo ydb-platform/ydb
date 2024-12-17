@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     ListLength([]),
     Yql::Append([], 1),
@@ -55,4 +56,5 @@ SELECT
     ListZipAll(Just([]), []),
     ListZipAll(Just([]), Just([])),
     ListZipAll(Just([]), [1]),
-    ListZipAll([1], Just([]));
+    ListZipAll([1], Just([]))
+;

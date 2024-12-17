@@ -1,9 +1,13 @@
-/* postgres can not *//* multirun can not *//* syntax version 1 */
+/* postgres can not */
+/* multirun can not */
+/* syntax version 1 */
 USE plato;
 
 INSERT INTO Output
 SELECT
     *
-FROM Input
+FROM
+    Input
 ASSUME ORDER BY
-    key;
+    key
+;

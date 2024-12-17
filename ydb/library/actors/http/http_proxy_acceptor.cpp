@@ -30,7 +30,7 @@ protected:
         switch (ev->GetTypeRewrite()) {
             HFunc(NActors::TEvPollerRegisterResult, Handle);
             HFunc(NActors::TEvPollerReady, Handle);
-            HFunc(TEvHttpProxy::TEvHttpConnectionClosed, Handle);
+            HFunc(TEvHttpProxy::TEvHttpIncomingConnectionClosed, Handle);
             HFunc(TEvHttpProxy::TEvReportSensors, Handle);
         }
     }
@@ -59,6 +59,7 @@ protected:
         Endpoint->Secure = event->Get()->Secure;
         Endpoint->RateLimiter.Limit = event->Get()->MaxRequestsPerSecond;
         Endpoint->RateLimiter.Period = TDuration::Seconds(1);
+        Endpoint->InactivityTimeout = event->Get()->InactivityTimeout;
         int err = 0;
         if (Endpoint->Secure) {
             if (!event->Get()->SslCertificatePem.empty()) {
@@ -142,7 +143,7 @@ protected:
         }
     }
 
-    void Handle(TEvHttpProxy::TEvHttpConnectionClosed::TPtr event, const NActors::TActorContext&) {
+    void Handle(TEvHttpProxy::TEvHttpIncomingConnectionClosed::TPtr event, const NActors::TActorContext&) {
         Connections.erase(event->Get()->ConnectionID);
         for (auto& req : event->Get()->RecycledRequests) {
             if (RecycledRequests.size() >= MaxRecycledRequestsCount) {

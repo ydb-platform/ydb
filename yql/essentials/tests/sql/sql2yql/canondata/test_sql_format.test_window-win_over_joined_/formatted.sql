@@ -4,16 +4,16 @@ SELECT
 FROM (
     SELECT
         0 AS id
-)
-    AS r
+) AS r
 JOIN (
     SELECT
         0 AS id
-)
-    AS m
-ON r.id = m.id
+) AS m
+ON
+    r.id == m.id
 WINDOW
     w AS (
         PARTITION BY
             r.id
-    );
+    )
+;

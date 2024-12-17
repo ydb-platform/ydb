@@ -803,6 +803,8 @@ void TSimpleProcess::DoSpawn()
         PollPeriod_);
 
     AsyncWaitExecutor_->Start();
+
+    YT_LOG_INFO("Process spawned (Pid: %v)", ProcessId_);
 #else
     THROW_ERROR_EXCEPTION("Unsupported platform");
 #endif

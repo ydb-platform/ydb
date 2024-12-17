@@ -1,5 +1,7 @@
-/* postgres can not *//* hybridfile can not YQL-17743 */
+/* postgres can not */
+/* hybridfile can not YQL-17743 */
 USE plato;
+
 PRAGMA OrderedColumns;
 PRAGMA yt.UseNativeYtTypes;
 
@@ -8,7 +10,10 @@ SELECT
     key,
     AsList(subkey),
     value
-FROM Input
-WHERE key > '000'
+FROM
+    Input
+WHERE
+    key > '000'
 ORDER BY
-    value DESC;
+    value DESC
+;

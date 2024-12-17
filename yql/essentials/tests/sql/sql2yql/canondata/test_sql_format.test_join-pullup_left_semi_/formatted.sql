@@ -1,4 +1,5 @@
 PRAGMA DisableSimpleColumns;
+
 USE plato;
 
 FROM (
@@ -6,20 +7,22 @@ FROM (
         key,
         subkey || key AS subkey,
         value
-    FROM Input1
-)
-    AS a
+    FROM
+        Input1
+) AS a
 LEFT SEMI JOIN (
     SELECT
         key || subkey AS subkey,
         key,
         1 AS value
-    FROM Input2
-)
-    AS b
-ON a.key = b.key
+    FROM
+        Input2
+) AS b
+ON
+    a.key == b.key
 SELECT
     a.key AS akey,
     a.subkey
 ORDER BY
-    akey;
+    akey
+;

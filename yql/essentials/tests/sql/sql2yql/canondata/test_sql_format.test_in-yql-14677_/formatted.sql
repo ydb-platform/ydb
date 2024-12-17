@@ -1,15 +1,21 @@
 /* postgres can not */
 USE plato;
-PRAGMA yt.MapJoinLimit = "1m";
 
-$l1 =
+PRAGMA yt.MapJoinLimit = '1m';
+
+$l1 = (
     SELECT
         key
-    FROM `Input`;
+    FROM
+        `Input`
+);
 
 SELECT
     *
-FROM Input
-WHERE TRUE AND
-    value != "" AND
-    key IN $l1;
+FROM
+    Input
+WHERE
+    TRUE
+    AND value != ''
+    AND key IN $l1
+;

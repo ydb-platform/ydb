@@ -1,9 +1,12 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
 $path = (
     SELECT
         min(Path)
-    FROM folder("")
+    FROM
+        folder('')
 );
+
 DROP TABLE $path;

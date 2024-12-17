@@ -3,6 +3,10 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/utils/fetch/fetch.h>
 
+#include <util/generic/maybe.h>
+
+#include <tuple>
+
 
 namespace NYql::NPrivate {
 
@@ -20,11 +24,12 @@ public:
         auto urlWithoutParameters = SubstParameters(url, Parameters, nullptr);
         auto preprocessedUrl = urlWithoutParameters;
 
+        TString alias;
         if (UrlPreprocessing) {
-            preprocessedUrl = UrlPreprocessing->Preprocess(urlWithoutParameters).first;
+            std::tie(preprocessedUrl, alias) = UrlPreprocessing->Preprocess(urlWithoutParameters);
         }
 
-        TString token;
+        TMaybe<TString> token;
         if (tokenName) {
             if (!Credentials) {
                 ythrow yexception() << "Missing credentials";
@@ -38,9 +43,17 @@ public:
             token = credential->Content;
         }
 
+        if (!token && alias && Credentials) {
+            if (auto credential = Credentials->FindCredential("default_" + alias)) {
+                token = credential->Content;
+            }
+        }
+
+        token = token.OrElse("");
+
         for (const auto& urlLister: UrlListers) {
             if (urlLister->Accept(preprocessedUrl)) {
-                return urlLister->ListUrl(preprocessedUrl, token);
+                return urlLister->ListUrl(preprocessedUrl, *token);
             }
         }
 

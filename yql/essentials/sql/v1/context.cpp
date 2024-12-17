@@ -65,6 +65,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"ValidateUnusedExprs", &TContext::ValidateUnusedExprs},
     {"AnsiImplicitCrossJoin", &TContext::AnsiImplicitCrossJoin},
     {"DistinctOverWindow", &TContext::DistinctOverWindow},
+    {"EmitUnionMerge", &TContext::EmitUnionMerge},
     {"SeqMode", &TContext::SeqMode},
 };
 

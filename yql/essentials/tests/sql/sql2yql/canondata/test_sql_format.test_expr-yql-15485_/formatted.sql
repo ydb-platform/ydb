@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $ages = [
     <|suffix: "0-0.5"u, begin: 0.f, end: 0.5f|>,
     <|suffix: "0.5-1"u, begin: 0.5f, end: 1.f|>,
@@ -11,18 +12,17 @@ $ages = [
     <|suffix: "14-16"u, begin: 14.f, end: 16.f|>,
     <|suffix: "16+"u, begin: 16.f, end: 18.f|>,
 ];
+
 $interval_fits_in = ($interval, $other) -> {
     $length = $interval.end - $interval.begin;
     RETURN IF(
         $interval.end <= $other.begin OR $interval.begin >= $other.end,
         0.f,
         IF(
-            $interval.begin >= $other.begin AND $interval.end <= $other.end,
-            -- interval is completely within other
+            $interval.begin >= $other.begin AND $interval.end <= $other.end, -- interval is completely within other
             1.f,
             IF(
-                $interval.begin <= $other.begin AND $interval.end >= $other.end,
-                -- other is completely within the interval
+                $interval.begin <= $other.begin AND $interval.end >= $other.end, -- other is completely within the interval
                 ($other.end - $other.begin) / $length,
                 IF(
                     $interval.begin < $other.begin,
@@ -33,6 +33,7 @@ $interval_fits_in = ($interval, $other) -> {
         )
     );
 };
+
 $age_suffixes = ($interval, $age_segments) -> {
     RETURN IF(
         $interval.end - $interval.begin > 10.f OR $interval.end - $interval.begin < 1e-4f,
@@ -41,7 +42,7 @@ $age_suffixes = ($interval, $age_segments) -> {
             ListMap(
                 $age_segments,
                 ($i) -> {
-                    RETURN <|age_suffix: ":Age:"u || $i.suffix, age_weight: $interval_fits_in($interval, $i)|>
+                    RETURN <|age_suffix: ":Age:"u || $i.suffix, age_weight: $interval_fits_in($interval, $i)|>;
                 }
             ),
             ($i) -> {
@@ -62,20 +63,24 @@ $data = (
             girls ?? FALSE AS girls,
             min_age ?? 0.f AS min_age,
             max_age ?? 18.f AS max_age
-        FROM AS_TABLE([
-            <|puid: 1, ts: 123, boys: TRUE, girls: FALSE, min_age: 1.f, max_age: 2.f|>,
-            <|puid: 2, ts: 123, boys: TRUE, girls: FALSE, min_age: NULL, max_age: NULL|>,
-            <|puid: 3, ts: 123, boys: NULL, girls: NULL, min_age: 1.f, max_age: 2.f|>,
-            <|puid: 4, ts: 123, boys: TRUE, girls: TRUE, min_age: 1.f, max_age: 2.f|>,
-            <|puid: 5, ts: 123, boys: TRUE, girls: TRUE, min_age: 1.f, max_age: 5.f|>,
-            <|puid: 6, ts: 123, boys: TRUE, girls: FALSE, min_age: 1.f, max_age: 2.f|>,
-        ])
+        FROM
+            AS_TABLE([
+                <|puid: 1, ts: 123, boys: TRUE, girls: FALSE, min_age: 1.f, max_age: 2.f|>,
+                <|puid: 2, ts: 123, boys: TRUE, girls: FALSE, min_age: NULL, max_age: NULL|>,
+                <|puid: 3, ts: 123, boys: NULL, girls: NULL, min_age: 1.f, max_age: 2.f|>,
+                <|puid: 4, ts: 123, boys: TRUE, girls: TRUE, min_age: 1.f, max_age: 2.f|>,
+                <|puid: 5, ts: 123, boys: TRUE, girls: TRUE, min_age: 1.f, max_age: 5.f|>,
+                <|puid: 6, ts: 123, boys: TRUE, girls: FALSE, min_age: 1.f, max_age: 2.f|>,
+            ])
     )
-    WHERE boys OR girls OR min_age > 0.f OR max_age < 18.f
+    WHERE
+        boys OR girls OR min_age > 0.f OR max_age < 18.f
 );
 
 SELECT
     puid,
     $age_suffixes(<|begin: min_age, end: max_age|>, $ages) AS age_suffixes,
     <|begin: min_age, end: max_age|> AS interval
-FROM $data;
+FROM
+    $data
+;

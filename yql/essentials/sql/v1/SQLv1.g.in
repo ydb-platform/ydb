@@ -460,7 +460,7 @@ row_pattern_primary:
     | DOLLAR
     | CARET
     | LPAREN row_pattern? RPAREN
-    | LBRACE_CURLY MINUS row_pattern MINUS RBRACE_CURLY //TODO This rule accepts spaces between brace and minus sign, i.e: {   -  S2 - } that is not supposed to. Handle this case in https://st.yandex-team.ru/YQL-16227
+    | LBRACE_CURLY MINUS row_pattern MINUS RBRACE_CURLY
     | row_pattern_permute
 ;
 
@@ -893,7 +893,7 @@ create_replication_stmt: CREATE ASYNC REPLICATION object_ref
 
 replication_target: object_ref AS object_ref;
 replication_settings: replication_settings_entry (COMMA replication_settings_entry)*;
-replication_settings_entry: an_id EQUALS STRING_VALUE;
+replication_settings_entry: an_id EQUALS expr;
 
 alter_replication_stmt: ALTER ASYNC REPLICATION object_ref alter_replication_action (COMMA alter_replication_action)*;
 alter_replication_action:
@@ -1206,7 +1206,6 @@ keyword_expr_uncompat:
   | JSON_EXISTS
   | JSON_VALUE
   | JSON_QUERY
-  | LOCAL
   | NOT
   | NULL
   | PROCESS
@@ -1338,6 +1337,7 @@ keyword_as_compat:
   | FOREIGN
   | FUNCTION
   | GLOB
+  | GLOBAL
   | GRANT
   | GROUP
   | GROUPING
@@ -1367,6 +1367,7 @@ keyword_as_compat:
   // | LEFT
   | LEGACY
   | LIKE
+  | LOCAL
   | MANAGE
   | MATCH
   | MATCHES
@@ -1560,6 +1561,7 @@ keyword_compat: (
   | FOREIGN
   | FUNCTION
   | GLOB
+  | GLOBAL
   | GRANT
   | GROUP
   | GROUPING
@@ -1589,6 +1591,7 @@ keyword_compat: (
   | LEFT
   | LEGACY
   | LIKE
+  | LOCAL
   | MANAGE
   | MATCH
   | MATCHES

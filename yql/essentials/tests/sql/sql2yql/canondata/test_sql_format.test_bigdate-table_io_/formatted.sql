@@ -3,25 +3,32 @@ USE plato;
 
 SELECT
     *
-FROM BigDates
+FROM
+    BigDates
 ORDER BY
-    row;
+    row
+;
 
-INSERT INTO @Output
-    WITH truncate
+INSERT INTO @Output WITH truncate
 SELECT
     *
-FROM BigDates
-WHERE row > -100
+FROM
+    BigDates
+WHERE
+    row > -100
 ORDER BY
-    row;
+    row
+;
+
 COMMIT;
 
 SELECT
     *
-FROM @Output
+FROM
+    @Output
 ORDER BY
-    row;
+    row
+;
 
 SELECT
     row,
@@ -29,6 +36,8 @@ SELECT
     CAST(dt64 AS string),
     CAST(ts64 AS string),
     CAST(i64 AS string)
-FROM BigDates
+FROM
+    BigDates
 ORDER BY
-    row;
+    row
+;

@@ -1,24 +1,27 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
+
 $myAddSuffix = ($row, $value) -> {
     $type = TypeOf($row);
+
     --$type=Struct<key:String,subkey:String,value:String>;
     $lambda = EvaluateCode(
         LambdaCode(
             ($r) -> {
                 RETURN FuncCode(
-                    "AsStruct",
+                    'AsStruct',
                     ListMap(
                         StructTypeComponents(TypeHandle($type)),
                         ($i) -> {
                             RETURN ListCode(
                                 AtomCode($i.Name),
                                 FuncCode(
-                                    "Concat",
-                                    FuncCode("Member", $r, AtomCode($i.Name)),
+                                    'Concat',
+                                    FuncCode('Member', $r, AtomCode($i.Name)),
                                     ReprCode($value)
                                 )
-                            )
+                            );
                         }
                     )
                 );
@@ -29,5 +32,7 @@ $myAddSuffix = ($row, $value) -> {
 };
 
 SELECT
-    $myAddSuffix(TableRow(), "*")
-FROM Input;
+    $myAddSuffix(TableRow(), '*')
+FROM
+    Input
+;

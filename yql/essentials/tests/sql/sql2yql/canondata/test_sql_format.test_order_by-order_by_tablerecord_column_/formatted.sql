@@ -1,8 +1,11 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
 SELECT
     *
-FROM Input
+FROM
+    Input
 ORDER BY
-    TableRecordIndex();
+    TableRecordIndex()
+;

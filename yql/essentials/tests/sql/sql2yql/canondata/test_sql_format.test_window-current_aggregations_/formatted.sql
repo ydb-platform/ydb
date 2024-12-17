@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     value,
     SUM(unwrap(CAST(subkey AS uint32))) OVER w1 AS sum1,
@@ -6,7 +7,8 @@ SELECT
     ListSort(AGGREGATE_LIST_DISTINCT(subkey) OVER w1) AS agglist_distinct1,
     SUM(CAST(subkey AS uint32)) OVER w2 AS sum2,
     AGGREGATE_LIST(subkey) OVER w2 AS agglist2,
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w1 AS (
         PARTITION BY
@@ -19,4 +21,5 @@ WINDOW
             value
     )
 ORDER BY
-    value;
+    value
+;

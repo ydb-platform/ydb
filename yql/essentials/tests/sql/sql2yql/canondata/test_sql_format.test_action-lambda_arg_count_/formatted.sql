@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     LambdaArgumentsCount(() -> (1)),
     LambdaArgumentsCount(($x) -> ($x + 1)),
@@ -9,4 +10,5 @@ SELECT
     LambdaOptionalArgumentsCount(($x) -> ($x + 1)),
     LambdaOptionalArgumentsCount(($x, $y) -> ($x + $y)),
     LambdaOptionalArgumentsCount(($x?) -> ($x + 1)),
-    LambdaOptionalArgumentsCount(($x, $y?) -> ($x + $y));
+    LambdaOptionalArgumentsCount(($x, $y?) -> ($x + $y))
+;

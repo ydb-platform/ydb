@@ -1,6 +1,9 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
+
 PRAGMA DistinctOverWindow;
+
 $input = AsList(
     AsStruct(1 AS key, 1 AS subkey, AsStruct(1 AS i1, 2 AS i2, 3 AS i3) AS col),
     AsStruct(2 AS key, 1 AS subkey, AsStruct(1 AS i1, 2 AS i2, 3 AS i3) AS col),
@@ -17,6 +20,7 @@ SELECT
     key,
     subkey,
     col,
+
     -- assuming ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
     count(DISTINCT col) OVER (
         PARTITION BY
@@ -30,19 +34,24 @@ SELECT
         ORDER BY
             key DESC
     ) AS cnt2_desc,
-FROM AS_TABLE($input)
+FROM
+    AS_TABLE($input)
 ORDER BY
-    key;
+    key
+;
 
 SELECT
     key,
     subkey,
     col,
+
     -- assuming ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
     count(DISTINCT col) OVER (
         PARTITION BY
             subkey
     ) AS cnt,
-FROM AS_TABLE($input)
+FROM
+    AS_TABLE($input)
 ORDER BY
-    key;
+    key
+;

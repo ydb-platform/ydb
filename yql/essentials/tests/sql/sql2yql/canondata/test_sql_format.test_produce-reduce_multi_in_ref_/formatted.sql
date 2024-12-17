@@ -1,5 +1,7 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
+
 $udf = YQL::@@
 (lambda '(key stream) 
     (PartitionByKey stream
@@ -18,16 +20,20 @@ $udf = YQL::@@
 $src = (
     SELECT
         *
-    FROM plato.Input
-    WHERE key > "200"
+    FROM
+        plato.Input
+    WHERE
+        key > '200'
 );
 
 $r = (
     REDUCE Input, (
         SELECT
             *
-        FROM Input
-        WHERE key > "100"
+        FROM
+            Input
+        WHERE
+            key > '100'
     ), $src
     ON
         key
@@ -38,8 +44,10 @@ SELECT
     key,
     src,
     cnt
-FROM $r
+FROM
+    $r
 ORDER BY
     key,
     src,
-    cnt;
+    cnt
+;

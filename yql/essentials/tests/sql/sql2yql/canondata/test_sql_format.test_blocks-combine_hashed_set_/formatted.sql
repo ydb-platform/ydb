@@ -2,8 +2,10 @@ USE plato;
 
 SELECT
     key
-FROM Input
+FROM
+    Input
 GROUP BY
     key
 ORDER BY
-    key;
+    key
+;

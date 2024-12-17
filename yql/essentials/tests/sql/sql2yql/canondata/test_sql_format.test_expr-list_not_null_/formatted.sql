@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 SELECT
     ListNotNull(NULL),
     ListNotNull([]),
@@ -9,4 +10,5 @@ SELECT
     ListNotNull(Just([1, 2])),
     ListNotNull(Just([1, NULL, 2])),
     ListNotNull(Nothing(List<Int32>?)),
-    ListNotNull(Nothing(List<Int32?>?));
+    ListNotNull(Nothing(List<Int32?>?))
+;

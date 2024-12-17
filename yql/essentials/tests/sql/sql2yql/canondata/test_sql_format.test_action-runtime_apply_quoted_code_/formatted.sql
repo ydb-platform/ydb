@@ -1,7 +1,9 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $func = ($x) -> {
     RETURN $x == 1;
 };
+
 $structApply = ($strValue, $f) -> {
     $code = EvaluateCode(
         LambdaCode(
@@ -9,9 +11,9 @@ $structApply = ($strValue, $f) -> {
                 $members = StructTypeComponents(TypeHandle(TypeOf($strValue)));
                 RETURN Yql::Fold(
                     $members, ReprCode(FALSE), ($item, $state) -> {
-                        $member = FuncCode("Member", $strCode, AtomCode($item.Name));
-                        $apply = FuncCode("Apply", QuoteCode($f), $member);
-                        RETURN FuncCode("Or", $state, $apply);
+                        $member = FuncCode('Member', $strCode, AtomCode($item.Name));
+                        $apply = FuncCode('Apply', QuoteCode($f), $member);
+                        RETURN FuncCode('Or', $state, $apply);
                     }
                 );
             }
@@ -21,7 +23,9 @@ $structApply = ($strValue, $f) -> {
 };
 
 SELECT
-    $structApply(AsStruct(1 AS a, 2 AS b, 3 AS c), $func);
+    $structApply(AsStruct(1 AS a, 2 AS b, 3 AS c), $func)
+;
 
 SELECT
-    $structApply(AsStruct(4 AS a, 2 AS b, 3 AS c), $func);
+    $structApply(AsStruct(4 AS a, 2 AS b, 3 AS c), $func)
+;

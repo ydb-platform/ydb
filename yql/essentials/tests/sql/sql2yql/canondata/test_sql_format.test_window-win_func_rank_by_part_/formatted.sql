@@ -1,5 +1,7 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
+
 PRAGMA DisableAnsiRankForNullableKeys;
 
 $input = (
@@ -8,7 +10,8 @@ $input = (
         CAST(key AS int32) ?? 0 AS key,
         CAST(subkey AS int32) AS subkey,
         value
-    FROM Input
+    FROM
+        Input
 );
 
 SELECT
@@ -16,7 +19,8 @@ SELECT
     dense_rank(key) OVER w1 AS dense_rank_key,
     key_quad,
     key
-FROM $input
+FROM
+    $input
 WINDOW
     w1 AS (
         PARTITION BY
@@ -27,4 +31,5 @@ WINDOW
 ORDER BY
     rank_key,
     dense_rank_key,
-    key_quad;
+    key_quad
+;

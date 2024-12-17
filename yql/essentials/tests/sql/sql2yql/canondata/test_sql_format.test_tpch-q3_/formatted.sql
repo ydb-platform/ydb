@@ -7,11 +7,12 @@ $join1 = (
         o.o_orderdate AS o_orderdate,
         o.o_shippriority AS o_shippriority,
         o.o_orderkey AS o_orderkey
-    FROM plato.customer
-        AS c
-    JOIN plato.orders
-        AS o
-    ON c.c_custkey = o.o_custkey
+    FROM
+        plato.customer AS c
+    JOIN
+        plato.orders AS o
+    ON
+        c.c_custkey == o.o_custkey
 );
 
 $join2 = (
@@ -23,11 +24,12 @@ $join2 = (
         l.l_discount AS l_discount,
         l.l_shipdate AS l_shipdate,
         l.l_extendedprice AS l_extendedprice
-    FROM $join1
-        AS j1
-    JOIN plato.lineitem
-        AS l
-    ON l.l_orderkey = j1.o_orderkey
+    FROM
+        $join1 AS j1
+    JOIN
+        plato.lineitem AS l
+    ON
+        l.l_orderkey == j1.o_orderkey
 );
 
 SELECT
@@ -35,10 +37,12 @@ SELECT
     sum(l_extendedprice * (1 - l_discount)) AS revenue,
     o_orderdate,
     o_shippriority
-FROM $join2
-WHERE c_mktsegment = 'MACHINERY' AND
-    CAST(o_orderdate AS Timestamp) < Date('1995-03-08') AND
-    CAST(l_shipdate AS Timestamp) > Date('1995-03-08')
+FROM
+    $join2
+WHERE
+    c_mktsegment == 'MACHINERY'
+    AND CAST(o_orderdate AS Timestamp) < Date('1995-03-08')
+    AND CAST(l_shipdate AS Timestamp) > Date('1995-03-08')
 GROUP BY
     l_orderkey,
     o_orderdate,

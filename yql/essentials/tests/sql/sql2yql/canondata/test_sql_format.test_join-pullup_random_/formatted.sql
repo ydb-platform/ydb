@@ -1,5 +1,6 @@
 /* kikimr can not - due to random */
 PRAGMA DisableSimpleColumns;
+
 USE plato;
 
 FROM (
@@ -7,12 +8,12 @@ FROM (
         key,
         subkey || key AS subkey,
         value,
-        RANDOM(value || "x") <= 1.0 AS rn
-    FROM Input1
-)
-    AS a
-JOIN Input2
-    AS b
+        RANDOM(value || 'x') <= 1.0 AS rn
+    FROM
+        Input1
+) AS a
+JOIN
+    Input2 AS b
 USING (key)
 SELECT
     a.key,
@@ -21,4 +22,5 @@ SELECT
     b.value
 ORDER BY
     a.key,
-    a.rn;
+    a.rn
+;

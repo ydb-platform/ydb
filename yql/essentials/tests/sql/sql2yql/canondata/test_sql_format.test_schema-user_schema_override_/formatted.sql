@@ -1,9 +1,9 @@
 /* syntax version 1 */
 USE plato;
 
-INSERT INTO Input
-    WITH TRUNCATE
+INSERT INTO Input WITH TRUNCATE
 SELECT
     *
-FROM Input
-    WITH SCHEMA Struct<key: String, value: String>;
+FROM
+    Input WITH SCHEMA Struct<key: String, value: String>
+;

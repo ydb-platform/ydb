@@ -2,5 +2,6 @@ USE plato;
 
 SELECT
     *
-FROM Input
-    VIEW lambda_process;
+FROM
+    Input VIEW lambda_process
+;

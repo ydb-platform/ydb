@@ -1,5 +1,4 @@
-INSERT INTO plato.Output
-    WITH TRUNCATE
+INSERT INTO plato.Output WITH TRUNCATE
 SELECT
     *
 FROM (
@@ -9,7 +8,8 @@ FROM (
         SELECT
             TableRow() AS data,
             key
-        FROM plato.Input
+        FROM
+            plato.Input
     )
     WINDOW
         w AS (
@@ -17,4 +17,5 @@ FROM (
                 key
         )
 )
-    FLATTEN COLUMNS;
+    FLATTEN COLUMNS
+;

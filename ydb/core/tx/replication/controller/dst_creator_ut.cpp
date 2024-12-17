@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             const TTestTableDescription& tableDesc,
             const NKikimrSchemeOp::TTableDescription& replicatedDesc,
             EReplicationMode mode = EReplicationMode::ReadOnly,
-            EReplicaConsistency consistency = EReplicaConsistency::Weak
+            EConsistencyLevel consistency = EConsistencyLevel::Row
     ) {
         UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.KeyColumnNamesSize(), tableDesc.KeyColumns.size());
         for (ui32 i = 0; i < replicatedDesc.KeyColumnNamesSize(); ++i) {
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     void Basic(
             const TString& replicatedPath,
             EReplicationMode mode = EReplicationMode::ReadOnly,
-            EReplicaConsistency consistency = EReplicaConsistency::Weak
+            EConsistencyLevel consistency = EConsistencyLevel::Row
     ) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
@@ -78,8 +78,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         Basic("/Root/Dir/Replicated");
     }
 
-    Y_UNIT_TEST(StrongConsistency) {
-        Basic("/Root/Replicated", EReplicationMode::ReadOnly, EReplicaConsistency::Strong);
+    Y_UNIT_TEST(GlobalConsistency) {
+        Basic("/Root/Replicated", EReplicationMode::ReadOnly, EConsistencyLevel::Global);
     }
 
     void WithIndex(const TString& replicatedPath, NKikimrSchemeOp::EIndexType indexType) {
@@ -386,7 +386,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         auto changeMode = [](const TTestTableDescription& desc) {
             auto copy = desc;
             copy.ReplicationConfig->Mode = TTestTableDescription::TReplicationConfig::MODE_NONE;
-            copy.ReplicationConfig->Consistency = TTestTableDescription::TReplicationConfig::CONSISTENCY_UNKNOWN;
+            copy.ReplicationConfig->ConsistencyLevel = TTestTableDescription::TReplicationConfig::CONSISTENCY_LEVEL_UNKNOWN;
             return copy;
         };
 
@@ -400,14 +400,14 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         });
     }
 
-    Y_UNIT_TEST(ReplicationConsistencyMismatch) {
+    Y_UNIT_TEST(ReplicationConsistencyLevelMismatch) {
         auto changeConsistency = [](const TTestTableDescription& desc) {
             auto copy = desc;
-            copy.ReplicationConfig->Consistency = TTestTableDescription::TReplicationConfig::CONSISTENCY_STRONG;
+            copy.ReplicationConfig->ConsistencyLevel = TTestTableDescription::TReplicationConfig::CONSISTENCY_LEVEL_GLOBAL;
             return copy;
         };
 
-        ExistingDst(NKikimrScheme::StatusSchemeError, "Replication consistency mismatch", changeConsistency, TTestTableDescription{
+        ExistingDst(NKikimrScheme::StatusSchemeError, "Replication consistency level mismatch", changeConsistency, TTestTableDescription{
             .Name = "Table",
             .KeyColumns = {"key"},
             .Columns = {
@@ -416,7 +416,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             },
             .ReplicationConfig = TTestTableDescription::TReplicationConfig{
                 .Mode = TTestTableDescription::TReplicationConfig::MODE_READ_ONLY,
-                .Consistency = TTestTableDescription::TReplicationConfig::CONSISTENCY_WEAK,
+                .ConsistencyLevel = TTestTableDescription::TReplicationConfig::CONSISTENCY_LEVEL_ROW,
             },
         });
     }

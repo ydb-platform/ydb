@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
 $dictList = (
@@ -6,11 +7,13 @@ $dictList = (
         AsDict(AsTuple(value, CAST(subkey AS Int32))) AS `dict`,
         subkey,
         value
-    FROM Input
+    FROM
+        Input
 );
 
 SELECT
     input.`dict`[input.value],
     input.`dict`[input.subkey]
-FROM $dictList
-    AS input;
+FROM
+    $dictList AS input
+;

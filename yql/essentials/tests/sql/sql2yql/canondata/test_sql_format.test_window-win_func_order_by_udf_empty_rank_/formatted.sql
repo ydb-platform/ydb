@@ -1,5 +1,7 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 PRAGMA DisableAnsiRankForNullableKeys;
+
 USE plato;
 
 SELECT
@@ -7,7 +9,8 @@ SELECT
     RANK() OVER w AS ix,
     subkey,
     String::Base64Encode(subkey) AS subkey_enc
-FROM Input
+FROM
+    Input
 WINDOW
     w AS (
         PARTITION BY
@@ -17,4 +20,5 @@ WINDOW
     )
 ORDER BY
     key,
-    ix;
+    ix
+;

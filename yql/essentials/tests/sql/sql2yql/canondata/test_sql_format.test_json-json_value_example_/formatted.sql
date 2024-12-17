@@ -1,11 +1,14 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
 -- These examples are taken from [ISO/IEC TR 19075-6:2017] standard (https://www.iso.org/standard/67367.html)
 SELECT
     T.K,
     JSON_VALUE (T.J, 'lax $.who') AS Who
-FROM T;
+FROM
+    T
+;
 
 SELECT
     T.K,
@@ -13,7 +16,9 @@ SELECT
     JSON_VALUE (
         T.J, 'lax $.where' NULL ON EMPTY
     ) AS Nali
-FROM T;
+FROM
+    T
+;
 
 SELECT
     T.K,
@@ -21,7 +26,9 @@ SELECT
     JSON_VALUE (
         T.J, 'strict $.where' DEFAULT 'no where there' ON ERROR
     ) AS Nali
-FROM T;
+FROM
+    T
+;
 
 SELECT
     T.K,
@@ -30,12 +37,15 @@ SELECT
     JSON_VALUE (
         T.J, 'lax $.friends.name' NULL ON EMPTY DEFAULT '*** error ***' ON ERROR
     ) AS Friend
-FROM T;
+FROM
+    T
+;
 
 SELECT
     T.K,
     JSON_VALUE (T.J, 'strict $.who') AS Who,
     JSON_VALUE (T.J, 'strict $.where' NULL ON EMPTY NULL ON ERROR) AS Nali,
+
     -- NOTE: output for this particular column differs with standard.
     -- For row with T.K = 106 and T.J = { "who": "Louise", "where": "Iana" } output is "*** error ***", not NULL.
     -- This is because answer in standard (NULL) is not correct. Query "strict $.friends[*].name" is executed in strict mode
@@ -49,11 +59,16 @@ SELECT
     JSON_VALUE (
         T.J, 'strict $.friends[*].name' NULL ON EMPTY DEFAULT '*** error ***' ON ERROR
     ) AS Friend
-FROM T;
+FROM
+    T
+;
 
 SELECT
     T.K,
     JSON_VALUE (T.J, 'lax $.who') AS Who,
+
     -- NOTE: In the original example INTEGER type was used. YQL does not have INTEGER type, Int64 was used instead
     JSON_VALUE (T.J, 'lax $.friends[0].rank' RETURNING Int64 NULL ON EMPTY) AS Rank
-FROM T;
+FROM
+    T
+;

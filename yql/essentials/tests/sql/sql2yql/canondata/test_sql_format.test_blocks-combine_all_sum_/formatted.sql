@@ -7,6 +7,8 @@ SELECT
     sum(CAST(key AS int32)),
     sum(1u / 0u),
     sum(2),
-    sum(if(key = 10u, key)),
-    sum(if(key = 100u, key))
-FROM Input;
+    sum(if(key == 10u, key)),
+    sum(if(key == 100u, key))
+FROM
+    Input
+;

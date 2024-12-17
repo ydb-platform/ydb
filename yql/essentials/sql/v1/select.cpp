@@ -124,6 +124,10 @@ public:
                     Node = Y("SingleMember", Y("SqlAccess", Q("dict"), Y("Take", Node, Y("Uint64", Q("1"))), Y("Uint64", Q("0"))));
                 } else {
                     ctx.Error(Pos) << "Source used in expression should contain one concrete column";
+                    if (RefPos) {
+                        ctx.Error(*RefPos) << "Source is used here";
+                    }
+
                     return false;
                 }
             }
@@ -565,6 +569,10 @@ public:
                 Node = Y("SingleMember", Y("SqlAccess", Q("dict"), Y("Take", Node, Y("Uint64", Q("1"))), Y("Uint64", Q("0"))));
             } else {
                 ctx.Error(Pos) << "Source used in expression should contain one concrete column";
+                if (RefPos) {
+                    ctx.Error(*RefPos) << "Source is used here";
+                }
+
                 return false;
             }
         }
@@ -2800,7 +2808,11 @@ public:
     TNodePtr Build(TContext& ctx) override {
         TPtr res;
         if (QuantifierAll) {
-            res = ctx.PositionalUnionAll ? Y("UnionAllPositional") : Y("UnionAll");
+            if (ctx.EmitUnionMerge) {
+                res = ctx.PositionalUnionAll ? Y("UnionMergePositional") : Y("UnionMerge");
+            } else {
+                res = ctx.PositionalUnionAll ? Y("UnionAllPositional") : Y("UnionAll");
+            }
         } else {
             res = ctx.PositionalUnionAll ? Y("UnionPositional") : Y("Union");
         }
@@ -2848,8 +2860,8 @@ private:
 };
 
 TSourcePtr BuildUnion(
-    TPosition pos, 
-    TVector<TSourcePtr>&& sources, 
+    TPosition pos,
+    TVector<TSourcePtr>&& sources,
     bool quantifierAll,
     const TWriteSettings& settings
 ) {

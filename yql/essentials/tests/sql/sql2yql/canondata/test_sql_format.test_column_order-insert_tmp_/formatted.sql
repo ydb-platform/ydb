@@ -1,45 +1,58 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
+
 PRAGMA OrderedColumns;
 
 INSERT INTO @tmp
 SELECT
     *
-FROM Input
+FROM
+    Input
 ORDER BY
     subkey,
-    key;
+    key
+;
+
 COMMIT;
 
 SELECT
     *
-FROM @tmp
+FROM
+    @tmp
 ORDER BY
     subkey,
-    key;
+    key
+;
 
-INSERT INTO @tmp
-    WITH truncate
+INSERT INTO @tmp WITH truncate
 SELECT
     key,
     value,
     subkey
-FROM Input
+FROM
+    Input
 ORDER BY
     subkey,
-    key;
+    key
+;
 
 SELECT
     *
-FROM @tmp
+FROM
+    @tmp
 ORDER BY
     subkey,
-    key;
+    key
+;
+
 COMMIT;
 
 SELECT
     *
-FROM @tmp
+FROM
+    @tmp
 ORDER BY
     subkey,
-    key;
+    key
+;

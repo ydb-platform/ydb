@@ -1,23 +1,26 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $make_struct = CALLABLE (
     Callable<(String) -> Struct<lel: Int32>>,
     ($_string) -> {
         RETURN AsStruct(5 AS lel);
     }
 );
+
 $kekify_struct = ($struct) -> {
     RETURN EvaluateCode(
         FuncCode(
-            "AsStruct",
+            'AsStruct',
             ListMap(
                 StructTypeComponents(TypeHandle(TypeOf($struct))),
                 ($_component) -> {
-                    RETURN ListCode(AtomCode("kek"), ReprCode(42));
+                    RETURN ListCode(AtomCode('kek'), ReprCode(42));
                 }
             )
         )
     );
 };
+
 $struct = AsStruct(
     CALLABLE (
         Callable<(String) -> Struct<kek: Int32>>,
@@ -29,4 +32,5 @@ $struct = AsStruct(
 );
 
 SELECT
-    FormatType(EvaluateType($struct.IntHandle));
+    FormatType(EvaluateType($struct.IntHandle))
+;

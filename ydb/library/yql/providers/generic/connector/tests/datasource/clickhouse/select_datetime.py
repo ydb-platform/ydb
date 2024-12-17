@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import datetime
 from typing import Sequence
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind, EGenericProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
@@ -120,8 +120,8 @@ class Factory:
             data_out_=data_out,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,
-            data_source_kind=EDataSourceKind.CLICKHOUSE,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.CLICKHOUSE,
+            protocol=EGenericProtocol.NATIVE,
             schema=schema,
             pragmas=dict(),
             check_output_schema=True,
@@ -177,12 +177,12 @@ class Factory:
         return TestCase(
             name_=test_case_name,
             date_time_format=EDateTimeFormat.STRING_FORMAT,
-            protocol=EProtocol.NATIVE,
+            protocol=EGenericProtocol.NATIVE,
             data_in=None,
             data_out_=data_out,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,
-            data_source_kind=EDataSourceKind.CLICKHOUSE,
+            data_source_kind=EGenericDataSourceKind.CLICKHOUSE,
             schema=schema,
             pragmas=dict(),
             check_output_schema=True,

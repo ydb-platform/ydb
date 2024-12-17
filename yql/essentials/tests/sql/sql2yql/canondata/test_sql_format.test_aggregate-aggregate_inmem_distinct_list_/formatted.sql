@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     listlength(aggregate_list(DISTINCT x)) AS c
 FROM (
@@ -56,4 +57,5 @@ FROM (
 GROUP BY
     x
 ORDER BY
-    c;
+    c
+;

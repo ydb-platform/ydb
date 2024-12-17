@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
 $foo = (
@@ -8,4 +9,6 @@ $foo = (
 
 SELECT
     bar
-FROM $foo;
+FROM
+    $foo
+;

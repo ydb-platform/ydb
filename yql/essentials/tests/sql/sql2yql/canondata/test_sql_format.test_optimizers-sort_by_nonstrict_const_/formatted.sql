@@ -1,9 +1,12 @@
-/* yt can not *//* custom error:Member not found: date*/
+/* yt can not */
+/* custom error:Member not found: date*/
 USE plato;
 
 SELECT
     *
-FROM Input
+FROM
+    Input
 ORDER BY
     date,
-    double;
+    double
+;

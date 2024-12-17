@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     Yql::AggrEquals([], []),
     Yql::AggrNotEquals([], []),
@@ -8,11 +9,11 @@ SELECT
     Yql::AggrGreaterOrEqual([], []),
     Yql::AggrEquals({}, {}),
     Yql::AggrNotEquals({}, {}),
-    [] = [],
-    [] = ListCreate(Int32),
-    ListCreate(Int32) = [],
-    [] = [1],
-    [1] = [],
+    [] == [],
+    [] == ListCreate(Int32),
+    ListCreate(Int32) == [],
+    [] == [1],
+    [1] == [],
     [] != [],
     [] != ListCreate(Int32),
     ListCreate(Int32) != [],
@@ -38,13 +39,14 @@ SELECT
     ListCreate(Int32) >= [],
     [] >= [1],
     [1] >= [],
-    {} = {},
-    {} = SetCreate(Int32),
-    SetCreate(Int32) = {},
-    {} = {1},
-    {1} = {},
+    {} == {},
+    {} == SetCreate(Int32),
+    SetCreate(Int32) == {},
+    {} == {1},
+    {1} == {},
     {} != {},
     {} != SetCreate(Int32),
     SetCreate(Int32) != {},
     {} != {1},
-    {1} != {},;
+    {1} != {},
+;

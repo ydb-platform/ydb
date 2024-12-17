@@ -87,6 +87,15 @@ namespace NActors {
 
     void TExecutorThread::UnregisterActor(TMailbox* mailbox, TActorId actorId) {
         Y_DEBUG_ABORT_UNLESS(actorId.PoolID() == ThreadCtx.PoolId() && ThreadCtx.Pool()->ResolveMailbox(actorId.Hint()) == mailbox);
+	
+
+	// For logging
+	TStringStream logOut;
+	logOut << "Die "
+		<< actorId << " "
+		<< TInstant::Now().ToString() << "\n";
+	Cerr << logOut.Str();
+
         IActor* actor = mailbox->DetachActor(actorId.LocalId());
         ExecutionStats.DecrementActorsAliveByActivity(actor->GetActivityType());
         DyingActors.push_back(THolder(actor));
@@ -266,17 +275,32 @@ namespace NActors {
                         TlsThreadContext->ActivityContext.ElapsingActorActivity.store(activityType, std::memory_order_release);
                     }
 
-                    actor->Receive(ev);
 
                     // For logging
-                    TStringStream logOut;
-                    logOut << "Receive "
-                        << actor->GetActorName() << " "
-                        << actor->SelfId() << " "
-                        // << ev->Sender << " "
-                        << (void*)ev.Get() << " "
-                        << TInstant::Now().ToString() << "\n";
-                    Cerr << logOut.Str();
+                    auto getNameWithoutSpace = [&actor]() {
+                        auto name = actor->GetActorName();
+                        std::string nameWithoutSpace;
+                        for (auto sym : name) {
+                            if (sym == ' ') {
+                                nameWithoutSpace += '+';
+                            } else {
+                                nameWithoutSpace += sym;
+                            }
+                        }
+                        return nameWithoutSpace;
+                    };
+                    if (ev) {
+   		        TStringStream logOut;
+                        logOut << "Receive "
+                            << actor->SelfId() << " "
+                            << ev->Sender << " "
+                            << (void*)ev.Get() << " "
+                            << TInstant::Now().ToString() << " "
+                            << getNameWithoutSpace() << "\n";
+                        Cerr << logOut.Str();
+                    }
+
+                    actor->Receive(ev);
 
                     hpnow = GetCycleCountFast();
                     hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);

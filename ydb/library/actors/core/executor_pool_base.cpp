@@ -16,6 +16,12 @@ namespace NActors {
         actor->SelfActorId = self;
         actor->DoActorInit();
         actor->Registered(sys, owner);
+
+        TStringStream logOut;
+        logOut << "New " 
+            << actor->SelfId() << " "
+            << TInstant::Now().ToString() << "\n";
+        Cerr << logOut.Str();
     }
 
     TExecutorPoolBaseMailboxed::TExecutorPoolBaseMailboxed(ui32 poolId)

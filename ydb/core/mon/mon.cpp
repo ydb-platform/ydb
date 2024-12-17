@@ -696,12 +696,12 @@ public:
     }
 
     TString RewriteWithForwardedFromNode(const TString& response) {
-        NHttp::THttpParser<NHttp::THttpRequest, NHttp::TSocketBuffer> parser(response);
+        NHttp::THttpRequestParser parser(response);
 
         NHttp::THeadersBuilder headers(parser.Headers);
         headers.Set("X-Forwarded-From-Node", TStringBuilder() << Event->Sender.NodeId());
 
-        NHttp::THttpRenderer<NHttp::THttpRequest, NHttp::TSocketBuffer> renderer;
+        NHttp::THttpRequestRenderer renderer;
         renderer.InitRequest(parser.Method, parser.URL, parser.Protocol, parser.Version);
         renderer.Set(headers);
         if (parser.HaveBody()) {
@@ -730,12 +730,12 @@ public:
     }
 
     TString RewriteLocationWithNode(const TString& response) {
-        NHttp::THttpParser<NHttp::THttpResponse, NHttp::TSocketBuffer> parser(response);
+        NHttp::THttpResponseParser parser(response);
 
         NHttp::THeadersBuilder headers(parser.Headers);
         headers.Set("Location", TStringBuilder() << "/node/" << TActivationContext::ActorSystem()->NodeId << headers["Location"]);
 
-        NHttp::THttpRenderer<NHttp::THttpResponse, NHttp::TSocketBuffer> renderer;
+        NHttp::THttpResponseRenderer renderer;
         renderer.InitResponse(parser.Protocol, parser.Version, parser.Status, parser.Message);
         renderer.Set(headers);
         if (parser.HaveBody()) {
@@ -839,7 +839,7 @@ public:
         TString responseTxt = ev->Get()->Record.GetHttpResponse();
         NHttp::THttpOutgoingResponsePtr responseObj = Event->Get()->Request->CreateResponseString(responseTxt);
         if (responseObj->Status == "301" || responseObj->Status == "302") {
-            NHttp::THttpParser<NHttp::THttpResponse, NHttp::TSocketBuffer> parser(responseTxt);
+            NHttp::THttpResponseParser parser(responseTxt);
             NHttp::THeadersBuilder headers(parser.Headers);
             if (headers["Location"].starts_with('/')) {
                 NHttp::THttpOutgoingResponsePtr response = new NHttp::THttpOutgoingResponse(Event->Get()->Request);

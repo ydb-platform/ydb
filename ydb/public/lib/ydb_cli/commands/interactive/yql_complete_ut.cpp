@@ -5,10 +5,6 @@
 using namespace NYdb::NConsoleClient;
 
 Y_UNIT_TEST_SUITE(YqlCompleteTests) {
-    size_t CompletionsCount(TYQLCompletionEngine& engine, TString prefix) {
-        return engine.Complete(prefix).Candidates.size();
-    }
-
     Y_UNIT_TEST(Beginning) {
         TVector<TCandidate> expected = {
             {ECandidateKind::Keyword, "ALTER"},
@@ -271,8 +267,8 @@ Y_UNIT_TEST_SUITE(YqlCompleteTests) {
 
     Y_UNIT_TEST(UTF8Wide) {
         TYQLCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "\xF0\x9F\x98\x8A"), 0);
-        UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "编码"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("\xF0\x9F\x98\x8A").Candidates.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("编码").Candidates.size(), 0);
     }
 
     Y_UNIT_TEST(Typing) {

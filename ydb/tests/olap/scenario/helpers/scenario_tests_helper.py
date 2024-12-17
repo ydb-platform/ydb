@@ -1,4 +1,5 @@
 from __future__ import annotations
+import enum
 import os
 import allure
 import allure_commons
@@ -59,26 +60,79 @@ class ScenarioTestHelper:
         sth.execute_scheme_query(DropTable(table_name))
     """
 
+    DEFAULT_RETRIABLE_ERRORS = {
+        ydb.StatusCode.OVERLOADED,
+        ydb.StatusCode.BAD_SESSION,
+        ydb.StatusCode.CONNECTION_LOST,
+        ydb.StatusCode.UNAVAILABLE,
+    }
+
+    @enum.unique
+    class Compression(enum.IntEnum):
+        OFF = 1
+        LZ4 = 2
+        ZSTD = 3
+
+    class ColumnFamily:
+        """A class that describes a column family."""
+
+        def __init__(self, name: str, compression: ScenarioTestHelper.Compression, compression_level: Optional[int]):
+            """Constructor.
+
+            Args:
+                name: Column family name.
+                compression: Compression codec.
+                compression_level: Compression codec level.
+            """
+
+            self._name = name
+            self._compression = compression
+            self._compression_level = compression_level
+
+        def to_yql(self) -> str:
+            """Convert to YQL"""
+            return f'FAMILY {self._name} (COMPRESSION = "{self._compression.name}"{", COMPRESSION_LEVEL = " + str(self._compression_level) if self._compression_level is not None else ""})'
+
+        @property
+        def name(self) -> str:
+            """Column family name."""
+
+            return self._name
+
+        @property
+        def compression(self) -> ScenarioTestHelper.Compression:
+            """Compression"""
+
+            return self._compression
+
+        @property
+        def compression_level(self) -> Optional[int]:
+            """Compression level."""
+
+            return self._compression_level
+
     class Column:
         """A class that describes a table column."""
 
-        def __init__(self, name: str, type: ydb.PrimitiveType, not_null: bool = False) -> None:
+        def __init__(self, name: str, type: ydb.PrimitiveType, column_family_name: str = "", not_null: bool = False) -> None:
             """Constructor.
 
             Args:
                 name: Column name.
                 type: Column type.
+                column_family_name: Column Family name.
                 not_null: Whether the entry in the column can be NULL.
             """
 
             self._name = name
             self._type = type
+            self._column_family_name = column_family_name
             self._not_null = not_null
 
         def to_yql(self) -> str:
             """Convert to YQL"""
 
-            return f'{self._name} {self._type}{" NOT NULL" if self._not_null else ""}'
+            return f'{self._name} {self._type}{"" if not self._column_family_name else f" FAMILY {self._column_family_name}"}{" NOT NULL" if self._not_null else ""}'
 
         @property
         def bulk_upsert_type(self) -> ydb.OptionalType | ydb.PrimitiveType:
@@ -100,6 +154,11 @@ class ScenarioTestHelper:
 
             return self._type
 
+        def column_family(self) -> str:
+            """Colum family name"""
+
+            return "default" if not self._column_family_name else self._column_family_name
+
         @property
         def not_null(self) -> bool:
             """Whether the entry in the column can be NULL."""
@@ -113,8 +172,9 @@ class ScenarioTestHelper:
             schema = (
                 ScenarioTestHelper.Schema()
                 .with_column(name='id', type=PrimitiveType.Int32, not_null=True)
-                .with_column(name='level', type=PrimitiveType.Uint32)
+                .with_column(name='level', type=PrimitiveType.Uint32, column_family_name="family1")
                 .with_key_columns('id')
+                .with_column_family(name="family1", compression=ScenarioTestHelper.Compression.LZ4, compression_level=None)
             )
         """
 
@@ -123,6 +183,7 @@ class ScenarioTestHelper:
 
             self.columns = []
             self.key_columns = []
+            self.column_families = []
 
         def with_column(self, *vargs, **kargs) -> ScenarioTestHelper.Schema:
             """Add a column.
@@ -146,6 +207,18 @@ class ScenarioTestHelper:
                 self."""
 
             self.key_columns += vargs
+            return self
+
+        def with_column_family(self, *vargs, **kargs) -> ScenarioTestHelper.Schema:
+            """Add a column family.
+
+            The method arguments are the same as {ScenarioTestHelper.ColumnFamily.__init__}.
+
+            Returns:
+                self.
+            """
+
+            self.column_families.append(ScenarioTestHelper.ColumnFamily(*vargs, **kargs))
             return self
 
         def build_bulk_columns_types(self) -> ydb.BulkUpsertColumns:
@@ -622,3 +695,15 @@ class ScenarioTestHelper:
                 )
             else:
                 pytest.fail(f'Cannot remove type {repr(e.type)} for path {os.path.join(root_path, e.name)}')
+
+    def get_volumes_columns(self, table_name: str, name_column: str) -> tuple[int, int]:
+        query = f'''SELECT * FROM `{ScenarioTestHelper(self.test_context).get_full_path(table_name)}/.sys/primary_index_stats` WHERE Activity == 1'''
+        if (len(name_column)):
+            query += f' AND EntityName = \"{name_column}\"'
+        result_set = self.execute_scan_query(query, {ydb.StatusCode.SUCCESS}).result_set
+        raw_bytes = 0
+        bytes = 0
+        for row in result_set.rows:
+            raw_bytes += row["RawBytes"]
+            bytes += row["BlobRangeSize"]
+        return raw_bytes, bytes

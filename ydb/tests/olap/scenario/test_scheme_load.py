@@ -7,7 +7,7 @@ from ydb.tests.olap.scenario.helpers import (
     DropTable,
 )
 from ydb import PrimitiveType
-import threading
+from helpers.thread_helper import TestThread
 import allure
 
 
@@ -18,20 +18,6 @@ class TestSchemeLoad(BaseTestSet):
         .with_column(name='level', type=PrimitiveType.Uint32)
         .with_key_columns('id')
     )
-
-    class TestThread(threading.Thread):
-        def run(self) -> None:
-            self.exc = None
-            try:
-                self.ret = self._target(*self._args, **self._kwargs)
-            except BaseException as e:
-                self.exc = e
-
-        def join(self, timeout=None):
-            super().join(timeout)
-            if self.exc:
-                raise self.exc
-            return self.ret
 
     def _create_tables(self, prefix: str, count: int, ctx: TestContext):
         sth = ScenarioTestHelper(ctx)
@@ -52,7 +38,7 @@ class TestSchemeLoad(BaseTestSet):
             threads = []
             for t in range(threads_count):
                 threads.append(
-                    self.TestThread(target=self._create_tables, args=[str(t), int(tables_count / threads_count), ctx])
+                    TestThread(target=self._create_tables, args=[str(t), int(tables_count / threads_count), ctx])
                 )
                 threads[-1].start()
             for t in threads:
@@ -62,7 +48,7 @@ class TestSchemeLoad(BaseTestSet):
             threads = []
             for t in range(threads_count):
                 threads.append(
-                    self.TestThread(target=self._drop_tables, args=[str(t), int(tables_count / threads_count), ctx])
+                    TestThread(target=self._drop_tables, args=[str(t), int(tables_count / threads_count), ctx])
                 )
                 threads[-1].start()
             for t in threads:

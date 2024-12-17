@@ -1,4 +1,4 @@
-from conftest import BaseTestSet 
+from conftest import BaseTestSet
 from ydb.tests.olap.scenario.helpers import (
     ScenarioTestHelper,
     TestContext,
@@ -63,7 +63,12 @@ class TestAlterCompression(BaseTestSet):
             # assert sth.get_table_rows_count(table_path) == rows_written
 
     def _loop_alter_table(
-        self, ctx: TestContext, action: AlterTableLikeObject, table: str, column_families: list[str], duration: timedelta
+        self,
+        ctx: TestContext,
+        action: AlterTableLikeObject,
+        table: str,
+        column_families: list[str],
+        duration: timedelta,
     ):
         data_types = [
             PrimitiveType.Double,
@@ -94,12 +99,26 @@ class TestAlterCompression(BaseTestSet):
             column_name: str = random.choice(column_names)
             family: str = random.choice(column_families)
             index_compression_type: int = random.randint(0, len(compressions) - 1)
-            compression: ScenarioTestHelper.Compression = compressions[index_compression_type]
-            sth.execute_scheme_query(AlterTable(table).action(AlterColumnFamily(family, AlterCompression(compression))))
+            compression: ScenarioTestHelper.Compression = compressions[
+                index_compression_type
+            ]
+            sth.execute_scheme_query(
+                AlterTable(table).action(
+                    AlterColumnFamily(family, AlterCompression(compression))
+                )
+            )
             if compression == ScenarioTestHelper.Compression.ZSTD:
                 compression_level: int = random.randint(0, 10)
-                sth.execute_scheme_query(AlterTable(table).action(AlterColumnFamily(family, AlterCompressionLevel(compression_level))))
-            sth.execute_scheme_query(AlterTable(table).action(AlterColumn(column_name, AlterFamily(family))))
+                sth.execute_scheme_query(
+                    AlterTable(table).action(
+                        AlterColumnFamily(
+                            family, AlterCompressionLevel(compression_level)
+                        )
+                    )
+                )
+            sth.execute_scheme_query(
+                AlterTable(table).action(AlterColumn(column_name, AlterFamily(family)))
+            )
 
     def _upsert_and_alter(
         self,
@@ -109,7 +128,7 @@ class TestAlterCompression(BaseTestSet):
         tables: list[str],
         count_rows: int,
         duration: timedelta,
-        column_families: list[str]
+        column_families: list[str],
     ):
         sth = ScenarioTestHelper(ctx)
         threads = []
@@ -195,7 +214,7 @@ class TestAlterCompression(BaseTestSet):
         ctx: TestContext,
         tables: list[str],
         alter_action: AlterTable,
-        column_family_names: list[str]
+        column_family_names: list[str],
     ):
         sth = ScenarioTestHelper(ctx)
         self._upsert_and_alter(
@@ -205,7 +224,7 @@ class TestAlterCompression(BaseTestSet):
             tables=tables,
             count_rows=self.count_rows_for_bulk_upsert,
             duration=self.duration_alter_and_insert,
-            column_families=column_family_names
+            column_families=column_family_names,
         )
         column_names: list[str] = [column.name for column in self.schema1.columns]
         assert self._read_data(ctx=ctx, tables=tables, column_names=column_names)
@@ -281,46 +300,60 @@ class TestAlterCompression(BaseTestSet):
                     alter_action=AlterTable(table_name).action(
                         AlterColumn(column_name, AlterFamily(family.name))
                     ),
-                    column_family_names=column_family_names
+                    column_family_names=column_family_names,
                 )
 
             self._scenario(
                 ctx=ctx,
                 tables=tables,
-                alter_action=AlterTable(table_name).action(AlterColumnFamily(
-                        column_families[-1].name, AlterCompression(column_families[-1].compression)
-                    )).action(
+                alter_action=AlterTable(table_name)
+                .action(
+                    AlterColumnFamily(
+                        column_families[-1].name,
+                        AlterCompression(column_families[-1].compression),
+                    )
+                )
+                .action(
                     AlterColumnFamily(
                         column_families[-1].name, AlterCompressionLevel(9)
                     )
                 ),
-                column_family_names=column_family_names
+                column_family_names=column_family_names,
             )
 
             self._scenario(
                 ctx=ctx,
                 tables=tables,
-                alter_action=AlterTable(table_name).action(AlterColumnFamily(
-                        column_families[-1].name, AlterCompression(column_families[-1].compression)
-                    )).action(
+                alter_action=AlterTable(table_name)
+                .action(
+                    AlterColumnFamily(
+                        column_families[-1].name,
+                        AlterCompression(column_families[-1].compression),
+                    )
+                )
+                .action(
                     AlterColumnFamily(
                         column_families[-1].name, AlterCompressionLevel(0)
                     )
                 ),
-                column_family_names=column_family_names
+                column_family_names=column_family_names,
             )
 
             self._scenario(
                 ctx=ctx,
                 tables=tables,
-                alter_action=AlterTable(table_name).action(AlterColumnFamily(
-                        column_families[-1].name, AlterCompression(column_families[-1].compression)
-                    )).action(
+                alter_action=AlterTable(table_name)
+                .action(
+                    AlterColumnFamily(
+                        column_families[-1].name,
+                        AlterCompression(column_families[-1].compression),
+                    )
+                )
+                .action(
                     AlterColumnFamily(
                         column_families[-1].name,
                         AlterCompressionLevel(prev_compression_level),
                     )
                 ),
-                column_family_names=column_family_names
+                column_family_names=column_family_names,
             )
-

@@ -31,7 +31,6 @@ from ydb import PrimitiveType, StatusCode
 import boto3
 import datetime
 import random
-import threading
 from typing import Iterable, Optional
 import itertools
 from string import ascii_lowercase

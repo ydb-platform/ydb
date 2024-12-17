@@ -231,6 +231,18 @@ namespace Tests {
             AppConfig->MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);
             return *this;
         }
+        TServerSettings& SetEnableOlapSink(bool withOlapSink) {
+            AppConfig->MutableTableServiceConfig()->SetEnableOlapSink(withOlapSink);
+            return *this;
+        }
+        TServerSettings& SetEnableHtapTx(bool withHtapTx) {
+            AppConfig->MutableTableServiceConfig()->SetEnableHtapTx(withHtapTx);
+            return *this;
+        }
+        TServerSettings& SetAllowOlapDataQuery(bool withAllowOlapDataQuery) {
+            AppConfig->MutableTableServiceConfig()->SetAllowOlapDataQuery(withAllowOlapDataQuery);
+            return *this;
+        }
 
 
         // Add additional grpc services

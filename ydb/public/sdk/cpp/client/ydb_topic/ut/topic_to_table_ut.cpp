@@ -233,6 +233,9 @@ protected:
                         const TString& boundary);
   
     virtual bool GetEnableOltpSink() const;
+    virtual bool GetEnableOlapSink() const;
+    virtual bool GetEnableHtapTx() const;
+    virtual bool GetAllowOlapDataQuery() const;
 
 private:
     template<class E>
@@ -279,6 +282,9 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
     settings.SetEnableTopicSplitMerge(true);
     settings.SetEnablePQConfigTransactionsAtSchemeShard(true);
     settings.SetEnableOltpSink(GetEnableOltpSink());
+    settings.SetEnableOlapSink(GetEnableOlapSink());
+    settings.SetEnableHtapTx(GetEnableHtapTx());
+    settings.SetAllowOlapDataQuery(GetAllowOlapDataQuery());
 
     Setup = std::make_unique<TTopicSdkTestSetup>(TEST_CASE_NAME, settings);
 
@@ -1402,6 +1408,21 @@ auto TFixture::GetAvgWriteBytes(const TString& topicName,
 }
 
 bool TFixture::GetEnableOltpSink() const
+{
+    return false;
+}
+
+bool TFixture::GetEnableOlapSink() const
+{
+    return false;
+}
+
+bool TFixture::GetEnableHtapTx() const
+{
+    return false;
+}
+
+bool TFixture::GetAllowOlapDataQuery() const
 {
     return false;
 }
@@ -2557,37 +2578,55 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_48, TFixture)
     UNIT_ASSERT_GT(topicDescription.GetTotalPartitionsCount(), 2);
 }
 
-class TFixtureOltpSink : public TFixture {
+class TFixtureSinks : public TFixture {
 protected:
     bool GetEnableOltpSink() const override;
+    bool GetEnableOlapSink() const override;
+    bool GetEnableHtapTx() const override;
+    bool GetAllowOlapDataQuery() const override;
 };
 
-bool TFixtureOltpSink::GetEnableOltpSink() const
+bool TFixtureSinks::GetEnableOltpSink() const
 {
     return true;
 }
 
-Y_UNIT_TEST_F(OltpSink_WriteToTopic_1, TFixtureOltpSink)
+bool TFixtureSinks::GetEnableOlapSink() const
+{
+    return true;
+}
+
+bool TFixtureSinks::GetEnableHtapTx() const
+{
+    return true;
+}
+
+bool TFixtureSinks::GetAllowOlapDataQuery() const
+{
+    return true;
+}
+
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_1, TFixtureSinks)
 {
     TestWriteToTopic7();
 }
 
-Y_UNIT_TEST_F(OltpSink_WriteToTopic_2, TFixtureOltpSink)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_2, TFixtureSinks)
 {
     TestWriteToTopic10();
 }
 
-Y_UNIT_TEST_F(OltpSink_WriteToTopic_3, TFixtureOltpSink)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_3, TFixtureSinks)
 {
     TestWriteToTopic26();
 }
 
-Y_UNIT_TEST_F(OltpSink_WriteToTopic_4, TFixtureOltpSink)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_4, TFixtureSinks)
 {
     TestWriteToTopic9();
 }
 
-Y_UNIT_TEST_F(OltpSink_WriteToTopic_5, TFixtureOltpSink)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_5, TFixtureSinks)
 {
     CreateTopic("topic_A");
 
@@ -2605,32 +2644,32 @@ Y_UNIT_TEST_F(OltpSink_WriteToTopic_5, TFixtureOltpSink)
     Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 0);
 }
 
-Y_UNIT_TEST_F(OltpSink_WriteToTopics_1, TFixtureOltpSink)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopics_1, TFixtureSinks)
 {
     TestWriteToTopic1();
 }
 
-Y_UNIT_TEST_F(OltpSink_WriteToTopics_2, TFixtureOltpSink)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopics_2, TFixtureSinks)
 {
     TestWriteToTopic27();
 }
 
-Y_UNIT_TEST_F(OltpSink_WriteToTopics_3, TFixtureOltpSink)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopics_3, TFixtureSinks)
 {
     TestWriteToTopic11();
 }
 
-Y_UNIT_TEST_F(OltpSink_WriteToTopics_4, TFixtureOltpSink)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopics_4, TFixtureSinks)
 {
     TestWriteToTopic4();
 }
 
-Y_UNIT_TEST_F(OltpSink_WriteToTopicAndTable_1, TFixtureOltpSink)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_1, TFixtureSinks)
 {
     TestWriteToTopic24();
 }
 
-Y_UNIT_TEST_F(OltpSink_WriteToTopicAndTable_2, TFixtureOltpSink)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_2, TFixtureSinks)
 {
     CreateTopic("topic_A");
     CreateTopic("topic_B");
@@ -2669,7 +2708,7 @@ Y_UNIT_TEST_F(OltpSink_WriteToTopicAndTable_2, TFixtureOltpSink)
     CheckTabletKeys("topic_B");
 }
 
-Y_UNIT_TEST_F(OltpSink_WriteToTopicAndTable_3, TFixtureOltpSink)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_3, TFixtureSinks)
 {
     CreateTopic("topic_A");
     CreateTopic("topic_B");
@@ -2714,7 +2753,7 @@ Y_UNIT_TEST_F(OltpSink_WriteToTopicAndTable_3, TFixtureOltpSink)
     CheckTabletKeys("topic_B");
 }
 
-Y_UNIT_TEST_F(OltpSink_WriteToTopicAndTable_4, TFixtureOltpSink)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_4, TFixtureSinks)
 {
     CreateTopic("topic_A");
     CreateTable("/Root/table_A");
@@ -2739,7 +2778,7 @@ Y_UNIT_TEST_F(OltpSink_WriteToTopicAndTable_4, TFixtureOltpSink)
     UNIT_ASSERT_VALUES_EQUAL(GetTableRecordsCount("table_A"), records.size());
 }
 
-Y_UNIT_TEST_F(OltpSink_WriteToTopicAndTable_5, TFixtureOltpSink)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_5, TFixtureSinks)
 {
     CreateTopic("topic_A");
     CreateTable("/Root/table_A");

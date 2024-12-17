@@ -330,7 +330,7 @@ static const TDuration minSaveInterval = TDuration::Seconds(10);
 class TProgressFile {
 public:
     TProgressFile(const TString& sourceFilePath)
-        : SourceFilePath(sourceFilePath)
+        : SourceFilePath(sourceFilePath.empty() ? sourceFilePath : "std_input")
     {
         std::vector<TString> pathParts;
         StringSplitter(sourceFilePath).Split('/').Collect(&pathParts);
@@ -346,18 +346,21 @@ public:
     }
 
     bool Load() {
+        bool fakeLoad = true;
         try {
-            if (ProgressFilePath.Exists()) {
+            if (!fakeLoad && ProgressFilePath.Exists()) {
                 Progress = YAML::LoadFile(ProgressFilePath.GetPath());
-                if (static_cast<bool>(Progress[sourceModifiedKey])
-                        && Progress[sourceModifiedKey].as<i64>() == TFileStat(SourceFilePath).MTime) {
-                    return true;
-                } else {
-                    if (!static_cast<bool>(Progress[sourceModifiedKey])) {
-                        Cerr << "(!) Progress file \"" << ProgressFilePath.GetPath()
-                            << "\" doesn't have modification time" << Endl;
+                if (SourceFilePath != "std_input") {
+                    if (static_cast<bool>(Progress[sourceModifiedKey])
+                            && Progress[sourceModifiedKey].as<i64>() == TFileStat(SourceFilePath).MTime) {
+                        return true;
+                    } else {
+                        if (!static_cast<bool>(Progress[sourceModifiedKey])) {
+                            Cerr << "(!) Progress file \"" << ProgressFilePath.GetPath()
+                                << "\" doesn't have modification time" << Endl;
+                        }
+                        ProgressFilePath.DeleteIfExists();
                     }
-                    ProgressFilePath.DeleteIfExists();
                 }
             }
         } catch (const std::exception& e) {
@@ -369,6 +372,10 @@ public:
     }
 
     bool Save() {
+        bool fakeSave = true;
+        if (fakeSave) {
+            return true;
+        }
         if (FailedToSave) {
             // Failed to save once, do not try to save again
             return false;
@@ -431,7 +438,7 @@ public:
     }
 
     TString GetSourceFilePath() const {
-        return SourceFilePath.GetPath();
+        return SourceFilePath == "std_input" ? SourceFilePath : TFsPath(SourceFilePath).Fix().GetPath();
     }
 
     TString GetProgressFilePath() const {
@@ -445,11 +452,13 @@ public:
 private:
     void StartNewProgress() {
         Progress = YAML::Node();
-        Progress[sourceModifiedKey] = TFileStat(SourceFilePath).MTime;
+        if (SourceFilePath != "std_input") {
+            Progress[sourceModifiedKey] = TFileStat(SourceFilePath).MTime;
+        }
         Progress[completedKey] = false;
     }
 
-    TFsPath SourceFilePath;
+    TString SourceFilePath;
     TFsPath ProgressFilePath;
     YAML::Node Progress;
     bool FailedToSave = false; // To prevent error messaging on every save attempt

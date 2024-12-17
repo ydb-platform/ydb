@@ -1,5 +1,5 @@
 (
-(import aggregate_module '"/lib/yql/aggregate.yql")
+(import aggregate_module '"/lib/yql/aggregate.yqls")
 (let world (block '(
   (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) '('"key" '"subkey" '"value") '()))
   (let world (Left! x))

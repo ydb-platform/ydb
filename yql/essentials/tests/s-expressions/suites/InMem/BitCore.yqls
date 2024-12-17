@@ -2,7 +2,7 @@
 (let config (DataSource 'config))
 (let world (Configure! world config 'PureDataSource 'yt))
 
-(import core_module '"/lib/yql/core.yql")
+(import core_module '"/lib/yql/core.yqls")
 (let res_sink (DataSink 'result))
 (let test (lambda '(world data) (block '(
   (let world (Write! world res_sink (Key) data '('('type))))

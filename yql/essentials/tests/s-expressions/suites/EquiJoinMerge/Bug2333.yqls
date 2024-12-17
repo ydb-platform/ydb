@@ -1,5 +1,5 @@
 (
-(import aggregate_module '"/lib/yql/aggregate.yql")
+(import aggregate_module '"/lib/yql/aggregate.yqls")
 (let world (Configure! world (DataSource '"yt" '"$all") '"Attr" '"joinmergetableslimit" '"2"))
 (let world (Configure! world (DataSource '"yt" '"$all") '"Attr" '"joinmergeunsortedfactor" '"0.8"))
 (let world (block '(

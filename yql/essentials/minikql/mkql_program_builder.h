@@ -712,12 +712,15 @@ public:
     TRuntimeNode MatchRecognizeCore(
         TRuntimeNode inputStream,
         const TUnaryLambda& getPartitionKeySelectorNode,
-        const TArrayRef<TStringBuf>& partitionColumns,
-        const TArrayRef<std::pair<TStringBuf, TBinaryLambda>>& getMeasures,
+        const TArrayRef<TStringBuf>& partitionColumnNames,
+        const TVector<TStringBuf>& measureColumnNames,
+        const TVector<TBinaryLambda>& getMeasures,
         const NYql::NMatchRecognize::TRowPattern& pattern,
-        const TArrayRef<std::pair<TStringBuf, TTernaryLambda>>& getDefines,
+        const TVector<TStringBuf>& defineVarNames,
+        const TVector<TTernaryLambda>& getDefines,
         bool streamingMode,
-        const NYql::NMatchRecognize::TAfterMatchSkipTo& skipTo
+        const NYql::NMatchRecognize::TAfterMatchSkipTo& skipTo,
+        NYql::NMatchRecognize::ERowsPerMatch rowsPerMatch
     );
 
     TRuntimeNode TimeOrderRecover(

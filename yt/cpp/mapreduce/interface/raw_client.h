@@ -1,6 +1,7 @@
 #pragma once
 
 #include "client_method_options.h"
+#include "operation.h"
 
 namespace NYT {
 
@@ -110,6 +111,45 @@ public:
         const TVector<TRichYPath>& sourcePaths,
         const TRichYPath& destinationPath,
         const TConcatenateOptions& options = {}) = 0;
+
+    // Transactions
+
+    virtual void PingTx(const TTransactionId& transactionId) = 0;
+
+    // Operations
+
+    virtual TOperationAttributes GetOperation(
+        const TOperationId& operationId,
+        const TGetOperationOptions& options = {}) = 0;
+
+    virtual TOperationAttributes GetOperation(
+        const TString& operationId,
+        const TGetOperationOptions& options = {}) = 0;
+
+    virtual void AbortOperation(
+        TMutationId& mutationId,
+        const TOperationId& operationId) = 0;
+
+    virtual void CompleteOperation(
+        TMutationId& mutationId,
+        const TOperationId& operationId) = 0;
+
+    virtual void SuspendOperation(
+        TMutationId& mutationId,
+        const TOperationId& operationId,
+        const TSuspendOperationOptions& options = {}) = 0;
+
+    virtual void ResumeOperation(
+        TMutationId& mutationId,
+        const TOperationId& operationId,
+        const TResumeOperationOptions& options = {}) = 0;
+
+    virtual TListOperationsResult ListOperations(const TListOperationsOptions& options = {}) = 0;
+
+    virtual void UpdateOperationParameters(
+        const TOperationId& operationId,
+        const TUpdateOperationParametersOptions& options = {}) = 0;
+
 };
 
 ////////////////////////////////////////////////////////////////////////////////

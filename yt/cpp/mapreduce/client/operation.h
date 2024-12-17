@@ -179,6 +179,7 @@ void ExecuteVanilla(
     const TOperationOptions& options);
 
 EOperationBriefState CheckOperation(
+    const IRawClientPtr& rawClient,
     const IClientRetryPolicyPtr& clientRetryPolicy,
     const TClientContext& context,
     const TOperationId& operationId);

@@ -711,17 +711,25 @@ IOperationPtr TClientBase::AttachOperation(const TOperationId& operationId)
 
 EOperationBriefState TClientBase::CheckOperation(const TOperationId& operationId)
 {
-    return NYT::NDetail::CheckOperation(ClientRetryPolicy_, Context_, operationId);
+    return NYT::NDetail::CheckOperation(RawClient_, ClientRetryPolicy_, Context_, operationId);
 }
 
 void TClientBase::AbortOperation(const TOperationId& operationId)
 {
-    NRawClient::AbortOperation(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, operationId);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &operationId] (TMutationId& mutationId) {
+            RawClient_->AbortOperation(mutationId, operationId);
+        });
 }
 
 void TClientBase::CompleteOperation(const TOperationId& operationId)
 {
-    NRawClient::CompleteOperation(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, operationId);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &operationId] (TMutationId& mutationId) {
+            RawClient_->CompleteOperation(mutationId, operationId);
+        });
 }
 
 void TClientBase::WaitForOperation(const TOperationId& operationId)
@@ -996,7 +1004,11 @@ void TTransaction::Abort()
 
 void TTransaction::Ping()
 {
-    PingTx(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, TransactionId_);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this] (TMutationId /*mutationId*/) {
+            RawClient_->PingTx(TransactionId_);
+        });
 }
 
 void TTransaction::Detach()
@@ -1265,7 +1277,11 @@ TOperationAttributes TClient::GetOperation(
     const TGetOperationOptions& options)
 {
     CheckShutdown();
-    return NRawClient::GetOperation(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, operationId, options);
+    return RequestWithRetry<TOperationAttributes>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &operationId, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->GetOperation(operationId, options);
+        });
 }
 
 TOperationAttributes TClient::GetOperation(
@@ -1273,14 +1289,21 @@ TOperationAttributes TClient::GetOperation(
     const TGetOperationOptions& options)
 {
     CheckShutdown();
-    return NRawClient::GetOperation(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, alias, options);
+    return RequestWithRetry<TOperationAttributes>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &alias, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->GetOperation(alias, options);
+        });
 }
 
-TListOperationsResult TClient::ListOperations(
-    const TListOperationsOptions& options)
+TListOperationsResult TClient::ListOperations(const TListOperationsOptions& options)
 {
     CheckShutdown();
-    return NRawClient::ListOperations(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, options);
+    return RequestWithRetry<TListOperationsResult>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->ListOperations(options);
+        });
 }
 
 void TClient::UpdateOperationParameters(
@@ -1288,7 +1311,11 @@ void TClient::UpdateOperationParameters(
     const TUpdateOperationParametersOptions& options)
 {
     CheckShutdown();
-    return NRawClient::UpdateOperationParameters(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, operationId, options);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &operationId, &options] (TMutationId /*mutationId*/) {
+            RawClient_->UpdateOperationParameters(operationId, options);
+        });
 }
 
 TJobAttributes TClient::GetJob(
@@ -1379,7 +1406,11 @@ void TClient::SuspendOperation(
     const TSuspendOperationOptions& options)
 {
     CheckShutdown();
-    NRawClient::SuspendOperation(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, operationId, options);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &operationId, &options] (TMutationId& mutationId) {
+            RawClient_->SuspendOperation(mutationId, operationId, options);
+        });
 }
 
 void TClient::ResumeOperation(
@@ -1387,7 +1418,11 @@ void TClient::ResumeOperation(
     const TResumeOperationOptions& options)
 {
     CheckShutdown();
-    NRawClient::ResumeOperation(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, operationId, options);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &operationId, &options] (TMutationId& mutationId) {
+            RawClient_->ResumeOperation(mutationId, operationId, options);
+        });
 }
 
 TYtPoller& TClient::GetYtPoller()

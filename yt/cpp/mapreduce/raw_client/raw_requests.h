@@ -36,64 +36,6 @@ void ExecuteBatch(
     const TExecuteBatchOptions& options = TExecuteBatchOptions());
 
 //
-// Transactions
-//
-
-void PingTx(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId);
-
-//
-// Operations
-//
-
-TOperationAttributes GetOperation(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TOperationId& operationId,
-    const TGetOperationOptions& options = TGetOperationOptions());
-
-TOperationAttributes GetOperation(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TString& operationId,
-    const TGetOperationOptions& options = TGetOperationOptions());
-
-void AbortOperation(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TOperationId& operationId);
-
-void CompleteOperation(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TOperationId& operationId);
-
-void SuspendOperation(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TOperationId& operationId,
-    const TSuspendOperationOptions& options = TSuspendOperationOptions());
-
-void ResumeOperation(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TOperationId& operationId,
-    const TResumeOperationOptions& options = TResumeOperationOptions());
-
-TListOperationsResult ListOperations(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TListOperationsOptions& options = TListOperationsOptions());
-
-void UpdateOperationParameters(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TOperationId& operationId,
-    const TUpdateOperationParametersOptions& options = TUpdateOperationParametersOptions());
-
-//
 // Jobs
 //
 

@@ -1,5 +1,5 @@
 (
-(import aggregate_module '"/lib/yql/aggregate.yql")
+(import aggregate_module '"/lib/yql/aggregate.yqls")
 (let world (Configure! world (DataSource '"config") 'SQL '0))
 (let world (block '(
   (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) '('"assignment_gs_count" '"assignment_assignment_id" '"assignment_last_status_change_time" '"requester_id" '"project_id" '"assignment_gs_weight") '()))

@@ -28,14 +28,11 @@ class TYtDqWideWriteWrapper final : public TStatefulFlowCodegeneratorNode<TYtDqW
             ITransactionPtr&& transaction,
             THolder<TMkqlIOSpecs>&& specs,
             TRawTableWriterPtr&& outStream,
-            THolder<TMkqlWriterImpl>&& writer,
-            size_t representationsSize
+            THolder<TMkqlWriterImpl>&& writer
         )
             : TComputationValue<TWriterState>(memInfo)
             , Client(std::move(client)), Transaction(std::move(transaction))
             , Specs(std::move(specs)), OutStream(std::move(outStream)), Writer(std::move(writer))
-            , Values(representationsSize)
-            , Fields(GetPointers(Values))
         {}
 
         ~TWriterState() override {
@@ -45,19 +42,12 @@ class TYtDqWideWriteWrapper final : public TStatefulFlowCodegeneratorNode<TYtDqW
             }
         }
 
-        void AddRow() const {
-            Writer->AddFlatRow(Values.data());
-        }
-
-        const std::vector<NUdf::TUnboxedValue*>& GetFields() const {
-            return Fields;
+        void AddRow(const NUdf::TUnboxedValuePod* row) const {
+            Writer->AddFlatRow(row);
         }
 
         void Finish() {
             if (!Finished) {
-                Values.clear();
-                Values.shrink_to_fit();
-                std::fill(Fields.begin(), Fields.end(),  nullptr);
                 Writer->Finish();
                 OutStream->Finish();
             }
@@ -70,8 +60,6 @@ class TYtDqWideWriteWrapper final : public TStatefulFlowCodegeneratorNode<TYtDqW
         const THolder<TMkqlIOSpecs> Specs;
         const TRawTableWriterPtr OutStream;
         const THolder<TMkqlWriterImpl> Writer;
-        NKikimr::NMiniKQL::TUnboxedValueVector Values;
-        std::vector<NUdf::TUnboxedValue*> Fields;
     };
 
 public:
@@ -94,6 +82,7 @@ public:
         , OutSpec(outSpec)
         , WriterOptions(writerOptions)
         , CodecCtx(std::move(codecCtx))
+        , Values(Representations.size()), Fields(GetPointers(Values))
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
@@ -102,9 +91,9 @@ public:
         } else if (state.IsInvalid())
             MakeState(ctx, state);
 
-        switch (const auto ptr = static_cast<TWriterState*>(state.AsBoxed().Get()); Flow->FetchValues(ctx, ptr->GetFields().data())) {
+        switch (const auto ptr = static_cast<TWriterState*>(state.AsBoxed().Get()); Flow->FetchValues(ctx, Fields.data())) {
             case EFetchResult::One:
-                ptr->AddRow();
+                ptr->AddRow(Values.data());
                 return NUdf::TUnboxedValuePod::Void();
             case EFetchResult::Yield:
                 return NUdf::TUnboxedValuePod::MakeYield();
@@ -236,14 +225,14 @@ private:
         auto writer = MakeHolder<TMkqlWriterImpl>(outStream, 4_MB);
         writer->SetSpecs(*specs);
 
-        state = ctx.HolderFactory.Create<TWriterState>(std::move(client), std::move(transaction), std::move(specs), std::move(outStream), std::move(writer), Representations.size());
+        state = ctx.HolderFactory.Create<TWriterState>(std::move(client), std::move(transaction), std::move(specs), std::move(outStream), std::move(writer));
     }
 
     void RegisterDependencies() const final {
         FlowDependsOn(Flow);
     }
 
-    static std::vector<NUdf::TUnboxedValue*> GetPointers(NKikimr::NMiniKQL::TUnboxedValueVector& array) {
+    static std::vector<NUdf::TUnboxedValue*> GetPointers(std::vector<NUdf::TUnboxedValue>& array) {
         std::vector<NUdf::TUnboxedValue*> pointers;
         pointers.reserve(array.size());
         std::transform(array.begin(), array.end(), std::back_inserter(pointers), [](NUdf::TUnboxedValue& v) { return std::addressof(v); });
@@ -259,6 +248,9 @@ private:
     const NYT::TNode OutSpec;
     const NYT::TNode WriterOptions;
     const THolder<NCommon::TCodecContext> CodecCtx;
+
+    std::vector<NUdf::TUnboxedValue> Values;
+    const std::vector<NUdf::TUnboxedValue*> Fields;
 };
 
 }

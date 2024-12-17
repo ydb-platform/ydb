@@ -29,6 +29,8 @@ namespace NYdb {
         struct TCandidate final {
             ECandidateKind Kind;
             std::string Content;
+
+            friend bool operator==(const TCandidate& lhs, const TCandidate& rhs) = default;
         };
 
         struct TCompletion final {

@@ -7,6 +7,8 @@
 
 #include <yql/essentials/sql/v1/format/sql_format.h>
 
+#include <util/stream/output.h>
+
 #define RULE_(mode, name) NALP##mode##Antlr4::SQLv1Antlr4Parser::Rule##name
 
 #define RULE(name) RULE_(Default, name)
@@ -166,3 +168,17 @@ namespace NYdb {
 
     } // namespace NConsoleClient
 } // namespace NYdb
+
+template <>
+void Out<NYdb::NConsoleClient::ECandidateKind>(IOutputStream& out, NYdb::NConsoleClient::ECandidateKind kind) {
+    switch (kind) {
+        case NYdb::NConsoleClient::ECandidateKind::Keyword:
+            out << "Keyword";
+            break;
+    }
+}
+
+template <>
+void Out<NYdb::NConsoleClient::TCandidate>(IOutputStream& out, const NYdb::NConsoleClient::TCandidate& candidate) {
+    out << "(" << candidate.Kind << ": " << candidate.Content << ")";
+}

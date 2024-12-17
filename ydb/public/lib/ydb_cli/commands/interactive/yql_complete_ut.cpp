@@ -9,12 +9,51 @@ Y_UNIT_TEST_SUITE(YqlCompleteTests) {
         return engine.Complete(prefix).Candidates.size();
     }
 
-    Y_UNIT_TEST(Blank) {
+    Y_UNIT_TEST(Beginning) {
         TYQLCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, ""), 33);
-        UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, " "), 33);
-        UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "  "), 33);
-        UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "   "), 33);
+
+        TVector<TCandidate> expected = {
+            {ECandidateKind::Keyword, "ALTER"},
+            {ECandidateKind::Keyword, "ANALYZE"},
+            {ECandidateKind::Keyword, "BACKUP"},
+            {ECandidateKind::Keyword, "COMMIT"},
+            {ECandidateKind::Keyword, "CREATE"},
+            {ECandidateKind::Keyword, "DECLARE"},
+            {ECandidateKind::Keyword, "DEFINE"},
+            {ECandidateKind::Keyword, "DELETE"},
+            {ECandidateKind::Keyword, "DISCARD"},
+            {ECandidateKind::Keyword, "DO"},
+            {ECandidateKind::Keyword, "DROP"},
+            {ECandidateKind::Keyword, "EVALUATE"},
+            {ECandidateKind::Keyword, "EXPLAIN"},
+            {ECandidateKind::Keyword, "EXPORT"},
+            {ECandidateKind::Keyword, "FOR"},
+            {ECandidateKind::Keyword, "FROM"},
+            {ECandidateKind::Keyword, "GRANT"},
+            {ECandidateKind::Keyword, "IF"},
+            {ECandidateKind::Keyword, "IMPORT"},
+            {ECandidateKind::Keyword, "INSERT"},
+            {ECandidateKind::Keyword, "PARALLEL"},
+            {ECandidateKind::Keyword, "PRAGMA"},
+            {ECandidateKind::Keyword, "PROCESS"},
+            {ECandidateKind::Keyword, "REDUCE"},
+            {ECandidateKind::Keyword, "REPLACE"},
+            {ECandidateKind::Keyword, "RESTORE"},
+            {ECandidateKind::Keyword, "REVOKE"},
+            {ECandidateKind::Keyword, "ROLLBACK"},
+            {ECandidateKind::Keyword, "SELECT"},
+            {ECandidateKind::Keyword, "UPDATE"},
+            {ECandidateKind::Keyword, "UPSERT"},
+            {ECandidateKind::Keyword, "USE"},
+            {ECandidateKind::Keyword, "VALUES"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("").Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete(" ").Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("  ").Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete(";").Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("; ").Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete(" ; ").Candidates, expected);
     }
 
     Y_UNIT_TEST(Select) {

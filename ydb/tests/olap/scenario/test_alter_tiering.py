@@ -6,6 +6,7 @@ from ydb.tests.olap.scenario.helpers import (
     CreateTableStore,
     DropTable,
 )
+from helpers.thread_helper import TestThread
 from helpers.tiering_helper import (
     ObjectStorageParams,
     AlterTier,
@@ -25,9 +26,8 @@ from ydb.tests.olap.lib.utils import get_external_param
 from ydb import PrimitiveType
 import datetime
 import random
-import threading
-from typing import Iterable
 import time
+from typing import Iterable
 
 
 class TestAlterTiering(BaseTestSet):
@@ -39,20 +39,6 @@ class TestAlterTiering(BaseTestSet):
         .with_column(name='data', type=PrimitiveType.String, not_null=True)
         .with_key_columns('timestamp', 'writer', 'value')
     )
-
-    class TestThread(threading.Thread):
-        def run(self) -> None:
-            self.exc = None
-            try:
-                self.ret = self._target(*self._args, **self._kwargs)
-            except BaseException as e:
-                self.exc = e
-
-        def join(self, timeout=None):
-            super().join(timeout)
-            if self.exc:
-                raise self.exc
-            return self.ret
 
     def _drop_tables(self, prefix: str, count: int, ctx: TestContext):
         sth = ScenarioTestHelper(ctx)
@@ -128,13 +114,21 @@ class TestAlterTiering(BaseTestSet):
 
         threads = []
 
-        threads.append(self.TestThread(
-            target=self._change_tiering_rule,
-            args=[ctx, 'store/table', tiering_rules, test_duration]
-        ))
-        writer_id_offset = random.randint(0, 1 << 30)
-        for i in range(4):
-            threads.append(self.TestThread(target=self._upsert, args=[ctx, 'store/table', writer_id_offset + i, test_duration]))
+        # "Alter table drop column" causes scan failures
+        threads.append(TestThread(target=self._loop_alter_column, args=[ctx, 'store', test_duration]))
+        for table in tables_for_tiering_modification:
+            threads.append(TestThread(
+                target=self._loop_change_tiering_rule,
+                args=[ctx, table, random.sample(tiering_rules, len(tiering_rules)), test_duration]
+            ))
+        for i, table in enumerate(tables):
+            for writer in range(n_writers):
+                threads.append(TestThread(target=self._loop_upsert, args=[ctx, table, i * n_writers + writer, test_duration, allow_s3_unavailability]))
+        for tiering_rule in tiering_rules:
+            threads.append(TestThread(
+                target=self._loop_alter_tiering_rule,
+                args=[ctx, tiering_rule, random.sample(['timestamp', 'timestamp2'], 2), random.sample(tiering_policy_configs, len(tiering_policy_configs)), test_duration]
+            ))
 
         for thread in threads:
             thread.start()

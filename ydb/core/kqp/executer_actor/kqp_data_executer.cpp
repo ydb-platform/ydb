@@ -160,6 +160,9 @@ public:
                 || Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW);
         }
 
+        YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
+            || tableServiceConfig.GetEnableKqpDataQueryStreamLookup());
+
         ReadOnlyTx = IsReadOnlyTx();
     }
 
@@ -1777,6 +1780,7 @@ private:
                 (VolatileTx ? NTxDataShard::TTxFlags::VolatilePrepare : 0);
             std::unique_ptr<TEvDataShard::TEvProposeTransaction> evData;
             if (GetSnapshot().IsValid() && (ReadOnlyTx || Request.UseImmediateEffects)) {
+                YQL_ENSURE(!(Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW && ReadOnlyTx));
                 evData.reset(new TEvDataShard::TEvProposeTransaction(
                     NKikimrTxDataShard::TX_KIND_DATA,
                     SelfId(),
@@ -1784,13 +1788,16 @@ private:
                     dataTransaction.SerializeAsString(),
                     GetSnapshot().Step,
                     GetSnapshot().TxId,
+                    NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT,
                     flags));
             } else {
+                YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW);
                 evData.reset(new TEvDataShard::TEvProposeTransaction(
                     NKikimrTxDataShard::TX_KIND_DATA,
                     SelfId(),
                     TxId,
                     dataTransaction.SerializeAsString(),
+                    NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE,
                     flags));
             }
 

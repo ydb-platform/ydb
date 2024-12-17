@@ -350,9 +350,8 @@ public:
     }
 
     bool Load() {
-        bool fakeLoad = true;
         try {
-            if (!fakeLoad && ProgressFilePath.Exists()) {
+            if (ProgressFilePath.Exists()) {
                 Progress = YAML::LoadFile(ProgressFilePath.GetPath());
                 if (SourceFilePath != "std_input") {
                     if (static_cast<bool>(Progress[sourceModifiedKey])
@@ -376,10 +375,6 @@ public:
     }
 
     bool Save() {
-        bool fakeSave = true;
-        if (fakeSave) {
-            return true;
-        }
         if (FailedToSave) {
             // Failed to save once, do not try to save again
             return false;

@@ -491,7 +491,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         ctx.Send(source, result.release(), 0, cookie);
     };
     if (behaviour == EOperationBehaviour::CommitWriteLock) {
-        TMemoryProfileGuard mpg1("NEvents::TDataEvents::TEvWrite::1");
         auto commitOperation = std::make_shared<TCommitOperation>(TabletID());
         auto conclusionParse = commitOperation->Parse(*ev->Get());
         if (conclusionParse.IsFail()) {
@@ -523,7 +522,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    TMemoryProfileGuard mpg2("NEvents::TDataEvents::TEvWrite::2");
     if (record.GetOperations().size() != 1) {
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
@@ -532,7 +530,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    TMemoryProfileGuard mpg3("NEvents::TDataEvents::TEvWrite::3");
     const auto& operation = record.GetOperations()[0];
     const std::optional<NEvWrite::EModificationType> mType =
         TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(operation.GetType());
@@ -547,7 +544,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    TMemoryProfileGuard mpg4("NEvents::TDataEvents::TEvWrite::4");
     auto schema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaOptional(operation.GetTableId().GetSchemaVersion());
     if (!schema) {
         sendError("unknown schema version", NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
@@ -563,14 +559,12 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     Counters.GetColumnTablesCounters()->GetPathIdCounter(pathId)->OnWriteEvent();
 
-    TMemoryProfileGuard mpg5("NEvents::TDataEvents::TEvWrite::5");
     auto arrowData = std::make_shared<TArrowData>(schema);
     if (!arrowData->Parse(operation, NEvWrite::TPayloadReader<NEvents::TDataEvents::TEvWrite>(*ev->Get()))) {
         sendError("parsing data error", NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         return;
     }
 
-    TMemoryProfileGuard mpg5_1("NEvents::TDataEvents::TEvWrite::5_1");
     auto overloadStatus = CheckOverloaded(pathId);
     if (overloadStatus != EOverloadStatus::None) {
         std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(
@@ -579,7 +573,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    TMemoryProfileGuard mpg6("NEvents::TDataEvents::TEvWrite::6");
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", arrowData->GetSize())(
         "in_flight", Counters.GetWritesMonitor()->GetWritesInFlight())("sizE_in_flight", Counters.GetWritesMonitor()->GetWritesSizeInFlight());
     Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize());
@@ -596,13 +589,11 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         lockId = record.GetLockTxId();
     }
 
-    TMemoryProfileGuard mpg7("NEvents::TDataEvents::TEvWrite::7");
     if (!AppDataVerified().ColumnShardConfig.GetWritingEnabled()) {
         sendError("writing disabled", NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
         return;
     }
 
-    TMemoryProfileGuard mpg8("NEvents::TDataEvents::TEvWrite::8");
     OperationsManager->RegisterLock(lockId, Generation());
     auto writeOperation = OperationsManager->RegisterOperation(
         pathId, lockId, cookie, granuleShardingVersionId, *mType, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());

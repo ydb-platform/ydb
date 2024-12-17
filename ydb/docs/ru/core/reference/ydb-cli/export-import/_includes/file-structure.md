@@ -110,82 +110,12 @@ state: STATE_ENABLED
 ```proto
 self {
   name: "update_feed"
-  owner: "root@builtin"
+  owner: "Alice"
   type: TOPIC
-  effective_permissions {
-    subject: "USERS"
-    permission_names: "ydb.database.connect"
-  }
-  effective_permissions {
-    subject: "METADATA-READERS"
-    permission_names: "ydb.generic.list"
-  }
-  effective_permissions {
-    subject: "DATA-READERS"
-    permission_names: "ydb.granular.select_row"
-  }
-  effective_permissions {
-    subject: "DATA-WRITERS"
-    permission_names: "ydb.tables.modify"
-  }
-  effective_permissions {
-    subject: "DDL-ADMINS"
-    permission_names: "ydb.granular.create_directory"
-    permission_names: "ydb.granular.write_attributes"
-    permission_names: "ydb.granular.create_table"
-    permission_names: "ydb.granular.remove_schema"
-    permission_names: "ydb.granular.alter_schema"
-  }
-  effective_permissions {
-    subject: "ACCESS-ADMINS"
-    permission_names: "ydb.access.grant"
-  }
-  effective_permissions {
-    subject: "DATABASE-ADMINS"
-    permission_names: "ydb.generic.manage"
-  }
   created_at {
     plan_step: 1734362034420
     tx_id: 281474982949619
   }
-}
-partitioning_settings {
-  min_active_partitions: 1
-  max_active_partitions: 1
-  auto_partitioning_settings {
-    strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
-    partition_write_speed {
-      stabilization_window {
-        seconds: 300
-      }
-      up_utilization_percent: 80
-      down_utilization_percent: 20
-    }
-  }
-}
-partitions {
-  active: true
-}
-retention_period {
-  seconds: 86400
-}
-partition_write_speed_bytes_per_second: 1048576
-partition_write_burst_bytes: 1048576
-attributes {
-  key: "__max_partition_message_groups_seqno_stored"
-  value: "6000000"
-}
-attributes {
-  key: "_allow_unauthenticated_read"
-  value: "true"
-}
-attributes {
-  key: "_allow_unauthenticated_write"
-  value: "true"
-}
-attributes {
-  key: "_message_group_seqno_retention_period_ms"
-  value: "1382400000"
 }
 consumers {
   name: "my_consumer"

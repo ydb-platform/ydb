@@ -228,15 +228,15 @@ public:
         EventsQ_.Push(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
     }
 
-    NThreading::TFuture<void> WaitEvent() {
+    NThreading::TFuture<void> WaitEvent() override {
         return NThreading::MakeFuture();
     }
 
-    TMaybe<NYdb::NTopic::TWriteSessionEvent::TEvent> GetEvent(bool block) {
+    TMaybe<NYdb::NTopic::TWriteSessionEvent::TEvent> GetEvent(bool block) override {
         return EventsQ_.Pop(block);
     }
 
-    TVector<NYdb::NTopic::TWriteSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount) {
+    TVector<NYdb::NTopic::TWriteSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount) override {
         TVector<NYdb::NTopic::TWriteSessionEvent::TEvent> res;
         for (auto event = EventsQ_.Pop(block); !event.Empty() &&  res.size() <= maxEventsCount.GetOrElse(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
             res.push_back(*event);
@@ -244,12 +244,12 @@ public:
         return res;
     }
 
-    NThreading::TFuture<ui64> GetInitSeqNo() {
+    NThreading::TFuture<ui64> GetInitSeqNo() override {
         return NThreading::MakeFuture(SeqNo_);
     }
 
     void Write(NYdb::NTopic::TContinuationToken&&, NYdb::NTopic::TWriteMessage&& message, 
-               NYdb::NTable::TTransaction* tx) {
+               NYdb::NTable::TTransaction* tx) override {
         Y_UNUSED(tx);
         
         EventsMsgQ_.Push(TOwningWriteMessage(std::move(message)));
@@ -257,7 +257,7 @@ public:
     }
 
     void Write(NYdb::NTopic::TContinuationToken&& token, TStringBuf data, TMaybe<ui64> seqNo,
-                       TMaybe<TInstant> createTimestamp) {
+                       TMaybe<TInstant> createTimestamp) override {
         NYdb::NTopic::TWriteMessage message(data);
         if (seqNo.Defined()) {
             message.SeqNo(*seqNo);
@@ -271,7 +271,7 @@ public:
 
     // Ignores codec in message and always writes raw for debugging purposes
     void WriteEncoded(NYdb::NTopic::TContinuationToken&& token, NYdb::NTopic::TWriteMessage&& params,
-                              NYdb::NTable::TTransaction* tx) {
+                              NYdb::NTable::TTransaction* tx) override {
         Y_UNUSED(tx);
 
         NYdb::NTopic::TWriteMessage message(params.Data);
@@ -289,7 +289,7 @@ public:
 
     // Ignores codec in message and always writes raw for debugging purposes
     void WriteEncoded(NYdb::NTopic::TContinuationToken&& token, TStringBuf data, NYdb::NTopic::ECodec codec, ui32 originalSize,
-                              TMaybe<ui64> seqNo, TMaybe<TInstant> createTimestamp) {
+                              TMaybe<ui64> seqNo, TMaybe<TInstant> createTimestamp) override {
         Y_UNUSED(codec);
         Y_UNUSED(originalSize);
 
@@ -304,7 +304,7 @@ public:
         Write(std::move(token), std::move(message), nullptr);
     }
 
-    bool Close(TDuration timeout = TDuration::Max()) {
+    bool Close(TDuration timeout = TDuration::Max()) override {
         Y_UNUSED(timeout);
         EventsQ_.Stop();
         EventsMsgQ_.Stop();
@@ -316,11 +316,11 @@ public:
         return true;
     }
 
-    NYdb::NTopic::TWriterCounters::TPtr GetCounters() {
+    NYdb::NTopic::TWriterCounters::TPtr GetCounters() override {
         return Counters_;
     }
 
-    ~TFileTopicWriteSession() {
+    ~TFileTopicWriteSession() override {
         EventsQ_.Stop();
         EventsMsgQ_.Stop();
         Pool_.Stop();

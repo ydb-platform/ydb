@@ -360,17 +360,14 @@ private:
         const TString queryId = task.query_id().value();
         const bool isStreaming = task.query_type() == FederatedQuery::QueryContent::STREAMING;
         TString queryIdLabel;
-        TString queryNameLabel;
+        // todo: sanitize query name
+        TString queryNameLabel = task.query_name();
         if (task.automatic()) {
             queryIdLabel = isStreaming ? "streaming" : "analytics";
+        } else if (isStreaming) {
+            queryIdLabel = queryId;
         } else {
-            if (isStreaming) {
-                // todo: sanitize query name
-                queryNameLabel = task.query_name();
-                queryIdLabel = queryId;
-            } else {
-                queryIdLabel = "manual";
-            }
+            queryIdLabel = "manual";
         }
 
         ::NYql::NCommon::TServiceCounters queryCounters(ServiceCounters);
@@ -381,9 +378,8 @@ private:
         }
 
         ::NMonitoring::TDynamicCounterPtr queryPublicCounters = publicCountersParent;
-        if (queryIdLabel) {
-            queryPublicCounters = queryPublicCounters->GetSubgroup("query_id", queryIdLabel);
-        }
+        // use original query id here
+        queryPublicCounters = queryPublicCounters->GetSubgroup("query_id", queryId);
 
         if (queryNameLabel) {
             queryPublicCounters = queryPublicCounters->GetSubgroup("query_name", queryNameLabel);
@@ -401,7 +397,7 @@ private:
             queryRootCounters = queryRootCounters->GetSubgroup("query_id", queryIdLabel);
         }
 
-        if (queryNameLabel) {
+        if (!task.automatic() && isStreaming && queryNameLabel) {
             queryRootCounters = queryRootCounters->GetSubgroup("query_name", queryNameLabel);
         }
 

@@ -229,7 +229,10 @@ public:
     }
 
     NThreading::TFuture<void> WaitEvent() override {
-        return NThreading::MakeFuture();
+        return NThreading::Async([this] () {
+            EventsQ_.BlockUntilEvent();
+            return NThreading::MakeFuture();
+        }, Pool_);
     }
 
     TMaybe<NYdb::NTopic::TWriteSessionEvent::TEvent> GetEvent(bool block) override {

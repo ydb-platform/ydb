@@ -123,6 +123,7 @@ void TCommandConfigReplace::Config(TConfig& config) {
         .NoArgument().SetFlag(&AllowUnknownFields);
     config.Opts->AddLongOption("force", "Ignore metadata on config replacement")
         .NoArgument().SetFlag(&Force);
+    config.AllowEmptyDatabase = true;
     config.SetFreeArgsNum(0);
 }
 

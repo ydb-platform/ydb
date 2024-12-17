@@ -49,7 +49,7 @@ Some of the below parameters have default values. This means that the workload w
 `--bandwidth VAL`: Limit the workload per second, defaults to 0 (not set). `VAL` specifies the data amount with a unit, for example, 2MiB. If this value is set, the `--rps` limit (see above) is not applied.
 `--in-flight VAL`: Limits the number of queries that can be run in parallel, the default value is 10. To achieve maximum parallelism, set the parameter value to the number of cores allocated for the restore process.
 `--upload-batch-rows VAL`: Limits the number of records in the uploaded batch, the default value is 0 (unlimited). `VAL` determines the number of records and is set as a number with an optional unit, for example, 1K.
-`--upload-batch-bytes VAL`: Limits the batch size of uploaded data, the default value is 512KB. `VAL` specifies the data amount with a unit, for example, 1MiB. Maximum value is 15 MiB.
+`--upload-batch-bytes VAL`: Limits the batch size of uploaded data, the default value is 512KB. `VAL` specifies the data amount with a unit, for example, 1MiB. Maximum value is 16 MiB.
 `--upload-batch-rus VAL`: Applies only to Serverless databases to limit Request Units (RU) that can be consumed to upload one batch, defaults to 30 RU. The batch size is selected to match the specified value. `VAL` determines the number of RU and is set as a number with an optional unit, for example, 100 or 1K.
 
 ## Examples {#examples}

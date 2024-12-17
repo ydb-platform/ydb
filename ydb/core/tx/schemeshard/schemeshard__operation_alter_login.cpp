@@ -227,6 +227,9 @@ public:
             }
             NACLib::TACL effectiveACL(path->CachedEffectiveACL.GetForSelf());
             if (effectiveACL.HasAccess(user)) {
+                // publish paths from which the user's access is being removed
+                // user access could have been granted directly (ACL, handled by `acl.TryRemoveAccess(user)` above)
+                // or it might have been inherited from a parent (effective ACL)
                 context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
             }
         }

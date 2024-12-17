@@ -103,7 +103,7 @@ class TNewCdcStream: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return MakeHolder<TDoneWithBarrier>(OperationId);
         default:
             return nullptr;
         }
@@ -464,7 +464,7 @@ class TNewCdcStreamAtTable: public TSubOperation {
             if (InitialScan) {
                 return MakeHolder<TDoneWithInitialScan>(OperationId);
             } else {
-                return MakeHolder<TDone>(OperationId);
+                return MakeHolder<TDoneWithBarrier>(OperationId);
             }
         default:
             return nullptr;

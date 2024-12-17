@@ -25,6 +25,7 @@ private:
 
 public:
     const TString& GetStringCache(const TString& original) {
+        std::unique_lock lock(StringsCache);
         auto it = StringsCache.find(original);
         if (it == StringsCache.end()) {
             it = StringsCache.emplace(original).first;

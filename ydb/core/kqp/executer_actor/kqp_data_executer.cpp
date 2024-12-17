@@ -198,8 +198,10 @@ public:
     }
 
     void Finalize() {
+        Y_ENSURE(!AlreadyReplied);
+
         if (LocksBroken) {
-            YQL_ENSURE(!ResponseEv || ResponseEv->BrokenLockShardId);
+            YQL_ENSURE(ResponseEv->BrokenLockShardId);
             return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
         }
 

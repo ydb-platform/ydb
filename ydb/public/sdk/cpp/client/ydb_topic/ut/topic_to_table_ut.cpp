@@ -2737,6 +2737,26 @@ Y_UNIT_TEST_F(OltpSink_WriteToTopicAndTable_4, TFixtureOltpSink)
 
     UNIT_ASSERT_VALUES_EQUAL(GetTableRecordsCount("table_A"), records.size());
 }
+
+Y_UNIT_TEST_F(OltpSink_WriteToTopicAndTable_5, TFixtureOltpSink)
+{
+    CreateTopic("topic_A");
+    CreateTable("/Root/table_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    auto records = MakeTableRecords();
+    WriteToTable("table_A", records, &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx);
+
+    RollbackTx(tx, EStatus::SUCCESS);
+
+    Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 0);
+    CheckTabletKeys("topic_A");
+
+    UNIT_ASSERT_VALUES_EQUAL(GetTableRecordsCount("table_A"), 0);
+}
 }
 
 }

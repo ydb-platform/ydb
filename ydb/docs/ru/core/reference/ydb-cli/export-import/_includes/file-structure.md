@@ -12,9 +12,9 @@
 
 - Файл `scheme.pb`, содержащий информацию о структуре таблицы и её параметрах в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 - Один или несколько файлов `data_XX.csv`, содержащих данные таблицы в формате `csv`, где `XX` - порядковый номер файла. Выгрузка начинается с файла `data_00.csv`, каждый следующий файл создается при превышении размера текущего файла в 100MB.
-- Директории для описания changefeed'ов. Имя директории соответствует названию changefeed'а. В директории находятся:
-  - Файл `changefeed_description.pb` - содержит информацию о changefeed'е в формате protobuf
-  - Файл `topic_description.pb` - содержит информацию о changefeed'е, как о топике в формате protobuf (`tools restore` берет информацию о consumer'ах из этого файла)
+- Директории для описания [потоков изменений](https://ydb.tech/docs/ru/concepts/cdc). Имя директории соответствует названию потока изменений. В директории находятся:
+  - Файл `changefeed_description.pb` - содержит информацию о потоке изменений в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format).
+  - Файл `topic_description.pb` - содержит информацию о нижележащем топике в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format).
 
 ## Файлы с данными {#datafiles}
 

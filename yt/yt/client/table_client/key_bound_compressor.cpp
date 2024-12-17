@@ -44,7 +44,7 @@ void TKeyBoundCompressor::InitializeMapping()
 
     // Prepare component-wise image prefixes.
     ComponentWisePrefixes_.resize(SortedKeyBounds_.size());
-    for (ssize_t index = 0; index < ssize(SortedKeyBounds_); ++index) {
+    for (int index = 0; index < ssize(SortedKeyBounds_); ++index) {
         ComponentWisePrefixes_[index] = RowBuffer_->AllocateUnversioned(SortedKeyBounds_[index].Prefix.GetCount());
     }
 
@@ -55,7 +55,7 @@ void TKeyBoundCompressor::InitializeMapping()
     // * >[foo], <=[foo]
     // * but not >=[foo] with [foo].
     for (
-        ssize_t beginIndex = 0, endIndex = 0, currentImage = 0;
+        int beginIndex = 0, endIndex = 0, currentImage = 0;
         beginIndex < ssize(SortedKeyBounds_);
         beginIndex = endIndex, ++currentImage)
     {
@@ -80,7 +80,7 @@ void TKeyBoundCompressor::InitializeMapping()
 
     // Second, calculate component-wise images.
     CalculateComponentWise(/*fromIndex*/ 0, /*toIndex*/ SortedKeyBounds_.size(), /*componentIndex*/ 0);
-    for (ssize_t index = 0; index < ssize(SortedKeyBounds_); ++index) {
+    for (int index = 0; index < ssize(SortedKeyBounds_); ++index) {
         const auto& keyBound = SortedKeyBounds_[index];
         auto& componentWiseImage = Mapping_[keyBound].ComponentWise;
         componentWiseImage.Prefix = ComponentWisePrefixes_[index];
@@ -89,13 +89,13 @@ void TKeyBoundCompressor::InitializeMapping()
     }
 }
 
-void TKeyBoundCompressor::CalculateComponentWise(ssize_t fromIndex, ssize_t toIndex, ssize_t componentIndex)
+void TKeyBoundCompressor::CalculateComponentWise(int fromIndex, int toIndex, int componentIndex)
 {
     if (fromIndex == toIndex || componentIndex == Comparator_.GetLength()) {
         return;
     }
     for (
-        ssize_t beginIndex = fromIndex, endIndex = fromIndex, currentImage = 0;
+        int beginIndex = fromIndex, endIndex = fromIndex, currentImage = 0;
         beginIndex < toIndex;
         beginIndex = endIndex, ++currentImage)
     {
@@ -105,7 +105,7 @@ void TKeyBoundCompressor::CalculateComponentWise(ssize_t fromIndex, ssize_t toIn
                 break;
             }
             auto beginBound = SortedKeyBounds_[beginIndex];
-            if (beginBound.Prefix.GetCount() > componentIndex) {
+            if (static_cast<int>(beginBound.Prefix.GetCount()) > componentIndex) {
                 break;
             }
             ++beginIndex;
@@ -122,7 +122,7 @@ void TKeyBoundCompressor::CalculateComponentWise(ssize_t fromIndex, ssize_t toIn
                 break;
             }
             auto endBound = SortedKeyBounds_[endIndex];
-            if (endBound.Prefix.GetCount() <= componentIndex) {
+            if (static_cast<int>(endBound.Prefix.GetCount()) <= componentIndex) {
                 break;
             }
             if (endBound.Prefix[componentIndex] != beginBound.Prefix[componentIndex]) {

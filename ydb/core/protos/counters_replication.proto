@@ -7,10 +7,17 @@ option (TabletTypeName) = "ReplicationController"; // Used as prefix for all cou
 
 enum ESimpleCounters {
     COUNTER_SIMPLE_IGNORE = 0;
+    COUNTER_SESSIONS = 1 [(CounterOpts) = {Name: "Sessions"}];
+    COUNTER_WORKERS = 2 [(CounterOpts) = {Name: "Workers"}];
+    COUNTER_BOOT_QUEUE = 3 [(CounterOpts) = {Name: "BootQueue"}];
+    COUNTER_STOP_QUEUE = 4 [(CounterOpts) = {Name: "StopQueue"}];
+    COUNTER_DATA_LAG = 5 [(CounterOpts) = {Name: "DataLag"}];
 }
 
 enum ECumulativeCounters {
     COUNTER_CUMULATIVE_IGNORE = 0;
+    COUNTER_CREATE_SESSION = 1 [(CounterOpts) = {Name: "CreateSession"}];
+    COUNTER_DELETE_SESSION = 2 [(CounterOpts) = {Name: "DeleteSession"}];
 }
 
 enum EPercentileCounters {
@@ -33,4 +40,11 @@ enum ETxTypes {
     TXTYPE_CREATE_DST_RESULT = 7 [(TxTypeOpts) = {Name: "TxCreateDstResult"}];
     TXTYPE_DROP_STREAM_RESULT = 8 [(TxTypeOpts) = {Name: "TxDropStreamResult"}];
     TXTYPE_DROP_DST_RESULT = 9 [(TxTypeOpts) = {Name: "TxDropDstResult"}];
+    TXTYPE_ALTER_REPLICATION = 10 [(TxTypeOpts) = {Name: "TxAlterReplication"}];
+    TXTYPE_RESOLVE_SECRET_RESULT = 11 [(TxTypeOpts) = {Name: "TxResolveSecretResult"}];
+    TXTYPE_ALTER_DST_RESULT = 12 [(TxTypeOpts) = {Name: "TxAlterDstResult"}];
+    TXTYPE_DESCRIBE_REPLICATION = 13 [(TxTypeOpts) = {Name: "TxDescribeReplication"}];
+    TXTYPE_WORKER_ERROR = 14 [(TxTypeOpts) = {Name: "TxWorkerError"}];
+    TXTYPE_ASSIGN_TX_ID = 15 [(TxTypeOpts) = {Name: "TxAssignTxId"}];
+    TXTYPE_HEARTBEAT = 16 [(TxTypeOpts) = {Name: "TxHeartbeat"}];
 }

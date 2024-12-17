@@ -6,6 +6,7 @@ from six import iteritems
 
 from .utils import build_pj_path
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,7 +19,8 @@ class PackageJson(object):
     DEV_DEP_KEY = "devDependencies"
     PEER_DEP_KEY = "peerDependencies"
     OPT_DEP_KEY = "optionalDependencies"
-    DEP_KEYS = (DEP_KEY, DEV_DEP_KEY, PEER_DEP_KEY, OPT_DEP_KEY)
+    PNPM_OVERRIDES_KEY = "pnpm.overrides"
+    DEP_KEYS = (DEP_KEY, DEV_DEP_KEY, PEER_DEP_KEY, OPT_DEP_KEY, PNPM_OVERRIDES_KEY)
 
     WORKSPACE_SCHEMA = "workspace:"
 
@@ -92,12 +94,16 @@ class PackageJson(object):
 
     def dependencies_iter(self):
         for key in self.DEP_KEYS:
-            deps = self.data.get(key)
+            if key == self.PNPM_OVERRIDES_KEY:
+                deps = self.data.get("pnpm", {}).get("overrides", {})
+            else:
+                deps = self.data.get(key)
+
             if not deps:
                 continue
 
             for name, spec in iteritems(deps):
-                yield (name, spec)
+                yield name, spec
 
     def has_dependencies(self):
         first_dep = next(self.dependencies_iter(), None)
@@ -222,3 +228,31 @@ class PackageJson(object):
         """
         ws_map = self.get_workspace_map()
         return {pj.get_name(): path for path, (pj, _) in ws_map.items()}
+
+    def validate_prebuilds(self, requires_build_packages: list[str]):
+        pnpm_overrides: dict[str, str] = self.data.get("pnpm", {}).get("overrides", {})
+        use_prebuild_flags: dict[str, bool] = self.data.get("@yatool/prebuilder", {}).get("usePrebuild", {})
+
+        def covered(k: str) -> bool:
+            if k.startswith("@yandex-prebuild/"):
+                return True
+            return k in use_prebuild_flags
+
+        not_covered = [key for key in requires_build_packages if not covered(key)]
+        use_prebuild_keys = [key for key in use_prebuild_flags if use_prebuild_flags[key]]
+        missing_overrides = [key for key in use_prebuild_keys if key not in pnpm_overrides]
+
+        messages = []
+
+        if not_covered:
+            messages.append("These packages possibly have addons but are not checked yet:")
+            messages.extend([f"  - {key}" for key in not_covered])
+
+        if missing_overrides:
+            messages.append("These packages have addons but overrides are not set:")
+            messages.extend([f"  - {key}" for key in missing_overrides])
+
+        return (not messages, messages)
+
+    def get_pnpm_patched_dependencies(self) -> dict[str, str]:
+        return self.data.get("pnpm", {}).get("patchedDependencies", {})

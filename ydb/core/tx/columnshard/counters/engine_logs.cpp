@@ -2,6 +2,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/library/actors/core/log.h>
+
 #include <util/generic/serialized_enum.h>
 
 namespace NKikimr::NColumnShard {
@@ -60,6 +62,10 @@ TEngineLogsCounters::TEngineLogsCounters()
     PortionNoBorderCount = TBase::GetDeriviative("Ttl/PortionNoBorder/Count");
     PortionNoBorderBytes = TBase::GetDeriviative("Ttl/PortionNoBorder/Bytes");
 
+    GranuleOptimizerLocked = TBase::GetDeriviative("Optimizer/Granules/Locked");
+
+    IndexMetadataUsageBytes = TBase::GetValue("IndexMetadata/Usage/Bytes");
+
     StatUsageForTTLCount = TBase::GetDeriviative("Ttl/StatUsageForTTLCount/Count");
     ChunkUsageForTTLCount = TBase::GetDeriviative("Ttl/ChunkUsageForTTLCount/Count");
 }
@@ -77,27 +83,34 @@ void TEngineLogsCounters::OnActualizationTask(const ui32 evictCount, const ui32 
 void TEngineLogsCounters::TPortionsInfoGuard::OnNewPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const {
     const ui32 producedId = (ui32)(portion->HasRemoveSnapshot() ? NOlap::NPortion::EProduced::INACTIVE : portion->GetMeta().Produced);
     Y_ABORT_UNLESS(producedId < BlobGuards.size());
-    for (auto&& i : portion->GetRecords()) {
-        BlobGuards[producedId]->Add(i.GetBlobRange().Size, i.GetBlobRange().Size);
-    }
-    for (auto&& i : portion->GetIndexes()) {
-        BlobGuards[producedId]->Add(i.GetBlobRange().Size, i.GetBlobRange().Size);
+    for (auto&& blobId : portion->GetBlobIds()) {
+        BlobGuards[producedId]->Add(blobId.BlobSize(), blobId.BlobSize());
     }
     PortionRecordCountGuards[producedId]->Add(portion->GetRecordsCount(), 1);
-    PortionSizeGuards[producedId]->Add(portion->GetBlobBytes(), 1);
+    PortionSizeGuards[producedId]->Add(portion->GetTotalBlobBytes(), 1);
 }
 
 void TEngineLogsCounters::TPortionsInfoGuard::OnDropPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const {
     const ui32 producedId = (ui32)(portion->HasRemoveSnapshot() ? NOlap::NPortion::EProduced::INACTIVE : portion->GetMeta().Produced);
     Y_ABORT_UNLESS(producedId < BlobGuards.size());
-    for (auto&& i : portion->GetRecords()) {
-        BlobGuards[producedId]->Sub(i.GetBlobRange().Size, i.GetBlobRange().Size);
-    }
-    for (auto&& i : portion->GetIndexes()) {
-        BlobGuards[producedId]->Sub(i.GetBlobRange().Size, i.GetBlobRange().Size);
+    THashSet<NOlap::TUnifiedBlobId> blobIds;
+    for (auto&& blobId : portion->GetBlobIds()) {
+        BlobGuards[producedId]->Sub(blobId.BlobSize(), blobId.BlobSize());
     }
     PortionRecordCountGuards[producedId]->Sub(portion->GetRecordsCount(), 1);
-    PortionSizeGuards[producedId]->Sub(portion->GetBlobBytes(), 1);
+    PortionSizeGuards[producedId]->Sub(portion->GetTotalBlobBytes(), 1);
+}
+
+NKikimr::NColumnShard::TBaseGranuleDataClassSummary TBaseGranuleDataClassSummary::operator+(const TBaseGranuleDataClassSummary& item) const {
+    TBaseGranuleDataClassSummary result;
+    result.TotalPortionsSize = TotalPortionsSize + item.TotalPortionsSize;
+    result.ColumnPortionsSize = ColumnPortionsSize + item.ColumnPortionsSize;
+    AFL_VERIFY(result.TotalPortionsSize >= 0);
+    AFL_VERIFY(result.ColumnPortionsSize >= 0);
+    result.PortionsCount = PortionsCount + item.PortionsCount;
+    result.RecordsCount = RecordsCount + item.RecordsCount;
+    result.MetadataMemoryPortionsSize = MetadataMemoryPortionsSize + item.MetadataMemoryPortionsSize;
+    return result;
 }
 
 }

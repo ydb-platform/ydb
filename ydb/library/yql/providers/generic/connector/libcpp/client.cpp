@@ -1,4 +1,5 @@
 #include <util/stream/file.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include "client.h"
 
@@ -28,8 +29,9 @@ namespace NYql::NConnector {
             Y_ENSURE(config.GetEndpoint().host(), TStringBuilder() << "Empty host in TGenericConnectorConfig: " << config.DebugString());
             Y_ENSURE(config.GetEndpoint().port(), TStringBuilder() << "Empty port in TGenericConnectorConfig: " << config.DebugString());
             GrpcConfig_.Locator = TStringBuilder() << config.GetEndpoint().host() << ":" << config.GetEndpoint().port();
-
             GrpcConfig_.EnableSsl = config.GetUseSsl();
+
+            YQL_CLOG(INFO, ProviderGeneric) << "Connector endpoint: " << (config.GetUseSsl() ? "grpcs" : "grpc") << "://" << GrpcConfig_.Locator;
 
             // Read content of CA cert
             TString rootCertData;
@@ -139,4 +141,4 @@ namespace NYql::NConnector {
     IClient::TPtr MakeClientGRPC(const NYql::TGenericConnectorConfig& cfg) {
         return std::make_shared<TClientGRPC>(cfg);
     }
-}
+} // namespace NYql::NConnector

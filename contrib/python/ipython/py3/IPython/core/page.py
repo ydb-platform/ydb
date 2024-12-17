@@ -122,10 +122,10 @@ def _detect_screen_size(screen_lines_def):
     termios.tcsetattr(sys.stdout,termios.TCSANOW,term_flags)
     # Now we have what we needed: the screen size in rows/columns
     return screen_lines_real
-    #print '***Screen size:',screen_lines_real,'lines x',\
-    #screen_cols,'columns.' # dbg
+    # print('***Screen size:',screen_lines_real,'lines x',
+    #       screen_cols,'columns.')  # dbg
 
-def pager_page(strng, start=0, screen_lines=0, pager_cmd=None):
+def pager_page(strng, start=0, screen_lines=0, pager_cmd=None) -> None:
     """Display a string, piping through a pager after a certain length.
 
     strng can be a mime-bundle dict, supplying multiple representations,
@@ -179,9 +179,9 @@ def pager_page(strng, start=0, screen_lines=0, pager_cmd=None):
             print(str_toprint)
             return
 
-    #print 'numlines',numlines,'screenlines',screen_lines  # dbg
+    # print('numlines',numlines,'screenlines',screen_lines)  # dbg
     if numlines <= screen_lines :
-        #print '*** normal print'  # dbg
+        # print('*** normal print')  # dbg
         print(str_toprint)
     else:
         # Try to open pager and default to internal one if that fails.
@@ -239,7 +239,7 @@ def pager_page(strng, start=0, screen_lines=0, pager_cmd=None):
             page_dumb(strng,screen_lines=screen_lines)
 
 
-def page(data, start=0, screen_lines=0, pager_cmd=None):
+def page(data, start: int = 0, screen_lines: int = 0, pager_cmd=None):
     """Display content in a pager, piping through a pager after a certain length.
 
     data can be a mime-bundle dict, supplying multiple representations,

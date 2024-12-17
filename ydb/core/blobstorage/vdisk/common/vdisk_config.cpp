@@ -1,5 +1,4 @@
 #include "vdisk_config.h"
-#include "vdisk_performance_params.h"
 #include <ydb/core/base/interconnect_channels.h>
 #include <google/protobuf/text_format.h>
 
@@ -35,16 +34,17 @@ namespace NKikimr {
         HugeBlobsFreeChunkReservation = 1;
         SetupHugeBytes();
         HugeBlobOverhead = 8u;
-        HugeBlobOldMapCompatible = false;
         HullCompLevel0MaxSstsAtOnce = 8u;
         HullCompSortedPartsNum = 8u;
         HullCompLevelRateThreshold = 1.0;
         HullCompFreeSpaceThreshold = 2.0;
         FreshCompMaxInFlightWrites = 10;
+        FreshCompMaxInFlightReads = 10; // when moving huge blobs
         HullCompMaxInFlightWrites = 10;
         HullCompMaxInFlightReads = 20;
         HullCompReadBatchEfficiencyThreshold = 0.5;  // don't issue reads if there are more gaps than the useful data
         AnubisOsirisMaxInFly = 1000;
+        AddHeader = true;
 
         RecoveryLogCutterFirstDuration = TDuration::Seconds(10);
         RecoveryLogCutterRegularDuration = TDuration::Seconds(30);
@@ -63,6 +63,8 @@ namespace NKikimr {
         SyncLogAdvisedIndexedBlockSize = ui32(1) << ui32(20);       // 1 MB
         SyncLogMaxMemAmount = ui64(64) << ui64(20);                 // 64 MB
 
+        MaxSyncLogChunkSize = ui32(16) << ui32(10);                 // 32 Kb
+
         ReplTimeInterval = TDuration::Seconds(60);                  // 60 seconds
         ReplRequestTimeout = TDuration::Seconds(10);                // 10 seconds
         ReplPlanQuantum = TDuration::MilliSeconds(100);             // 100 ms
@@ -79,7 +81,6 @@ namespace NKikimr {
         HandoffMaxInFlightByteSize = 16u << 20u;
         HandoffTimeout = TDuration::Seconds(10);
         RunRepl = !baseInfo.ReadOnly;
-        RunHandoff = false;
 
         ReplMaxTimeToMakeProgress = VDiskPerformance.at(baseInfo.DeviceType).ReplMaxTimeToMakeProgress;
 
@@ -123,8 +124,6 @@ namespace NKikimr {
         BarrierValidation = true; // switch by default on debug builds
 #endif
 
-        BurstThresholdNs = NPDisk::DevicePerformance.at(baseInfo.DeviceType).BurstThresholdNs;
-        DiskTimeAvailableScale = 1;
     }
 
     void TVDiskConfig::SetupHugeBytes() {
@@ -137,8 +136,7 @@ namespace NKikimr {
                 MinHugeBlobInBytes = 512u << 10u;
                 break;
         }
-        // for compatibility reasons it must be 512KB
-        MilestoneHugeBlobInBytes = 512u << 10u;
+        MilestoneHugeBlobInBytes = 512u << 10u;  // for compatibility reasons it must be 512KB
     }
 
     void TVDiskConfig::Merge(const NKikimrBlobStorage::TVDiskConfig &update) {

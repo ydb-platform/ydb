@@ -6,6 +6,8 @@ LICENSE(BSD-3-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+VERSION(5.4.2)
+
 ADDINCL(
     contrib/libs/hyperscan
     contrib/libs/hyperscan/src

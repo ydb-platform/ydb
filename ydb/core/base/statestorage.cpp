@@ -1,5 +1,6 @@
 #include "statestorage.h"
 #include "tabletid.h"
+#include <ydb/core/blobstorage/base/utility.h>
 #include <util/generic/xrange.h>
 #include <util/generic/mem_copy.h>
 #include <util/generic/algorithm.h>
@@ -133,17 +134,44 @@ ui32 TStateStorageInfo::ContentHash() const {
     return static_cast<ui32>(hash);
 }
 
+TString TStateStorageInfo::ToString() const {
+    TStringStream s;
+    s << '{';
+    s << "NToSelect# " << NToSelect;
+    s << " Rings# [";
+    for (size_t ring = 0; ring < Rings.size(); ++ring) {
+        if (ring) {
+            s << ' ';
+        }
+        s << ring << ":{";
+        const auto& r = Rings[ring];
+        s << FormatList(r.Replicas);
+        if (r.IsDisabled) {
+            s << " Disabled";
+        }
+        if (r.UseRingSpecificNodeSelection) {
+            s << " UseRingSpecificNodeSelection";
+        }
+        s << '}';
+    }
+    s << "] StateStorageVersion# " << StateStorageVersion;
+    s << " CompatibleVersions# " << FormatList(CompatibleVersions);
+    s << '}';
+    return s.Str();
+}
+
 void TStateStorageInfo::TSelection::MergeReply(EStatus status, EStatus *owner, ui64 targetCookie, bool resetOld) {
     ui32 unknown = 0;
     ui32 ok = 0;
     ui32 outdated = 0;
+    ui32 unavailable = 0;
 
     const ui32 majority = Sz / 2 + 1;
 
     ui32 cookie = 0;
     for (ui32 i = 0; i < Sz; ++i) {
         EStatus &st = Status[i];
-        if (resetOld && st != StatusUnknown)
+        if (resetOld && st != StatusUnknown && st != StatusUnavailable)
             st = StatusOutdated;
 
         if (cookie == targetCookie)
@@ -163,16 +191,19 @@ void TStateStorageInfo::TSelection::MergeReply(EStatus status, EStatus *owner, u
         case StatusOutdated:
             ++outdated;
             break;
+        case StatusUnavailable:
+            ++unavailable;
+            break;
         }
     }
 
     if (owner) {
         if (ok >= majority) {
             *owner = StatusOk;
-        } else if (outdated >= majority) {
-            *owner = StatusOutdated;
         } else if (ok + unknown < majority) {
-            if (outdated)
+            if (unavailable > (Sz - majority))
+                *owner = StatusUnavailable;
+            else if (outdated)
                 *owner = StatusOutdated;
             else
                 *owner = StatusNoInfo;

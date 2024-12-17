@@ -19,13 +19,13 @@ from
     cross join {{call_center}} as cc
     cross join {{date_dim}} as d
 where
-    d.d_month_seq between 1178 and 1178 + 11
+    d.d_month_seq between 1200 and 1200 + 11
     and cs.cs_ship_date_sk   = d.d_date_sk
     and cs.cs_warehouse_sk   = w.w_warehouse_sk
     and cs.cs_ship_mode_sk   = sm.sm_ship_mode_sk
     and cs.cs_call_center_sk = cc.cc_call_center_sk
 group by
-    substring(cast(w.w_warehouse_name as String), 1, 20) as w_warehouse_name,
+    substring(cast(w.w_warehouse_name as String), 0, 20) as w_warehouse_name,
     sm.sm_type,
     cc.cc_name
 order by w_warehouse_name,

@@ -23,6 +23,9 @@ public:
     //! Returns |true| iff the context is canceled.
     bool IsCanceled() const;
 
+    //! Only safe to use after IsCanceled returned |true|.
+    const TError& GetCancelationError() const;
+
     //! Marks the context as canceled raising the handlers
     //! and propagates cancelation.
     void Cancel(const TError& error);

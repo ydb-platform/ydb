@@ -106,7 +106,7 @@ void RunUnderProfiler(
     });
 
     TFileOutput output(GetOutputPath() / name);
-    WriteProfile(&output, profile);
+    WriteCompressedProfile(&output, profile);
     output.Finish();
 }
 

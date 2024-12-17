@@ -1,0 +1,53 @@
+name: Collect-analytics-run
+on:
+  schedule:
+    - cron: "0 * * * *"  # Every 1 h
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        type: string
+        default: ""
+        
+defaults:
+  run:
+    shell: bash
+jobs:
+  main:
+    name: Checkout and setup
+    runs-on: [ self-hosted ]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.commit_sha }}
+    - name: Setup ydb access
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+    - name: Install dependencies
+      run: |
+        python3 -m pip install ydb ydb[yc] codeowners pandas
+    - name: Collect testowners 
+      run: python3 .github/scripts/analytics/upload_testowners.py
+    - name: Collect test history data with window 1 days relwithdebinfo for main
+      run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1
+    - name: Collect test history data with window 1 days release-asan for main
+      run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1 --build_type=release-asan
+    - name: Collect all muted and not muted tests
+      run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch main
+    - name: Collect all test monitor (how long tests in state)
+      run: python3 .github/scripts/analytics/tests_monitor.py --branch main
+    - name: Collect test history data with window 10 run relwithdebinfo for main 
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=10 
+    - name: Collect test history data with window 10 run release-asan for main
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=10 --build_type=release-asan
+    - name: Collect test history data with window 50 run relwithdebinfo for main
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=50 
+    - name: Collect test history data with window 50 run release-asan for main
+      run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=50 --build_type=release-asan
+      
+
+

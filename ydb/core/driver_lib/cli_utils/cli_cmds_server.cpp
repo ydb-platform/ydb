@@ -54,6 +54,7 @@ int TClientCommandServer::Run(TConfig& config) {
 void TClientCommandServer::Config(TConfig& config) {
     TClientCommand::Config(config);
 
+    NConfig::AddProtoConfigOptions(DepsRecorder->GetDeps().ProtoConfigFileProvider);
     InitCfg.RegisterCliOptions(*config.Opts);
     ProtoConfigFileProvider->RegisterCliOptions(*config.Opts);
     config.SetFreeArgsMin(0);

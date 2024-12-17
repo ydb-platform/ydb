@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="221" failures="112" skipped="6">
+    <testsuite name="" tests="221" failures="112" errors="0" id="0" hostname="localhost" skipped="6" time="0.330" timestamp="2024-07-16T15:06:53Z">
+        <testcase name="test-failed" classname="f" time="0.000">
+            <failure message="Failed">failed-mess</failure>
+        </testcase>
+    </testsuite>
+</testsuites>

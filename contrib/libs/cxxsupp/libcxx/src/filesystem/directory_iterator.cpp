@@ -80,14 +80,12 @@ public:
   bool assign() {
     if (!wcscmp(__data_.cFileName, L".") || !wcscmp(__data_.cFileName, L".."))
       return false;
-    // FIXME: Cache more of this
-    //directory_entry::__cached_data cdata;
-    //cdata.__type_ = get_file_type(__data_);
-    //cdata.__size_ = get_file_size(__data_);
-    //cdata.__write_time_ = get_write_time(__data_);
     __entry_.__assign_iter_entry(
         __root_ / __data_.cFileName,
-        directory_entry::__create_iter_result(detail::get_file_type(__data_)));
+        directory_entry::__create_iter_cached_result(detail::get_file_type(__data_),
+                                                     detail::get_file_size(__data_),
+                                                     detail::get_file_perm(__data_),
+                                                     detail::get_write_time(__data_)));
     return true;
   }
 
@@ -192,7 +190,7 @@ directory_iterator::directory_iterator(const path& p, error_code* ec,
 }
 
 directory_iterator& directory_iterator::__increment(error_code* ec) {
-  _LIBCPP_ASSERT_UNCATEGORIZED(__imp_, "Attempting to increment an invalid iterator");
+  _LIBCPP_ASSERT_NON_NULL(__imp_ != nullptr, "Attempting to increment an invalid iterator");
   ErrorHandler<void> err("directory_iterator::operator++()", ec);
 
   error_code m_ec;
@@ -206,7 +204,7 @@ directory_iterator& directory_iterator::__increment(error_code* ec) {
 }
 
 directory_entry const& directory_iterator::__dereference() const {
-  _LIBCPP_ASSERT_UNCATEGORIZED(__imp_, "Attempting to dereference an invalid iterator");
+  _LIBCPP_ASSERT_NON_NULL(__imp_ != nullptr, "Attempting to dereference an invalid iterator");
   return __imp_->__entry_;
 }
 
@@ -235,7 +233,7 @@ recursive_directory_iterator::recursive_directory_iterator(
 }
 
 void recursive_directory_iterator::__pop(error_code* ec) {
-  _LIBCPP_ASSERT_UNCATEGORIZED(__imp_, "Popping the end iterator");
+  _LIBCPP_ASSERT_NON_NULL(__imp_ != nullptr, "Popping the end iterator");
   if (ec)
     ec->clear();
   __imp_->__stack_.pop();

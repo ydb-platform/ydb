@@ -2,10 +2,10 @@
 #include "yql_pq_provider_impl.h"
 #include "yql_pq_dq_integration.h"
 
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/utils/log/context.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/utils/log/context.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 namespace NYql {
 
@@ -22,13 +22,16 @@ TDataProviderInitializer GetPqDataProviderInitializer(
                TIntrusivePtr<TTypeAnnotationContext> typeCtx,
                const TOperationProgressWriter& progressWriter,
                const TYqlOperationOptions& operationOptions,
-               THiddenQueryAborter)
+               THiddenQueryAborter hiddenAborter,
+               const TQContext& qContext)
         {
             Y_UNUSED(userName);
             Y_UNUSED(functionRegistry);
             Y_UNUSED(randomProvider);
             Y_UNUSED(progressWriter);
             Y_UNUSED(operationOptions);
+            Y_UNUSED(hiddenAborter);
+            Y_UNUSED(qContext);
 
             auto state = MakeIntrusive<TPqState>(sessionId);
             state->SupportRtmrMode = supportRtmrMode;

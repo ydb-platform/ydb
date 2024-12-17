@@ -7,12 +7,12 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
-#include <ydb/library/yql/core/yql_data_provider.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
-#include <ydb/library/yql/public/udf/udf_helpers.h>
-#include <ydb/library/yql/public/udf/udf_value_builder.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/public/udf/udf_helpers.h>
+#include <yql/essentials/public/udf/udf_value_builder.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/testing/common/env.h>
 
@@ -120,6 +120,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
 
     NKikimrConfig::TAppConfig appConfig = settings.AppConfig;
     appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+    appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
     ServerSettings->SetAppConfig(appConfig);
     ServerSettings->SetFeatureFlags(settings.FeatureFlags);
     ServerSettings->SetNodeCount(settings.NodeCount);
@@ -129,9 +130,15 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetFrFactory(&UdfFrFactory);
     ServerSettings->SetEnableNotNullColumns(true);
     ServerSettings->SetEnableMoveIndex(true);
-    ServerSettings->SetEnableUniqConstraint(true);
     ServerSettings->SetUseRealThreads(settings.UseRealThreads);
     ServerSettings->SetEnableTablePgTypes(true);
+    ServerSettings->SetEnablePgSyntax(true);
+    ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
+    ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
+
+    if (!settings.FeatureFlags.HasEnableOlapCompression()) {
+        ServerSettings->SetEnableOlapCompression(true);
+    }
 
     if (settings.Storage) {
         ServerSettings->SetCustomDiskParams(*settings.Storage);
@@ -163,6 +170,8 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         .SetDiscoveryMode(NYdb::EDiscoveryMode::Async)
         .SetAuthToken(settings.AuthToken);
     Driver.Reset(MakeHolder<NYdb::TDriver>(DriverConfig));
+
+    CountersRoot = settings.CountersRoot;
 
     Initialize(settings);
 }
@@ -493,13 +502,13 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     // --test-param KQP_LOG_FLAT_TX_SCHEMESHARD=debug
     SetupLogLevelFromTestParam(NKikimrServices::FLAT_TX_SCHEMESHARD);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_YQL);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_YQL);
     SetupLogLevelFromTestParam(NKikimrServices::TX_DATASHARD);
     SetupLogLevelFromTestParam(NKikimrServices::TX_COORDINATOR);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_COMPUTE);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_TASKS_RUNNER);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_EXECUTER);
     SetupLogLevelFromTestParam(NKikimrServices::TX_PROXY_SCHEME_CACHE);
+    SetupLogLevelFromTestParam(NKikimrServices::TX_PROXY);
     SetupLogLevelFromTestParam(NKikimrServices::SCHEME_BOARD_REPLICA);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_WORKER);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_SESSION);
@@ -514,13 +523,19 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::KQP_RESOURCE_MANAGER);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_NODE);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_BLOBS_STORAGE);
+    SetupLogLevelFromTestParam(NKikimrServices::KQP_WORKLOAD_SERVICE);
     SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD);
+    SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD_SCAN);
     SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);
         return true;
     });
+
+    if (settings.AuthToken) {
+        this->Client->GrantConnect(settings.AuthToken);
+    }
 
     if (settings.WithSampleTables) {
         RunCall([this] {
@@ -897,6 +912,11 @@ static void FillPlan(const NYdb::NTable::TScanQueryPart& streamPart, TCollectedS
         if (!plan.empty()) {
             res.PlanJson = plan;
         }
+
+        auto ast = res.QueryStats->query_ast();
+        if (!ast.empty()) {
+            res.Ast = ast;
+        }
     }
 }
 
@@ -908,6 +928,11 @@ static void FillPlan(const NYdb::NScripting::TYqlResultPart& streamPart, TCollec
         if (!plan.empty()) {
             res.PlanJson = plan;
         }
+
+        auto ast = res.QueryStats->query_ast();
+        if (!ast.empty()) {
+            res.Ast = ast;
+        }
     }
 }
 
@@ -918,6 +943,11 @@ static void FillPlan(const NYdb::NQuery::TExecuteQueryPart& streamPart, TCollect
         auto plan = res.QueryStats->query_plan();
         if (!plan.empty()) {
             res.PlanJson = plan;
+        }
+
+        auto ast = res.QueryStats->query_ast();
+        if (!ast.empty()) {
+            res.Ast = ast;
         }
     }
 }
@@ -1176,7 +1206,7 @@ std::vector<NJson::TJsonValue> FindPlanStages(const NJson::TJsonValue& plan) {
     return stages;
 }
 
-void CreateSampleTablesWithIndex(TSession& session, bool populateTables) {
+void CreateSampleTablesWithIndex(TSession& session, bool populateTables, bool withPgTypes) {
     auto res = session.ExecuteSchemeQuery(R"(
         --!syntax_v1
         CREATE TABLE `/Root/SecondaryKeys` (
@@ -1202,10 +1232,25 @@ void CreateSampleTablesWithIndex(TSession& session, bool populateTables) {
             PRIMARY KEY (Key),
             INDEX Index GLOBAL ON (Index2)
             COVER (Value)
-        )
+        );
 
     )").GetValueSync();
     UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+    if (withPgTypes) {
+        auto res = session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/SecondaryPgTypeKeys` (
+                Key pgint4,
+                Fk pgint4,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX Index GLOBAL ON (Fk)
+            );
+
+        )").GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    }
 
     if (!populateTables)
         return;
@@ -1246,6 +1291,19 @@ void CreateSampleTablesWithIndex(TSession& session, bool populateTables) {
 
     )", TTxControl::BeginTx().CommitTx()).GetValueSync();
 
+    if (withPgTypes) {
+        auto result = session.ExecuteDataQuery(R"(
+
+            REPLACE INTO `/Root/SecondaryPgTypeKeys` (Key, Fk, Value) VALUES
+                (1pi,  1pi,  "Payload1"),
+                (2pi,  2pi,  "Payload2"),
+                (5pi,  5pi,  "Payload5"),
+                (NULL, 6pi,  "Payload6"),
+                (7pi,  NULL, "Payload7");
+
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+    }
+
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
@@ -1285,7 +1343,6 @@ THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime,
 {
     auto &runtime = *server->GetRuntime();
     TAutoPtr<IEventHandle> handle;
-    TVector<ui64> shards;
 
     auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
     request->Record.MutableDescribePath()->SetPath(path);
@@ -1308,6 +1365,18 @@ TVector<ui64> GetTableShards(Tests::TServer* server,
     return shards;
 }
 
+TVector<ui64> GetColumnTableShards(Tests::TServer* server,
+                                   TActorId sender,
+                                   const TString &path)
+{
+    TVector<ui64> shards;
+    auto lsResult = DescribeTable(server, sender, path);
+    for (auto &part : lsResult.GetPathDescription().GetColumnTableDescription().GetSharding().GetColumnShards())
+        shards.push_back(part);
+
+    return shards;
+}
+
 TVector<ui64> GetTableShards(Tests::TServer::TPtr server,
                                 TActorId sender,
                                 const TString &path) {
@@ -1322,6 +1391,148 @@ void WaitForZeroSessions(const NKqp::TKqpCounters& counters) {
     }
 
     UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
+}
+
+NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& params) {
+    if (auto ops = opt.GetMapSafe().find("Operators"); ops != opt.GetMapSafe().end()) {
+        auto opName = ops->second.GetArraySafe()[0].GetMapSafe().at("Name").GetStringSafe();
+        if (
+            opName.find("Join") != TString::npos || 
+            opName.find("Union") != TString::npos ||
+            (opName.find("Filter") != TString::npos && params.IncludeFilters)
+        ) {
+            NJson::TJsonValue newChildren;
+
+            for (auto c : opt.GetMapSafe().at("Plans").GetArraySafe()) {
+                newChildren.AppendValue(SimplifyPlan(c, params));
+            }
+
+            opt["Plans"] = newChildren;
+            return opt;
+        }
+        else if (opName.find("Table") != TString::npos) {
+            return opt;
+        }
+    }
+
+    auto firstPlan = opt.GetMapSafe().at("Plans").GetArraySafe()[0];
+    return SimplifyPlan(firstPlan, params);
+}
+
+bool JoinOrderAndAlgosMatch(const NJson::TJsonValue& opt, const NJson::TJsonValue& ref) {
+    auto op = opt.GetMapSafe().at("Operators").GetArraySafe()[0];
+    if (op.GetMapSafe().at("Name").GetStringSafe() != ref.GetMapSafe().at("op_name").GetStringSafe()) {
+        return false;
+    }
+
+    auto refMap = ref.GetMapSafe();
+    if (auto args = refMap.find("args"); args != refMap.end()){
+        if (!opt.GetMapSafe().contains("Plans")){
+            return false;
+        }
+        auto subplans = opt.GetMapSafe().at("Plans").GetArraySafe();
+        if (args->second.GetArraySafe().size() != subplans.size()) {
+            return false;
+        }
+        for (size_t i=0; i<subplans.size(); i++) {
+            if (!JoinOrderAndAlgosMatch(subplans[i],args->second.GetArraySafe()[i])) {
+                return false;
+            }
+        }
+        return true;
+    } else {
+        if (!op.GetMapSafe().contains("Table")) {
+            return false;
+        }
+        return op.GetMapSafe().at("Table").GetStringSafe() == refMap.at("table").GetStringSafe();
+    }
+}
+
+bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference){
+    NJson::TJsonValue optRoot;
+    NJson::ReadJsonTree(optimized, &optRoot, true);
+    optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"), {});
+    
+    NJson::TJsonValue refRoot;
+    NJson::ReadJsonTree(reference, &refRoot, true);
+
+    return JoinOrderAndAlgosMatch(optRoot, refRoot);
+}
+
+/* Temporary solution to canonize tests */
+NJson::TJsonValue GetDetailedJoinOrderImpl(const NJson::TJsonValue& opt, const TGetPlanParams& params) {
+    NJson::TJsonValue res;
+
+    if (!opt.GetMapSafe().contains("Plans") && !params.IncludeTables) {
+        return res;
+    }
+
+    auto op = opt.GetMapSafe().at("Operators").GetArraySafe()[0];
+    res["op_name"] = op.GetMapSafe().at("Name").GetStringSafe();
+    if (params.IncludeOptimizerEstimation && op.GetMapSafe().contains("E-Rows")) {
+        res["e-size"] = op.GetMapSafe().at("E-Rows").GetStringSafe();
+    }
+
+
+    if (!opt.GetMapSafe().contains("Plans")) {
+        res["table"] = op.GetMapSafe().at("Table").GetStringSafe();
+        return res;
+    }
+    
+    auto subplans = opt.GetMapSafe().at("Plans").GetArraySafe();
+    for (size_t i = 0; i < subplans.size(); ++i) {
+        res["args"].AppendValue(GetDetailedJoinOrderImpl(subplans[i], params));
+    }
+    return res;
+}
+
+NJson::TJsonValue GetDetailedJoinOrder(const TString& deserializedPlan, const TGetPlanParams& params) {
+    NJson::TJsonValue optRoot;
+    NJson::ReadJsonTree(deserializedPlan, &optRoot, true);
+    optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"), params);
+    return GetDetailedJoinOrderImpl(optRoot, params);
+}
+
+NJson::TJsonValue GetJoinOrderImpl(const NJson::TJsonValue& opt) {
+    if (!opt.GetMapSafe().contains("Plans")) {
+        auto op = opt.GetMapSafe().at("Operators").GetArraySafe()[0];
+        return op.GetMapSafe().at("Table").GetStringSafe();
+    }
+
+    NJson::TJsonValue res;
+
+    auto subplans = opt.GetMapSafe().at("Plans").GetArraySafe();
+    for (size_t i = 0; i < subplans.size(); ++i) {
+        res.AppendValue(GetJoinOrderImpl(subplans[i]));
+    }
+
+    return res;
+}
+
+NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan) {
+    NJson::TJsonValue optRoot;
+    NJson::ReadJsonTree(deserializedPlan, &optRoot, true);
+    optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"), {});
+    return GetJoinOrderImpl(optRoot);
+}
+
+NJson::TJsonValue GetJoinOrderFromDetailedJoinOrderImpl(const NJson::TJsonValue& opt) {
+    if (!opt.GetMapSafe().contains("table")) {
+        NJson::TJsonValue res;
+        auto args = opt.GetMapSafe().at("args").GetArraySafe();
+        for (size_t i = 0; i < args.size(); ++i) {
+            res.AppendValue(GetJoinOrderFromDetailedJoinOrderImpl(args[i]));
+        }
+        return res;
+    }
+
+    return opt.GetMapSafe().at("table");
+}
+
+NJson::TJsonValue GetJoinOrderFromDetailedJoinOrder(const TString& deserializedDetailedJoinOrder) {
+    NJson::TJsonValue optRoot;
+    NJson::ReadJsonTree(deserializedDetailedJoinOrder, &optRoot, true);
+    return GetJoinOrderFromDetailedJoinOrderImpl(optRoot);
 }
 
 } // namspace NKqp

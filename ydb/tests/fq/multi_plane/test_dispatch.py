@@ -15,11 +15,10 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 def kikimr():
     kikimr_conf = StreamingOverKikimrConfig(
         cloud_mode=True,
-        node_count={"/cp": TenantConfig(1),
-                    "/alpha": TenantConfig(1),
-                    "/beta": TenantConfig(1)},
+        node_count={"/cp": TenantConfig(1), "/alpha": TenantConfig(1), "/beta": TenantConfig(1)},
         tenant_mapping={"alpha": "/alpha", "beta": "/beta"},
-        cloud_mapping={"a_cloud": "alpha", "b_cloud": "beta"})
+        cloud_mapping={"a_cloud": "alpha", "b_cloud": "beta"},
+    )
     kikimr = StreamingOverKikimr(kikimr_conf)
     kikimr.start_mvp_mock_server()
     kikimr.start()

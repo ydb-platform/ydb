@@ -293,6 +293,9 @@ class ClusterDetailsProvider(object):
         self.static_cpu_count = self.__cluster_description.get("static_cpu_count", 20)
         self.dynamic_cpu_count = self.__cluster_description.get("dynamic_cpu_count", 8)
         self.force_io_pool_threads = self.__cluster_description.get("force_io_pool_threads", None)
+        self.client_certificate_authorization = self.__cluster_description.get("client_certificate_authorization")
+        self.table_profiles_config = self.__cluster_description.get("table_profiles_config")
+        self.http_proxy_config = self.__cluster_description.get("http_proxy_config")
         self.blob_storage_config = self.__cluster_description.get("blob_storage_config")
         self.pdisk_key_config = self.__cluster_description.get("pdisk_key_config", {})
         if not self.need_txt_files and not self.use_new_style_kikimr_cfg:
@@ -350,17 +353,17 @@ class ClusterDetailsProvider(object):
     def _get_datacenter(self, host_description):
         if host_description.get("datacenter") is not None:
             return str(host_description.get("datacenter"))
-        return str(self._walle.get_datacenter(host_description["name"]))
+        return str(self._walle.get_datacenter(host_description.get("name", host_description.get("host"))))
 
     def _get_rack(self, host_description):
         if host_description.get("rack") is not None:
             return str(host_description.get("rack"))
-        return str(self._walle.get_rack(host_description["name"]))
+        return str(self._walle.get_rack(host_description.get("name", host_description.get("host"))))
 
     def _get_body(self, host_description):
         if host_description.get("body") is not None:
             return str(host_description.get("body"))
-        return str(self._walle.get_body(host_description["name"]))
+        return str(self._walle.get_body(host_description.get("name", host_description.get("host"))))
 
     def _collect_drives_info(self, host_description):
         host_config_id = host_description.get("host_config_id", None)
@@ -378,7 +381,7 @@ class ClusterDetailsProvider(object):
 
     def __collect_host_info(self, node_id, host_description):
         return KiKiMRHost(
-            hostname=host_description["name"],
+            hostname=host_description.get("name", host_description.get("host")),
             node_id=host_description.get("node_id", node_id),
             drives=self._collect_drives_info(host_description),
             ic_port=host_description.get("ic_port", DEFAULT_INTERCONNECT_PORT),
@@ -472,7 +475,7 @@ class ClusterDetailsProvider(object):
     def host_configs(self):
         converted_host_configs = []
         for host_config in self.__cluster_description.get("host_configs", []):
-            host_config_drives = host_config.get("drives", [])
+            host_config_drives = host_config.get("drives", host_config.get("drive", []))
             converted_host_configs.append(
                 HostConfig(
                     host_config_id=host_config["host_config_id"],
@@ -693,7 +696,7 @@ class ClusterDetailsProvider(object):
     # PQ stuff
     @property
     def pq_config(self):
-        cfg = copy.deepcopy(self.__cluster_description.get("pq", {"enabled": False}))
+        cfg = copy.deepcopy(self.__cluster_description.get("pq", {"enabled": True}))
         cfg.pop("shared_cache_size_mb", "")
         return cfg
 

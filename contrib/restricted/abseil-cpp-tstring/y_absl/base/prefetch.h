@@ -129,7 +129,7 @@ void PrefetchToLocalCacheNta(const void* addr);
 //
 //  void* Arena::Allocate(size_t size) {
 //    void* ptr = AllocateBlock(size);
-//    y_absl::PrefetchToLocalCacheForWrite(p);
+//    y_absl::PrefetchToLocalCacheForWrite(ptr);
 //    return ptr;
 //  }
 //

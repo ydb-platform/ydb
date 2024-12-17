@@ -1,4 +1,0 @@
-# To be supplied in overlay if needed
-items:
-- name: Dummy
-  hidden: true

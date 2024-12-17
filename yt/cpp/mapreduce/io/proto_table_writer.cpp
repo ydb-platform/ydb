@@ -3,6 +3,8 @@
 #include "node_table_writer.h"
 #include "proto_helpers.h"
 
+#include <yt/yt/core/misc/protobuf_helpers.h>
+
 #include <yt/cpp/mapreduce/common/node_builder.h>
 
 #include <yt/cpp/mapreduce/interface/io.h>
@@ -39,7 +41,7 @@ TNode MakeNodeFromMessage(const Message& row)
             continue;
         }
 
-        TString columnName = fieldDesc->options().GetExtension(column_name);
+        auto columnName = fieldDesc->options().GetExtension(column_name);
         if (columnName.empty()) {
             const auto& keyColumnName = fieldDesc->options().GetExtension(key_column_name);
             columnName = keyColumnName.empty() ? fieldDesc->name() : keyColumnName;
@@ -174,10 +176,16 @@ void TLenvalProtoTableWriter::AddRow(const Message& row, size_t tableIndex)
         "Message: %s", row.DebugString().data());
 
     auto* stream = Output_->GetStream(tableIndex);
-    i32 size = row.ByteSize();
+    i32 size = row.ByteSizeLong();
     stream->Write(&size, sizeof(size));
-    bool serializedOk = row.SerializeToArcadiaStream(stream);
-    Y_ENSURE(serializedOk, "Failed to serialize protobuf message");
+
+    // NB: Scope is essential here since output stream adaptor flushes in destructor.
+    {
+        TProtobufOutputStreamAdaptor streamAdaptor(stream);
+        auto result = row.SerializeToZeroCopyStream(&streamAdaptor);
+        Y_ENSURE(result && !streamAdaptor.HasError(), "Failed to serialize protobuf message");
+    }
+
     Output_->OnRowFinished(tableIndex);
 }
 
@@ -208,11 +216,34 @@ void TLenvalProtoSingleTableWriter::AddRow(const Message& row, size_t tableIndex
         "Message: %s", row.DebugString().data());
 
     auto* stream = Output_->GetStream(tableIndex);
-    i32 size = row.ByteSize();
+    i32 size = row.ByteSizeLong();
     stream->Write(&size, sizeof(size));
-    bool serializedOk = row.SerializeToArcadiaStream(stream);
-    Y_ENSURE(serializedOk, "Failed to serialize protobuf message");
+
+    // NB: Scope is essential here since output stream adaptor flushes in destructor.
+    {
+        TProtobufOutputStreamAdaptor streamAdaptor(stream);
+        auto result = row.SerializeToZeroCopyStream(&streamAdaptor);
+        Y_ENSURE(result && !streamAdaptor.HasError(), "Failed to serialize protobuf message");
+    }
+
     Output_->OnRowFinished(tableIndex);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void LenvalEncodeProto(IZeroCopyOutput* output, const ::google::protobuf::Message& message)
+{
+    i32 size = message.ByteSizeLong();
+    output->Write(&size, sizeof(size));
+
+    TProtobufZeroCopyOutputStream adapter(output);
+    auto result = message.SerializeToZeroCopyStream(&adapter);
+
+    adapter.ThrowOnError();
+
+    if (!result) {
+        ythrow yexception() << "Failed to serialize protobuf message";
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

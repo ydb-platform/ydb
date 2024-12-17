@@ -1,4 +1,4 @@
-## Explicitly created temporary (anonymous) tables {#temporary-tables}
+# Explicitly created temporary (anonymous) tables {#temporary-tables}
 
 In complex multiphase queries, it can be useful to explicitly create a physical temporary table in order to manually affect the query process. To do this, you can use the table name starting with `@`. Such tables are called anonymous to distinguish them from temporary tables created by a YT operation.
 
@@ -6,7 +6,7 @@ Each such name within the query is replaced, at execution time, by a globally un
 
 This feature lets you ignore conflicts in paths to temporary tables between parallel operations, and also avoid deleting them explicitly when the query completes.
 
-**Examples:**
+## Examples
 
 ```yql
 INSERT INTO @my_temp_table

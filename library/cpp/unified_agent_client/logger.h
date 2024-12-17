@@ -133,6 +133,13 @@ namespace NUnifiedAgent {
             return Logger;
         }
 
+        ELogPriority FiltrationLevel() const {
+            if (Logger) {
+                return Logger->CurrentLogContext_.load()->Priority;
+            }
+            return LOG_DEF_PRIORITY;
+        }
+
         friend class TLogger;
 
     private:

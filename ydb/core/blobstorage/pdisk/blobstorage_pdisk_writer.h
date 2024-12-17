@@ -9,7 +9,6 @@
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_request_id.h"
 
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/blobstorage/crypto/crypto.h>
 
 #include <util/generic/deque.h>
@@ -96,10 +95,10 @@ public:
     TLogChunkInfo *LogChunkInfo = nullptr;
 
     TPDiskHashCalculator Hash;
-    TControlWrapper UseT1ha0Hasher;
     TPDiskStreamCypher Cypher;
-    TActorSystem *ActorSystem;
-    ui32 PDiskId;
+    std::shared_ptr<TPDiskCtx> PCtx;
+    // TActorSystem *ActorSystem;
+    // ui32 PDiskId;
     TDriveModel *DriveModel;
 
     bool OnNewChunk;
@@ -110,8 +109,8 @@ public:
 
     TSectorWriter(TPDiskMon &mon, IBlockDevice &blockDevice, TDiskFormat &format, ui64 &nonce,
             const TKey &key, TBufferPool *pool, ui64 firstSectorIdx, ui64 endSectorIdx, ui64 dataMagic, ui32 chunkIdx,
-            TLogChunkInfo *logChunkInfo, ui64 sectorIdx, TBuffer *buffer, TActorSystem *actorSystem, ui32 pDiskId,
-            TDriveModel *driveModel, const TControlWrapper& useT1ha0Hasher, bool enableEncrytion)
+            TLogChunkInfo *logChunkInfo, ui64 sectorIdx, TBuffer *buffer, std::shared_ptr<TPDiskCtx> pCtx,
+            TDriveModel *driveModel, bool enableEncrytion)
         : Mon(mon)
         , BlockDevice(blockDevice)
         , Format(format)
@@ -125,16 +124,14 @@ public:
         , RecordBytesLeft(0)
         , DataMagic(dataMagic)
         , LogChunkInfo(logChunkInfo)
-        , Hash(useT1ha0Hasher)
-        , UseT1ha0Hasher(useT1ha0Hasher)
+        , Hash()
         , Cypher(enableEncrytion)
-        , ActorSystem(actorSystem)
-        , PDiskId(pDiskId)
+        , PCtx(std::move(pCtx))
         , DriveModel(driveModel)
         , OnNewChunk(true)
     {
         Y_ABORT_UNLESS(!LogChunkInfo || LogChunkInfo->ChunkIdx == ChunkIdx);
-        BufferedWriter.Reset(new TBufferedWriter(Format.SectorSize, BlockDevice, Format, pool, actorSystem,
+        BufferedWriter.Reset(new TBufferedWriter(Format.SectorSize, BlockDevice, Format, pool, PCtx->ActorSystem,
                     DriveModel));
 
         Cypher.SetKey(key);
@@ -159,17 +156,14 @@ public:
             }
         }
 
-        if (ActorSystem) {
-            LOG_DEBUG_S(*ActorSystem, NKikimrServices::BS_PDISK, SelfInfo() << " is created at "
-                    << " chunkIdx# " << ChunkIdx << " sectorIdx# " << SectorIdx
-                    << (buffer ? " WithBuffer" : " NoBuffer"));
-        }
+        P_LOG(PRI_DEBUG, BPD01, SelfInfo() << " is created",
+                (ChunkIdx, ChunkIdx), (SectorIdx, SectorIdx),
+                (Buffered, buffer ? " WithBuffer" : " NoBuffer"));
     }
 
     const TString SelfInfo() {
         TStringStream ss;
-        ss << "PDiskId# " << PDiskId
-            << " TSectorWriter<"
+        ss << "TSectorWriter<"
             << (IsLog ? "Log" : "!Log") << ","
             << (IsSysLog ? "SysLog" : "!SysLog")
             << "> ";
@@ -179,11 +173,8 @@ public:
     void WriteNextChunkReference(TChunkIdx nextChunk, ui64 nextChunkNonce, TCompletionAction *action,
             TReqId reqId, NWilson::TTraceId *traceId) {
 
-        if (ActorSystem) {
-            LOG_INFO_S(*ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                    << " WriteNextChunkReference, currentChunkIdx# " << ChunkIdx
-                    << " nextChunkIdx# " << nextChunk << " Nonce# " << Nonce);
-        }
+        P_LOG(PRI_INFO, BPD01, SelfInfo() << " WriteNextChunkReference", (CurrentChunkIdx, ChunkIdx),
+            (nextChunkIdx, nextChunk), (Nonce, Nonce));
 
         ui64 sectorOffset = Format.Offset(ChunkIdx, SectorIdx);
         ui8* sector = BufferedWriter->Seek(sectorOffset, ReplicationFactor, ReplicationFactor, reqId, traceId,
@@ -250,11 +241,8 @@ public:
     void NextSector(const ui64 dataMagic, TReqId reqId, NWilson::TTraceId *traceId) {
         if (OnNewChunk) {
             OnNewChunk = false;
-            if (ActorSystem) {
-                LOG_DEBUG_S(*ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                        << " NextSector on new chunk, currentChunkIdx# " << ChunkIdx
-                        << " SectorIdx# " << SectorIdx << " Nonce# " << Nonce);
-            }
+            P_LOG(PRI_DEBUG, BPD01, SelfInfo() << " NextSector on new chunk",
+                (CurrentChunkIdx, ChunkIdx), (SectorIdx, SectorIdx), (Nonce, Nonce));
         }
         ui32 reserve = 1;
         if (IsSysLog) {
@@ -310,7 +298,6 @@ public:
         TDataSectorFooter &sectorFooter = *(TDataSectorFooter*)(sector + Format.SectorSize - sizeof(TDataSectorFooter));
         sectorFooter.Version = PDISK_DATA_VERSION;
         sectorFooter.Nonce = Nonce;
-        Hash.SetUseT1ha0Hasher(UseT1ha0Hasher);
         sectorFooter.Hash = Hash.HashSector(sectorOffset, magic, sector, Format.SectorSize);
 
         BufferedWriter->MarkDirty();
@@ -322,12 +309,12 @@ public:
         TParitySectorFooter &sectorFooter = *(TParitySectorFooter*)
             (sector + Format.SectorSize - sizeof(TParitySectorFooter));
         sectorFooter.Nonce = Nonce;
-        Hash.SetUseT1ha0Hasher(UseT1ha0Hasher);
         sectorFooter.Hash = Hash.HashSector(sectorOffset, magic, sector, Format.SectorSize);
-        if (!IsLog && ActorSystem) {
-            LOG_TRACE_S(*ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                    << " PrepareParitySectorFooter, sectorOffset#" << sectorOffset
-                    << " Nonce# " << Nonce << " hash# " << sectorFooter.Hash);
+        if (!IsLog) {
+            P_LOG(PRI_TRACE, BPD01, SelfInfo() << " PrepareParitySectorFooter",
+                    (SectorOffset, sectorOffset),
+                    (Nonce, Nonce),
+                    (Hash, sectorFooter.Hash));
         }
         BufferedWriter->MarkDirty();
         ++Nonce;
@@ -373,22 +360,17 @@ public:
     void TerminateLog(TReqId reqId, NWilson::TTraceId *traceId) {
         Y_ABORT_UNLESS(IsLog);
         if (SectorBytesFree == 0 || SectorBytesFree == Format.SectorPayloadSize()) {
-            if (ActorSystem) {
-                LOG_DEBUG_S(*ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                        << " TerminateLog Sector is full or free "
-                        << " SectorBytesFree# " << SectorBytesFree
-                        << " chunkIdx# " << ChunkIdx << " sectorIdx# " << SectorIdx
-                        << " sectorOffset# " << Format.Offset(ChunkIdx, SectorIdx)
-                        << " Marker# BPD63");
-            }
+            P_LOG(PRI_DEBUG, BPD63, SelfInfo() << " TerminateLog Sector is full or free",
+                    (SectorBytesFree, SectorBytesFree),
+                    (ChunkIdx, ChunkIdx),
+                    (SectorIdx, SectorIdx),
+                    (SectorOffset, Format.Offset(ChunkIdx, SectorIdx)));
         } else if (SectorBytesFree <= sizeof(TFirstLogPageHeader)) {
-            if (ActorSystem) {
-                LOG_DEBUG_S(*ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                        << " TerminateLog small SectorBytesFree# " << SectorBytesFree
-                        << " chunkIdx# " << ChunkIdx << " sectorIdx# " << SectorIdx
-                        << " sectorOffset# " << Format.Offset(ChunkIdx, SectorIdx)
-                        << " Marker# BPD65");
-            }
+            P_LOG(PRI_DEBUG, BPD65, SelfInfo() << " TerminateLog small",
+                    (SectorBytesFree, SectorBytesFree),
+                    (ChunkIdx, ChunkIdx),
+                    (SectorIdx, SectorIdx),
+                    (SectorOffset, Format.Offset(ChunkIdx, SectorIdx)));
             TFirstLogPageHeader terminator(LogPageTerminator, 0, 0, 0, 0, 0);
             if (IsSysLog) {
                 *Mon.BandwidthPSysLogPadding += SectorBytesFree;
@@ -398,13 +380,10 @@ public:
             RecordBytesLeft += SectorBytesFree;
             Write(&terminator, SectorBytesFree, reqId, traceId);
         } else {
-            if (ActorSystem) {
-                LOG_DEBUG_S(*ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                        << " TerminateLog large SectorBytesFree# " << SectorBytesFree
-                        << " chunkIdx# " << ChunkIdx << " sectorIdx# " << SectorIdx
-                        << " sectorOffset# " << Format.Offset(ChunkIdx, SectorIdx)
-                        << " Marker# BPD66");
-            }
+            P_LOG(PRI_DEBUG, BPD66, SelfInfo() << " TerminateLog large",
+                (SectorBytesFree, SectorBytesFree),
+                (ChunkIdx, ChunkIdx), (SectorIdx, SectorIdx),
+                (SectorOffset, Format.Offset(ChunkIdx, SectorIdx)));
             ui32 availableSize = SectorBytesFree - sizeof(TFirstLogPageHeader);
             TFirstLogPageHeader header(LogPageTerminator, availableSize, availableSize, 0, 0, 0);
             if (IsSysLog) {
@@ -432,11 +411,8 @@ public:
             TFirstLogPageHeader header(flags, payloadSize, dataSize, owner, signature, ownerLsn);
             RecordBytesLeft = sizeNeeded;
             isTornOffHeader = (SectorBytesFree == sizeof(TFirstLogPageHeader) && !isWhole);
-            if (ActorSystem) {
-                LOG_DEBUG_S(*ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                        << " LogPageHeader, chunkIdx# " << ChunkIdx << " sectorIdx# " << SectorIdx
-                        << " nonce# " << Nonce << " Marker# BPD60");
-            }
+            P_LOG(PRI_DEBUG, BPD60, SelfInfo() << " LogPageHeader",
+                    (ChunkIdx, ChunkIdx), (SectorIdx, SectorIdx), (Nonce, Nonce));
             Write(&header, sizeof(TFirstLogPageHeader), reqId, traceId);
         }
         if (isTornOffHeader) {
@@ -450,11 +426,8 @@ public:
             } else {
                 *Mon.BandwidthPLogRecordHeader += sizeof(TLogPageHeader);
             }
-            if (ActorSystem) {
-                LOG_DEBUG_S(*ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                        << " LogPageHeader, chunkIdx# " << ChunkIdx << " sectorIdx# " << SectorIdx
-                        << " nonce# " << Nonce << " Marker# BPD61");
-            }
+            P_LOG(PRI_DEBUG, BPD61, SelfInfo() << " LogPageHeader", 
+                    (ChunkIdx, ChunkIdx), (SectorIdx, SectorIdx), (Nonce, Nonce));
             Write(&header, sizeof(TLogPageHeader), reqId, traceId);
         }
     }
@@ -480,12 +453,7 @@ public:
             } else {
                 *Mon.BandwidthPLogRecordHeader += sizeof(TLogPageHeader);
             }
-            if (ActorSystem) {
-                LOG_DEBUG_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                        << " Line# " << __LINE__ << " LogPageHeader writing"
-                        << " chunkIdx# " << ChunkIdx << " sectorIdx# " << SectorIdx
-                        << " Marker# BPD62");
-            }
+            P_LOG(PRI_DEBUG, BPD62, "LogPageHeader writing", (ChunkIdx, ChunkIdx), (SectorIdx, SectorIdx));
             Write(&header, sizeof(TLogPageHeader), reqId, traceId);
         }
         Write(data, size, reqId, traceId);

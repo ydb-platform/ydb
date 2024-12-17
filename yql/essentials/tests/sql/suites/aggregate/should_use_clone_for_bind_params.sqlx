@@ -1,0 +1,13 @@
+/* postgres can not */
+use plato;
+
+$puid = ($mission) -> {RETURN Yson::LookupUint64($mission, 'puid');};
+$mid = ($mission) -> {RETURN Yson::LookupString($mission, 'external_id');};
+$customer = ($mission) -> {RETURN Yson::LookupInt64($mission, 'customer');};
+
+SELECT count(distinct $puid) from Input;
+SELECT count(distinct $mid) from Input;
+SELECT count(distinct $customer) from Input;
+
+SELECT count(distinct $puid,$mid,$customer) from Input;
+

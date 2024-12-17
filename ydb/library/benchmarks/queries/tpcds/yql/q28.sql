@@ -8,49 +8,49 @@ from (select avg(ss_list_price) B1_LP
             ,count(distinct ss_list_price) B1_CNTD
       from {{store_sales}} as store_sales
       where ss_quantity between 0 and 5
-        and (ss_list_price between 73 and 73+10
-             or ss_coupon_amt between 7826 and 7826+1000
-             or ss_wholesale_cost between 70 and 70+20)) B1 cross join
+        and (ss_list_price between 8 and 8+10
+             or ss_coupon_amt between 459 and 459+1000
+             or ss_wholesale_cost between 57 and 57+20)) B1 cross join
      (select avg(ss_list_price) B2_LP
             ,count(ss_list_price) B2_CNT
             ,count(distinct ss_list_price) B2_CNTD
       from {{store_sales}} as store_sales
       where ss_quantity between 6 and 10
-        and (ss_list_price between 152 and 152+10
-          or ss_coupon_amt between 2196 and 2196+1000
-          or ss_wholesale_cost between 56 and 56+20)) B2 cross join
+        and (ss_list_price between 90 and 90+10
+          or ss_coupon_amt between 2323 and 2323+1000
+          or ss_wholesale_cost between 31 and 31+20)) B2 cross join
      (select avg(ss_list_price) B3_LP
             ,count(ss_list_price) B3_CNT
             ,count(distinct ss_list_price) B3_CNTD
       from {{store_sales}} as store_sales
       where ss_quantity between 11 and 15
-        and (ss_list_price between 53 and 53+10
-          or ss_coupon_amt between 3430 and 3430+1000
-          or ss_wholesale_cost between 13 and 13+20)) B3 cross join
+        and (ss_list_price between 142 and 142+10
+          or ss_coupon_amt between 12214 and 12214+1000
+          or ss_wholesale_cost between 79 and 79+20)) B3 cross join
      (select avg(ss_list_price) B4_LP
             ,count(ss_list_price) B4_CNT
             ,count(distinct ss_list_price) B4_CNTD
       from {{store_sales}} as store_sales
       where ss_quantity between 16 and 20
-        and (ss_list_price between 182 and 182+10
-          or ss_coupon_amt between 3262 and 3262+1000
-          or ss_wholesale_cost between 20 and 20+20)) B4 cross join
+        and (ss_list_price between 135 and 135+10
+          or ss_coupon_amt between 6071 and 6071+1000
+          or ss_wholesale_cost between 38 and 38+20)) B4 cross join
      (select avg(ss_list_price) B5_LP
             ,count(ss_list_price) B5_CNT
             ,count(distinct ss_list_price) B5_CNTD
       from {{store_sales}} as store_sales
       where ss_quantity between 21 and 25
-        and (ss_list_price between 85 and 85+10
-          or ss_coupon_amt between 3310 and 3310+1000
-          or ss_wholesale_cost between 37 and 37+20)) B5 cross join
+        and (ss_list_price between 122 and 122+10
+          or ss_coupon_amt between 836 and 836+1000
+          or ss_wholesale_cost between 17 and 17+20)) B5 cross join
      (select avg(ss_list_price) B6_LP
             ,count(ss_list_price) B6_CNT
             ,count(distinct ss_list_price) B6_CNTD
       from {{store_sales}} as store_sales
       where ss_quantity between 26 and 30
-        and (ss_list_price between 180 and 180+10
-          or ss_coupon_amt between 12592 and 12592+1000
-          or ss_wholesale_cost between 22 and 22+20)) B6
+        and (ss_list_price between 154 and 154+10
+          or ss_coupon_amt between 7326 and 7326+1000
+          or ss_wholesale_cost between 7 and 7+20)) B6
 limit 100;
 
 -- end query 1 in stream 0 using template query28.tpl

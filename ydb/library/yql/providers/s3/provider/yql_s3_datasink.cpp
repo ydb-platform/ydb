@@ -1,14 +1,14 @@
 #include "yql_s3_provider_impl.h"
 #include "yql_s3_dq_integration.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -90,23 +90,33 @@ private:
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& write, TExprContext& ctx) override {
         const TS3Write w(write);
         auto settings = write->Tail().ChildrenList();
+
+        TExprNode::TPtr format = ExtractFormat(settings);
+        if (!format) {
+            ctx.AddError(TIssue(ctx.GetPosition(write->Pos()), "Missing format - please use WITH FORMAT when writing into S3"));
+            return nullptr;
+        }
+
         return Build<TS3WriteObject>(ctx, w.Pos())
                 .World(w.World())
                 .DataSink(w.DataSink())
                 .Target<TS3Target>()
                     .Path(write->Child(2U)->Head().Tail().HeadPtr())
-                    .Format(ExtractFormat(settings))
+                    .Format(std::move(format))
                     .Settings(ctx.NewList(w.Pos(), std::move(settings)))
                     .Build()
                 .Input(write->ChildPtr(3))
             .Done().Ptr();
     }
 
-    void GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs) override {
+    ui32 GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs, bool withLimits) override {
+        Y_UNUSED(withLimits);
         if (const auto& maybeOp = TMaybeNode<TS3WriteObject>(&node)) {
             const auto& op = maybeOp.Cast();
             outputs.push_back(TPinInfo(nullptr, op.DataSink().Raw(), op.Target().Raw(), op.DataSink().Cluster().StringValue() + '.' + op.Target().Path().StringValue(), false));
+            return 1;
         }
+        return 0;
     }
 
     bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool) override {

@@ -291,6 +291,18 @@ namespace NTi::NIo {
                     case ETypeName::Uuid:
                         type = TUuidType::InstanceRaw();
                         break;
+                    case ETypeName::Date32:
+                        type = TDate32Type::InstanceRaw();
+                        break;
+                    case ETypeName::Datetime64:
+                        type = TDatetime64Type::InstanceRaw();
+                        break;
+                    case ETypeName::Timestamp64:
+                        type = TTimestamp64Type::InstanceRaw();
+                        break;
+                    case ETypeName::Interval64:
+                        type = TInterval64Type::InstanceRaw();
+                        break;
                     case ETypeName::Void:
                         type = TVoidType::InstanceRaw();
                         break;
@@ -710,6 +722,18 @@ namespace NTi::NIo {
             [&consumer](const TUuidType*) {
                 consumer.OnScalarString("uuid");
             },
+            [&consumer](const TDate32Type*) {
+                consumer.OnScalarString("date32");
+            },
+            [&consumer](const TDatetime64Type*) {
+                consumer.OnScalarString("datetime64");
+            },
+            [&consumer](const TTimestamp64Type*) {
+                consumer.OnScalarString("timestamp64");
+            },
+            [&consumer](const TInterval64Type*) {
+                consumer.OnScalarString("interval64");
+            },
             [&consumer](const TDecimalType* t) {
                 consumer.OnBeginMap();
 
@@ -968,6 +992,18 @@ namespace NTi::NIo {
             [&consumer](const TUuidType*) {
                 WriteDataType(consumer, EPrimitiveTypeName::Uuid);
             },
+            [&consumer](const TDate32Type*) {
+                WriteDataType(consumer, EPrimitiveTypeName::Date32);
+            },
+            [&consumer](const TDatetime64Type*) {
+                WriteDataType(consumer, EPrimitiveTypeName::Datetime64);
+            },
+            [&consumer](const TTimestamp64Type*) {
+                WriteDataType(consumer, EPrimitiveTypeName::Timestamp64);
+            },
+            [&consumer](const TInterval64Type*) {
+                WriteDataType(consumer, EPrimitiveTypeName::Interval64);
+            },
             [&consumer](const TDecimalType* t) {
                 consumer.OnBeginList();
                 consumer.OnScalarString("DataType");
@@ -1142,6 +1178,10 @@ namespace NTi::NIo {
                 [](const TJsonType*) -> TStringBuf { return "string"; },
                 [](const TYsonType*) -> TStringBuf { return "any"; },
                 [](const TUuidType*) -> TStringBuf { return "string"; },
+                [](const TDate32Type*) -> TStringBuf { return "int64"; },
+                [](const TDatetime64Type*) -> TStringBuf { return "int64"; },
+                [](const TTimestamp64Type*) -> TStringBuf { return "int64"; },
+                [](const TInterval64Type*) -> TStringBuf { return "int64"; },
                 [](const TDecimalType*) -> TStringBuf { return "string"; },
                 [](const TOptionalType*) -> TStringBuf { return "any"; },
                 [](const TListType*) -> TStringBuf { return "any"; },

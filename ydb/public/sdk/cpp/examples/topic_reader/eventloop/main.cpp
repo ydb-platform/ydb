@@ -104,6 +104,8 @@ int main(int argc, const char* argv[]) {
             startPartitionSessionEvent->Confirm();
         } else if (auto* stopPartitionSessionEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
             stopPartitionSessionEvent->Confirm();
+        } else if (auto* endPartitionSessionEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
+            endPartitionSessionEvent->Confirm();
         } else if (auto* closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
             break;
         }

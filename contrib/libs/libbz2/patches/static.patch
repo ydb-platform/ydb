@@ -1,0 +1,20 @@
+--- a/bzlib.h
++++ b/bzlib.h
+@@ -83,15 +83,6 @@ typedef
+ #   endif
+-#   ifdef BZ_EXPORT
+-#   define BZ_API(func) WINAPI func
+-#   define BZ_EXTERN extern
+-#   else
+-   /* import windows dll dynamically */
+-#   define BZ_API(func) (WINAPI * func)
+-#   define BZ_EXTERN
+-#   endif
+-#else
+-#   define BZ_API(func) func
+-#   define BZ_EXTERN extern
+ #endif
+ 
++#define BZ_API(func) func
++#define BZ_EXTERN extern
+ 

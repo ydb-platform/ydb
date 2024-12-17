@@ -1,13 +1,14 @@
 #include "ut_utils/managed_executor.h"
 #include "ut_utils/topic_sdk_test_setup.h"
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/ut_utils.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/write_session.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/executor_impl.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/write_session.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/write_session.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -255,7 +256,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NPersQueue::TWriteSessionSettings writeSettings;
         writeSettings.Path(setup->GetTestTopic()).MessageGroupId(TEST_MESSAGE_GROUP_ID);
         writeSettings.Codec(NPersQueue::ECodec::RAW);
-        NPersQueue::IExecutor::TPtr executor = new NPersQueue::TSyncExecutor();
+        IExecutor::TPtr executor = new TSyncExecutor();
         writeSettings.CompressionExecutor(executor);
 
         ui64 count = 100u;
@@ -454,14 +455,15 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT(!futureWrite.HasValue());
         Cerr << ">>>TEST: future write has no value " << Endl;
-        RunTasks(stepByStepExecutor, {0});
+        RunTasks(stepByStepExecutor, {0});  // Run compression task.
+        RunTasks(stepByStepExecutor, {1});  // Run send task.
         futureWrite.GetValueSync();
         UNIT_ASSERT(futureWrite.HasValue());
         Cerr << ">>>TEST: future write has value " << Endl;
 
         UNIT_ASSERT(!futureRead.HasValue());
         Cerr << ">>>TEST: future read has no value " << Endl;
-        RunTasks(stepByStepExecutor, {1});
+        RunTasks(stepByStepExecutor, {2});  // Run decompression task.
         futureRead.GetValueSync();
         UNIT_ASSERT(futureRead.HasValue());
         Cerr << ">>>TEST: future read has value " << Endl;
@@ -608,7 +610,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NPersQueue::TWriteSessionSettings writeSettings;
         writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
         writeSettings.Codec(NPersQueue::ECodec::RAW);
-        NPersQueue::IExecutor::TPtr executor = new NPersQueue::TSyncExecutor();
+        IExecutor::TPtr executor = new TSyncExecutor();
         writeSettings.CompressionExecutor(executor);
 
         auto& client = setup->GetPersQueueClient();
@@ -620,7 +622,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             bool res = session->Write(message);
             UNIT_ASSERT(res);
         }
-        bool res = session->Close(TDuration::Seconds(10));
+        bool res = session->Close(TDuration::Seconds(30));
         UNIT_ASSERT(res);
 
         std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
@@ -655,8 +657,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         Cerr << ">>> TEST: Session gracefully closed" << Endl;
 
         Sleep(TDuration::Seconds(5));
-
-        // UNIT_ASSERT(false);
     }
 
     Y_UNIT_TEST(ConflictingWrites) {
@@ -696,6 +696,118 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(stats.Defined());
         UNIT_ASSERT_VALUES_EQUAL(stats->GetEndOffset(), count);
 
+    }
+
+    Y_UNIT_TEST(TWriteSession_WriteEncoded) {
+        // This test was adapted from ydb_persqueue tests.
+        // It writes 4 messages: 2 with default codec, 1 with explicitly set GZIP codec, 1 with RAW codec.
+        // The last message MUST be sent in a separate WriteRequest, as it has a codec field applied for all messages in the request.
+        // This separation currently happens in TWriteSessionImpl::SendImpl method.
+
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        auto client = setup->MakeClient();
+        auto settings = TWriteSessionSettings()
+            .Path(TEST_TOPIC)
+            .MessageGroupId(TEST_MESSAGE_GROUP_ID);
+
+        size_t batchSize = 100000000;
+        settings.BatchFlushInterval(TDuration::Seconds(1000)); // Batch on size, not on time.
+        settings.BatchFlushSizeBytes(batchSize);
+        auto writer = client.CreateWriteSession(settings);
+        TString message = "message";
+        TString packed;
+        {
+            TStringOutput so(packed);
+            TZLibCompress oss(&so, ZLib::GZip, 6);
+            oss << message;
+        }
+
+        Cerr << message << " " << packed << "\n";
+
+        {
+            auto event = *writer->GetEvent(true);
+            UNIT_ASSERT(!writer->WaitEvent().Wait(TDuration::Seconds(1)));
+            auto ev = writer->WaitEvent();
+            UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event));
+            auto continueToken = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken);
+            writer->Write(std::move(continueToken), message);
+            UNIT_ASSERT(ev.Wait(TDuration::Seconds(1)));
+        }
+        {
+            auto event = *writer->GetEvent(true);
+            UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event));
+            auto continueToken = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken);
+            writer->Write(std::move(continueToken), "");
+        }
+        {
+            auto event = *writer->GetEvent(true);
+            UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event));
+            auto continueToken = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken);
+            writer->WriteEncoded(std::move(continueToken), packed, ECodec::GZIP, message.size());
+        }
+
+        ui32 acks = 0, tokens = 0;
+        while(acks < 4 || tokens < 2)  {
+            auto event = *writer->GetEvent(true);
+            if (std::holds_alternative<TWriteSessionEvent::TAcksEvent>(event)) {
+                acks += std::get<TWriteSessionEvent::TAcksEvent>(event).Acks.size();
+            }
+            if (std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event)) {
+                if (tokens == 0) {
+                    auto continueToken = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken);
+                    writer->WriteEncoded(std::move(continueToken), "", ECodec::RAW, 0);
+                }
+                ++tokens;
+            }
+            Cerr << "GOT EVENT " << acks << " " << tokens << "\n";
+        }
+        UNIT_ASSERT(!writer->WaitEvent().Wait(TDuration::Seconds(5)));
+
+        UNIT_ASSERT_VALUES_EQUAL(acks, 4);
+        UNIT_ASSERT_VALUES_EQUAL(tokens, 2);
+
+        auto readSettings = TReadSessionSettings()
+            .ConsumerName(TEST_CONSUMER)
+            .AppendTopics(TEST_TOPIC);
+        std::shared_ptr<IReadSession> readSession = client.CreateReadSession(readSettings);
+        ui32 readMessageCount = 0;
+        while (readMessageCount < 4) {
+            Cerr << "Get event on client\n";
+            auto event = *readSession->GetEvent(true);
+            std::visit(TOverloaded {
+                [&](TReadSessionEvent::TDataReceivedEvent& event) {
+                    for (auto& message: event.GetMessages()) {
+                        TString sourceId = message.GetMessageGroupId();
+                        ui32 seqNo = message.GetSeqNo();
+                        UNIT_ASSERT_VALUES_EQUAL(readMessageCount + 1, seqNo);
+                        ++readMessageCount;
+                        UNIT_ASSERT_VALUES_EQUAL(message.GetData(), (seqNo % 2) == 1 ? "message" : "");
+                    }
+                },
+                [&](TReadSessionEvent::TCommitOffsetAcknowledgementEvent&) {
+                    UNIT_FAIL("no commits in test");
+                },
+                [&](TReadSessionEvent::TStartPartitionSessionEvent& event) {
+                    event.Confirm();
+                },
+                [&](TReadSessionEvent::TStopPartitionSessionEvent& event) {
+                    event.Confirm();
+                },
+                [&](TReadSessionEvent::TEndPartitionSessionEvent& event) {
+                    event.Confirm();
+                },
+                [&](TReadSessionEvent::TPartitionSessionStatusEvent&) {
+                    UNIT_FAIL("Test does not support lock sessions yet");
+                },
+                [&](TReadSessionEvent::TPartitionSessionClosedEvent&) {
+                    UNIT_FAIL("Test does not support lock sessions yet");
+                },
+                [&](TSessionClosedEvent&) {
+                    UNIT_FAIL("Session closed");
+                }
+
+            }, event);
+        }
     }
 } // Y_UNIT_TEST_SUITE(BasicUsage)
 
@@ -821,7 +933,23 @@ Y_UNIT_TEST_SUITE(TSettingsValidation) {
         //Specify msg groupId and don't specify deduplication. Should work with dedup enable
         runTest({}, "msgGroup", {}, true, EExpectedTestResult::SUCCESS);
         runTest({}, "msgGroup", {}, false, EExpectedTestResult::SUCCESS);
+    }
 
+    Y_UNIT_TEST(ValidateSettingsFailOnStart) {
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        TTopicClient client = setup.MakeClient();
+
+        auto readSettings = TReadSessionSettings()
+            .ConsumerName(TEST_CONSUMER)
+            .MaxMemoryUsageBytes(0)
+            .AppendTopics(TEST_TOPIC);
+
+        auto readSession = client.CreateReadSession(readSettings);
+        auto event = readSession->GetEvent(true);
+        UNIT_ASSERT(event.Defined());
+
+        auto& closeEvent = std::get<NYdb::NTopic::TSessionClosedEvent>(*event);
+        UNIT_ASSERT(closeEvent.DebugString().Contains("Too small max memory usage"));
     }
 
 } // Y_UNIT_TEST_SUITE(TSettingsValidation)

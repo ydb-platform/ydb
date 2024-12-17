@@ -8,10 +8,11 @@
 
 namespace NYT::NFormats {
 
-using namespace NConcurrency;
-using namespace NYson;
-using namespace NTableClient;
 using namespace NComplexTypes;
+using namespace NConcurrency;
+using namespace NCrypto;
+using namespace NTableClient;
+using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -111,6 +112,11 @@ bool TSchemafulWriter::Write(TRange<TUnversionedRow> rows)
 TFuture<void> TSchemafulWriter::GetReadyEvent()
 {
     return Result_;
+}
+
+std::optional<TMD5Hash> TSchemafulWriter::GetDigest() const
+{
+    return std::nullopt;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -54,6 +54,8 @@ public:
         return GRPC_COMPRESS_LEVEL_NONE;
     }
 
+    TString GetEndpointId() const override { return {}; }
+
     google::protobuf::Arena* GetArena() override {
         return &Arena_;
     }
@@ -76,6 +78,7 @@ public:
     TString GetPeer() const override { return {}; }
     bool SslServer() const override { return false; }
     bool IsClientLost() const override { return false; }
+    bool IsStreamCall() const override { return false; }
 
 public:
     NYql::TIssues GetIssues() {
@@ -87,7 +90,10 @@ protected:
         return *BaseRequest_;
     }
 
-private:
+    IRequestCtx& GetBaseRequest() noexcept {
+        return *BaseRequest_;
+    }
+
     void RaiseIssue(const NYql::TIssue& issue) {
         IssueManager_.RaiseIssue(issue);
     }
@@ -123,11 +129,6 @@ public:
     }
 
     const NProtoBuf::Message* GetRequest() const override {
-        return &Request_;
-    }
-
-    //! Get mutable pointer to the request's message.
-    NProtoBuf::Message* GetRequestMut() override {
         return &Request_;
     }
 

@@ -4,7 +4,7 @@
 #include <ydb/core/pgproxy/pg_proxy_types.h>
 #include <ydb/core/pgproxy/pg_proxy_events.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 #define INCLUDE_YDB_INTERNAL_H
@@ -28,6 +28,14 @@ struct TConnectionState {
     TString SessionId;
     TTransactionState Transaction;
     uint32_t ConnectionNum = 0;
+};
+
+struct TPgWireAuthData {
+    TActorId Sender;
+    TString UserName;
+    TString DatabasePath;
+    TString Password;
+    TString PeerName;
 };
 
 struct TParsedStatement {
@@ -56,6 +64,7 @@ struct TEvEvents {
         EvUpdateStatement,
         EvSingleQuery,
         EvCancelRequest,
+        EvAuthResponse,
         EvEnd
     };
 
@@ -97,6 +106,24 @@ struct TEvEvents {
 
     struct TEvCancelRequest : NActors::TEventLocal<TEvCancelRequest, EvCancelRequest> {
         TEvCancelRequest() = default;
+    };
+
+    struct TEvAuthResponse : NActors::TEventLocal<TEvAuthResponse, EvAuthResponse> {
+        TString SerializedToken;
+        TString Ticket;
+        TString ErrorMessage;
+        TActorId Sender;
+
+        TEvAuthResponse(const TString& serializedToken, const TString& ticket, const TActorId& sender)
+            : SerializedToken(serializedToken)
+            , Ticket(ticket)
+            , Sender(sender)
+        {}
+
+        TEvAuthResponse(const TString& errorMessage, const TActorId& sender)
+            : ErrorMessage(errorMessage)
+            , Sender(sender)
+        {}
     };
 };
 

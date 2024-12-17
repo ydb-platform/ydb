@@ -1124,7 +1124,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
     class TReplicaEnumerator: public TBaseRequester<TReplicaEnumerator, TEvStateStorage::TEvListSchemeBoardResult> {
         IEventBase* MakeRequest() const override {
-            return new TEvStateStorage::TEvListSchemeBoard();
+            return new TEvStateStorage::TEvListSchemeBoard(false);
         }
 
         void ProcessResponse(TEvStateStorage::TEvListSchemeBoardResult::TPtr& ev) override {

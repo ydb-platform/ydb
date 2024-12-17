@@ -8,7 +8,7 @@ import subprocess
 logger = logging.getLogger(__name__)
 
 
-DOCKER_IMAGE_YDBD_PACKAGE_SPEC = 'ydb/tools/ydbd_slice/image/pkg.json'
+DOCKER_IMAGE_YDBD_PACKAGE_SPEC = 'ydb/deploy/docker/debug/pkg.json'
 DOCKER_IMAGE_REGISTRY = 'cr.yandex'
 DOCKER_IMAGE_REPOSITORY = 'crpbo4q9lbgkn85vr1rm'
 DOCKER_IMAGE_NAME = 'ydb'

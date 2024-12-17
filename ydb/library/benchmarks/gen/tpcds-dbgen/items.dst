@@ -1,0 +1,516 @@
+--
+-- Legal Notice
+--
+-- This document and associated source code (the "Work") is a part of a
+-- benchmark specification maintained by the TPC.
+--
+-- The TPC reserves all right, title, and interest to the Work as provided
+-- under U.S. and international laws, including without limitation all patent
+-- and trademark rights therein.
+--
+-- No Warranty
+--
+-- 1.1 TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE INFORMATION
+--     CONTAINED HEREIN IS PROVIDED "AS IS" AND WITH ALL FAULTS, AND THE
+--     AUTHORS AND DEVELOPERS OF THE WORK HEREBY DISCLAIM ALL OTHER
+--     WARRANTIES AND CONDITIONS, EITHER EXPRESS, IMPLIED OR STATUTORY,
+--     INCLUDING, BUT NOT LIMITED TO, ANY (IF ANY) IMPLIED WARRANTIES,
+--     DUTIES OR CONDITIONS OF MERCHANTABILITY, OF FITNESS FOR A PARTICULAR
+--     PURPOSE, OF ACCURACY OR COMPLETENESS OF RESPONSES, OF RESULTS, OF
+--     WORKMANLIKE EFFORT, OF LACK OF VIRUSES, AND OF LACK OF NEGLIGENCE.
+--     ALSO, THERE IS NO WARRANTY OR CONDITION OF TITLE, QUIET ENJOYMENT,
+--     QUIET POSSESSION, CORRESPONDENCE TO DESCRIPTION OR NON-INFRINGEMENT
+--     WITH REGARD TO THE WORK.
+-- 1.2 IN NO EVENT WILL ANY AUTHOR OR DEVELOPER OF THE WORK BE LIABLE TO
+--     ANY OTHER PARTY FOR ANY DAMAGES, INCLUDING BUT NOT LIMITED TO THE
+--     COST OF PROCURING SUBSTITUTE GOODS OR SERVICES, LOST PROFITS, LOSS
+--     OF USE, LOSS OF DATA, OR ANY INCIDENTAL, CONSEQUENTIAL, DIRECT,
+--     INDIRECT, OR SPECIAL DAMAGES WHETHER UNDER CONTRACT, TORT, WARRANTY,
+--     OR OTHERWISE, ARISING IN ANY WAY OUT OF THIS OR ANY OTHER AGREEMENT
+--     RELATING TO THE WORK, WHETHER OR NOT SUCH AUTHOR OR DEVELOPER HAD
+--     ADVANCE NOTICE OF THE POSSIBILITY OF SUCH DAMAGES.
+--
+-- Contributors:
+-- Gradient Systems
+--
+--
+--
+------
+-- categories
+-- values            weights
+-- -----------------------
+--    1. name            1. uniform
+--    2. class dist name
+--  3. Use Size? 
+------
+create categories;
+set types = (varchar, varchar, int);
+set weights = 1; 
+add ("Women", "women_class", 1: 1);
+add ("Men", "men_class", 1: 1);
+add ("Children", "children_class", 1: 1);
+add ("Shoes", "shoe_class", 1: 1);
+add ("Music", "music_class", 0: 1);
+add ("Jewelry", "jewelry_class", 0: 1);
+add ("Home", "home_class", 0: 1);
+add ("Sports", "sport_class", 0: 1);
+add ("Books", "book_class", 0: 1);
+add ("Electronics", "electronic_class", 0: 1);
+
+------
+-- women_class
+--   second level used to populate the item hierarchy
+-- values            weights
+-- -----------------------
+--    1. class name    1. uniform
+--  2. brand count 
+------
+create women_class;
+set types = (varchar, int);
+set weights = 1;
+add ("dresses", 2: 1);
+add ("fragrances", 2: 1);
+add ("maternity", 2: 1);
+add ("swimwear", 2: 1);
+
+------
+-- men_class
+--   second level used to populate the item hierarchy
+-- values            weights
+-- -----------------------
+--    1. class name    1. uniform
+--  2. brand count 
+------
+create men_class;
+set types = (varchar, int);
+set weights = 1;
+add ("accessories", 2: 1);
+add ("shirts", 2: 1);
+add ("pants", 2: 1);
+add ("sports-apparel", 2: 1);
+
+------
+-- children_class
+--   second level used to populate the item hierarchy
+-- values            weights
+-- -----------------------
+--    1. class name    1. uniform
+--  2. brand count 
+------
+create children_class;
+set types = (varchar, int);
+set weights = 1;
+add ("newborn", 2: 1);
+add ("infants", 2: 1);
+add ("toddlers", 2: 1);
+add ("school-uniforms", 2: 1);
+
+------
+-- shoe_class
+--   second level used to populate the item hierarchy
+-- values            weights
+-- -----------------------
+--    1. class name    1. uniform
+--  2. brand count 
+------
+create shoe_class;
+set types = (varchar, int);
+set weights = 1;
+add ("womens", 2: 1);
+add ("mens", 2: 1);
+add ("kids", 2: 1);
+add ("athletic", 2: 1);
+
+------
+-- music_class
+--   second level used to populate the item hierarchy
+-- values            weights
+-- -----------------------
+--    1. class name    1. uniform
+--  2. brand count 
+------
+create music_class;
+set types = (varchar, int);
+set weights = 1;
+add ("rock", 2: 1);
+add ("country", 2: 1);
+add ("pop", 2: 1);
+add ("classical", 2: 1);
+
+------
+-- jewelry_class
+--   second level used to populate the item hierarchy
+-- values            weights
+-- -----------------------
+--    1. class name    1. uniform
+--  2. brand count 
+------
+create jewelry_class;
+set types = (varchar, int);
+set weights = 1;
+add ("birdal", 8: 1);
+add ("diamonds", 8: 1);
+add ("gold", 8: 1);
+add ("bracelets", 8: 1);
+add ("earings", 8: 1);
+add ("rings", 8: 1);
+add ("pendants", 8: 1);
+add ("mens watch", 8: 1);
+add ("womens watch", 8: 1);
+add ("jewelry boxes", 8: 1);
+add ("semi-precious", 8: 1);
+add ("costume", 8: 1);
+add ("loose stones", 8: 1);
+add ("estate", 8: 1);
+add ("custom", 8: 1);
+add ("consignment", 8: 1);
+
+------
+-- home_class
+--   second level used to populate the item hierarchy
+-- values            weights
+-- -----------------------
+--    1. class name    1. uniform
+--  2. brand count 
+------
+create home_class;
+set types = (varchar, int);
+set weights = 1;
+add ("bathroom", 10: 1);
+add ("bedding", 10: 1);
+add ("kids", 10: 1);
+add ("curtains/drapes", 10: 1);
+add ("blinds/shades", 10: 1);
+add ("rugs", 10: 1);
+add ("decor", 10: 1);
+add ("lighting", 10: 1);
+add ("mattresses", 10: 1);
+add ("flatware", 10: 1);
+add ("accent", 10: 1);
+add ("paint", 10: 1);
+add ("wallpaper", 10: 1);
+add ("glassware", 10: 1);
+add ("tables", 10: 1);
+add ("furniture", 10: 1);
+
+------
+-- sport_class
+--   second level used to populate the item hierarchy
+-- values            weights
+-- -----------------------
+--    1. class name    1. uniform
+--  2. brand count 
+------
+create sport_class;
+set types = (varchar, int);
+set weights = 1;
+add ("athletic shoes", 10: 1);
+add ("baseball", 10: 1);
+add ("basketball", 10: 1);
+add ("camping", 10: 1);
+add ("fitness", 10: 1);
+add ("football", 10: 1);
+add ("hockey", 10: 1);
+add ("outdoor", 10: 1);
+add ("optics", 10: 1);
+add ("pools", 10: 1);
+add ("archery", 10: 1);
+add ("guns", 10: 1);
+add ("sailing", 10: 1);
+add ("tennis", 10: 1);
+add ("fishing", 10: 1);
+add ("golf", 10: 1);
+
+------
+-- book_class
+--   second level used to populate the item hierarchy
+-- values            weights
+-- -----------------------
+--    1. class name    1. uniform
+--  2. brand count 
+------
+create book_class;
+set types = (varchar, int);
+set weights = 1;
+add ("arts", 12: 1);
+add ("business", 12: 1);
+add ("computers", 12: 1);
+add ("entertainments", 12: 1);
+add ("history", 12: 1);
+add ("parenting", 12: 1);
+add ("reference", 12: 1);
+add ("romance", 12: 1);
+add ("science", 12: 1);
+add ("travel", 12: 1);
+add ("cooking", 12: 1);
+add ("home repair", 12: 1);
+add ("self-help", 12: 1);
+add ("sports", 12: 1);
+add ("fiction", 12: 1);
+add ("mystery", 12: 1);
+
+------
+-- electronic_class
+--   second level used to populate the item hierarchy
+-- values            weights
+-- -----------------------
+--    1. class name    1. uniform
+--  2. brand count 
+------
+create electronic_class;
+set types = (varchar, int);
+set weights = 1;
+add ("cameras", 17: 1);
+add ("camcorders", 17: 1);
+add ("dvd/vcr players", 17: 1);
+add ("audio", 17: 1);
+add ("karoke", 17: 1);
+add ("musical", 17: 1);
+add ("personal", 17: 1);
+add ("scanners", 17: 1);
+add ("televisions", 17: 1);
+add ("memory", 17: 1);
+add ("disk drives", 17: 1);
+add ("monitors", 17: 1);
+add ("stereo", 17: 1);
+add ("automotive", 17: 1);
+add ("portable", 17: 1);
+add ("wireless", 17: 1);
+
+------
+-- sizes
+--   size of a particular item, if applicable (based on category)
+-- values            weights
+-- -----------------------
+--    1. size        1. uniform    
+--                2. for non-sized categories
+--                3. size distributtion 
+------
+create sizes;
+set types = (varchar);
+set weights = 3; 
+add ("petite": 1, 0, 17);
+add ("small": 1, 0, 17);
+add ("medium": 1, 0, 35);
+add ("large": 1, 0, 22);
+add ("extra large", 1, 0, 17);
+add ("economy": 1, 0, 5);
+add ("N/A": 1, 1, 4);
+
+------
+-- units
+-- values            weights
+-- -----------------------
+--    1. unit name    1. uniform    
+------
+create units;
+set types = (varchar);
+set weights = 1; 
+add ("Unknown": 400);
+add ("Each": 400);
+add ("Dozen": 400);
+add ("Case": 400);
+add ("Pallet": 400);
+add ("Gross": 400);
+add ("Carton", 400);
+add ("Box": 400);
+add ("Bunch": 400);
+add ("Bundle": 400);
+add ("Oz": 400);
+add ("Lb": 400);
+add ("Ton": 400);
+add ("Ounce", 400);
+add ("Pound": 400);
+add ("Tsp": 400);
+add ("Tbl": 400);
+add ("Cup": 400);
+add ("Dram": 400);
+add ("Gram": 400);
+add ("N/A", 400);
+
+------
+-- container
+------
+create container;
+set types = (varchar);
+set weights = 1; 
+add ("Unknown": 4);
+
+
+------
+-- colors
+-- values            weights
+-- -----------------------
+--    1. color    1. uniform    
+--                2. skewed dist (used by dbgen)
+--                3. low likelihood (used by qgen) 
+--                4. medium likelihood (used by qgen) 
+--                5. high likelihood (used by qgen) 
+------
+create colors;
+set types = (varchar);
+set weights = 5; 
+set names = (name:uniform, skewed, low, medium, high);
+add ("almond": 1, 1, 1, 0, 0);
+add ("antique": 1, 1, 1, 0, 0);
+add ("aquamarine": 1, 1, 1, 0, 0);
+add ("azure": 1, 1, 1, 0, 0);
+add ("beige": 1, 1, 1, 0, 0);
+add ("bisque": 1, 1, 1, 0, 0);
+add ("black": 1, 1, 1, 0, 0);
+add ("blanched": 1, 1, 1, 0, 0);
+add ("blue": 1, 1, 1, 0, 0);
+add ("blush": 1, 1, 1, 0, 0);
+add ("brown": 1, 1, 1, 0, 0);
+add ("burlywood": 1, 1, 1, 0, 0);
+add ("burnished": 1, 1, 1, 0, 0);
+add ("chartreuse": 1, 1, 1, 0, 0);
+add ("chiffon": 1, 1, 1, 0, 0);
+add ("chocolate": 1, 1, 1, 0, 0);
+add ("coral": 1, 1, 1, 0, 0);
+add ("cornflower": 1, 1, 1, 0, 0);
+add ("cornsilk": 1, 1, 1, 0, 0);
+add ("cream": 1, 1, 1, 0, 0);
+add ("cyan": 1, 1, 1, 0, 0);
+add ("dark": 1, 1, 1, 0, 0);
+add ("deep": 1, 1, 1, 0, 0);
+add ("dim": 1, 1, 1, 0, 0);
+add ("dodger": 1, 1, 1, 0, 0);
+add ("drab": 1, 1, 1, 0, 0);
+add ("firebrick": 1, 1, 1, 0, 0);
+add ("floral": 1, 1, 1, 0, 0);
+add ("forest": 1, 1, 1, 0, 0);
+add ("frosted": 1, 1, 1, 0, 0);
+add ("gainsboro": 1, 3, 0, 1, 0);
+add ("ghost": 1, 3, 0, 1, 0);
+add ("goldenrod": 1, 3, 0, 1, 0);
+add ("green": 1, 3, 0, 1, 0);
+add ("grey": 1, 3, 0, 1, 0);
+add ("honeydew": 1, 3, 0, 1, 0);
+add ("hot": 1, 3, 0, 1, 0);
+add ("indian": 1, 3, 0, 1, 0);
+add ("ivory": 1, 3, 0, 1, 0);
+add ("khaki": 1, 3, 0, 1, 0);
+add ("lace": 1, 3, 0, 1, 0);
+add ("lavender": 1, 3, 0, 1, 0);
+add ("lawn": 1, 3, 0, 1, 0);
+add ("lemon": 1, 3, 0, 1, 0);
+add ("light": 1, 3, 0, 1, 0);
+add ("lime": 1, 3, 0, 1, 0);
+add ("linen": 1, 3, 0, 1, 0);
+add ("magenta": 1, 3, 0, 1, 0);
+add ("maroon": 1, 3, 0, 1, 0);
+add ("medium": 1, 3, 0, 1, 0);
+add ("metallic": 1, 3, 0, 1, 0);
+add ("midnight": 1, 3, 0, 1, 0);
+add ("mint": 1, 3, 0, 1, 0);
+add ("misty": 1, 3, 0, 1, 0);
+add ("moccasin": 1, 3, 0, 1, 0);
+add ("navajo": 1, 3, 0, 1, 0);
+add ("navy": 1, 3, 0, 1, 0);
+add ("olive": 1, 3, 0, 1, 0);
+add ("orange": 1, 3, 0, 1, 0);
+add ("orchid": 1, 3, 0, 1, 0);
+add ("pale": 1, 9, 0, 0, 1);
+add ("papaya": 1, 9, 0, 0, 1);
+add ("peach": 1, 9, 0, 0, 1);
+add ("peru": 1, 9, 0, 0, 1);
+add ("pink": 1, 9, 0, 0, 1);
+add ("plum": 1, 9, 0, 0, 1);
+add ("powder": 1, 9, 0, 0, 1);
+add ("puff": 1, 9, 0, 0, 1);
+add ("purple": 1, 9, 0, 0, 1);
+add ("red": 1, 9, 0, 0, 1);
+add ("rose": 1, 9, 0, 0, 1);
+add ("rosy": 1, 9, 0, 0, 1);
+add ("royal": 1, 9, 0, 0, 1);
+add ("saddle": 1, 9, 0, 0, 1);
+add ("salmon": 1, 9, 0, 0, 1);
+add ("sandy": 1, 9, 0, 0, 1);
+add ("seashell": 1, 9, 0, 0, 1);
+add ("sienna": 1, 9, 0, 0, 1);
+add ("sky": 1, 9, 0, 0, 1);
+add ("slate": 1, 9, 0, 0, 1);
+add ("smoke": 1, 9, 0, 0, 1);
+add ("snow": 1, 9, 0, 0, 1);
+add ("spring": 1, 9, 0, 0, 1);
+add ("steel": 1, 9, 0, 0, 1);
+add ("tan": 1, 9, 0, 0, 1);
+add ("thistle": 1, 9, 0, 0, 1);
+add ("tomato": 1, 9, 0, 0, 1);
+add ("turquoise": 1, 9, 0, 0, 1);
+add ("violet": 1, 9, 0, 0, 1);
+add ("wheat": 1, 9, 0, 0, 1);
+add ("white": 1, 9, 0, 0, 1);
+add ("yellow": 1, 9, 0, 0, 1);
+
+------
+-- brand_syllables
+-- values            weights
+-- -----------------------
+--    1. syllable    1. uniform    
+------
+create brand_syllables;
+set types = (varchar);
+set weights = 1;
+add ("univ": 1);
+add ("amalg": 1);
+add ("importo":1);
+add ("exporti":1);
+add ("edu pack":1);
+add ("scholar":1);
+add ("corp":1);
+add ("brand":1);
+add ("nameless":1);
+add ("maxi":1);
+
+------
+-- i_current_price
+-- values            weights
+-- -----------------------
+--    1. min    1. unified    
+--    2. max    2. low
+--            3. medium
+--            4. high
+-- NOTE: distcomp doesn't currently support decimal data type directly
+------
+create i_current_price;
+set types = (int, varchar, varchar);
+set weights = 4;
+set names = (index, low_bound, high_bound: skew, high, medium, low);
+add (1, "0.09",    "4.99":    60, 1, 0, 0);
+add (2, "5.00",    "9.99":    30, 0, 1, 0);
+add (3, "10.00",    "99.99":10, 0, 0, 1);
+
+------
+-- i_manufact_id
+-- values            weights
+-- -----------------------
+--    1. ind    1. unified    
+--    2. min    2. low
+--    3. max    3. medium
+--        4. high
+------
+create i_manufact_id;
+set types = (int, int, int);
+set weights = 4;
+add (1, 1,        333:    60, 1, 0, 0);
+add (2, 334,    666:    30, 0, 1, 0);
+add (3, 667,    1000:    10, 0, 0, 1);
+
+------
+-- i_manager_id
+-- values            weights
+-- -----------------------
+--    1. index    1. unified    
+--    2. min        2. low
+--      3. max        3. medium
+--            4. high
+------
+create i_manager_id;
+set types = (int, int, int);
+set weights = 4;
+add (1, 1,        33:    60, 1, 0, 0);
+add (2, 34,    66:    30, 0, 1, 0);
+add (3, 67,    100:10, 0, 0, 1);
+

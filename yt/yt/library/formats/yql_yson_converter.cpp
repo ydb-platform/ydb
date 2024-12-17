@@ -169,19 +169,19 @@ void TYqlJsonWriter::OnStringScalarWeightLimited(TStringBuf value, i64 limit)
     auto incomplete = false;
     auto base64 = false;
     if (IsUtf(valueToWrite)) {
-        if (static_cast<i64>(valueToWrite.Size()) > limit) {
+        if (static_cast<i64>(valueToWrite.size()) > limit) {
             valueToWrite = TruncateUtf8(valueToWrite, limit);
             incomplete = true;
         }
     } else {
         base64 = true;
-        auto maxEncodedSize = Base64EncodeBufSize(valueToWrite.Size());
+        auto maxEncodedSize = Base64EncodeBufSize(valueToWrite.size());
         if (static_cast<i64>(maxEncodedSize) > limit) {
             auto truncatedLen = (limit - 1) / 4 * 3;
-            incomplete = (truncatedLen < static_cast<i64>(valueToWrite.Size()));
+            incomplete = (truncatedLen < static_cast<i64>(valueToWrite.size()));
             valueToWrite.Trunc(truncatedLen);
         }
-        Buffer_.Resize(Base64EncodeBufSize(valueToWrite.Size()));
+        Buffer_.Resize(Base64EncodeBufSize(valueToWrite.size()));
         valueToWrite = Base64Encode(valueToWrite, Buffer_.Begin());
     }
     OnStringScalarImpl(valueToWrite, incomplete, base64);
@@ -198,7 +198,7 @@ void TYqlJsonWriter::TransferYsonWeightLimited(
         callback(&writer);
     }
     auto yson = TStringBuf(Buffer_.Begin(), Buffer_.End());
-    if (static_cast<i64>(yson.Size()) > limit) {
+    if (static_cast<i64>(yson.size()) > limit) {
         OnStringScalarImpl("", /* incomplete */ true, /* base64 */ false);
     } else {
         WriteWithWrapping(

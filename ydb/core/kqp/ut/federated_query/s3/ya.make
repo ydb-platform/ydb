@@ -1,11 +1,9 @@
 UNITTEST_FOR(ydb/core/kqp)
 
-IF (WITH_VALGRIND)
-    TIMEOUT(3600)
+IF (WITH_VALGRIND OR SANITIZER_TYPE)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -20,7 +18,9 @@ PEERDIR(
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
     ydb/core/kqp/ut/common
     ydb/core/kqp/ut/federated_query/common
-    ydb/library/yql/sql/pg_dummy
+    ydb/library/yql/providers/s3/actors
+    yql/essentials/sql/pg_dummy
+    ydb/library/testlib/s3_recipe_helper
     ydb/public/sdk/cpp/client/ydb_types/operation
 )
 

@@ -7,7 +7,6 @@
 
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/core/grpc_services/base/base_service.h>
-#include <ydb/core/grpc_services/auth_processor/dynamic_node_auth_processor.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -25,12 +24,6 @@ public:
                     NActors::TActorId id);
 
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
-    void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override;
-
-    bool IncRequest();
-    void DecRequest();
-
-    void SetDynamicNodeAuthParams(const TDynamicNodeAuthorizationParams& dynamicNodeAuthorizationParams);
 
 private:
     void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
@@ -42,10 +35,6 @@ private:
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
     NActors::TActorId GRpcRequestProxyId_;
-    NYdbGrpc::TGlobalLimiter* Limiter_ = nullptr;
-
-    TDynamicNodeAuthorizationParams DynamicNodeAuthorizationParams = {};
-    std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> NodeRegistrationRequest;
 };
 
 } // namespace NGRpcService

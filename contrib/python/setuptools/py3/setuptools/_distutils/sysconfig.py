@@ -9,15 +9,17 @@ Written by:   Fred L. Drake, Jr.
 Email:        <fdrake@acm.org>
 """
 
+import functools
 import os
+import pathlib
 import re
 import sys
 import sysconfig
-import pathlib
 
-from .errors import DistutilsPlatformError
-from . import py39compat
 from ._functools import pass_none
+from .compat import py39
+from .errors import DistutilsPlatformError
+from .util import is_mingw
 
 IS_PYPY = '__pypy__' in sys.builtin_module_names
 
@@ -107,7 +109,7 @@ def get_python_version():
     return '%d.%d' % sys.version_info[:2]
 
 
-def get_python_inc(plat_specific=0, prefix=None):
+def get_python_inc(plat_specific=False, prefix=None):
     """Return the directory containing installed Python header files.
 
     If 'plat_specific' is false (the default), this is the path to the
@@ -120,12 +122,14 @@ def get_python_inc(plat_specific=0, prefix=None):
     """
     default_prefix = BASE_EXEC_PREFIX if plat_specific else BASE_PREFIX
     resolved_prefix = prefix if prefix is not None else default_prefix
+    # MinGW imitates posix like layout, but os.name != posix
+    os_name = "posix" if is_mingw() else os.name
     try:
-        getter = globals()[f'_get_python_inc_{os.name}']
+        getter = globals()[f'_get_python_inc_{os_name}']
     except KeyError:
         raise DistutilsPlatformError(
             "I don't know where Python installs its C header files "
-            "on platform '%s'" % os.name
+            f"on platform '{os.name}'"
         )
     return getter(resolved_prefix, prefix, plat_specific)
 
@@ -195,12 +199,11 @@ def _get_python_inc_posix_prefix(prefix):
 
 def _get_python_inc_nt(prefix, spec_prefix, plat_specific):
     if python_build:
-        # Include both the include and PC dir to ensure we can find
-        # pyconfig.h
+        # Include both include dirs to ensure we can find pyconfig.h
         return (
             os.path.join(prefix, "include")
             + os.path.pathsep
-            + os.path.join(prefix, "PC")
+            + os.path.dirname(sysconfig.get_config_h_filename())
         )
     return os.path.join(prefix, "include")
 
@@ -213,7 +216,7 @@ def _posix_lib(standard_lib, libpython, early_prefix, prefix):
         return os.path.join(libpython, "site-packages")
 
 
-def get_python_lib(plat_specific=0, standard_lib=0, prefix=None):
+def get_python_lib(plat_specific=False, standard_lib=False, prefix=None):
     """Return the directory containing the Python library (standard or
     site additions).
 
@@ -244,7 +247,7 @@ def get_python_lib(plat_specific=0, standard_lib=0, prefix=None):
         else:
             prefix = plat_specific and EXEC_PREFIX or PREFIX
 
-    if os.name == "posix":
+    if os.name == "posix" or is_mingw():
         if plat_specific or standard_lib:
             # Platform-specific modules (any module from a non-pure-Python
             # module distribution) or standard Python library modules.
@@ -262,9 +265,26 @@ def get_python_lib(plat_specific=0, standard_lib=0, prefix=None):
             return os.path.join(prefix, "Lib", "site-packages")
     else:
         raise DistutilsPlatformError(
-            "I don't know where Python installs its library "
-            "on platform '%s'" % os.name
+            f"I don't know where Python installs its library on platform '{os.name}'"
         )
+
+
+@functools.lru_cache
+def _customize_macos():
+    """
+    Perform first-time customization of compiler-related
+    config vars on macOS. Use after a compiler is known
+    to be needed. This customization exists primarily to support Pythons
+    from binary installers. The kind and paths to build tools on
+    the user system may vary significantly from the system
+    that Python itself was built on.  Also the user OS
+    version and build tools may not support the same set
+    of CPU architectures for universal builds.
+    """
+
+    sys.platform == "darwin" and __import__('_osx_support').customize_compiler(
+        get_config_vars()
+    )
 
 
 def customize_compiler(compiler):  # noqa: C901
@@ -273,23 +293,10 @@ def customize_compiler(compiler):  # noqa: C901
     Mainly needed on Unix, so we can plug in the information that
     varies across Unices and is stored in Python's Makefile.
     """
-    if compiler.compiler_type == "unix":
-        if sys.platform == "darwin":
-            # Perform first-time customization of compiler-related
-            # config vars on OS X now that we know we need a compiler.
-            # This is primarily to support Pythons from binary
-            # installers.  The kind and paths to build tools on
-            # the user system may vary significantly from the system
-            # that Python itself was built on.  Also the user OS
-            # version and build tools may not support the same set
-            # of CPU architectures for universal builds.
-            global _config_vars
-            # Use get_config_var() to ensure _config_vars is initialized.
-            if not get_config_var('CUSTOMIZED_OSX_COMPILER'):
-                import _osx_support
-
-                _osx_support.customize_compiler(_config_vars)
-                _config_vars['CUSTOMIZED_OSX_COMPILER'] = 'True'
+    if compiler.compiler_type in ["unix", "cygwin"] or (
+        compiler.compiler_type == "mingw32" and is_mingw()
+    ):
+        _customize_macos()
 
         (
             cc,
@@ -361,14 +368,7 @@ def customize_compiler(compiler):  # noqa: C901
 
 def get_config_h_filename():
     """Return full pathname of installed pyconfig.h file."""
-    if python_build:
-        if os.name == "nt":
-            inc_dir = os.path.join(_sys_home or project_base, "PC")
-        else:
-            inc_dir = _sys_home or project_base
-        return os.path.join(inc_dir, 'pyconfig.h')
-    else:
-        return sysconfig.get_config_h_filename()
+    return sysconfig.get_config_h_filename()
 
 
 def get_makefile_filename():
@@ -403,7 +403,11 @@ def parse_makefile(fn, g=None):  # noqa: C901
     from distutils.text_file import TextFile
 
     fp = TextFile(
-        fn, strip_comments=1, skip_blanks=1, join_lines=1, errors="surrogateescape"
+        fn,
+        strip_comments=True,
+        skip_blanks=True,
+        join_lines=True,
+        errors="surrogateescape",
     )
 
     if g is None:
@@ -542,7 +546,7 @@ def get_config_vars(*args):
     global _config_vars
     if _config_vars is None:
         _config_vars = sysconfig.get_config_vars().copy()
-        py39compat.add_ext_suffix(_config_vars)
+        py39.add_ext_suffix(_config_vars)
 
     return [_config_vars.get(name) for name in args] if args else _config_vars
 

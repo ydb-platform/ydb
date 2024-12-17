@@ -28,7 +28,8 @@ DEFINE_ENUM(EPipelineState,
 );
 
 YT_DEFINE_ERROR_ENUM(
-    ((SpecVersionMismatch)    (3300))
+    ((SpecVersionMismatch)             (3300))
+    ((PipelineStateVersionMismatch)    (3301))
 );
 
 YT_DEFINE_STRONG_TYPEDEF(TVersion, i64);

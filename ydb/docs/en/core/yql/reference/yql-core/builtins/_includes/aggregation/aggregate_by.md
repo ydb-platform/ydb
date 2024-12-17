@@ -5,7 +5,7 @@ Applying an [aggregation factory](../../basic.md#aggregationfactory) to all valu
 1. Column, `DISTINCT` column or expression.
 2. Factory.
 
-**Examples:**
+### Examples
 
 ```yql
 $count_factory = AggregationFactory("COUNT");

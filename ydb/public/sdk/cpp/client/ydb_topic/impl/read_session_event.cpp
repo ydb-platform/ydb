@@ -1,5 +1,7 @@
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/read_session.h>
+#include "common.h"
+#include "read_session_impl.ipp"
+
+#include <ydb/public/sdk/cpp/client/ydb_topic/include/read_events.h>
 
 namespace NYdb::NTopic {
 
@@ -14,6 +16,7 @@ using TCompressedMessage = TDataReceivedEvent::TCompressedMessage;
 using TCommitOffsetAcknowledgementEvent = TReadSessionEvent::TCommitOffsetAcknowledgementEvent;
 using TStartPartitionSessionEvent = TReadSessionEvent::TStartPartitionSessionEvent;
 using TStopPartitionSessionEvent = TReadSessionEvent::TStopPartitionSessionEvent;
+using TEndPartitionSessionEvent = TReadSessionEvent::TEndPartitionSessionEvent;
 using TPartitionSessionStatusEvent = TReadSessionEvent::TPartitionSessionStatusEvent;
 using TPartitionSessionClosedEvent = TReadSessionEvent::TPartitionSessionClosedEvent;
 
@@ -177,7 +180,7 @@ bool TMessage::HasException() const {
 }
 
 void TMessage::Commit() {
-    static_cast<NPersQueue::TPartitionStreamImpl<false>*>(PartitionSession.Get())
+    static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())
         ->Commit(Information.Offset, Information.Offset + 1);
 }
 
@@ -211,7 +214,7 @@ ui64 TCompressedMessage::GetUncompressedSize() const {
 }
 
 void TCompressedMessage::Commit() {
-    static_cast<NPersQueue::TPartitionStreamImpl<false>*>(PartitionSession.Get())
+    static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())
         ->Commit(Information.Offset, Information.Offset + 1);
 }
 
@@ -245,8 +248,12 @@ TDataReceivedEvent::TDataReceivedEvent(TVector<TMessage> messages, TVector<TComp
 }
 
 void TDataReceivedEvent::Commit() {
+    if (ReadInTransaction) {
+        ythrow yexception() << "Offsets cannot be commited explicitly when reading in a transaction";
+    }
+
     for (auto [from, to] : OffsetRanges) {
-        static_cast<NPersQueue::TPartitionStreamImpl<false>*>(PartitionSession.Get())->Commit(from, to);
+        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())->Commit(from, to);
     }
 }
 
@@ -299,7 +306,7 @@ TStartPartitionSessionEvent::TStartPartitionSessionEvent(TPartitionSession::TPtr
 
 void TStartPartitionSessionEvent::Confirm(TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset) {
     if (PartitionSession) {
-        static_cast<NPersQueue::TPartitionStreamImpl<false>*>(PartitionSession.Get())
+        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())
             ->ConfirmCreate(readOffset, commitOffset);
     }
 }
@@ -317,14 +324,14 @@ void TPrintable<TStartPartitionSessionEvent>::DebugString(TStringBuilder& ret, b
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // NTopic::TReadSessionEvent::TStopPartitionSessionEvent
 
-TStopPartitionSessionEvent::TStopPartitionSessionEvent(TPartitionSession::TPtr partitionSession, bool committedOffset)
+TStopPartitionSessionEvent::TStopPartitionSessionEvent(TPartitionSession::TPtr partitionSession, ui64 committedOffset)
     : TPartitionSessionAccessor(std::move(partitionSession))
     , CommittedOffset(committedOffset) {
 }
 
 void TStopPartitionSessionEvent::Confirm() {
     if (PartitionSession) {
-        static_cast<NPersQueue::TPartitionStreamImpl<false>*>(PartitionSession.Get())->ConfirmDestroy();
+        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())->ConfirmDestroy();
     }
 }
 
@@ -335,6 +342,44 @@ void TPrintable<TStopPartitionSessionEvent>::DebugString(TStringBuilder& ret, bo
     self->GetPartitionSession()->DebugString(ret);
     ret << " CommittedOffset: " << self->GetCommittedOffset()
         << " }";
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// NTopic::TReadSessionEvent::TEndPartitionSessionEvent
+
+TEndPartitionSessionEvent::TEndPartitionSessionEvent(TPartitionSession::TPtr partitionSession, std::vector<ui32>&& adjacentPartitionIds, std::vector<ui32>&& childPartitionIds)
+    : TPartitionSessionAccessor(std::move(partitionSession))
+    , AdjacentPartitionIds(std::move(adjacentPartitionIds))
+    , ChildPartitionIds(std::move(childPartitionIds)) {
+}
+
+void TEndPartitionSessionEvent::Confirm() {
+    if (PartitionSession) {
+        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())->ConfirmEnd(GetChildPartitionIds());
+    }
+}
+
+void JoinIds(TStringBuilder& ret, const std::vector<ui32> ids) {
+    ret << "[";
+    for (size_t i = 0; i < ids.size(); ++i) {
+        if (i) {
+            ret << ", ";
+        }
+        ret << ids[i];
+    }
+    ret << "]";
+}
+
+template<>
+void TPrintable<TEndPartitionSessionEvent>::DebugString(TStringBuilder& ret, bool) const {
+    const auto* self = static_cast<const TEndPartitionSessionEvent*>(this);
+    ret << "EndPartitionSession {";
+    self->GetPartitionSession()->DebugString(ret);
+    ret << " AdjacentPartitionIds: ";
+    JoinIds(ret, self->GetAdjacentPartitionIds());
+    ret << " ChildPartitionIds: ";
+    JoinIds(ret, self->GetChildPartitionIds());
+    ret << " }";
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -387,7 +432,7 @@ template<>
 void TPrintable<TSessionClosedEvent>::DebugString(TStringBuilder& ret, bool) const {
     const auto* self = static_cast<const TSessionClosedEvent*>(this);
     ret << "SessionClosed { Status: " << self->GetStatus()
-        << " Issues: \"" << NPersQueue::IssuesSingleLineString(self->GetIssues())
+        << " Issues: \"" << IssuesSingleLineString(self->GetIssues())
         << "\" }";
 }
 

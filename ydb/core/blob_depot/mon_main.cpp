@@ -379,7 +379,11 @@ namespace NKikimr::NBlobDepot {
         TStringStream s;
 
         const TCgiParameters& cgi = ev->Get()->Cgi();
-        if (cgi.Has("page")) {
+
+        if (cgi.Has("json")) {
+            JsonHandler.ProcessRenderPage(cgi, ev->Sender, ev->Cookie);
+            return true;
+        } else if (cgi.Has("page")) {
             const TString& page = cgi.Get("page");
             if (page == "data") {
                 Execute(std::make_unique<TTxMonData>(this, ev));
@@ -405,6 +409,66 @@ namespace NKikimr::NBlobDepot {
         HTML(s) {
             s << "<a href='app?TabletID=" << TabletID() << "&page=data'>Contained data</a><br>";
 
+            s << R"(<script>
+function ready() {
+    doFetch();
+}
+
+function doFetch(gen, sequence) {
+    var p = {
+        "TabletID": ")" << TabletID() << R"(",
+        "json": 1,
+        "pretty": 1
+    };
+    if (gen !== undefined) {
+        p.generation = gen;
+    }
+    if (sequence !== undefined) {
+        p.sequence = sequence;
+    }
+    const params = new URLSearchParams(p);
+    var url = "app?" + params.toString();
+    fetch(url)
+        .then((r) => {
+            try {
+                return r.json();
+            } catch {
+                document.getElementById("error").textContent = "failed to fetch JSON";
+            }
+        })
+        .then((json) => { processJson(json); });
+}
+
+function processJson(json) {
+    //console.log("received " + JSON.stringify(json));
+    if (json.error !== undefined) {
+        alert("json error: " + json.error);
+        location.reload();
+        return;
+    } else if (!json.no_change) {
+        var data = json.data;
+        if (data !== undefined) {
+            for (const key in data) {
+                var elem = document.getElementById(key);
+                if (elem) {
+                    elem.textContent = data[key];
+                } else {
+                    console.log("element not found: " + key);
+                }
+            }
+        }
+    }
+    doFetch(json.generation, json.sequence);
+}
+
+document.addEventListener("DOMContentLoaded", ready);
+</script>
+)";
+
+#define UP(NAME, VALUE) "<div class=synced id=" << NAME << '>' << VALUE << "</div>"
+
+            s << "<strong><font color='red'><div id='error'/></font></strong>";
+
             DIV_CLASS("panel panel-info") {
                 DIV_CLASS("panel-heading") {
                     s << "Stats";
@@ -412,25 +476,19 @@ namespace NKikimr::NBlobDepot {
                 DIV_CLASS("panel-body") {
                     KEYVALUE_TABLE({
 
-                        TABLER() {
-                            TABLED() { s << "Data, bytes"; }
-                            TABLED() {
-                                ui64 total = 0;
-                                Data->EnumerateRefCount([&](TLogoBlobID id, ui32 /*refCount*/) {
-                                    total += id.BlobSize();
-                                });
-                                s << FormatByteSize(total);
-                            }
-                        }
-
+                        ui64 total = 0;
                         ui64 trashInFlight = 0;
                         ui64 trashPending = 0;
+                        Data->EnumerateRefCount([&](TLogoBlobID id, ui32 /*refCount*/) {
+                            total += id.BlobSize();
+                        });
                         Data->EnumerateTrash([&](ui32 /*groupId*/, TLogoBlobID id, bool inFlight) {
                             (inFlight ? trashInFlight : trashPending) += id.BlobSize();
                         });
 
-                        KEYVALUE_P("Trash in flight, bytes", FormatByteSize(trashInFlight));
-                        KEYVALUE_P("Trash pending, bytes", FormatByteSize(trashPending));
+                        KEYVALUE_UP("Data, bytes", "data", FormatByteSize(total));
+                        KEYVALUE_UP("Trash in flight, bytes", "trash_in_flight", FormatByteSize(trashInFlight));
+                        KEYVALUE_UP("Trash pending, bytes", "trash_pending", FormatByteSize(trashPending));
 
                         std::vector<ui32> groups;
                         for (const auto& [groupId, _] : Groups) {
@@ -439,12 +497,51 @@ namespace NKikimr::NBlobDepot {
                         std::sort(groups.begin(), groups.end());
                         for (const ui32 groupId : groups) {
                             TGroupInfo& group = Groups[groupId];
-                            KEYVALUE_P(TStringBuilder() << "Data in GroupId# " << groupId << ", bytes",
-                                FormatByteSize(group.AllocatedBytes));
+                            KEYVALUE_UP(TStringBuilder() << "Data in GroupId# " << groupId << ", bytes",
+                                'g' << groupId, FormatByteSize(group.AllocatedBytes));
                         }
                     })
                 }
             }
+
+            if (Configured && Config.GetIsDecommittingGroup()) {
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        s << "Decommission";
+                    }
+                    DIV_CLASS("panel-body") {
+                        KEYVALUE_TABLE({
+                            KEYVALUE_UP("Decommit state", "d.state", DecommitState);
+                            KEYVALUE_UP("Assimilator state", "d.running", GroupAssimilatorId ? "running" : "stopped");
+                            KEYVALUE_UP("Last assimilated blob id", "d.last_assimilated_blob_id",
+                                Data->LastAssimilatedBlobId ?  Data->LastAssimilatedBlobId->ToString() : "<null>");
+                            KEYVALUE_UP("Skip blocks up to", "d.skip_blocks_up_to",
+                                AsStats.SkipBlocksUpTo ? ToString(*AsStats.SkipBlocksUpTo) : "<null>");
+                            KEYVALUE_UP("Skip barriers up to", "d.skip_barriers_up_to",
+                                AsStats.SkipBarriersUpTo ? TStringBuilder() << std::get<0>(*AsStats.SkipBarriersUpTo)
+                                << ':' << (int)std::get<1>(*AsStats.SkipBarriersUpTo) : "<null>"_sb);
+                            KEYVALUE_UP("Skip blobs up to", "d.skip_blobs_up_to",
+                                AsStats.SkipBlobsUpTo ? AsStats.SkipBlobsUpTo->ToString() : "<null>");
+                            KEYVALUE_UP("Copy iteration", "d.copy_iteration", AsStats.CopyIteration);
+                            KEYVALUE_UP("Bytes to copy", "d.bytes_to_copy", FormatByteSize(AsStats.BytesToCopy));
+                            KEYVALUE_UP("Bytes already copied", "d.bytes_copied", FormatByteSize(AsStats.BytesCopied));
+                            KEYVALUE_UP("Copy speed, bytes per second", "d.copy_speed", FormatByteSize(AsStats.CopySpeed) + "/s");
+                            KEYVALUE_UP("Copy time remaining", "d.copy_time_remaining", AsStats.CopyTimeRemaining);
+                            KEYVALUE_UP("Last read blob id", "d.last_read_blob_id", AsStats.LastReadBlobId);
+                            KEYVALUE_UP("Latest successful get", "d.latest_ok_get", AsStats.LatestOkGet);
+                            KEYVALUE_UP("Latest erroneous get", "d.latest_error_get", AsStats.LatestErrorGet);
+                            KEYVALUE_UP("Latest successful put", "d.latest_ok_put", AsStats.LatestOkPut);
+                            KEYVALUE_UP("Latest erroneous put", "d.latest_error_put", AsStats.LatestErrorPut);
+                            KEYVALUE_UP("Blobs read with OK", "d.blobs_read_ok", AsStats.BlobsReadOk);
+                            KEYVALUE_UP("Blobs read with NODATA", "d.blobs_read_nodata", AsStats.BlobsReadNoData);
+                            KEYVALUE_UP("Blobs read with error", "d.blobs_read_error", AsStats.BlobsReadError);
+                            KEYVALUE_UP("Blobs put with OK", "d.blobs_put_ok", AsStats.BlobsPutOk);
+                            KEYVALUE_UP("Blobs put with error", "d.blobs_put_error", AsStats.BlobsPutError);
+                        })
+                    }
+                }
+            }
+
             DIV_CLASS("panel panel-info") {
                 DIV_CLASS("panel-heading") {
                     s << "Data";
@@ -453,6 +550,213 @@ namespace NKikimr::NBlobDepot {
                     Data->RenderMainPage(s);
                 }
             }
+        }
+    }
+
+    NJson::TJsonValue TBlobDepot::RenderJson(bool pretty) {
+        NJson::TJsonMap json;
+
+        const auto formatSize = [&](ui64 size) -> NJson::TJsonValue {
+            if (pretty) {
+                return FormatByteSize(size);
+            } else {
+                return size;
+            }
+        };
+
+        ui64 total = 0;
+        ui64 trashInFlight = 0;
+        ui64 trashPending = 0;
+        Data->EnumerateRefCount([&](TLogoBlobID id, ui32 /*refCount*/) {
+            total += id.BlobSize();
+        });
+        Data->EnumerateTrash([&](ui32 /*groupId*/, TLogoBlobID id, bool inFlight) {
+            (inFlight ? trashInFlight : trashPending) += id.BlobSize();
+        });
+
+        NJson::TJsonMap data{
+            {"data", formatSize(total)},
+            {"trash_in_flight", formatSize(trashInFlight)},
+            {"trash_pending", formatSize(trashPending)},
+        };
+
+        for (const auto& [groupId, group] : Groups) {
+            data[TStringBuilder() << "g" << groupId] = formatSize(group.AllocatedBytes);
+        }
+
+        if (Configured && Config.GetIsDecommittingGroup()) {
+            data["d.running"] = GroupAssimilatorId ? "running" : "stopped";
+            data["d.state"] = TStringBuilder() << DecommitState;
+            data["d.last_assimilated_blob_id"] = Data->LastAssimilatedBlobId ? Data->LastAssimilatedBlobId->ToString() : "<null>";
+            AsStats.ToJson(data, pretty);
+        }
+
+        json["data"] = std::move(data);
+
+        return json;
+    }
+
+    TJsonHandler::TJsonHandler(TRenderJson renderJson, ui32 timerEv, ui32 updateEv)
+        : RenderJson(renderJson)
+        , TimerEv(timerEv)
+        , UpdateEv(updateEv)
+    {}
+
+    void TJsonHandler::Setup(TActorId selfId, ui32 generation) {
+        SelfId = selfId;
+        Generation = generation;
+    }
+
+    void TJsonHandler::ProcessRenderPage(const TCgiParameters& cgi, TActorId sender, ui64 cookie) {
+        const TMonotonic now = TActivationContext::Monotonic();
+
+        auto issueResponse = [&](const NJson::TJsonValue& json) {
+            TStringStream s;
+            NJson::WriteJson(&s, &json);
+            TActivationContext::Send(new IEventHandle(sender, SelfId, new NMon::TEvRemoteJsonInfoRes(s.Str()), 0, cookie));
+        };
+
+        auto issueError = [&](TString message) {
+            issueResponse(NJson::TJsonMap{{"error", std::move(message)}});
+        };
+
+        if (!cgi.Has("pretty")) {
+            return issueResponse(RenderJson(false));
+        }
+
+        UpdateHistory(now);
+
+        if (cgi.Has("generation")) {
+            ui32 gen;
+            if (!TryFromString(cgi.Get("generation"), gen)) {
+                return issueError("incorrect 'generation' parameter");
+            } else if (gen != Generation) {
+                return issueError("generation mismatch");
+            }
+        }
+
+        if (cgi.Has("sequence")) {
+            ui64 seq;
+            if (!TryFromString(cgi.Get("sequence"), seq)) {
+                return issueError("incorrect 'sequence' parameter");
+            } else if (seq == Sequence) {
+                const TMonotonic when = now + LongPollTimeout;
+                LongPolls.emplace_back(TJsonHandler::TLongPoll{when, sender, cookie, seq});
+                if (!LongPollTimerPending) {
+                    TActivationContext::Schedule(when, new IEventHandle(TimerEv, 0, SelfId, {}, nullptr, 0));
+                    LongPollTimerPending = true;
+                }
+                return;
+            } else {
+                return IssueResponse({TMonotonic(), sender, cookie, seq});
+            }
+        }
+
+        IssueResponse({TMonotonic(), sender, cookie, 0});
+    }
+
+    void TJsonHandler::Invalidate() {
+        Invalid = true;
+        if (!LongPolls.empty() && !UpdateTimerPending) {
+            const TMonotonic when = LastUpdatedTimestamp + UpdateTimeout;
+            TActivationContext::Schedule(when, new IEventHandle(UpdateEv, 0, SelfId, {}, nullptr, 0));
+            UpdateTimerPending = true;
+        }
+    }
+
+    void TJsonHandler::HandleTimer() {
+        Y_ABORT_UNLESS(LongPollTimerPending);
+
+        NJson::TJsonMap json{{"no_change", true}, {"generation", Generation}, {"sequence", Sequence}};
+        TStringStream s;
+        NJson::WriteJson(&s, &json);
+
+        const TMonotonic now = TActivationContext::Monotonic();
+        for (; !LongPolls.empty() && LongPolls.front().When <= now; LongPolls.pop_front()) {
+            const auto& item = LongPolls.front();
+            TActivationContext::Send(new IEventHandle(item.Sender, SelfId, new NMon::TEvRemoteJsonInfoRes(s.Str()), 0, item.Cookie));
+        }
+
+        if (LongPolls.empty()) {
+            LongPollTimerPending = false;
+        } else {
+            TActivationContext::Schedule(LongPolls.front().When, new IEventHandle(TimerEv, 0, SelfId, {}, nullptr, 0));
+        }
+    }
+
+    void TJsonHandler::HandleUpdate() {
+        Y_ABORT_UNLESS(UpdateTimerPending);
+        UpdateTimerPending = false;
+        if (!LongPolls.empty()) {
+            UpdateHistory(TActivationContext::Monotonic());
+        }
+    }
+
+    void TJsonHandler::UpdateHistory(TMonotonic now) {
+        if (LastUpdatedTimestamp + UpdateTimeout <= now && Invalid) {
+            NJson::TJsonValue json = RenderJson(true);
+            json["generation"] = Generation;
+            json["sequence"] = Sequence;
+            if (History.empty() || json != History.back().Json) {
+                json["sequence"] = ++Sequence;
+                History.emplace_back(THistory{Sequence, std::move(json)});
+                while (History.size() > 3) {
+                    History.pop_front();
+                }
+
+                TStringStream s;
+                NJson::WriteJson(&s, &History.back().Json);
+
+                for (const auto& lp : LongPolls) {
+                    IssueResponse(lp);
+                }
+                LongPolls.clear();
+            }
+
+            LastUpdatedTimestamp = now;
+            Invalid = false;
+        }
+        if (Invalid && !UpdateTimerPending) {
+            const TMonotonic when = LastUpdatedTimestamp + UpdateTimeout;
+            TActivationContext::Schedule(when, new IEventHandle(UpdateEv, 0, SelfId, {}, nullptr, 0));
+            UpdateTimerPending = true;
+        }
+    }
+
+    void TJsonHandler::IssueResponse(const TLongPoll& lp) {
+        const NJson::TJsonValue *base = nullptr;
+
+        if (lp.BaseSequence) {
+            auto comp = [](const THistory& item, ui64 sequence) { return item.Sequence < sequence; };
+            auto it = std::lower_bound(History.begin(), History.end(), lp.BaseSequence, comp);
+            if (it != History.end() && it->Sequence == lp.BaseSequence) {
+                base = &it->Json;
+            }
+        }
+
+        Y_ABORT_UNLESS(!History.empty());
+
+        auto issueResponse = [&](const NJson::TJsonValue& json) {
+            TStringStream s;
+            NJson::WriteJson(&s, &json);
+            TActivationContext::Send(new IEventHandle(lp.Sender, SelfId, new NMon::TEvRemoteJsonInfoRes(s.Str()), 0,
+                lp.Cookie));
+        };
+
+        if (base) {
+            NJson::TJsonValue response = History.back().Json;
+            const auto& baseMap = (*base)["data"].GetMapSafe();
+            auto& map = response["data"].GetMapSafe();
+            for (auto it = map.begin(); it != map.end(); ) {
+                if (const auto jt = baseMap.find(it->first); jt != baseMap.end() && jt->second == it->second) {
+                    map.erase(it++);
+                } else {
+                    ++it;
+                }
+            }
+            issueResponse(response);
+        } else {
+            issueResponse(History.back().Json);
         }
     }
 

@@ -26,7 +26,7 @@ using namespace NTableClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = ArrowLogger;
+static constexpr auto& Logger = ArrowLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -39,7 +39,7 @@ constexpr i64 ArrowAlignment = 8;
 
 flatbuffers::Offset<flatbuffers::String> SerializeString(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
-    const TString& str)
+    const std::string& str)
 {
     return flatbufBuilder->CreateString(str.data(), str.length());
 }
@@ -189,7 +189,7 @@ struct TRecordBatchSerializationContext final
 template <class T>
 TMutableRange<T> GetTypedValues(TMutableRef ref)
 {
-    return MakeMutableRange(
+    return TMutableRange(
         reinterpret_cast<T*>(ref.Begin()),
         reinterpret_cast<T*>(ref.End()));
 }
@@ -457,7 +457,8 @@ void SerializeDoubleColumn(
     YT_VERIFY(column->Values->BaseValue == 0);
     YT_VERIFY(!column->Values->ZigZagEncoded);
 
-    YT_LOG_DEBUG("Adding double column (ColumnId: %v, StartIndex: %v, ValueCount: %v)",
+    YT_LOG_DEBUG(
+        "Adding double column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
         column->Id,
         column->StartIndex,
         column->ValueCount,
@@ -486,7 +487,8 @@ void SerializeFloatColumn(
     YT_VERIFY(column->Values->BaseValue == 0);
     YT_VERIFY(!column->Values->ZigZagEncoded);
 
-    YT_LOG_DEBUG("Adding float column (ColumnId: %v, StartIndex: %v, ValueCount: %v)",
+    YT_LOG_DEBUG(
+        "Adding float column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
         column->Id,
         column->StartIndex,
         column->ValueCount,
@@ -1087,7 +1089,7 @@ private:
         auto [recordBatchOffset, bodySize, bodyWriter] = SerializeRecordBatch(
             &flatbufBuilder,
             typedColumn.Column->ValueCount,
-            MakeRange({typedColumn}));
+            TRange({typedColumn}));
 
         auto dictionaryBatchOffset = org::apache::arrow::flatbuf::CreateDictionaryBatch(
             flatbufBuilder,

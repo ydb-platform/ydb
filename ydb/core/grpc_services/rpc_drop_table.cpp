@@ -1,5 +1,6 @@
 #include "service_table.h"
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include "service_table.h"
 #include "rpc_calls.h"

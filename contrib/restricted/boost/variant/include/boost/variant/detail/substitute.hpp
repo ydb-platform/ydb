@@ -22,10 +22,7 @@
 #include <boost/mpl/aux_/preprocessor/repeat.hpp>
 #include <boost/mpl/int_fwd.hpp>
 #include <boost/mpl/limits/arity.hpp>
-#include <boost/preprocessor/cat.hpp>
 #include <boost/preprocessor/empty.hpp>
-#include <boost/preprocessor/arithmetic/inc.hpp>
-#include <boost/preprocessor/iterate.hpp>
 
 namespace boost {
 namespace detail { namespace variant {

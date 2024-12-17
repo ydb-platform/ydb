@@ -3,6 +3,7 @@
 #include "flat_table_part.h"
 #include "flat_part_iface.h"
 #include "flat_part_charge_iface.h"
+#include "flat_page_data.h"
 
 namespace NKikimr::NTable {
 
@@ -73,7 +74,7 @@ public:
         const TRowId sliceBeginRowId = beginRowId, sliceEndRowId = endRowId;
         const auto& meta = Part->IndexPages.GetBTree({});
         Y_ABORT_UNLESS(beginRowId < endRowId);
-        Y_ABORT_UNLESS(endRowId <= meta.RowCount);
+        Y_ABORT_UNLESS(endRowId <= meta.GetRowCount());
 
         if (Y_UNLIKELY(key1 && key2 && Compare(key1, key2, keyDefaults) > 0)) {
             key2 = key1; // will not go further than key1
@@ -81,8 +82,8 @@ public:
         }
 
         TVector<TNodeState> level, nextLevel(::Reserve(3));
-        TPageId key1PageId = key1 ? meta.PageId : Max<TPageId>();
-        TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
+        TPageId key1PageId = key1 ? meta.GetPageId() : Max<TPageId>();
+        TPageId key2PageId = key2 ? meta.GetPageId() : Max<TPageId>();
         TChildState firstChild = BuildRootChildState(meta);
 
         const auto iterateLevel = [&](const auto& tryHandleChild) {
@@ -138,17 +139,17 @@ public:
                     if (child.PageId == key1PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
                         auto& key1Child = node.GetChild(pos);
-                        key1PageId = key1Child.PageId;
+                        key1PageId = key1Child.GetPageId();
                         if (pos) {
-                            beginRowId = Max(beginRowId, node.GetChild(pos - 1).RowCount); // move beginRowId to the first key >= key1
+                            beginRowId = Max(beginRowId, node.GetChild(pos - 1).GetRowCount()); // move beginRowId to the first key >= key1
                         }
                     }
                     if (child.PageId == key2PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
                         auto& key2Child = node.GetChild(pos);
-                        key2PageId = key2Child.PageId;
-                        endRowId = Min(endRowId, key2Child.RowCount + 1); // move endRowId - 1 to the first key > key2
-                        if (key2Child.RowCount <= sliceBeginRowId) {
+                        key2PageId = key2Child.GetPageId();
+                        endRowId = Min(endRowId, key2Child.GetRowCount() + 1); // move endRowId - 1 to the first key > key2
+                        if (key2Child.GetRowCount() <= sliceBeginRowId) {
                             hasValidRowsRange = false; // key2 is before current slice
                             endRowId = Max(endRowId, sliceBeginRowId + 1); // always load sliceBeginRowId regardless of key2
                         }
@@ -223,7 +224,7 @@ public:
         const TRowId sliceBeginRowId = beginRowId, sliceEndRowId = endRowId;
         const auto& meta = Part->IndexPages.GetBTree({});
         Y_ABORT_UNLESS(beginRowId < endRowId);
-        Y_ABORT_UNLESS(endRowId <= meta.RowCount);
+        Y_ABORT_UNLESS(endRowId <= meta.GetRowCount());
 
         if (Y_UNLIKELY(key1 && key2 && Compare(key2, key1, keyDefaults) > 0)) {
             key2 = key1; // will not go further than key1
@@ -232,8 +233,8 @@ public:
 
         // level's nodes is in reverse order
         TVector<TNodeState> level, nextLevel(::Reserve(3));
-        TPageId key1PageId = key1 ? meta.PageId : Max<TPageId>();
-        TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
+        TPageId key1PageId = key1 ? meta.GetPageId() : Max<TPageId>();
+        TPageId key2PageId = key2 ? meta.GetPageId() : Max<TPageId>();
         TChildState lastChild = BuildRootChildState(meta);
 
         const auto iterateLevel = [&](const auto& tryHandleChild) {
@@ -289,16 +290,16 @@ public:
                     if (child.PageId == key1PageId) {
                         TRecIdx pos = node.SeekReverse(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
                         auto& key1Child = node.GetChild(pos);
-                        key1PageId = key1Child.PageId;
-                        endRowId = Min(endRowId, key1Child.RowCount); // move endRowId - 1 to the last key <= key1
+                        key1PageId = key1Child.GetPageId();
+                        endRowId = Min(endRowId, key1Child.GetRowCount()); // move endRowId - 1 to the last key <= key1
                     }
                     if (child.PageId == key2PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                        key2PageId = node.GetChild(pos).PageId;
+                        key2PageId = node.GetChild(pos).GetPageId();
                         if (pos) {
                             auto& prevKey2Child = node.GetChild(pos - 1);
-                            beginRowId = Max(beginRowId, prevKey2Child.RowCount - 1); // move beginRowId to the last key < key2
-                            if (prevKey2Child.RowCount >= sliceEndRowId) {
+                            beginRowId = Max(beginRowId, prevKey2Child.GetRowCount() - 1); // move beginRowId to the last key < key2
+                            if (prevKey2Child.GetRowCount() >= sliceEndRowId) {
                                 hasValidRowsRange = false; // key2 is after current slice
                                 beginRowId = Min(beginRowId, sliceEndRowId - 1); // always load endRowId - 1 regardless of keys 
                             }
@@ -585,10 +586,10 @@ private:
 
         const TGroupId groupId(0, true);
         const auto& meta = Part->IndexPages.GetBTree(TGroupId{0, true});
-        TRowId beginRowId = 0, endRowId = meta.RowCount;
+        TRowId beginRowId = 0, endRowId = meta.GetRowCount();
         
         TVector<TNodeState> level, nextLevel(::Reserve(3));
-        TPageId key1PageId = meta.PageId, key2PageId = meta.PageId;
+        TPageId key1PageId = meta.GetPageId(), key2PageId = meta.GetPageId();
 
         const auto iterateLevel = [&](const auto& tryHandleChild) {
             for (const auto &node : level) {
@@ -624,16 +625,16 @@ private:
                     if (child.PageId == key1PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key1, scheme.ColsKeyIdx, keyDefaults);
                         auto& key1Child = node.GetShortChild(pos);
-                        key1PageId = key1Child.PageId;
+                        key1PageId = key1Child.GetPageId();
                         if (pos) {
-                            beginRowId = Max(beginRowId, node.GetShortChild(pos - 1).RowCount); // move beginRowId to the first key >= key1
+                            beginRowId = Max(beginRowId, node.GetShortChild(pos - 1).GetRowCount()); // move beginRowId to the first key >= key1
                         }
                     }
                     if (child.PageId == key2PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, scheme.ColsKeyIdx, keyDefaults);
                         auto& key2Child = node.GetShortChild(pos);
-                        key2PageId = key2Child.PageId;
-                        endRowId = Min(endRowId, key2Child.RowCount); // move endRowId to the first key > key2
+                        key2PageId = key2Child.GetPageId();
+                        endRowId = Min(endRowId, key2Child.GetRowCount()); // move endRowId to the first key > key2
                     }
                     return true;
                 } else {
@@ -703,19 +704,19 @@ private:
 
 private:
     ui64 GetPrevBytes(const TBtreeIndexMeta& meta, TRowId rowId) const {
-        TPageId pageId = meta.PageId;
+        TPageId pageId = meta.GetPageId();
         ui64 result = 0;
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
-            auto page = Env->TryGetPage(Part, pageId);
+            auto page = Env->TryGetPage(Part, pageId, {});
             if (!page) {
                 return result;
             }
             auto node = TBtreeIndexNode(*page);
             auto pos = node.Seek(rowId);
-            pageId = node.GetShortChild(pos).PageId;
+            pageId = node.GetShortChild(pos).GetPageId();
             if (pos) {
-                result = node.GetShortChild(pos - 1).DataSize;
+                result = node.GetShortChild(pos - 1).GetDataSize();
             }
         }
 
@@ -723,18 +724,18 @@ private:
     }
 
     ui64 GetBytes(TBtreeIndexMeta meta, TRowId rowId) const {
-        TPageId pageId = meta.PageId;
-        ui64 result = meta.DataSize;
+        TPageId pageId = meta.GetPageId();
+        ui64 result = meta.GetDataSize();
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
-            auto page = Env->TryGetPage(Part, pageId);
+            auto page = Env->TryGetPage(Part, pageId, {});
             if (!page) {
                 return result;
             }
             auto node = TBtreeIndexNode(*page);
             auto pos = node.Seek(rowId);
-            pageId = node.GetShortChild(pos).PageId;
-            result = node.GetShortChild(pos).DataSize;
+            pageId = node.GetShortChild(pos).GetPageId();
+            result = node.GetShortChild(pos).GetDataSize();
         }
 
         return result;
@@ -750,7 +751,7 @@ private:
     }
 
     bool TryLoadNode(const TChildState& child, TVector<TNodeState>& level) const noexcept {
-        auto page = Env->TryGetPage(Part, child.PageId);
+        auto page = Env->TryGetPage(Part, child.PageId, {});
         if (!page) {
             return false;
         }
@@ -777,24 +778,24 @@ private:
     }
 
     TChildState BuildRootChildState(const TBtreeIndexMeta& meta) const noexcept {
-        return TChildState(meta.PageId,
-            0, meta.RowCount,
+        return TChildState(meta.GetPageId(),
+            0, meta.GetRowCount(),
             0, meta.GetNonErasedRowCount(),
-            0, meta.DataSize);
+            0, meta.GetDataSize());
     }
 
     TChildState BuildChildState(const TNodeState& parent, TChild child, const TChild* prevChild) const noexcept {
-        return TChildState(child.PageId,
-            prevChild ? prevChild->RowCount : parent.BeginRowId, child.RowCount,
+        return TChildState(child.GetPageId(),
+            prevChild ? prevChild->GetRowCount() : parent.BeginRowId, child.GetRowCount(),
             prevChild ? prevChild->GetNonErasedRowCount() : parent.PrevItems, child.GetNonErasedRowCount(),
-            prevChild ? prevChild->DataSize : parent.PrevBytes, child.DataSize);
+            prevChild ? prevChild->GetDataSize() : parent.PrevBytes, child.GetDataSize());
     }
 
     TChildState BuildChildState(const TNodeState& parent, TShortChild child, const TShortChild* prevChild) const noexcept {
-        return TChildState(child.PageId,
-            prevChild ? prevChild->RowCount : parent.BeginRowId, child.RowCount,
-            prevChild ? prevChild->RowCount : parent.BeginRowId, child.RowCount,
-            prevChild ? prevChild->DataSize : parent.PrevBytes, child.DataSize);
+        return TChildState(child.GetPageId(),
+            prevChild ? prevChild->GetRowCount() : parent.BeginRowId, child.GetRowCount(),
+            prevChild ? prevChild->GetRowCount() : parent.BeginRowId, child.GetRowCount(),
+            prevChild ? prevChild->GetDataSize() : parent.PrevBytes, child.GetDataSize());
     }
 
     bool LimitExceeded(ui64 prev, ui64 current, ui64 limit) const noexcept {

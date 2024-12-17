@@ -12,7 +12,7 @@ service UserAccountService {
     option (google.api.http) = { get: "/iam/v1/userAccounts/{user_account_id}" };
   }
 
-  rpc Delete (DeleteUserAccountRequest) returns (ydb.yc.priv.operation.Operation);
+  rpc Delete (DeleteUserAccountRequest) returns (.ydb.yc.priv.operation.Operation);
 
   rpc GetSettings (GetSettingsRequest) returns (UserSettings);
 

@@ -9,14 +9,13 @@
 namespace NActors {
     static constexpr TDuration GetNodeRequestTimeout = TDuration::Seconds(5);
 
-    static constexpr TDuration FirstErrorSleep = TDuration::MilliSeconds(10);
-    static constexpr TDuration MaxErrorSleep = TDuration::Seconds(10);
-    static constexpr ui32 SleepRetryMultiplier = 4;
-
-    static TString PeerNameForHuman(ui32 nodeNum, const TString& longName, ui16 port) {
+    static TString PeerNameForHuman(const TString& longName, ui16 port) {
         TStringBuf token;
         TStringBuf(longName).NextTok('.', token);
-        return ToString<ui32>(nodeNum) + ":" + (token.size() > 0 ? TString(token) : longName) + ":" + ToString<ui16>(port);
+        return TStringBuilder()
+            << (token.size() > 0 ? TString(token) : longName)
+            << ':'
+            << port;
     }
 
     TInterconnectProxyTCP::TInterconnectProxyTCP(const ui32 node, TInterconnectProxyCommon::TPtr common,
@@ -25,8 +24,7 @@ namespace NActors {
         , PeerNodeId(node)
         , DynamicPtr(dynamicPtr)
         , Common(std::move(common))
-        , SecureContext(new NInterconnect::TSecureSocketContext(Common->Settings.Certificate, Common->Settings.PrivateKey,
-                Common->Settings.CaFilePath, Common->Settings.CipherList))
+        , SecureContext(new NInterconnect::TSecureSocketContext(Common))
     {
         Y_ABORT_UNLESS(Common);
         Y_ABORT_UNLESS(Common->NameserviceId);
@@ -34,6 +32,7 @@ namespace NActors {
             Y_ABORT_UNLESS(!*DynamicPtr);
             *DynamicPtr = this;
         }
+        NumDisconnects.fill(0);
     }
 
     void TInterconnectProxyTCP::Bootstrap() {
@@ -62,6 +61,11 @@ namespace NActors {
 
     void TInterconnectProxyTCP::RequestNodeInfo(STATEFN_SIG) {
         ICPROXY_PROFILED;
+
+        if (ev->GetTypeRewrite() == TEvents::TSystem::Unsubscribe) {
+            // do not initiate new session upon receiving this event
+            return;
+        }
 
         Y_ABORT_UNLESS(!IncomingHandshakeActor && !OutgoingHandshakeActor && !PendingIncomingHandshakeEvents && !PendingSessionEvents);
         EnqueueSessionEvent(ev);
@@ -105,12 +109,12 @@ namespace NActors {
             TransitToErrorState("cannot get node info");
         } else {
             auto& info = *ev->Get()->Node;
-            TString name = PeerNameForHuman(PeerNodeId, info.Host, info.Port);
+            TString name = PeerNameForHuman(info.Host, info.Port);
             TechnicalPeerHostName = info.Host;
             if (!Metrics) {
                 Metrics = Common->Metrics ? CreateInterconnectMetrics(Common) : CreateInterconnectCounters(Common);
             }
-            Metrics->SetPeerInfo(name, info.Location.GetDataCenterId());
+            Metrics->SetPeerInfo(PeerNodeId, name, info.Location.GetDataCenterId());
 
             LOG_DEBUG_IC("ICP02", "configured for host %s", name.data());
 
@@ -758,9 +762,10 @@ namespace NActors {
 
         // recalculate wakeup timeout -- if this is the first failure, then we sleep for default timeout; otherwise we
         // sleep N times longer than the previous try, but not longer than desired number of seconds
+        auto& s = Common->Settings;
         HoldByErrorWakeupDuration = HoldByErrorWakeupDuration != TDuration::Zero()
-                                        ? Min(HoldByErrorWakeupDuration * SleepRetryMultiplier, MaxErrorSleep)
-                                        : FirstErrorSleep;
+            ? Min(HoldByErrorWakeupDuration * s.ErrorSleepRetryMultiplier, s.MaxErrorSleep)
+            : Common->Settings.FirstErrorSleep;
 
         // transit to required state and arm wakeup timer
         if (Terminated) {
@@ -941,4 +946,33 @@ namespace NActors {
         // TODO: unregister actor mon page
         TActor::PassAway();
     }
+
+    void TInterconnectProxyTCP::RegisterDisconnect() {
+        const TMonotonic now = TActivationContext::Monotonic();
+        ShiftDisconnectWindow(now);
+        ++NumDisconnectsInLastHour;
+        ++NumDisconnects[NumDisconnectsIndex];
+    }
+
+    ui32 TInterconnectProxyTCP::GetDisconnectCountInLastHour() {
+        ShiftDisconnectWindow(TMonotonic::Now());
+        return NumDisconnectsInLastHour;
+    }
+
+    void TInterconnectProxyTCP::ShiftDisconnectWindow(TMonotonic now) {
+        const ui64 currentMinutes = now.Minutes();
+        if (FirstDisconnectWindowMinutes) {
+            const ui32 steps = currentMinutes - FirstDisconnectWindowMinutes;
+            if (steps < NumDisconnectsSize) { // advance window by "steps" items, clearing them
+                for (ui32 i = 0; i < steps; ++i) {
+                    NumDisconnectsInLastHour -= std::exchange(NumDisconnects[++NumDisconnectsIndex %= NumDisconnectsSize], 0);
+                }
+            } else { // window has been fully flushed
+                NumDisconnects.fill(0);
+                NumDisconnectsInLastHour = 0;
+            }
+        }
+        FirstDisconnectWindowMinutes = currentMinutes;
+    }
+
 }

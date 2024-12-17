@@ -28,6 +28,7 @@ In large queries, you can use separate files for action definition and include t
 Even if the list of parameters in the subquery template definition is empty, when using it in `FROM`, specify the parentheses `()`. This may help to limit the scope of named expressions used in only one subquery.
 
 {% if feature_mapreduce %}
+
 In some cases, instead of `DEFINE SUBQUERY` it's more convenient to use an equivalent [lambda function](../expressions.md#lambda).
 In this case, the lambda function must accept, as the first argument, the special object called `world` that passes dependencies to make certain PRAGMA or COMMIT statements visible at the query template's point of use. Also, make sure to pass this object as the first argument along with the other arguments (if any) to other query templates, if you use them in your lambda function.
 The return value of the lambda function must have the structure list type (output table) or a list of variants over a tuple of structures (multiple output tables). In the latter case, the following unpacking is usually used at the query template's point of use:
@@ -39,7 +40,7 @@ $out1, $out2 = PROCESS $mySubquery($myParam1, $myParam2);
 
 {% endif %}
 
-**Examples**
+### Examples
 
 ```yql
 DEFINE SUBQUERY $hello_world($name, $suffix?) AS
@@ -139,7 +140,7 @@ These functions combine the results of one or more subquery templates passed by 
 * `SubqueryMerge` uses the same constraints as `SubqueryExtend` and also outputs a sorted result if all subqueries have the same sort order.
 * `SubqueryUnionMerge` uses the same constraints as `SubqueryUnionAll` and also outputs a sorted result if all subqueries have the same sort order.
 
-**Examples:**
+### Examples
 
 ```yql
 DEFINE SUBQUERY $sub1() as
@@ -168,7 +169,7 @@ They substitute each item from the list into the subquery template as a paramete
 * `SubqueryMergeFor` uses the same constraints as `SubqueryExtendFor` and also outputs a sorted result if all subqueries have the same sort order.
 * `SubqueryUnionMergeFor` uses the same constraints as `SubqueryUnionAllFor` and also outputs a sorted result if all subqueries have the same sort order.
 
-**Examples:**
+### Examples
 
 ```yql
 DEFINE SUBQUERY $sub($i) as
@@ -188,7 +189,7 @@ The functions take the following arguments:
 
 And they build a new query template without parameters where sorting is performed or a comment on the use of sorting is added to the result. To use the resulting query template, call the `PROCESS` function, since, when using a `SELECT`, sorting is ignored.
 
-**Examples:**
+### Examples
 
 ```yql
 DEFINE SUBQUERY $sub() as
@@ -199,4 +200,3 @@ $sub2 = SubqueryOrderBy($sub, [('x',false), ('y',true)]);
 
 PROCESS $sub2();
 ```
-

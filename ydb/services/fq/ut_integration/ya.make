@@ -21,13 +21,11 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/udfs/common/clickhouse/client
-    ydb/library/yql/utils
+    yql/essentials/utils/network
     ydb/public/lib/fq
     ydb/services/ydb
 )
 
 YQL_LAST_ABI_VERSION()
-
-REQUIREMENTS(ram:14)
 
 END()

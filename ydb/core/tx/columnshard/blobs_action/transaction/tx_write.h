@@ -1,41 +1,52 @@
 #pragma once
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/transactions/propose_transaction_base.h>
+#include <ydb/core/tx/columnshard/data_sharing/common/transactions/tx_extension.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 
 namespace NKikimr::NColumnShard {
 
-class TTxWrite : public TProposeTransactionBase {
+class TTxWrite: public NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard> {
+private:
+    using TBase = NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard>;
+
 public:
     TTxWrite(TColumnShard* self, const TEvPrivate::TEvWriteBlobsResult::TPtr& putBlobResult)
-        : TProposeTransactionBase(self)
-        , PutBlobResult(putBlobResult)
-        , TabletTxNo(++Self->TabletTxCounter)
-    {}
+        : TBase(self, "TTxWrite")
+        , PutBlobResult(putBlobResult) {
+    }
 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_WRITE; }
-
+    bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void DoComplete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override {
+        return TXTYPE_WRITE;
+    }
 
 private:
     TEvPrivate::TEvWriteBlobsResult::TPtr PutBlobResult;
-    const ui32 TabletTxNo;
-    std::vector<std::unique_ptr<NActors::IEventBase>> Results;
+    std::optional<NOlap::TSnapshot> CommitSnapshot;
 
+    bool CommitOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TInsertWriteId writeId);
+    bool InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TInsertWriteId writeId);
 
-    bool InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TWriteId writeId);
-    void OnProposeResult(TTxController::TProposeResult& proposeResult, const TTxController::TTxInfo& txInfo) override;
-    void OnProposeError(TTxController::TProposeResult& proposeResult, const TTxController::TBasicTxInfo& txInfo) override;
+    class TReplyInfo {
+    private:
+        std::unique_ptr<NActors::IEventBase> Event;
+        TActorId DestinationForReply;
+        const ui64 Cookie;
 
-    TStringBuilder TxPrefix() const {
-        return TStringBuilder() << "TxWrite[" << ToString(TabletTxNo) << "] ";
-    }
+    public:
+        TReplyInfo(std::unique_ptr<NActors::IEventBase>&& ev, const TActorId& destinationForReply, const ui64 cookie)
+            : Event(std::move(ev))
+            , DestinationForReply(destinationForReply)
+            , Cookie(cookie) {
+        }
 
-    TString TxSuffix() const {
-        return TStringBuilder() << " at tablet " << Self->TabletID();
-    }
+        void DoSendReply(const TActorContext& ctx) {
+            ctx.Send(DestinationForReply, Event.release(), 0, Cookie);
+        }
+    };
+
+    std::vector<TReplyInfo> Results;
 };
 
-
-}
+}   // namespace NKikimr::NColumnShard

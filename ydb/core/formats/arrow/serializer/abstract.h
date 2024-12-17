@@ -6,6 +6,7 @@
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
 #include <ydb/library/conclusion/result.h>
+#include <ydb/library/formats/arrow/common/validation.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/status.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
@@ -54,11 +55,28 @@ public:
     }
 
     TString SerializeFull(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+        if (!batch) {
+            return "";
+        }
         return DoSerializeFull(batch);
     }
 
     TString SerializePayload(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+        if (!batch) {
+            return "";
+        }
         return DoSerializePayload(batch);
+    }
+
+    std::shared_ptr<arrow::RecordBatch> Repack(const std::shared_ptr<arrow::RecordBatch>& batch) {
+        if (!batch) {
+            return batch;
+        }
+        return TStatusValidator::GetValid(Deserialize(SerializeFull(batch)));
+    }
+
+    TString Repack(const TString& batchString) {
+        return SerializeFull(TStatusValidator::GetValid(Deserialize(batchString)));
     }
 
     arrow::Result<std::shared_ptr<arrow::RecordBatch>> Deserialize(const TString& data) const {
@@ -128,6 +146,7 @@ public:
     using TBase::DeserializeFromProto;
 
     static std::shared_ptr<ISerializer> GetDefaultSerializer();
+    static std::shared_ptr<ISerializer> GetFastestSerializer();
 
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TCompressionOptions& proto);
 

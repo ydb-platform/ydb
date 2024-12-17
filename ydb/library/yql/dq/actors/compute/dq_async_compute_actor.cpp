@@ -16,31 +16,23 @@ constexpr TDuration MIN_QUOTED_CPU_TIME = TDuration::MilliSeconds(10);
 
 using namespace NActors;
 
-namespace {
-
-bool IsDebugLogEnabled(const TActorSystem* actorSystem) {
-    auto* settings = actorSystem->LoggerSettings();
-    return settings && settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, NKikimrServices::KQP_COMPUTE);
-}
-
-} // anonymous namespace
-
-struct TComputeActorAsyncInputHelperForTaskRunnerActor : public TComputeActorAsyncInputHelper
+//Used in Async CA to interact with TaskRunnerActor
+struct TComputeActorAsyncInputHelperAsync : public TComputeActorAsyncInputHelper
 {
 public:
-    TComputeActorAsyncInputHelperForTaskRunnerActor(
-            const TString& logPrefix,
-            ui64 index,
-            NDqProto::EWatermarksMode watermarksMode,
-            ui64& cookie,
-            int& inflight
+    TComputeActorAsyncInputHelperAsync(
+        const TString& logPrefix,
+        ui64 index,
+        NDqProto::EWatermarksMode watermarksMode,
+        ui64& cookie,
+        int& inflight
     )
-        : TComputeActorAsyncInputHelper(logPrefix, index, watermarksMode)
-        , TaskRunnerActor(nullptr)
-        , Cookie(cookie)
-        , Inflight(inflight)
-        , FreeSpace(1)
-        , PushStarted(false)
+    : TComputeActorAsyncInputHelper(logPrefix, index, watermarksMode)
+    , TaskRunnerActor(nullptr)
+    , Cookie(cookie)
+    , Inflight(inflight)
+    , FreeSpace(1)
+    , PushStarted(false)
     {}
 
     i64 GetFreeSpace() const override
@@ -64,18 +56,17 @@ public:
     bool PushStarted;
 };
 
-class TDqAsyncComputeActor : public TDqComputeActorBase<TDqAsyncComputeActor, TComputeActorAsyncInputHelperForTaskRunnerActor>
+class TDqAsyncComputeActor : public TDqComputeActorBase<TDqAsyncComputeActor, TComputeActorAsyncInputHelperAsync>
                            , public NTaskRunnerActor::ITaskRunnerActor::ICallbacks
 {
-    using TBase = TDqComputeActorBase<TDqAsyncComputeActor, TComputeActorAsyncInputHelperForTaskRunnerActor>;
+    using TBase = TDqComputeActorBase<TDqAsyncComputeActor, TComputeActorAsyncInputHelperAsync>;
 public:
     static constexpr char ActorName[] = "DQ_COMPUTE_ACTOR";
 
     static constexpr bool HasAsyncTaskRunner = true;
 
     TDqAsyncComputeActor(const TActorId& executerId, const TTxId& txId, NDqProto::TDqTask* task,
-        IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+        IDqAsyncIoFactory::TPtr asyncIoFactory, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         const NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
         const ::NMonitoring::TDynamicCounterPtr& taskCounters,
@@ -87,6 +78,7 @@ public:
         , SentStatsRequest(false)
         , QuoterServiceActorId(quoterServiceActorId)
     {
+        InitializeTask();
         InitExtraMonCounters(taskCounters);
         if (ownCounters) {
             CA_LOG_D("TDqAsyncComputeActor, make stat");
@@ -95,16 +87,6 @@ public:
     }
 
     void DoBootstrap() {
-        const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
-
-        TLogFunc logger;
-        if (IsDebugLogEnabled(actorSystem)) {
-            logger = [actorSystem, txId = GetTxId(), taskId = Task.GetId()] (const TString& message) {
-                LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_COMPUTE, "TxId: " << txId
-                    << ", task: " << taskId << ": " << message);
-            };
-        }
-
         NActors::IActor* actor;
         THashSet<ui32> inputWithDisabledCheckpointing;
         for (const auto&[idx, inputInfo]: InputChannelsMap) {
@@ -124,15 +106,11 @@ public:
             source.TaskRunnerActor = TaskRunnerActor;
         }
 
-        for (auto& [_, source]: InputTransformsMap) {
-            source.TaskRunnerActor = TaskRunnerActor;
-        }
-
-
         Become(&TDqAsyncComputeActor::StateFuncWrapper<&TDqAsyncComputeActor::StateFuncBody>);
 
-        auto wakeup = [this]{ ContinueExecute(EResumeSource::CABootstrapWakeup); };
-        std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(TxId, std::move(wakeup));
+        auto wakeupCallback = [this]{ ContinueExecute(EResumeSource::CABootstrapWakeup); };
+        auto errorCallback = [this](const TString& error){ SendError(error); };
+        std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(TxId, std::move(wakeupCallback), std::move(errorCallback));
 
         Send(TaskRunnerActorId,
             new NTaskRunnerActor::TEvTaskRunnerCreate(
@@ -153,17 +131,15 @@ public:
         }
     }
 
-    template<typename T>
-    requires(std::is_base_of<TComputeActorAsyncInputHelperForTaskRunnerActor, T>::value)
-    T CreateInputHelper(const TString& logPrefix,
+    TComputeActorAsyncInputHelperAsync CreateInputHelper(const TString& logPrefix,
         ui64 index,
         NDqProto::EWatermarksMode watermarksMode
     ) 
     {
-        return T(logPrefix, index, watermarksMode, Cookie, ProcessSourcesState.Inflight);
+        return TComputeActorAsyncInputHelperAsync(logPrefix, index, watermarksMode, Cookie, ProcessSourcesState.Inflight);
     }
 
-    const IDqAsyncInputBuffer* GetInputTransform(ui64 inputIdx, const TComputeActorAsyncInputHelperForTaskRunnerActor&) const {
+    const IDqAsyncInputBuffer* GetInputTransform(ui64 inputIdx, const TComputeActorAsyncInputHelperSync&) const {
         return TaskRunnerStats.GetInputTransform(inputIdx);
     }
 
@@ -181,10 +157,256 @@ private:
             hFunc(TEvDqCompute::TEvInjectCheckpoint, OnInjectCheckpoint);
             hFunc(TEvDqCompute::TEvRestoreFromCheckpoint, OnRestoreFromCheckpoint);
             hFunc(NKikimr::TEvQuota::TEvClearance, OnCpuQuotaGiven);
+            hFunc(NActors::NMon::TEvHttpInfo, OnMonitoringPage)
             default:
                 TBase::BaseStateFuncBody(ev);
         };
     };
+
+    void OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev) {
+        TStringStream html;
+        html << "<h3>Common</h3>";
+        html << "Cookie: " << Cookie << "<br />";
+        html << "MkqlMemoryLimit: " << MkqlMemoryLimit << "<br />";
+        html << "SentStatsRequest: " << SentStatsRequest << "<br />";
+
+        html << "<h3>State</h3>";
+        html << "<pre>" << ComputeActorState.DebugString() << "</pre>";
+
+#define DUMP(P, X) html << #X ": " << P.X << "<br />"
+        html << "<h4>ProcessSourcesState</h4>";
+        DUMP(ProcessSourcesState, Inflight);
+        html << "<h4>ProcessOutputsState</h4>";
+        DUMP(ProcessOutputsState, Inflight);
+        DUMP(ProcessOutputsState, ChannelsReady);
+        DUMP(ProcessOutputsState, HasDataToSend);
+        DUMP(ProcessOutputsState, AllOutputsFinished);
+        DUMP(ProcessOutputsState, LastRunStatus);
+        DUMP(ProcessOutputsState, LastPopReturnedNoData);
+
+        html << "<h3>Watermarks</h3>";
+        for (const auto& [time, id]: WatermarkTakeInputChannelDataRequests) {
+            html << "WatermarkTakeInputChannelDataRequests: " << time.ToString() << " " << id << "<br />";
+        }
+
+        html << "<h3>CPU Quota</h3>";
+        html << "QuoterServiceActorId: " << QuoterServiceActorId.ToString() << "<br />";
+        if (ContinueRunEvent) {
+            html << "ContinueRunEvent.AskFreeSpace: " << ContinueRunEvent->AskFreeSpace << "<br />";
+            html << "ContinueRunEvent.AskFreeSpace: " << ContinueRunEvent->CheckpointOnly << "<br />";
+            html << "ContinueRunEvent.AskFreeSpace: " << ContinueRunEvent->CheckpointRequest.Defined() << "<br />";
+            html << "ContinueRunEvent.AskFreeSpace: " << ContinueRunEvent->WatermarkRequest.Defined() << "<br />";
+            html << "ContinueRunEvent.AskFreeSpace: " << ContinueRunEvent->CheckpointOnly << "<br />";
+            html << "ContinueRunEvent.AskFreeSpace: " << ContinueRunEvent->MemLimit << "<br />";
+            for (const auto& sinkId: ContinueRunEvent->SinkIds) {
+                html << "ContinueRunEvent.SinkIds: " << sinkId << "<br />";
+            }
+
+            for (const auto& inputTransformId: ContinueRunEvent->InputTransformIds) {
+                html << "ContinueRunEvent.InputTransformIds: " << inputTransformId << "<br />";
+            }
+        }
+
+        html << "ContinueRunStartWaitTime: " << ContinueRunStartWaitTime.ToString() << "<br />";
+        html << "ContinueRunInflight: " << ContinueRunInflight << "<br />";
+        html << "CpuTimeSpent: " << CpuTimeSpent.ToString() << "<br />";
+        html << "CpuTimeQuotaAsked: " << CpuTimeQuotaAsked.ToString() << "<br />";
+        html << "UseCpuQuota: " << UseCpuQuota() << "<br />";
+
+
+        html << "<h3>Checkpoints</h3>";
+        html << "ReadyToCheckpoint: " << ReadyToCheckpoint() << "<br />";
+        html << "CheckpointRequestedFromTaskRunner: " << CheckpointRequestedFromTaskRunner << "<br />";
+
+        auto dumpAsyncStats = [&](auto prefix, auto& asyncStats) {
+            html << prefix << "Level: " << static_cast<int>(asyncStats.Level) << "<br />";
+            html << prefix << "MinWaitDuration: " << asyncStats.MinWaitDuration.ToString() << "<br />";
+            html << prefix << "CurrentPauseTs: " << (asyncStats.CurrentPauseTs ? asyncStats.CurrentPauseTs->ToString() : TString{}) << "<br />";
+            html << prefix << "MergeWaitPeriod: " << asyncStats.MergeWaitPeriod << "<br />";
+            html << prefix << "Bytes: " << asyncStats.Bytes << "<br />";
+            html << prefix << "DecompressedBytes: " << asyncStats.DecompressedBytes << "<br />";
+            html << prefix << "Rows: " << asyncStats.Rows << "<br />";
+            html << prefix << "Chunks: " << asyncStats.Chunks << "<br />";
+            html << prefix << "Splits: " << asyncStats.Splits << "<br />";
+            html << prefix << "FirstMessageTs: " << asyncStats.FirstMessageTs.ToString() << "<br />";
+            html << prefix << "PauseMessageTs: " << asyncStats.PauseMessageTs.ToString() << "<br />";
+            html << prefix << "ResumeMessageTs: " << asyncStats.ResumeMessageTs.ToString() << "<br />";
+            html << prefix << "LastMessageTs: " << asyncStats.LastMessageTs.ToString() << "<br />";
+            html << prefix << "WaitTime: " << asyncStats.WaitTime.ToString() << "<br />";
+        };
+
+        auto dumpOutputStats = [&](auto prefix, auto& outputStats) {
+            html << prefix << "MaxMemoryUsage: " << outputStats.MaxMemoryUsage << "<br />";
+            html << prefix << "MaxRowsInMemory: " << outputStats.MaxRowsInMemory << "<br />";
+            dumpAsyncStats(prefix, outputStats);
+        };
+
+        auto dumpInputChannelStats = [&](auto prefix, auto& pushStats) {
+            html << prefix << "ChannelId: " << pushStats.ChannelId << "<br />";
+            html << prefix << "SrcStageId: " << pushStats.SrcStageId << "<br />";
+            html << prefix << "RowsInMemory: " << pushStats.RowsInMemory << "<br />";
+            html << prefix << "MaxMemoryUsage: " << pushStats.MaxMemoryUsage << "<br />";
+            html << prefix << "DeserializationTime: " << pushStats.DeserializationTime.ToString() << "<br />";
+            dumpAsyncStats(prefix, pushStats);
+        };
+
+        auto dumpInputStats = dumpAsyncStats;
+
+        html << "<h3>InputChannels</h3>";
+        for (const auto& [id, info]: InputChannelsMap) {
+            html << "<h4>Input Channel Id: " << id << "</h4>";
+            DUMP(info, LogPrefix);
+            DUMP(info, ChannelId);
+            DUMP(info, SrcStageId);
+            DUMP(info, HasPeer);
+            html << "PendingWatermarks: " << !info.PendingWatermarks.empty() << " " << (info.PendingWatermarks.empty() ? TString{} : info.PendingWatermarks.back().ToString()) << "<br />";
+            html << "WatermarksMode: " << NDqProto::EWatermarksMode_Name(info.WatermarksMode) << "<br />";
+            html << "PendingCheckpoint: " << info.PendingCheckpoint.has_value() << " " << (info.PendingCheckpoint ? TStringBuilder{} << info.PendingCheckpoint->GetId() << " " << info.PendingCheckpoint->GetGeneration() : TString{}) << "<br />";
+            html << "CheckpointingMode: " << NDqProto::ECheckpointingMode_Name(info.CheckpointingMode) << "<br />";
+            DUMP(info, FreeSpace);
+            html << "IsPaused: " << info.IsPaused() << "<br />";
+            if (info.Channel) {
+                html << "DqInputChannel.ChannelId: " << info.Channel->GetChannelId() << "<br />";
+                html << "DqInputChannel.FreeSpace: " << info.Channel->GetFreeSpace() << "<br />";
+                html << "DqInputChannel.StoredBytes: " << info.Channel->GetStoredBytes() << "<br />";
+                html << "DqInputChannel.Empty: " << info.Channel->Empty() << "<br />";
+                html << "DqInputChannel.InputType: " << (info.Channel->GetInputType() ? info.Channel->GetInputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
+                html << "DqInputChannel.InputWidth: " << (info.Channel->GetInputWidth() ? ToString(*info.Channel->GetInputWidth()) : TString{"unknown"})  << "<br />";
+                html << "DqInputChannel.IsFinished: " << info.Channel->IsFinished() << "<br />";
+
+                const auto& pushStats = info.Channel->GetPushStats();
+                dumpInputChannelStats("DqInputChannel.PushStats.", pushStats);
+
+                const auto& popStats = info.Channel->GetPopStats();
+                dumpInputStats("DqInputChannel.PopStats."sv, popStats);
+            }
+        }
+
+        html << "<h3>InputTransform</h3>";
+        for (const auto& [id, info]: InputTransformsMap) {
+            html << "<h4>Input Transform Id: " << id << "</h4>";
+            DUMP(info, LogPrefix);
+            DUMP(info, Type);
+            html << "PendingWatermark: " << !!info.PendingWatermark << " " << (!info.PendingWatermark ? TString{} : info.PendingWatermark->ToString()) << "<br />";
+            html << "WatermarksMode: " << NDqProto::EWatermarksMode_Name(info.WatermarksMode) << "<br />";
+            html << "FreeSpace: " << info.GetFreeSpace() << "<br />";
+            if (info.Buffer) {
+                html << "DqInputBuffer.InputIndex: " << info.Buffer->GetInputIndex() << "<br />";
+                html << "DqInputBuffer.FreeSpace: " << info.Buffer->GetFreeSpace() << "<br />";
+                html << "DqInputBuffer.StoredBytes: " << info.Buffer->GetStoredBytes() << "<br />";
+                html << "DqInputBuffer.Empty: " << info.Buffer->Empty() << "<br />";
+                html << "DqInputBuffer.InputType: " << (info.Buffer->GetInputType() ? info.Buffer->GetInputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
+                html << "DqInputBuffer.InputWidth: " << (info.Buffer->GetInputWidth() ? ToString(*info.Buffer->GetInputWidth()) : TString{"unknown"})  << "<br />";
+                html << "DqInputBuffer.IsFinished: " << info.Buffer->IsFinished() << "<br />";
+                html << "DqInputBuffer.IsPaused: " << info.Buffer->IsPaused() << "<br />";
+                html << "DqInputBuffer.IsPending: " << info.Buffer->IsPending() << "<br />";
+
+                const auto& popStats = info.Buffer->GetPopStats();
+                dumpInputStats("DqInputBuffer."sv, popStats);
+            }
+            if (info.AsyncInput) {
+                const auto& input = *info.AsyncInput;
+                html << "AsyncInput.InputIndex: " << input.GetInputIndex() << "<br />";
+                const auto& ingressStats = input.GetIngressStats();
+                dumpAsyncStats("AsyncInput.IngressStats."sv, ingressStats);
+            }
+        }
+
+        html << "<h3>OutputChannels</h3>";
+        for (const auto& [id, info]: OutputChannelsMap) {
+            html << "<h4>Input Channel Id: " << id << "</h4>";
+            DUMP(info, ChannelId);
+            DUMP(info, DstStageId);
+            DUMP(info, HasPeer);
+            DUMP(info, Finished);
+            DUMP(info, EarlyFinish);
+            DUMP(info, PopStarted);
+            DUMP(info, IsTransformOutput);
+            html << "EWatermarksMode: " << NDqProto::EWatermarksMode_Name(info.WatermarksMode) << "<br />";
+
+            if (info.AsyncData) {
+                html << "AsyncData.DataSize: " << info.AsyncData->Data.size() << "<br />";
+                html << "AsyncData.Changed: " << info.AsyncData->Changed << "<br />";
+                html << "AsyncData.Checkpoint: " << info.AsyncData->Checkpoint << "<br />";
+                html << "AsyncData.Finished: " << info.AsyncData->Finished << "<br />";
+                html << "AsyncData.Watermark: " << info.AsyncData->Watermark << "<br />";
+            }
+
+            if (info.Channel) {
+                html << "DqOutputChannel.ChannelId: " << info.Channel->GetChannelId() << "<br />";
+                html << "DqOutputChannel.ValuesCount: " << info.Channel->GetValuesCount() << "<br />";
+                html << "DqOutputChannel.IsFull: " << info.Channel->IsFull() << "<br />";
+                html << "DqOutputChannel.HasData: " << info.Channel->HasData() << "<br />";
+                html << "DqOutputChannel.IsFinished: " << info.Channel->IsFinished() << "<br />";
+                html << "DqInputChannel.OutputType: " << (info.Channel->GetOutputType() ? info.Channel->GetOutputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
+
+                const auto& pushStats = info.Channel->GetPushStats();
+                dumpOutputStats("DqOutputChannel.PushStats."sv, pushStats);
+
+                const auto& popStats = info.Channel->GetPopStats();
+                html << "DqOutputChannel.PopStats.ChannelId: " << popStats.ChannelId << "<br />";
+                html << "DqOutputChannel.PopStats.DstStageId: " << popStats.DstStageId << "<br />";
+                html << "DqOutputChannel.PopStats.MaxMemoryUsage: " << popStats.MaxMemoryUsage << "<br />";
+                html << "DqOutputChannel.PopStats.MaxRowsInMemory: " << popStats.MaxRowsInMemory << "<br />";
+                html << "DqOutputChannel.PopStats.SerializationTime: " << popStats.SerializationTime.ToString() << "<br />";
+                html << "DqOutputChannel.PopStats.SpilledBytes: " << popStats.SpilledBytes << "<br />";
+                html << "DqOutputChannel.PopStats.SpilledRows: " << popStats.SpilledRows << "<br />";
+                html << "DqOutputChannel.PopStats.SpilledBlobs: " << popStats.SpilledBlobs << "<br />";
+                dumpOutputStats("DqOutputChannel.PopStats."sv, popStats);
+            }
+        }
+
+        html << "<h3>Sinks</h3>";
+        for (const auto& [id, info]: SinksMap) {
+            html << "<h4>Sink Id: " << id << "</h4>";
+            DUMP(info, Type);
+            DUMP(info, FreeSpaceBeforeSend);
+            DUMP(info, Finished);
+            DUMP(info, FinishIsAcknowledged);
+            DUMP(info, PopStarted);
+            if (info.Buffer) {
+                const auto& buffer = *info.Buffer;
+                html << "DqOutputBuffer.OutputIndex: " << buffer.GetOutputIndex() << "<br />";
+                html << "DqOutputBuffer.IsFull: " << buffer.IsFull() << "<br />";
+                html << "DqOutputBuffer.OutputType: " << (buffer.GetOutputType() ? buffer.GetOutputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
+                html << "DqOutputBuffer.IsFinished: " << buffer.IsFinished() << "<br />";
+                html << "DqOutputBuffer.HasData: " << buffer.HasData() << "<br />";
+
+                const auto& pushStats = buffer.GetPushStats();
+                dumpOutputStats("DqOutputBuffer.PushStats."sv, pushStats);
+
+                const auto& popStats = buffer.GetPopStats();
+                dumpOutputStats("DqOutputBuffer.PopStats."sv, popStats);
+            }
+            if (info.AsyncOutput) {
+                const auto& output = *info.AsyncOutput;
+                html << "AsyncOutput.OutputIndex: " << output.GetOutputIndex() << "<br />";
+                html << "AsyncOutput.FreeSpace: " << output.GetFreeSpace() << "<br />";
+                const auto& egressStats = output.GetEgressStats();
+                dumpAsyncStats("AsyncOutput.EgressStats."sv, egressStats);
+            }
+        }
+
+        html << "<h3>Sources</h3>";
+        for (const auto& [id, info]: SourcesMap) {
+            html << "<h4>Source Id: " << id << "</h4>";
+            DUMP(info, Type);
+            DUMP(info, LogPrefix);
+            DUMP(info, Index);
+            DUMP(info, Finished);
+            html << "IsPausedByWatermark: " << info.IsPausedByWatermark() << "<br />";
+            html << "FreeSpace: " << info.GetFreeSpace() << "<br />";
+            if (info.AsyncInput) {
+                const auto& input = *info.AsyncInput;
+                html << "AsyncInput.InputIndex: " << input.GetInputIndex() << "<br />";
+                const auto& ingressStats = input.GetIngressStats();
+                dumpAsyncStats("AsyncInput.IngressStats."sv, ingressStats);
+            }
+        }
+#undef DUMP
+
+        Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(html.Str()));
+    }
 
     void OnStateRequest(TEvDqCompute::TEvStateRequest::TPtr& ev) {
         CA_LOG_T("Got TEvStateRequest from actor " << ev->Sender << " PingCookie: " << ev->Cookie);
@@ -230,18 +452,18 @@ private:
             CA_LOG_T("update task runner stats");
             TaskRunnerStats = std::move(ev->Get()->Stats);
         }
-        auto record = NDqProto::TEvComputeActorState();
-        record.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
-        record.SetStatusCode(NYql::NDqProto::StatusIds::SUCCESS);
-        record.SetTaskId(Task.GetId());
+        ComputeActorState = NDqProto::TEvComputeActorState();
+        ComputeActorState.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
+        ComputeActorState.SetStatusCode(NYql::NDqProto::StatusIds::SUCCESS);
+        ComputeActorState.SetTaskId(Task.GetId());
         NYql::TIssues issues;
         FillIssues(issues);
 
-        IssuesToMessage(issues, record.MutableIssues());
-        FillStats(record.MutableStats(), /* last */ false);
+        IssuesToMessage(issues, ComputeActorState.MutableIssues());
+        FillStats(ComputeActorState.MutableStats(), /* last */ false);
         for (const auto& [actorId, cookie] : WaitingForStateResponse) {
             auto state = MakeHolder<TEvDqCompute::TEvState>();
-            state->Record = record;
+            state->Record = ComputeActorState;
             Send(actorId, std::move(state), NActors::IEventHandle::FlagTrackDelivery, cookie);
         }
         WaitingForStateResponse.clear();
@@ -269,20 +491,19 @@ private:
 //            << ", finished: " << outputChannel.Channel->IsFinished());
             );
 
-        outputChannel.PopStarted = true;
-        const bool hasFreeMemory = peerState.HasFreeMemory();
+        const bool shouldSkipData = Channels->ShouldSkipData(outputChannel.ChannelId);
+        const bool hasFreeMemory = Channels->HasFreeMemoryInChannel(outputChannel.ChannelId);
         UpdateBlocked(outputChannel, !hasFreeMemory);
-        ProcessOutputsState.Inflight++;
-        if (!hasFreeMemory) {
-            CA_LOG_T("Can not drain channel because it is blocked by capacity. ChannelId: " << channelId
-                << ", peerState:(" << peerState.DebugString() << ")"
-            );
-            auto ev = MakeHolder<NTaskRunnerActor::TEvOutputChannelData>(channelId);
-            Y_ABORT_UNLESS(!ev->Finished);
-            Send(SelfId(), std::move(ev));  // try again, ev.Finished == false
+
+        if (!shouldSkipData && !outputChannel.EarlyFinish && !hasFreeMemory) {
+            CA_LOG_T("DrainOutputChannel return because No free memory in channel, channel: " << outputChannel.ChannelId);
+            ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
+            ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
             return;
         }
 
+        outputChannel.PopStarted = true;
+        ProcessOutputsState.Inflight++;
         Send(TaskRunnerActorId, new NTaskRunnerActor::TEvOutputChannelDataRequest(channelId, wasFinished, peerState.GetFreeMemory()));
     }
 
@@ -330,9 +551,15 @@ private:
         // no TaskRunner => no outputChannel.Channel, nothing to Finish
         CA_LOG_I("Peer finished, channel: " << channelId);
         TOutputChannelInfo* outputChannel = OutputChannelsMap.FindPtr(channelId);
+        outputChannel->Finished = true;
+        outputChannel->EarlyFinish = true;
         YQL_ENSURE(outputChannel, "task: " << Task.GetId() << ", output channelId: " << channelId);
 
-        outputChannel->Finished = true;
+        if (outputChannel->PopStarted) { // There may be another in-flight message here
+            return;
+        }
+
+        outputChannel->PopStarted = true;
         ProcessOutputsState.Inflight++;
         Send(TaskRunnerActorId, MakeHolder<NTaskRunnerActor::TEvOutputChannelDataRequest>(channelId, /* wasFinished = */ true, 0));  // finish channel
         DoExecute();
@@ -435,8 +662,6 @@ private:
     }
 
     void DoExecuteImpl() override {
-        TrySendAsyncChannelsData();
-
         PollAsyncInput();
         if (ProcessSourcesState.Inflight == 0) {
             auto req = GetCheckpointRequest();
@@ -466,6 +691,9 @@ private:
             Stat->AddCounters2(ev->Get()->Sensors);
         }
         TypeEnv = const_cast<NKikimr::NMiniKQL::TTypeEnvironment*>(&typeEnv);
+        for (auto& [inputIndex, transform] : this->InputTransformsMap) {
+            std::tie(transform.Input, transform.Buffer) = ev->Get()->InputTransforms.at(inputIndex);
+        }
         FillIoMaps(holderFactory, typeEnv, secureParams, taskParams, readRanges, nullptr);
 
         {
@@ -496,7 +724,6 @@ private:
             Stat->AddCounters2(ev->Get()->Sensors);
         }
         ContinueRunInflight = false;
-        TrySendAsyncChannelsData(); // send from previous cycle
 
         MkqlMemoryLimit = ev->Get()->MkqlMemoryLimit;
         ProfileStats = std::move(ev->Get()->ProfileStats);
@@ -544,18 +771,19 @@ private:
         }
     }
 
-    void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TComputeActorState& state) const override {
+    void SaveState(const NDqProto::TCheckpoint& checkpoint, TComputeActorState& state) const override {
         CA_LOG_D("Save state");
         Y_ABORT_UNLESS(ProgramState);
-        state.MutableMiniKqlProgram()->Swap(&*ProgramState);
+        state.MiniKqlProgram = std::move(*ProgramState);
         ProgramState.Destroy();
 
         // TODO:(whcrc) maybe save Sources before Program?
         for (auto& [inputIndex, source] : SourcesMap) {
             YQL_ENSURE(source.AsyncInput, "Source[" << inputIndex << "] is not created");
-            NDqProto::TSourceState& sourceState = *state.AddSources();
+            state.Sources.push_back({});
+            TSourceState& sourceState = state.Sources.back();
             source.AsyncInput->SaveState(checkpoint, sourceState);
-            sourceState.SetInputIndex(inputIndex);
+            sourceState.InputIndex = inputIndex;
         }
     }
 
@@ -578,7 +806,22 @@ private:
         auto it = OutputChannelsMap.find(ev->Get()->ChannelId);
         Y_ABORT_UNLESS(it != OutputChannelsMap.end());
         TOutputChannelInfo& outputChannel = it->second;
-        Y_ABORT_UNLESS(!outputChannel.AsyncData); // have finished previous cycle
+        if (outputChannel.AsyncData) {
+            CA_LOG_E("Data was not sent to the output channel in the previous step. Channel: " << outputChannel.ChannelId
+            << " Finished: " << outputChannel.Finished
+            << " Previous: { DataSize: " << outputChannel.AsyncData->Data.size()
+            << ", Watermark: " << outputChannel.AsyncData->Watermark
+            << ", Checkpoint: " << outputChannel.AsyncData->Checkpoint
+            << ", Finished: " << outputChannel.AsyncData->Finished
+            << ", Changed: " << outputChannel.AsyncData->Changed << "}"
+            << " Current: { DataSize: " << ev->Get()->Data.size()
+            << ", Watermark: " << ev->Get()->Watermark
+            << ", Checkpoint: " << ev->Get()->Checkpoint
+            << ", Finished: " << ev->Get()->Finished
+            << ", Changed: " << ev->Get()->Changed << "} ");
+            InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssue("Data was not sent to the output channel in the previous step"));
+            return;
+        }
         outputChannel.AsyncData.ConstructInPlace();
         outputChannel.AsyncData->Watermark = std::move(ev->Get()->Watermark);
         outputChannel.AsyncData->Data = std::move(ev->Get()->Data);
@@ -586,29 +829,18 @@ private:
         outputChannel.AsyncData->Finished = ev->Get()->Finished;
         outputChannel.AsyncData->Changed = ev->Get()->Changed;
 
-        if (TrySendAsyncChannelData(outputChannel)) {
-            CheckRunStatus();
-        }
+        SendAsyncChannelData(outputChannel);
+        CheckRunStatus();
     }
 
-    bool TrySendAsyncChannelData(TOutputChannelInfo& outputChannel) {
-        if (!outputChannel.AsyncData) {
-            return false;
-        }
+    void SendAsyncChannelData(TOutputChannelInfo& outputChannel) {
+        Y_ABORT_UNLESS(outputChannel.AsyncData);
 
         // If the channel has finished, then the data received after drain is no longer needed
         const bool shouldSkipData = Channels->ShouldSkipData(outputChannel.ChannelId);
-        if (!shouldSkipData && !Channels->CanSendChannelData(outputChannel.ChannelId)) { // When channel will be connected, they will call resume execution.
-            CA_LOG_T("TrySendAsyncChannelData return false because Channel can't send channel data");
-            return false;
-        }
-        if (!shouldSkipData && !Channels->HasFreeMemoryInChannel(outputChannel.ChannelId)) {
-            CA_LOG_T("TrySendAsyncChannelData return false because No free memory in channel");
-            return false;
-        }
 
         auto& asyncData = *outputChannel.AsyncData;
-        outputChannel.Finished = asyncData.Finished || shouldSkipData;
+        outputChannel.Finished = asyncData.Finished || shouldSkipData || outputChannel.EarlyFinish;
         if (outputChannel.Finished) {
             FinishedOutputChannels.insert(outputChannel.ChannelId);
         }
@@ -673,19 +905,6 @@ private:
             FinishedSinks.size() == SinksMap.size();
 
         outputChannel.AsyncData = Nothing();
-
-        return true;
-    }
-
-    bool TrySendAsyncChannelsData() {
-        bool result = false;
-        for (auto& [channelId, outputChannel] : OutputChannelsMap) {
-            result |= TrySendAsyncChannelData(outputChannel);
-        }
-        if (result) {
-            CheckRunStatus();
-        }
-        return result;
     }
 
     void OnInputChannelDataAck(NTaskRunnerActor::TEvInputChannelDataAck::TPtr& ev) {
@@ -957,7 +1176,7 @@ private:
     bool ReadyToCheckpointFlag;
     TVector<std::pair<NActors::TActorId, ui64>> WaitingForStateResponse;
     bool SentStatsRequest;
-    mutable THolder<NDqProto::TMiniKqlProgramState> ProgramState;
+    mutable THolder<TMiniKqlProgramState> ProgramState;
     ui64 MkqlMemoryLimit = 0;
     TDqMemoryQuota::TProfileStats ProfileStats;
     bool CheckpointRequestedFromTaskRunner = false;
@@ -971,12 +1190,12 @@ private:
     NMonitoring::THistogramPtr CpuTimeGetQuotaLatency;
     NMonitoring::THistogramPtr CpuTimeQuotaWaitDelay;
     NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
+    NDqProto::TEvComputeActorState ComputeActorState;
 };
 
 
 IActor* CreateDqAsyncComputeActor(const TActorId& executerId, const TTxId& txId, NYql::NDqProto::TDqTask* task,
-    IDqAsyncIoFactory::TPtr asyncIoFactory,
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    IDqAsyncIoFactory::TPtr asyncIoFactory, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     const NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
     ::NMonitoring::TDynamicCounterPtr taskCounters,

@@ -1,7 +1,7 @@
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2022 The OpenLDAP Foundation.
+ * Copyright 1998-2024 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -239,8 +239,6 @@ short_input:
 
 	/* Check for changetype */
 	if ( BV_CASEMATCH( lr->lr_btype+i, &BV_CHANGETYPE )) {
-#ifdef LIBERAL_CHANGETYPE_MODOP
-		/* trim trailing spaces (and log warning ...) */
 		int icnt;
 		for ( icnt = lr->lr_vals[i].bv_len; --icnt > 0; ) {
 			if ( !isspace( (unsigned char) lr->lr_vals[i].bv_val[icnt] ) ) {
@@ -249,12 +247,21 @@ short_input:
 		}
 
 		if ( ++icnt != lr->lr_vals[i].bv_len ) {
+#ifdef LIBERAL_CHANGETYPE_MODOP
+		/* trim trailing spaces (and log warning ...) */
 			fprintf( stderr, _("%s: illegal trailing space after"
 				" \"%s: %s\" trimmed (line %lu, entry \"%s\")\n"),
 				errstr, BV_CHANGETYPE.bv_val, lr->lr_vals[i].bv_val, linenum+i, dn );
 			lr->lr_vals[i].bv_val[icnt] = '\0';
+			lr->lr_vals[i].bv_len = icnt;
+#else /* !LIBERAL_CHANGETYPE_MODOP */
+			fprintf( stderr, _("%s: illegal trailing space after"
+				" \"%s: %s\" (line %lu, entry \"%s\")\n"),
+				errstr, BV_CHANGETYPE.bv_val, lr->lr_vals[i].bv_val, linenum+i, dn );
+			rc = LDAP_PARAM_ERROR;
+			goto leave;
+#endif /* !LIBERAL_CHANGETYPE_MODOP */
 		}
-#endif /* LIBERAL_CHANGETYPE_MODOP */
 
 		/* if LDIF_ENTRIES_ONLY, then either the changetype must be add, or
 		   there must be no changetype, and the flag LDIF_DEFAULT_ADD must be set */
@@ -442,7 +449,6 @@ short_input:
 
 	for ( ; i<lr->lr_lines; i++ ) {
 		if ( expect_modop ) {
-#ifdef LIBERAL_CHANGETYPE_MODOP
 			/* trim trailing spaces (and log warning ...) */
 		    int icnt;
 		    for ( icnt = lr->lr_vals[i].bv_len; --icnt > 0; ) {
@@ -450,12 +456,22 @@ short_input:
 			}
     
 			if ( ++icnt != lr->lr_vals[i].bv_len ) {
+#ifdef LIBERAL_CHANGETYPE_MODOP
 				fprintf( stderr, _("%s: illegal trailing space after"
 					" \"%s: %s\" trimmed (line %lu, entry \"%s\")\n"),
-					errstr, type, lr->lr_vals[i].bv_val, linenum+i, dn );
+					errstr, lr->lr_btype[i].bv_val, lr->lr_vals[i].bv_val,
+					linenum+i, dn );
 				lr->lr_vals[i].bv_val[icnt] = '\0';
+				lr->lr_vals[i].bv_len = icnt;
+#else /* !LIBERAL_CHANGETYPE_MODOP */
+				fprintf( stderr, _("%s: illegal trailing space after"
+					" \"%s: %s\" (line %lu, entry \"%s\")\n"),
+					errstr, lr->lr_btype[i].bv_val, lr->lr_vals[i].bv_val,
+					linenum+i, dn );
+				rc = LDAP_PARAM_ERROR;
+				goto leave;
+#endif /* !LIBERAL_CHANGETYPE_MODOP */
 			}
-#endif /* LIBERAL_CHANGETYPE_MODOP */
 
 			expect_modop = 0;
 			expect_sep = 1;

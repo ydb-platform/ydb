@@ -101,7 +101,7 @@ INSTANTIATE_TEST_SUITE_P(
     All,
     TCodecTest,
     ::testing::Combine(
-        ::testing::ValuesIn(GetSupportedCodecIds()),
+        ::testing::ValuesIn(GetSupportedCodecs()),
         ::testing::ValuesIn(std::vector<ui64>({static_cast<ui64>(-1), 1, 1024}))),
     [] (const ::testing::TestParamInfo<std::tuple<ECodec, ui64>>& info) -> std::string {
         return

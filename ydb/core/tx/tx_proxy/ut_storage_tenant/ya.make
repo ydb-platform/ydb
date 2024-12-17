@@ -3,11 +3,9 @@ UNITTEST_FOR(ydb/core/tx/tx_proxy)
 FORK_SUBTESTS()
 
 IF (WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -18,7 +16,7 @@ PEERDIR(
     ydb/core/blobstorage
     ydb/core/testlib/default
     ydb/core/tx
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf/service/exception_policy
 )
 
 YQL_LAST_ABI_VERSION()
@@ -28,7 +26,5 @@ SRCS(
     proxy_ut_helpers.h
     proxy_ut_helpers.cpp
 )
-
-REQUIREMENTS(ram:32)
 
 END()

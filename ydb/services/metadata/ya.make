@@ -13,6 +13,6 @@ PEERDIR(
 END()
 
 RECURSE(
-    secret
     initializer
+    secret
 )

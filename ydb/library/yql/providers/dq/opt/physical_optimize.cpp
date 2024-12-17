@@ -1,15 +1,15 @@
 #include "physical_optimize.h"
 
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/common/transform/yql_optimize.h>
+#include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql::NDqs {
 
@@ -30,6 +30,8 @@ public:
         AddHandler(0, &TDqReadWrap::Match, HNDL(BuildStageWithReadWrap));
         AddHandler(0, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<false>));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<false>));
+        AddHandler(0, &TCoAssumeUnique::Match, HNDL(PushAssumeUniqueToStage<false>));
+        AddHandler(0, &TCoAssumeDistinct::Match, HNDL(PushAssumeDistinctToStage<false>));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<false>));
         AddHandler(0, &TCoCombineByKey::Match, HNDL(PushCombineToStage<false>));
         AddHandler(0, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage<false>));
@@ -38,6 +40,7 @@ public:
         AddHandler(0, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage<false>));
         AddHandler(0, &TCoAsList::Match, HNDL(BuildAggregationResultStage));
         AddHandler(0, &TCoTopSort::Match, HNDL(BuildTopSortStage<false>));
+        AddHandler(0, &TCoTop::Match, HNDL(BuildTopStage<false>));
         AddHandler(0, &TCoSort::Match, HNDL(BuildSortStage<false>));
         AddHandler(0, &TCoTakeBase::Match, HNDL(BuildTakeOrTakeSkipStage<false>));
         AddHandler(0, &TCoLength::Match, HNDL(RewriteLengthOfStageOutput<false>));
@@ -45,12 +48,15 @@ public:
         AddHandler(0, &TDqJoin::Match, HNDL(SuppressSortOnJoinInput));
         AddHandler(0, &TDqJoin::Match, HNDL(RewriteRightJoinToLeft));
         AddHandler(0, &TDqJoin::Match, HNDL(RewriteLeftPureJoin<false>));
+        AddHandler(0, &TDqJoin::Match, HNDL(RewriteStreamLookupJoin));
         AddHandler(0, &TDqJoin::Match, HNDL(BuildJoin<false>));
         AddHandler(0, &TCoAssumeSorted::Match, HNDL(BuildSortStage<false>));
         AddHandler(0, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<false>));
         AddHandler(0, &TCoLMap::Match, HNDL(PushLMapToStage<false>));
         AddHandler(0, &TCoOrderedLMap::Match, HNDL(BuildOrderedLMapOverMuxStage));
         AddHandler(0, &TCoLMap::Match, HNDL(BuildLMapOverMuxStage));
+        AddHandler(0, &TCoUnorderedBase::Match, HNDL(PushUnorderedToStage<false>));
+        AddHandler(0, &TDqStage::Match, HNDL(UnorderedOverStageInput<false>));
         if (enablePrecompute) {
             AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems<false>));
             AddHandler(0, &TCoSqlIn::Match, HNDL(BuildSqlIn<false>));
@@ -64,6 +70,8 @@ public:
 
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<true>));
         AddHandler(1, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<true>));
+        AddHandler(1, &TCoAssumeUnique::Match, HNDL(PushAssumeUniqueToStage<true>));
+        AddHandler(1, &TCoAssumeDistinct::Match, HNDL(PushAssumeDistinctToStage<true>));
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<true>));
         AddHandler(1, &TCoCombineByKey::Match, HNDL(PushCombineToStage<true>));
         AddHandler(1, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage<true>));
@@ -71,6 +79,7 @@ public:
         AddHandler(1, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<true>));
         AddHandler(1, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage<true>));
         AddHandler(1, &TCoTopSort::Match, HNDL(BuildTopSortStage<true>));
+        AddHandler(1, &TCoTop::Match, HNDL(BuildTopStage<true>));
         AddHandler(1, &TCoSort::Match, HNDL(BuildSortStage<true>));
         AddHandler(1, &TCoTakeBase::Match, HNDL(BuildTakeOrTakeSkipStage<true>));
         AddHandler(1, &TCoLength::Match, HNDL(RewriteLengthOfStageOutput<true>));
@@ -79,6 +88,8 @@ public:
         AddHandler(1, &TCoAssumeSorted::Match, HNDL(BuildSortStage<true>));
         AddHandler(1, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<true>));
         AddHandler(1, &TCoLMap::Match, HNDL(PushLMapToStage<true>));
+        AddHandler(1, &TCoUnorderedBase::Match, HNDL(PushUnorderedToStage<true>));
+        AddHandler(1, &TDqStage::Match, HNDL(UnorderedOverStageInput<true>));
         if (enablePrecompute) {
             AddHandler(1, &TCoHasItems::Match, HNDL(BuildHasItems<true>));
             AddHandler(1, &TCoSqlIn::Match, HNDL(BuildSqlIn<true>));
@@ -112,6 +123,16 @@ protected:
     }
 
     template <bool IsGlobal>
+    TMaybeNode<TExprBase> PushAssumeDistinctToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        return DqPushAssumeDistinctToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+    }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> PushAssumeUniqueToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        return DqPushAssumeUniqueToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+    }
+
+    template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         return DqBuildFlatmapStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
@@ -133,6 +154,17 @@ protected:
     TMaybeNode<TExprBase> BuildLMapOverMuxStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         return DqBuildLMapOverMuxStage(node, ctx, optCtx, *getParents());
     }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> PushUnorderedToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        return DqPushUnorderedToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+    }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> UnorderedOverStageInput(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        return DqUnorderedOverStageInput(node, ctx, optCtx, *Types, *getParents(), IsGlobal);
+    }
+
 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> PushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
@@ -166,6 +198,11 @@ protected:
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildTopSortStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         return DqBuildTopSortStage(node, ctx, optCtx, *getParents(), IsGlobal);
+    }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> BuildTopStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        return DqBuildTopStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
     template <bool IsGlobal>
@@ -204,12 +241,58 @@ protected:
         return DqRewriteLeftPureJoin(node, ctx, *getParents(), IsGlobal);
     }
 
+    TMaybeNode<TExprBase> RewriteStreamLookupJoin(TExprBase node, TExprContext& ctx) {
+        const auto join = node.Cast<TDqJoin>();
+        if (join.JoinAlgo().StringValue() != "StreamLookupJoin") {
+            return node;
+        }
+
+        const auto pos = node.Pos();
+        const auto left = join.LeftInput().Maybe<TDqConnection>();
+        if (!left) {
+            return node;
+        }
+        auto cn = Build<TDqCnStreamLookup>(ctx, pos)
+            .Output(left.Output().Cast())
+            .LeftLabel(join.LeftLabel().Cast<NNodes::TCoAtom>())
+            .RightInput(join.RightInput())
+            .RightLabel(join.RightLabel().Cast<NNodes::TCoAtom>())
+            .JoinKeys(join.JoinKeys())
+            .JoinType(join.JoinType())
+            .LeftJoinKeyNames(join.LeftJoinKeyNames())
+            .RightJoinKeyNames(join.RightJoinKeyNames())
+            .TTL(ctx.NewAtom(pos, 300)) //TODO configure me
+            .MaxCachedRows(ctx.NewAtom(pos, 1'000'000)) //TODO configure me
+            .MaxDelayedRows(ctx.NewAtom(pos, 1'000'000)) //Configure me
+        .Done();
+
+        auto lambda = Build<TCoLambda>(ctx, pos)
+            .Args({"stream"})
+            .Body("stream")
+            .Done();
+        const auto stage = Build<TDqStage>(ctx, pos)
+            .Inputs()
+                .Add(cn)
+                .Build()
+            .Program(lambda)
+            .Settings(TDqStageSettings().BuildNode(ctx, pos))
+            .Done();
+
+        return Build<TDqCnUnionAll>(ctx, pos)
+            .Output()
+                .Stage(stage)
+                .Index().Build("0")
+                .Build()
+            .Done();
+    }
+
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildJoin(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         const auto join = node.Cast<TDqJoin>();
         const TParentsMap* parentsMap = getParents();
         const auto mode = Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off);
-        return DqBuildJoin(join, ctx, optCtx, *parentsMap, IsGlobal, /* pushLeftStage = */ false /* TODO */, mode);
+        const auto useGraceJoin = Config->UseGraceJoinCoreForMap.Get().GetOrElse(false);
+        return DqBuildJoin(join, ctx, optCtx, *parentsMap, IsGlobal, /* pushLeftStage = */ false /* TODO */, mode, true, useGraceJoin);
     }
 
     template <bool IsGlobal>

@@ -11,7 +11,7 @@ bool TTxProposeFromInitiator::DoExecute(NTabletFlatExecutor::TTransactionContext
 }
 
 void TTxProposeFromInitiator::DoComplete(const TActorContext& /*ctx*/) {
-    AFL_VERIFY(!Session->IsConfirmed());
+    AFL_VERIFY(!Session->IsConfirmed() || Session->GetTransferContext().GetTxId());
     AFL_VERIFY(Sessions->emplace(Session->GetSessionId(), Session).second);
     Session->GetInitiatorController().ProposeSuccess(Session->GetSessionId());
 }
@@ -21,12 +21,12 @@ bool TTxConfirmFromInitiator::DoExecute(NTabletFlatExecutor::TTransactionContext
     NIceDb::TNiceDb db(txc.DB);
     Session->Confirm(true);
     db.Table<Schema::DestinationSessions>().Key(Session->GetSessionId())
-        .Update(NIceDb::TUpdate<Schema::DestinationSessions::Cursor>(Session->SerializeCursorToProto().SerializeAsString()));
+        .Update(NIceDb::TUpdate<Schema::DestinationSessions::Cursor>(Session->SerializeCursorToProto().SerializeAsString()))
+        .Update(NIceDb::TUpdate<Schema::DestinationSessions::Details>(Session->SerializeDataToProto().SerializeAsString()));
     return true;
 }
 
 void TTxConfirmFromInitiator::DoComplete(const TActorContext& /*ctx*/) {
-    Session->Start(*Self);
     Session->GetInitiatorController().ConfirmSuccess(Session->GetSessionId());
 }
 

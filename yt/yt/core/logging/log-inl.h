@@ -13,19 +13,19 @@ namespace NYT::NLogging {
 
 namespace NDetail {
 
-template <size_t Length, class... TArgs>
+template <class... TArgs>
 TLogMessage BuildLogMessage(
     const TLoggingContext& loggingContext,
     const TLogger& logger,
     const TError& error,
-    const char (&format)[Length],
+    TFormatString<TArgs...> format,
     TArgs&&... args)
 {
     TMessageStringBuilder builder;
-    AppendLogMessageWithFormat(&builder, loggingContext, logger, format, std::forward<TArgs>(args)...);
+    AppendLogMessageWithFormat(&builder, loggingContext, logger, format.Get(), std::forward<TArgs>(args)...);
     builder.AppendChar('\n');
-    FormatValue(&builder, error, TStringBuf());
-    return {builder.Flush(), format};
+    FormatValue(&builder, error, TStringBuf("v"));
+    return {builder.Flush(), format.Get()};
 }
 
 } // namespace NDetail

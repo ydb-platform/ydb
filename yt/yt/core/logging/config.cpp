@@ -34,6 +34,51 @@ std::optional<ELogLevel> GetLogLevelFromEnv()
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TLogWriterConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("type", &TThis::Type);
+    registrar.Parameter("format", &TThis::Format)
+        .Alias("accepted_message_format")
+        .Default(ELogFormat::PlainText);
+    registrar.Parameter("rate_limit", &TThis::RateLimit)
+        .Default();
+    registrar.Parameter("common_fields", &TThis::CommonFields)
+        .Default();
+    registrar.Parameter("enable_system_messages", &TThis::EnableSystemMessages)
+        .Alias("enable_control_messages")
+        .Default();
+    registrar.Parameter("system_message_family", &TThis::SystemMessageFamily)
+        .Default();
+    registrar.Parameter("enable_source_location", &TThis::EnableSourceLocation)
+        .Default(false);
+    registrar.Parameter("enable_system_fields", &TThis::EnableSystemFields)
+        .Alias("enable_instant")
+        .Default(true);
+    registrar.Parameter("enable_host_field", &TThis::EnableHostField)
+        .Default(false);
+    registrar.Parameter("json_format", &TThis::JsonFormat)
+        .Default();
+
+    registrar.Postprocessor([] (TThis* config) {
+        // COMPAT(max42).
+        if (config->Format == ELogFormat::Structured) {
+            config->Format = ELogFormat::Json;
+        }
+    });
+}
+
+bool TLogWriterConfig::AreSystemMessagesEnabled() const
+{
+    return EnableSystemMessages.value_or(Format == ELogFormat::PlainText);
+}
+
+ELogFamily TLogWriterConfig::GetSystemMessageFamily() const
+{
+    return SystemMessageFamily.value_or(Format == ELogFormat::PlainText ? ELogFamily::PlainText : ELogFamily::Structured);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TRotationPolicyConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("max_total_size_to_keep", &TThis::MaxTotalSizeToKeep)
@@ -57,7 +102,11 @@ void TFileLogWriterConfig::Register(TRegistrar registrar)
     registrar.Parameter("file_name", &TThis::FileName);
     registrar.Parameter("use_timestamp_suffix", &TThis::UseTimestampSuffix)
         .Default(false);
+    registrar.Parameter("use_logrotate_compatible_timestamp_suffix", &TThis::UseLogrotateCompatibleTimestampSuffix)
+        .Default(false);
     registrar.Parameter("enable_compression", &TThis::EnableCompression)
+        .Default(false);
+    registrar.Parameter("enable_no_reuse", &TThis::EnableNoReuse)
         .Default(false);
     registrar.Parameter("compression_method", &TThis::CompressionMethod)
         .Default(ECompressionMethod::Gzip);
@@ -66,49 +115,30 @@ void TFileLogWriterConfig::Register(TRegistrar registrar)
     registrar.Parameter("rotation_policy", &TThis::RotationPolicy)
         .DefaultNew();
 
+    registrar.Preprocessor([] (TThis* config) {
+        config->Type = WriterType;
+    });
+
     registrar.Postprocessor([] (TThis* config) {
         if (config->CompressionMethod == ECompressionMethod::Gzip && (config->CompressionLevel < 0 || config->CompressionLevel > 9)) {
             THROW_ERROR_EXCEPTION("Invalid \"compression_level\" attribute for \"gzip\" compression method");
         } else if (config->CompressionMethod == ECompressionMethod::Zstd && config->CompressionLevel > 22) {
             THROW_ERROR_EXCEPTION("Invalid \"compression_level\" attribute for \"zstd\" compression method");
         }
+        if (config->UseTimestampSuffix && config->UseLogrotateCompatibleTimestampSuffix) {
+            THROW_ERROR_EXCEPTION("At most one of \"use_timestamp_suffix\" and "
+                "\"use_logrotate_compatible_timestamp_suffix\" can be specified");
+        }
     });
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TLogWriterConfig::Register(TRegistrar registrar)
+void TStderrLogWriterConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("type", &TThis::Type);
-    registrar.Parameter("format", &TThis::Format)
-        .Alias("accepted_message_format")
-        .Default(ELogFormat::PlainText);
-    registrar.Parameter("rate_limit", &TThis::RateLimit)
-        .Default();
-    registrar.Parameter("common_fields", &TThis::CommonFields)
-        .Default();
-    registrar.Parameter("enable_system_messages", &TThis::EnableSystemMessages)
-        .Alias("enable_control_messages")
-        .Default();
-    registrar.Parameter("enable_source_location", &TThis::EnableSourceLocation)
-        .Default(false);
-    registrar.Parameter("enable_system_fields", &TThis::EnableSystemFields)
-        .Alias("enable_instant")
-        .Default(true);
-    registrar.Parameter("json_format", &TThis::JsonFormat)
-        .Default();
-
-    registrar.Postprocessor([] (TThis* config) {
-        // COMPAT(max42).
-        if (config->Format == ELogFormat::Structured) {
-            config->Format = ELogFormat::Json;
-        }
+    registrar.Preprocessor([] (TThis* config) {
+        config->Type = WriterType;
     });
-}
-
-bool TLogWriterConfig::AreSystemMessagesEnabled() const
-{
-    return EnableSystemMessages.value_or(Format == ELogFormat::PlainText);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -169,13 +199,18 @@ void TLogManagerConfig::Register(TRegistrar registrar)
         .Default(1'000'000);
     registrar.Parameter("shutdown_grace_timeout", &TThis::ShutdownGraceTimeout)
         .Default(TDuration::Seconds(1));
+    registrar.Parameter("shutdown_busy_timeout", &TThis::ShutdownGraceTimeout)
+        .Default(TDuration::Zero());
 
-    registrar.Parameter("writers", &TThis::Writers);
     registrar.Parameter("rules", &TThis::Rules);
-    registrar.Parameter("suppressed_messages", &TThis::SuppressedMessages)
-        .Default();
+    registrar.Parameter("writers", &TThis::Writers);
     registrar.Parameter("category_rate_limits", &TThis::CategoryRateLimits)
         .Default();
+
+    registrar.Parameter("suppressed_messages", &TThis::SuppressedMessages)
+        .Optional();
+    registrar.Parameter("message_level_overrides", &TThis::MessageLevelOverrides)
+        .Optional();
 
     registrar.Parameter("request_suppression_timeout", &TThis::RequestSuppressionTimeout)
         .Alias("trace_suppression_timeout")
@@ -209,8 +244,12 @@ TLogManagerConfigPtr TLogManagerConfig::ApplyDynamic(const TLogManagerDynamicCon
     mergedConfig->ShutdownGraceTimeout = ShutdownGraceTimeout;
     mergedConfig->Rules = CloneYsonStructs(dynamicConfig->Rules.value_or(Rules));
     mergedConfig->Writers = CloneYsonStructs(Writers);
-    mergedConfig->SuppressedMessages = dynamicConfig->SuppressedMessages.value_or(SuppressedMessages);
     mergedConfig->CategoryRateLimits = dynamicConfig->CategoryRateLimits.value_or(CategoryRateLimits);
+    mergedConfig->SuppressedMessages = dynamicConfig->SuppressedMessages.value_or(SuppressedMessages);
+    mergedConfig->MessageLevelOverrides = MessageLevelOverrides;
+    for (const auto& [message, level] : dynamicConfig->MessageLevelOverrides) {
+        mergedConfig->MessageLevelOverrides[message] = level;
+    }
     mergedConfig->RequestSuppressionTimeout = dynamicConfig->RequestSuppressionTimeout.value_or(RequestSuppressionTimeout);
     mergedConfig->EnableAnchorProfiling = dynamicConfig->EnableAnchorProfiling.value_or(EnableAnchorProfiling);
     mergedConfig->MinLoggedMessageRateToProfile = dynamicConfig->MinLoggedMessageRateToProfile.value_or(MinLoggedMessageRateToProfile);
@@ -221,21 +260,18 @@ TLogManagerConfigPtr TLogManagerConfig::ApplyDynamic(const TLogManagerDynamicCon
     return mergedConfig;
 }
 
-TLogManagerConfigPtr TLogManagerConfig::CreateLogFile(const TString& path)
+TLogManagerConfigPtr TLogManagerConfig::CreateLogFile(const TString& path, ELogLevel logLevel)
 {
     auto rule = New<TRuleConfig>();
-    rule->MinLevel = ELogLevel::Trace;
+    rule->MinLevel = logLevel;
     rule->Writers.push_back(TString(DefaultFileWriterName));
-
-    auto writerConfig = New<TLogWriterConfig>();
-    writerConfig->Type = TFileLogWriterConfig::Type;
 
     auto fileWriterConfig = New<TFileLogWriterConfig>();
     fileWriterConfig->FileName = NFS::NormalizePathSeparators(path);
 
     auto config = New<TLogManagerConfig>();
     config->Rules.push_back(rule);
-    EmplaceOrCrash(config->Writers, DefaultFileWriterName, writerConfig->BuildFullConfig(fileWriterConfig));
+    EmplaceOrCrash(config->Writers, DefaultFileWriterName, ConvertTo<IMapNodePtr>(fileWriterConfig));
     config->MinDiskSpace = 0;
     config->HighBacklogWatermark = 100'000;
     config->LowBacklogWatermark = 100'000;
@@ -250,14 +286,11 @@ TLogManagerConfigPtr TLogManagerConfig::CreateStderrLogger(ELogLevel logLevel)
     rule->MinLevel = logLevel;
     rule->Writers.push_back(TString(DefaultStderrWriterName));
 
-    auto writerConfig = New<TLogWriterConfig>();
-    writerConfig->Type = TStderrLogWriterConfig::Type;
-
     auto stderrWriterConfig = New<TStderrLogWriterConfig>();
 
     auto config = New<TLogManagerConfig>();
     config->Rules.push_back(rule);
-    config->Writers.emplace(DefaultStderrWriterName, writerConfig->BuildFullConfig(stderrWriterConfig));
+    config->Writers.emplace(DefaultStderrWriterName, ConvertTo<IMapNodePtr>(stderrWriterConfig));
     config->MinDiskSpace = 0;
     config->HighBacklogWatermark = 100'000;
     config->LowBacklogWatermark = 100'000;
@@ -313,9 +346,6 @@ TLogManagerConfigPtr TLogManagerConfig::CreateYTServer(
         rule->MinLevel = currentLogLevel == ELogLevel::Error ? ELogLevel::Warning : currentLogLevel;
         rule->Writers.push_back(ToString(currentLogLevel));
 
-        auto writerConfig = New<TLogWriterConfig>();
-        writerConfig->Type = TFileLogWriterConfig::Type;
-
         auto fileWriterConfig = New<TFileLogWriterConfig>();
         auto fileName = Format(
             "%v/%v%v.log",
@@ -325,7 +355,7 @@ TLogManagerConfigPtr TLogManagerConfig::CreateYTServer(
         fileWriterConfig->FileName = NFS::NormalizePathSeparators(fileName);
 
         config->Rules.push_back(rule);
-        config->Writers.emplace(ToString(currentLogLevel), writerConfig->BuildFullConfig(fileWriterConfig));
+        config->Writers.emplace(ToString(currentLogLevel), ConvertTo<IMapNodePtr>(fileWriterConfig));
     }
 
     for (const auto& [category, writerName] : structuredCategoryToWriterName) {
@@ -335,11 +365,8 @@ TLogManagerConfigPtr TLogManagerConfig::CreateYTServer(
         rule->Family = ELogFamily::Structured;
         rule->IncludeCategories = {category};
 
-        auto writerConfig = New<TLogWriterConfig>();
-        writerConfig->Type = TFileLogWriterConfig::Type;
-        writerConfig->Format = ELogFormat::Yson;
-
         auto fileWriterConfig = New<TFileLogWriterConfig>();
+        fileWriterConfig->Format = ELogFormat::Yson;
         auto fileName = Format(
             "%v/%v.yson.%v.log",
             directory,
@@ -348,7 +375,7 @@ TLogManagerConfigPtr TLogManagerConfig::CreateYTServer(
         fileWriterConfig->FileName = NFS::NormalizePathSeparators(fileName);
 
         config->Rules.push_back(rule);
-        config->Writers.emplace(writerName, writerConfig->BuildFullConfig(fileWriterConfig));
+        config->Writers.emplace(writerName, ConvertTo<IMapNodePtr>(fileWriterConfig));
     }
 
     config->Postprocess();
@@ -407,9 +434,6 @@ TLogManagerConfigPtr TLogManagerConfig::TryCreateFromEnv()
         }
     }
 
-    auto writerConfig = New<TLogWriterConfig>();
-    writerConfig->Type = TStderrLogWriterConfig::Type;
-
     auto stderrWriterConfig = New<TStderrLogWriterConfig>();
 
     auto config = New<TLogManagerConfig>();
@@ -417,7 +441,7 @@ TLogManagerConfigPtr TLogManagerConfig::TryCreateFromEnv()
     config->MinDiskSpace = 0;
     config->HighBacklogWatermark = std::numeric_limits<int>::max();
     config->LowBacklogWatermark = 0;
-    EmplaceOrCrash(config->Writers, DefaultStderrWriterName, writerConfig->BuildFullConfig(stderrWriterConfig));
+    EmplaceOrCrash(config->Writers, DefaultStderrWriterName, ConvertTo<IMapNodePtr>(stderrWriterConfig));
 
     config->Postprocess();
     return config;
@@ -448,9 +472,12 @@ void TLogManagerDynamicConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("rules", &TThis::Rules)
         .Optional();
+    registrar.Parameter("category_rate_limits", &TThis::CategoryRateLimits)
+        .Optional();
+
     registrar.Parameter("suppressed_messages", &TThis::SuppressedMessages)
         .Optional();
-    registrar.Parameter("category_rate_limits", &TThis::CategoryRateLimits)
+    registrar.Parameter("message_level_overrides", &TThis::MessageLevelOverrides)
         .Optional();
 
     registrar.Parameter("request_suppression_timeout", &TThis::RequestSuppressionTimeout)

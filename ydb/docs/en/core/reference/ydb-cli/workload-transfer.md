@@ -9,9 +9,11 @@ Starts the load in the form of transactions {{ ydb-short-name }} involving topic
 Before starting the load, it is necessary to initialize the test environment. You can use the command `{{ ydb-cli }} workload transfer topic-to-table init` to do this. It will create a topic and a table with the necessary parameters.
 
 Command syntax:
+
 ```bash
 {{ ydb-cli }} [global options...] workload transfer topic-to-table init [options...]
 ```
+
 * `global options` — [global parameters](commands/global-options.md).
 * `options` - parameters of the subcommand.
 
@@ -40,17 +42,21 @@ For example, the command `{{ ydb-cli }} --profile quickstart workload transfer t
 The test simulates the load from an application that receives messages from a topic, processes them and writes the processing results to a database table.
 
 During the operation of the program, two types of work streams are simulated:
+
 * Input stream: messages are written to the topic in the non-transaction mode. The user can control the writing speed, the message size, the number of producers.
 * Processing flow: messages are read from the topic and written to the table using the {{ ydb-short-name }} transaction.
 
-The following actions are performed in the processing flow within a single transaction: 
+The following actions are performed in the processing flow within a single transaction:
+
 * messages from the topic are being read until the `--commit-period` period has expired;
 * one `UPSERT` command and a `COMMIT` command are executed on the table to commit the transaction after the period expires.
 
 Command syntax:
+
 ```bash
 {{ ydb-cli }} [global options...] workload transfer topic-to-table run [options...]
 ```
+
 * `global options` — [global parameters](commands/global-options.md).
 * `options` - parameters of the subcommand.
 
@@ -116,16 +122,17 @@ Window  Write speed     Write time      Inflight        Read speed      Topic ti
 * `Lag time` — the specified percentile of message delay time in ms.
 * `Read speed` — the speed of reading messages by consumers. In messages per second and in megabytes per second.
 * `Select time`, `Upsert time`, `Commit time` — the specified percentile of the execution time of Select, Insert, Commit operations in ms.
-<!-- * `Full time` — the specified percentile of the time of complete processing of the message, from writing by the producer to reading by the consumer in ms. -->
 
 ## Removing the test environment {#clean}
 
 After the test is completed, you can delete the test environment.
 
 Command syntax:
+
 ```bash
 {{ ydb-cli }} [global options...] workload transfer topic-to-table clean [options...]
 ```
+
 * `global options` — [global parameters](commands/global-options.md).
 * `options` - parameters of the subcommand.
 
@@ -136,6 +143,7 @@ View the command description:
 ```
 
 Parameters of the subcommand:
+
 Parameter Name | Parameter Description | Default value
 ---|---|---
 `--topic` | Topic name | `transfer-topic`

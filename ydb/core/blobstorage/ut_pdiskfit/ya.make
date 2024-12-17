@@ -1,6 +1,6 @@
 RECURSE(
-    pdiskfit
     lib
+    pdiskfit
 )
 
 RECURSE_FOR_TESTS(

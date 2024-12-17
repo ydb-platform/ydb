@@ -20,7 +20,7 @@ void TCommandSelfCheck::Config(TConfig& config) {
     TYdbSimpleCommand::Config(config);
     config.SetFreeArgsNum(0);
 
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::Json });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::Json });
 
     config.Opts->AddLongOption('v', "verbose", "Return detailed info about components checked with their statuses.")
         .StoreTrue(&Verbose);
@@ -28,7 +28,7 @@ void TCommandSelfCheck::Config(TConfig& config) {
 
 void TCommandSelfCheck::Parse(TConfig& config) {
     TYdbSimpleCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
 }
 
 int TCommandSelfCheck::Run(TConfig& config) {
@@ -49,8 +49,8 @@ int TCommandSelfCheck::Run(TConfig& config) {
 int TCommandSelfCheck::PrintResponse(NMonitoring::TSelfCheckResult& result) {
     const auto& proto = NYdb::TProtoAccessor::GetProto(result);
     switch (OutputFormat) {
-        case EOutputFormat::Default:
-        case EOutputFormat::Pretty:
+        case EDataFormat::Default:
+        case EDataFormat::Pretty:
         {
             NColorizer::TColors colors = NColorizer::AutoColors(Cout);
             TStringBuf statusColor;
@@ -83,7 +83,7 @@ int TCommandSelfCheck::PrintResponse(NMonitoring::TSelfCheckResult& result) {
             }
             break;
         }
-        case EOutputFormat::Json:
+        case EDataFormat::Json:
         {
             TString json;
             google::protobuf::util::JsonPrintOptions jsonOpts;

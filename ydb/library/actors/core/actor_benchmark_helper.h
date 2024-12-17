@@ -31,7 +31,8 @@ struct TTestEndDecorator : TDecorator {
     }
 
     ~TTestEndDecorator() {
-        if (AtomicDecrement(*ActorsAlive) == 0) {
+        auto alive = AtomicDecrement(*ActorsAlive);
+        if (alive == 0) {
             Pad->Unpark();
         }
     }

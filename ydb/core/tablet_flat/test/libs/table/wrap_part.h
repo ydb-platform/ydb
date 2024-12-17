@@ -6,7 +6,7 @@
 #include <ydb/core/tablet_flat/test/libs/rows/rows.h>
 #include <ydb/core/tablet_flat/flat_table_part.h>
 #include <ydb/core/tablet_flat/flat_part_screen.h>
-#include <ydb/core/tablet_flat/flat_part_iter_multi.h>
+#include <ydb/core/tablet_flat/flat_part_iter.h>
 #include <ydb/core/tablet_flat/flat_stat_part.h>
 
 namespace NKikimr {
@@ -63,7 +63,7 @@ namespace NTest {
             return Iter && Iter->IsValid() && Ready == EReady::Data;
         }
 
-        TRunIt* Get() const noexcept
+        TRunIter* Get() const noexcept
         {
             return Iter.Get();
         }
@@ -76,7 +76,7 @@ namespace NTest {
         void Make(IPages *env) noexcept
         {
             Ready = EReady::Gone;
-            Iter = MakeHolder<TRunIt>(Run, Remap_.Tags, Scheme->Keys, env);
+            Iter = MakeHolder<TRunIter>(Run, Remap_.Tags, Scheme->Keys, env);
         }
 
         EReady Seek(TRawVals key_, ESeek seek) noexcept
@@ -104,7 +104,8 @@ namespace NTest {
         EReady SkipToRowVersion(TRowVersion rowVersion) noexcept
         {
             TIteratorStats stats;
-            Ready = Iter->SkipToRowVersion(rowVersion, stats, /* committed */ nullptr, /* observer */ nullptr);
+            Ready = Iter->SkipToRowVersion(rowVersion, stats, /* committed */ nullptr, /* observer */ nullptr,
+                /* decided */ ITransactionSet::None);
 
             if (Ready == EReady::Data)
                 Ready = RollUp();
@@ -193,15 +194,15 @@ namespace NTest {
         TRowState State;
         TRun Run_;
         TRun& Run;
-        THolder<TRunIt> Iter;
+        THolder<TRunIter> Iter;
         TOwnedCellVec StopKey;
     };
 
     using TWrapPart = TWrapPartImpl<EDirection::Forward>;
     using TWrapReversePart = TWrapPartImpl<EDirection::Reverse>;
 
-    using TCheckIt = TChecker<TWrapPart, TPartEggs>;
-    using TCheckReverseIt = TChecker<TWrapReversePart, TPartEggs>;
+    using TCheckIter = TChecker<TWrapPart, TPartEggs>;
+    using TCheckReverseIter = TChecker<TWrapReversePart, TPartEggs>;
 }
 }
 }

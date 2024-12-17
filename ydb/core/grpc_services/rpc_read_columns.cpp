@@ -81,7 +81,7 @@ public:
         : TBase()
         , Request(std::move(request))
         , SchemeCache(MakeSchemeCacheID())
-        , LeaderPipeCache(MakePipePeNodeCacheID(false))
+        , LeaderPipeCache(MakePipePerNodeCacheID(false))
         , Timeout(TDuration::Seconds(DEFAULT_TIMEOUT_SEC))
         , WaitingResolveReply(false)
         , Finished(false)
@@ -147,7 +147,7 @@ private:
             }
 
             std::unique_ptr<TEvTablet::TEvLocalSchemeTx> ev(new TEvTablet::TEvLocalSchemeTx());
-            ctx.Send(MakePipePeNodeCacheID(true), new TEvPipeCache::TEvForward(ev.release(), *tabletId, true), IEventHandle::FlagTrackDelivery);
+            ctx.Send(MakePipePerNodeCacheID(true), new TEvPipeCache::TEvForward(ev.release(), *tabletId, true), IEventHandle::FlagTrackDelivery);
 
             TBase::Become(&TThis::StateWaitResolveTable);
             WaitingResolveReply = true;
@@ -317,6 +317,7 @@ private:
             TTableRange range(MinKey.GetCells(), MinKeyInclusive, MaxKey.GetCells(), MaxKeyInclusive);
             auto tableScanActor = NSysView::CreateSystemViewScan(ctx.SelfID, 0,
                 ResolveNamesResult->ResultSet.front().TableId,
+                JoinPath(ResolveNamesResult->ResultSet.front().Path),
                 range,
                 columns);
 

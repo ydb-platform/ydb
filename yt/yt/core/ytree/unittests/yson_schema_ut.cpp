@@ -157,6 +157,20 @@ struct TTestStructWithCustomType
     }
 };
 
+struct TTestStructWithUndefinedType
+    : public TYsonStruct
+{
+    NYT::NYTree::TYsonStructPtr UndefinedTypeField;
+
+    REGISTER_YSON_STRUCT(TTestStructWithUndefinedType);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("undefined_type_field", &TThis::UndefinedTypeField)
+            .Optional();
+    }
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void CheckSchema(const TYsonStructPtr& ysonStruct, TStringBuf expected)
@@ -217,7 +231,7 @@ TEST(TYsonStructSchemaTest, TestSchemaForProtobufMessage)
                         item={
                             type_name="struct";
                             members=[
-                                {name="int32_field";type="uint32";};
+                                {name="int32_field";type="int32";};
                                 {name="string_field";"type"="utf8";};
                             ];
                         };
@@ -233,6 +247,30 @@ TEST(TYsonStructSchemaTest, TestYsonStructWithCustomType)
         R"({type_name="struct";
             members=[
                 {name="my_type";type="int64";};
+            ]})");
+}
+
+TEST(TYsonStructSchemaTest, TestYsonStructWithUndefinedType)
+{
+    auto ysonStruct = New<TTestStructWithUndefinedType>();
+    CheckSchema(
+        ysonStruct,
+        R"({type_name="struct";
+            members=[
+                {
+                    name="undefined_type_field";
+                    type={type_name="optional";item={type_name="struct";members=[];};};
+                };
+            ]})");
+    ysonStruct->UndefinedTypeField = New<TTestSubStruct>();
+    CheckSchema(
+        ysonStruct,
+        R"({type_name="struct";
+            members=[
+                {
+                    name="undefined_type_field";
+                    type={type_name="optional";item={type_name="struct";members=[{name="my_uint";type="uint32";}]}};
+                };
             ]})");
 }
 

@@ -51,7 +51,7 @@ namespace {
         return false;
     }
 
-    void PrintOptionsDescription(IOutputStream& os, const NLastGetopt::TOpts* opts, NColorizer::TColors& colors) {
+    void PrintOptionsDescription(IOutputStream& os, const NLastGetopt::TOpts* opts, NColorizer::TColors& colors, const TString& command) {
         using namespace NLastGetopt;
         NColorizer::TColors disabledColors(false);
         os << "  ";
@@ -68,20 +68,25 @@ namespace {
             firstPrintedOption = false;
         }
 
-        os << Endl << "  To get full description of these options run 'ydb --help'.";
+        os << Endl << "  To get full description of these options run '" << command << "--help'.";
     }
 
     void PrintParentOptions(TStringStream& stream, TClientCommand::TConfig& config, NColorizer::TColors& colors) {
         bool foundRootParent = false;
-        for (const auto& parentCommand : config.ParentCommands) {
+        TStringBuilder fullCommand;
+        for (const auto& parentCommand: config.ParentCommands) {
+            fullCommand << parentCommand.Name << " ";
             if (parentCommand.Options) {
+                TString name = "Global";
                 if (!foundRootParent) {
                     foundRootParent = true;
-                    stream << colors.BoldColor() << "Global options" << colors.OldColor() << ":" << Endl;
-                    PrintOptionsDescription(stream, parentCommand.Options, colors);
                 } else {
-                    throw yexception() << "More than two tree commands have options";
+                    name = parentCommand.Name;
+                    name[0] = toupper(name[0]);
+                    stream << Endl << Endl;
                 }
+                stream << colors.BoldColor() << name << " options" << colors.OldColor() << ":" << Endl;
+                PrintOptionsDescription(stream, parentCommand.Options, colors, fullCommand);
             }
         }
     }
@@ -101,7 +106,7 @@ TClientCommand::TClientCommand(
 {
     HideOption("svnrevision");
     Opts.AddHelpOption('h');
-    ChangeOptionDescription("help", "Print usage");
+    ChangeOptionDescription("help", "Print usage, -hh for detailed help");
     auto terminalWidth = GetTerminalWidth();
     size_t lineLength = terminalWidth ? *terminalWidth : Max<size_t>();
     Opts.SetWrap(Max(Opts.Wrap_, static_cast<ui32>(lineLength)));
@@ -120,6 +125,32 @@ ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriority(TClientComman
         default:
             return ELogPriority::TLOG_ERR;
     }
+}
+
+size_t TClientCommand::TConfig::ParseHelpCommandVerbosilty(int argc, char** argv) {
+    size_t cnt = 0;
+    for (int i = 0; i < argc; ++i) {
+        TStringBuf arg = argv[i];
+        if (arg == "--help") {
+            ++cnt;
+            continue;
+        }
+        if (arg.StartsWith("--")) { // other option
+            continue;
+        }
+        if (arg.StartsWith("-")) { // char options
+            for (size_t i = 1; i < arg.size(); ++i) {
+                if (arg[i] == 'h') {
+                    ++cnt;
+                }
+            }
+        }
+    }
+
+    if (!cnt) {
+        cnt = 1;
+    }
+    return cnt;
 }
 
 TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config) {
@@ -238,7 +269,7 @@ void TClientCommand::SetCustomUsage(TConfig& config) {
                 foundRootParent = true;
                 fullName << " [global options...]";
             } else {
-                throw yexception() << "More than two tree commands have options";
+                fullName << " [" << parent.Name << " options...]";
             }
         }
         fullName << " ";
@@ -274,6 +305,9 @@ void TClientCommand::RenderOneCommandDescription(
     const NColorizer::TColors& colors,
     RenderEntryType type
 ) {
+    if (Hidden) {
+        return;
+    }
     TString prefix;
     if (type == MIDDLE) {
         prefix = "├─ ";
@@ -303,6 +337,10 @@ void TClientCommand::RenderOneCommandDescription(
     stream << '\n';
 }
 
+void TClientCommand::Hide() {
+    Hidden = true;
+}
+
 TClientCommandTree::TClientCommandTree(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
     : TClientCommand(name, aliases, description)
     , SelectedCommand(nullptr)
@@ -316,6 +354,11 @@ void TClientCommandTree::AddCommand(std::unique_ptr<TClientCommand> command) {
     }
     command->Parent = this;
     SubCommands[command->Name] = std::move(command);
+}
+
+void TClientCommandTree::AddHiddenCommand(std::unique_ptr<TClientCommand> command) {
+    command->Hide();
+    AddCommand(std::move(command));
 }
 
 void TClientCommandTree::Config(TConfig& config) {

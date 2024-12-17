@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <library/cpp/json/json_writer.h>
+#include <mutex>
 
 namespace NYdb {
 namespace NConsoleClient {

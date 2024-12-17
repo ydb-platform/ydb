@@ -1,8 +1,8 @@
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tablet/tablet_impl.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/util/console.h>
 #include <ydb/core/client/minikql_compile/yql_expr_minikql.h>
@@ -13,8 +13,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/diff/diff.h>
 
-#include <ydb/library/yql/ast/yql_ast.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_ast.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <util/folder/path.h>
 #include <util/generic/xrange.h>
@@ -338,11 +338,13 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TClient client(settings);
 
         NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT(client.LocalQuery(TxAllocator, "("
-            "(let row '('('dummyKey (Bool 'true))))"
-            "(let select '('reservedIds))"
-            "(return (AsList (SetResult 'reservedIds (SelectRow 'config row select))))"
-        ")", res));
+        UNIT_ASSERT_VALUES_EQUAL(
+            LocalQuery(*server.GetRuntime(), TxAllocator, "("
+                "(let row '('('dummyKey (Bool 'true))))"
+                "(let select '('reservedIds))"
+                "(return (AsList (SetResult 'reservedIds (SelectRow 'config row select))))"
+            ")", res),
+            NKikimrProto::OK);
 
         {
             TValue value = TValue::Create(res.GetValue(), res.GetType());
@@ -1793,15 +1795,14 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         const auto settings = TServerSettings(port);
         TServer server(settings);
-        TClient client(settings);
 
         NTabletFlatScheme::TSchemeChanges scheme1;
         NTabletFlatScheme::TSchemeChanges scheme2;
         TString err;
-        bool success = client.LocalSchemeTx(Tests::Hive, "", true, scheme1, err);
-        UNIT_ASSERT(success);
-        success = client.LocalSchemeTx(Tests::Hive, "", false, scheme2, err);
-        UNIT_ASSERT(success);
+        auto status = LocalSchemeTx(*server.GetRuntime(), Tests::Hive, "", true, scheme1, err);
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
+        status = LocalSchemeTx(*server.GetRuntime(), Tests::Hive, "", false, scheme2, err);
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
 
         UNIT_ASSERT_VALUES_EQUAL(ToString(scheme1), ToString(scheme2));
     }
@@ -1816,10 +1817,10 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         NTabletFlatScheme::TSchemeChanges scheme;
         TString err;
-        bool success = false;
+        NKikimrProto::EReplyStatus status;
 
-        success = client.LocalSchemeTx(Tests::Hive, "", true, scheme, err);
-        UNIT_ASSERT(success);
+        status = LocalSchemeTx(*server.GetRuntime(), Tests::Hive, "", true, scheme, err);
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
         TString oldScheme = ToString(scheme);
 
         TString change =  R"___(
@@ -1837,17 +1838,18 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 )___";
 
         // Dry run first
-        success = client.LocalSchemeTx(Tests::Hive, change, true, scheme, err);
-        UNIT_ASSERT(success);
+        status = LocalSchemeTx(*server.GetRuntime(), Tests::Hive, change, true, scheme, err);
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
         TString dryRunScheme = ToString(scheme);
         // Re-read
-        success = client.LocalSchemeTx(Tests::Hive, "", true, scheme, err);
+        status = LocalSchemeTx(*server.GetRuntime(), Tests::Hive, "", true, scheme, err);
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
         TString newScheme = ToString(scheme);
         UNIT_ASSERT_VALUES_EQUAL_C(newScheme, oldScheme, "Schema changed by dry-run");
 
         // Update
-        success = client.LocalSchemeTx(Tests::Hive, change, false, scheme, err);
-        UNIT_ASSERT(success);
+        status = LocalSchemeTx(*server.GetRuntime(), Tests::Hive, change, false, scheme, err);
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
         newScheme = ToString(scheme);
         UNIT_ASSERT_VALUES_EQUAL_C(newScheme, dryRunScheme, "Dry-run result is not equal");
 
@@ -1869,10 +1871,10 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         NTabletFlatScheme::TSchemeChanges schemeInitial;
         TString err;
-        bool success = false;
+        NKikimrProto::EReplyStatus status;
 
-        success = client.LocalSchemeTx(Tests::DummyTablet1, "", true, schemeInitial, err);
-        UNIT_ASSERT(success);
+        status = LocalSchemeTx(*server.GetRuntime(), Tests::DummyTablet1, "", true, schemeInitial, err);
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
         const TString oldScheme = ToString(schemeInitial);
 
         TString change =  R"___(
@@ -1884,8 +1886,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         // Update
         NTabletFlatScheme::TSchemeChanges schemeChanged;
-        success = client.LocalSchemeTx(Tests::DummyTablet1, change, false, schemeChanged, err);
-        UNIT_ASSERT(success);
+        status = LocalSchemeTx(*server.GetRuntime(), Tests::DummyTablet1, change, false, schemeChanged, err);
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
         const TString newScheme = ToString(schemeChanged);
 
         TString schemaDiff = DiffStrings(oldScheme, newScheme);

@@ -1,0 +1,335 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+SKIP     CC-BY-4.0            0ec92fc648504d1069b11b64e44bfdc4
+BELONGS ya.make
+    License text:
+        Markus Kuhn [ˈmaʳkʊs kuːn] <http://www.cl.cam.ac.uk/~mgk25/> — 2002-07-25 CC BY
+    Scancode info:
+        Original SPDX id: CC-BY-4.0
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://creativecommons.org/licenses/by/4.0/, http://creativecommons.org/licenses/by/4.0/legalcode, https://spdx.org/licenses/CC-BY-4.0
+    Files with this license:
+        third_party/utf8_range/UTF-8-demo.txt [5:5]
+
+KEEP     MIT                  399584035c417b91040964779555dfac
+BELONGS ya.make
+    License text:
+        MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        third_party/utf8_range/LICENSE [1:1]
+
+KEEP     MIT                  4b22d8fd72d8f6c6211edffd2b6983d7
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: third_party/utf8_range/utf8_validity.cc at line 4, third_party/utf8_range/utf8_validity.h at line 4
+FILE_INCLUDE third_party/utf8_range/LICENSE found in files: third_party/utf8_range/utf8_validity.cc at line 4, third_party/utf8_range/utf8_validity.h at line 4
+    License text:
+        // Use of this source code is governed by an MIT-style
+        // license that can be found in the LICENSE file or at
+        // https://opensource.org/licenses/MIT.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        third_party/utf8_range/utf8_validity.cc [3:5]
+        third_party/utf8_range/utf8_validity.h [3:5]
+
+KEEP     MIT                  54575e81a786e9aa7d98337ec2e1ebb0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        third_party/utf8_range/LICENSE [6:22]
+
+SKIP     LicenseRef-scancode-generic-cla 5d780ffa423067f23c6a123ae33e7c18
+BELONGS ya.make
+    License text:
+        \## Contributor License Agreement
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        third_party/utf8_range/CONTRIBUTING.md [8:8]
+
+SKIP     LicenseRef-scancode-proprietary-license 67e6ac0ff3543e750737c958f31bbc07
+BELONGS ya.make
+    License text:
+          // a reasonable default is used.  The caller retains ownership of
+          // copying_stream unless SetOwnsCopyingStream(true) is called.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-proprietary-license
+        Score           : 4.94
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/proprietary-license.LICENSE
+    Files with this license:
+        src/google/protobuf/io/zero_copy_stream_impl_lite.h [218:219]
+
+KEEP     BSD-3-Clause         6aa235708ac9f5dd8e5c6ac415fc5837
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/google/protobuf/any.cc [5:29]
+        src/google/protobuf/any.h [5:29]
+        src/google/protobuf/any.proto [5:29]
+        src/google/protobuf/any_lite.cc [5:29]
+        src/google/protobuf/api.proto [5:29]
+        src/google/protobuf/arena.cc [5:29]
+        src/google/protobuf/arena.h [5:29]
+        src/google/protobuf/arena_align.cc [5:29]
+        src/google/protobuf/arena_align.h [5:29]
+        src/google/protobuf/arena_allocation_policy.h [5:29]
+        src/google/protobuf/arena_cleanup.h [5:29]
+        src/google/protobuf/arena_config.cc [5:29]
+        src/google/protobuf/arena_config.h [5:29]
+        src/google/protobuf/arenastring.cc [5:29]
+        src/google/protobuf/arenastring.h [5:29]
+        src/google/protobuf/arenaz_sampler.cc [5:29]
+        src/google/protobuf/arenaz_sampler.h [5:29]
+        src/google/protobuf/descriptor.cc [5:29]
+        src/google/protobuf/descriptor.h [5:29]
+        src/google/protobuf/descriptor.proto [5:29]
+        src/google/protobuf/descriptor_database.cc [5:29]
+        src/google/protobuf/descriptor_database.h [5:29]
+        src/google/protobuf/duration.proto [5:29]
+        src/google/protobuf/dynamic_message.cc [5:29]
+        src/google/protobuf/dynamic_message.h [5:29]
+        src/google/protobuf/empty.proto [5:29]
+        src/google/protobuf/endian.h [5:29]
+        src/google/protobuf/explicitly_constructed.h [5:29]
+        src/google/protobuf/extension_set.cc [5:29]
+        src/google/protobuf/extension_set.h [5:29]
+        src/google/protobuf/extension_set_heavy.cc [5:29]
+        src/google/protobuf/extension_set_inl.h [5:29]
+        src/google/protobuf/field_mask.proto [5:29]
+        src/google/protobuf/generated_enum_reflection.h [5:29]
+        src/google/protobuf/generated_enum_util.cc [5:29]
+        src/google/protobuf/generated_enum_util.h [5:29]
+        src/google/protobuf/generated_message_bases.cc [5:29]
+        src/google/protobuf/generated_message_bases.h [5:29]
+        src/google/protobuf/generated_message_reflection.cc [5:29]
+        src/google/protobuf/generated_message_reflection.h [5:29]
+        src/google/protobuf/generated_message_tctable_decl.h [5:29]
+        src/google/protobuf/generated_message_tctable_full.cc [5:29]
+        src/google/protobuf/generated_message_tctable_gen.cc [5:29]
+        src/google/protobuf/generated_message_tctable_gen.h [5:29]
+        src/google/protobuf/generated_message_tctable_impl.h [5:29]
+        src/google/protobuf/generated_message_tctable_lite.cc [5:29]
+        src/google/protobuf/generated_message_util.cc [5:29]
+        src/google/protobuf/generated_message_util.h [5:29]
+        src/google/protobuf/has_bits.h [5:29]
+        src/google/protobuf/implicit_weak_message.cc [5:29]
+        src/google/protobuf/implicit_weak_message.h [5:29]
+        src/google/protobuf/inlined_string_field.cc [5:29]
+        src/google/protobuf/inlined_string_field.h [5:29]
+        src/google/protobuf/io/coded_stream.cc [5:29]
+        src/google/protobuf/io/coded_stream.h [5:29]
+        src/google/protobuf/io/gzip_stream.cc [5:29]
+        src/google/protobuf/io/gzip_stream.h [5:29]
+        src/google/protobuf/io/io_win32.cc [5:29]
+        src/google/protobuf/io/io_win32.h [5:29]
+        src/google/protobuf/io/printer.cc [5:29]
+        src/google/protobuf/io/printer.h [5:29]
+        src/google/protobuf/io/strtod.cc [5:29]
+        src/google/protobuf/io/strtod.h [5:29]
+        src/google/protobuf/io/tokenizer.cc [5:29]
+        src/google/protobuf/io/tokenizer.h [5:29]
+        src/google/protobuf/io/zero_copy_sink.cc [5:29]
+        src/google/protobuf/io/zero_copy_sink.h [5:29]
+        src/google/protobuf/io/zero_copy_stream.cc [5:29]
+        src/google/protobuf/io/zero_copy_stream.h [5:29]
+        src/google/protobuf/io/zero_copy_stream_impl.cc [5:29]
+        src/google/protobuf/io/zero_copy_stream_impl.h [5:29]
+        src/google/protobuf/io/zero_copy_stream_impl_lite.cc [5:29]
+        src/google/protobuf/io/zero_copy_stream_impl_lite.h [5:29]
+        src/google/protobuf/json/internal/descriptor_traits.h [5:29]
+        src/google/protobuf/json/internal/lexer.cc [5:29]
+        src/google/protobuf/json/internal/lexer.h [5:29]
+        src/google/protobuf/json/internal/message_path.cc [5:29]
+        src/google/protobuf/json/internal/message_path.h [5:29]
+        src/google/protobuf/json/internal/parser.cc [5:29]
+        src/google/protobuf/json/internal/parser.h [5:29]
+        src/google/protobuf/json/internal/parser_traits.h [5:29]
+        src/google/protobuf/json/internal/unparser.cc [5:29]
+        src/google/protobuf/json/internal/unparser.h [5:29]
+        src/google/protobuf/json/internal/unparser_traits.h [5:29]
+        src/google/protobuf/json/internal/untyped_message.cc [5:29]
+        src/google/protobuf/json/internal/untyped_message.h [6:30]
+        src/google/protobuf/json/internal/writer.cc [5:29]
+        src/google/protobuf/json/internal/writer.h [5:29]
+        src/google/protobuf/json/internal/zero_copy_buffered_stream.cc [5:29]
+        src/google/protobuf/json/internal/zero_copy_buffered_stream.h [5:29]
+        src/google/protobuf/json/json.cc [5:29]
+        src/google/protobuf/json/json.h [5:29]
+        src/google/protobuf/json/old_json.cc [5:29]
+        src/google/protobuf/map.cc [5:29]
+        src/google/protobuf/map.h [5:29]
+        src/google/protobuf/map_entry.h [5:29]
+        src/google/protobuf/map_entry_lite.h [5:29]
+        src/google/protobuf/map_field.cc [5:29]
+        src/google/protobuf/map_field.h [5:29]
+        src/google/protobuf/map_field_inl.h [5:29]
+        src/google/protobuf/map_field_lite.h [5:29]
+        src/google/protobuf/map_type_handler.h [5:29]
+        src/google/protobuf/message.cc [5:29]
+        src/google/protobuf/message.h [5:29]
+        src/google/protobuf/message_lite.cc [5:29]
+        src/google/protobuf/message_lite.h [5:29]
+        src/google/protobuf/metadata_lite.h [5:29]
+        src/google/protobuf/parse_context.cc [5:29]
+        src/google/protobuf/parse_context.h [5:29]
+        src/google/protobuf/port.h [5:29]
+        src/google/protobuf/port_def.inc [6:30]
+        src/google/protobuf/port_undef.inc [6:30]
+        src/google/protobuf/reflection.h [5:29]
+        src/google/protobuf/reflection_internal.h [5:29]
+        src/google/protobuf/reflection_ops.cc [5:29]
+        src/google/protobuf/reflection_ops.h [5:29]
+        src/google/protobuf/repeated_field.cc [5:29]
+        src/google/protobuf/repeated_field.h [5:29]
+        src/google/protobuf/repeated_ptr_field.cc [5:29]
+        src/google/protobuf/repeated_ptr_field.h [5:29]
+        src/google/protobuf/serial_arena.h [5:29]
+        src/google/protobuf/service.cc [5:29]
+        src/google/protobuf/service.h [5:29]
+        src/google/protobuf/source_context.proto [5:29]
+        src/google/protobuf/string_block.h [5:29]
+        src/google/protobuf/struct.proto [5:29]
+        src/google/protobuf/stubs/callback.h [5:29]
+        src/google/protobuf/stubs/common.cc [5:29]
+        src/google/protobuf/stubs/common.h [5:29]
+        src/google/protobuf/stubs/hash.h [5:29]
+        src/google/protobuf/stubs/map_util.h [5:29]
+        src/google/protobuf/stubs/platform_macros.h [5:29]
+        src/google/protobuf/stubs/port.h [5:29]
+        src/google/protobuf/stubs/status.cc [5:29]
+        src/google/protobuf/stubs/status.h [5:29]
+        src/google/protobuf/stubs/status_macros.h [5:29]
+        src/google/protobuf/stubs/stl_util.h [5:29]
+        src/google/protobuf/stubs/stringpiece.cc [5:29]
+        src/google/protobuf/stubs/stringpiece.h [5:29]
+        src/google/protobuf/stubs/structurally_valid.cc [5:29]
+        src/google/protobuf/stubs/strutil.cc [5:29]
+        src/google/protobuf/stubs/strutil.h [5:29]
+        src/google/protobuf/stubs/substitute.cc [5:29]
+        src/google/protobuf/stubs/substitute.h [5:29]
+        src/google/protobuf/text_format.cc [5:29]
+        src/google/protobuf/text_format.h [5:29]
+        src/google/protobuf/thread_safe_arena.h [5:29]
+        src/google/protobuf/timestamp.proto [5:29]
+        src/google/protobuf/type.proto [5:29]
+        src/google/protobuf/unknown_field_set.cc [5:29]
+        src/google/protobuf/unknown_field_set.h [5:29]
+        src/google/protobuf/util/delimited_message_util.cc [5:29]
+        src/google/protobuf/util/delimited_message_util.h [5:29]
+        src/google/protobuf/util/field_comparator.cc [5:29]
+        src/google/protobuf/util/field_comparator.h [5:29]
+        src/google/protobuf/util/field_mask_util.cc [5:29]
+        src/google/protobuf/util/field_mask_util.h [5:29]
+        src/google/protobuf/util/message_differencer.cc [5:29]
+        src/google/protobuf/util/message_differencer.h [5:29]
+        src/google/protobuf/util/time_util.cc [5:29]
+        src/google/protobuf/util/time_util.h [5:29]
+        src/google/protobuf/util/type_resolver.h [5:29]
+        src/google/protobuf/util/type_resolver_util.cc [5:29]
+        src/google/protobuf/util/type_resolver_util.h [5:29]
+        src/google/protobuf/wire_format.cc [5:29]
+        src/google/protobuf/wire_format.h [5:29]
+        src/google/protobuf/wire_format_lite.cc [5:29]
+        src/google/protobuf/wire_format_lite.h [5:29]
+        src/google/protobuf/wrappers.proto [5:29]
+
+KEEP     Protobuf-License     77b55cb8215e726b6ae7c1cf484bc45f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-protobuf
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://protobuf.googlecode.com/svn/trunk/COPYING.txt, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/protobuf.LICENSE
+    Files with this license:
+        LICENSE [3:32]
+
+SKIP     LicenseRef-scancode-generic-cla beb3339ebeb4487c0ec15f216cc26cb2
+BELONGS ya.make
+    License text:
+        \### Contributor License Agreements
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 80.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [35:35]
+
+SKIP     LicenseRef-scancode-generic-cla d629c1791f1024cda2ec24fa16773bcd
+BELONGS ya.make
+    License text:
+        Contributions to this project must be accompanied by a Contributor License
+        Agreement (CLA). You (or your employer) retain the copyright to your
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 22.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        third_party/utf8_range/CONTRIBUTING.md [10:11]
+
+SKIP     LicenseRef-scancode-generic-cla d72fcd21b18e44b666a94e6225ed43eb
+BELONGS ya.make
+    License text:
+        Contributions to this project must be accompanied by a Contributor License
+        Agreement. You (or your employer) retain the copyright to your contribution,
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [37:38]

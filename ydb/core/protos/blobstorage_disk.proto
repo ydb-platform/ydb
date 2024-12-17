@@ -2,6 +2,8 @@ package NKikimrBlobStorage;
 option java_package = "ru.yandex.kikimr.proto";
 
 import "ydb/core/protos/blobstorage_disk_color.proto";
+import "ydb/core/protos/whiteboard_disk_states.proto";
+import "ydb/core/protos/whiteboard_flags.proto";
 
 message TPDiskState {
     enum E {
@@ -39,6 +41,11 @@ message TVDiskID {
     optional uint32 VDisk = 5;
 }
 
+message TPDiskId {
+    optional uint32 NodeId = 1;
+    optional uint32 PDiskId = 2;
+}
+
 message TVSlotId {
     optional uint32 NodeId = 1;
     optional uint32 PDiskId = 2;
@@ -56,6 +63,9 @@ message TVDiskMetrics {
     optional TVSlotId VSlotId = 8;
     optional double Occupancy = 9;
     optional NKikimrBlobStorage.TPDiskSpaceColor.E SpaceColor = 10;
+    optional NKikimrWhiteboard.EVDiskState State = 11;
+    optional bool Replicated = 12;
+    optional NKikimrWhiteboard.EFlag DiskSpace = 13;
 }
 
 message TPDiskMetrics {

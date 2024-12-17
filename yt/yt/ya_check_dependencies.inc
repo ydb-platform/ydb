@@ -10,6 +10,7 @@ CHECK_DEPENDENT_DIRS(ALLOW_ONLY ALL
     mapreduce
     tools
     util
+    vendor
     yp
     yt
 )

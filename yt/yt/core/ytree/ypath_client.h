@@ -25,6 +25,8 @@ public:
     //! This simplifies correlating requests with responses within a batch.
     DEFINE_BYREF_RW_PROPERTY(std::any, Tag);
 
+    DEFINE_BYREF_RW_PROPERTY(std::vector<TSharedRef>, Attachments);
+
 public:
     NRpc::TRequestId GetRequestId() const override;
     NRpc::TRealmId GetRealmId() const override;
@@ -37,11 +39,11 @@ public:
     void DeclareClientFeature(int featureId) override;
     void RequireServerFeature(int featureId) override;
 
-    const TString& GetUser() const override;
-    void SetUser(const TString& user) override;
+    const std::string& GetUser() const override;
+    void SetUser(const std::string& user) override;
 
-    const TString& GetUserTag() const override;
-    void SetUserTag(const TString& tag) override;
+    const std::string& GetUserTag() const override;
+    void SetUserTag(const std::string& tag) override;
 
     void SetUserAgent(const TString& userAgent) override;
 
@@ -55,6 +57,8 @@ public:
 
     const NRpc::NProto::TRequestHeader& Header() const override;
     NRpc::NProto::TRequestHeader& Header() override;
+
+    bool IsAttachmentCompressionEnabled() const override;
 
     bool IsStreamingEnabled() const override;
 
@@ -81,7 +85,6 @@ protected:
         bool mutating);
 
     NRpc::NProto::TRequestHeader Header_;
-    std::vector<TSharedRef> Attachments_;
 
     virtual TSharedRef SerializeBody() const = 0;
 };
@@ -119,7 +122,7 @@ protected:
     {
         // COPMAT(danilalexeev): legacy RPC codecs
         if (Header_.has_request_codec()) {
-            YT_VERIFY(Header_.request_codec() == NYT::ToProto<int>(NCompression::ECodec::None));
+            YT_VERIFY(Header_.request_codec() == NYT::ToProto(NCompression::ECodec::None));
             return SerializeProtoToRefWithCompression(*this);
         } else {
             return SerializeProtoToRefWithEnvelope(*this);
@@ -199,19 +202,14 @@ protected:
 // it would be TYPathBuf, but for now it breaks the advantages for CoW of the
 // TString. Rethink it if and when YT will try to use std::string or non-CoW
 // TString everywhere.
-#ifdef YT_USE_VANILLA_PROTOBUF
+using TYPathMaybeRef = std::conditional_t<IsArcadiaProtobuf, const TYPath&, TYPath>;
 
-TYPath GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
-TYPath GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
+TYPathMaybeRef GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
+TYPathMaybeRef GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
 
-#else
+const google::protobuf::RepeatedPtrField<TProtobufString>& GetOriginalRequestAdditionalPaths(const NRpc::NProto::TRequestHeader& header);
 
-const TYPath& GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
-const TYPath& GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
-
-#endif
-
-void SetRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPath path);
+void SetRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPathBuf path);
 
 bool IsRequestMutating(const NRpc::NProto::TRequestHeader& header);
 
@@ -264,13 +262,15 @@ TString SyncYPathGetKey(
 TFuture<NYson::TYsonString> AsyncYPathGet(
     const IYPathServicePtr& service,
     const TYPath& path,
-    const TAttributeFilter& attributeFilter = {});
+    const TAttributeFilter& attributeFilter = {},
+    const IAttributeDictionaryPtr& options = {});
 
 //! Executes |Get| verb assuming #service handles requests synchronously. Throws if an error has occurred.
 NYson::TYsonString SyncYPathGet(
     const IYPathServicePtr& service,
     const TYPath& path,
-    const TAttributeFilter& attributeFilter = {});
+    const TAttributeFilter& attributeFilter = {},
+    const IAttributeDictionaryPtr& options = {});
 
 //! Asynchronously executes |Exists| verb.
 TFuture<bool> AsyncYPathExists(
@@ -348,7 +348,7 @@ bool AreNodesEqual(
     const INodePtr& rhs,
     const TNodesEqualityOptions& options = {});
 
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 struct TNodeWalkOptions
 {

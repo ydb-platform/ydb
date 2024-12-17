@@ -6,6 +6,7 @@
 
 // for 'create' funcs
 #include <ydb/core/mind/bscontroller/bsc.h>
+#include <ydb/core/backup/controller/tablet.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/mediator/mediator.h>
@@ -81,16 +82,13 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
             TIntrusivePtr<TTabletSetupInfo> tabletSetupInfo = MakeTabletSetupInfo(tabletType, appData->UserPoolId, appData->SystemPoolId);
 
             TIntrusivePtr<TBootstrapperInfo> bi = new TBootstrapperInfo(tabletSetupInfo.Get());
-            if (config.NodeSize() != 1) {
-                for (ui32 node : config.GetNode()) {
-                    if (node != selfNode)
-                        bi->OtherNodes.emplace_back(node);
-                }
-                if (config.HasWatchThreshold())
-                    bi->WatchThreshold = TDuration::MilliSeconds(config.GetWatchThreshold());
-                if (config.HasStartFollowers())
-                    bi->StartFollowers = config.GetStartFollowers();
+            for (ui32 node : config.GetNode()) {
+                bi->Nodes.emplace_back(node);
             }
+            if (config.HasWatchThreshold())
+                bi->WatchThreshold = TDuration::MilliSeconds(config.GetWatchThreshold());
+            if (config.HasStartFollowers())
+                bi->StartFollowers = config.GetStartFollowers();
 
             BootstrapperInstance = Register(CreateBootstrapper(storageInfo.Get(), bi.Get(), false), TMailboxType::HTSwap, appData->SystemPoolId);
 
@@ -230,6 +228,9 @@ TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(
         break;
     case TTabletTypes::StatisticsAggregator:
         createFunc = &NStat::CreateStatisticsAggregator;
+        break;
+    case TTabletTypes::BackupController:
+        createFunc = &NBackup::CreateBackupController;
         break;
     default:
         return nullptr;

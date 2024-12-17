@@ -8,7 +8,7 @@ with customer_total_return as
      ,{{date_dim}}
      ,{{customer_address}}
  where cr_returned_date_sk = d_date_sk
-   and d_year =1998
+   and d_year =2000
    and cr_returning_addr_sk = ca_address_sk
  group by cr_returning_customer_sk
          ,ca_state )
@@ -18,11 +18,11 @@ with customer_total_return as
  from customer_total_return ctr1
      ,{{customer_address}}
      ,{{customer}}
- where ctr1.ctr_total_return > (select avg(ctr_total_return)*1.2::numeric
+ where ctr1.ctr_total_return > (select avg(ctr_total_return)*1.2
  			  from customer_total_return ctr2
                   	  where ctr1.ctr_state = ctr2.ctr_state)
        and ca_address_sk = c_current_addr_sk
-       and ca_state = 'TX'
+       and ca_state = 'GA'
        and ctr1.ctr_customer_sk = c_customer_sk
  order by c_customer_id nulls first
  ,c_salutation nulls first

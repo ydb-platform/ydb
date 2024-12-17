@@ -14,13 +14,16 @@ std::shared_ptr<TReplCtx> CreateReplCtx(TVector<TVDiskID>& vdisks, const TIntrus
     auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
     auto vctx = MakeIntrusive<TVDiskContext>(TActorId(), info->PickTopology(), counters, TVDiskID(0, 1, 0, 0, 0),
         nullptr, NPDisk::DEVICE_TYPE_UNKNOWN);
-    auto hugeBlobCtx = std::make_shared<THugeBlobCtx>(512u << 10u, nullptr);
-    auto dsk = MakeIntrusive<TPDiskParams>(ui8(1), 1u, 128u << 20, 4096u, 0u, 1000000000u, 1000000000u, 65536u, 65536u, 65536u);
+    auto hugeBlobCtx = std::make_shared<THugeBlobCtx>(nullptr, true);
+    auto dsk = MakeIntrusive<TPDiskParams>(ui8(1), 1u, 128u << 20, 4096u, 0u, 1000000000u, 1000000000u, 65536u, 65536u, 65536u,
+            NPDisk::DEVICE_TYPE_UNKNOWN);
     auto pdiskCtx = std::make_shared<TPDiskCtx>(dsk, TActorId(), TString());
     auto replCtx = std::make_shared<TReplCtx>(
         vctx,
+        nullptr,
         pdiskCtx,
         hugeBlobCtx,
+        4097,
         nullptr,
         info,
         TActorId(),
@@ -36,7 +39,7 @@ TVDiskContextPtr CreateVDiskContext(const TBlobStorageGroupInfo& info) {
 
 TIntrusivePtr<THullCtx> CreateHullCtx(const TBlobStorageGroupInfo& info, ui32 chunkSize, ui32 compWorthReadSize) {
     return MakeIntrusive<THullCtx>(CreateVDiskContext(info), chunkSize, compWorthReadSize, true, true, true, true, 1u,
-        1u, 2.0, 10u, 10u, 20u, 0.5, TDuration::Minutes(5), TDuration::Seconds(1));
+        1u, 2.0, 10u, 10u, 10u, 20u, 0.5, TDuration::Minutes(5), TDuration::Seconds(1), true);
 }
 
 TIntrusivePtr<THullDs> CreateHullDs(const TBlobStorageGroupInfo& info) {
@@ -111,7 +114,7 @@ Y_UNIT_TEST_SUITE(HullReplWriteSst) {
                         if (TIngress::CreateIngressWithLocal(&groupInfo->GetTopology(), replCtx->VCtx->ShortSelfVDisk,
                                 TLogoBlobID(id, partIdx + 1))) {
                             vec.Set(partIdx);
-                            rope = TDiskBlob::Create(size, partIdx + 1, vec.GetSize(), TRope(std::move(data)), arena);
+                            rope = TDiskBlob::Create(size, partIdx + 1, vec.GetSize(), TRope(std::move(data)), arena, true);
                             break;
                         }
                     }

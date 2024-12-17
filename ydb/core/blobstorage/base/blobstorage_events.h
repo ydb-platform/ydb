@@ -21,10 +21,16 @@ namespace NKikimr {
         TEvControllerUpdateDiskStatus() = default;
 
         TEvControllerUpdateDiskStatus(const TVDiskID& vDiskId, ui32 nodeId, ui32 pdiskId, ui32 vslotId,
-                ui32 satisfactionRankPercent) {
+                std::optional<ui32> satisfactionRankPercent, NKikimrWhiteboard::EVDiskState state, bool replicated,
+                NKikimrWhiteboard::EFlag diskSpace) {
             NKikimrBlobStorage::TVDiskMetrics* metric = Record.AddVDisksMetrics();
             VDiskIDFromVDiskID(vDiskId, metric->MutableVDiskId());
-            metric->SetSatisfactionRank(satisfactionRankPercent);
+            if (satisfactionRankPercent) {
+                metric->SetSatisfactionRank(*satisfactionRankPercent);
+            }
+            metric->SetState(state);
+            metric->SetReplicated(replicated);
+            metric->SetDiskSpace(diskSpace);
             auto *p = metric->MutableVSlotId();
             p->SetNodeId(nodeId);
             p->SetPDiskId(pdiskId);
@@ -84,7 +90,6 @@ namespace NKikimr {
             return str.Str();
         }
     };
-
 
     struct TEvBlobStorage::TEvControllerNodeServiceSetUpdate : public TEventPB<
         TEvBlobStorage::TEvControllerNodeServiceSetUpdate,
@@ -276,12 +281,13 @@ namespace NKikimr {
     {
         TEvVStatusResult() = default;
 
-        TEvVStatusResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, bool joinedGroup, bool replicated,
+        TEvVStatusResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, bool joinedGroup, bool replicated, bool isReadOnly,
                 ui64 incarnationGuid)
         {
             Record.SetStatus(status);
             Record.SetJoinedGroup(joinedGroup);
             Record.SetReplicated(replicated);
+            Record.SetIsReadOnly(isReadOnly);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
             if (status == NKikimrProto::OK) {
                 Record.SetIncarnationGuid(incarnationGuid);
@@ -372,10 +378,10 @@ namespace NKikimr {
         }
     };
 
-    struct TEvBlobStorage::TEvAskRestartPDisk : TEventLocal<TEvAskRestartPDisk, EvAskRestartPDisk> {
+    struct TEvBlobStorage::TEvAskWardenRestartPDisk : TEventLocal<TEvAskWardenRestartPDisk, EvAskWardenRestartPDisk> {
         const ui32 PDiskId;
 
-        TEvAskRestartPDisk(const ui32& pdiskId)
+        TEvAskWardenRestartPDisk(const ui32& pdiskId)
             : PDiskId(pdiskId)
         {}
     };
@@ -393,23 +399,28 @@ namespace NKikimr {
         {}
     };
 
-    struct TEvBlobStorage::TEvRestartPDisk : TEventLocal<TEvRestartPDisk, EvRestartPDisk> {
+    struct TEvBlobStorage::TEvAskWardenRestartPDiskResult : TEventLocal<TEvAskWardenRestartPDiskResult, EvAskWardenRestartPDiskResult> {
         const ui32 PDiskId;
         const NPDisk::TMainKey MainKey;
+        const bool RestartAllowed;
         TIntrusivePtr<TPDiskConfig> Config;
+        TString Details;
 
-        TEvRestartPDisk(const ui32& pdiskId, const NPDisk::TMainKey& mainKey, const TIntrusivePtr<TPDiskConfig>& config)
+        TEvAskWardenRestartPDiskResult(const ui32 pdiskId, const NPDisk::TMainKey& mainKey, const bool restartAllowed, const TIntrusivePtr<TPDiskConfig>& config,
+            TString details = "")
             : PDiskId(pdiskId)
             , MainKey(mainKey)
+            , RestartAllowed(restartAllowed)
             , Config(config)
+            , Details(details)
         {}
     };
 
-    struct TEvBlobStorage::TEvRestartPDiskResult : TEventLocal<TEvRestartPDiskResult, EvRestartPDiskResult> {
+    struct TEvBlobStorage::TEvNotifyWardenPDiskRestarted : TEventLocal<TEvNotifyWardenPDiskRestarted, EvNotifyWardenPDiskRestarted> {
         const ui32 PDiskId;
         NKikimrProto::EReplyStatus Status;
 
-        TEvRestartPDiskResult(const ui32& pdiskId, NKikimrProto::EReplyStatus status = NKikimrProto::EReplyStatus::OK)
+        TEvNotifyWardenPDiskRestarted(const ui32 pdiskId, NKikimrProto::EReplyStatus status = NKikimrProto::EReplyStatus::OK)
             : PDiskId(pdiskId)
             , Status(status)
         {}

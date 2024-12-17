@@ -145,64 +145,18 @@ bool TYPathServiceBase::ShouldHideAttributes()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define IMPLEMENT_SUPPORTS_VERB_RESOLVE(method, onPathError) \
-    DEFINE_RPC_SERVICE_METHOD(TSupports##method, method) \
-    { \
-        NYPath::TTokenizer tokenizer(GetRequestTargetYPath(context->RequestHeader())); \
-        if (tokenizer.Advance() == NYPath::ETokenType::EndOfStream) { \
-            method##Self(request, response, context); \
-            return; \
-        } \
-        tokenizer.Skip(NYPath::ETokenType::Ampersand); \
-        if (tokenizer.GetType() != NYPath::ETokenType::Slash) { \
-            onPathError \
-            return; \
-        } \
-        if (tokenizer.Advance() == NYPath::ETokenType::At) { \
-            method##Attribute(TYPath(tokenizer.GetSuffix()), request, response, context); \
-        } else { \
-            method##Recursive(TYPath(tokenizer.GetInput()), request, response, context); \
-        } \
-    }
+IMPLEMENT_SUPPORTS_METHOD(GetKey)
+IMPLEMENT_SUPPORTS_METHOD(Get)
+IMPLEMENT_SUPPORTS_METHOD(Set)
+IMPLEMENT_SUPPORTS_METHOD(List)
+IMPLEMENT_SUPPORTS_METHOD(Remove)
 
-#define IMPLEMENT_SUPPORTS_VERB(method) \
-    IMPLEMENT_SUPPORTS_VERB_RESOLVE( \
-        method, \
-        { \
-            tokenizer.ThrowUnexpected(); \
-        } \
-    ) \
-    \
-    void TSupports##method::method##Attribute(const TYPath& /*path*/, TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
-    { \
-        ThrowMethodNotSupported(context->GetMethod(), TString("attribute")); \
-    } \
-    \
-    void TSupports##method::method##Self(TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
-    { \
-        ThrowMethodNotSupported(context->GetMethod(), TString("self")); \
-    } \
-    \
-    void TSupports##method::method##Recursive(const TYPath& /*path*/, TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
-    { \
-        ThrowMethodNotSupported(context->GetMethod(), TString("recursive")); \
-    }
-
-IMPLEMENT_SUPPORTS_VERB(GetKey)
-IMPLEMENT_SUPPORTS_VERB(Get)
-IMPLEMENT_SUPPORTS_VERB(Set)
-IMPLEMENT_SUPPORTS_VERB(List)
-IMPLEMENT_SUPPORTS_VERB(Remove)
-
-IMPLEMENT_SUPPORTS_VERB_RESOLVE(
+IMPLEMENT_SUPPORTS_METHOD_RESOLVE(
     Exists,
     {
         context->SetRequestInfo();
         Reply(context, /*exists*/ false);
     })
-
-#undef IMPLEMENT_SUPPORTS_VERB
-#undef IMPLEMENT_SUPPORTS_VERB_RESOLVE
 
 void TSupportsExists::ExistsAttribute(
     const TYPath& /*path*/,
@@ -299,7 +253,7 @@ void TSupportsMultisetAttributes::SetAttributes(
 void TSupportsPermissions::ValidatePermission(
     EPermissionCheckScope /*scope*/,
     EPermission /*permission*/,
-    const TString& /*user*/)
+    const std::string& /*user*/)
 { }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -311,7 +265,7 @@ TSupportsPermissions::TCachingPermissionValidator::TCachingPermissionValidator(
     , Scope_(scope)
 { }
 
-void TSupportsPermissions::TCachingPermissionValidator::Validate(EPermission permission, const TString& user)
+void TSupportsPermissions::TCachingPermissionValidator::Validate(EPermission permission, const std::string& user)
 {
     auto& validatedPermissions = ValidatedPermissions_[user];
     if (None(validatedPermissions & permission)) {
@@ -528,7 +482,7 @@ TFuture<TYsonString> TSupportsAttributes::DoGetAttribute(
         writer.OnBeginMap();
 
         if (attributeFilter) {
-            WriteAttributesFragment(&writer, attributeFilter, /*stable*/false);
+            WriteAttributesFragment(&writer, attributeFilter, /*stable*/ false);
         } else {
             if (builtinAttributeProvider) {
                 std::vector<ISystemAttributeProvider::TAttributeDescriptor> builtinDescriptors;
@@ -979,10 +933,10 @@ void TSupportsAttributes::SetAttribute(
     // Check if this pooled string has a small overhead (<= 25%).
     // Otherwise make a deep copy.
     const auto& requestValue = request->value();
-    const auto& safeValue = requestValue.capacity() <= requestValue.length() * 5 / 4
-        ? requestValue
-        : TString(TStringBuf(requestValue));
-    DoSetAttribute(path, TYsonString(safeValue), request->force());
+    TYsonString safeValue = requestValue.capacity() <= requestValue.length() * 5 / 4
+        ? TYsonString{requestValue}
+        : TYsonString{TStringBuf(requestValue)};
+    DoSetAttribute(path, std::move(safeValue), request->force());
     context->Reply();
 }
 
@@ -1324,7 +1278,7 @@ class TNodeSetter
     private: \
         I##name##Node* const Node_; \
         \
-        virtual ENodeType GetExpectedType() override \
+        ENodeType GetExpectedType() override \
         { \
             return ENodeType::name; \
         }
@@ -1415,7 +1369,9 @@ private:
 
     void OnForwardingFinished(TString itemKey)
     {
-        YT_VERIFY(Map_->AddChild(itemKey, TreeBuilder_->EndTree()));
+        if (!Map_->AddChild(itemKey, TreeBuilder_->EndTree())) {
+            THROW_ERROR_EXCEPTION("Duplicate key %Qv", itemKey);
+        }
     }
 
     void OnMyEndMap() override
@@ -1775,6 +1731,8 @@ IYPathServiceContextPtr CreateYPathContext(
 
     return New<TYPathServiceContext>(
         std::move(requestMessage),
+        TMemoryUsageTrackerGuard(),
+        GetNullMemoryUsageTracker(),
         std::move(logger),
         logLevel);
 }
@@ -1790,6 +1748,8 @@ IYPathServiceContextPtr CreateYPathContext(
     return New<TYPathServiceContext>(
         std::move(requestHeader),
         std::move(requestMessage),
+        TMemoryUsageTrackerGuard(),
+        GetNullMemoryUsageTracker(),
         std::move(logger),
         logLevel);
 }

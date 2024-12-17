@@ -1,0 +1,4 @@
+requirements:
+  - six
+exclude:
+  - boto/vendored/six.py

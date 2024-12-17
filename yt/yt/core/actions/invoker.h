@@ -1,9 +1,9 @@
 #pragma once
 
 #include "callback.h"
-#include "bind.h"
 
 #include <yt/yt/core/threading/public.h>
+#include <library/cpp/yt/memory/range.h>
 
 #include <type_traits>
 
@@ -69,6 +69,25 @@ DEFINE_REFCOUNTED_TYPE(IPrioritizedInvoker)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct IBoundedConcurrencyInvoker
+    : public virtual IInvoker
+{
+    using IInvoker::Invoke;
+
+    //! Updates invoker's max concurrent invocations value.
+    //!
+    //! Does nothing, if the value stays the same.
+    //! If the value increases, pending closures are invoked until #maxConcurrentInvocations is reached.
+    //! If the value decreases, value is scheduled to be changed, but only changes once
+    //! number of outstanding requests is less or equal to #maxConcurrentInvocations, and
+    //! then the value actually changes.
+    virtual void SetMaxConcurrentInvocations(int maxConcurrentInvocations) = 0;
+};
+
+DEFINE_REFCOUNTED_TYPE(IBoundedConcurrencyInvoker);
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct ISuspendableInvoker
     : public virtual IInvoker
 {
@@ -99,8 +118,3 @@ DEFINE_REFCOUNTED_TYPE(ISuspendableInvoker)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-
-#define INVOKER_INL_H_
-#include "invoker-inl.h"
-#undef INVOKER_INL_H_
-

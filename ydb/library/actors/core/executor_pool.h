@@ -1,24 +1,29 @@
 #pragma once
 
 #include "event.h"
+#include "executor_pool_jail.h"
 #include "scheduler_queue.h"
 
 namespace NActors {
     class TActorSystem;
-    struct TMailboxHeader;
+    class TMailbox;
+    class TMailboxCache;
     struct TWorkerContext;
     struct TExecutorPoolStats;
+    struct TExecutorPoolState;
     struct TExecutorThreadStats;
+    class TExecutorPoolJail;
     class ISchedulerCookie;
+    struct TSharedExecutorThreadCtx;
 
     struct TCpuConsumption {
-        double ConsumedUs = 0;
-        double BookedUs = 0;
+        double CpuUs = 0;
+        double ElapsedUs = 0;
         ui64 NotEnoughCpuExecutions = 0;
 
         void Add(const TCpuConsumption& other) {
-            ConsumedUs += other.ConsumedUs;
-            BookedUs += other.BookedUs;
+            CpuUs += other.CpuUs;
+            ElapsedUs += other.ElapsedUs;
             NotEnoughCpuExecutions += other.NotEnoughCpuExecutions;
         }
     };
@@ -57,9 +62,8 @@ namespace NActors {
         virtual void Initialize(TWorkerContext& wctx) {
             Y_UNUSED(wctx);
         }
-        virtual ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) = 0;
-        virtual void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingCounter) = 0;
-        virtual TMailboxHeader *ResolveMailbox(ui32 hint) = 0;
+        virtual TMailbox* GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) = 0;
+        virtual TMailbox* ResolveMailbox(ui32 hint) = 0;
 
         /**
          * Schedule one-shot event that will be send at given time point in the future.
@@ -94,16 +98,21 @@ namespace NActors {
         // for actorsystem
         virtual bool Send(TAutoPtr<IEventHandle>& ev) = 0;
         virtual bool SpecificSend(TAutoPtr<IEventHandle>& ev) = 0;
-        virtual void ScheduleActivation(ui32 activation) = 0;
-        virtual void SpecificScheduleActivation(ui32 activation) = 0;
-        virtual void ScheduleActivationEx(ui32 activation, ui64 revolvingCounter) = 0;
+        virtual void ScheduleActivation(TMailbox* mailbox) = 0;
+        virtual void SpecificScheduleActivation(TMailbox* mailbox) = 0;
+        virtual void ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingCounter) = 0;
         virtual TActorId Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingCounter, const TActorId& parentId) = 0;
-        virtual TActorId Register(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId) = 0;
+        virtual TActorId Register(IActor* actor, TMailboxCache& cache, ui64 revolvingCounter, const TActorId& parentId) = 0;
+        virtual TActorId Register(IActor* actor, TMailbox* mailbox, const TActorId& parentId) = 0;
 
         virtual void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
             // TODO: make pure virtual and override everywhere
             Y_UNUSED(poolStats);
             Y_UNUSED(statsCopy);
+        }
+
+        virtual void GetExecutorPoolState(TExecutorPoolState &poolState) const {
+            Y_UNUSED(poolState);
         }
 
         virtual TString GetName() const {
@@ -123,11 +132,15 @@ namespace NActors {
 
         virtual void SetRealTimeMode() const {}
 
-        virtual i16 GetThreadCount() const {
+        virtual float GetThreadCount() const {
             return 1;
         }
 
-        virtual void SetThreadCount(i16 threads) {
+        virtual i16 GetFullThreadCount() const {
+            return 1;
+        }
+
+        virtual void SetFullThreadCount(i16 threads) {
             Y_UNUSED(threads);
         }
 
@@ -139,16 +152,39 @@ namespace NActors {
             return 0;
         }
 
-        virtual i16 GetDefaultThreadCount() const {
+        virtual float GetDefaultThreadCount() const {
             return 1;
         }
 
-        virtual i16 GetMinThreadCount() const {
+        virtual i16 GetDefaultFullThreadCount() const {
             return 1;
         }
 
-        virtual i16 GetMaxThreadCount() const {
+        virtual float GetMinThreadCount() const {
             return 1;
+        }
+
+
+        virtual i16 GetMinFullThreadCount() const {
+            return 1;
+        }
+
+        virtual float GetMaxThreadCount() const {
+            return 1;
+        }
+
+        virtual i16 GetMaxFullThreadCount() const {
+            return 1;
+        }
+
+        virtual TSharedExecutorThreadCtx* ReleaseSharedThread() {
+            return nullptr;
+        }
+        virtual void AddSharedThread(TSharedExecutorThreadCtx*) {
+        }
+
+        virtual bool IsSharedThreadEnabled() const {
+            return false;
         }
 
         virtual TCpuConsumption GetThreadCpuConsumption(i16 threadIdx) {

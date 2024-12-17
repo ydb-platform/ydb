@@ -17,7 +17,7 @@ using namespace NYTree;
 TFairShareInvokerQueue::TFairShareInvokerQueue(
     TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
     const std::vector<TBucketDescription>& bucketDescriptions,
-    NProfiling::IRegistryImplPtr registry)
+    NProfiling::IRegistryPtr registry)
     : Weights_(bucketDescriptions.size(), 1.0)
 {
     Buckets_.reserve(bucketDescriptions.size());
@@ -54,24 +54,17 @@ const IInvokerPtr& TFairShareInvokerQueue::GetInvoker(int bucketIndex, int queue
     return bucket.Invokers[queueIndex];
 }
 
-void TFairShareInvokerQueue::Shutdown()
+void TFairShareInvokerQueue::Shutdown(bool graceful)
 {
     for (auto& bucket : Buckets_) {
-        bucket.Queue->Shutdown();
+        bucket.Queue->Shutdown(graceful);
     }
 }
 
-void TFairShareInvokerQueue::DrainProducer()
+void TFairShareInvokerQueue::OnConsumerFinished()
 {
     for (auto& bucket : Buckets_) {
-        bucket.Queue->DrainProducer();
-    }
-}
-
-void TFairShareInvokerQueue::DrainConsumer()
-{
-    for (auto& bucket : Buckets_) {
-        bucket.Queue->DrainConsumer();
+        bucket.Queue->OnConsumerFinished();
     }
 }
 

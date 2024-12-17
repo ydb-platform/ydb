@@ -23,6 +23,8 @@
 
 {% include [x](_includes/basic/current_tz.md) %}
 
+{% include [x](_includes/basic/version.md) %}
+
 {% include [x](_includes/basic/max_min.md) %}
 
 {% include [x](_includes/basic/as_container.md) %}
@@ -88,6 +90,8 @@
 {% include [x](_includes/basic/staticmap.md) %}
 
 {% include [x](_includes/basic/staticzip.md) %}
+
+{% include [x](_includes/basic/staticfold.md) %}
 
 {% include [x](_includes/basic/aggr_factory.md) %}
 

@@ -50,5 +50,7 @@ enum EErrorCode {
 
     UNKNOWN_TXID = 30;
 
+    PRECONDITION_FAILED = 31;
+
     ERROR = 100;
 }

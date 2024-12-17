@@ -53,6 +53,10 @@ TEST_P(THyperLogLogTest, Random)
             rng,
             size,
             targetCardinality);
+
+        THyperLogLog<8> hllClone(hll.first.Data());
+        EXPECT_EQ(hll.first.EstimateCardinality(), hllClone.EstimateCardinality());
+
         auto err = ((double)hll.first.EstimateCardinality() - hll.second) / hll.second;
         error += err;
     }

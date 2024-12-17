@@ -20,7 +20,7 @@ class TFairScheduler
     : public IFairScheduler<TTask>
 {
 public:
-    void Enqueue(TTask task, const TString& user) override
+    void Enqueue(TTask task, const std::string& user) override
     {
         auto guard = Guard(Lock_);
 
@@ -34,12 +34,14 @@ public:
         bucket->Tasks.push(std::move(task));
     }
 
-    TTask Dequeue() override
+    std::optional<TTask> TryDequeue() override
     {
         auto guard = Guard(Lock_);
 
         while (true) {
-            YT_VERIFY(!BucketHeap_.empty());
+            if (BucketHeap_.empty()) {
+                return std::nullopt;
+            }
 
             auto* bucket = BucketHeap_.front();
             YT_ASSERT(bucket->InHeap);
@@ -77,14 +79,7 @@ public:
         YT_ABORT();
     }
 
-    bool IsEmpty() const override
-    {
-        auto guard = Guard(Lock_);
-
-        return BucketHeap_.empty();
-    }
-
-    void ChargeUser(const TString& user, TDuration time) override
+    void ChargeUser(const std::string& user, TDuration time) override
     {
         auto guard = Guard(Lock_);
 
@@ -99,11 +94,11 @@ private:
 
     struct TUserBucket
     {
-        explicit TUserBucket(TString userName)
-            : UserName(std::move(userName))
+        explicit TUserBucket(const std::string& userName)
+            : UserName(userName)
         { }
 
-        TString UserName;
+        std::string UserName;
         TDuration ExcessTime;
         //! Typically equals ExcessTime; however when a user is charged we just update ExcessTime
         //! and leave HeapKey intact. Upon extracting heap's top we check if its ExcessTime matches its HeapKey
@@ -121,14 +116,14 @@ private:
         }
     };
 
-    THashMap<TString, TUserBucket> NameToUserBucket_;
+    THashMap<std::string, TUserBucket> NameToUserBucket_;
     TDuration ExcessBaseline_;
 
     //! Min-heap ordered by TUserBucket::ExcessTime.
     //! A bucket is only present here iff it has at least one task.
     std::vector<TUserBucket*> BucketHeap_;
 
-    TUserBucket* GetOrCreateBucket(const TString& userName)
+    TUserBucket* GetOrCreateBucket(const std::string& userName)
     {
         VERIFY_SPINLOCK_AFFINITY(Lock_);
 

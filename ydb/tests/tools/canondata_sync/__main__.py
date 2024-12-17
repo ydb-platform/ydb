@@ -17,7 +17,8 @@ def get_yc_token() -> str:
     return yc_token
 
 
-def get_lockbox_secret(token, secret_id):
+def get_lockbox_secret(secret_id):
+    token = get_yc_token()
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.get(
         f"https://payload.lockbox.api.cloud.yandex.net/lockbox/v1/secrets/{secret_id}/payload",
@@ -30,9 +31,14 @@ def get_lockbox_secret(token, secret_id):
     return {e["key"]: e["textValue"] for e in response.json()["entries"]}
 
 
-def get_s3_keys(token, secret_provider_name, secret_id):
+def get_s3_keys(secret_provider_name, secret_id):
+    env_ydb_canonical_key_id = os.environ.get('YDB_CANONICAL_KEY_ID')
+    env_ydb_canonical_key_secret = os.environ.get('YDB_CANONICAL_KEY_SECRET')
+    if env_ydb_canonical_key_id is not None and env_ydb_canonical_key_secret is not None:
+        return env_ydb_canonical_key_id, env_ydb_canonical_key_secret
+
     if secret_provider_name == "lockbox":
-        secret = get_lockbox_secret(token, secret_id)
+        secret = get_lockbox_secret(secret_id)
         return secret["KEY_ID"], secret["KEY_SECRET"]
 
     raise ValueError("Only yav is supported now")
@@ -46,8 +52,7 @@ def main():
     parser.add_argument("root_dir")
 
     args = parser.parse_args()
-    token = get_yc_token()
-    aws_access_key_id, aws_secret_access_key = get_s3_keys(token, args.secret_provider, args.secret_id)
+    aws_access_key_id, aws_secret_access_key = get_s3_keys(args.secret_provider, args.secret_id)
 
     found_objects = utils.get_urls(args.root_dir)
     if not found_objects:

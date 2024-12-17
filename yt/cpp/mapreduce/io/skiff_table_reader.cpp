@@ -98,9 +98,9 @@ void TSkiffTableReader::Next()
         try {
             ReadRow();
             break;
-        } catch (const std::exception& exception) {
-            YT_LOG_ERROR("Read error: %v", exception.what());
-            if (!Input_.Retry(RangeIndex_, RowIndex_)) {
+        } catch (const std::exception& ex) {
+            YT_LOG_ERROR("Read error: %v", ex.what());
+            if (!Input_.Retry(RangeIndex_, RowIndex_, std::make_exception_ptr(ex))) {
                 throw;
             }
             BufferedInput_ = TBufferedInput(&Input_);

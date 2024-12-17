@@ -59,6 +59,22 @@ message TSystemTablets {
     repeated NKikimrConfig.TBootstrap.TTablet TxMediator = 11 [(NMarkers.AsMap) = "Tablets"];
 }
 
+message TExtendedHostConfigDrive {
+    option (NMarkers.CombinedType) = true;
+    optional string Path = 1 [(NMarkers.CopyTo) = "THostConfigDrive"];
+    optional string Type = 2 [
+        (NMarkers.AdvancedCopyTo) = {
+            Target: "THostConfigDrive"
+            Transform: true
+        }];
+    optional bool SharedWithOs = 3 [(NMarkers.CopyTo) = "THostConfigDrive"];
+    optional bool ReadCentric = 4 [(NMarkers.CopyTo) = "THostConfigDrive"];
+    optional uint64 Kind = 5 [(NMarkers.CopyTo) = "THostConfigDrive"];
+
+    optional NKikimrBlobStorage.TPDiskConfig PDiskConfig = 6 [(NMarkers.CopyTo) = "THostConfigDrive"];
+    optional uint64 ExpectedSlotCount = 7;
+}
+
 message THosts {
     optional uint32 NodeId = 1;
     optional uint32 Port = 2;
@@ -70,6 +86,60 @@ message THosts {
     optional NActorsInterconnect.TNodeLocation WalleLocation = 8 [deprecated=true];
     optional string Address = 9;
     optional string Name = 10;
+    repeated TExtendedHostConfigDrive Drive = 11;
+}
+
+message TTls {
+    option (NMarkers.CombinedType) = true;
+    optional string Key = 1 [
+        (NMarkers.AdvancedCopyTo) = {
+            Target: "TGRpcConfig"
+            Keep: true
+        },
+        (NMarkers.AdvancedCopyTo) = {
+            Target: "TInterconnectConfig"
+            Keep: true
+            Rename: "PathToPrivateKeyFile"
+        }];
+    optional string Cert = 2 [
+        (NMarkers.AdvancedCopyTo) = {
+            Target: "TGRpcConfig"
+            Keep: true
+        },
+        (NMarkers.AdvancedCopyTo) = {
+            Target: "TInterconnectConfig"
+            Keep: true
+            Rename: "PathToCertificateFile"
+        }];
+    optional string CA = 3 [
+        (NMarkers.AdvancedCopyTo) = {
+            Target: "TGRpcConfig"
+            Keep: true
+        },
+        (NMarkers.AdvancedCopyTo) = {
+            Target: "TInterconnectConfig"
+            Keep: true
+            Rename: "PathToCaFile"
+        }];
+}
+
+message TExtendedDefineHostConfig {
+    option (NMarkers.CombinedType) = true;
+    optional uint64 HostConfigId = 1 [(NMarkers.CopyTo) = "TDefineHostConfig"];
+    optional string Name = 2 [(NMarkers.CopyTo) = "TDefineHostConfig"];
+    repeated TExtendedHostConfigDrive Drive = 3 [
+        (NMarkers.AdvancedCopyTo) = {
+            Target: "TDefineHostConfig"
+            Recurse: "THostConfigDrive"
+        }];
+
+    optional NKikimrBlobStorage.TPDiskConfig DefaultHostPDiskConfig = 4 [(NMarkers.CopyTo) = "TDefineHostConfig"];
+
+    repeated string Rot = 5 [(NMarkers.CopyTo) = "TDefineHostConfig"];
+    repeated string Ssd = 6 [(NMarkers.CopyTo) = "TDefineHostConfig"];
+    repeated string Nvme = 7 [(NMarkers.CopyTo) = "TDefineHostConfig"];
+
+    optional uint64 ItemConfigGeneration = 100 [(NMarkers.CopyTo) = "TDefineHostConfig"];
 }
 
 // these are additional fields used only before transformations
@@ -79,6 +149,17 @@ message TEphemeralInputFields {
     optional TSystemTablets SystemTablets = 1;
     optional string StaticErasure = 2;
     repeated THosts Hosts = 3;
-    repeated NKikimrBlobStorage.TDefineHostConfig HostConfigs = 4;
+    repeated TExtendedDefineHostConfig HostConfigs = 4;
     optional uint32 StorageConfigGeneration = 5;
+    // mutually exclusive with StaticErasure, but we should only warn and perfer one of them for smoother transition
+    optional string Erasure = 6;
+    optional string DefaultDiskType = 7 [default = "SSD"];
+    optional TTls Tls = 8;
+    optional FailDomainKind FailDomainType = 9 [default = Rack];
+
+    enum FailDomainKind {
+        Rack = 0;
+        Body = 1;
+        Disk = 2;
+    }
 }

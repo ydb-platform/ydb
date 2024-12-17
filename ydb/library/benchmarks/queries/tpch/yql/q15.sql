@@ -4,23 +4,22 @@
 -- TPC TPC-H Parameter Substitution (Version 2.17.2 build 0)
 -- using 1680793381 as a seed to the RNG
 
-$border = Date("1997-03-01");
+$border = Date("1996-01-01");
 $revenue0 = (
     select
         l_suppkey as supplier_no,
-        sum(l_extendedprice * (1 - l_discount)) as total_revenue,
-        cast(sum(l_extendedprice * (1 - l_discount)) as Uint64) as total_revenue_approx
+        $round(sum(l_extendedprice * ($z1_12 - l_discount)), -8) as total_revenue
     from
         {{lineitem}}
     where
-        cast(l_shipdate as timestamp) >= $border
-        and cast(l_shipdate as timestamp) < ($border + Interval("P92D"))
+        l_shipdate  >= $border
+        and l_shipdate < ($border + Interval("P91D"))
     group by
         l_suppkey
 );
 $max_revenue = (
 select
-    max(total_revenue_approx) as max_revenue
+    max(total_revenue) as max_revenue
 from
     $revenue0
 );
@@ -30,8 +29,7 @@ select
     s.s_name as s_name,
     s.s_address as s_address,
     s.s_phone as s_phone,
-    r.total_revenue as total_revenue,
-    r.total_revenue_approx as total_revenue_approx
+    r.total_revenue as total_revenue
 from
     {{supplier}} as s
 join
@@ -51,7 +49,7 @@ from
 join
     $max_revenue as m
 on
-    j.total_revenue_approx = m.max_revenue
+    j.total_revenue = m.max_revenue
 order by
     s_suppkey;
 

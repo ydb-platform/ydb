@@ -3,8 +3,11 @@ RECURSE(
     functional
     library
     library/sqs
+    olap
     oss
     perf
+    postgres_integrations
+    stability
     supp
     tools
 )

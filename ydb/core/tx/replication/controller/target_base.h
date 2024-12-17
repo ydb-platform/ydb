@@ -1,17 +1,30 @@
 #pragma once
 
+#include "lag_provider.h"
 #include "replication.h"
 
 namespace NKikimr::NReplication::NController {
 
-class TTargetBase: public TReplication::ITarget {
+class TTargetBase
+    : public TReplication::ITarget
+    , public TLagProvider
+{
 protected:
     using ETargetKind = TReplication::ETargetKind;
     using EDstState = TReplication::EDstState;
     using EStreamState = TReplication::EStreamState;
+    struct TWorker: public TItemWithLag {};
+
+    inline TReplication* GetReplication() const {
+        return Replication;
+    }
+
+    const THashMap<ui64, TWorker>& GetWorkers() const;
+    void RemoveWorkers(const TActorContext& ctx);
 
 public:
-    explicit TTargetBase(ETargetKind kind, ui64 id, const TString& srcPath, const TString& dstPath);
+    explicit TTargetBase(TReplication* replication, ETargetKind kind,
+        ui64 id, const TString& srcPath, const TString& dstPath);
 
     ui64 GetId() const override;
     ETargetKind GetKind() const override;
@@ -34,10 +47,16 @@ public:
     const TString& GetIssue() const override;
     void SetIssue(const TString& value) override;
 
-    void Progress(TReplication::TPtr replication, const TActorContext& ctx) override;
+    void AddWorker(ui64 id) override;
+    void RemoveWorker(ui64 id) override;
+    void UpdateLag(ui64 workerId, TDuration lag) override;
+    const TMaybe<TDuration> GetLag() const override;
+
+    void Progress(const TActorContext& ctx) override;
     void Shutdown(const TActorContext& ctx) override;
 
 private:
+    TReplication* const Replication;
     const ui64 Id;
     const ETargetKind Kind;
     const TString SrcPath;
@@ -50,8 +69,11 @@ private:
     TString Issue;
 
     TActorId DstCreator;
+    TActorId DstAlterer;
     TActorId DstRemover;
     TActorId WorkerRegistar;
+    THashMap<ui64, TWorker> Workers;
+    bool PendingRemoveWorkers = false;
 
 }; // TTargetBase
 

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "defs.h"
+#include "activity_guard.h"
+#include "executor_thread.h"
 #include "thread_context.h"
 
 #include <ydb/library/actors/util/datetime.h>
@@ -9,8 +11,7 @@
 
 namespace NActors {
     class TGenericExecutorThread;
-    class TBasicExecutorPool;
-    class TIOExecutorPool;
+    class IExecutorPool;
 
     enum class EThreadState : ui64 {
         None,
@@ -20,7 +21,7 @@ namespace NActors {
     };
 
     struct TGenericExecutorThreadCtx {
-        TAutoPtr<TGenericExecutorThread> Thread;
+        std::unique_ptr<TGenericExecutorThread> Thread;
 
     protected:
         friend class TIOExecutorPool;
@@ -30,6 +31,8 @@ namespace NActors {
         std::atomic<ui64> WaitingFlag = static_cast<ui64>(EThreadState::None);
 
     public:
+        ~TGenericExecutorThreadCtx(); // in executor_thread.cpp
+
         ui64 StartWakingTs = 0;
 
         ui64 GetStateInt() {
@@ -57,11 +60,13 @@ namespace NActors {
 
         template <typename TDerived, typename TWaitState>
         void Spin(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag) {
-            ui64 start = GetCycleCountFast();
             bool doSpin = true;
+            NHPTimer::STime start = GetCycleCountFast();
+            TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_SPIN> activityGuard(start);
             while (true) {
                 for (ui32 j = 0; doSpin && j < 12; ++j) {
-                    if (GetCycleCountFast() >= (start + spinThresholdCycles)) {
+                    NHPTimer::STime hpnow = GetCycleCountFast();
+                    if (hpnow >= i64(start + spinThresholdCycles)) {
                         doSpin = false;
                         break;
                     }
@@ -95,16 +100,20 @@ namespace NActors {
                 return false;
             }
 
+            NHPTimer::STime hpnow = GetCycleCountFast();
+            NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
+            ui32 prevActivity = TlsThreadContext->ElapsingActorActivity.exchange(Max<ui64>(), std::memory_order_acq_rel);
+            TlsThreadContext->WorkerCtx->AddElapsedCycles(prevActivity, hpnow - hpprev);
             do {
-                TlsThreadContext->Timers.HPNow = GetCycleCountFast();
-                TlsThreadContext->Timers.Elapsed += TlsThreadContext->Timers.HPNow - TlsThreadContext->Timers.HPStart;
                 if (WaitingPad.Park()) // interrupted
                     return true;
-                TlsThreadContext->Timers.HPStart = GetCycleCountFast();
-                TlsThreadContext->Timers.Parked += TlsThreadContext->Timers.HPStart - TlsThreadContext->Timers.HPNow;
+                hpnow = GetCycleCountFast();
+                hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
+                TlsThreadContext->WorkerCtx->AddParkedCycles(hpnow - hpprev);
                 state = GetState<TWaitState>();
             } while (static_cast<EThreadState>(state) == EThreadState::Sleep && !stopFlag->load(std::memory_order_relaxed));
-
+            TlsThreadContext->ActivationStartTS.store(hpnow, std::memory_order_release);
+            TlsThreadContext->ElapsingActorActivity.store(TlsThreadContext->ActorSystemIndex, std::memory_order_release);
             static_cast<TDerived*>(this)->AfterWakeUp(state);
             return false;
         }
@@ -113,7 +122,7 @@ namespace NActors {
     struct TExecutorThreadCtx : public TGenericExecutorThreadCtx {
         using TBase = TGenericExecutorThreadCtx;
 
-        TBasicExecutorPool *OwnerExecutorPool = nullptr;
+        IExecutorPool *OwnerExecutorPool = nullptr;
 
         void SetWork() {
             ExchangeState(EThreadState::Work);
@@ -176,7 +185,7 @@ namespace NActors {
             }
         };
 
-        std::atomic<TBasicExecutorPool*> ExecutorPools[MaxPoolsForSharedThreads];
+        std::atomic<IExecutorPool*> ExecutorPools[MaxPoolsForSharedThreads];
         std::atomic<i64> RequestsForWakeUp = 0;
         ui32 NextPool = 0;
 
@@ -208,7 +217,11 @@ namespace NActors {
             WaitingPad.Interrupt();
         }
 
-        TSharedExecutorThreadCtx() = default;
+        TSharedExecutorThreadCtx() {
+            for (ui32 idx = 0; idx < MaxPoolsForSharedThreads; ++idx) {
+                ExecutorPools[idx].store(nullptr, std::memory_order_release);
+            }
+        }
     };
 
 }

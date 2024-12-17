@@ -1,7 +1,6 @@
 #include "read_session.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/log_lazy.h>
-
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
@@ -12,8 +11,12 @@ namespace NYdb::NTopic {
 
 static const TString DRIVER_IS_STOPPING_DESCRIPTION = "Driver is stopping";
 
-void MakeCountersNotNull(TReaderCounters& counters);
-bool HasNullCounters(TReaderCounters& counters);
+void SetReadInTransaction(TReadSessionEvent::TEvent& event)
+{
+    if (auto* e = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event)) {
+        e->SetReadInTransaction();
+    }
+}
 
 TReadSession::TReadSession(const TReadSessionSettings& settings,
              std::shared_ptr<TTopicClient::TImpl> client,
@@ -48,7 +51,7 @@ TReadSession::~TReadSession() {
 }
 
 void TReadSession::Start() {
-    EventsQueue = std::make_shared<NPersQueue::TReadSessionEventsQueue<false>>(Settings);
+    EventsQueue = std::make_shared<TReadSessionEventsQueue<false>>(Settings);
 
     if (!ValidateSettings()) {
         return;
@@ -56,7 +59,7 @@ void TReadSession::Start() {
 
     LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Starting read session");
 
-    NPersQueue::TDeferredActions<false> deferred;
+    TDeferredActions<false> deferred;
     with_lock (Lock) {
         if (Aborting) {
             return;
@@ -67,7 +70,7 @@ void TReadSession::Start() {
     SetupCountersLogger();
 }
 
-void TReadSession::CreateClusterSessionsImpl(NPersQueue::TDeferredActions<false>& deferred) {
+void TReadSession::CreateClusterSessionsImpl(TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     // Create cluster sessions.
@@ -81,7 +84,7 @@ void TReadSession::CreateClusterSessionsImpl(NPersQueue::TDeferredActions<false>
         return;
     }
 
-    CbContext = NPersQueue::MakeWithCallbackContext<NPersQueue::TSingleClusterReadSessionImpl<false>>(
+    CbContext = MakeWithCallbackContext<TSingleClusterReadSessionImpl<false>>(
         Settings,
         DbDriverState->Database,
         SessionId,
@@ -91,8 +94,7 @@ void TReadSession::CreateClusterSessionsImpl(NPersQueue::TDeferredActions<false>
         EventsQueue,
         context,
         1,
-        1,
-        Client->GetProvidedCodecs()
+        1
     );
 
     deferred.DeferStartSession(CbContext);
@@ -117,7 +119,7 @@ bool TReadSession::ValidateSettings() {
     }
 
     if (issues) {
-        Abort(EStatus::BAD_REQUEST, NPersQueue::MakeIssueWithSubIssues("Invalid read session settings", issues));
+        Abort(EStatus::BAD_REQUEST, MakeIssueWithSubIssues("Invalid read session settings", issues));
         return false;
     } else {
         return true;
@@ -141,12 +143,10 @@ TVector<TReadSessionEvent::TEvent> TReadSession::GetEvents(const TReadSessionGet
     auto events = GetEvents(settings.Block_, settings.MaxEventsCount_, settings.MaxByteSize_);
     if (!events.empty() && settings.Tx_) {
         auto& tx = settings.Tx_->get();
+        CbContext->TryGet()->CollectOffsets(tx, events, Client);
         for (auto& event : events) {
-            if (auto* dataEvent = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event)) {
-                CollectOffsets(tx, *dataEvent);
-            }
+            SetReadInTransaction(event);
         }
-        UpdateOffsets(tx);
     }
     return events;
 }
@@ -162,109 +162,33 @@ TMaybe<TReadSessionEvent::TEvent> TReadSession::GetEvent(bool block, size_t maxB
 TMaybe<TReadSessionEvent::TEvent> TReadSession::GetEvent(const TReadSessionGetEventSettings& settings)
 {
     auto event = GetEvent(settings.Block_, settings.MaxByteSize_);
-    if (event) {
+    if (event && settings.Tx_) {
         auto& tx = settings.Tx_->get();
-        if (auto* dataEvent = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
-            CollectOffsets(tx, *dataEvent);
-        }
-        UpdateOffsets(tx);
+        CbContext->TryGet()->CollectOffsets(tx, *event, Client);
+        SetReadInTransaction(*event);
     }
     return event;
-}
-
-void TReadSession::CollectOffsets(NTable::TTransaction& tx,
-                                  const TReadSessionEvent::TDataReceivedEvent& event)
-{
-    const auto& session = *event.GetPartitionSession();
-
-    if (event.HasCompressedMessages()) {
-        for (auto& message : event.GetCompressedMessages()) {
-            CollectOffsets(tx, session.GetTopicPath(), session.GetPartitionId(), message.GetOffset());
-        }
-    } else {
-        for (auto& message : event.GetMessages()) {
-            CollectOffsets(tx, session.GetTopicPath(), session.GetPartitionId(), message.GetOffset());
-        }
-    }
-}
-
-void TReadSession::CollectOffsets(NTable::TTransaction& tx,
-                                  const TString& topicPath, ui32 partitionId, ui64 offset)
-{
-    const TString& sessionId = tx.GetSession().GetId();
-    const TString& txId = tx.GetId();
-    TOffsetRanges& ranges = OffsetRanges[std::make_pair(sessionId, txId)];
-    ranges[topicPath][partitionId].InsertInterval(offset, offset + 1);
-}
-
-void TReadSession::UpdateOffsets(const NTable::TTransaction& tx)
-{
-    const TString& sessionId = tx.GetSession().GetId();
-    const TString& txId = tx.GetId();
-
-    auto p = OffsetRanges.find(std::make_pair(sessionId, txId));
-    if (p == OffsetRanges.end()) {
-        return;
-    }
-
-    TVector<TTopicOffsets> topics;
-    for (auto& [path, partitions] : p->second) {
-        TTopicOffsets topic;
-        topic.Path = path;
-
-        topics.push_back(std::move(topic));
-
-        for (auto& [id, ranges] : partitions) {
-            TPartitionOffsets partition;
-            partition.PartitionId = id;
-
-            TTopicOffsets& t = topics.back();
-            t.Partitions.push_back(std::move(partition));
-
-            for (auto& range : ranges) {
-                TPartitionOffsets& p = t.Partitions.back();
-
-                TOffsetsRange r;
-                r.Start = range.first;
-                r.End = range.second;
-
-                p.Offsets.push_back(r);
-            }
-        }
-    }
-
-    Y_ABORT_UNLESS(!topics.empty());
-
-    auto result = Client->UpdateOffsetsInTransaction(tx,
-                                                     topics,
-                                                     Settings.ConsumerName_,
-                                                     {}).GetValueSync();
-    Y_ABORT_UNLESS(!result.IsTransportError());
-
-    if (!result.IsSuccess()) {
-        ythrow yexception() << "error on update offsets: " << result;
-    }
-
-    OffsetRanges.erase(std::make_pair(sessionId, txId));
 }
 
 bool TReadSession::Close(TDuration timeout) {
     LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Closing read session. Close timeout: " << timeout);
     // Log final counters.
-    CountersLogger->Stop();
+    if (CountersLogger) {
+        CountersLogger->Stop();
+    }
     with_lock (Lock) {
         if (DumpCountersContext) {
             DumpCountersContext->Cancel();
         }
     }
 
-    NPersQueue::TSingleClusterReadSessionImpl<false>::TPtr session;
+    TSingleClusterReadSessionImpl<false>::TPtr session;
     NThreading::TPromise<bool> promise = NThreading::NewPromise<bool>();
     auto callback = [=]() mutable {
         promise.TrySetValue(true);
     };
 
-    NPersQueue::TDeferredActions<false> deferred;
+    TDeferredActions<false> deferred;
     with_lock (Lock) {
         if (Closing || Aborting) {
             return false;
@@ -299,7 +223,7 @@ bool TReadSession::Close(TDuration timeout) {
     NThreading::TFuture<bool> resultFuture = promise.GetFuture();
     const bool result = resultFuture.GetValueSync();
     if (result) {
-        NPersQueue::Cancel(timeoutContext);
+        Cancel(timeoutContext);
 
         NYql::TIssues issues;
         issues.AddIssue("Session was gracefully closed");
@@ -328,28 +252,28 @@ TStringBuilder TReadSession::GetLogPrefix() const {
 }
 
 void TReadSession::MakeCountersIfNeeded() {
-    if (!Settings.Counters_ || NPersQueue::HasNullCounters(*Settings.Counters_)) {
+    if (!Settings.Counters_ || HasNullCounters(*Settings.Counters_)) {
         TReaderCounters::TPtr counters = MakeIntrusive<TReaderCounters>();
         if (Settings.Counters_) {
             *counters = *Settings.Counters_; // Copy all counters that have been set by user.
         }
-        NPersQueue::MakeCountersNotNull(*counters);
+        MakeCountersNotNull(*counters);
         Settings.Counters(counters);
     }
 }
 
 void TReadSession::SetupCountersLogger() {
     with_lock(Lock) {
-        std::vector<NPersQueue::TCallbackContextPtr<false>> sessions{CbContext};
+        std::vector<TCallbackContextPtr<false>> sessions{CbContext};
 
-        CountersLogger = std::make_shared<NPersQueue::TCountersLogger<false>>(Connections, sessions, Settings.Counters_, Log,
+        CountersLogger = std::make_shared<TCountersLogger<false>>(Connections, sessions, Settings.Counters_, Log,
                                                                  GetLogPrefix(), StartSessionTime);
         DumpCountersContext = CountersLogger->MakeCallbackContext();
         CountersLogger->Start();
     }
 }
 
-void TReadSession::AbortImpl(NPersQueue::TDeferredActions<false>&) {
+void TReadSession::AbortImpl(TDeferredActions<false>&) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     if (!Aborting) {
@@ -357,24 +281,26 @@ void TReadSession::AbortImpl(NPersQueue::TDeferredActions<false>&) {
         if (DumpCountersContext) {
             DumpCountersContext->Cancel();
         }
-        CbContext->TryGet()->Abort();
+        if (CbContext) {
+            CbContext->TryGet()->Abort();
+        }
     }
 }
 
-void TReadSession::AbortImpl(TSessionClosedEvent&& closeEvent, NPersQueue::TDeferredActions<false>& deferred) {
+void TReadSession::AbortImpl(TSessionClosedEvent&& closeEvent, TDeferredActions<false>& deferred) {
     LOG_LAZY(Log, TLOG_NOTICE, GetLogPrefix() << "Aborting read session. Description: " << closeEvent.DebugString());
 
     EventsQueue->Close(std::move(closeEvent), deferred);
     AbortImpl(deferred);
 }
 
-void TReadSession::AbortImpl(EStatus statusCode, NYql::TIssues&& issues, NPersQueue::TDeferredActions<false>& deferred) {
+void TReadSession::AbortImpl(EStatus statusCode, NYql::TIssues&& issues, TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     AbortImpl(TSessionClosedEvent(statusCode, std::move(issues)), deferred);
 }
 
-void TReadSession::AbortImpl(EStatus statusCode, const TString& message, NPersQueue::TDeferredActions<false>& deferred) {
+void TReadSession::AbortImpl(EStatus statusCode, const TString& message, TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     NYql::TIssues issues;
@@ -393,10 +319,10 @@ void TReadSession::Abort(EStatus statusCode, const TString& message) {
 }
 
 void TReadSession::Abort(TSessionClosedEvent&& closeEvent) {
-    NPersQueue::TDeferredActions<false> deferred;
+    TDeferredActions<false> deferred;
     with_lock (Lock) {
         AbortImpl(std::move(closeEvent), deferred);
     }
 }
 
-}
+}  // namespace NYdb::NTopic

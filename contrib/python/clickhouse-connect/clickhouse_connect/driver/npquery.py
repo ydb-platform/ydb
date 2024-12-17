@@ -1,4 +1,5 @@
 import logging
+import itertools
 from typing import Generator, Sequence, Tuple
 
 from clickhouse_connect.driver.common import empty_gen, StreamContext
@@ -93,14 +94,17 @@ class NumpyResult(Closable):
         return self
 
     def close_df(self):
-        pieces = list(self._df_stream())
-        pieces = [piece for piece in pieces if not piece.empty]
-        if len(pieces) > 1:
-            self._df_result = pd.concat(pieces, ignore_index=True)
-        elif len(pieces) == 1:
-            self._df_result = pieces[0]
-        else:
-            self._df_result = pd.DataFrame()
+        if self._block_gen is None:
+            raise StreamClosedError
+        bg = self._block_gen
+        chain = itertools.chain
+        chains = [chain(b) for b in zip(*bg)]
+        new_df_series = []
+        for c in chains:
+            series = [pd.Series(piece, copy=False) for piece in c if len(piece) > 0]
+            if len(series) > 0:
+                new_df_series.append(pd.concat(series, copy=False, ignore_index=True))
+        self._df_result = pd.DataFrame(dict(zip(self.column_names, new_df_series)))
         self.close()
         return self
 

@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import os
 import sys
 import itertools
 from importlib.machinery import EXTENSION_SUFFIXES
 from importlib.util import cache_from_source as _compiled_file_name
-from typing import Dict, Iterator, List, Tuple
+from typing import Iterator
 from pathlib import Path
 
 from distutils.command.build_ext import build_ext as _du_build_ext
@@ -16,7 +18,7 @@ from setuptools.extension import Extension, Library
 
 try:
     # Attempt to use Cython for building extensions, if available
-    from Cython.Distutils.build_ext import build_ext as _build_ext
+    from Cython.Distutils.build_ext import build_ext as _build_ext  # type: ignore[import-not-found] # Cython not installed on CI tests
 
     # Additionally, assert that the compiler module will load
     # also. Ref #1229.
@@ -26,7 +28,9 @@ except ImportError:
 
 # make sure _config_vars is initialized
 get_config_var("LDSHARED")
-from distutils.sysconfig import _config_vars as _CONFIG_VARS  # noqa
+# Not publicly exposed in typeshed distutils stubs, but this is done on purpose
+# See https://github.com/pypa/setuptools/pull/4228#issuecomment-1959856400
+from distutils.sysconfig import _config_vars as _CONFIG_VARS  # type: ignore # noqa
 
 
 def _customize_compiler_for_shlib(compiler):
@@ -58,7 +62,7 @@ if sys.platform == "darwin":
     use_stubs = True
 elif os.name != 'nt':
     try:
-        import dl
+        import dl  # type: ignore[import-not-found] # https://github.com/python/mypy/issues/13002
 
         use_stubs = have_rtld = hasattr(dl, 'RTLD_NOW')
     except ImportError:
@@ -91,7 +95,7 @@ class build_ext(_build_ext):
         if old_inplace:
             self.copy_extensions_to_source()
 
-    def _get_inplace_equivalent(self, build_py, ext: Extension) -> Tuple[str, str]:
+    def _get_inplace_equivalent(self, build_py, ext: Extension) -> tuple[str, str]:
         fullname = self.get_ext_fullname(ext.name)
         filename = self.get_ext_filename(fullname)
         modpath = fullname.split('.')
@@ -123,7 +127,7 @@ class build_ext(_build_ext):
         _, _, name = ext.name.rpartition(".")
         return f"{os.path.join(dir_, name)}.py"
 
-    def _get_output_mapping(self) -> Iterator[Tuple[str, str]]:
+    def _get_output_mapping(self) -> Iterator[tuple[str, str]]:
         if not self.inplace:
             return
 
@@ -263,7 +267,7 @@ class build_ext(_build_ext):
         pkg = '.'.join(ext._full_name.split('.')[:-1] + [''])
         return any(pkg + libname in libnames for libname in ext.libraries)
 
-    def get_source_files(self) -> List[str]:
+    def get_source_files(self) -> list[str]:
         return [*_build_ext.get_source_files(self), *self._get_internal_depends()]
 
     def _get_internal_depends(self) -> Iterator[str]:
@@ -304,12 +308,12 @@ class build_ext(_build_ext):
 
             yield path.as_posix()
 
-    def get_outputs(self) -> List[str]:
+    def get_outputs(self) -> list[str]:
         if self.inplace:
             return list(self.get_output_mapping().keys())
         return sorted(_build_ext.get_outputs(self) + self.__get_stubs_outputs())
 
-    def get_output_mapping(self) -> Dict[str, str]:
+    def get_output_mapping(self) -> dict[str, str]:
         """See :class:`setuptools.commands.build.SubCommand`"""
         mapping = self._get_output_mapping()
         return dict(sorted(mapping, key=lambda x: x[0]))
@@ -340,9 +344,8 @@ class build_ext(_build_ext):
         if compile and os.path.exists(stub_file):
             raise BaseError(stub_file + " already exists! Please delete.")
         if not self.dry_run:
-            f = open(stub_file, 'w')
-            f.write(
-                '\n'.join([
+            with open(stub_file, 'w', encoding="utf-8") as f:
+                content = '\n'.join([
                     "def __bootstrap__():",
                     "   global __bootstrap__, __file__, __loader__",
                     "   import sys, os, pkg_resources, importlib.util" + if_dl(", dl"),
@@ -366,8 +369,7 @@ class build_ext(_build_ext):
                     "__bootstrap__()",
                     "",  # terminal \n
                 ])
-            )
-            f.close()
+                f.write(content)
         if compile:
             self._compile_and_remove_stub(stub_file)
 
@@ -378,7 +380,10 @@ class build_ext(_build_ext):
         optimize = self.get_finalized_command('install_lib').optimize
         if optimize > 0:
             byte_compile(
-                [stub_file], optimize=optimize, force=True, dry_run=self.dry_run
+                [stub_file],
+                optimize=optimize,
+                force=True,
+                dry_run=self.dry_run,
             )
         if os.path.exists(stub_file) and not self.dry_run:
             os.unlink(stub_file)
@@ -396,7 +401,7 @@ if use_stubs or os.name == 'nt':
         library_dirs=None,
         runtime_library_dirs=None,
         export_symbols=None,
-        debug=0,
+        debug=False,
         extra_preargs=None,
         extra_postargs=None,
         build_temp=None,
@@ -431,7 +436,7 @@ else:
         library_dirs=None,
         runtime_library_dirs=None,
         export_symbols=None,
-        debug=0,
+        debug=False,
         extra_preargs=None,
         extra_postargs=None,
         build_temp=None,

@@ -395,7 +395,7 @@ void TLockCommand::DoExecute(ICommandContextPtr context)
             ProduceSingleOutputValue(context, "lock_id", lockResult.LockId);
             break;
         default:
-            ProduceOutput(context, [&](NYson::IYsonConsumer* consumer) {
+            ProduceOutput(context, [&] (NYson::IYsonConsumer* consumer) {
                 BuildYsonFluently(consumer)
                     .BeginMap()
                         .Item("lock_id").Value(lockResult.LockId)
@@ -596,6 +596,13 @@ void TMoveCommand::Register(TRegistrar registrar)
         "preserve_owner",
         [] (TThis* command) -> auto& {
             return command->Options.PreserveOwner;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_acl",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveAcl;
         })
         .Optional(/*init*/ false);
 

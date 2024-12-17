@@ -26,7 +26,7 @@ struct TProfileLocation
 {
     size_t Tid = 0;
     TString ThreadName;
-    std::vector<std::pair<TString, std::variant<TString, i64>>> Tags;
+    std::vector<std::pair<std::string, std::variant<std::string, i64>>> Tags;
     std::vector<ui64> Backtrace;
 
     bool operator == (const TProfileLocation& other) const = default;
@@ -82,7 +82,8 @@ protected:
 
     virtual void EnableProfiler() = 0;
     virtual void DisableProfiler() = 0;
-    virtual void AnnotateProfile(NProto::Profile* profile, const std::function<i64(const TString&)>& stringify) = 0;
+    using TStringify = std::function<i64(const std::string& str)>;
+    virtual void AnnotateProfile(NProto::Profile* profile, const TStringify& stringify) = 0;
     virtual i64 EncodeValue(i64 value) = 0;
 
     void RecordSample(NBacktrace::TFramePointerCursor* cursor, i64 value);

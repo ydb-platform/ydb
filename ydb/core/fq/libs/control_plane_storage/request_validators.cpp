@@ -19,10 +19,15 @@ void ValidateGenericConnectionSetting(
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
     }
 
-    if (!connection.database_id() && !(connection.host() && connection.port())) {
-        auto msg = TStringBuilder() << "content.setting.clickhouse_cluster.{database_id or host,port} field is not specified";
-        issues.AddIssue( MakeErrorIssue(TIssuesIds::BAD_REQUEST,msg));
+    if (!connection.database_id()) {
+        auto msg = TStringBuilder() << "content.setting." << dataSourceKind << "_cluster.database_id field is not specified";
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST,msg));
     }
+
+    if (!connection.database_name()) {
+        auto msg = TStringBuilder() << "content.setting." << dataSourceKind << "_cluster.database_name field is not specified";
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST,msg));
+    }    
 
     if (!connection.login()) {
         auto msg = TStringBuilder() << "content.setting." << dataSourceKind << "_cluster.login is not specified";
@@ -67,6 +72,14 @@ NYql::TIssues ValidateConnectionSetting(
     }
     case FederatedQuery::ConnectionSetting::kPostgresqlCluster: {
         ValidateGenericConnectionSetting(setting.postgresql_cluster(), "postgresql", disableCurrentIam, passwordRequired, issues);
+        break;
+    }
+    case FederatedQuery::ConnectionSetting::kGreenplumCluster: {
+        ValidateGenericConnectionSetting(setting.greenplum_cluster(), "greenplum", disableCurrentIam, passwordRequired, issues);
+        break;
+    }
+    case FederatedQuery::ConnectionSetting::kMysqlCluster: {
+        ValidateGenericConnectionSetting(setting.mysql_cluster(), "mysql", disableCurrentIam, passwordRequired, issues);
         break;
     }
     case FederatedQuery::ConnectionSetting::kObjectStorage: {
@@ -118,6 +131,22 @@ NYql::TIssues ValidateConnectionSetting(
         }
         break;
     }
+    case FederatedQuery::ConnectionSetting::kLogging: {
+        const FederatedQuery::Logging logging = setting.logging();
+        if (!logging.has_auth() || logging.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
+            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.logging.auth field is not specified"));
+        }
+
+        if (logging.auth().identity_case() == FederatedQuery::IamAuth::kCurrentIam && disableCurrentIam) {
+            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
+        }
+
+        if (!logging.folder_id()) {
+            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.logging.folder_id field is not specified"));
+        }
+
+        break;
+    }
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET: {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "connection is not set"));
         break;
@@ -135,13 +164,13 @@ NYql::TIssues ValidateEntityName(const TString& name) {
             MakeErrorIssue(TIssuesIds::BAD_REQUEST, "name field is not specified"));
     }
 
-    if (name.Size() > 255) {
+    if (name.size() > 255) {
         issues.AddIssue(
             MakeErrorIssue(TIssuesIds::BAD_REQUEST,
                            TStringBuilder{}
                                << "Incorrect connection name: " << name
                                << ". Name length must not exceed 255 symbols. Current length is "
-                               << name.Size() << " symbol(s)"));
+                               << name.size() << " symbol(s)"));
     }
 
     if (name != to_lower(name)) {

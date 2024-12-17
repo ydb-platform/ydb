@@ -23,12 +23,20 @@ service AccessService {
 message AuthenticateRequest {
   oneof credentials {
     string iam_token = 1;
+    AwsCompatibleSignature aws_compatible_signature = 2;
   }
 }
 
 message AuthenticateResponse {
-  Account account = 1;
-  google.protobuf.Timestamp session_expires_at = 2;
+  ResultCode resultCode = 1;
+  Account account = 2;
+  google.protobuf.Timestamp session_expires_at = 3;
+
+  enum ResultCode {
+    OK = 0; // authentication was successful.
+    UNKNOWN_SUBJECT = 1; // if the subject: doesn't exist, deleted, not found or account doesn't exist in the tenant owning the resource.
+    INVALID_TOKEN = 2; // The iam_token is not valid. It has an invalid length, invalid signature, etc.
+  }
 }
 
 message AuthorizeRequest {
@@ -43,13 +51,34 @@ message AuthorizeCheck {
   Permission permission = 1;
   string container_id = 2;
   ResourcePath resource_path = 3;
-  oneof credentials {
+  oneof identifier {
     string iam_token = 4;
     Account account = 5;
+    AwsCompatibleSignature aws_compatible_signature = 6;
   }
 }
 
 message AuthorizeResult {
-  bool authorized = 1;
+  ResultCode resultCode = 1;
   Account account = 2;
+
+  enum ResultCode {
+    OK = 0; // Access granted.
+    PERMISSION_DENIED = 1; // Other cases of access denied.
+    UNKNOWN_SUBJECT = 2; // if the subject: doesn't exist, deleted, not found or account doesn't exist in the tenant owning the resource.
+    INVALID_TOKEN = 3; // The iam_token is not valid. It has an invalid length, invalid signature, etc.
+  }
+}
+
+message AwsCompatibleSignature {
+  string aws_access_key_id = 1;
+  string string_to_sign = 2;
+  string signature = 3;
+  AmzSignatureV4KeyParams sign_key_params = 4;
+}
+
+message AmzSignatureV4KeyParams {
+  google.protobuf.Timestamp amz_date = 1;
+  string amz_region = 2;
+  string amz_service = 3;
 }

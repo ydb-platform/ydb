@@ -22,9 +22,9 @@ void TReadyEventReaderBase::SetReadyEvent(TFuture<void> readyEvent)
 {
     // We could use TTimingGuard here but we try to not prolong
     // reader lifetime for such insignificant business as timing.
-    ReadyEvent_ = readyEvent.Apply(BIND([weakThis = MakeWeak(this)] {
-        if (auto strongThis = weakThis.Lock()) {
-            strongThis->WaitTimer_.Stop();
+    ReadyEvent_ = readyEvent.Apply(BIND([this, weakThis = MakeWeak(this)] {
+        if (auto this_ = weakThis.Lock()) {
+            WaitTimer_.Stop();
         }
     }));
 }

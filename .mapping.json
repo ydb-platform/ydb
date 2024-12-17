@@ -1,0 +1,7 @@
+{
+  "build/mapping.conf.json":"devtools/ya/opensource/mapping.conf.json",
+  "build/scripts":"build/export_generators/hardcoded-cmake/build/scripts",
+  "build/ya.conf.json":"devtools/ya/opensource/ya.conf.json",
+  "ya":"devtools/ya/opensource/ya",
+  "ya.conf":"devtools/ya/opensource/ya.conf"
+}

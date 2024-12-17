@@ -9,17 +9,17 @@ items:
     href: parameterized_queries.md
   - name: Working with topics
     href: topic.md
-  - name: Test app
-    include: { mode: link, path: example/toc_p.yaml }
+  - name: Working with coordination nodes
+    href: coordination.md
   - name: Handling errors in the API
     href: error_handling.md
   - name: gRPC API
     items:
     - name: Overview
       href: overview-grpc-api.md
+    - name: gRPC headers
+      href: grpc-headers.md
     - name: Health Check API
       href: health-check-api.md
-  - name: Code recipes
-    include: { mode: link, path: recipes/toc_p.yaml }
   - name: Comparison of SDK features
     href: feature-parity.md

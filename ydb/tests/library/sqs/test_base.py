@@ -11,9 +11,9 @@ import re
 import socket
 from hamcrest import assert_that, equal_to, not_none, none, greater_than, less_than_or_equal_to, any_of, not_
 
-import ydb.tests.library.common.yatest_common as yatest_common
+import yatest
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 
@@ -71,7 +71,7 @@ HAS_QUEUES_PARAMS = {
 
 def get_sqs_client_path():
     if os.getenv("SQS_CLIENT_BINARY"):
-        return yatest_common.binary_path(os.getenv("SQS_CLIENT_BINARY"))
+        return yatest.common.binary_path(os.getenv("SQS_CLIENT_BINARY"))
     raise RuntimeError("SQS_CLIENT_BINARY enviroment variable is not specified")
 
 
@@ -179,7 +179,7 @@ class KikimrSqsTestBase(object):
 
     def setup_method(self, method=None):
         logging.debug('Test started: {}'.format(str(method.__name__)))
-        logging.debug("Kikimr logs dir: {}".format(self.cluster.slots[1].cwd if self.slot_count else self.cluster.nodes[1].cwd))
+        logging.debug("Kikimr working dir: {}".format(self.cluster.config.working_dir))
 
         # Start all nodes in case of previous test with killed nodes
         for node_index in range(len(self.cluster.nodes)):
@@ -328,12 +328,12 @@ class KikimrSqsTestBase(object):
             '-s', 'localhost',
             '-p', str(grpc_port)
         ]
-        yatest_common.execute(cmd)
+        yatest.common.execute(cmd)
 
     @classmethod
     def _setup_cluster(cls):
         config_generator = cls._setup_config_generator()
-        cluster = kikimr_cluster_factory(config_generator)
+        cluster = KiKiMR(config_generator)
         cluster.start()
         cls._init_cluster(cluster, config_generator)
         return cluster, config_generator
@@ -348,8 +348,8 @@ class KikimrSqsTestBase(object):
         while retries_count:
             logging.debug("Running {}".format(' '.join(cmd)))
             try:
-                yatest_common.execute(cmd)
-            except yatest_common.ExecutionError as ex:
+                yatest.common.execute(cmd)
+            except yatest.common.ExecutionError as ex:
                 logging.debug("Create user failed: {}. Retrying".format(ex))
                 retries_count -= 1
                 time.sleep(3)
@@ -434,10 +434,10 @@ class KikimrSqsTestBase(object):
                         '--partitions', '1',
                         '--queue-name', queue_name,
                     ] + self._sqs_server_opts
-                    execute = yatest_common.execute(cmd)
+                    execute = yatest.common.execute(cmd)
                     self.queue_url = execute.std_out
                     self.queue_url = self.queue_url.strip()
-            except (RuntimeError, yatest_common.ExecutionError) as ex:
+            except (RuntimeError, yatest.common.ExecutionError) as ex:
                 logging.debug("Got error: {}. Retrying creation request".format(ex))
                 if retries:
                     time.sleep(1)  # Sleep before next retry

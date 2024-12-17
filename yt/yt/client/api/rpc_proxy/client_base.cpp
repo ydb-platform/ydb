@@ -12,6 +12,7 @@
 #include "table_writer.h"
 #include "transaction.h"
 
+#include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/file_reader.h>
 #include <yt/yt/client/api/file_writer.h>
 #include <yt/yt/client/api/journal_reader.h>
@@ -39,20 +40,21 @@ namespace NYT::NApi::NRpcProxy {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using namespace NYPath;
-using namespace NYson;
+using namespace NConcurrency;
+using namespace NObjectClient;
 using namespace NTableClient;
 using namespace NTabletClient;
-using namespace NObjectClient;
 using namespace NTransactionClient;
+using namespace NYPath;
 using namespace NYTree;
+using namespace NYson;
 
 using NYT::ToProto;
 using NYT::FromProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr i64 MaxTracingTagLength = 1000;
+constexpr i64 MaxTracingTagLength = 1'000;
 static const TString DisabledSelectQueryTracingTag = "Tag is disabled, look for enable_select_query_tracing_tag parameter";
 
 TString SanitizeTracingTag(const TString& originalTag)
@@ -130,9 +132,9 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
     req->SetTimeout(config->RpcTimeout);
 
     req->set_type(static_cast<NProto::ETransactionType>(type));
-    req->set_timeout(ToProto<i64>(timeout));
+    req->set_timeout(ToProto(timeout));
     if (options.Deadline) {
-        req->set_deadline(ToProto<ui64>(*options.Deadline));
+        req->set_deadline(ToProto(*options.Deadline));
     }
     if (options.Id) {
         ToProto(req->mutable_id(), options.Id);
@@ -141,6 +143,13 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
         ToProto(req->mutable_parent_id(), options.ParentId);
     }
     ToProto(req->mutable_prerequisite_transaction_ids(), options.PrerequisiteTransactionIds);
+
+    if (options.ReplicateToMasterCellTags) {
+        ToProto(
+            req->mutable_replicate_to_master_cell_tags()->mutable_cell_tags(),
+            *options.ReplicateToMasterCellTags);
+    }
+
     // XXX(sandello): Better? Remove these fields from the protocol at all?
     // COMPAT(kiselyovp): remove auto_abort from the protocol
     req->set_auto_abort(false);
@@ -303,7 +312,7 @@ TFuture<NCypressClient::TNodeId> TClientBase::CreateNode(
     SetTimeoutOptions(*req, options);
 
     req->set_path(path);
-    req->set_type(ToProto<int>(type));
+    req->set_type(ToProto(type));
 
     if (options.Attributes) {
         ToProto(req->mutable_attributes(), *options.Attributes);
@@ -384,7 +393,7 @@ TFuture<void> TClientBase::MultisetAttributesNode(
     std::sort(children.begin(), children.end());
     for (const auto& [attribute, value] : children) {
         auto* protoSubrequest = req->add_subrequests();
-        protoSubrequest->set_attribute(attribute);
+        protoSubrequest->set_attribute(ToProto(attribute));
         protoSubrequest->set_value(ConvertToYsonString(value).ToString());
     }
 
@@ -407,7 +416,7 @@ TFuture<TLockNodeResult> TClientBase::LockNode(
     SetTimeoutOptions(*req, options);
 
     req->set_path(path);
-    req->set_mode(ToProto<int>(mode));
+    req->set_mode(ToProto(mode));
 
     req->set_waitable(options.Waitable);
     if (options.ChildKey) {
@@ -505,6 +514,7 @@ TFuture<NCypressClient::TNodeId> TClientBase::MoveNode(
     req->set_preserve_expiration_time(options.PreserveExpirationTime);
     req->set_preserve_expiration_timeout(options.PreserveExpirationTimeout);
     req->set_preserve_owner(options.PreserveOwner);
+    req->set_preserve_acl(options.PreserveAcl);
     req->set_pessimistic_quota_check(options.PessimisticQuotaCheck);
     req->set_enable_cross_cell_copying(options.EnableCrossCellCopying);
 
@@ -575,7 +585,7 @@ TFuture<void> TClientBase::ExternalizeNode(
     SetTimeoutOptions(*req, options);
 
     ToProto(req->mutable_path(), path);
-    req->set_cell_tag(ToProto<int>(cellTag));
+    req->set_cell_tag(ToProto(cellTag));
     ToProto(req->mutable_transactional_options(), options);
 
     return req->Invoke().As<void>();
@@ -603,7 +613,7 @@ TFuture<NObjectClient::TObjectId> TClientBase::CreateObject(
     auto proxy = CreateApiServiceProxy();
     auto req = proxy.CreateObject();
 
-    req->set_type(ToProto<int>(type));
+    req->set_type(ToProto(type));
     req->set_ignore_existing(options.IgnoreExisting);
     req->set_sync(options.Sync);
     if (options.Attributes) {
@@ -663,7 +673,7 @@ IFileWriterPtr TClientBase::CreateFileWriter(
     return NRpcProxy::CreateFileWriter(std::move(req));
 }
 
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 IJournalReaderPtr TClientBase::CreateJournalReader(
     const TYPath& path,
@@ -740,7 +750,10 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
 
-    return NRpcProxy::CreateTableReader(std::move(req));
+    return NRpc::CreateRpcClientInputStream(std::move(req))
+        .ApplyUnique(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
+            return NRpcProxy::CreateTableReader(std::move(inputStream));
+        }));
 }
 
 TFuture<ITableWriterPtr> TClientBase::CreateTableWriter(
@@ -759,7 +772,52 @@ TFuture<ITableWriterPtr> TClientBase::CreateTableWriter(
 
     ToProto(req->mutable_transactional_options(), options);
 
-    return NRpcProxy::CreateTableWriter(std::move(req));
+    auto schema = New<TTableSchema>();
+    return NRpc::CreateRpcClientOutputStream(
+        std::move(req),
+        BIND ([=] (const TSharedRef& metaRef) {
+            NApi::NRpcProxy::NProto::TWriteTableMeta meta;
+            if (!TryDeserializeProto(&meta, metaRef)) {
+                THROW_ERROR_EXCEPTION("Failed to deserialize schema for table writer");
+            }
+
+            FromProto(schema.Get(), meta.schema());
+        }))
+        .ApplyUnique(BIND([=] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {
+            return NRpcProxy::CreateTableWriter(std::move(outputStream), std::move(schema));
+        })).As<ITableWriterPtr>();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TFuture<TDistributedWriteSessionPtr> TClientBase::StartDistributedWriteSession(
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteSessionStartOptions& options)
+{
+    using TRsp = TIntrusivePtr<NRpc::TTypedClientResponse<NProto::TRspStartDistributedWriteSession>>;
+
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.StartDistributedWriteSession();
+    FillRequest(req.Get(), path, options);
+
+    return req->Invoke()
+        .ApplyUnique(BIND([] (TRsp&& result) -> TDistributedWriteSessionPtr {
+            return ConvertTo<TDistributedWriteSessionPtr>(TYsonString(result->session()));
+        }));
+}
+
+TFuture<void> TClientBase::FinishDistributedWriteSession(
+    TDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionFinishOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.FinishDistributedWriteSession();
+
+    FillRequest(req.Get(), std::move(session), options);
+
+    return req->Invoke().AsVoid();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -854,6 +912,7 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
             MergeRefsToRef<TRpcProxyClientBufferTag>(rsp->Attachments()));
         return TVersionedLookupRowsResult{
             .Rowset = std::move(rowset),
+            .UnavailableKeyIndexes = FromProto<std::vector<int>>(rsp->unavailable_key_indexes()),
         };
     }));
 }
@@ -928,6 +987,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
                 MergeRefsToRef<TRpcProxyClientBufferTag>(std::move(subresponseAttachments)));
             result.push_back({
                 .Rowset = std::move(rowset),
+                .UnavailableKeyIndexes = FromProto<std::vector<int>>(subresponse.unavailable_key_indexes()),
             });
 
             beginAttachmentIndex = endAttachmentIndex;
@@ -987,6 +1047,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     }
     req->set_range_expansion_limit(options.RangeExpansionLimit);
     req->set_max_subqueries(options.MaxSubqueries);
+    req->set_min_row_count_per_subquery(options.MinRowCountPerSubquery);
     req->set_allow_full_scan(options.AllowFullScan);
     req->set_allow_join_without_index(options.AllowJoinWithoutIndex);
 
@@ -1000,7 +1061,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_verbose_logging(options.VerboseLogging);
     req->set_new_range_inference(options.NewRangeInference);
     if (options.ExecutionBackend) {
-        req->set_execution_backend(static_cast<int>(*options.ExecutionBackend));
+        req->set_execution_backend(ToProto(*options.ExecutionBackend));
     }
     req->set_enable_code_cache(options.EnableCodeCache);
     req->set_memory_limit_per_node(options.MemoryLimitPerNode);
@@ -1008,6 +1069,10 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
     req->set_use_canonical_null_relations(options.UseCanonicalNullRelations);
     req->set_merge_versioned_rows(options.MergeVersionedRows);
+    ToProto(req->mutable_versioned_read_options(), options.VersionedReadOptions);
+    if (options.UseLookupCache) {
+        req->set_use_lookup_cache(*options.UseLookupCache);
+    }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {
         TSelectRowsResult result;
@@ -1051,7 +1116,7 @@ TFuture<TPullRowsResult> TClientBase::PullRows(
         req->set_upper_timestamp(options.UpperTimestamp);
     }
     for (auto [tabletId, rowIndex] : options.StartReplicationRowIndexes) {
-        auto *protoReplicationRowIndex = req->add_start_replication_row_indexes();
+        auto* protoReplicationRowIndex = req->add_start_replication_row_indexes();
         ToProto(protoReplicationRowIndex->mutable_tablet_id(), tabletId);
         protoReplicationRowIndex->set_row_index(rowIndex);
     }

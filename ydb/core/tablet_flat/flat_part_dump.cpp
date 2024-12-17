@@ -106,22 +106,22 @@ namespace {
         TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 
         auto indexPageId = part.IndexPages.GetFlat({});
-        auto indexPage = Env->TryGetPage(&part, indexPageId);
+        auto indexPage = Env->TryGetPage(&part, indexPageId, {});
 
         if (!indexPage) {
             Out
-                << " + Index{unload}"
+                << " + FlatIndex{unload}"
                 << Endl
                 << " |  Page     Row    Bytes  (";
             return;
         }
         
-        auto index = NPage::TIndex(*indexPage);
+        auto index = NPage::TFlatIndex(*indexPage);
         auto label = index.Label();
 
         Out
-            << " + Index{" << (ui16)label.Type << " rev "
-            << label.Format << ", " << label.Size << "b}"
+            << " + FlatIndex{" << indexPageId << "}" 
+            << " Label{" << (ui16)label.Type << " rev " << label.Format << ", " << label.Size << "b}"
             << " " << index->Count + (index.GetLastKeyRecord() ? 1 : 0) << " rec" << Endl
             << " |  Page     Row    Bytes  (";
 
@@ -133,7 +133,7 @@ namespace {
 
         Out << ")" << Endl;
 
-        auto printIndexKey = [&](const NPage::TIndex::TRecord* record) {
+        auto printIndexKey = [&](const NPage::TFlatIndex::TRecord* record) {
             key.clear();
             for (const auto &info: part.Scheme->Groups[0].ColsKeyIdx)
                 key.push_back(record->Cell(info));
@@ -142,7 +142,7 @@ namespace {
                 << " | " << (Printf(Out, " %4u", record->GetPageId()), " ")
                 << (Printf(Out, " %6lu", record->GetRowId()), " ");
 
-            if (auto *page = Env->TryGetPage(&part, record->GetPageId())) {
+            if (auto *page = Env->TryGetPage(&part, record->GetPageId(), {})) {
                 Printf(Out, " %6zub  ", page->size());
             } else {
                 Out << "~none~  ";
@@ -189,7 +189,7 @@ namespace {
         TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 
         // TODO: need to join with other column groups
-        auto data = NPage::TDataPage(Env->TryGetPage(&part, page));
+        auto data = NPage::TDataPage(Env->TryGetPage(&part, page, {}));
 
         if (data) {
             auto label = data.Label();
@@ -304,14 +304,14 @@ namespace {
         }
 
         auto dumpChild = [&] (NPage::TBtreeIndexNode::TChild child) {
-            if (part.GetPageType(child.PageId) == EPage::BTreeIndex) {
+            if (part.GetPageType(child.GetPageId(), {}) == EPage::BTreeIndex) {
                 BTreeIndexNode(part, child, level + 1);
             } else {
                 Out << intend << " | " << child.ToString() << Endl;
             }
         };
 
-        auto page = Env->TryGetPage(&part, meta.PageId);
+        auto page = Env->TryGetPage(&part, meta.GetPageId(), {});
         if (!page) {
             Out << intend << " | -- the rest of the index pages aren't loaded" << Endl;
             return;
@@ -323,10 +323,8 @@ namespace {
 
         Out
             << intend
-            << " + BTreeIndex{"
-            << meta.ToString() << ", "
-            << (ui16)label.Type << " rev " << label.Format << ", " 
-            << label.Size << "b}"
+            << " + BTreeIndex{" << meta.ToString() << "}"
+            << " Label{" << (ui16)label.Type << " rev " << label.Format << ", " << label.Size << "b}"
             << Endl;
 
         dumpChild(node.GetChild(0));

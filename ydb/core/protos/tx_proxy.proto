@@ -60,6 +60,7 @@ message TReadTableTransaction {
     enum EVersion {
         UNSPECIFIED = 0;
         YDB_V1 = 1;
+        YDB_V2 = 2; // Like V1 but allows NotNull types in result set
     }
     optional string Path = 1;
     optional bool Ordered = 2 [default = false];
@@ -274,6 +275,9 @@ message TEvNavigateStatus_Deprecated {
 message TEvInvalidateTable {
     optional uint64 SchemeShardId = 1;
     optional uint64 TableId = 2;
+}
+
+message TEvInvalidateTableResult {
 }
 
 message TEvExportRequest {

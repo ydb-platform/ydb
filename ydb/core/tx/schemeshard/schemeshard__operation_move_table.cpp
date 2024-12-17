@@ -2,6 +2,8 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/mind/hive/hive.h>
+
 namespace {
 
 using namespace NKikimr;
@@ -51,7 +53,7 @@ public:
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -98,10 +100,13 @@ public:
             for (const auto& child: srcPath->GetChildren()) {
                 auto name = child.first;
 
-                TPath srcIndexPath = srcPath.Child(name);
-                Y_ABORT_UNLESS(srcIndexPath.IsResolved());
+                TPath srcChildPath = srcPath.Child(name);
+                Y_ABORT_UNLESS(srcChildPath.IsResolved());
 
-                if (srcIndexPath.IsDeleted()) {
+                if (srcChildPath.IsDeleted()) {
+                    continue;
+                }
+                if (srcChildPath.IsSequence()) {
                     continue;
                 }
 
@@ -109,7 +114,7 @@ public:
                 Y_ABORT_UNLESS(dstIndexPath.IsResolved());
 
                 auto remap = move->AddReMapIndexes();
-                PathIdFromPathId(srcIndexPath->PathId, remap->MutableSrcPathId());
+                PathIdFromPathId(srcChildPath->PathId, remap->MutableSrcPathId());
                 PathIdFromPathId(dstIndexPath->PathId, remap->MutableDstPathId());
             }
 
@@ -306,7 +311,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvPrivate::TEvCompletePublication"
                                << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         Y_ABORT_UNLESS(ActivePathId == ev->Get()->PathId);
 
@@ -325,7 +330,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
                                << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
 
@@ -386,7 +391,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvPrivate:TEvCompleteBarrier"
                                << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -430,7 +435,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
                                << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         context.OnComplete.Barrier(OperationId, "RenamePathBarrier");
         return false;
@@ -598,7 +603,8 @@ public:
             checks
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
-                .IsResolved();
+                .IsResolved()
+                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
                 if (dstParent.IsUnderDeleting()) {
                     checks

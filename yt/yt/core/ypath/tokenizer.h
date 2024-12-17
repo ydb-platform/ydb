@@ -22,12 +22,13 @@ public:
     ETokenType Advance();
 
     ETokenType GetType() const;
+    ETokenType GetPreviousType() const;
     TStringBuf GetToken() const;
-    TStringBuf GetPrefix() const;
-    TStringBuf GetPrefixPlusToken() const;
+    TYPathBuf GetPrefix() const;
+    TYPathBuf GetPrefixPlusToken() const;
     TStringBuf GetSuffix() const;
     TStringBuf GetInput() const;
-    TStringBuf GetPath() const;
+    TYPathBuf GetPath() const;
     const TString& GetLiteralValue() const;
 
     void Expect(ETokenType expectedType) const;
@@ -35,9 +36,27 @@ public:
     bool Skip(ETokenType expectedType);
     [[noreturn]] void ThrowUnexpected() const;
 
-private:
-    TYPathBuf Path_;
+    // For iterations. Restores tokenizer to current state on destruction.
+    // Does not restore LiteralValue_.
+    class TCheckpoint
+    {
+    public:
+        explicit TCheckpoint(TTokenizer& tokenizer);
+        ~TCheckpoint();
 
+    private:
+        TTokenizer& Tokenizer_;
+        TYPathBuf Path_;
+        ETokenType Type_;
+        ETokenType PreviousType_;
+        TStringBuf Token_;
+        TStringBuf Input_;
+    };
+
+private:
+    friend class TTokenizer::TCheckpoint;
+
+    TYPathBuf Path_;
     ETokenType Type_;
     ETokenType PreviousType_;
     TStringBuf Token_;
@@ -52,7 +71,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool HasPrefix(const TYPath& fullPath, const TYPath& prefixPath);
+bool HasPrefix(TYPathBuf fullPath, TYPathBuf prefixPath);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -2,6 +2,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
 
 #include <utility>
 
@@ -273,12 +274,11 @@ private:
         context.SS->ExternalTables[externalTable->PathId] = externalTableInfo;
         context.SS->IncrementPathDbRefCount(externalTable->PathId);
 
-        context.SS->PersistPath(db, externalTable->PathId);
 
         if (!acl.empty()) {
             externalTable->ApplyACL(acl);
-            context.SS->PersistACL(db, externalTable);
         }
+        context.SS->PersistPath(db, externalTable->PathId);
 
         context.SS->PersistExternalDataSource(db, externalDataSourcePathId, externalDataSource);
         context.SS->PersistExternalTable(db, externalTable->PathId, externalTableInfo);
@@ -308,6 +308,13 @@ public:
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(ssId));
+
+        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
+            if (!context.SS->EnableExternalDataSourcesOnServerless) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "External data sources are disabled for serverless domains. Please contact your system administrator to enable it");
+                return result;
+            }
+        }
 
         const auto parentPath = TPath::Resolve(parentPathStr, context.SS);
         RETURN_RESULT_UNLESS(NExternalTable::IsParentPathValid(result, parentPath));
@@ -392,6 +399,30 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreateExternalTable().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreateExternalTable()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateExternalTable);

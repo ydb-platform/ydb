@@ -22,23 +22,24 @@ namespace NKikimr::NBsController {
             NIceDb::TNiceDb db(txc.DB);
 
             for (NKikimrBlobStorage::TGroupMetrics& item : *record.MutableGroupMetrics()) {
-                if (TGroupInfo *group = Self->FindGroup(item.GetGroupId())) {
+                if (TGroupInfo *group = Self->FindGroup(TGroupId::FromProto(&item, &NKikimrBlobStorage::TGroupMetrics::GetGroupId))) {
                     group->GroupMetrics = std::move(item);
 
                     TString s;
                     const bool success = group->GroupMetrics->SerializeToString(&s);
                     Y_DEBUG_ABORT_UNLESS(success);
-                    db.Table<Schema::Group>().Key(group->ID).Update<Schema::Group::Metrics>(s);
+                    typename TGroupId::Type groupId = group->ID.GetRawId();
+                    db.Table<Schema::Group>().Key(groupId).Update<Schema::Group::Metrics>(s);
                 }
             }
 
             if (record.GroupsToQuerySize()) {
                 Response.reset(new TEvBlobStorage::TEvControllerGroupMetricsExchange);
                 auto& outRecord = Response->Record;
-                for (const TGroupId groupId : record.GetGroupsToQuery()) {
-                    if (TGroupInfo *group = Self->FindGroup(groupId)) {
+                for (const ui32 groupId : record.GetGroupsToQuery()) {
+                    if (TGroupInfo *group = Self->FindGroup(TGroupId::FromValue(groupId))) {
                         auto *item = outRecord.AddGroupMetrics();
-                        item->SetGroupId(group->ID);
+                        item->SetGroupId(group->ID.GetRawId());
                         group->FillInGroupParameters(item->MutableGroupParameters());
                     }
                 }
@@ -59,6 +60,11 @@ namespace NKikimr::NBsController {
     };
 
     void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr& ev) {
+        if (auto& record = ev->Get()->Record; record.HasWhiteboardUpdate()) {
+            auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate>();
+            ev->Record.Swap(record.MutableWhiteboardUpdate());
+            Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), ev.release());
+        }
         Execute(new TTxGroupMetricsExchange(this, ev));
     }
 

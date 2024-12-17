@@ -1,0 +1,22 @@
+--- a/testsuite/libffi.call/ffitest.h	(index)
++++ b/testsuite/libffi.call/ffitest.h	(working tree)
+@@ -6 +6,7 @@
+-#include "fficonfig.h"
++
++#define HAVE_STDINT_H
++#define HAVE_INTTYPES_H
++
++#ifndef _MSC_VER
++#define HAVE_MMAP_ANON
++#endif
+--- a/testsuite/libffi.closures/ffitest.h	(index)
++++ b/testsuite/libffi.closures/ffitest.h	(working tree)
+@@ -6 +6,7 @@
+-#include "fficonfig.h"
++
++#define HAVE_STDINT_H
++#define HAVE_INTTYPES_H
++
++#ifndef _MSC_VER
++#define HAVE_MMAP_ANON
++#endif

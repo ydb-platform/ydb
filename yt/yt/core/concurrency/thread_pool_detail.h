@@ -18,7 +18,7 @@ public:
 
     explicit TThreadPoolBase(TString threadNamePrefix);
 
-    void Configure(int threadCount);
+    void SetThreadCount(int threadCount);
     void Shutdown();
     void EnsureStarted();
 
@@ -42,8 +42,7 @@ protected:
 
     virtual void DoStart();
     virtual void DoShutdown();
-    virtual TClosure MakeFinalizerCallback();
-    virtual void DoConfigure(int threadCount);
+    virtual void DoSetThreadCount(int threadCount);
 
     virtual TSchedulerThreadPtr SpawnThread(int index) = 0;
 };

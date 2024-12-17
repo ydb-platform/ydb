@@ -13,29 +13,20 @@
 namespace NActors {
     class TChunkSerializer;
     class IActor;
-    class ISerializerToStream {
-    public:
-        virtual bool SerializeToArcadiaStream(TChunkSerializer*) const = 0;
-    };
-
+    
     class IEventBase
-        : TNonCopyable,
-          public ISerializerToStream {
+        : TNonCopyable {
     protected:
         // for compatibility with virtual actors
-        virtual bool DoExecute(IActor* /*actor*/, std::unique_ptr<IEventHandle> /*eventPtr*/) {
-            Y_DEBUG_ABORT_UNLESS(false);
-            return false;
-        }
+        virtual bool DoExecute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr);
+
     public:
         // actual typing is performed by IEventHandle
 
         virtual ~IEventBase() {
         }
 
-        bool Execute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr) {
-            return DoExecute(actor, std::move(eventPtr));
-        }
+        bool Execute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr);
 
         virtual TString ToStringHeader() const = 0;
         virtual TString ToString() const {
@@ -66,6 +57,13 @@ namespace NActors {
             {
             }
         };
+
+    public:
+        typedef TAutoPtr<IEventHandle> TPtr;
+
+    public:
+        // Used by a mailbox intrusive list
+        std::atomic<uintptr_t> NextLinkPtr;
 
     public:
         template <typename TEv>
@@ -349,6 +347,10 @@ namespace NActors {
     template <typename TEventType>
     class TEventHandle: public IEventHandle {
         TEventHandle(); // we never made instance of TEventHandle
+
+    public:
+        typedef TAutoPtr<TEventHandle<TEventType>> TPtr;
+
     public:
         TEventType* Get() {
             return IEventHandle::Get<TEventType>();
@@ -371,7 +373,7 @@ namespace NActors {
         // still abstract
 
         typedef TEventHandle<TEventType> THandle;
-        typedef TAutoPtr<THandle> TPtr;
+        typedef typename THandle::TPtr TPtr;
     };
 
 #define DEFINE_SIMPLE_LOCAL_EVENT(eventType, header)                    \

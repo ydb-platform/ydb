@@ -1,8 +1,8 @@
 #include "yql_pq_helpers.h"
 
 #include "yql_pq_provider_impl.h"
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/utils/log/log.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
 
 namespace NYql {
@@ -101,5 +101,20 @@ void FillSettingsWithResolvedYdsIds(
     }
 }
 
+TMaybeNode<TExprBase> FindSetting(TExprNode::TPtr settings, TStringBuf name) {
+    const auto maybeSettingsList = TMaybeNode<TCoNameValueTupleList>(settings);
+    if (!maybeSettingsList) {
+        return nullptr;
+    }
+    const auto settingsList = maybeSettingsList.Cast();
+
+    for (size_t i = 0; i < settingsList.Size(); ++i) {
+        TCoNameValueTuple setting = settingsList.Item(i);
+        if (setting.Name().Value() == name) {
+            return setting.Value();
+        }
+    }
+    return nullptr;
+}
 
 } // namespace NYql

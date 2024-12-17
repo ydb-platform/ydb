@@ -55,7 +55,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
         EngineBay.SetIsImmediateTx();
 
     if (usesMvccSnapshot)
-        EngineBay.SetIsRepeatableSnapshot();
+        EngineBay.SetUsesMvccSnapshot();
 
     if (Tx.HasReadTableTransaction()) {
         auto &tx = Tx.GetReadTableTransaction();
@@ -235,7 +235,7 @@ bool TValidatedDataTx::ReValidateKeys(const NTable::TScheme& scheme)
 
     if (IsKqpTx()) {
         const auto& userDb = EngineBay.GetUserDb();
-        TKeyValidator::TValidateOptions options(userDb.GetLockTxId(), userDb.GetLockNodeId(), userDb.GetIsRepeatableSnapshot(), userDb.GetIsImmediateTx(), userDb.GetIsWriteTx(), scheme);
+        TKeyValidator::TValidateOptions options(userDb.GetLockTxId(), userDb.GetLockNodeId(), userDb.GetUsesMvccSnapshot(), userDb.GetIsImmediateTx(), userDb.GetIsWriteTx(), scheme);
         auto [result, error] = EngineBay.GetKeyValidator().ValidateKeys(options);
         if (result != EResult::Ok) {
             ErrStr = std::move(error);
@@ -410,7 +410,7 @@ TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
     if (!DataTx) {
         Y_ABORT_UNLESS(TxBody);
         DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
-                                                    GetReceivedAt(), TxBody, IsMvccSnapshotRepeatable());
+                                                    GetReceivedAt(), TxBody, IsMvccSnapshotRead());
         if (DataTx->HasStreamResponse())
             SetStreamSink(DataTx->GetSink());
     }
@@ -440,7 +440,10 @@ bool TActiveTransaction::BuildSchemeTx()
         + (ui32)SchemeTx->HasCreateCdcStreamNotice()
         + (ui32)SchemeTx->HasAlterCdcStreamNotice()
         + (ui32)SchemeTx->HasDropCdcStreamNotice()
-        + (ui32)SchemeTx->HasMoveIndex();
+        + (ui32)SchemeTx->HasMoveIndex()
+        + (ui32)SchemeTx->HasCreateIncrementalRestoreSrc()
+        + (ui32)SchemeTx->HasCreateIncrementalBackupSrc()
+        ;
     if (count != 1)
         return false;
 
@@ -476,6 +479,10 @@ bool TActiveTransaction::BuildSchemeTx()
         SchemeTxType = TSchemaOperation::ETypeDropCdcStream;
     else if (SchemeTx->HasMoveIndex())
         SchemeTxType = TSchemaOperation::ETypeMoveIndex;
+    else if (SchemeTx->HasCreateIncrementalRestoreSrc())
+        SchemeTxType = TSchemaOperation::ETypeCreateIncrementalRestoreSrc;
+    else if (SchemeTx->HasCreateIncrementalBackupSrc())
+        SchemeTxType = TSchemaOperation::ETypeCreateIncrementalBackupSrc;
     else
         SchemeTxType = TSchemaOperation::ETypeUnknown;
 
@@ -536,7 +543,7 @@ void TActiveTransaction::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBas
                                        const TActorContext &ctx) {
     ReleasedTxDataSize = provider.GetMemoryLimit() + provider.GetRequestedMemory();
 
-    if (!DataTx || DataTx->IsTxDataReleased())
+    if (!DataTx || DataTx->GetIsReleased())
         return;
 
     DataTx->ReleaseTxData();
@@ -639,7 +646,7 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
 
     bool extractKeys = DataTx->IsTxInfoLoaded();
     DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
-                                                GetReceivedAt(), TxBody, IsMvccSnapshotRepeatable());
+                                                GetReceivedAt(), TxBody, IsMvccSnapshotRead());
     if (DataTx->Ready() && extractKeys) {
         DataTx->ExtractKeys(true);
     }
@@ -858,6 +865,7 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::CreateCdcStream);
         plan.push_back(EExecutionUnitKind::AlterCdcStream);
         plan.push_back(EExecutionUnitKind::DropCdcStream);
+        plan.push_back(EExecutionUnitKind::CreateIncrementalRestoreSrc);
         plan.push_back(EExecutionUnitKind::CompleteOperation);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
     } else {
@@ -935,6 +943,27 @@ bool TActiveTransaction::OnStopping(TDataShard& self, const TActorContext& ctx) 
 
         // Distributed ops avoid doing new work when stopping
         return false;
+    }
+}
+
+void TActiveTransaction::OnCleanup(TDataShard& self, std::vector<std::unique_ptr<IEventHandle>>& replies) {
+    if (!IsImmediate() && GetTarget() && !HasCompletedFlag()) {
+        auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(GetKind());
+        auto status = NKikimrTxDataShard::TEvProposeTransactionResult::ABORTED;
+        auto result = std::make_unique<TEvDataShard::TEvProposeTransactionResult>(
+            kind, self.TabletID(), GetTxId(), status);
+
+        if (self.State == TShardState::SplitSrcWaitForNoTxInFlight) {
+            result->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, TStringBuilder()
+                << "DataShard " << self.TabletID() << " is splitting");
+        } else if (self.Pipeline.HasWaitingSchemeOps()) {
+            result->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED, TStringBuilder()
+                << "DataShard " << self.TabletID() << " is blocked by a schema operation");
+        } else {
+            result->AddError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, "Transaction was cleaned up");
+        }
+
+        replies.push_back(std::make_unique<IEventHandle>(GetTarget(), self.SelfId(), result.release(), 0, GetCookie()));
     }
 }
 

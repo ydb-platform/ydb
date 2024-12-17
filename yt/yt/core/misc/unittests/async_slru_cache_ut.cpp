@@ -1,5 +1,9 @@
 #include <yt/yt/core/test_framework/framework.h>
 
+#include <yt/yt/core/concurrency/public.h>
+#include <yt/yt/core/concurrency/fair_share_action_queue.h>
+#include <yt/yt/core/concurrency/thread_pool.h>
+
 #include <yt/yt/core/misc/async_slru_cache.h>
 #include <yt/yt/core/misc/property.h>
 
@@ -11,6 +15,10 @@ namespace NYT {
 namespace {
 
 using namespace NProfiling;
+
+////////////////////////////////////////////////////////////////////////////////
+
+const NLogging::TLogger Logger("Main");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -109,9 +117,23 @@ public:
         : TAsyncSlruCacheBase(std::move(config)), EnableResurrection_(enableResurrection)
     { }
 
-    DEFINE_BYVAL_RO_PROPERTY(int, ItemCount, 0);
-    DEFINE_BYVAL_RO_PROPERTY(int, TotalAdded, 0);
-    DEFINE_BYVAL_RO_PROPERTY(int, TotalRemoved, 0);
+    int GetItemCount() const
+    {
+        auto guard = Guard(Lock_);
+        return Keys_.size();
+    }
+
+    int GetTotalAdded() const
+    {
+        auto guard = Guard(Lock_);
+        return TotalAdded_;
+    }
+
+    int GetTotalRemoved() const
+    {
+        auto guard = Guard(Lock_);
+        return TotalRemoved_;
+    }
 
 protected:
     i64 GetWeight(const TSimpleCachedValuePtr& value) const override
@@ -119,24 +141,42 @@ protected:
         return value->Weight;
     }
 
-    void OnAdded(const TSimpleCachedValuePtr& /*value*/) override
+    void OnAdded(const TSimpleCachedValuePtr& value) override
     {
-        ++ItemCount_;
+        YT_LOG_DEBUG("Item add (Item: %v)", value->GetKey());
+        auto guard = Guard(Lock_);
+
+        if (!Keys_.find(value->GetKey()).IsEnd()) {
+            YT_LOG_ALERT("Item already exist (Item: %v)", value->GetKey());
+        }
+
+        EmplaceOrCrash(Keys_, value->GetKey());
         ++TotalAdded_;
     }
 
-    void OnRemoved(const TSimpleCachedValuePtr& /*value*/) override
+    void OnRemoved(const TSimpleCachedValuePtr& value) override
     {
-        --ItemCount_;
+        YT_LOG_DEBUG("Item remove (Item: %v)", value->GetKey());
+        auto guard = Guard(Lock_);
+
+        if (Keys_.find(value->GetKey()).IsEnd()) {
+            YT_LOG_ALERT("Item not found (Item: %v)", value->GetKey());
+        }
+
+        EraseOrCrash(Keys_, value->GetKey());
         ++TotalRemoved_;
-        EXPECT_GE(ItemCount_, 0);
     }
+
     bool IsResurrectionSupported() const override
     {
         return EnableResurrection_;
     }
 
 private:
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    THashSet<int> Keys_;
+    int TotalAdded_ = 0;
+    int TotalRemoved_ = 0;
     bool EnableResurrection_;
 };
 
@@ -347,6 +387,55 @@ TEST(TAsyncSlruCacheTest, UpdateWeight)
     }
 }
 
+TEST(TAsyncSlruCacheTest, CookieWeight)
+{
+    const int cacheSize = 10;
+    auto config = CreateCacheConfig(cacheSize);
+    auto cache = New<TSimpleSlruCache>(config);
+
+    for (int i = 0; i < cacheSize; ++i) {
+        auto cookie = cache->BeginInsert(i, 1);
+        EXPECT_TRUE(cookie.IsActive());
+        cookie.EndInsert(New<TSimpleCachedValue>(i, i));
+    }
+
+    // All values fit in cache.
+    EXPECT_EQ(cache->GetSize(), cacheSize);
+
+    auto key = cacheSize;
+
+    {
+        // Insert as 2, Trim 2 and cancel.
+        auto cookie = cache->BeginInsert(key, 2);
+        EXPECT_TRUE(cookie.IsActive());
+        EXPECT_EQ(cache->GetSize(), cacheSize - 1);
+        cookie.Cancel(TError("Cancelled"));
+        EXPECT_EQ(cache->GetSize(), cacheSize - 2);
+    }
+
+    {
+        // Insert as 0, resize to 3, trim 1, resize to 1 and cancel.
+        auto cookie = cache->BeginInsert(key);
+        EXPECT_TRUE(cookie.IsActive());
+        EXPECT_EQ(cache->GetSize(), cacheSize - 1);
+        cookie.UpdateWeight(3);
+        EXPECT_EQ(cache->GetSize(), cacheSize - 2);
+        cookie.UpdateWeight(1);
+        EXPECT_EQ(cache->GetSize(), cacheSize - 2);
+        cookie.Cancel(TError("Cancelled"));
+        EXPECT_EQ(cache->GetSize(), cacheSize - 3);
+    }
+
+    {
+        // Insert as 2, complete as 4 - trim 1.
+        auto cookie = cache->BeginInsert(key, 2);
+        EXPECT_TRUE(cookie.IsActive());
+        EXPECT_EQ(cache->GetSize(), cacheSize - 2);
+        cookie.EndInsert(New<TSimpleCachedValue>(key, key, 4));
+        EXPECT_EQ(cache->GetSize(), cacheSize - 3);
+    }
+}
+
 TEST(TAsyncSlruCacheTest, Touch)
 {
     const int cacheSize = 2;
@@ -413,6 +502,49 @@ TEST(TAsyncSlruCacheTest, AddRemoveWithResurrection)
             EXPECT_EQ(cache->GetItemCount(), cache->GetSize());
         }
     }
+}
+
+TEST(TAsyncSlruCacheTest, AddRemoveStressTest)
+{
+    auto threadPool = NConcurrency::CreateThreadPool(2, "AddRemoveStressTest");
+
+    constexpr int cacheSize = 5;
+    constexpr int valueCount = 20;
+    auto config = CreateCacheConfig(cacheSize);
+    auto cache = New<TCountingSlruCache>(std::move(config));
+
+    std::vector<TSimpleCachedValuePtr> values;
+
+    for (int i = 0; i < valueCount; ++i) {
+        values.push_back(New<TSimpleCachedValue>(i, i));
+    }
+
+    auto callback = BIND([&] {
+        std::vector<TCountingSlruCache::TInsertCookie> cookies;
+
+        for (int i = 0; i < valueCount; ++i) {
+            auto cookie = cache->BeginInsert(i);
+            cookies.emplace_back(std::move(cookie));
+        }
+
+        for (int i = 0; i < valueCount; ++i) {
+            cookies.back().EndInsert(values[i]);
+            cookies.pop_back();
+        }
+    });
+
+    for (int i = 0; i < 100; i++) {
+        std::vector<TFuture<void>> futures;
+        futures.reserve(2);
+
+        for (int j = 0; j < 2; j++) {
+            futures.push_back(callback.AsyncVia(threadPool->GetInvoker()).Run());
+        }
+
+        NConcurrency::WaitFor(AllSucceeded(futures)).ThrowOnError();
+    }
+
+    threadPool->Shutdown();
 }
 
 TEST(TAsyncSlruCacheTest, AddThenImmediatelyRemove)
@@ -920,6 +1052,7 @@ DEFINE_ENUM(EStressOperation,
     ((UpdateWeight) (7))
     ((ReleaseValue) (8))
     ((Reconfigure) (9))
+    ((UpdateCookieWeight) (10))
 );
 
 class TAsyncSlruCacheStressTest
@@ -948,6 +1081,7 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
     }
 
     std::uniform_int_distribution<int> weightDistribution(1, 10);
+    std::uniform_int_distribution<int> cookieWeightDistribution(0, 10);
     std::uniform_int_distribution<int> keyDistribution(1, 20);
     std::uniform_int_distribution<int> capacityDistribution(50, 150);
     std::uniform_real_distribution<double> youngerSizeFractionDistribution(0.0, 1.0);
@@ -1018,7 +1152,8 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
             }
             case EStressOperation::BeginInsert: {
                 int key = keyDistribution(randomGenerator);
-                auto cookie = cache->BeginInsert(key);
+                auto cookieWeight = cookieWeightDistribution(randomGenerator);
+                auto cookie = cache->BeginInsert(key, cookieWeight);
                 if (cookie.IsActive()) {
                     activeInsertCookies.emplace_back(std::move(cookie));
                     lastInsertedValues[key] = nullptr;
@@ -1101,6 +1236,15 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
                 config->Capacity = capacityDistribution(randomGenerator);
                 config->YoungerSizeFraction = youngerSizeFractionDistribution(randomGenerator);
                 cache->Reconfigure(std::move(config));
+                break;
+            }
+            case EStressOperation::UpdateCookieWeight: {
+                if (activeInsertCookies.empty()) {
+                    break;
+                }
+                size_t cookieIndex = randomGenerator() % activeInsertCookies.size();
+                auto cookieWeight = cookieWeightDistribution(randomGenerator);
+                activeInsertCookies[cookieIndex].UpdateWeight(cookieWeight);
                 break;
             }
         }

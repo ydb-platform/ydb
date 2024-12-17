@@ -160,12 +160,12 @@ namespace orc {
     }
 
     bool ret = evaluateColumnStatistics(stripeStats.col_stats());
+    if (mMetrics != nullptr) {
+      mMetrics->EvaluatedRowGroupCount.fetch_add(stripeRowGroupCount);
+    }
     if (!ret) {
       // reset mNextSkippedRows when the current stripe does not satisfy the PPD
       mNextSkippedRows.clear();
-      if (mMetrics != nullptr) {
-        mMetrics->EvaluatedRowGroupCount.fetch_add(stripeRowGroupCount);
-      }
     }
     return ret;
   }
@@ -177,7 +177,7 @@ namespace orc {
         mFileStatsEvalResult = true;
       } else {
         mFileStatsEvalResult = evaluateColumnStatistics(footer.statistics());
-        if (!mFileStatsEvalResult && mMetrics != nullptr) {
+        if (mMetrics != nullptr) {
           mMetrics->EvaluatedRowGroupCount.fetch_add(numRowGroupsInStripeRange);
         }
       }

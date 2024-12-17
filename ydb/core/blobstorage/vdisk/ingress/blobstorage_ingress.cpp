@@ -3,8 +3,6 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 
-#include <library/cpp/pop_count/popcount.h>
-
 #include <util/generic/bitops.h>
 
 namespace NKikimr {
@@ -233,9 +231,46 @@ namespace NKikimr {
             TVectorType m = handoff[handoffNodeId].ToVector(); // map of handoff replicas on this node
             TVectorType mainVec = main.ToVector();
             TVectorType toMove = m - mainVec;   // what we can send to main replicas
-            TVectorType toDel = m & mainVec;    // what we can delete
+            TVectorType deleted = GetVDiskHandoffDeletedVec(top, vdisk, id);
+            TVectorType toDel = m & mainVec & ~deleted;  // not deleted, what we can to delete
             return TPairOfVectors(toMove, toDel);
         }
+    }
+
+    NMatrix::TVectorType TIngress::GetVDiskHandoffVec(const TBlobStorageGroupInfo::TTopology *top,
+                                                 const TVDiskIdShort &vdisk,
+                                                 const TLogoBlobID &id) const {
+        Y_ABORT_UNLESS(IngressMode(top->GType) == EMode::GENERIC);
+        Y_DEBUG_ABORT_UNLESS(id.PartId() == 0);
+        SETUP_VECTORS(Data, top->GType);
+
+        ui8 nodeId = top->GetIdxInSubgroup(vdisk, id.Hash());
+
+        if (nodeId < totalParts) {
+            return TVectorType(0, totalParts);
+        }
+
+        ui8 handoffNodeId = nodeId - totalParts;
+        Y_DEBUG_ABORT_UNLESS(handoffNodeId < handoffNum);
+        return handoff[handoffNodeId].ToVector();
+    }
+
+    NMatrix::TVectorType TIngress::GetVDiskHandoffDeletedVec(const TBlobStorageGroupInfo::TTopology *top,
+                                                 const TVDiskIdShort &vdisk,
+                                                 const TLogoBlobID &id) const {
+        Y_ABORT_UNLESS(IngressMode(top->GType) == EMode::GENERIC);
+        Y_DEBUG_ABORT_UNLESS(id.PartId() == 0);
+        SETUP_VECTORS(Data, top->GType);
+
+        ui8 nodeId = top->GetIdxInSubgroup(vdisk, id.Hash());
+
+        if (nodeId < totalParts) {
+            return TVectorType(0, totalParts);
+        }
+
+        ui8 handoffNodeId = nodeId - totalParts;
+        Y_DEBUG_ABORT_UNLESS(handoffNodeId < handoffNum);
+        return handoff[handoffNodeId].DeletedPartsVector();
     }
 
     NMatrix::TVectorType TIngress::LocalParts(TBlobStorageGroupType gtype) const {
@@ -279,7 +314,8 @@ namespace NKikimr {
 
     void TIngress::DeleteHandoff(const TBlobStorageGroupInfo::TTopology *top,
                                  const TVDiskIdShort &vdisk,
-                                 const TLogoBlobID &id) {
+                                 const TLogoBlobID &id,
+                                 bool deleteLocal) {
         Y_ABORT_UNLESS(IngressMode(top->GType) == EMode::GENERIC);
 
         Y_DEBUG_ABORT_UNLESS(id.PartId() != 0);
@@ -293,8 +329,10 @@ namespace NKikimr {
         Y_DEBUG_ABORT_UNLESS(handoffNodeId < handoffNum);
 
         ui8 i = id.PartId() - 1u;
-        local.Clear(i);                     // delete local
         handoff[handoffNodeId].Delete(i);   // delete handoff
+        if (deleteLocal) {
+            local.Clear(i);
+        }
     }
 
     // Make a copy of ingress w/o local bits

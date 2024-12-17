@@ -24,11 +24,11 @@ TDigest::TDigest(TStringBuf serializedDigest)
 {
     NTDigest::TDigest digest;
     Y_ABORT_UNLESS(digest.ParseFromArray(serializedDigest.data(), serializedDigest.size()));
-    Delta = digest.GetDelta();
-    K = digest.GetK();
+    Delta = digest.delta();
+    K = digest.k();
     for (int i = 0; i < digest.centroids_size(); ++i) {
         const NTDigest::TDigest::TCentroid& centroid = digest.centroids(i);
-        Update(centroid.GetMean(), centroid.GetWeight());
+        Update(centroid.mean(), centroid.weight());
     }
 }
 
@@ -187,12 +187,12 @@ double TDigest::GetRank(double value) {
 TString TDigest::Serialize() {
     Compress();
     NTDigest::TDigest digest;
-    digest.SetDelta(Delta);
-    digest.SetK(K);
+    digest.set_delta(Delta);
+    digest.set_k(K);
     for (const auto& it : Centroids) {
-        NTDigest::TDigest::TCentroid* centroid = digest.AddCentroids();
-        centroid->SetMean(it.Mean);
-        centroid->SetWeight(it.Count);
+        NTDigest::TDigest::TCentroid* centroid = digest.add_centroids();
+        centroid->set_mean(it.Mean);
+        centroid->set_weight(it.Count);
     }
     return digest.SerializeAsString();
 }

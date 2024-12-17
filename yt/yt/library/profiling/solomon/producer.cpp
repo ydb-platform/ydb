@@ -18,13 +18,13 @@ DEFINE_REFCOUNTED_TYPE(TProducerCounters)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const static auto& Logger = SolomonLogger;
+static constexpr auto& Logger = SolomonLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void TProducerCounters::ClearOutdated(i64 lastIteration)
 {
-    std::vector<TString> countersToRemove;
+    std::vector<std::string> countersToRemove;
     for (const auto& [name, counter] : Counters) {
         if (std::get<1>(counter) != lastIteration) {
             countersToRemove.push_back(name);
@@ -34,7 +34,7 @@ void TProducerCounters::ClearOutdated(i64 lastIteration)
         Counters.erase(name);
     }
 
-    std::vector<TString> gaugesToRemove;
+    std::vector<std::string> gaugesToRemove;
     for (const auto& [name, gauge] : Gauges) {
         if (gauge.second != lastIteration) {
             gaugesToRemove.push_back(name);
@@ -65,7 +65,7 @@ bool TProducerCounters::IsEmpty() const
 ////////////////////////////////////////////////////////////////////////////////
 
 TCounterWriter::TCounterWriter(
-    IRegistryImplPtr registry,
+    IRegistryPtr registry,
     TProducerCountersPtr counters,
     i64 iteration)
     : Registry_(std::move(registry))
@@ -94,7 +94,7 @@ void TCounterWriter::PopTag()
     Counters_.pop_back();
 }
 
-void TCounterWriter::AddGauge(const TString& name, double value)
+void TCounterWriter::AddGauge(const std::string& name, double value)
 {
     auto& [gauge, iteration] = Counters_.back()->Gauges[name];
     iteration = Iteration_;
@@ -114,7 +114,7 @@ void TCounterWriter::AddGauge(const TString& name, double value)
     gauge.Update(value);
 }
 
-void TCounterWriter::AddCounter(const TString& name, i64 value)
+void TCounterWriter::AddCounter(const std::string& name, i64 value)
 {
     auto& [counter, iteration, lastValue] = Counters_.back()->Counters[name];
     iteration = Iteration_;
@@ -143,72 +143,123 @@ void TCounterWriter::AddCounter(const TString& name, i64 value)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TOwningProducer
+{
+    ISensorProducerPtr Owner;
+    TProducerStatePtr Producer;
+};
+
+void DoCollectBatch(
+    const IRegistryPtr& profiler,
+    std::vector<TOwningProducer>&& batchArg,
+    const TEventTimer& collectDuration)
+{
+    auto batch = std::move(batchArg);
+    for (const auto& item : batch) {
+        TEventTimerGuard guard(collectDuration);
+        try {
+            const auto& producer = item.Producer;
+            const auto& buffer = item.Owner->GetBuffer();
+            if (buffer) {
+                auto lastBuffer = producer->LastBuffer.Lock();
+                if (lastBuffer == buffer) {
+                    continue;
+                }
+
+                TCounterWriter writer(profiler, producer->Counters, ++producer->LastUpdateIteration);
+                buffer->WriteTo(&writer);
+                producer->LastBuffer = buffer;
+                if (producer->Counters->Options.ProducerRemoveSupport) {
+                    producer->Counters->ClearOutdated(producer->LastUpdateIteration);
+                }
+            } else {
+                producer->Counters->Counters.clear();
+                producer->Counters->Gauges.clear();
+                producer->Counters->Tags.clear();
+            }
+        } catch (const std::exception& ex) {
+            YT_LOG_ERROR(ex, "Producer read failed");
+            continue;
+        }
+    }
+}
+
+TFuture<void> CollectBatchAsync(
+    const IInvokerPtr& invoker,
+    const IRegistryPtr& profiler,
+    std::vector<TOwningProducer>&& batch,
+    const TEventTimer& collectDuration)
+{
+    return BIND(&DoCollectBatch, profiler, Passed(std::move(batch)), collectDuration)
+        .AsyncVia(invoker)
+        .Run();
+}
+
 void TProducerSet::AddProducer(TProducerStatePtr state)
 {
     Producers_.insert(std::move(state));
 }
 
-void TProducerSet::Collect(IRegistryImplPtr profiler, IInvokerPtr invoker)
+void TProducerSet::Collect(IRegistryPtr profiler, IInvokerPtr invoker)
 {
     std::vector<TFuture<void>> offloadFutures;
     std::deque<TProducerStatePtr> toRemove;
+
+    std::vector<TOwningProducer> batch;
+    batch.reserve(BatchSize_);
     for (const auto& producer : Producers_) {
         auto owner = producer->Producer.Lock();
         if (!owner) {
             toRemove.push_back(producer);
-            continue;
+        } else {
+            auto item = TOwningProducer{
+                .Owner = std::move(owner),
+                .Producer = producer,
+            };
+            batch.push_back(std::move(item));
         }
 
-        auto future = BIND([profiler, owner, producer, collectDuration = ProducerCollectDuration_] () {
-            auto startTime = TInstant::Now();
-            auto reportTime = Finally([&] {
-                collectDuration.Record(TInstant::Now() - startTime);
-            });
-
-            try {
-                auto buffer = owner->GetBuffer();
-                if (buffer) {
-                    auto lastBuffer = producer->LastBuffer.Lock();
-                    if (lastBuffer == buffer) {
-                        return;
-                    }
-
-                    TCounterWriter writer(profiler, producer->Counters, ++producer->LastUpdateIteration);
-                    buffer->WriteTo(&writer);
-                    producer->LastBuffer = buffer;
-                    if (producer->Counters->Options.ProducerRemoveSupport) {
-                        producer->Counters->ClearOutdated(producer->LastUpdateIteration);
-                    }
-                } else {
-                    producer->Counters->Counters.clear();
-                    producer->Counters->Gauges.clear();
-                    producer->Counters->Tags.clear();
-                }
-            } catch (const std::exception& ex) {
-                YT_LOG_ERROR(ex, "Producer read failed");
-                return;
-            }
-        })
-            .AsyncVia(invoker)
-            .Run();
-
-        offloadFutures.push_back(future);
+        if (std::ssize(batch) == BatchSize_) {
+            offloadFutures.push_back(
+                CollectBatchAsync(
+                    invoker,
+                    profiler,
+                    std::move(batch),
+                    ProducerCollectDuration_));
+            batch.clear();
+        }
     }
+    if (!batch.empty()) {
+        offloadFutures.push_back(
+            CollectBatchAsync(
+                invoker,
+                profiler,
+                std::move(batch),
+                ProducerCollectDuration_));
+    }
+
+
+    for (const auto& producer : toRemove) {
+        Producers_.erase(producer);
+    }
+
+    invoker->Invoke(BIND_NO_PROPAGATE([_ = std::move(toRemove)] { }));
 
     // Use blocking Get(), because we want to lock current thread while data structure is updating.
     for (const auto& future : offloadFutures) {
         future.Get();
     }
-
-    for (const auto& producer : toRemove) {
-        Producers_.erase(producer);
-    }
 }
 
-void TProducerSet::Profile(const TProfiler& profiler)
+void TProducerSet::Profile(const TWeakProfiler& profiler)
 {
     SelfProfiler_ = profiler;
     ProducerCollectDuration_ = profiler.Timer("/producer_collect_duration");
+}
+
+void TProducerSet::SetCollectionBatchSize(int batchSize)
+{
+    BatchSize_ = batchSize;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -20,7 +20,6 @@
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
 
-
 namespace NKikimr {
 
 constexpr ui32 TEST_TIMEOUT = NSan::PlainOrUnderSanitizer(300000, 1200000);

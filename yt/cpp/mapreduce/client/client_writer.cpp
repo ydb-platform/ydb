@@ -1,12 +1,15 @@
 #include "client_writer.h"
 
 #include "retryful_writer.h"
-#include "retryless_writer.h"
 #include "retryful_writer_v2.h"
+#include "retryless_writer.h"
 
-#include <yt/cpp/mapreduce/interface/io.h>
 #include <yt/cpp/mapreduce/common/fwd.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
+
+#include <yt/cpp/mapreduce/interface/io.h>
+
+#include <yt/cpp/mapreduce/raw_client/raw_client.h>
 
 namespace NYT {
 
@@ -14,6 +17,7 @@ namespace NYT {
 
 TClientWriter::TClientWriter(
     const TRichYPath& path,
+    const IRawClientPtr& rawClient,
     IClientRetryPolicyPtr clientRetryPolicy,
     ITransactionPingerPtr transactionPinger,
     const TClientContext& context,
@@ -21,6 +25,7 @@ TClientWriter::TClientWriter(
     const TMaybe<TFormat>& format,
     const TTableWriterOptions& options)
     : BufferSize_(options.BufferSize_)
+    , AutoFinish_(options.AutoFinish_)
 {
     if (options.SingleHttpRequest_) {
         RawWriter_.Reset(new TRetrylessWriter(
@@ -37,6 +42,7 @@ TClientWriter::TClientWriter(
             auto serializedWriterOptions = FormIORequestParameters(options);
 
             RawWriter_ = MakeIntrusive<NPrivate::TRetryfulWriterV2>(
+                    rawClient,
                     std::move(clientRetryPolicy),
                     std::move(transactionPinger),
                     context,
@@ -49,6 +55,7 @@ TClientWriter::TClientWriter(
                     options.CreateTransaction_);
         } else {
             RawWriter_.Reset(new TRetryfulWriter(
+                rawClient,
                 std::move(clientRetryPolicy),
                 std::move(transactionPinger),
                 context,
@@ -59,6 +66,16 @@ TClientWriter::TClientWriter(
                 options));
         }
     }
+}
+
+TClientWriter::~TClientWriter()
+{
+    NDetail::FinishOrDie(this, AutoFinish_, "TClientWriter");
+}
+
+void TClientWriter::Finish()
+{
+    RawWriter_->Finish();
 }
 
 size_t TClientWriter::GetStreamCount() const

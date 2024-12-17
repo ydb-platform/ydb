@@ -1,0 +1,32 @@
+Use locate_t defined by libc++.
+
+--- a/include/fmt/format.h
++++ b/include/fmt/format.h
+@@ -339,1 +339,1 @@
+-#if defined(_SECURE_SCL) && _SECURE_SCL
++#if defined(_SECURE_SCL) && _SECURE_SCL && !defined(_LIBCPP_VERSION)
+--- a/include/fmt/os.h
++++ b/include/fmt/os.h
+@@ -23,6 +23,10 @@
+ #  include <xlocale.h>  // for LC_NUMERIC_MASK on OS X
+ #endif
+ 
++#if defined(_WIN32)
++#  include <locale>  // for libc++ locale_win32.h
++#endif
++
+ #include "format.h"
+ 
+ // UWP doesn't provide _pipe.
+@@ -348,5 +352,5 @@
+ class locale {
+  private:
+-#  ifdef _WIN32
++#  if defined(_WIN32) && !defined(_LIBCPP_VERSION)
+   using locale_t = _locale_t;
+ 
+@@ -367,3 +371,3 @@ class locale {
+   locale() {
+-#  ifndef _WIN32
++#  if !defined(_WIN32) || defined(_LIBCPP_VERSION)
+     locale_ = FMT_SYSTEM(newlocale(LC_NUMERIC_MASK, "C", nullptr));

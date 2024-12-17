@@ -1,14 +1,15 @@
 #include "helpers.h"
+
 #include "attributes.h"
 #include "ypath_client.h"
 
 #include <yt/yt/core/misc/error.h>
 
-#include <yt/yt/core/misc/singleton.h>
-
 namespace NYT::NYTree {
 
 using namespace NYson;
+
+using NYT::FromProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -232,8 +233,8 @@ IAttributeDictionaryPtr FromProto(const NProto::TAttributeDictionary& protoAttri
 {
     auto attributes = CreateEphemeralAttributes();
     for (const auto& protoAttribute : protoAttributes.attributes()) {
-        const auto& key = protoAttribute.key();
-        const auto& value = protoAttribute.value();
+        auto key = FromProto<TString>(protoAttribute.key());
+        auto value = FromProto<TString>(protoAttribute.value());
         attributes->SetYson(key, TYsonString(value));
     }
     return attributes;
@@ -310,7 +311,7 @@ void ValidateYTreeKey(TStringBuf key)
 #endif
 }
 
-void ValidateYPathResolutionDepth(const TYPath& path, int depth)
+void ValidateYPathResolutionDepth(TYPathBuf path, int depth)
 {
     if (depth > MaxYPathResolveIterations) {
         THROW_ERROR_EXCEPTION(

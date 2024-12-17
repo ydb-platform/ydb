@@ -1,6 +1,8 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
+import "ydb/library/yql/providers/generic/connector/api/service/protos/connector.proto";
+
 package NYql.NS3;
 
 message TPath {
@@ -11,7 +13,7 @@ message TPath {
 message TSource {
     string Url = 1;
     string Token = 2;
-    repeated TPath DeprecatedPath = 3; // deprecated
+    reserved 3;
     optional string RowType = 4;
     optional string Format = 5;
     map<string, string> Settings = 6;
@@ -22,4 +24,7 @@ message TSource {
     uint64 ParallelDownloadCount = 11;
     uint64 RowsLimitHint = 12;
     bool UseRuntimeListing = 13;
+    bool AsyncDecoding = 14;
+    NYql.NConnector.NApi.TPredicate Predicate = 15;
+    bool AsyncDecompressing = 16;
 }

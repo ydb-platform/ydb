@@ -2,7 +2,7 @@
 
 Удаление профиля производится следующей командой:
 
-``` bash
+```bash
 {{ ydb-cli }} config profile delete <profile_name> [-f]
 ```
 
@@ -14,7 +14,7 @@
 
 ## Примеры {#examples}
 
-### Удаление профиля `mydb1` без интерактивного подтверждения
+### Удаление профиля mydb1 без интерактивного подтверждения
 
 ```bash
 {{ ydb-cli }} config profile delete mydb1 -f
@@ -22,18 +22,20 @@
 
 Команда исполнится успешно также и в случае, если профиль с именем `mydb1` не существует.
 
-### Удаление профиля `mydb1` с интерактивным подтверждением
+### Удаление профиля mydb1 с интерактивным подтверждением
 
 ```bash
 {{ ydb-cli }} config profile delete mydb1
 ```
 
 Если профиль не существует, выполнение команды завершится с ошибкой:
+
 ``` text
 No existing profile "mydb1". Run "ydb config profile list" without arguments to see existing profiles
 ```
 
 Если профиль существует, то выдается интерактивный запрос на подтверждение:
+
 ``` text
 Profile "mydb1" will be permanently removed. Continue? (y/n): y
 Profile "mydb1" was removed.
@@ -41,7 +43,7 @@ Profile "mydb1" was removed.
 
 ### Удаление всех профилей
 
-Хотя специальной команды удаления всех профилей нет в YDB CLI, в Linux-совместимых операционных системах вы можете воспользоваться следующим рецептом для удаления всех существующих профилей:
+Хотя специальной команды удаления всех профилей нет в {{ ydb-short-name }} CLI, в Linux-совместимых операционных системах вы можете воспользоваться следующим рецептом для удаления всех существующих профилей:
 
 ``` bash
 {{ ydb-cli }} config profile list | while read l;do {{ ydb-cli }} config profile delete $l;done;

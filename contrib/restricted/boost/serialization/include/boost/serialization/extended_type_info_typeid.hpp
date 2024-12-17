@@ -96,7 +96,7 @@ public:
         type_unregister();
     }
     // get the eti record for the true type of this record
-    // relying upon standard type info implemenation (rtti)
+    // relying upon standard type info implementation (rtti)
     const extended_type_info *
     get_derived_extended_type_info(const T & t) const {
         // note: this implementation - based on usage of typeid (rtti)

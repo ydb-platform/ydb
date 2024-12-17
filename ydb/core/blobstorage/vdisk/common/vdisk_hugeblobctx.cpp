@@ -3,17 +3,23 @@
 
 namespace NKikimr {
 
-    THugeSlotsMap::THugeSlotsMap(ui32 appendBlockSize, TAllSlotsInfo &&slotsInfo, TSearchTable &&searchTable)
+    THugeSlotsMap::THugeSlotsMap(ui32 appendBlockSize, ui32 minHugeBlobInBlocks, TAllSlotsInfo &&slotsInfo,
+            TSearchTable &&searchTable)
         : AppendBlockSize(appendBlockSize)
+        , MinHugeBlobInBlocks(minHugeBlobInBlocks)
         , AllSlotsInfo(std::move(slotsInfo))
         , SearchTable(std::move(searchTable))
     {}
 
     const THugeSlotsMap::TSlotInfo *THugeSlotsMap::GetSlotInfo(ui32 size) const {
-        ui32 sizeInBlocks = size / AppendBlockSize;
-        sizeInBlocks += !(sizeInBlocks * AppendBlockSize == size);
-        const ui64 idx = SearchTable.at(sizeInBlocks);
+        const ui32 sizeInBlocks = (size + AppendBlockSize - 1) / AppendBlockSize;
+        Y_ABORT_UNLESS(MinHugeBlobInBlocks <= sizeInBlocks);
+        const ui64 idx = SearchTable.at(sizeInBlocks - MinHugeBlobInBlocks);
         return &AllSlotsInfo.at(idx);
+    }
+
+    ui32 THugeSlotsMap::AlignByBlockSize(ui32 size) const {
+        return Max(MinHugeBlobInBlocks * AppendBlockSize, size - size % AppendBlockSize);
     }
 
     void THugeSlotsMap::Output(IOutputStream &str) const {
@@ -25,11 +31,7 @@ namespace NKikimr {
         str << "]}\n";
         str << "{SearchTable# [";
         for (const auto &idx : SearchTable) {
-            if (idx != NoOpIdx) {
-                AllSlotsInfo.at(idx).Output(str);
-            } else {
-                str << "null";
-            }
+            AllSlotsInfo.at(idx).Output(str);
             str << "\n";
         }
         str << "]}";
@@ -42,8 +44,8 @@ namespace NKikimr {
     }
 
     // check whether this blob is huge one; userPartSize doesn't include any metadata stored along with blob
-    bool THugeBlobCtx::IsHugeBlob(TBlobStorageGroupType gtype, const TLogoBlobID& fullId) const {
-        return gtype.MaxPartSize(fullId) + TDiskBlob::HugeBlobOverhead >= MinREALHugeBlobInBytes;
+    bool THugeBlobCtx::IsHugeBlob(TBlobStorageGroupType gtype, const TLogoBlobID& fullId, ui32 minHugeBlobInBytes) const {
+        return gtype.MaxPartSize(fullId) + (AddHeader ? TDiskBlob::HeaderSize : 0) >= minHugeBlobInBytes;
     }
 
 } // NKikimr

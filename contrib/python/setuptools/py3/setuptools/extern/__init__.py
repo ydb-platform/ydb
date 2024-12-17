@@ -32,14 +32,14 @@ class VendorImporter:
         """
         root, base, target = fullname.partition(self.root_name + '.')
         for prefix in self.search_path:
+            extant = prefix + target
             try:
-                extant = prefix + target
                 __import__(extant)
-                mod = sys.modules[extant]
-                sys.modules[fullname] = mod
-                return mod
             except ImportError:
-                pass
+                continue
+            mod = sys.modules[extant]
+            sys.modules[fullname] = mod
+            return mod
         else:
             raise ImportError(
                 "The '{target}' package is required; "
@@ -70,15 +70,23 @@ class VendorImporter:
             sys.meta_path.append(self)
 
 
+# [[[cog
+# import cog
+# from tools.vendored import yield_top_level
+# names = "\n".join(f"    {x!r}," for x in yield_top_level('setuptools'))
+# cog.outl(f"names = (\n{names}\n)")
+# ]]]
 names = (
-    'packaging',
-    'ordered_set',
-    'more_itertools',
+    'backports',
     'importlib_metadata',
-    'zipp',
     'importlib_resources',
     'jaraco',
-    'typing_extensions',
+    'more_itertools',
+    'ordered_set',
+    'packaging',
     'tomli',
+    'wheel',
+    'zipp',
 )
+# [[[end]]]
 VendorImporter(__name__, names, 'setuptools._vendor').install()

@@ -3,27 +3,33 @@
 #include <util/generic/hash.h>
 #include <map>
 #include <optional>
+#include <unordered_set>
 
 namespace NYql {
 class TFeaturesExtractor: TNonCopyable {
 private:
     THashMap<TString, TString> Features;
+    std::unordered_set<TString> ResetFeatures;
+
 public:
-    explicit TFeaturesExtractor(const THashMap<TString, TString>& features)
-        : Features(features) {
+    TFeaturesExtractor(const THashMap<TString, TString>& features, const std::unordered_set<TString>& resetFeatures)
+        : Features(features)
+        , ResetFeatures(resetFeatures)
+    {}
 
-    }
-
-    explicit TFeaturesExtractor(THashMap<TString, TString>&& features)
-        : Features(std::move(features)) {
-
-    }
+    TFeaturesExtractor(THashMap<TString, TString>&& features, std::unordered_set<TString>&& resetFeatures)
+        : Features(std::move(features))
+        , ResetFeatures(std::move(resetFeatures))
+    {}
 
     bool IsFinished() const {
-        return Features.empty();
+        return Features.empty() && ResetFeatures.empty();
     }
 
     TString GetRemainedParamsString() const;
+
+    // Throws exception on failure
+    void ValidateResetFeatures() const;
 
     template <class T>
     std::optional<T> Extract(const TString& featureId, const std::optional<T> noExistsValue = {}) {
@@ -41,5 +47,6 @@ public:
 
     std::optional<TString> Extract(const TString& paramName);
 
+    bool ExtractResetFeature(const TString& paramName);
 };
 }

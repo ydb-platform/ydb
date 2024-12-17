@@ -13,7 +13,7 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const static auto& Logger = SolomonLogger;
+static constexpr auto& Logger = SolomonLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -45,7 +45,7 @@ bool TSensorSet::IsEmpty() const
         RateHistograms_.empty();
 }
 
-void TSensorSet::Profile(const TProfiler &profiler)
+void TSensorSet::Profile(const TWeakProfiler& profiler)
 {
     CubeSize_ = profiler.Gauge("/cube_size");
     SensorsEmitted_ = profiler.Gauge("/sensors_emitted");
@@ -283,7 +283,7 @@ int TSensorSet::Collect()
 }
 
 void TSensorSet::ReadSensors(
-    const TString& name,
+    const std::string& name,
     TReadOptions readOptions,
     TTagWriter* tagWriter,
     ::NMonitoring::IMetricConsumer* consumer) const
@@ -406,22 +406,22 @@ void TSensorSet::InitializeType(ESensorType type)
     }
 }
 
-void TSensorSet::DumpCube(NProto::TCube *cube) const
+void TSensorSet::DumpCube(NProto::TCube *cube, const std::vector<TTagId>& extraTags) const
 {
     cube->set_sparse(Options_.Sparse);
     cube->set_global(Options_.Global);
     cube->set_disable_default(Options_.DisableDefault);
     cube->set_disable_sensors_rename(Options_.DisableSensorsRename);
-    cube->set_summary_policy(ToProto<ui64>(Options_.SummaryPolicy));
+    cube->set_summary_policy(ToProto(Options_.SummaryPolicy));
 
-    CountersCube_.DumpCube(cube);
-    TimeCountersCube_.DumpCube(cube);
-    GaugesCube_.DumpCube(cube);
-    SummariesCube_.DumpCube(cube);
-    TimersCube_.DumpCube(cube);
-    TimeHistogramsCube_.DumpCube(cube);
-    GaugeHistogramsCube_.DumpCube(cube);
-    RateHistogramsCube_.DumpCube(cube);
+    CountersCube_.DumpCube(cube, extraTags);
+    TimeCountersCube_.DumpCube(cube, extraTags);
+    GaugesCube_.DumpCube(cube, extraTags);
+    SummariesCube_.DumpCube(cube, extraTags);
+    TimersCube_.DumpCube(cube, extraTags);
+    TimeHistogramsCube_.DumpCube(cube, extraTags);
+    GaugeHistogramsCube_.DumpCube(cube, extraTags);
+    RateHistogramsCube_.DumpCube(cube, extraTags);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

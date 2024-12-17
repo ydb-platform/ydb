@@ -38,10 +38,11 @@ Partial matches are possible::
     m.variables().get('operator2')  # Returns "add"
 
 """
+
 from __future__ import annotations
 
 import re
-from typing import Callable, Dict, Iterable, Iterator, Pattern
+from typing import Callable, Dict, Iterable, Iterator, Pattern, TypeVar, overload
 from typing import Match as RegexMatch
 
 from .regex_parser import (
@@ -56,9 +57,7 @@ from .regex_parser import (
     tokenize_regex,
 )
 
-__all__ = [
-    "compile",
-]
+__all__ = ["compile", "Match", "Variables"]
 
 
 # Name of the named group in the regex, matching trailing input.
@@ -96,13 +95,13 @@ class _CompiledGrammar:
         counter = [0]
 
         def create_group_func(node: Variable) -> str:
-            name = "n%s" % counter[0]
+            name = f"n{counter[0]}"
             self._group_names_to_nodes[name] = node.varname
             counter[0] += 1
             return name
 
         # Compile regex strings.
-        self._re_pattern = "^%s$" % self._transform(root_node, create_group_func)
+        self._re_pattern = f"^{self._transform(root_node, create_group_func)}$"
         self._re_prefix_patterns = list(
             self._transform_prefix(root_node, create_group_func)
         )
@@ -153,7 +152,7 @@ class _CompiledGrammar:
         def transform(node: Node) -> str:
             # Turn `AnyNode` into an OR.
             if isinstance(node, AnyNode):
-                return "(?:%s)" % "|".join(transform(c) for c in node.children)
+                return "(?:{})".format("|".join(transform(c) for c in node.children))
 
             # Concatenate a `NodeSequence`
             elif isinstance(node, NodeSequence):
@@ -311,11 +310,11 @@ class _CompiledGrammar:
                     yield "".join(result)
 
             elif isinstance(node, Regex):
-                yield "(?:%s)?" % node.regex
+                yield f"(?:{node.regex})?"
 
             elif isinstance(node, Lookahead):
                 if node.negative:
-                    yield "(?!%s)" % cls._transform(node.childnode, create_group_func)
+                    yield f"(?!{cls._transform(node.childnode, create_group_func)})"
                 else:
                     # Not sure what the correct semantics are in this case.
                     # (Probably it's not worth implementing this.)
@@ -349,10 +348,10 @@ class _CompiledGrammar:
                         )
 
             else:
-                raise TypeError("Got %r" % node)
+                raise TypeError(f"Got {node!r}")
 
         for r in transform(root_node):
-            yield "^(?:%s)$" % r
+            yield f"^(?:{r})$"
 
     def match(self, string: str) -> Match | None:
         """
@@ -490,6 +489,9 @@ class Match:
                 yield MatchVariable(varname, value, (reg[0], reg[1]))
 
 
+_T = TypeVar("_T")
+
+
 class Variables:
     def __init__(self, tuples: list[tuple[str, str, tuple[int, int]]]) -> None:
         #: List of (varname, value, slice) tuples.
@@ -501,7 +503,13 @@ class Variables:
             ", ".join(f"{k}={v!r}" for k, v, _ in self._tuples),
         )
 
-    def get(self, key: str, default: str | None = None) -> str | None:
+    @overload
+    def get(self, key: str) -> str | None: ...
+
+    @overload
+    def get(self, key: str, default: str | _T) -> str | _T: ...
+
+    def get(self, key: str, default: str | _T | None = None) -> str | _T | None:
         items = self.getall(key)
         return items[0] if items else default
 

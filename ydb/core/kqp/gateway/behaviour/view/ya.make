@@ -1,7 +1,5 @@
 LIBRARY()
 
-OWNER(g:kikimr)
-
 SRCS(
     manager.cpp
     GLOBAL behaviour.cpp
@@ -10,6 +8,7 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/kqp/gateway/actors
+    ydb/core/kqp/provider
     ydb/core/tx/tx_proxy
     ydb/services/metadata/abstract
     ydb/services/metadata/manager

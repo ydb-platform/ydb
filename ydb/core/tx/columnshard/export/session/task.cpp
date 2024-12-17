@@ -1,9 +1,9 @@
 #include "session.h"
-#include <ydb/core/tx/columnshard/export/protos/task.pb.h>
+#include "control.h"
 
 namespace NKikimr::NOlap::NExport {
 
-NKikimr::TConclusionStatus TExportTask::DeserializeFromProto(const NKikimrColumnShardExportProto::TExportTask& proto) {
+NKikimr::TConclusionStatus TExportTask::DoDeserializeFromProto(const NKikimrColumnShardExportProto::TExportTask& proto) {
     auto id = TIdentifier::BuildFromProto(proto.GetIdentifier());
     if (!id) {
         return id;
@@ -24,23 +24,36 @@ NKikimr::TConclusionStatus TExportTask::DeserializeFromProto(const NKikimrColumn
     Selector = selector.DetachResult();
     StorageInitializer = initializer.DetachResult();
     Serializer = serializer.DetachResult();
+    if (proto.HasTxId()) {
+        TxId = proto.GetTxId();
+    }
     return TConclusionStatus::Success();
 }
 
-NKikimrColumnShardExportProto::TExportTask TExportTask::SerializeToProto() const {
+NKikimrColumnShardExportProto::TExportTask TExportTask::DoSerializeToProto() const {
     NKikimrColumnShardExportProto::TExportTask result;
     *result.MutableIdentifier() = Identifier.SerializeToProto();
     *result.MutableSelector() = Selector.SerializeToProto();
     *result.MutableStorageInitializer() = StorageInitializer.SerializeToProto();
     *result.MutableSerializer() = Serializer.SerializeToProto();
+    if (TxId) {
+        result.SetTxId(*TxId);
+    }
     return result;
 }
 
-NKikimr::TConclusion<NKikimr::NOlap::NExport::TExportTask> TExportTask::BuildFromProto(const NKikimrColumnShardExportProto::TExportTask& proto) {
-    TExportTask result;
-    auto resultParsed = result.DeserializeFromProto(proto);
-    if (!resultParsed) {
-        return resultParsed;
+NBackground::TSessionControlContainer TExportTask::BuildConfirmControl() const {
+    return NBackground::TSessionControlContainer(std::make_shared<NBackground::TFakeStatusChannel>(), std::make_shared<TConfirmSessionControl>(GetClassName(), ::ToString(Identifier.GetPathId())));
+}
+
+NBackground::TSessionControlContainer TExportTask::BuildAbortControl() const {
+    return NBackground::TSessionControlContainer(std::make_shared<NBackground::TFakeStatusChannel>(), std::make_shared<TAbortSessionControl>(GetClassName(), ::ToString(Identifier.GetPathId())));
+}
+
+std::shared_ptr<NBackground::ISessionLogic> TExportTask::DoBuildSession() const {
+    auto result = std::make_shared<TSession>(std::make_shared<TExportTask>(Identifier, Selector, StorageInitializer, Serializer, TxId));
+    if (!!TxId) {
+        result->Confirm();
     }
     return result;
 }

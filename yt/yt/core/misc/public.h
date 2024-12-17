@@ -3,6 +3,8 @@
 #include "common.h"
 #include "error_code.h"
 
+#include <library/cpp/yt/misc/concepts.h>
+
 // Google Protobuf forward declarations.
 namespace google::protobuf {
 
@@ -138,7 +140,13 @@ using TInternedObjectDataPtr = TIntrusivePtr<TInternedObjectData<T>>;
 template <class T>
 class TInternedObject;
 
-DECLARE_REFCOUNTED_STRUCT(IMemoryUsageTracker)
+namespace NStatisticPath {
+
+class TStatisticPathLiteral;
+class TStatisticPath;
+struct TStatisticPathSerializer;
+
+} // namespace NStatisticPath
 
 class TStatistics;
 class TSummary;
@@ -167,44 +175,13 @@ DEFINE_ENUM(EProcessErrorCode,
     ((NonZeroExitCode)    (10000))
     ((Signal)             (10001))
     ((CannotResolveBinary)(10002))
+    ((CannotStartProcess) (10003))
 );
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_STRUCT(IMemoryReferenceTracker)
-
-////////////////////////////////////////////////////////////////////////////////
-
-template <class TObject, class TScalar>
-concept CScalable = requires (TObject object, TScalar scalar)
-{
-    { object * scalar } -> std::same_as<TObject>;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-template <class T, class Sig>
-struct TIsInvocable;
-
-template <class T, class TRet, bool NoExcept, class... TArgs>
-struct TIsInvocable<T, TRet(TArgs...) noexcept(NoExcept)>
-{
-private:
-    static constexpr bool IsInvocable_ = requires (T&& t, TArgs&&... args) {
-        { std::forward<T>(t)(std::forward<TArgs>(args)...) } -> std::same_as<TRet>;
-    };
-
-    static constexpr bool IsNoThrowInvocable_ = requires (T&& t, TArgs&&... args) {
-        { std::forward<T>(t)(std::forward<TArgs>(args)...) } noexcept;
-    };
-public:
-    static constexpr bool Value =
-        IsInvocable_ &&
-        (!NoExcept || IsNoThrowInvocable_);
-};
-
-template <class T, class Sig>
-concept CInvocable = TIsInvocable<T, Sig>::Value;
+DECLARE_REFCOUNTED_STRUCT(IMemoryUsageTracker)
+DECLARE_REFCOUNTED_STRUCT(IReservingMemoryUsageTracker)
 
 ////////////////////////////////////////////////////////////////////////////////
 

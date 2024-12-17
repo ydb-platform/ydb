@@ -3,6 +3,7 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/mind/hive/hive.h>
 
 namespace {
 
@@ -16,7 +17,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TSplitMerge TConfigureDestination"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -186,7 +187,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TSplitMerge TTransferData"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

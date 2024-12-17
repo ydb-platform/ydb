@@ -12,57 +12,68 @@ namespace NYT::NClient::NHedging::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TClientConfig
-    : public virtual NYTree::TYsonStruct
+struct TConnectionWithPenaltyConfig
+    : public virtual NApi::NRpcProxy::TConnectionConfig
 {
-    NApi::NRpcProxy::TConnectionConfigPtr Connection;
     TDuration InitialPenalty;
 
-    REGISTER_YSON_STRUCT(TClientConfig);
+    REGISTER_YSON_STRUCT(TConnectionWithPenaltyConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(TClientConfig)
+DEFINE_REFCOUNTED_TYPE(TConnectionWithPenaltyConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
 //! The options for hedging client.
+//! TODO(bulatman) Rename to `THedgingClientConfig`.
 struct THedgingClientOptions
-    : public virtual NYTree::TYsonStructLite
+    : public virtual NYTree::TYsonStruct
 {
-    std::vector<TClientConfigPtr> ClientConfigs;
-
-    struct TClientOptions
-    {
-        TClientOptions(
-            NApi::IClientPtr client,
-            TString clusterName,
-            TDuration initialPenalty,
-            TCounterPtr counter = {});
-
-        TClientOptions(
-            NApi::IClientPtr client,
-            TDuration initialPenalty,
-            TCounterPtr counter = {});
-
-        NApi::IClientPtr Client;
-        TString ClusterName;
-        TDuration InitialPenalty;
-        TCounterPtr Counter;
-    };
-
+    std::vector<TIntrusivePtr<TConnectionWithPenaltyConfig>> Connections;
     TDuration BanPenalty;
     TDuration BanDuration;
     THashMap<TString, TString> Tags;
 
-    // This parameter is set on postprocessor.
-    TVector<TClientOptions> Clients;
-
-    REGISTER_YSON_STRUCT_LITE(THedgingClientOptions);
+    REGISTER_YSON_STRUCT(THedgingClientOptions);
 
     static void Register(TRegistrar registrar);
 };
+
+DEFINE_REFCOUNTED_TYPE(THedgingClientOptions)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TReplicationLagPenaltyProviderOptions
+    : public virtual NYTree::TYsonStruct
+{
+    // Clusters that need checks for replication lag.
+    std::vector<TString> ReplicaClusters;
+
+    // Table that needs checks for replication lag.
+    TString TablePath;
+
+    // Same as BanPenalty in hedging client.
+    TDuration LagPenalty;
+    // Tablet is considered "lagged" if CurrentTimestamp - TabletLastReplicationTimestamp >= MaxTabletLag.
+    TDuration MaxTabletLag;
+
+    // Real value from 0.0 to 1.0. Replica cluster receives LagPenalty if NumberOfTabletsWithLag >= MaxTabletsWithLagFraction * TotalNumberOfTablets.
+    double MaxTabletsWithLagFraction;
+
+    // Replication lag check period.
+    TDuration CheckPeriod;
+
+    // In case of any errors from master client - clear all penalties.
+    bool ClearPenaltiesOnErrors;
+
+    REGISTER_YSON_STRUCT(TReplicationLagPenaltyProviderOptions);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TReplicationLagPenaltyProviderOptions)
 
 ////////////////////////////////////////////////////////////////////////////////
 

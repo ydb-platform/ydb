@@ -18,9 +18,14 @@ namespace NKikimr::NPQ {
 class TInitializerStep;
 class TPartition;
 
+struct TInitializionContext {
+    std::optional<ui64> StartOffset;
+    std::optional<ui64> EndOffset;
+};
+
 
 /**
- * This class execute independent steps of parttition actor initialization. 
+ * This class execute independent steps of parttition actor initialization.
  * Each initialization step makes its own decision whether to perform it or not.
  */
 class TInitializer {
@@ -40,13 +45,15 @@ protected:
 private:
     void DoNext(const TActorContext& ctx);
 
+    TString LogPrefix() const;
+
     TPartition* Partition;
 
     bool InProgress;
 
     TVector<THolder<TInitializerStep>> Steps;
     std::vector<THolder<TInitializerStep>>::iterator CurrentStep;
-    
+    TInitializionContext Ctx;
 };
 
 /**
@@ -57,13 +64,14 @@ class TInitializerStep {
 public:
     TInitializerStep(TInitializer* initializer, TString name, bool skipNewPartition);
     virtual ~TInitializerStep() = default;
-    
+
     virtual void Execute(const TActorContext& ctx) = 0;
     virtual bool Handle(STFUNC_SIG);
 
     TPartition* Partition() const;
     const TPartitionId& PartitionId() const;
-    TString TopicName() const;
+    const TString& TopicName() const;
+    TInitializionContext& GetContext();
 
     const TString Name;
     const bool SkipNewPartition;
@@ -72,6 +80,8 @@ protected:
     void Done(const TActorContext& ctx);
     void PoisonPill(const TActorContext& ctx);
 
+    TString LogPrefix() const;
+
 private:
     TInitializer* Initializer;
 };
@@ -79,7 +89,7 @@ private:
 
 class TBaseKVStep: public TInitializerStep {
 public:
-    TBaseKVStep(TInitializer* initializer, TString name, bool skipNewPartition);    
+    TBaseKVStep(TInitializer* initializer, TString name, bool skipNewPartition);
 
     bool Handle(STFUNC_SIG) override;
     virtual void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) = 0;
@@ -91,7 +101,7 @@ public:
 //
 
 class TInitConfigStep: public TBaseKVStep {
-public:    
+public:
     TInitConfigStep(TInitializer* initializer);
 
     void Execute(const TActorContext& ctx) override;
@@ -114,11 +124,14 @@ public:
 };
 
 class TInitMetaStep: public TBaseKVStep {
+    friend class TPartitionTestWrapper;
 public:
     TInitMetaStep(TInitializer* initializer);
 
     void Execute(const TActorContext& ctx) override;
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) override;
+private:
+    void LoadMeta(const NKikimrClient::TResponse& kvResponse, const TMaybe<TActorContext>& mbCtx);
 };
 
 class TInitInfoRangeStep: public TBaseKVStep {
@@ -147,6 +160,13 @@ public:
 
     void Execute(const TActorContext& ctx) override;
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) override;
+};
+
+class TInitEndWriteTimestampStep: public TInitializerStep {
+public:
+    TInitEndWriteTimestampStep(TInitializer* initializer);
+
+    void Execute(const TActorContext& ctx) override;
 };
 
 } // NKikimr::NPQ

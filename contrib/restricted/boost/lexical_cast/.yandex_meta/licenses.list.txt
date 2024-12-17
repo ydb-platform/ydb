@@ -1,0 +1,30 @@
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Use, modification and distribution are subject to the
+// Boost Software License, Version 1.0.
+// (See accompanying file LICENSE_1_0.txt
+// or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+License
+
+Distributed under the [Boost Software License, Version 1.0](https://boost.org/LICENSE_1_0.txt).
+
+====================COPYRIGHT====================
+// Copyright (c) 2013 John Maddock, Antony Polukhin
+
+
+====================COPYRIGHT====================
+// Copyright Alexander Nasonov & Paul A. Bristow 2006.
+
+
+====================COPYRIGHT====================
+// Copyright Kevlin Henney, 2000-2005.
+// Copyright Alexander Nasonov, 2006-2010.
+// Copyright Antony Polukhin, 2011-2024.

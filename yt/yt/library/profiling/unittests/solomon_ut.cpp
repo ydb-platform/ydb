@@ -48,7 +48,7 @@ struct TTestMetricConsumer
         if (name == "sensor") {
             Name = value;
         } else {
-            Labels.emplace_back(TString(name) + "=" + value);
+            Labels.push_back(TString(name) + "=" + value);
         }
     }
 
@@ -369,6 +369,22 @@ TEST(TSolomonRegistry, SparseHistogram)
 
     CollectSensors(impl, 2);
     CollectSensors(impl, 3);
+}
+
+TEST(TSolomonRegistry, HistogramWithBigCounterValues)
+{
+    auto impl = New<TSolomonRegistry>();
+    TProfiler profiler(impl, "/d");
+
+    auto h0 = profiler.GaugeHistogram("/histogram", {1.0});
+
+    h0.Add(0, 2e9);
+    h0.Add(0, 2e9);
+
+    auto result = h0.GetSnapshot().Values;
+
+    ASSERT_FALSE(result.empty());
+    ASSERT_EQ(result.front(), 4e9);
 }
 
 TEST(TSolomonRegistry, SparseCounters)

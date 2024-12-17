@@ -6,12 +6,12 @@
 
 Общий вид команды:
 
-```sql
+```yql
 DROP TOPIC topic_path;
 ```
 
 Следующая команда удалит топик с именем `my_topic`:
 
-```sql
+```yql
 DROP TOPIC `my_topic`;
 ```

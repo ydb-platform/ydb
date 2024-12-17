@@ -36,6 +36,11 @@ namespace NTabletFlatExecutor {
             auto items = snap.MutableSchemeInfoBodies();
             for (const auto &logo : Log)
                 LogoBlobIDFromLogoBlobID(logo, items->Add());
+
+            auto deleted = snap.MutableGcSnapLeft();
+            for (const auto &logo : ObsoleteLog) {
+                LogoBlobIDFromLogoBlobID(logo, deleted->Add());
+            }
         }
 
         void WriteLog(TLogCommit &commit, TString alter) noexcept
@@ -50,11 +55,18 @@ namespace NTabletFlatExecutor {
             }
         }
 
+        void Clear() noexcept
+        {
+            ObsoleteLog.splice(ObsoleteLog.end(), Log);
+            Bytes = 0;
+        }
+
     protected:
         TAutoPtr<NPageCollection::TSteppedCookieAllocator> Cookies;
         NPageCollection::TSlicer Slicer;
         ui64 Bytes = 0;
         TList<TLogoBlobID> Log;
+        TList<TLogoBlobID> ObsoleteLog;
     };
 
 }

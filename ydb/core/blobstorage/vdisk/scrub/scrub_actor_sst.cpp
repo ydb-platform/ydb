@@ -10,7 +10,7 @@ namespace NKikimr {
         ReadOutAndResilverIndex(sst);
         ReadOutSelectedBlobs(std::move(blobsOnDisk));
         SstId.reset();
-        ++*SstProcessed;
+        ++MonGroup.SstProcessed();
     }
 
     std::vector<TScrubCoroImpl::TBlobOnDisk> TScrubCoroImpl::MakeBlobList(TLevelSegmentPtr sst) {
@@ -158,8 +158,8 @@ namespace NKikimr {
                     STLOGX(GetActorContext(), intervalReadable ? PRI_DEBUG : PRI_ERROR, BS_VDISK_SCRUB, VDS04,
                         VDISKP(LogPrefix, "small blob interval checked"), (Interval, interval),
                         (IsReadable, intervalReadable), (NumBlobsOfInterest, pendingBlobs.size()));
-                    ++*SmallBlobIntervalsRead;
-                    *SmallBlobIntervalBytesRead += interval.Size;
+                    ++MonGroup.SmallBlobIntervalsRead();
+                    MonGroup.SmallBlobIntervalBytesRead() += interval.Size;
 
                     for (TBlobOnDisk *blob : pendingBlobs) {
                         const bool blobReadable = intervalReadable || IsReadable(blob->Part);
@@ -167,8 +167,8 @@ namespace NKikimr {
                             STLOGX(GetActorContext(), blobReadable ? PRI_INFO : PRI_ERROR, BS_VDISK_SCRUB, VDS12,
                                 VDISKP(LogPrefix, "small blob from unreadable interval checked"),
                                 (Key, blob->Id), (Location, blob->Part), (IsReadable, blobReadable));
-                            ++*SmallBlobsRead;
-                            *SmallBlobBytesRead += blob->Part.Size;
+                            ++MonGroup.SmallBlobsRead();
+                            MonGroup.SmallBlobBytesRead() += interval.Size;
                         }
                         if (blobReadable) {
                             UpdateReadableParts(blob->Id, blob->Local);

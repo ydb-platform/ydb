@@ -6,7 +6,7 @@ import logging
 from collections import defaultdict
 from kubernetes.client import Configuration
 
-from ydb.tools.ydbd_slice import nodes, handlers
+from ydb.tools.ydbd_slice import nodes
 from ydb.tools.ydbd_slice.kube import api, kubectl, yaml, generate, cms, dynconfig, docker
 
 
@@ -80,6 +80,9 @@ def get_all_manifests(directory):
                      'Please create NodeClaim mainfest')
         sys.exit(2)
 
+    if not result:
+        raise RuntimeError(f'failed to find any manifests in {os.path.abspath(directory)}')
+
     return result
 
 
@@ -146,7 +149,6 @@ def get_nodes(api_client, project_path, manifests):
     node_list.sort()
     return node_list
 
-
 def get_domain(api_client, project_path, manifests):
     for (_, _, kind, _, _, data) in manifests:
         if kind != 'storage':
@@ -181,15 +183,16 @@ def manifests_ydb_filter_components(project_path, manifests, update_components):
     return result
 
 
-def slice_docker_load(api_client, project_path, manifests, docker_tar_path):
+def slice_docker_load(api_client, project_path, manifests, image_path):
     node_list = get_nodes(api_client, project_path, manifests)
     if len(node_list) == 0:
         logger.info('no nodes found, nothing to load.')
         return
     remote_path = f"/Berkanavt/kikimr/{docker.DOCKER_IMAGE_TAR}"
     node_list = nodes.Nodes(node_list)
-    node_list.copy(docker_tar_path, remote_path)
-    handlers.ctr_image_import(node_list)
+    node_list.copy(image_path, remote_path)
+    cmd = "sudo ctr image import {} && rm -rf {}".format(image_path)
+    node_list.execute_async(cmd)
 
 #
 # macro level nodeclaim functions
@@ -242,7 +245,9 @@ def slice_nodeclaim_format(api_client, project_path, manifests):
         logger.info('no nodes found, nothing to format.')
         return
     node_list = nodes.Nodes(node_list)
-    handlers.format_drivers(node_list)
+    cmd = r"sudo find /dev/disk/ -path '*/by-partlabel/kikimr_*' " \
+          r"-exec dd if=/dev/zero of={} bs=1M count=1 status=none \;"
+    node_list.execute_async(cmd)
 
 
 def slice_nodeclaim_delete(api_client, project_path, manifests):
@@ -274,7 +279,7 @@ def wait_for_storage(api_client, project_path, manifests):
         except TimeoutError as e:
             sys.exit(e.args[0])
 
-#
+
 # macro level ydb functions
 
 

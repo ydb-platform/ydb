@@ -45,4 +45,4 @@ namespace NYql::NConnector::NTest {
 
     using TListSplitsStreamIteratorMock = TStreamIteratorMock<NApi::TListSplitsResponse>;
     using TReadSplitsStreamIteratorMock = TStreamIteratorMock<NApi::TReadSplitsResponse>;
-}
+} // namespace NYql::NConnector::NTest

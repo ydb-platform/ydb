@@ -1,8 +1,7 @@
 PROGRAM(flex)
 
 LICENSE(
-    Bison-exception-2.2 AND
-    GPL-2.0-or-later AND
+    GPL-2.0-or-later WITH Bison-exception-2.2 AND
     LicenseRef-scancode-flex-2.5
 )
 

@@ -20,7 +20,7 @@ public:
 
     TFuture<TPeerDiscoveryResponse> Discover(
         IChannelPtr channel,
-        const TString& /*address*/,
+        const std::string& /*address*/,
         TDuration timeout,
         TDuration replyDelay,
         const std::string& serviceName) override
@@ -43,12 +43,12 @@ private:
     TPeerDiscoveryResponse ConvertResponse(const TIntrusivePtr<TTypedClientResponse<NProto::TRspDiscover>>& rsp)
     {
         if (Hook_) {
-            Hook_->OnResponse(rsp.Get());
+            Hook_->HandleResponse(rsp.Get());
         }
 
         return TPeerDiscoveryResponse{
             .IsUp = rsp->up(),
-            .Addresses = FromProto<std::vector<TString>>(rsp->suggested_addresses()),
+            .Addresses = FromProto<std::vector<std::string>>(rsp->suggested_addresses()),
         };
     }
 };

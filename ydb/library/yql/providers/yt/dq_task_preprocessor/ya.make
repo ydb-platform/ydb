@@ -7,16 +7,17 @@ PEERDIR(
     library/cpp/yson/node
     yt/cpp/mapreduce/common
     yt/cpp/mapreduce/interface
-    ydb/library/yql/utils
-    ydb/library/yql/utils/log
-    ydb/library/yql/utils/failure_injector
-    ydb/library/yql/minikql
-    ydb/library/yql/minikql/computation
-    ydb/library/yql/providers/common/codec
+    yql/essentials/utils
+    yql/essentials/utils/log
+    yql/essentials/utils/failure_injector
+    yql/essentials/minikql
+    yql/essentials/minikql/computation
+    yql/essentials/providers/common/codec
     ydb/library/yql/providers/dq/interface
-    ydb/library/yql/providers/yt/codec
-    ydb/library/yql/providers/yt/gateway/lib
-    ydb/library/yql/providers/yt/lib/yson_helpers
+    yt/yql/providers/yt/codec
+    yt/yql/providers/yt/provider
+    yt/yql/providers/yt/gateway/lib
+    yt/yql/providers/yt/lib/yson_helpers
 )
 
 YQL_LAST_ABI_VERSION()

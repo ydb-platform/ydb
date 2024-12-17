@@ -19,6 +19,7 @@ class SchemeEntryType(enum.IntEnum):
     RTMR_VOLUME = 5
     BLOCK_STORE_VOLUME = 6
     COORDINATION_NODE = 7
+    COLUMN_STORE = 12
     COLUMN_TABLE = 13
     SEQUENCE = 15
     REPLICATION = 16
@@ -53,6 +54,14 @@ class SchemeEntryType(enum.IntEnum):
         :return: True if scheme entry is a column table and False otherwise
         """
         return entry == SchemeEntryType.COLUMN_TABLE
+
+    @staticmethod
+    def is_column_store(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is a column store and False otherwise
+        """
+        return entry == SchemeEntryType.COLUMN_STORE
 
     @staticmethod
     def is_row_table(entry):
@@ -127,6 +136,12 @@ class SchemeEntry(object):
         :return: True if scheme entry is a directory and False otherwise
         """
         return SchemeEntryType.is_directory(self.type)
+
+    def is_column_store(self):
+        """
+        :return: True if scheme entry is a column store and False otherwise
+        """
+        return SchemeEntryType.is_column_store(self.type)
 
     def is_table(self):
         """

@@ -88,8 +88,9 @@ namespace NKikimr {
     THullCtx::THullCtx(TVDiskContextPtr vctx, ui32 chunkSize, ui32 compWorthReadSize, bool freshCompaction,
             bool gcOnlySynced, bool allowKeepFlags, bool barrierValidation, ui32 hullSstSizeInChunksFresh,
             ui32 hullSstSizeInChunksLevel, double hullCompFreeSpaceThreshold, ui32 freshCompMaxInFlightWrites,
-            ui32 hullCompMaxInFlightWrites, ui32 hullCompMaxInFlightReads, double hullCompReadBatchEfficiencyThreshold,
-            TDuration hullCompStorageRatioCalcPeriod, TDuration hullCompStorageRatioMaxCalcDuration)
+            ui32 freshCompMaxInFlightReads, ui32 hullCompMaxInFlightWrites, ui32 hullCompMaxInFlightReads,
+            double hullCompReadBatchEfficiencyThreshold, TDuration hullCompStorageRatioCalcPeriod,
+            TDuration hullCompStorageRatioMaxCalcDuration, bool addHeader)
         : VCtx(std::move(vctx))
         , IngressCache(TIngressCache::Create(VCtx->Top, VCtx->ShortSelfVDisk))
         , ChunkSize(chunkSize)
@@ -102,11 +103,13 @@ namespace NKikimr {
         , HullSstSizeInChunksLevel(hullSstSizeInChunksLevel)
         , HullCompFreeSpaceThreshold(hullCompFreeSpaceThreshold)
         , FreshCompMaxInFlightWrites(freshCompMaxInFlightWrites)
+        , FreshCompMaxInFlightReads(freshCompMaxInFlightReads)
         , HullCompMaxInFlightWrites(hullCompMaxInFlightWrites)
         , HullCompMaxInFlightReads(hullCompMaxInFlightReads)
         , HullCompReadBatchEfficiencyThreshold(hullCompReadBatchEfficiencyThreshold)
         , HullCompStorageRatioCalcPeriod(hullCompStorageRatioCalcPeriod)
         , HullCompStorageRatioMaxCalcDuration(hullCompStorageRatioMaxCalcDuration)
+        , AddHeader(addHeader)
         , LsmHullGroup(VCtx->VDiskCounters, "subsystem", "lsmhull")
         , LsmHullSpaceGroup(VCtx->VDiskCounters, "subsystem", "outofspace")
     {}

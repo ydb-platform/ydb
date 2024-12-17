@@ -124,7 +124,7 @@ protected:
                 issues.AddIssues(status.GetIssues());
                 internalIssues.AddIssues(status.GetIssues());
             }
-        } catch (const TCodeLineException& exception) {
+        } catch (const NYql::TCodeLineException& exception) {
             NYql::TIssue issue = MakeErrorIssue(exception.Code, exception.GetRawMessage());
             issues.AddIssue(issue);
             NYql::TIssue internalIssue = MakeErrorIssue(exception.Code, CurrentExceptionMessage());

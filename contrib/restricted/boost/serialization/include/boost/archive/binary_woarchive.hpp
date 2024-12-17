@@ -29,7 +29,7 @@ namespace boost {
 namespace archive {
 
 // do not derive from this class.  If you want to extend this functionality
-// via inhertance, derived from binary_oarchive_impl instead.  This will
+// via inheritance, derived from binary_oarchive_impl instead.  This will
 // preserve correct static polymorphism.
 class binary_woarchive :
     public binary_oarchive_impl<

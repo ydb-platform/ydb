@@ -28,8 +28,8 @@ PEERDIR(
 END()
 
 RECURSE(
-    test
     static
     static/css
     static/js
+    test
 )

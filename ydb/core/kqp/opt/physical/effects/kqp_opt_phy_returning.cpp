@@ -153,10 +153,12 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimiz
                 .Done();
         }
 
-        return Build<TCoExtractMembers>(ctx, pos)
+        auto inputExpr = Build<TCoExtractMembers>(ctx, pos)
             .Input(input.Cast())
             .Members(returning.Columns())
-            .Done();
+            .Done().Ptr();
+
+        return TExprBase(ctx.ChangeChild(*returning.Raw(), TKqlReturningList::idx_Update, std::move(inputExpr)));
     };
 
     if (auto maybeList = returning.Update().Maybe<TExprList>()) {
@@ -181,6 +183,18 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         return buildReturningRows(del.Input().Cast(), MakeColumnsList(tableDesc.Metadata->KeyColumnNames, ctx, node.Pos()), returning.Columns());
     }
 
+    TExprNode::TPtr result = returning.Update().Ptr();
+    auto status = TryConvertTo(result, *result->GetTypeAnn(), *returning.Raw()->GetTypeAnn(), ctx);
+    YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error, "wrong returning expr type");
+
+    if (status.Level == IGraphTransformer::TStatus::Repeat) {
+        return TExprBase(ctx.ChangeChild(*returning.Raw(), TKqlReturningList::idx_Update, std::move(result)));
+    }
+
+    if (status.Level == IGraphTransformer::TStatus::Ok) {
+        return TExprBase(result);
+    }
+
     return node;
 }
 
@@ -190,7 +204,7 @@ TExprBase KqpRewriteReturningUpsert(TExprBase node, TExprContext& ctx, const TKq
         return node;
     }
 
-    if (!upsert.Input().Maybe<TDqPrecompute>() && !upsert.Input().Maybe<TDqPhyPrecompute>()) {
+    if (upsert.Input().Maybe<TDqPrecompute>() || upsert.Input().Maybe<TDqPhyPrecompute>()) {
         return node;
     }
 
@@ -212,7 +226,7 @@ TExprBase KqpRewriteReturningDelete(TExprBase node, TExprContext& ctx, const TKq
         return node;
     }
 
-    if (!del.Input().Maybe<TDqPrecompute>() && !del.Input().Maybe<TDqPhyPrecompute>()) {
+    if (del.Input().Maybe<TDqPrecompute>() || del.Input().Maybe<TDqPhyPrecompute>()) {
         return node;
     }
 

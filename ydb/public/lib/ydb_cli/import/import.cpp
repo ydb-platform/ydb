@@ -1,5 +1,6 @@
 #include "import.h"
 
+#include <util/stream/format.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -79,6 +80,46 @@ TStatus WaitForQueue(const size_t maxQueueSize, std::vector<TAsyncStatus>& inFli
     return MakeStatus();
 }
 
+TString PrettifyBytes(double bytes) {
+    return ToString(HumanReadableSize(bytes, SF_BYTES));
+}
+
+void InitCsvParser(TCsvParser& parser,
+                   bool& removeLastDelimiter,
+                   NCsvFormat::TLinesSplitter& csvSource,
+                   const TImportFileSettings& settings,
+                   const std::map<TString, TType>* columnTypes,
+                   const NTable::TTableDescription* dbTableInfo) {
+    if (settings.Header_ || settings.HeaderRow_) {
+        TString headerRow;
+        if (settings.Header_) {
+            headerRow = csvSource.ConsumeLine();
+        }
+        if (settings.HeaderRow_) {
+            headerRow = settings.HeaderRow_;
+        }
+        if (headerRow.EndsWith("\r\n")) {
+            headerRow.erase(headerRow.size() - 2);
+        }
+        if (headerRow.EndsWith("\n")) {
+            headerRow.erase(headerRow.size() - 1);
+        }
+        if (headerRow.EndsWith(settings.Delimiter_)) {
+            removeLastDelimiter = true;
+            headerRow.erase(headerRow.size() - settings.Delimiter_.size());
+        }
+        parser = TCsvParser(std::move(headerRow), settings.Delimiter_[0], settings.NullValue_, columnTypes);
+    } else {
+        TVector<TString> columns;
+        Y_ENSURE_BT(dbTableInfo);
+        for (const auto& column : dbTableInfo->GetColumns()) {
+            columns.push_back(column.Name);
+        }
+        parser = TCsvParser(std::move(columns), settings.Delimiter_[0], settings.NullValue_, columnTypes);
+    }
+    parser.BuildLineType();
+}
+
 FHANDLE GetStdinFileno() {
 #if defined(_win32_)
     return GetStdHandle(STD_INPUT_HANDLE);
@@ -89,26 +130,26 @@ FHANDLE GetStdinFileno() {
 
 class TMaxInflightGetter {
 public:
-    TMaxInflightGetter(ui64 totalMaxInFlight, std::atomic<ui64>& filesCount)
+    TMaxInflightGetter(ui64 totalMaxInFlight, std::atomic<ui64>& currentFileCount)
         : TotalMaxInFlight(totalMaxInFlight)
-        , FilesCount(filesCount) {
+        , CurrentFileCount(currentFileCount) {
     }
 
     ~TMaxInflightGetter() {
-        --FilesCount;
+        --CurrentFileCount;
     }
 
     ui64 GetCurrentMaxInflight() const {
-        return (TotalMaxInFlight - 1) / FilesCount + 1; // round up
+        return (TotalMaxInFlight - 1) / CurrentFileCount + 1; // round up
     }
 
 private:
     ui64 TotalMaxInFlight;
-    std::atomic<ui64>& FilesCount;
+    std::atomic<ui64>& CurrentFileCount;
 };
 
 class TCsvFileReader {
-private:
+public:
     class TFileChunk {
     public:
         TFileChunk(TFile file, THolder<IInputStream>&& stream, ui64 size = std::numeric_limits<ui64>::max())
@@ -139,8 +180,7 @@ private:
     };
 
 public:
-    TCsvFileReader(const TString& filePath, const TImportFileSettings& settings, TString& headerRow,
-                   TMaxInflightGetter& inFlightGetter) {
+    TCsvFileReader(const TString& filePath, const TImportFileSettings& settings, TString& headerRow, ui64 maxThreads) {
         TFile file;
         if (filePath) {
             file = TFile(filePath, RdOnly);
@@ -158,7 +198,6 @@ public:
         }
         i64 skipSize = countInput.Counter();
 
-        MaxInFlight = inFlightGetter.GetCurrentMaxInflight();
         i64 fileSize = file.GetLength();
         if (filePath.empty() || fileSize == -1) {
             SplitCount = 1;
@@ -166,7 +205,7 @@ public:
             return;
         }
 
-        SplitCount = Min(MaxInFlight, (fileSize - skipSize) / settings.BytesPerRequest_ + 1);
+        SplitCount = Min(maxThreads, (fileSize - skipSize) / settings.BytesPerRequest_ + 1);
         i64 chunkSize = (fileSize - skipSize) / SplitCount;
         if (chunkSize == 0) {
             SplitCount = 1;
@@ -219,36 +258,173 @@ private:
     size_t MaxInFlight;
 };
 
+class TJobInFlightManager {
+public:
+    TJobInFlightManager(size_t orderNum, size_t fileCount, size_t maxJobInFlight)
+        : MaxJobInFlight(maxJobInFlight)
+        , CurrentFileCount(fileCount)
+        , CurrentSemaphoreMax(GetSemaphoreMaxValue(orderNum))
+        , JobsSemaphore(GetSemaphoreMaxValue(orderNum)) {
+    }
+
+    // Return value: true if this call was useful (Inflight manager is still working)
+    // Parameter informedSoFar: number of other Inflight managers already informed. Needed to calculate newSemaphoreMax
+    bool OnAnotherFileFinished(size_t informedSoFar) {
+        std::lock_guard<std::mutex> lock(Mutex);
+        if (Finished || CurrentFileCount <= 1) {
+            return false;
+        }
+        --CurrentFileCount;
+        size_t newSemaphoreMax = GetSemaphoreMaxValue(informedSoFar);
+        size_t semaphoreSizeDiff = newSemaphoreMax - CurrentSemaphoreMax;
+        CurrentSemaphoreMax = newSemaphoreMax;
+        if (semaphoreSizeDiff > 0) {
+            JobsSemaphore.release(semaphoreSizeDiff);
+        }
+        return true;
+    }
+
+    void AcquireJob() {
+        JobsSemaphore.acquire();
+    }
+
+    void ReleaseJob() {
+        JobsSemaphore.release();
+    }
+
+    void Finish() {
+        std::lock_guard<std::mutex> lock(Mutex);
+        Finished = true;
+    }
+
+    void WaitForAllJobs() {
+        std::lock_guard<std::mutex> lock(Mutex);
+        for (size_t i = 0; i < CurrentSemaphoreMax; ++i) {
+            JobsSemaphore.acquire();
+        }
+    }
+
+private:
+    size_t GetSemaphoreMaxValue(size_t orderNum) const {
+        return Max((size_t)1, MaxJobInFlight / CurrentFileCount
+            // One more thread for the first <MaxJobInFlight % CurrentFileCount> managers to utilize max jobs inflight
+            + (orderNum < MaxJobInFlight % CurrentFileCount ? 1 : 0));
+    }
+    size_t MaxJobInFlight;
+    size_t CurrentFileCount;
+    size_t CurrentSemaphoreMax;
+    bool Finished = false;
+    std::mutex Mutex;
+    // Jobs starts on launching a worker in a separate thread that builds TValue and sends request
+    // Job ends on receiving final request (after all retries)
+    std::counting_semaphore<> JobsSemaphore;
+}; // TJobInflightManager
+
 } // namespace
 
-TImportFileClient::TImportFileClient(const TDriver& driver, const TClientCommand::TConfig& rootConfig)
-    : OperationClient(std::make_shared<NOperation::TOperationClient>(driver))
+class TImportFileClient::TImpl {
+public:
+    explicit TImpl(const TDriver& driver, const TClientCommand::TConfig& rootConfig,
+                                     const TImportFileSettings& settings);
+    TStatus Import(const TVector<TString>& filePaths, const TString& dbPath);
+
+private:
+    using ProgressCallbackFunc = std::function<void (ui64, ui64)>;
+
+    TStatus UpsertCsv(IInputStream& input,
+                      const TString& dbPath,
+                      const TString& filePath,
+                      std::optional<ui64> inputSizeHint,
+                      ProgressCallbackFunc & progressCallback,
+                      std::shared_ptr<TJobInFlightManager> jobInflightManager);
+
+    TStatus UpsertCsvByBlocks(const TString& filePath,
+                              const TString& dbPath);
+    TAsyncStatus UpsertTValueBuffer(const TString& dbPath, TValueBuilder& builder);
+    TAsyncStatus UpsertTValueBuffer(const TString& dbPath, std::function<TValue()>&& buildFunc);
+    TStatus UpsertJson(IInputStream &input, const TString &dbPath, std::optional<ui64> inputSizeHint,
+                       ProgressCallbackFunc & progressCallback);
+    TStatus UpsertParquet(const TString& filename, const TString& dbPath, ProgressCallbackFunc & progressCallback);
+    TAsyncStatus UpsertParquetBuffer(const TString& dbPath, const TString& buffer, const TString& strSchema);
+    TType GetTableType();
+    std::map<TString, TType> GetColumnTypes();
+    void ValidateTValueUpsertTable();
+
+    std::shared_ptr<NTable::TTableClient> TableClient;
+    std::shared_ptr<NScheme::TSchemeClient> SchemeClient;
+    const TImportFileSettings& Settings;
+    NTable::TBulkUpsertSettings UpsertSettings;
+    NTable::TRetryOperationSettings RetrySettings;
+    std::unique_ptr<const NTable::TTableDescription> DbTableInfo;
+    std::atomic<ui64> CurrentFileCount;
+    std::atomic<ui64> TotalBytesRead = 0;
+    // RequestInflight increases on sending a single request to server
+    // Decreases on receiving any response for its request
+    std::unique_ptr<std::counting_semaphore<>> RequestsInflight;
+    // Common pool between all files for building TValues
+    THolder<IThreadPool> ProcessingPool;
+    std::atomic<bool> Failed = false;
+    std::atomic<bool> InformedAboutLimit = false;
+    THolder<TStatus> ErrorStatus;
+
+    static constexpr ui32 VerboseModeStepSize = 1 << 27; // 128 MB
+}; // TImpl
+
+TImportFileClient::TImportFileClient(const TDriver& driver, const TClientCommand::TConfig& rootConfig,
+                                     const TImportFileSettings& settings)
+    : Impl_(new TImpl(driver, rootConfig, settings)) {
+}
+
+TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TString& dbPath) {
+    return Impl_->Import(filePaths, dbPath);
+}
+
+TImportFileClient::TImpl::TImpl(const TDriver& driver, const TClientCommand::TConfig& rootConfig,
+                                    const TImportFileSettings& settings)
+    : TableClient(std::make_shared<NTable::TTableClient>(driver))
     , SchemeClient(std::make_shared<NScheme::TSchemeClient>(driver))
-    , TableClient(std::make_shared<NTable::TTableClient>(driver))
+    , Settings(settings)
 {
     RetrySettings
         .MaxRetries(TImportFileSettings::MaxRetries)
         .Idempotent(true)
         .Verbose(rootConfig.IsVerbose());
+    ProcessingPool = CreateThreadPool(Settings.Threads_, 0,
+        IThreadPool::TParams().SetThreadNamePrefix("CsvProcessing"));
+    RequestsInflight = std::make_unique<std::counting_semaphore<>>(Settings.MaxInFlightRequests_);
 }
 
-TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TString& dbPath, const TImportFileSettings& settings) {
-    FilesCount = filePaths.size();
-    if (settings.Format_ == EOutputFormat::Tsv && settings.Delimiter_ != "\t") {
+TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, const TString& dbPath) {
+    CurrentFileCount = filePaths.size();
+    if (Settings.Format_ == EDataFormat::Tsv && Settings.Delimiter_ != "\t") {
         return MakeStatus(EStatus::BAD_REQUEST,
             TStringBuilder() << "Illegal delimiter for TSV format, only tab is allowed");
     }
 
-    auto result = NDump::DescribePath(*SchemeClient, dbPath);
-    auto resultStatus = result.GetStatus();
-    if (resultStatus != EStatus::SUCCESS) {
-        return MakeStatus(EStatus::SCHEME_ERROR,
-            TStringBuilder() <<  result.GetIssues().ToString() << dbPath);
+    auto describeStatus = TableClient->RetryOperationSync(
+        [this, dbPath](NTable::TSession session) {
+            auto result = session.DescribeTable(dbPath).ExtractValueSync();
+            if (result.IsSuccess()) {
+                DbTableInfo = std::make_unique<const NTable::TTableDescription>(result.GetTableDescription());
+            }
+            return result;
+        }, NTable::TRetryOperationSettings{RetrySettings}.MaxRetries(10));
+
+    if (!describeStatus.IsSuccess()) {
+        /// TODO: Remove this after server fix: https://github.com/ydb-platform/ydb/issues/7791
+        if (describeStatus.GetStatus() == EStatus::SCHEME_ERROR) {
+            auto describePathResult = NDump::DescribePath(*SchemeClient, dbPath);
+            if (describePathResult.GetStatus() != EStatus::SUCCESS) {
+                return MakeStatus(EStatus::SCHEME_ERROR,
+                    TStringBuilder() << describePathResult.GetIssues().ToString() << dbPath);
+            }
+        }
+        return describeStatus;
     }
 
     UpsertSettings
-        .OperationTimeout(settings.OperationTimeout_)
-        .ClientTimeout(settings.ClientTimeout_);
+        .OperationTimeout(Settings.OperationTimeout_)
+        .ClientTimeout(Settings.ClientTimeout_);
 
     bool isStdoutInteractive = IsStdoutInteractive();
     size_t filePathsSize = filePaths.size();
@@ -270,8 +446,20 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
 
     // If the single empty filename passed, read from stdin, else from the file
 
-    for (const auto& filePath : filePaths) {
-        auto func = [&, this] {
+    std::vector<std::shared_ptr<TJobInFlightManager>> inflightManagers;
+    std::mutex inflightManagersLock;
+    if ((Settings.Format_ == EDataFormat::Tsv || Settings.Format_ == EDataFormat::Csv) && !Settings.NewlineDelimited_) {
+        inflightManagers.reserve(filePathsSize);
+        // <maxInFlight> requests in flight on server and <maxThreads> threads building TValue
+        size_t maxJobInflight = Settings.Threads_ + Settings.MaxInFlightRequests_;
+        for (size_t i = 0; i < filePathsSize; ++i) {
+            inflightManagers.push_back(std::make_shared<TJobInFlightManager>(i, filePathsSize, maxJobInflight));
+        }
+    }
+
+    for (size_t fileOrderNumber = 0; fileOrderNumber < filePathsSize; ++fileOrderNumber) {
+        const auto& filePath = filePaths[fileOrderNumber];
+        auto func = [&, fileOrderNumber, this] {
             std::unique_ptr<TFileInput> fileInput;
             std::optional<ui64> fileSizeHint;
 
@@ -294,13 +482,12 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
                     fileSizeHint = fileLength;
                 }
 
-                fileInput = std::make_unique<TFileInput>(file, settings.FileBufferSize_);
+                fileInput = std::make_unique<TFileInput>(file, Settings.FileBufferSize_);
             }
 
             ProgressCallbackFunc progressCallback;
 
-            if (isStdoutInteractive)
-            {
+            if (isStdoutInteractive) {
                 ui64 oldProgress = 0;
                 progressCallback = [&, oldProgress](ui64 current, ui64 total) mutable {
                     ui64 progress = static_cast<ui64>((static_cast<double>(current) / total) * 100.0);
@@ -313,26 +500,41 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
 
             IInputStream& input = fileInput ? *fileInput : Cin;
 
-            switch (settings.Format_) {
-                case EOutputFormat::Default:
-                case EOutputFormat::Csv:
-                case EOutputFormat::Tsv:
-                    if (settings.NewlineDelimited_) {
-                        return UpsertCsvByBlocks(filePath, dbPath, settings);
-                    } else {
-                        return UpsertCsv(input, dbPath, settings, fileSizeHint, progressCallback);
-                    }
-                case EOutputFormat::Json:
-                case EOutputFormat::JsonUnicode:
-                case EOutputFormat::JsonBase64:
-                    return UpsertJson(input, dbPath, settings, fileSizeHint, progressCallback);
-                case EOutputFormat::Parquet:
-                    return UpsertParquet(filePath, dbPath, settings, progressCallback);
-                default: ;
-            }
+            try {
+                switch (Settings.Format_) {
+                    case EDataFormat::Default:
+                    case EDataFormat::Csv:
+                    case EDataFormat::Tsv:
+                        if (Settings.NewlineDelimited_) {
+                            return UpsertCsvByBlocks(filePath, dbPath);
+                        } else {
+                            auto status = UpsertCsv(input, dbPath, filePath, fileSizeHint, progressCallback,
+                                inflightManagers.at(fileOrderNumber));
+                            std::lock_guard<std::mutex> lock(inflightManagersLock);
+                            inflightManagers[fileOrderNumber]->Finish();
+                            size_t informedManagers = 0;
+                            for (auto& inflightManager : inflightManagers) {
+                                if (inflightManager->OnAnotherFileFinished(informedManagers)) {
+                                    ++informedManagers;
+                                }
+                            }
+                            return status;
+                        }
+                    case EDataFormat::Json:
+                    case EDataFormat::JsonUnicode:
+                    case EDataFormat::JsonBase64:
+                        return UpsertJson(input, dbPath, fileSizeHint, progressCallback);
+                    case EDataFormat::Parquet:
+                        return UpsertParquet(filePath, dbPath, progressCallback);
+                    default: ;
+                }
 
-            return MakeStatus(EStatus::BAD_REQUEST,
-                        TStringBuilder() << "Unsupported format #" << (int) settings.Format_);
+                return MakeStatus(EStatus::BAD_REQUEST,
+                            TStringBuilder() << "Unsupported format #" << (int) Settings.Format_);
+            } catch (const std::exception& e) {
+                return MakeStatus(EStatus::INTERNAL_ERROR,
+                        TStringBuilder() << "Error: " << e.what());
+            }
         };
 
         asyncResults.push_back(NThreading::Async(std::move(func), *pool));
@@ -349,14 +551,18 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
     auto finish = TInstant::Now();
     auto duration = finish - start;
     progressBar.SetProcess(100);
-    Cerr << "Elapsed: " << duration.SecondsFloat() << " sec\n";
+    if (duration.SecondsFloat() > 0) {
+        std::cerr << "Elapsed: " << std::setprecision(3) << duration.SecondsFloat() << " sec. Total read size: "
+            << PrettifyBytes(TotalBytesRead) << ". Average processing speed: "
+            << PrettifyBytes((double)TotalBytesRead / duration.SecondsFloat())  << "/s." << std::endl;
+    }
 
     return MakeStatus(EStatus::SUCCESS);
 }
 
 inline
-TAsyncStatus TImportFileClient::UpsertTValueBuffer(const TString& dbPath, TValueBuilder& builder) {
-    auto upsert = [this, dbPath, rows = builder.Build()]
+TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath, TValueBuilder& builder) {
+    auto retryFunc = [this, dbPath, rows = builder.Build()]
             (NYdb::NTable::TTableClient& tableClient) mutable -> TAsyncStatus {
         NYdb::TValue rowsCopy(rows.GetType(), rows.GetProto());
         return tableClient.BulkUpsert(dbPath, std::move(rowsCopy), UpsertSettings)
@@ -365,65 +571,77 @@ TAsyncStatus TImportFileClient::UpsertTValueBuffer(const TString& dbPath, TValue
                 return NThreading::MakeFuture(status);
             });
     };
-    return TableClient->RetryOperation(upsert, RetrySettings);
+    return TableClient->RetryOperation(retryFunc, RetrySettings);
 }
 
-TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath, const TImportFileSettings& settings,
-                                     std::optional<ui64> inputSizeHint, ProgressCallbackFunc & progressCallback) {
-    TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, FilesCount);
+inline
+TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath, std::function<TValue()>&& buildFunc) {
+    // For the first attempt values are built before acquiring request inflight semaphore
+    std::optional<TValue> prebuiltValue = buildFunc();
+    auto retryFunc = [this, &dbPath, buildFunc = std::move(buildFunc), prebuiltValue = std::move(prebuiltValue)]
+            (NYdb::NTable::TTableClient& tableClient) mutable -> TAsyncStatus {
+        auto buildTValueAndSendRequest = [this, &buildFunc, &dbPath, &tableClient, &prebuiltValue]() {
+            // For every retry attempt after first request build value from strings again
+            // to prevent copying data in retryFunc in a happy way when there is only one request
+            TValue builtValue = prebuiltValue.has_value() ? std::move(prebuiltValue.value()) : buildFunc();
+            prebuiltValue = std::nullopt;
+            return tableClient.BulkUpsert(dbPath, std::move(builtValue), UpsertSettings)
+                .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
+                    NYdb::TStatus status = bulkUpsertResult.GetValueSync();
+                    return NThreading::MakeFuture(status);
+                });
+        };
+        // Running heavy building task on processing pool:
+        return NThreading::Async(std::move(buildTValueAndSendRequest), *ProcessingPool);
+    };
+    if (!RequestsInflight->try_acquire()) {
+        if (Settings.Verbose_ && Settings.NewlineDelimited_) {
+            if (!InformedAboutLimit.exchange(true)) {
+                Cerr << (TStringBuilder() << "@ (each '@' means max request inflight is reached and a worker thread is waiting for "
+                "any response from database)" << Endl);
+            } else {
+                Cerr << '@';
+            }
+        }
+        RequestsInflight->acquire();
+    }
+    return TableClient->RetryOperation(retryFunc, RetrySettings)
+        .Apply([this](const TAsyncStatus& asyncStatus) {
+            NYdb::TStatus status = asyncStatus.GetValueSync();
+            if (!status.IsSuccess()) {
+                if (!Failed.exchange(true)) {
+                    ErrorStatus = MakeHolder<TStatus>(status);
+                }
+            }
+            RequestsInflight->release();
+            return asyncStatus;
+        });
+}
 
+TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
+                                     const TString& dbPath,
+                                     const TString& filePath,
+                                     std::optional<ui64> inputSizeHint,
+                                     ProgressCallbackFunc & progressCallback,
+                                     std::shared_ptr<TJobInFlightManager> jobInflightManager) {
     TCountingInput countInput(&input);
     NCsvFormat::TLinesSplitter splitter(countInput);
+
+    auto columnTypes = GetColumnTypes();
+    ValidateTValueUpsertTable();
+    TInstant fileStartTime = TInstant::Now();
+
     TCsvParser parser;
-    bool RemoveLastDelimiter = false;
+    bool removeLastDelimiter = false;
+    InitCsvParser(parser, removeLastDelimiter, splitter, Settings, &columnTypes, DbTableInfo.get());
 
-    NTable::TCreateSessionResult sessionResult = TableClient->GetSession(NTable::TCreateSessionSettings()).GetValueSync();
-    if (!sessionResult.IsSuccess())
-        return sessionResult;
-    NTable::TDescribeTableResult tableResult = sessionResult.GetSession().DescribeTable(dbPath).GetValueSync();
-    if (!tableResult.IsSuccess())
-        return tableResult;
-
-    auto columnTypes = GetColumnTypes(tableResult.GetTableDescription());
-    ValidateTable(tableResult.GetTableDescription());
-
-    if (settings.Header_ || settings.HeaderRow_) {
-        TString headerRow;
-        if (settings.Header_) {
-            headerRow = splitter.ConsumeLine();
-        }
-        if (settings.HeaderRow_) {
-            headerRow = settings.HeaderRow_;
-        }
-        if (headerRow.EndsWith("\r\n")) {
-            headerRow.erase(headerRow.Size() - 2);
-        }
-        if (headerRow.EndsWith("\n")) {
-            headerRow.erase(headerRow.Size() - 1);
-        }
-        if (headerRow.EndsWith(settings.Delimiter_)) {
-            RemoveLastDelimiter = true;
-            headerRow.erase(headerRow.Size() - settings.Delimiter_.Size());
-        }
-        parser = TCsvParser(std::move(headerRow), settings.Delimiter_[0], settings.NullValue_, &columnTypes);
-    } else {
-        TVector<TString> columns;
-        for (const auto& column : tableResult.GetTableDescription().GetColumns()) {
-            columns.push_back(column.Name);
-        }
-        parser = TCsvParser(std::move(columns), settings.Delimiter_[0], settings.NullValue_, &columnTypes);
-    }
-
-    for (ui32 i = 0; i < settings.SkipRows_; ++i) {
+    for (ui32 i = 0; i < Settings.SkipRows_; ++i) {
         splitter.ConsumeLine();
     }
 
-    TType lineType = parser.GetColumnsType();
-
-    THolder<IThreadPool> pool = CreateThreadPool(settings.Threads_);
-
-    ui32 row = settings.SkipRows_;
-    ui64 nextBorder = VerboseModeReadSize;
+    ui64 row = Settings.SkipRows_ + Settings.Header_ + 1;
+    ui64 batchRows = 0;
+    ui64 nextBorder = VerboseModeStepSize;
     ui64 batchBytes = 0;
     ui64 readBytes = 0;
 
@@ -431,41 +649,49 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
     std::vector<TAsyncStatus> inFlightRequests;
     std::vector<TString> buffer;
 
-    auto upsertCsv = [&](std::vector<TString>&& buffer) {
-        TValueBuilder builder;
-        builder.BeginList();
-        for (auto&& line : buffer) {
-            builder.AddListItem();
-            parser.GetValue(std::move(line), builder, lineType);
-        }
-        builder.EndList();
-        return UpsertTValueBuffer(dbPath, builder).ExtractValueSync();
+    auto upsertCsvFunc = [&, jobInflightManager](std::vector<TString>&& buffer, ui64 row) {
+            auto buildFunc = [jobInflightManager, &parser, buffer = std::move(buffer), &filePath, row, this] () mutable {
+                try {
+                    return parser.BuildList(buffer, filePath, row);
+                } catch (const std::exception& e) {
+                    if (!Failed.exchange(true)) {
+                        ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
+                    }
+                    jobInflightManager->ReleaseJob();
+                    throw;
+                }
+            };
+            UpsertTValueBuffer(dbPath, std::move(buildFunc))
+                .Apply([jobInflightManager](const TAsyncStatus& asyncStatus) {
+                    jobInflightManager->ReleaseJob();
+                    return asyncStatus;
+                });
     };
 
     while (TString line = splitter.ConsumeLine()) {
-        ++row;
+        ++batchRows;
         if (line.empty()) {
             continue;
         }
-        readBytes += line.Size();
-        batchBytes += line.Size();
+        readBytes += line.size();
+        batchBytes += line.size();
 
-        if (RemoveLastDelimiter) {
-            if (!line.EndsWith(settings.Delimiter_)) {
+        if (removeLastDelimiter) {
+            if (!line.EndsWith(Settings.Delimiter_)) {
                 return MakeStatus(EStatus::BAD_REQUEST,
                         "According to the header, lines should end with a delimiter");
             }
-            line.erase(line.Size() - settings.Delimiter_.Size());
+            line.erase(line.size() - Settings.Delimiter_.size());
         }
 
         buffer.push_back(line);
 
-        if (readBytes >= nextBorder && RetrySettings.Verbose_) {
-            nextBorder += VerboseModeReadSize;
-            Cerr << "Processed " << 1.0 * readBytes / (1 << 20) << "Mb and " << row << " records" << Endl;
+        if (readBytes >= nextBorder && Settings.Verbose_) {
+            nextBorder += VerboseModeStepSize;
+            Cerr << (TStringBuilder() << "Processed " << PrettifyBytes(readBytes) << " and " << row + batchRows << " records" << Endl);
         }
 
-        if (batchBytes < settings.BytesPerRequest_) {
+        if (batchBytes < Settings.BytesPerRequest_) {
             continue;
         }
 
@@ -473,159 +699,186 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
             progressCallback(readBytes, *inputSizeHint);
         }
 
-        auto asyncUpsertCSV = [&, buffer = std::move(buffer)]() mutable {
-            return upsertCsv(std::move(buffer));
+        auto workerFunc = [&upsertCsvFunc, row, buffer = std::move(buffer)]() mutable {
+            upsertCsvFunc(std::move(buffer), row);
         };
-
+        row += batchRows;
+        batchRows = 0;
         batchBytes = 0;
         buffer.clear();
 
-        inFlightRequests.push_back(NThreading::Async(asyncUpsertCSV, *pool));
+        jobInflightManager->AcquireJob();
 
-        auto status = WaitForQueue(inFlightGetter.GetCurrentMaxInflight(), inFlightRequests);
-        if (!status.IsSuccess()) {
-            return status;
+        if (!ProcessingPool->AddFunc(workerFunc)) {
+            return MakeStatus(EStatus::INTERNAL_ERROR, "Couldn't add worker func");
+        }
+
+        if (Failed) {
+            break;
         }
     }
 
-    if (!buffer.empty() && countInput.Counter() > 0) {
-        upsertCsv(std::move(buffer));
+    // Send the rest if buffer is not empty
+    if (!buffer.empty() && countInput.Counter() > 0 && !Failed) {
+        jobInflightManager->AcquireJob();
+        upsertCsvFunc(std::move(buffer), row);
     }
 
-    return WaitForQueue(0, inFlightRequests);
+    jobInflightManager->WaitForAllJobs();
+
+    TotalBytesRead += readBytes;
+
+    if (Settings.Verbose_) {
+        std::stringstream str;
+        double fileProcessingTimeSeconds = (TInstant::Now() - fileStartTime).SecondsFloat();
+        str << std::endl << "File " << filePath << " of " << PrettifyBytes(readBytes)
+            << (Failed ? " failed in " : " processed in ") << std::setprecision(3) << fileProcessingTimeSeconds << " sec";
+        if (fileProcessingTimeSeconds > 0) {
+            str << ", " << PrettifyBytes((double)readBytes / fileProcessingTimeSeconds)  << "/s" << std::endl;
+        }
+        std::cerr << str.str();
+    }
+    if (Failed) {
+        return *ErrorStatus;
+    } else {
+        return MakeStatus();
+    }
 }
 
-TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath, const TString& dbPath, const TImportFileSettings& settings) {
-    TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, FilesCount);
+TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
+                                             const TString& dbPath) {
     TString headerRow;
+    ui64 maxThreads = Max((size_t)1, Settings.Threads_ / CurrentFileCount);
+    TCsvFileReader splitter(filePath, Settings, headerRow, maxThreads);
+    ui64 threadCount = splitter.GetSplitCount();
+    THolder<IThreadPool> readingPool = CreateThreadPool(maxThreads, 0,
+    IThreadPool::TParams().SetThreadNamePrefix("CsvReading"));
+    // MaxInFlightRequests_ requests in flight on server and threadCount threads building TValue
+    size_t maxJobInflightTotal = threadCount + Settings.MaxInFlightRequests_;
+
+    auto columnTypes = GetColumnTypes();
+    ValidateTValueUpsertTable();
+
     TCsvParser parser;
-    TCsvFileReader splitter(filePath, settings, headerRow, inFlightGetter);
-    bool RemoveLastDelimiter = false;
+    bool removeLastDelimiter = false;
+    TStringInput headerInput(headerRow);
+    NCsvFormat::TLinesSplitter headerSplitter(headerInput, Settings.Delimiter_[0]);
+    InitCsvParser(parser, removeLastDelimiter, headerSplitter, Settings, &columnTypes, DbTableInfo.get());
 
-    NTable::TCreateSessionResult sessionResult = TableClient->GetSession(NTable::TCreateSessionSettings()).GetValueSync();
-    if (!sessionResult.IsSuccess())
-        return sessionResult;
-    NTable::TDescribeTableResult tableResult = sessionResult.GetSession().DescribeTable(dbPath).GetValueSync();
-    if (!tableResult.IsSuccess())
-        return tableResult;
-
-    auto columnTypes = GetColumnTypes(tableResult.GetTableDescription());
-    ValidateTable(tableResult.GetTableDescription());
-
-    if (settings.Header_ || settings.HeaderRow_) {
-        if (settings.HeaderRow_) {
-            headerRow = settings.HeaderRow_;
-        }
-        if (headerRow.EndsWith("\r\n")) {
-            headerRow.erase(headerRow.Size() - 2);
-        }
-        if (headerRow.EndsWith("\n")) {
-            headerRow.erase(headerRow.Size() - 1);
-        }
-        if (headerRow.EndsWith(settings.Delimiter_)) {
-            RemoveLastDelimiter = true;
-            headerRow.erase(headerRow.Size() - settings.Delimiter_.Size());
-        }
-        parser = TCsvParser(std::move(headerRow), settings.Delimiter_[0], settings.NullValue_, &columnTypes);
-    } else {
-        TVector<TString> columns;
-        for (const auto& column : tableResult.GetTableDescription().GetColumns()) {
-            columns.push_back(column.Name);
-        }
-        parser = TCsvParser(std::move(columns), settings.Delimiter_[0], settings.NullValue_, &columnTypes);
-    }
-
-    TType lineType = parser.GetColumnsType();
-
-    TVector<TAsyncStatus> threadResults(splitter.GetSplitCount());
-    THolder<IThreadPool> pool = CreateThreadPool(splitter.GetSplitCount());
-    for (size_t threadId = 0; threadId < splitter.GetSplitCount(); ++threadId) {
-        auto loadCsv = [&, threadId] () {
-            auto upsertCsv = [&](std::vector<TString>&& buffer) {
-                TValueBuilder builder;
-                builder.BeginList();
-                for (auto&& line : buffer) {
-                    builder.AddListItem();
-                    parser.GetValue(std::move(line), builder, lineType);
-                }
-                builder.EndList();
-                return UpsertTValueBuffer(dbPath, builder);
+    TVector<NThreading::TFuture<void>> threadResults;
+    threadResults.reserve(threadCount);
+    for (size_t threadId = 0; threadId < threadCount; ++threadId) {
+        auto promise = NThreading::NewPromise<void>();
+        threadResults.push_back(promise.GetFuture());
+        auto workerFunc = [&, threadId, promise] () mutable {
+            TInstant threadStartTime = TInstant::Now();
+            size_t maxJobInflight = maxJobInflightTotal / threadCount + (threadId < maxJobInflightTotal % threadCount ? 1 : 0);
+            // Jobs starts on starting building TValue and sends request
+            // Job ends on receiving final request (after all retries)
+            std::counting_semaphore<> jobsInflight(maxJobInflight);
+            auto upsertCsvFunc = [&](std::vector<TString>&& buffer) {
+                auto buildFunc = [&jobsInflight, &parser, buffer = std::move(buffer), &filePath, this]() mutable {
+                    try {
+                        return parser.BuildList(buffer, filePath);
+                    } catch (const std::exception& e) {
+                        if (!Failed.exchange(true)) {
+                            ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
+                        }
+                        jobsInflight.release();
+                        throw;
+                    }
+                };
+                jobsInflight.acquire();
+                UpsertTValueBuffer(dbPath, std::move(buildFunc))
+                    .Apply([&jobsInflight](const TAsyncStatus& asyncStatus) {
+                        jobsInflight.release();
+                        return asyncStatus;
+                    });
             };
             std::vector<TAsyncStatus> inFlightRequests;
             std::vector<TString> buffer;
-            ui32 idx = settings.SkipRows_;
+            ui32 idx = Settings.SkipRows_;
             ui64 readBytes = 0;
             ui64 batchBytes = 0;
-            ui64 nextBorder = VerboseModeReadSize;
-            TAsyncStatus status;
+            ui64 nextBorder = VerboseModeStepSize;
             TString line;
-            while (splitter.GetChunk(threadId).ConsumeLine(line)) {
+            TCsvFileReader::TFileChunk& chunk = splitter.GetChunk(threadId);
+            while (chunk.ConsumeLine(line)) {
                 if (line.empty()) {
                     continue;
                 }
                 readBytes += line.size();
                 batchBytes += line.size();
-                if (RemoveLastDelimiter) {
-                    if (!line.EndsWith(settings.Delimiter_)) {
-                        return MakeStatus(EStatus::BAD_REQUEST,
-                                "According to the header, lines should end with a delimiter");
+                if (removeLastDelimiter) {
+                    if (!line.EndsWith(Settings.Delimiter_)) {
+                        if (!Failed.exchange(true)) {
+                            ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::BAD_REQUEST,
+                                "According to the header, lines should end with a delimiter"));
+                        }
+                        break;
                     }
-                    line.erase(line.Size() - settings.Delimiter_.Size());
+                    line.erase(line.size() - Settings.Delimiter_.size());
                 }
                 buffer.push_back(line);
                 ++idx;
-                if (readBytes >= nextBorder && RetrySettings.Verbose_) {
-                    nextBorder += VerboseModeReadSize;
-                    TStringBuilder builder;
-                    builder << "Processed " << 1.0 * readBytes / (1 << 20) << "Mb and " << idx << " records" << Endl;
-                    Cerr << builder;
+                if (readBytes >= nextBorder && Settings.Verbose_) {
+                    nextBorder += VerboseModeStepSize;
+                    Cerr << (TStringBuilder() << "Processed " << PrettifyBytes(readBytes) << " and "
+                        << idx << " records" << Endl);
                 }
-                if (batchBytes >= settings.BytesPerRequest_) {
+                if (batchBytes >= Settings.BytesPerRequest_) {
                     batchBytes = 0;
-                    auto status = WaitForQueue(splitter.GetThreadLimit(threadId), inFlightRequests);
-                    if (!status.IsSuccess()) {
-                        return status;
-                    }
-
-                    inFlightRequests.push_back(upsertCsv(std::move(buffer)));
+                    upsertCsvFunc(std::move(buffer));
                     buffer.clear();
+
+                    if (Failed) {
+                        break;
+                    }
                 }
             }
 
-            if (!buffer.empty() && splitter.GetChunk(threadId).GetReadCount() != 0) {
-                inFlightRequests.push_back(upsertCsv(std::move(buffer)));
+            if (!buffer.empty() && chunk.GetReadCount() != 0 && !Failed) {
+                upsertCsvFunc(std::move(buffer));
             }
 
-            return WaitForQueue(0, inFlightRequests);
+            // Wait for all jobs for current thread to finish
+            for (size_t i = 0; i < maxJobInflight; ++i) {
+                jobsInflight.acquire();
+            }
+
+            TotalBytesRead += readBytes;
+
+            if (Settings.Verbose_) {
+                std::stringstream str;
+                double threadProcessingTimeSeconds = (TInstant::Now() - threadStartTime).SecondsFloat();
+                str << std::endl << "File " << filePath << ", thread " << threadId << " processed " << PrettifyBytes(readBytes) << " and "
+                    << (Failed ? "failed in " : "successfully finished in ") << std::setprecision(3)
+                    << threadProcessingTimeSeconds << " sec";
+                if (threadProcessingTimeSeconds > 0) {
+                    str << ", " << PrettifyBytes((double)readBytes / threadProcessingTimeSeconds)  << "/s" << std::endl;
+                }
+                std::cerr << str.str();
+            }
+            promise.SetValue();
         };
-        threadResults[threadId] = NThreading::Async(loadCsv, *pool);
+
+        if (!readingPool->AddFunc(workerFunc)) {
+            return MakeStatus(EStatus::INTERNAL_ERROR, "Couldn't add worker func");
+        }
     }
     NThreading::WaitAll(threadResults).Wait();
-    for (size_t i = 0; i < splitter.GetSplitCount(); ++i) {
-        if (!threadResults[i].GetValueSync().IsSuccess()) {
-            return threadResults[i].GetValueSync();
-        }
+    if (Failed) {
+        return *ErrorStatus;
     }
     return MakeStatus();
 }
 
-TStatus TImportFileClient::UpsertJson(IInputStream& input, const TString& dbPath, const TImportFileSettings& settings,
-                                    std::optional<ui64> inputSizeHint, ProgressCallbackFunc & progressCallback) {
-    NTable::TCreateSessionResult sessionResult = TableClient->GetSession(NTable::TCreateSessionSettings()).GetValueSync();
-    if (!sessionResult.IsSuccess())
-        return sessionResult;
-    NTable::TDescribeTableResult tableResult = sessionResult.GetSession().DescribeTable(dbPath).GetValueSync();
-    if (!tableResult.IsSuccess())
-        return tableResult;
+TStatus TImportFileClient::TImpl::UpsertJson(IInputStream& input, const TString& dbPath, std::optional<ui64> inputSizeHint,
+                                      ProgressCallbackFunc & progressCallback) {
+    const TType tableType = GetTableType();
+    ValidateTValueUpsertTable();
 
-    const TType tableType = GetTableType(tableResult.GetTableDescription());
-    ValidateTable(tableResult.GetTableDescription());
-    const NYdb::EBinaryStringEncoding stringEncoding =
-        (settings.Format_ == EOutputFormat::JsonBase64) ? NYdb::EBinaryStringEncoding::Base64 :
-            NYdb::EBinaryStringEncoding::Unicode;
-
-    TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, FilesCount);
-    THolder<IThreadPool> pool = CreateThreadPool(settings.Threads_);
+    TMaxInflightGetter inFlightGetter(Settings.MaxInFlightRequests_, CurrentFileCount);
 
     ui64 readBytes = 0;
     ui64 batchBytes = 0;
@@ -639,7 +892,7 @@ TStatus TImportFileClient::UpsertJson(IInputStream& input, const TString& dbPath
         batch.BeginList();
 
         for (auto &line : batchLines) {
-            batch.AddListItem(JsonToYdbValue(line, tableType, stringEncoding));
+            batch.AddListItem(JsonToYdbValue(line, tableType, Settings.BinaryStringsEncoding_));
         }
 
         batch.EndList();
@@ -657,7 +910,7 @@ TStatus TImportFileClient::UpsertJson(IInputStream& input, const TString& dbPath
             progressCallback(readBytes, *inputSizeHint);
         }
 
-        if (batchBytes < settings.BytesPerRequest_) {
+        if (batchBytes < Settings.BytesPerRequest_) {
             continue;
         }
 
@@ -669,7 +922,7 @@ TStatus TImportFileClient::UpsertJson(IInputStream& input, const TString& dbPath
 
         batchLines.clear();
 
-        inFlightRequests.push_back(NThreading::Async(asyncUpsertJson, *pool));
+        inFlightRequests.push_back(NThreading::Async(asyncUpsertJson, *ProcessingPool));
 
         auto status = WaitForQueue(inFlightGetter.GetCurrentMaxInflight(), inFlightRequests);
         if (!status.IsSuccess()) {
@@ -684,9 +937,8 @@ TStatus TImportFileClient::UpsertJson(IInputStream& input, const TString& dbPath
     return WaitForQueue(0, inFlightRequests);
 }
 
-TStatus TImportFileClient::UpsertParquet([[maybe_unused]] const TString& filename,
+TStatus TImportFileClient::TImpl::UpsertParquet([[maybe_unused]] const TString& filename,
                                          [[maybe_unused]] const TString& dbPath,
-                                         [[maybe_unused]] const TImportFileSettings& settings,
                                          [[maybe_unused]] ProgressCallbackFunc & progressCallback) {
 #if defined(_WIN64) || defined(_WIN32) || defined(__WIN32__)
     return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Not supported on Windows");
@@ -722,8 +974,6 @@ TStatus TImportFileClient::UpsertParquet([[maybe_unused]] const TString& filenam
         return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Error while getting RecordBatchReader: " << st.ToString());
     }
 
-    THolder<IThreadPool> pool = CreateThreadPool(settings.Threads_);
-
     std::atomic<ui64> uploadedRows = 0;
     auto uploadedRowsCallback = [&](ui64 rows) {
         ui64 uploadedRowsValue = uploadedRows.fetch_add(rows);
@@ -752,7 +1002,7 @@ TStatus TImportFileClient::UpsertParquet([[maybe_unused]] const TString& filenam
             const TString strSchema = NYdb_cli::NArrow::SerializeSchema(*batch->schema());
             const size_t totalSize = NYdb_cli::NArrow::GetBatchDataSize(batch);
             const size_t sliceCount =
-                (totalSize / (size_t)settings.BytesPerRequest_) + (totalSize % settings.BytesPerRequest_ != 0 ? 1 : 0);
+                (totalSize / (size_t)Settings.BytesPerRequest_) + (totalSize % Settings.BytesPerRequest_ != 0 ? 1 : 0);
             const i64 rowsInSlice = batch->num_rows() / sliceCount;
 
             for (i64 currentRow = 0; currentRow < batch->num_rows(); currentRow += rowsInSlice) {
@@ -774,7 +1024,7 @@ TStatus TImportFileClient::UpsertParquet([[maybe_unused]] const TString& filenam
                     }
 
                     // Logarithmic approach to find number of rows fit into the byte limit.
-                    if (rowsBatch->num_rows() == 1 || NYdb_cli::NArrow::GetBatchDataSize(rowsBatch) < settings.BytesPerRequest_) {
+                    if (rowsBatch->num_rows() == 1 || NYdb_cli::NArrow::GetBatchDataSize(rowsBatch) < Settings.BytesPerRequest_) {
                         // Single row or fits into the byte limit.
                         auto value = UpsertParquetBuffer(dbPath, NYdb_cli::NArrow::SerializeBatchNoCompression(rowsBatch), strSchema);
                         auto status = value.ExtractValueSync();
@@ -794,9 +1044,9 @@ TStatus TImportFileClient::UpsertParquet([[maybe_unused]] const TString& filenam
             return MakeStatus();
         };
 
-        inFlightRequests.push_back(NThreading::Async(upsertParquetBatch, *pool));
+        inFlightRequests.push_back(NThreading::Async(upsertParquetBatch, *ProcessingPool));
 
-        auto status = WaitForQueue(settings.MaxInFlightRequests_, inFlightRequests);
+        auto status = WaitForQueue(Settings.MaxInFlightRequests_, inFlightRequests);
         if (!status.IsSuccess()) {
             return status;
         }
@@ -807,7 +1057,7 @@ TStatus TImportFileClient::UpsertParquet([[maybe_unused]] const TString& filenam
 }
 
 inline
-TAsyncStatus TImportFileClient::UpsertParquetBuffer(const TString& dbPath, const TString& buffer, const TString& strSchema) {
+TAsyncStatus TImportFileClient::TImpl::UpsertParquetBuffer(const TString& dbPath, const TString& buffer, const TString& strSchema) {
     auto upsert = [this, dbPath, buffer, strSchema](NYdb::NTable::TTableClient& tableClient) -> TAsyncStatus {
         return tableClient.BulkUpsert(dbPath, NTable::EDataFormat::ApacheArrow, buffer, strSchema, UpsertSettings)
             .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
@@ -818,10 +1068,11 @@ TAsyncStatus TImportFileClient::UpsertParquetBuffer(const TString& dbPath, const
     return TableClient->RetryOperation(upsert, RetrySettings);
 }
 
-TType TImportFileClient::GetTableType(const NTable::TTableDescription& tableDescription) {
+TType TImportFileClient::TImpl::GetTableType() {
     TTypeBuilder typeBuilder;
     typeBuilder.BeginStruct();
-    const auto& columns = tableDescription.GetTableColumns();
+    Y_ENSURE_BT(DbTableInfo);
+    const auto& columns = DbTableInfo->GetTableColumns();
     for (auto it = columns.begin(); it != columns.end(); it++) {
         typeBuilder.AddMember((*it).Name, (*it).Type);
     }
@@ -829,17 +1080,18 @@ TType TImportFileClient::GetTableType(const NTable::TTableDescription& tableDesc
     return typeBuilder.Build();
 }
 
-std::map<TString, TType> TImportFileClient::GetColumnTypes(const NTable::TTableDescription& tableDescription) {
+std::map<TString, TType> TImportFileClient::TImpl::GetColumnTypes() {
     std::map<TString, TType> columnTypes;
-    const auto& columns = tableDescription.GetTableColumns();
+    Y_ENSURE_BT(DbTableInfo);
+    const auto& columns = DbTableInfo->GetTableColumns();
     for (auto it = columns.begin(); it != columns.end(); it++) {
         columnTypes.insert({(*it).Name, (*it).Type});
     }
     return columnTypes;
 }
 
-void TImportFileClient::ValidateTable(const NTable::TTableDescription& tableDescription) {
-    auto columnTypes = GetColumnTypes(tableDescription);
+void TImportFileClient::TImpl::ValidateTValueUpsertTable() {
+    auto columnTypes = GetColumnTypes();
     bool hasPgType = false;
     for (const auto& [_, type] : columnTypes) {
         if (TTypeParser(type).GetKind() == TTypeParser::ETypeKind::Pg) {
@@ -847,7 +1099,8 @@ void TImportFileClient::ValidateTable(const NTable::TTableDescription& tableDesc
             break;
         }
     }
-    if (tableDescription.GetStoreType() == NTable::EStoreType::Column && hasPgType) {
+    Y_ENSURE_BT(DbTableInfo);
+    if (DbTableInfo->GetStoreType() == NTable::EStoreType::Column && hasPgType) {
         throw TMisuseException() << "Import into column table with Pg type columns in not supported";
     }
 }

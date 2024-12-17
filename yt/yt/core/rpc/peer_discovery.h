@@ -10,7 +10,7 @@ struct IDiscoverRequestHook
     : public TRefCounted
 {
     virtual void EnrichRequest(NProto::TReqDiscover* request) const = 0;
-    virtual void OnResponse(NProto::TRspDiscover* response) const = 0;
+    virtual void HandleResponse(NProto::TRspDiscover* response) const = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IDiscoverRequestHook);
@@ -20,7 +20,7 @@ DEFINE_REFCOUNTED_TYPE(IDiscoverRequestHook);
 struct TPeerDiscoveryResponse
 {
     bool IsUp;
-    std::vector<TString> Addresses;
+    std::vector<std::string> Addresses;
 };
 
 struct IPeerDiscovery
@@ -28,7 +28,7 @@ struct IPeerDiscovery
 {
     virtual TFuture<TPeerDiscoveryResponse> Discover(
         IChannelPtr channel,
-        const TString& address,
+        const std::string& address,
         TDuration timeout,
         TDuration replyDelay,
         const std::string& serviceName) = 0;

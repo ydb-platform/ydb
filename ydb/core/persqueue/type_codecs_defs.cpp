@@ -70,6 +70,7 @@ TTypeCodecs::TTypeCodecs(TTypeId typeId) {
     AddCodec<TVarLenCodec<false>>();
 
     switch (typeId) {
+    case NTypeIds::Date32:
     case NTypeIds::Int32:
         AddFixedLen<TInt32>(this);
         AddIntCodecs<TInt32>(this);
@@ -79,6 +80,9 @@ TTypeCodecs::TTypeCodecs(TTypeId typeId) {
         AddIntCodecs<TUint32>(this);
         break;
     case NTypeIds::Int64:
+    case NTypeIds::Datetime64:
+    case NTypeIds::Timestamp64:
+    case NTypeIds::Interval64:
         AddFixedLen<TInt64>(this);
         AddIntCodecs<TInt64>(this);
         break;

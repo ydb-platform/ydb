@@ -9,6 +9,7 @@ namespace NYdb {
 //! YDB_ANONYMOUS_CREDENTIALS="1" — uses anonymous access (used for test installation),
 //! YDB_METADATA_CREDENTIALS="1" — uses metadata service,
 //! YDB_ACCESS_TOKEN_CREDENTIALS=<access-token> — access token (for example, IAM-token).
+//! YDB_OAUTH2_KEY_FILE=<path-to-file> - OAuth 2.0 RFC8693 token exchange credentials parameters json file
 //! If grpcs protocol is given in endpoint (or protocol is empty), enables SSL and uses
 //! certificate from resourses and user cert from env variable "YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
 TDriverConfig CreateFromEnvironment(const TStringType& connectionString = "");

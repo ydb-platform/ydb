@@ -17,6 +17,7 @@ public:
     IActor* AddOutgoingConnection(bool secure, const NActors::TActorContext& ctx) {
         IActor* connectionSocket = CreateOutgoingConnectionActor(ctx.SelfID, secure, Poller);
         TActorId connectionId = ctx.Register(connectionSocket);
+        ALOG_DEBUG(HttpLog, "Connection created " << connectionId);
         Connections.emplace(connectionId);
         return connectionSocket;
     }
@@ -42,7 +43,8 @@ protected:
             HFunc(TEvHttpProxy::TEvHttpIncomingResponse, Handle);
             HFunc(TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
             HFunc(TEvHttpProxy::TEvHttpAcceptorClosed, Handle);
-            HFunc(TEvHttpProxy::TEvHttpConnectionClosed, Handle);
+            HFunc(TEvHttpProxy::TEvHttpOutgoingConnectionAvailable, Handle);
+            HFunc(TEvHttpProxy::TEvHttpOutgoingConnectionClosed, Handle);
             HFunc(TEvHttpProxy::TEvResolveHostRequest, Handle);
             HFunc(TEvHttpProxy::TEvReportSensors, Handle);
             HFunc(NActors::TEvents::TEvPoison, Handle);
@@ -97,6 +99,19 @@ protected:
     }
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event, const NActors::TActorContext& ctx) {
+        if (event->Get()->AllowConnectionReuse) {
+            auto destination = event->Get()->Request->GetDestination();
+            auto itAvailableConnection = AvailableConnections.find(destination);
+            if (itAvailableConnection != AvailableConnections.end()) {
+                TActorId availableConnection = itAvailableConnection->second;
+                ALOG_DEBUG(HttpLog, "Reusing connection " << availableConnection << " for destination " << destination);
+                AvailableConnections.erase(itAvailableConnection);
+                ctx.Send(event->Forward(availableConnection));
+                return;
+            } else {
+                ALOG_DEBUG(HttpLog, "Creating a new connection for destination " << destination);
+            }
+        }
         bool secure(event->Get()->Request->Secure);
         NActors::IActor* actor = AddOutgoingConnection(secure, ctx);
         ctx.Send(event->Forward(actor->SelfId()));
@@ -115,8 +130,21 @@ protected:
         }
     }
 
-    void Handle(TEvHttpProxy::TEvHttpConnectionClosed::TPtr event, const NActors::TActorContext&) {
+    void Handle(TEvHttpProxy::TEvHttpOutgoingConnectionAvailable::TPtr event, const NActors::TActorContext&) {
+        ALOG_DEBUG(HttpLog, "Connection " << event->Get()->ConnectionID << " available for destination " << event->Get()->Destination);
+        AvailableConnections.emplace(event->Get()->Destination, event->Get()->ConnectionID);
+    }
+
+    void Handle(TEvHttpProxy::TEvHttpOutgoingConnectionClosed::TPtr event, const NActors::TActorContext&) {
+        ALOG_DEBUG(HttpLog, "Connection closed " << event->Get()->ConnectionID);
         Connections.erase(event->Get()->ConnectionID);
+        auto range = AvailableConnections.equal_range(event->Get()->Destination);
+        for (auto it = range.first; it != range.second; ++it) {
+            if (it->second == event->Get()->ConnectionID) {
+                AvailableConnections.erase(it);
+                break;
+            }
+        }
     }
 
     void Handle(TEvHttpProxy::TEvRegisterHandler::TPtr event, const NActors::TActorContext& ctx) {
@@ -127,7 +155,7 @@ protected:
     void Handle(TEvHttpProxy::TEvResolveHostRequest::TPtr event, const NActors::TActorContext& ctx) {
         const TString& host(event->Get()->Host);
         auto it = Hosts.find(host);
-        if (it == Hosts.end() || it->second.DeadlineTime > ctx.Now()) {
+        if (it == Hosts.end() || it->second.DeadlineTime < ctx.Now()) {
             TString addressPart;
             TIpPort portPart = 0;
             CrackAddress(host, addressPart, portPart);
@@ -146,36 +174,47 @@ protected:
             } else {
                 // TODO(xenoxeno): move to another, possible blocking actor
                 try {
-                    const NDns::TResolvedHost* result = NDns::CachedResolve(NDns::TResolveInfo(addressPart, portPart));
-                    if (result != nullptr) {
-                        auto pAddr = result->Addr.Begin();
-                        while (pAddr != result->Addr.End() && pAddr->ai_family != AF_INET && pAddr->ai_family != AF_INET6) {
-                            ++pAddr;
+                    TNetworkAddress addr(addressPart, portPart);
+                    auto pAddr = addr.Begin();
+                    while (pAddr != addr.End() && pAddr->ai_family != AF_INET && pAddr->ai_family != AF_INET6) {
+                        ++pAddr;
+                    }
+                    if (pAddr == addr.End()) {
+                        ctx.Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse("Invalid address family resolved"));
+                        return;
+                    }
+                    THttpConfig::SocketAddressType address;
+                    switch (pAddr->ai_family) {
+                        case AF_INET:
+                            address = std::make_shared<TSockAddrInet>();
+                            break;
+                        case AF_INET6:
+                            address = std::make_shared<TSockAddrInet6>();
+                            break;
+                    }
+                    if (address) {
+                        memcpy(address->SockAddr(), pAddr->ai_addr, pAddr->ai_addrlen);
+                        LOG_DEBUG_S(ctx, HttpLog, "Host " << host << " resolved to " << address->ToString());
+                        if (it == Hosts.end()) {
+                            it = Hosts.emplace(host, THostEntry()).first;
                         }
-                        if (pAddr == result->Addr.End()) {
-                            ctx.Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse("Invalid address family resolved"));
-                            return;
-                        }
-                        THttpConfig::SocketAddressType address;
-                        switch (pAddr->ai_family) {
-                            case AF_INET:
-                                address = std::make_shared<TSockAddrInet>();
-                                break;
-                            case AF_INET6:
-                                address = std::make_shared<TSockAddrInet6>();
-                                break;
-                        }
-                        if (address) {
-                            memcpy(address->SockAddr(), pAddr->ai_addr, pAddr->ai_addrlen);
-                            LOG_DEBUG_S(ctx, HttpLog, "Host " << host << " resolved to " << address->ToString());
-                            if (it == Hosts.end()) {
-                                it = Hosts.emplace(host, THostEntry()).first;
-                            }
-                            it->second.Address = address;
-                            it->second.DeadlineTime = ctx.Now() + HostsTimeToLive;
-                        }
+                        it->second.Address = address;
+                        it->second.DeadlineTime = ctx.Now() + HostsTimeToLive;
+                    }
+                }
+                catch (const TNetworkResolutionError& e) {
+                    if (it != Hosts.end()) {
+                        ctx.Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse(it->first, it->second.Address));
+                        return;
                     } else {
-                        ctx.Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse("Error resolving host"));
+                        ctx.Send(event->Sender,
+                            new TEvHttpProxy::TEvResolveHostResponse(
+                                TStringBuilder()
+                                    << "Resolution failed and no stale cached value has been found to fallback.\n"
+                                    << "Resolution error: "
+                                    << e.what()
+                            )
+                        );
                         return;
                     }
                 }
@@ -247,6 +286,7 @@ protected:
     THashMap<TString, THostEntry> Hosts;
     THashMap<TString, TActorId> Handlers;
     THashSet<TActorId> Connections; // outgoing
+    std::unordered_multimap<TString, TActorId> AvailableConnections;
     std::weak_ptr<NMonitoring::TMetricRegistry> Registry;
 };
 

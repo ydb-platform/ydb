@@ -3,6 +3,7 @@
 #include "rpc_common/rpc_common.h"
 #include "audit_dml_operations.h"
 
+#include <ydb/core/grpc_services/grpc_integrity_trails.h>
 #include <ydb/public/api/protos/ydb_scripting.pb.h>
 
 namespace NKikimr {
@@ -48,6 +49,7 @@ public:
         const auto traceId = Request_->GetTraceId();
 
         AuditContextAppend(Request_.get(), *req);
+        NDataIntegrity::LogIntegrityTrails(traceId, *req, ctx);
 
         auto script = req->script();
 
@@ -57,6 +59,11 @@ public:
         }
 
         ::Ydb::Operations::OperationParams operationParams;
+
+        auto settings = NKqp::NPrivateEvents::TQueryRequestSettings()
+            .SetKeepSession(false)
+            .SetUseCancelAfter(false)
+            .SetSyntax(req->syntax());
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             NKikimrKqp::QUERY_ACTION_EXECUTE,
@@ -71,16 +78,16 @@ public:
             req->collect_stats(),
             nullptr, // query_cache_policy
             req->has_operation_params() ? &req->operation_params() : nullptr,
-            false, // keep session
-            false, // use cancelAfter
-            req->syntax()
+            settings
         );
 
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0, Span_.GetTraceId());
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record.GetRef();
+        NDataIntegrity::LogIntegrityTrails(Request_->GetTraceId(), *GetProtoRequest(), ev, ctx);
+
+        const auto& record = ev->Get()->Record;
         SetCost(record.GetConsumedRu());
         AddServerHintsIfAny(record);
 
@@ -94,7 +101,11 @@ public:
         auto queryResult = TEvExecuteYqlScriptRequest::AllocateResult<TResult>(Request_);
 
         try {
-            NKqp::ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult);
+            const auto& results = kqpResponse.GetYdbResults();
+            for (const auto& result : results) {
+                queryResult->add_result_sets()->CopyFrom(result);
+            }
+
         } catch (const std::exception& ex) {
             NYql::TIssues issues;
             issues.AddIssue(NYql::ExceptionToIssue(ex));

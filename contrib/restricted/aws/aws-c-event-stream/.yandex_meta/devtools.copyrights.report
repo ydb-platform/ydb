@@ -1,0 +1,65 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b26996bfb42c528af128697232328ba
+BELONGS ya.make
+    License text:
+        Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [2:2]
+        include/aws/event-stream/event_stream.h [5:5]
+        include/aws/event-stream/event_stream_channel_handler.h [4:4]
+        include/aws/event-stream/event_stream_exports.h [4:4]
+        include/aws/event-stream/event_stream_rpc.h [4:4]
+        include/aws/event-stream/event_stream_rpc_client.h [4:4]
+        include/aws/event-stream/event_stream_rpc_server.h [4:4]
+        include/aws/event-stream/private/event_stream_rpc_priv.h [4:4]
+        source/event_stream.c [2:2]
+        source/event_stream_rpc.c [2:2]
+        source/event_stream_rpc_client.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ecbccfb9ad7a00308f7ac6b874db40a1
+BELONGS ya.make
+    License text:
+         * Copyright 2010-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        source/event_stream_channel_handler.c [2:2]
+        source/event_stream_rpc_server.c [2:2]

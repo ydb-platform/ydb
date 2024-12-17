@@ -9,10 +9,10 @@ SRCS(
 PEERDIR(
     ydb/library/actors/protos
     ydb/public/api/protos
-    ydb/library/yql/core/issue/protos
+    yql/essentials/core/issue/protos
     ydb/library/yql/dq/proto
-    ydb/library/yql/public/issue/protos
-    ydb/library/yql/public/types
+    yql/essentials/public/issue/protos
+    yql/essentials/public/types
 )
 
 EXCLUDE_TAGS(GO_PROTO)

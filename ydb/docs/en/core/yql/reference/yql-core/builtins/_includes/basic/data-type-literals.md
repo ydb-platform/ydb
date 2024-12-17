@@ -2,7 +2,7 @@
 
 For primitive types, you can create literals based on string literals.
 
-**Syntax**
+### Syntax
 
 `<Primitive type>( <string>[, <additional attributes>] )`
 
@@ -22,7 +22,7 @@ For the data types `TzDate`, `TzDatetime`, `TzTimestamp`, literals are also set 
 
 {% include [decimal args](../../../_includes/decimal_args.md) %}
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

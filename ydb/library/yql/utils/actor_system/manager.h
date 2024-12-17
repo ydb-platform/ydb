@@ -8,9 +8,9 @@
 #include <util/generic/ptr.h>
 #include <util/generic/xrange.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/library/yql/providers/common/metrics/metrics_registry.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/providers/common/metrics/metrics_registry.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 using namespace NActors;
 
@@ -71,4 +71,4 @@ namespace NYql {
         THolder<TLogBackend> LoggerBackend_ = nullptr;
         IMetricsRegistryPtr MetricsRegistry_;
     };
-}
+} // namespace NYql

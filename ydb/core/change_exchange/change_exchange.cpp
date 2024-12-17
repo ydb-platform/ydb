@@ -88,7 +88,7 @@ TString TEvChangeExchange::TEvRemoveRecords::ToString() const {
     << " }";
 }
 
-/// TEvRecords
+// TEvRecords
 TEvChangeExchange::TEvRecords::TEvRecords(const TVector<IChangeRecord::TPtr>& records)
     : Records(records)
 {

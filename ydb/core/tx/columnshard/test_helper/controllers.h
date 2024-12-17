@@ -7,41 +7,61 @@ namespace NKikimr::NOlap {
 class TWaitCompactionController: public NYDBTest::NColumnShard::TController {
 private:
     using TBase = NKikimr::NYDBTest::ICSController;
-    TAtomic TTLFinishedCounter = 0;
-    TAtomic TTLStartedCounter = 0;
-    TAtomic InsertFinishedCounter = 0;
-    TAtomic InsertStartedCounter = 0;
     TAtomicCounter ExportsFinishedCount = 0;
     NMetadata::NFetcher::ISnapshot::TPtr CurrentConfig;
-    bool CompactionEnabledFlag = true;
-    YDB_ACCESSOR(bool, TTLEnabled, true);
     ui32 TiersModificationsCount = 0;
+    YDB_READONLY(TAtomicCounter, TieringMetadataActualizationCount, 0);
     YDB_READONLY(TAtomicCounter, StatisticsUsageCount, 0);
     YDB_READONLY(TAtomicCounter, MaxValueUsageCount, 0);
+    YDB_ACCESSOR_DEF(std::optional<ui64>, SmallSizeDetector);
+    YDB_ACCESSOR(bool, SkipSpecialCheckForEvict, false);
+
 protected:
     virtual void OnTieringModified(const std::shared_ptr<NKikimr::NColumnShard::TTiersManager>& /*tiers*/) override;
     virtual void OnExportFinished() override {
         ExportsFinishedCount.Inc();
     }
-    virtual bool DoOnStartCompaction(std::shared_ptr<NKikimr::NOlap::TColumnEngineChanges>& changes) override;
-    virtual bool DoOnWriteIndexComplete(const NKikimr::NOlap::TColumnEngineChanges& changes, const NKikimr::NColumnShard::TColumnShard& /*shard*/) override;
-    virtual bool DoOnWriteIndexStart(const ui64 /*tabletId*/, const TString& changeClassName) override;
+    virtual bool NeedForceCompactionBacketsConstruction() const override {
+        return true;
+    }
+    virtual ui64 DoGetSmallPortionSizeDetector(const ui64 /*def*/) const override {
+        return SmallSizeDetector.value_or(0);
+    }
+    virtual TDuration DoGetOptimizerFreshnessCheckDuration(const TDuration /*defaultValue*/) const override {
+        return TDuration::Zero();
+    }
+    virtual TDuration DoGetLagForCompactionBeforeTierings(const TDuration /*def*/) const override {
+        return TDuration::Zero();
+    }
+    virtual TDuration DoGetCompactionActualizationLag(const TDuration /*def*/) const override {
+        return TDuration::Zero();
+    }
 public:
+    virtual bool CheckPortionForEvict(const TPortionInfo& portion) const override {
+        if (SkipSpecialCheckForEvict) {
+            return true;
+        } else {
+            return TBase::CheckPortionForEvict(portion);
+        }
+    }
+
+
+    TWaitCompactionController() {
+        SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+    }
+
     ui32 GetFinishedExportsCount() const {
         return ExportsFinishedCount.Val();
     }
 
-    virtual void OnStatisticsUsage(const NKikimr::NOlap::NStatistics::TOperatorContainer& /*statOperator*/) override {
+    virtual void OnTieringMetadataActualized() override {
+        TieringMetadataActualizationCount.Inc();
+    }
+    virtual void OnStatisticsUsage(const NKikimr::NOlap::NIndexes::TIndexMetaContainer& /*statOperator*/) override {
         StatisticsUsageCount.Inc();
     }
     virtual void OnMaxValueUsage() override {
         MaxValueUsageCount.Inc();
-    }
-    void SetCompactionEnabled(const bool value) {
-        CompactionEnabledFlag = value;
-    }
-    virtual bool IsTTLEnabled() const override {
-        return TTLEnabled;
     }
     void SetTiersSnapshot(TTestBasicRuntime& runtime, const TActorId& tabletActorId, const NMetadata::NFetcher::ISnapshot::TPtr& snapshot);
 
@@ -52,22 +72,6 @@ public:
             return TBase::GetFallbackTiersSnapshot();
         }
     }
-    i64 GetTTLFinishedCounter() const {
-        return AtomicGet(TTLFinishedCounter);
-    }
-
-    i64 GetTTLStartedCounter() const {
-        return AtomicGet(TTLStartedCounter);
-    }
-
-    i64 GetInsertFinishedCounter() const {
-        return AtomicGet(InsertFinishedCounter);
-    }
-
-    i64 GetInsertStartedCounter() const {
-        return AtomicGet(InsertStartedCounter);
-    }
-
 };
 
 }

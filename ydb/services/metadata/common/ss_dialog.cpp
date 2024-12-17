@@ -29,7 +29,7 @@ void TSSDialogActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr
     auto& entity = request->ResultSet.front();
     SchemeShardId = entity.DomainInfo->ExtractSchemeShard();
     NTabletPipe::TClientConfig clientConfig;
-    SchemeShardPipe = MakePipePeNodeCacheID(false);
+    SchemeShardPipe = MakePipePerNodeCacheID(false);
     Execute();
 }
 

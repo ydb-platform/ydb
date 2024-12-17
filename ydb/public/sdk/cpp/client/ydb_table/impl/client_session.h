@@ -20,7 +20,6 @@ namespace NTable {
 
 using TSessionInspectorFn = std::function<void(TAsyncCreateSessionResult future)>;
 
-
 class TSession::TImpl : public TKqpSessionCommon {
     friend class TTableClient;
     friend class TSession;

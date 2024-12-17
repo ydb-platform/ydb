@@ -18,16 +18,131 @@ namespace {
     const ui32 defaultMinPartitions = 1;
     const ui64 defaultSizeToSplit = 2ul << 30; // 2048 Mb
 
-    ui32 CalculateDefaultMinPartitions(const Ydb::Table::CreateTableRequest& proto) {
+    template <typename TYdbProto>
+    ui32 CalculateDefaultMinPartitions(const TYdbProto& proto) {
         switch (proto.partitions_case()) {
-        case Ydb::Table::CreateTableRequest::kUniformPartitions:
+        case TYdbProto::kUniformPartitions:
             return static_cast<ui32>(proto.uniform_partitions());
-        case Ydb::Table::CreateTableRequest::kPartitionAtKeys:
+        case TYdbProto::kPartitionAtKeys:
             return proto.partition_at_keys().split_points().size() + 1;
         default:
             return defaultMinPartitions;
         }
     }
+}
+
+template <class TYdbProto>
+bool FillPartitioningPolicy(
+    NKikimrSchemeOp::TPartitionConfig& partitionConfig,
+    const TYdbProto& proto,
+    Ydb::StatusIds::StatusCode& code, TString& error
+) {
+    const auto& partitioningSettings = proto.partitioning_settings();
+
+    switch (partitioningSettings.partitioning_by_size()) {
+    case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
+    {
+        if (partitioningSettings.partition_size_mb()) {
+            auto &policy = *partitionConfig.MutablePartitioningPolicy();
+            policy.SetSizeToSplit((1 << 20) * partitioningSettings.partition_size_mb());
+            if (!partitioningSettings.min_partitions_count()) {
+                policy.SetMinPartitionsCount(CalculateDefaultMinPartitions(proto));
+            }
+        }
+        break;
+    }
+    case Ydb::FeatureFlag::ENABLED:
+    {
+        auto &policy = *partitionConfig.MutablePartitioningPolicy();
+        if (partitioningSettings.partition_size_mb()) {
+            policy.SetSizeToSplit((1 << 20) * partitioningSettings.partition_size_mb());
+        } else {
+            policy.SetSizeToSplit(defaultSizeToSplit);
+        }
+        if (!partitioningSettings.min_partitions_count()) {
+            policy.SetMinPartitionsCount(CalculateDefaultMinPartitions(proto));
+        }
+        break;
+    }
+    case Ydb::FeatureFlag::DISABLED:
+    {
+        if (partitioningSettings.partition_size_mb()) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Auto partitioning partition size is set while "
+                "auto partitioning by size is disabled";
+            return false;
+        }
+        auto &policy = *partitionConfig.MutablePartitioningPolicy();
+        policy.SetSizeToSplit(0);
+        break;
+    }
+    default:
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = TStringBuilder() << "Unknown auto partitioning by size feature flag status: '"
+            << (ui32)partitioningSettings.partitioning_by_size() << "'";
+        return false;
+    }
+
+    switch (partitioningSettings.partitioning_by_load()) {
+    case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
+    {
+        break;
+    }
+    case Ydb::FeatureFlag::ENABLED:
+    {
+        auto &policy = *partitionConfig.MutablePartitioningPolicy();
+        policy.MutableSplitByLoadSettings()->SetEnabled(true);
+        if (!partitioningSettings.min_partitions_count()) {
+            policy.SetMinPartitionsCount(CalculateDefaultMinPartitions(proto));
+        }
+        break;
+    }
+    case Ydb::FeatureFlag::DISABLED:
+    {
+        auto &policy = *partitionConfig.MutablePartitioningPolicy();
+        policy.MutableSplitByLoadSettings()->SetEnabled(false);
+        break;
+    }
+    default:
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = TStringBuilder() << "Unknown auto partitioning by load feature flag status: '"
+            << (ui32)partitioningSettings.partitioning_by_load() << "'";
+        return false;
+    }
+
+    if (partitioningSettings.min_partitions_count()) {
+        auto &policy = *partitionConfig.MutablePartitioningPolicy();
+        policy.SetMinPartitionsCount(partitioningSettings.min_partitions_count());
+    }
+
+    if (partitioningSettings.max_partitions_count()) {
+        auto &policy = *partitionConfig.MutablePartitioningPolicy();
+        policy.SetMaxPartitionsCount(partitioningSettings.max_partitions_count());
+    }
+
+    return true;
+}
+
+template <typename TYdbProto>
+bool FillPartitions(
+    NKikimrSchemeOp::TTableDescription& tableDesc,
+    const TYdbProto& proto,
+    Ydb::StatusIds::StatusCode& code, TString& error
+) {
+    switch (proto.partitions_case()) {
+    case TYdbProto::kUniformPartitions:
+        tableDesc.SetUniformPartitionsCount(proto.uniform_partitions());
+        break;
+    case TYdbProto::kPartitionAtKeys:
+        if (!CopyExplicitPartitions(tableDesc, proto.partition_at_keys(), code, error)) {
+            return false;
+        }
+        break;
+    default:
+        break;
+    }
+
+    return true;
 }
 
 bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
@@ -40,104 +155,18 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         if (tableProfileSet) {
             MEWarning("PartitioningSettings", warnings);
         }
-        auto& partitioningSettings = proto.partitioning_settings();
-
-        switch (partitioningSettings.partitioning_by_size()) {
-        case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
-        {
-            if (partitioningSettings.partition_size_mb()) {
-                auto &policy = *partitionConfig.MutablePartitioningPolicy();
-                policy.SetSizeToSplit((1 << 20) * partitioningSettings.partition_size_mb());
-                if (!partitioningSettings.min_partitions_count()) {
-                    policy.SetMinPartitionsCount(CalculateDefaultMinPartitions(proto));
-                }
-            }
-        }
-            break;
-        case Ydb::FeatureFlag::ENABLED:
-        {
-            auto &policy = *partitionConfig.MutablePartitioningPolicy();
-            if (partitioningSettings.partition_size_mb()) {
-                policy.SetSizeToSplit((1 << 20) * partitioningSettings.partition_size_mb());
-            } else {
-                policy.SetSizeToSplit(defaultSizeToSplit);
-            }
-            if (!partitioningSettings.min_partitions_count()) {
-                policy.SetMinPartitionsCount(CalculateDefaultMinPartitions(proto));
-            }
-            break;
-        }
-        case Ydb::FeatureFlag::DISABLED:
-        {
-            if (partitioningSettings.partition_size_mb()) {
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "Auto partitioning partition size is set while "
-                    "auto partitioning by size is disabled";
-                return false;
-            }
-            auto &policy = *partitionConfig.MutablePartitioningPolicy();
-            policy.SetSizeToSplit(0);
-            break;
-        }
-        default:
-            code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Unknown auto partitioning by size feature flag status: '"
-                << (ui32)partitioningSettings.partitioning_by_size() << "'";
+        if (!FillPartitioningPolicy(partitionConfig, proto, code, error)) {
             return false;
-        }
-
-        switch (partitioningSettings.partitioning_by_load()) {
-        case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
-        {
-            break;
-        }
-        case Ydb::FeatureFlag::ENABLED:
-        {
-            auto &policy = *partitionConfig.MutablePartitioningPolicy();
-            policy.MutableSplitByLoadSettings()->SetEnabled(true);
-            if (!partitioningSettings.min_partitions_count()) {
-                policy.SetMinPartitionsCount(CalculateDefaultMinPartitions(proto));
-            }
-            break;
-        }
-        case Ydb::FeatureFlag::DISABLED:
-        {
-            auto &policy = *partitionConfig.MutablePartitioningPolicy();
-            policy.MutableSplitByLoadSettings()->SetEnabled(false);
-            break;
-        }
-        default:
-            code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Unknown auto partitioning by load feature flag status: '"
-                << (ui32)partitioningSettings.partitioning_by_load() << "'";
-            return false;
-        }
-
-        if (partitioningSettings.min_partitions_count()) {
-            auto &policy = *partitionConfig.MutablePartitioningPolicy();
-            policy.SetMinPartitionsCount(partitioningSettings.min_partitions_count());
-        }
-
-        if (partitioningSettings.max_partitions_count()) {
-            auto &policy = *partitionConfig.MutablePartitioningPolicy();
-            policy.SetMaxPartitionsCount(partitioningSettings.max_partitions_count());
         }
     }
 
-    if (proto.partitions_case() != Ydb::Table::CreateTableRequest::PARTITIONS_NOT_SET && tableProfileSet) {
-        MEWarning("Partitions", warnings);
-    }
-    switch (proto.partitions_case()) {
-    case Ydb::Table::CreateTableRequest::kUniformPartitions:
-        tableDesc.SetUniformPartitionsCount(proto.uniform_partitions());
-        break;
-    case Ydb::Table::CreateTableRequest::kPartitionAtKeys:
-        if (!CopyExplicitPartitions(tableDesc, proto.partition_at_keys(), code, error)) {
+    if (proto.partitions_case() != Ydb::Table::CreateTableRequest::PARTITIONS_NOT_SET) {
+        if (tableProfileSet) {
+            MEWarning("Partitions", warnings);
+        }
+        if (!FillPartitions(tableDesc, proto, code, error)) {
             return false;
         }
-        break;
-    default:
-        break;
     }
 
     if (proto.key_bloom_filter() != Ydb::FeatureFlag::STATUS_UNSPECIFIED && tableProfileSet) {
@@ -197,10 +226,6 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         if (!FillTtlSettings(*tableDesc.MutableTTLSettings()->MutableEnabled(), proto.ttl_settings(), code, error)) {
             return false;
         }
-    }
-
-    if (proto.tiering().size()) {
-        tableDesc.MutableTTLSettings()->SetUseTiering(proto.tiering());
     }
 
     if (proto.has_storage_settings()) {
@@ -362,17 +387,149 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         tableDesc.MutableTTLSettings()->MutableDisabled();
     }
 
-    if (proto.has_set_tiering()) {
-        tableDesc.MutableTTLSettings()->SetUseTiering(proto.set_tiering());
-    } else if (proto.has_drop_tiering()) {
-        tableDesc.MutableTTLSettings()->SetUseTiering("");
-    }
-
     if (!changed && !hadPartitionConfig) {
         tableDesc.ClearPartitionConfig();
     }
 
     return true;
+}
+
+bool FillIndexTablePartitioning(
+    std::vector<NKikimrSchemeOp::TTableDescription>& indexImplTableDescriptions,
+    const Ydb::Table::TableIndex& index,
+    Ydb::StatusIds::StatusCode& code, TString& error
+) {
+    auto fillIndexPartitioning = [&](const Ydb::Table::GlobalIndexSettings& settings, std::vector<NKikimrSchemeOp::TTableDescription>& indexImplTableDescriptions) {
+        auto& indexImplTableDescription = indexImplTableDescriptions.emplace_back();
+
+        if (settings.has_partitioning_settings()) {
+            if (!FillPartitioningPolicy(*indexImplTableDescription.MutablePartitionConfig(), settings, code, error)) {
+                return false;
+            }
+        }
+        if (settings.partitions_case() != Ydb::Table::GlobalIndexSettings::PARTITIONS_NOT_SET) {
+            if (!FillPartitions(indexImplTableDescription, settings, code, error)) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    switch (index.type_case()) {
+    case Ydb::Table::TableIndex::kGlobalIndex:
+        if (!fillIndexPartitioning(index.global_index().settings(), indexImplTableDescriptions)) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TableIndex::kGlobalAsyncIndex:
+        if (!fillIndexPartitioning(index.global_async_index().settings(), indexImplTableDescriptions)) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TableIndex::kGlobalUniqueIndex:
+        if (!fillIndexPartitioning(index.global_unique_index().settings(), indexImplTableDescriptions)) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
+        if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().level_table_settings(), indexImplTableDescriptions)) {
+            return false;
+        }
+        if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().posting_table_settings(), indexImplTableDescriptions)) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TableIndex::TYPE_NOT_SET:
+        break;
+    }
+
+    return true;
+}
+
+template <typename TTtl>
+bool FillTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in, Ydb::StatusIds::StatusCode& code, TString& error) {
+    std::optional<ui32> fillLegacyExpireAfterSeconds;
+    if (!in.TiersSize()) {
+        // handle legacy input format for backwards-compatibility
+        fillLegacyExpireAfterSeconds = in.GetExpireAfterSeconds();
+    } else if (in.TiersSize() == 1 && in.GetTiers(0).HasDelete()) {
+        // convert delete-only TTL to legacy mode for backwards-compatibility
+        fillLegacyExpireAfterSeconds = in.GetTiers(0).GetApplyAfterSeconds();
+    } else {
+        for (const auto& inTier : in.GetTiers()) {
+            auto* outTier = out.add_tiers();
+            outTier->set_apply_after_seconds(inTier.GetApplyAfterSeconds());
+            switch (inTier.GetActionCase()) {
+                case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kDelete:
+                    outTier->mutable_delete_();
+                    break;
+                case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kEvictToExternalStorage:
+                    outTier->mutable_evict_to_external_storage()->set_storage_name(inTier.GetEvictToExternalStorage().GetStorageName());
+                    break;
+                case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::ACTION_NOT_SET:
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = "Undefined tier action";
+                    return false;
+            }
+        }
+    }
+
+    switch (in.GetColumnUnit()) {
+    case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO: {
+        if (fillLegacyExpireAfterSeconds) {
+            auto& outTTL = *out.mutable_date_type_column();
+            outTTL.set_column_name(in.GetColumnName());
+            outTTL.set_expire_after_seconds(*fillLegacyExpireAfterSeconds);
+        } else {
+            auto& outTTL = *out.mutable_date_type_column_v1();
+            outTTL.set_column_name(in.GetColumnName());
+        }
+        break;
+    }
+
+    case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
+    case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
+    case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
+    case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS: {
+        const auto unit = static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(in.GetColumnUnit());
+        if (fillLegacyExpireAfterSeconds) {
+            auto& outTTL = *out.mutable_value_since_unix_epoch();
+            outTTL.set_column_name(in.GetColumnName());
+            outTTL.set_column_unit(unit);
+            outTTL.set_expire_after_seconds(*fillLegacyExpireAfterSeconds);
+        } else {
+            auto& outTTL = *out.mutable_value_since_unix_epoch_v1();
+            outTTL.set_column_name(in.GetColumnName());
+            outTTL.set_column_unit(unit);
+        }
+        break;
+    }
+
+    default:
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Undefined column unit";
+        return false;
+    }
+
+    if constexpr (std::is_same_v<TTtl, NKikimrSchemeOp::TTTLSettings::TEnabled>) {
+        if (in.HasSysSettings() && in.GetSysSettings().HasRunInterval()) {
+            out.set_run_interval_seconds(TDuration::FromValue(in.GetSysSettings().GetRunInterval()).Seconds());
+        }
+    }
+
+    return true;
+}
+
+bool FillTtlSettings(Ydb::Table::TtlSettings& out, const NKikimrSchemeOp::TTTLSettings::TEnabled& in, Ydb::StatusIds::StatusCode& code, TString& error) {
+    return FillTtlSettingsImpl(out, in, code, error);
+}
+
+bool FillTtlSettings(Ydb::Table::TtlSettings& out, const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& in, Ydb::StatusIds::StatusCode& code, TString& error) {
+    return FillTtlSettingsImpl(out, in, code, error);
 }
 
 } // namespace NKikimr

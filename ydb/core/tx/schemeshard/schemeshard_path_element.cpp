@@ -177,6 +177,10 @@ bool TPathElement::IsReplication() const {
     return PathType == EPathType::EPathTypeReplication;
 }
 
+bool TPathElement::IsTransfer() const {
+    return PathType == EPathType::EPathTypeTransfer;
+}
+
 bool TPathElement::IsBlobDepot() const {
     return PathType == EPathType::EPathTypeBlobDepot;
 }
@@ -187,7 +191,7 @@ bool TPathElement::IsContainer() const {
 }
 
 bool TPathElement::IsLikeDirectory() const {
-    return IsDirectory() || IsDomainRoot() || IsOlapStore();
+    return IsDirectory() || IsDomainRoot() || IsOlapStore() || IsTableIndex() || IsBackupCollection();
 }
 
 bool TPathElement::HasActiveChanges() const {
@@ -215,8 +219,28 @@ bool TPathElement::IsExternalDataSource() const {
     return PathType == EPathType::EPathTypeExternalDataSource;
 }
 
+bool TPathElement::IsIncrementalBackupTable() const {
+    auto it = UserAttrs->Attrs.find(ATTR_INCREMENTAL_BACKUP);
+    if (it == UserAttrs->Attrs.end()) {
+        return false;
+    }
+    return TString(it->second) != "null";
+}
+
 bool TPathElement::IsView() const {
     return PathType == EPathType::EPathTypeView;
+}
+
+bool TPathElement::IsTemporary() const {
+    return !!TempDirOwnerActorId;
+}
+
+bool TPathElement::IsResourcePool() const {
+    return PathType == EPathType::EPathTypeResourcePool;
+}
+
+bool TPathElement::IsBackupCollection() const {
+    return PathType == EPathType::EPathTypeBackupCollection;
 }
 
 void TPathElement::SetDropped(TStepId step, TTxId txId) {
@@ -403,6 +427,14 @@ bool TPathElement::CheckFileStoreSpaceChange(TFileStoreSpace newSpace, TFileStor
             CheckSpaceChanged(FileStoreSpaceHDD, newSpace.HDD, oldSpace.HDD, errStr, "filestore", " (hdd)"));
 }
 
+void TPathElement::SetAsyncReplica(bool value) {
+    IsAsyncReplica = value;
+}
+
+void TPathElement::SetRestoreTable() {
+    IsRestoreTable = true;
+}
+
 bool TPathElement::HasRuntimeAttrs() const {
     return (VolumeSpaceRaw.Allocated > 0 ||
             VolumeSpaceSSD.Allocated > 0 ||
@@ -410,7 +442,8 @@ bool TPathElement::HasRuntimeAttrs() const {
             VolumeSpaceSSDNonrepl.Allocated > 0 ||
             VolumeSpaceSSDSystem.Allocated > 0 ||
             FileStoreSpaceSSD.Allocated > 0 ||
-            FileStoreSpaceHDD.Allocated > 0);
+            FileStoreSpaceHDD.Allocated > 0 ||
+            IsAsyncReplica);
 }
 
 void TPathElement::SerializeRuntimeAttrs(
@@ -434,6 +467,12 @@ void TPathElement::SerializeRuntimeAttrs(
     // filestore
     process(FileStoreSpaceSSD, "__filestore_space_allocated_ssd");
     process(FileStoreSpaceHDD, "__filestore_space_allocated_hdd");
+
+    if (IsAsyncReplica) {
+        auto* attr = userAttrs->Add();
+        attr->SetKey(ToString(ATTR_ASYNC_REPLICA));
+        attr->SetValue("true");
+    }
 }
 
 }

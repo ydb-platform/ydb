@@ -495,11 +495,11 @@ namespace orc {
     return result;
   }
 
-  static std::vector<TString> literal2String(const std::vector<Literal>& values) {
-    std::vector<TString> result;
+  static std::vector<TProtobufString> literal2String(const std::vector<Literal>& values) {
+    std::vector<TProtobufString> result;
     std::for_each(values.cbegin(), values.cend(), [&](const Literal& val) {
       if (!val.isNull()) {
-        result.emplace_back(TString(val.getString()));
+        result.emplace_back(TProtobufString(val.getString()));
       }
     });
     return result;
@@ -700,6 +700,9 @@ namespace orc {
         return TruthValue::YES_NO_NULL;
       }
     }
+
+    // files written by trino may lack of hasnull field.
+    if (!colStats.has_has_null()) return TruthValue::YES_NO_NULL;
 
     bool allNull = colStats.has_null() && colStats.number_of_values() == 0;
     if (mOperator == Operator::IS_NULL ||

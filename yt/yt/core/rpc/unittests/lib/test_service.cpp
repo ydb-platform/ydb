@@ -18,6 +18,13 @@ namespace NYT::NRpc {
 
 using namespace NConcurrency;
 
+using NYT::FromProto;
+
+////////////////////////////////////////////////////////////////////////////////
+
+static YT_DEFINE_GLOBAL(std::unique_ptr<NThreading::TEvent>, Latch);
+static YT_DEFINE_GLOBAL(std::atomic<int>, ConcurrentCalls);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TTestService
@@ -28,11 +35,15 @@ public:
     TTestService(
         IInvokerPtr invoker,
         bool secure,
-        TTestCreateChannelCallback createChannel)
+        TTestCreateChannelCallback createChannel,
+        IMemoryUsageTrackerPtr memoryUsageTracker)
         : TServiceBase(
             invoker,
             TTestProxy::GetDescriptor(),
-            NLogging::TLogger("Main"))
+            NLogging::TLogger("Main"),
+            TServiceOptions{
+                .MemoryUsageTracker = std::move(memoryUsageTracker),
+            })
         , Secure_(secure)
         , CreateChannel_(createChannel)
     {
@@ -50,6 +61,10 @@ public:
             .SetQueueSizeLimit(20)
             .SetConcurrencyByteLimit(10_MB)
             .SetQueueByteSizeLimit(20_MB));
+        RegisterMethod(RPC_SERVICE_METHOD_DESC(LatchedCall)
+            .SetCancelable(true)
+            .SetConcurrencyLimit(10)
+            .SetQueueSizeLimit(20));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(SlowCanceledCall)
             .SetCancelable(true));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(RequestBytesThrottledCall));
@@ -96,6 +111,9 @@ public:
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, AllocationCall)
     {
         context->SetRequestInfo();
+        if (request->wait_on_latch()) {
+            Latch()->Wait();
+        }
         response->set_allocated_string(TString("r", request->size()));
         context->Reply();
     }
@@ -124,7 +142,7 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, Compression)
     {
-        auto requestCodecId = CheckedEnumCast<NCompression::ECodec>(request->request_codec());
+        auto requestCodecId = FromProto<NCompression::ECodec>(request->request_codec());
         auto serializedRequestBody = SerializeProtoToRefWithCompression(*request, requestCodecId);
         const auto& compressedRequestBody = context->GetRequestBody();
         EXPECT_TRUE(TRef::AreBitwiseEqual(serializedRequestBody, compressedRequestBody));
@@ -162,11 +180,20 @@ public:
         context->Reply();
     }
 
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, LatchedCall)
+    {
+        context->SetRequestInfo();
+        if (request->wait_on_latch()) {
+            Latch()->Wait();
+        }
+        context->Reply();
+    }
+
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, SlowCanceledCall)
     {
         try {
             context->SetRequestInfo();
-            TDelayedExecutor::WaitForDuration(TDuration::Seconds(2));
+            TDelayedExecutor::WaitForDuration(TDuration::Max());
             context->Reply();
         } catch (const TFiberCanceledException&) {
             SlowCallCanceled_.Set();
@@ -181,6 +208,10 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, RequestBytesThrottledCall)
     {
+        THROW_ERROR_EXCEPTION_UNLESS(ConcurrentCalls().fetch_add(1) == 0, "Too many concurrent calls on entry!");
+        Sleep(TDuration::MilliSeconds(100));
+        THROW_ERROR_EXCEPTION_UNLESS(ConcurrentCalls().fetch_sub(1) == 1, "Too many concurrent calls on exit!");
+
         context->Reply();
     }
 
@@ -308,7 +339,7 @@ public:
         if (callCount.fetch_add(1) % 2) {
             context->Reply();
         } else {
-            context->Reply(TError(EErrorCode::TransportError, "Flaky call iteration"));
+            context->Reply(TError(NRpc::EErrorCode::TransportError, "Flaky call iteration"));
         }
     }
 
@@ -380,9 +411,39 @@ private:
 ITestServicePtr CreateTestService(
     IInvokerPtr invoker,
     bool secure,
-    TTestCreateChannelCallback createChannel)
+    TTestCreateChannelCallback createChannel,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
 {
-    return New<TTestService>(invoker, secure, createChannel);
+    return New<TTestService>(
+        invoker,
+        secure,
+        createChannel,
+        std::move(memoryUsageTracker));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ReleaseLatchedCalls()
+{
+    if (!Latch()) {
+        return;
+    }
+
+    Latch()->NotifyAll();
+}
+
+void MaybeInitLatch()
+{
+    if (!Latch()) {
+        Latch() = std::make_unique<NThreading::TEvent>();
+    }
+}
+
+void ResetLatch()
+{
+    if (Latch()) {
+        Latch().reset();
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

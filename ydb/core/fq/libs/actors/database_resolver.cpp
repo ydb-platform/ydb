@@ -4,11 +4,11 @@
 #include <ydb/core/fq/libs/common/cache.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/events/events.h>
-#include <ydb/core/fq/libs/exceptions/exceptions.h>
+#include <yql/essentials/utils/exceptions.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
-#include <ydb/library/yql/utils/url_builder.h>
+#include <yql/essentials/utils/url_builder.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/http/http_proxy.h>
@@ -29,7 +29,7 @@ using TParser = std::function<TDatabaseDescription(
         NJson::TJsonValue& body,
         const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
         bool useTls,
-        NConnector::NApi::EProtocol protocol
+        NYql::EGenericProtocol protocol
 )>;
 using TParsers = THashMap<NYql::EDatabaseType, TParser>;
 
@@ -155,12 +155,19 @@ private:
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev,
         const TRequestMap::const_iterator& requestIter,
         TMaybe<TDatabaseDescription>& result)
-    {
+    { 
         TString errorMessage;
-        if (ev->Get()->Error.empty() && (ev->Get()->Response && ev->Get()->Response->Status == "200")) {
-            errorMessage = HandleSuccessfulResponse(ev, requestIter, result);
+
+        if (requestIter == Requests.end()) {
+            // Requests are guaranteed to be kept in within TResponseProcessor until the response arrives.
+            // If there is no appropriate request, it's a fatal error.
+            errorMessage = "Invariant violation: unknown request";
         } else {
-            errorMessage = HandleFailedResponse(ev, requestIter);
+            if (ev->Get()->Error.empty() && (ev->Get()->Response && ev->Get()->Response->Status == "200")) {
+                errorMessage = HandleSuccessfulResponse(ev, *requestIter, result);
+            } else {
+                errorMessage = HandleFailedResponse(ev, *requestIter);
+            }
         }
 
         if (errorMessage) {
@@ -185,17 +192,13 @@ private:
 
     TString HandleSuccessfulResponse(
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev,
-        const TRequestMap::const_iterator& requestIter,
+        const TRequestMap::value_type& requestWithParams,
         TMaybe<TDatabaseDescription>& result
     ) {
-        if (requestIter == Requests.end()) {
-            return "unknown request";
-        }
-
         NJson::TJsonReaderConfig jsonConfig;
         NJson::TJsonValue databaseInfo;
 
-        const auto& params = requestIter->second;
+        const auto& params = requestWithParams.second;
         const bool parseJsonOk = NJson::ReadJsonTree(ev->Get()->Response->Body, &jsonConfig, &databaseInfo);
         TParsers::const_iterator parserIt;
         if (parseJsonOk && (parserIt = Parsers.find(params.DatabaseType)) != Parsers.end()) {
@@ -210,11 +213,13 @@ private:
                 DatabaseId2Description[std::make_pair(params.Id, params.DatabaseType)] = description;
                 result.ConstructInPlace(description);
                 return "";
-            } catch (const TCodeLineException& ex) {
+            } catch (const NYql::TCodeLineException& ex) {
+                LOG_E("ResponseProcessor::Handle(HttpIncomingResponse): " << ex.what());
                 return TStringBuilder()
                     << "response parser error: " << params.ToDebugString() << Endl
                     << ex.GetRawMessage();
             } catch (...) {
+                LOG_E("ResponseProcessor::Handle(HttpIncomingResponse): " << CurrentExceptionMessage());
                 return TStringBuilder()
                     << "response parser error: " << params.ToDebugString() << Endl
                     << CurrentExceptionMessage();
@@ -226,37 +231,37 @@ private:
 
     TString HandleFailedResponse(
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev,
-        const TRequestMap::const_iterator& requestIter
+        const TRequestMap::value_type& requestWithParams
     ) const {
-        if (requestIter == Requests.end()) {
-            return "unknown request";
-        } 
+        auto sb = TStringBuilder() 
+            << "Error while trying to resolve managed " << ToString(requestWithParams.second.DatabaseType)
+            << " database with id " << requestWithParams.second.Id << " via HTTP request to"
+            << ": endpoint '" << requestWithParams.first->Host << "'"
+            << ", url '" << requestWithParams.first->URL << "'"
+            << ": ";
 
+        // Handle network error (when the response is empty)
+        if (!ev->Get()->Response) {
+            return sb << ev->Get()->Error;
+        }
+
+        // Handle unauthenticated error
         const auto& status = ev->Get()->Response->Status;
-
         if (status == "403") {
-            return TStringBuilder() << "You have no permission to resolve database id into database endpoint. " + DetailedPermissionsError(requestIter->second);
+            return sb << "you have no permission to resolve database id into database endpoint." + DetailedPermissionsError(requestWithParams.second);
         }
 
-        auto errorMessage = ev->Get()->Error;
-
-        const TString error = TStringBuilder()
-            << "Cannot resolve database id (status = " << status << "). "
-            << "Response body from " << ev->Get()->Request->URL << ": " << (ev->Get()->Response ? ev->Get()->Response->Body : "empty");
-        if (!errorMessage.empty()) {
-            errorMessage += '\n';
-        }
-        errorMessage += error;
-
-        return errorMessage;
+        // Unexpected error. Add response body for debug
+        return sb << Endl
+                  << "Status: " << status << Endl
+                  << "Response body: " << ev->Get()->Response->Body;
     }
 
 
     TString DetailedPermissionsError(const TResolveParams& params) const {
- 
         if (params.DatabaseType == EDatabaseType::ClickHouse || params.DatabaseType == EDatabaseType::PostgreSQL) {
                 auto mdbTypeStr = NYql::DatabaseTypeLowercase(params.DatabaseType);
-                return TStringBuilder() << "Please check that your service account has role "  << 
+                return TStringBuilder() << " Please check that your service account has role "  << 
                                        "`managed-" << mdbTypeStr << ".viewer`.";
         }
         return {};
@@ -287,7 +292,7 @@ public:
             .SetErrorTtl(TDuration::Minutes(1))
             .SetMaxSize(1000000))
     {
-        auto ydbParser = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr&, bool, NConnector::NApi::EProtocol) {
+        auto ydbParser = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr&, bool, NYql::EGenericProtocol) {
             bool secure = false;
             TString endpoint = databaseInfo.GetMap().at("endpoint").GetStringRobust();
             TString prefix("/?database=");
@@ -308,29 +313,35 @@ public:
             Y_ENSURE(endpoint);
 
             TVector<TString> split = StringSplitter(endpoint).Split(':');
-
             Y_ENSURE(split.size() == 2);
 
-            return TDatabaseDescription{endpoint, split[0], FromString(split[1]), database, secure};
+            TString host = std::move(split[0]);
+            ui32 port = FromString(split[1]);
+
+            // There are two kinds of managed YDBs: serverless and dedicated.
+            // While working with dedicated databases, we have to use underlay network.
+            // That's why we add `u-` prefix to database fqdn.
+            if (databaseInfo.GetMap().contains("storageConfig")) {
+                endpoint = "u-" + endpoint;
+                host = "u-" + host;
+            }
+
+            return TDatabaseDescription{endpoint, std::move(host), port, database, secure};
         };
         Parsers[NYql::EDatabaseType::Ydb] = ydbParser;
         Parsers[NYql::EDatabaseType::DataStreams] = [ydbParser](
             NJson::TJsonValue& databaseInfo,
             const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
             bool useTls,
-            NConnector::NApi::EProtocol protocol)
+            NYql::EGenericProtocol protocol)
         {
-            bool isDedicatedDb  = databaseInfo.GetMap().contains("storageConfig");
             auto ret = ydbParser(databaseInfo, mdbEndpointGenerator, useTls, protocol);
             // TODO: Take explicit field from MVP
+            bool isDedicatedDb  = databaseInfo.GetMap().contains("storageConfig");
             if (!isDedicatedDb && ret.Endpoint.StartsWith("ydb.")) {
                 // Replace "ydb." -> "yds."
                 ret.Endpoint[2] = 's';
                 ret.Host[2] = 's';
-            }
-            if (isDedicatedDb) {
-                ret.Endpoint = "u-" + ret.Endpoint;
-                ret.Host = "u-" + ret.Host;
             }
             return ret;
         };
@@ -338,7 +349,7 @@ public:
             NJson::TJsonValue& databaseInfo,
             const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
             bool useTls,
-            NConnector::NApi::EProtocol protocol
+            NYql::EGenericProtocol protocol
             ) {
             NYql::IMdbEndpointGenerator::TEndpoint endpoint;
             TVector<TString> aliveHosts;
@@ -350,7 +361,7 @@ public:
             }
 
             if (aliveHosts.empty()) {
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE ClickHouse hosts found";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE ClickHouse hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {
@@ -369,7 +380,7 @@ public:
             NJson::TJsonValue& databaseInfo,
             const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
             bool useTls,
-            NConnector::NApi::EProtocol protocol
+            NYql::EGenericProtocol protocol
             ) {
             NYql::IMdbEndpointGenerator::TEndpoint endpoint;
             TVector<TString> aliveHosts;
@@ -398,11 +409,99 @@ public:
             }
             
             if (aliveHosts.empty()) {
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE PostgreSQL hosts found";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE PostgreSQL hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {
                 .DatabaseType = NYql::EDatabaseType::PostgreSQL,
+                .MdbHost = aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
+                .UseTls = useTls,
+                .Protocol = protocol,
+            };
+
+            endpoint = mdbEndpointGenerator->ToEndpoint(params);
+
+            return TDatabaseDescription{"", endpoint.first, endpoint.second, "", useTls};
+        };
+        Parsers[NYql::EDatabaseType::Greenplum] = [](
+            NJson::TJsonValue& databaseInfo,
+            const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
+            bool useTls,
+            NYql::EGenericProtocol protocol
+            ) {
+            NYql::IMdbEndpointGenerator::TEndpoint endpoint;
+            TString aliveHost;
+
+            for (const auto& host : databaseInfo.GetMap().at("hosts").GetArraySafe()) {
+                const auto& hostMap = host.GetMap();
+
+                if (hostMap.at("health").GetString() != "ALIVE"){
+                    // Host is not alive, skip it
+                    continue;
+
+                }
+
+                // If the host is alive, add it to the list of alive hosts
+                aliveHost = hostMap.at("name").GetString();
+                break;
+            }
+    
+            if (aliveHost == "") {
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE Greenplum hosts found";
+            }
+
+            NYql::IMdbEndpointGenerator::TParams params = {
+                .DatabaseType = NYql::EDatabaseType::Greenplum,
+                .MdbHost = aliveHost,
+                .UseTls = useTls,
+                .Protocol = protocol,
+            };
+
+            endpoint = mdbEndpointGenerator->ToEndpoint(params);
+
+            return TDatabaseDescription{"", endpoint.first, endpoint.second, "", useTls};
+        };
+        Parsers[NYql::EDatabaseType::MySQL] = [](
+            NJson::TJsonValue& databaseInfo,
+            const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
+            bool useTls,
+            NYql::EGenericProtocol protocol
+            ) {
+            NYql::IMdbEndpointGenerator::TEndpoint endpoint;
+            TVector<TString> aliveHosts;
+
+            const auto& hostsArray = databaseInfo.GetMap().at("hosts").GetArraySafe();
+
+            for (const auto& host : hostsArray) {
+                const auto& hostMap = host.GetMap();
+
+                if (!hostMap.contains("services")) {
+                    // indicates that cluster is down
+                    continue;
+                }
+
+                const auto& servicesArray = hostMap.at("services").GetArraySafe();
+
+                // check if all services of a particular host are alive
+                const bool alive = std::all_of(
+                    servicesArray.begin(),
+                    servicesArray.end(),
+                    [](const auto& service) {
+                        return service["health"].GetString() == "ALIVE";
+                    }
+                );
+
+                if (alive) {
+                    aliveHosts.push_back(host["name"].GetString());
+                }
+            }
+
+            if (aliveHosts.empty()) {
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE MySQL hosts found";
+            }
+
+            NYql::IMdbEndpointGenerator::TParams params = {
+                .DatabaseType = NYql::EDatabaseType::MySQL,
                 .MdbHost = aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
                 .UseTls = useTls,
                 .Protocol = protocol,
@@ -487,16 +586,23 @@ private:
             try {
                 TString url;
                 if (IsIn({NYql::EDatabaseType::Ydb, NYql::EDatabaseType::DataStreams }, databaseType)) {
-                    YQL_ENSURE(ev->Get()->YdbMvpEndpoint.Size() > 0, "empty YDB MVP Endpoint");
+                    YQL_ENSURE(ev->Get()->YdbMvpEndpoint.size() > 0, "empty YDB MVP Endpoint");
                     url = TUrlBuilder(ev->Get()->YdbMvpEndpoint + "/database")
                             .AddUrlParam("databaseId", databaseId)
                             .Build();
-                } else if (IsIn({NYql::EDatabaseType::ClickHouse, NYql::EDatabaseType::PostgreSQL }, databaseType)) {
+                } else if (IsIn({NYql::EDatabaseType::ClickHouse, NYql::EDatabaseType::PostgreSQL, NYql::EDatabaseType::MySQL}, databaseType)) {
                     YQL_ENSURE(ev->Get()->MdbGateway, "empty MDB Gateway");
                     url = TUrlBuilder(
                         ev->Get()->MdbGateway + "/managed-" + NYql::DatabaseTypeLowercase(databaseType) + "/v1/clusters/")
                             .AddPathComponent(databaseId)
                             .AddPathComponent("hosts")
+                            .Build();
+                } else if (NYql::EDatabaseType::Greenplum == databaseType) {
+                    YQL_ENSURE(ev->Get()->MdbGateway, "empty MDB Gateway");
+                    url = TUrlBuilder(
+                        ev->Get()->MdbGateway + "/managed-" + NYql::DatabaseTypeLowercase(databaseType) + "/v1/clusters/")
+                            .AddPathComponent(databaseId)
+                            .AddPathComponent("master-hosts")
                             .Build();
                 }
 

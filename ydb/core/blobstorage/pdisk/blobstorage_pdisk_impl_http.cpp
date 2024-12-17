@@ -25,18 +25,20 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
             TABLEBODY() {
                 TABLER() {
                     TABLED() {str << "PDisk";}
+                    TString stateStr = TStringBuilder() << TPDiskMon::TPDisk::StateToStr(Mon.PDiskState->Val()) << (Cfg->ReadOnly ? " (readonly)" : "");
+                    TString briefStateStr = TPDiskMon::TPDisk::BriefStateToStr(Mon.PDiskBriefState->Val());
                     switch(Mon.PDiskBriefState->Val()) {
                     case TPDiskMon::TPDisk::OK:
-                        TABLED() {GREEN_TEXT(str, TPDiskMon::TPDisk::StateToStr(Mon.PDiskState->Val()));}
-                        TABLED() {GREEN_TEXT(str, TPDiskMon::TPDisk::BriefStateToStr(Mon.PDiskBriefState->Val()));}
+                        TABLED() {GREEN_TEXT(str, stateStr);}
+                        TABLED() {GREEN_TEXT(str, briefStateStr);}
                         break;
                     case TPDiskMon::TPDisk::Booting:
-                        TABLED() {YELLOW_TEXT(str, TPDiskMon::TPDisk::StateToStr(Mon.PDiskState->Val()));}
-                        TABLED() {YELLOW_TEXT(str, TPDiskMon::TPDisk::BriefStateToStr(Mon.PDiskBriefState->Val()));}
+                        TABLED() {YELLOW_TEXT(str, stateStr);}
+                        TABLED() {YELLOW_TEXT(str, briefStateStr);}
                         break;
                     case TPDiskMon::TPDisk::Error:
-                        TABLED() {RED_TEXT(str, TPDiskMon::TPDisk::StateToStr(Mon.PDiskState->Val()));}
-                        TABLED() {RED_TEXT(str, TPDiskMon::TPDisk::BriefStateToStr(Mon.PDiskBriefState->Val()));}
+                        TABLED() {RED_TEXT(str, stateStr);}
+                        TABLED() {RED_TEXT(str, briefStateStr);}
                         break;
                     }
                     TABLED() {str << TPDiskMon::TPDisk::DetailedStateToStr(Mon.PDiskDetailedState->Val());}
@@ -100,11 +102,15 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
         DIV() {
             str << R"___(
                 <script>
-                    function reloadPage() {
-                        window.location.replace(window.location.href);
+                    function reloadPage(data) {
+                        if (data.result) {
+                            window.location.replace(window.location.href);
+                        } else {
+                            alert(data.error);
+                        }
                     }
 
-                    function sendReloadRequest() {
+                    function sendRestartRequest() {
                         $.ajax({
                             url: "",
                             data: "restartPDisk=",
@@ -123,19 +129,14 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
                     }
                 </script>
             )___";
-            str << "<button onClick='sendReloadRequest()' name='restartPDisk' class='btn btn-default' ";
-            if (Cfg->SectorMap || Mon.PDiskBriefState->Val() == TPDiskMon::TPDisk::Error) {
-                str << "style='background:Tomato; margin:5px' ";
-            } else {
-                str << "disabled ";
-                str << "style='background:LightGray; margin:5px' ";
-            }
+            str << "<button onclick='sendRestartRequest()' name='restartPDisk' class='btn btn-default' ";
+            str << "style='background:LightGray; margin:5px' ";
             str << ">";
             str << "Restart";
             str << "</button>";
 
             if (Cfg->SectorMap) {
-                str << "<button onClick='sendStopRequest()' name='stopPDisk' class='btn btn-default' ";
+                str << "<button onclick='sendStopRequest()' name='stopPDisk' class='btn btn-default' ";
                 str << "style='background:Tomato; margin:5px'>";
                 str << "Stop";
                 str << "</button>";
@@ -144,6 +145,48 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
         if (Cfg->SectorMap) {
             TAG(TH4) {str << "SectorMap"; }
             PRE() {str << Cfg->SectorMap->ToString();}
+        }
+        TAG(TH4) { str << "Metadata"; }
+        TABLE_CLASS ("table") {
+            TABLEHEAD() {
+                TABLER() {
+                    TABLEH() {str << "Parameter";}
+                    TABLEH() {str << "Value";}
+                }
+            }
+            auto kv = [&](const auto& key, const auto& value) {
+                TABLER() {
+                    TABLED() { str << key; }
+                    TABLED() { str << value; }
+                }
+            };
+            TABLEBODY() {
+                std::visit(TOverloaded{
+                    [&](const std::monostate&) {
+                        kv("State", "monostate");
+                    },
+                    [&](const NMeta::TFormatted& x) {
+                        kv("State", "Formatted");
+                        kv("Slots.size", x.Slots.size());
+                        kv("ReadPending.size", x.ReadPending.size());
+                        kv("NumReadsInFlight", x.NumReadsInFlight);
+                        kv("Parts.size", x.Parts.size());
+                    },
+                    [&](const NMeta::TUnformatted& x) {
+                        kv("State", "Unformatted");
+                        kv("Format.has_value", x.Format.has_value());
+                    },
+                }, Meta.State);
+                kv("StoredMetadata", std::visit<TString>(TOverloaded{
+                    [](const NMeta::TScanInProgress&) { return "ScanInProgress"; },
+                    [](const NMeta::TNoMetadata&) { return "NoMetadata"; },
+                    [](const NMeta::TError& e) { return TStringBuilder() << "Error# " << e.Description; },
+                    [](const TRcBuf& meta) { return TStringBuilder() << "Metadata Size# " << meta.size(); },
+                }, Meta.StoredMetadata));
+                kv("Requests.size", Meta.Requests.size());
+                kv("WriteInFlight", Meta.WriteInFlight);
+                kv("NextSequenceNumber", Meta.NextSequenceNumber);
+            }
         }
         TAG(TH4) {str << "Config"; }
         PRE() {str << Cfg->ToString(true);}
@@ -215,7 +258,7 @@ void TPDisk::OutputHtmlOwners(TStringStream &str) {
                     if (data.VDiskId != TVDiskID::InvalidId) {
                         TABLER() {
                             TABLED() { str << (ui32) owner;}
-                            TABLED() { str << data.VDiskId.ToStringWOGeneration(); }
+                            TABLED() { str << data.VDiskId.ToStringWOGeneration() << "<br/>(" << data.VDiskId.GroupID << ")"; }
                             TABLED() { str << chunksOwned[owner]; }
                             TABLED() { str << data.CutLogId.ToString(); }
                             TABLED() { str << data.WhiteboardProxyId; }
@@ -276,7 +319,7 @@ void TPDisk::OutputHtmlLogChunksDetails(TStringStream &str) {
                         if (id == TVDiskID::InvalidId) {
                             TABLEH() {str << "o" << owner << "v--"; }
                         } else {
-                            TABLEH() {str << "o" << owner << "v" << id.ToStringWOGeneration(); }
+                            TABLEH() {str << "o" << owner << "v" << id.ToStringWOGeneration() << "<br/>(" << id.GroupID << ")"; }
                         }
                     }
                 }
@@ -331,7 +374,7 @@ void TPDisk::OutputHtmlLogChunksDetails(TStringStream &str) {
 
 void TPDisk::OutputHtmlChunkLockUnlockInfo(TStringStream &str) {
     using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
-    bool chunkLockingEnabled = NKikimr::AppData(ActorSystem)->FeatureFlags.GetEnableChunkLocking();
+    bool chunkLockingEnabled = NKikimr::AppData(PCtx->ActorSystem)->FeatureFlags.GetEnableChunkLocking();
 
     auto commonParams = [&] (TStringStream &str, TString requestName) {
         for (TEvChunkLock::ELockFrom from : { TEvChunkLock::ELockFrom::LOG, TEvChunkLock::ELockFrom::PERSONAL_QUOTA } ) {
@@ -451,6 +494,8 @@ void TPDisk::OutputHtmlChunkLockUnlockInfo(TStringStream &str) {
                                             str << ",";
                                         } else if (chunk.OwnerId == OwnerLocked) {
                                             str << "X";
+                                        } else if (chunk.OwnerId == OwnerMetadata) {
+                                            str << 'M';
                                         } else {
                                             str << (ui32)chunk.OwnerId;
                                             if (chunk.CommitState != TChunkState::DATA_COMMITTED && chunk.CommitState != TChunkState::LOCKED) {
@@ -482,7 +527,7 @@ void TPDisk::HttpInfo(THttpInfo &httpInfo) {
         TGuard<TMutex> guard(StateMutex);
         ForsetiScheduler.OutputLog(out);
         reportResult->HttpInfoRes = new NMon::TEvHttpInfoRes(out.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom);
-        ActorSystem->Send(httpInfo.Sender, reportResult);
+        PCtx->ActorSystem->Send(httpInfo.Sender, reportResult);
     } else {
         TStringStream str = httpInfo.OutputString;
         TGuard<TMutex> guard(StateMutex);
@@ -537,7 +582,7 @@ void TPDisk::HttpInfo(THttpInfo &httpInfo) {
 
         }
         reportResult->HttpInfoRes = new NMon::TEvHttpInfoRes(str.Str());
-        ActorSystem->Send(httpInfo.Sender, reportResult);
+        PCtx->ActorSystem->Send(httpInfo.Sender, reportResult);
     }
 }
 

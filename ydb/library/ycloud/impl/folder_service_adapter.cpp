@@ -173,11 +173,22 @@ public:
     }
 };
 
-NActors::IActor* CreateFolderServiceActor(const NKikimrProto::NFolderService::TFolderServiceConfig& config) {
+NActors::IActor* CreateFolderServiceActor(
+        const NKikimrProto::NFolderService::TFolderServiceConfig& config) {
     if (config.GetEnable()) {
         return new NKikimr::NFolderService::TFolderServiceAdapter(config);
     } else {
-        return NKikimr::NFolderService::CreateMockFolderServiceAdapterActor(config);
+        return NKikimr::NFolderService::CreateMockFolderServiceAdapterActor(config, Nothing());
+    }
+}
+
+NActors::IActor* CreateFolderServiceActor(
+        const NKikimrProto::NFolderService::TFolderServiceConfig& config,
+        TString mockedCloudId) {
+    if (config.GetEnable()) {
+        return new NKikimr::NFolderService::TFolderServiceAdapter(config);
+    } else {
+        return NKikimr::NFolderService::CreateMockFolderServiceAdapterActor(config, mockedCloudId);
     }
 }
 } // namespace NKikimr::NFolderService

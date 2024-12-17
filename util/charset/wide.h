@@ -61,7 +61,7 @@ namespace NDetail {
     template <class T>
     inline void WriteSurrogatePair(wchar32 s, T& dest) noexcept;
 
-}
+} // namespace NDetail
 
 inline wchar16* SkipSymbol(wchar16* begin, const wchar16* end) noexcept {
     return begin + W16SymbolSize(begin, end);
@@ -81,8 +81,9 @@ inline const wchar32* SkipSymbol(const wchar32* begin, const wchar32* end) noexc
 inline wchar32 ReadSymbol(const wchar16* begin, const wchar16* end) noexcept {
     Y_ASSERT(begin < end);
     if (IsW16SurrogateLead(*begin)) {
-        if (begin + 1 < end && IsW16SurrogateTail(*(begin + 1)))
+        if (begin + 1 < end && IsW16SurrogateTail(*(begin + 1))) {
             return ::NDetail::ReadSurrogatePair(begin);
+        }
 
         return BROKEN_RUNE;
     } else if (IsW16SurrogateTail(*begin)) {
@@ -210,8 +211,9 @@ inline bool WriteSymbol(wchar32 s, wchar16*& dest, const wchar16* destEnd) noexc
             return true;
         }
 
-        if (dest + 2 > destEnd)
+        if (dest + 2 > destEnd) {
             return false;
+        }
 
         ::NDetail::WriteSurrogatePair(s, dest);
     } else {
@@ -333,7 +335,7 @@ namespace NDetail {
     void UTF8ToWideImplSSE41(const unsigned char*& cur, const unsigned char* last, wchar16*& dest) noexcept;
 
     void UTF8ToWideImplSSE41(const unsigned char*& cur, const unsigned char* last, wchar32*& dest) noexcept;
-}
+} // namespace NDetail
 
 //! @return len if robust and position where encoding stopped if not
 template <bool robust, typename TCharType>
@@ -341,7 +343,7 @@ inline size_t UTF8ToWideImpl(const char* text, size_t len, TCharType* dest, size
     const unsigned char* cur = reinterpret_cast<const unsigned char*>(text);
     const unsigned char* last = cur + len;
     TCharType* p = dest;
-#ifdef _sse_ //can't check for sse4, as we build most of arcadia without sse4 support even on platforms that support it
+#ifdef _sse_ // can't check for sse4, as we build most of arcadia without sse4 support even on platforms that support it
     if (cur + 16 <= last && NX86::CachedHaveSSE41()) {
         ::NDetail::UTF8ToWideImplSSE41(cur, last, p);
     }
@@ -362,8 +364,9 @@ inline TUtf16String UTF8ToWide(const char* text, size_t len) {
     TUtf16String w = TUtf16String::Uninitialized(len);
     size_t written;
     size_t pos = UTF8ToWideImpl<robust>(text, len, w.begin(), written);
-    if (pos != len)
+    if (pos != len) {
         ythrow yexception() << "failed to decode UTF-8 string at pos " << pos << ::NDetail::InStringMsg(text, len);
+    }
     Y_ASSERT(w.size() >= written);
     w.remove(written);
     return w;
@@ -464,6 +467,16 @@ inline TString WideToUTF8(const wchar16* text, size_t len) {
     s.remove(written);
     return s;
 }
+
+#if defined(_win_)
+inline TString WideToUTF8(const wchar_t* text, size_t len) {
+    return WideToUTF8(reinterpret_cast<const wchar16*>(text), len);
+}
+
+inline std::string WideToUTF8(std::wstring_view text) {
+    return WideToUTF8(text.data(), text.size()).ConstRef();
+}
+#endif
 
 inline TString WideToUTF8(const wchar32* text, size_t len) {
     TString s = TString::Uninitialized(WideToUTF8BufferSize(len));
@@ -596,7 +609,7 @@ namespace NDetail {
 
 #ifdef _sse2_
     inline bool DoIsStringASCIISSE(const unsigned char* first, const unsigned char* last) {
-        //scalar version for short strings
+        // scalar version for short strings
         if (first + 8 > last) {
             return ::NDetail::DoIsStringASCIISlow(first, last);
         }
@@ -627,9 +640,9 @@ namespace NDetail {
 
         return ::NDetail::DoIsStringASCIISlow(first, last);
     }
-#endif //_sse2_
+#endif // _sse2_
 
-}
+} // namespace NDetail
 
 //! returns @c true if character sequence has no symbols with value greater than 0x7F
 template <typename TChar>
@@ -697,15 +710,17 @@ inline TUtf32String ASCIIToUTF32(const TStringBuf s) {
 
 //! returns @c true if string contains whitespace characters only
 inline bool IsSpace(const wchar16* s, size_t n) {
-    if (n == 0)
+    if (n == 0) {
         return false;
+    }
 
     Y_ASSERT(s);
 
     const wchar16* const e = s + n;
     for (const wchar16* p = s; p != e; ++p) {
-        if (!IsWhitespace(*p))
+        if (!IsWhitespace(*p)) {
             return false;
+        }
     }
     return true;
 }
@@ -869,8 +884,9 @@ inline bool IsValidUTF16(const wchar16* b, const wchar16* e) {
     Y_ENSURE(b <= e, TStringBuf("invalid iterators"));
     while (b < e) {
         wchar32 symbol = ReadSymbolAndAdvance(b, e);
-        if (symbol == BROKEN_RUNE)
+        if (symbol == BROKEN_RUNE) {
             return false;
+        }
     }
     return true;
 }

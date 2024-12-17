@@ -61,7 +61,7 @@ static void close_sock_fds(int s_fd[], int c_fd[], int nr, bool fixed)
 	close_fds(c_fd, nr);
 }
 
-static void queue_send(struct io_uring *ring, int fd)
+static void *queue_send(struct io_uring *ring, int fd)
 {
 	struct io_uring_sqe *sqe;
 	struct data *d;
@@ -73,9 +73,11 @@ static void queue_send(struct io_uring *ring, int fd)
 	sqe = io_uring_get_sqe(ring);
 	io_uring_prep_writev(sqe, fd, &d->iov, 1, 0);
 	sqe->user_data = 1;
+
+	return d;
 }
 
-static void queue_recv(struct io_uring *ring, int fd, bool fixed)
+static void *queue_recv(struct io_uring *ring, int fd, bool fixed)
 {
 	struct io_uring_sqe *sqe;
 	struct data *d;
@@ -89,6 +91,8 @@ static void queue_recv(struct io_uring *ring, int fd, bool fixed)
 	sqe->user_data = 2;
 	if (fixed)
 		sqe->flags |= IOSQE_FIXED_FILE;
+
+	return d;
 }
 
 static void queue_accept_multishot(struct io_uring *ring, int fd,
@@ -196,7 +200,8 @@ static int start_accept_listen(struct sockaddr_in *addr, int port_off,
 
 	addr->sin_family = AF_INET;
 	addr->sin_addr.s_addr = inet_addr("127.0.0.1");
-	assert(!t_bind_ephemeral_port(fd, addr));
+	ret = t_bind_ephemeral_port(fd, addr);
+	assert(!ret);
 	ret = listen(fd, 128);
 	assert(ret != -1);
 
@@ -274,6 +279,8 @@ static int test_loop(struct io_uring *ring,
 	int nr_fds = multishot ? MAX_FDS : 1;
 	int multishot_idx = multishot ? INITIAL_USER_DATA : 0;
 	int err_ret = T_EXIT_FAIL;
+	void* send_d = 0;
+	void* recv_d = 0;
 
 	if (args.overflow)
 		cause_overflow(ring);
@@ -311,6 +318,9 @@ static int test_loop(struct io_uring *ring,
 				multishot ? "Multishot" : "",
 				i, s_fd[i]);
 			goto err;
+		} else if (s_fd[i] == 195 && args.overflow) {
+			fprintf(stderr, "Broken overflow handling\n");
+			goto err;
 		}
 
 		if (multishot && fixed) {
@@ -337,8 +347,8 @@ static int test_loop(struct io_uring *ring,
 		goto out;
 	}
 
-	queue_send(ring, c_fd[0]);
-	queue_recv(ring, s_fd[0], fixed);
+	send_d = queue_send(ring, c_fd[0]);
+	recv_d = queue_recv(ring, s_fd[0], fixed);
 
 	ret = io_uring_submit_and_wait(ring, 2);
 	assert(ret != -1);
@@ -362,9 +372,13 @@ static int test_loop(struct io_uring *ring,
 	}
 
 out:
+	free(send_d);
+	free(recv_d);
 	close_sock_fds(s_fd, c_fd, nr_fds, fixed);
 	return T_EXIT_PASS;
 err:
+	free(send_d);
+	free(recv_d);
 	close_sock_fds(s_fd, c_fd, nr_fds, fixed);
 	return err_ret;
 }
@@ -428,7 +442,7 @@ struct test_accept_many_args {
 };
 
 /*
- * Test issue many accepts and see if we handle cancellation on exit
+ * Test issue many accepts and see if we handle cancelation on exit
  */
 static int test_accept_many(struct test_accept_many_args args)
 {
@@ -483,7 +497,7 @@ static int test_accept_many(struct test_accept_many_args args)
 		if (io_uring_peek_cqe(&m_io_uring, &cqe))
 			break;
 		if (cqe->res != -ECANCELED) {
-			fprintf(stderr, "Expected cqe to be cancelled %d\n", cqe->res);
+			fprintf(stderr, "Expected cqe to be canceled %d\n", cqe->res);
 			ret = 1;
 			goto out;
 		}
@@ -555,6 +569,9 @@ static int test_accept_cancel(unsigned usecs, unsigned int nr, bool multishot)
 			fprintf(stderr, "unexpected 0 user data\n");
 			goto err;
 		} else if (cqe->user_data <= nr) {
+			/* no multishot */
+			if (cqe->res == -EINVAL)
+				return T_EXIT_SKIP;
 			if (cqe->res != -EINTR && cqe->res != -ECANCELED) {
 				fprintf(stderr, "Cancelled accept got %d\n", cqe->res);
 				goto err;
@@ -679,7 +696,12 @@ static int test_accept_fixed(void)
 	ret = io_uring_queue_init(32, &m_io_uring, 0);
 	assert(ret >= 0);
 	ret = io_uring_register_files(&m_io_uring, &fd, 1);
-	assert(ret == 0);
+	if (ret) {
+		/* kernel doesn't support sparse registered files, skip */
+		if (ret == -EBADF || ret == -EINVAL)
+			return T_EXIT_SKIP;
+		return T_EXIT_FAIL;
+	}
 	ret = test(&m_io_uring, args);
 	io_uring_queue_exit(&m_io_uring);
 	return ret;
@@ -701,7 +723,12 @@ static int test_multishot_fixed_accept(void)
 	ret = io_uring_queue_init(MAX_FDS + 10, &m_io_uring, 0);
 	assert(ret >= 0);
 	ret = io_uring_register_files(&m_io_uring, fd, MAX_FDS);
-	assert(ret == 0);
+	if (ret) {
+		/* kernel doesn't support sparse registered files, skip */
+		if (ret == -EBADF || ret == -EINVAL)
+			return T_EXIT_SKIP;
+		return T_EXIT_FAIL;
+	}
 	ret = test(&m_io_uring, args);
 	io_uring_queue_exit(&m_io_uring);
 	return ret;

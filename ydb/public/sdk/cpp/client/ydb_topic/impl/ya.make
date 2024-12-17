@@ -1,21 +1,24 @@
 LIBRARY()
 
 SRCS(
-    executor.h
-    executor.cpp
-    read_session_event.cpp
-    counters.cpp
+    common.h
+    common.cpp
+    counters_logger.h
     deferred_commit.cpp
     event_handlers.cpp
+    offsets_collector.cpp
+    read_session_event.cpp
+    read_session_impl.ipp
     read_session.h
     read_session.cpp
-    write_session.h
-    write_session.cpp
-    write_session_impl.h
-    write_session_impl.cpp
     topic_impl.h
     topic_impl.cpp
     topic.cpp
+    transaction.cpp
+    write_session_impl.h
+    write_session_impl.cpp
+    write_session.h
+    write_session.cpp
 )
 
 PEERDIR(
@@ -29,7 +32,8 @@ PEERDIR(
     ydb/public/sdk/cpp/client/impl/ydb_internal/make_request
     ydb/public/sdk/cpp/client/ydb_common_client/impl
     ydb/public/sdk/cpp/client/ydb_driver
-    ydb/public/sdk/cpp/client/ydb_persqueue_core/impl
+    ydb/public/sdk/cpp/client/ydb_topic/common
+    ydb/public/sdk/cpp/client/ydb_topic/include
     ydb/public/sdk/cpp/client/ydb_proto
 )
 

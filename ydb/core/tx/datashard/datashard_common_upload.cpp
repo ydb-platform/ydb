@@ -120,7 +120,9 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         if (keyCells.GetCells().size() != tableInfo.KeyColumnTypes.size() ||
             valueCells.GetCells().size() != valueCols.size())
         {
-            SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, "Cell count doesn't match row scheme");
+            SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Cell count doesn't match row scheme"
+                    << ": got keys " << keyCells.GetCells().size() << ", values " << valueCells.GetCells().size() 
+                    << "; expected keys " << tableInfo.KeyColumnTypes.size() << ", values " << valueCols.size());
             return true;
         }
 
@@ -129,13 +131,8 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         ui64 keyBytes = 0;
         for (const auto& kt : tableInfo.KeyColumnTypes) {
             const TCell& c = keyCells.GetCells()[ki];
-            if (kt.GetTypeId() == NScheme::NTypeIds::Uint8 && !c.IsNull() && c.AsValue<ui8>() > 127) {
-                SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT, "Keys with Uint8 column values >127 are currently prohibited");
-                return true;
-            }
-
             keyBytes += c.Size();
-            key.emplace_back(TRawTypeValue(c.AsRef(), kt));
+            key.emplace_back(TRawTypeValue(c.AsRef(), kt.GetTypeId()));
             ++ki;
         }
 
@@ -187,7 +184,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             if (valueCells.GetCells()[vi].Size() > NLimits::MaxWriteValueSize) {
                 SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT,
                          Sprintf("Row cell size of %" PRISZT " bytes is larger than the allowed threshold %" PRIu64,
-                                 valueCells.GetBuffer().Size(), NLimits::MaxWriteValueSize));
+                                 valueCells.GetBuffer().size(), NLimits::MaxWriteValueSize));
                 return true;
             }
 
@@ -198,7 +195,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             }
 
             if (allowUpdate) {
-                value.emplace_back(NTable::TUpdateOp(vt.first, NTable::ECellOp::Set, TRawTypeValue(valueCells.GetCells()[vi].AsRef(), vt.second)));
+                value.emplace_back(NTable::TUpdateOp(vt.first, NTable::ECellOp::Set, TRawTypeValue(valueCells.GetCells()[vi].AsRef(), vt.second.GetTypeId())));
             }
             ++vi;
         }
@@ -286,6 +283,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             /* participants */ { },
             groupProvider.GetCurrentChangeGroup(),
             /* ordered */ false,
+            /* arbiter */ false,
             txc);
         // Note: transaction is already committed, no additional waiting needed
     }

@@ -1,0 +1,229 @@
+====================BSL-1.0====================
+### License
+
+Distributed under the [Boost Software License, Version 1.0](http://www.boost.org/LICENSE_1_0.txt).
+
+
+====================BSL-1.0====================
+* Submit your patches as pull requests against **develop** branch. Note that by submitting patches you agree to license your modifications under the [Boost Software License, Version 1.0](http://www.boost.org/LICENSE_1_0.txt).
+
+
+====================BSL-1.0====================
+//  Permission to copy, use, modify, sell and distribute this software
+//  is granted provided this copyright notice appears in all copies.
+//  This software is provided "as is" without express or implied
+//  warranty, and with no claim as to its suitability for any purpose.
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2005-2013. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2011-2014. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2014-2014. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2015-2015. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2017-2021. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Pablo Halpern 2009. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE_1_0.txt or copy at
+//          http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+// (See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0. (See accompanying
+// file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+//  Copyright (c) 2004 Ralf Mattethat
+
+
+====================COPYRIGHT====================
+// (C) Copyright Daniel K. O. 2005.
+// (C) Copyright Ion Gaztanaga 2007-2014
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga        2006-2014
+// (C) Copyright Microsoft Corporation  2014
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga  2006-2013
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga  2006-2022
+// (C) Copyright 2022 Joaquin M Lopez Munoz.
+// (C) Copyright 2022 Christian Mazakas
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga  2007-2021
+// (C) Copyright Daniel Steck   2021
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga  2009-2013.
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga  2010-2013
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga  2013-2013
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga  2013-2014
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga  2014-2015
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2005-2013. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2007-2013
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2007-2014
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2008
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2008-2013
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2011-2014. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2014-2014. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2015-2015. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2017-2021. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (C) Copyright Joaquin M Lopez Munoz  2006-2013
+// (C) Copyright Ion Gaztanaga          2014-2014
+
+
+====================COPYRIGHT====================
+// (C) Copyright Olaf Krzikalla 2004-2006.
+// (C) Copyright Ion Gaztanaga  2006-2014
+
+
+====================COPYRIGHT====================
+// (C) Copyright Pablo Halpern 2009. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// Copyright 2005-2014 Daniel James.
+// Copyright 2021, 2022 Peter Dimov.
+// Copyright 2024 Ion Gaztanaga.
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// Copyright 2007 Alexandre Courpron
+
+
+====================COPYRIGHT====================
+// Copyright 2021 Ion Gaztanaga
+// Refactored the original Boost ContainerHash library to avoid
+// any heavy std header dependencies to just combine two hash
+
+
+====================COPYRIGHT====================
+// Copyright 2021-2023 Peter Dimov
+// Copyright 2024 Ion Gaztanaga
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// Copyright 2022 Peter Dimov
+// Copyright 2024 Ion Gaztanaga
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================Public-Domain====================
+//  This also contains public domain code from MurmurHash. From the
+
+
+====================Public-Domain====================
+// MurmurHash3 was written by Austin Appleby, and is placed in the public
+// domain. The author hereby disclaims copyright to this source code.
+
+
+====================Public-Domain====================
+// This code is in the public domain. Anyone may use it or change it in any way that

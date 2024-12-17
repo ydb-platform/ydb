@@ -1,0 +1,1 @@
+Docker image built from this Dockerfile is pushed as `ghcr.io/ydb-platform/fq-connector-go_greenplum:6.25.3-6432@sha256:9e862b05719b289b447562fbce6c003916a764a549f924a4175eecd7e7891a0b`. No need to rebuild them every time.

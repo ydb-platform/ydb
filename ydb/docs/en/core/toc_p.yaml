@@ -1,4 +1,6 @@
 title: YDB
 href: index.yaml
 items:
-- include: { mode: link, path: toc_i.yaml }
+- include:
+    mode: link
+    path: toc_i.yaml

@@ -1,0 +1,469 @@
+<sql-statement>
+--
+-- CASE
+-- Test the case statement
+--
+CREATE TABLE CASE_TBL (
+  i integer,
+  f double precision
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE CASE2_TBL (
+  i integer,
+  j integer
+);
+</sql-statement>
+<sql-statement>
+INSERT INTO CASE_TBL VALUES (1, 10.1);
+</sql-statement>
+<sql-statement>
+INSERT INTO CASE_TBL VALUES (2, 20.2);
+</sql-statement>
+<sql-statement>
+INSERT INTO CASE_TBL VALUES (3, -30.3);
+</sql-statement>
+<sql-statement>
+INSERT INTO CASE_TBL VALUES (4, NULL);
+</sql-statement>
+<sql-statement>
+INSERT INTO CASE2_TBL VALUES (1, -1);
+</sql-statement>
+<sql-statement>
+INSERT INTO CASE2_TBL VALUES (2, -2);
+</sql-statement>
+<sql-statement>
+INSERT INTO CASE2_TBL VALUES (3, -3);
+</sql-statement>
+<sql-statement>
+INSERT INTO CASE2_TBL VALUES (2, -4);
+</sql-statement>
+<sql-statement>
+INSERT INTO CASE2_TBL VALUES (1, NULL);
+</sql-statement>
+<sql-statement>
+INSERT INTO CASE2_TBL VALUES (NULL, -6);
+</sql-statement>
+<sql-statement>
+--
+-- Simplest examples without tables
+--
+SELECT '3' AS "One",
+  CASE
+    WHEN 1 < 2 THEN 3
+  END AS "Simple WHEN";
+</sql-statement>
+<sql-statement>
+SELECT '<NULL>' AS "One",
+  CASE
+    WHEN 1 > 2 THEN 3
+  END AS "Simple default";
+</sql-statement>
+<sql-statement>
+SELECT '3' AS "One",
+  CASE
+    WHEN 1 < 2 THEN 3
+    ELSE 4
+  END AS "Simple ELSE";
+</sql-statement>
+<sql-statement>
+SELECT '4' AS "One",
+  CASE
+    WHEN 1 > 2 THEN 3
+    ELSE 4
+  END AS "ELSE default";
+</sql-statement>
+<sql-statement>
+SELECT '6' AS "One",
+  CASE
+    WHEN 1 > 2 THEN 3
+    WHEN 4 < 5 THEN 6
+    ELSE 7
+  END AS "Two WHEN with default";
+</sql-statement>
+<sql-statement>
+SELECT '7' AS "None",
+   CASE WHEN random() < 0 THEN 1
+   END AS "NULL on no matches";
+</sql-statement>
+<sql-statement>
+-- Constant-expression folding shouldn't evaluate unreachable subexpressions
+SELECT CASE WHEN 1=0 THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END;
+</sql-statement>
+<sql-statement>
+SELECT CASE 1 WHEN 0 THEN 1/0 WHEN 1 THEN 1 ELSE 2/0 END;
+</sql-statement>
+<sql-statement>
+-- However we do not currently suppress folding of potentially
+-- reachable subexpressions
+SELECT CASE WHEN i > 100 THEN 1/0 ELSE 0 END FROM case_tbl;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.case_tbl
+    
+<sql-statement>
+-- Test for cases involving untyped literals in test expression
+SELECT CASE 'a' WHEN 'a' THEN 1 ELSE 2 END;
+</sql-statement>
+<sql-statement>
+--
+-- Examples of targets involving tables
+--
+SELECT
+  CASE
+    WHEN i >= 3 THEN i
+  END AS ">= 3 or Null"
+  FROM CASE_TBL;
+</sql-statement>
+<sql-statement>
+SELECT
+  CASE WHEN i >= 3 THEN (i + i)
+       ELSE i
+  END AS "Simplest Math"
+  FROM CASE_TBL;
+</sql-statement>
+<sql-statement>
+SELECT i AS "Value",
+  CASE WHEN (i < 0) THEN 'small'
+       WHEN (i = 0) THEN 'zero'
+       WHEN (i = 1) THEN 'one'
+       WHEN (i = 2) THEN 'two'
+       ELSE 'big'
+  END AS "Category"
+  FROM CASE_TBL;
+</sql-statement>
+<sql-statement>
+SELECT
+  CASE WHEN ((i < 0) or (i < 0)) THEN 'small'
+       WHEN ((i = 0) or (i = 0)) THEN 'zero'
+       WHEN ((i = 1) or (i = 1)) THEN 'one'
+       WHEN ((i = 2) or (i = 2)) THEN 'two'
+       ELSE 'big'
+  END AS "Category"
+  FROM CASE_TBL;
+</sql-statement>
+<sql-statement>
+--
+-- Examples of qualifications involving tables
+--
+--
+-- NULLIF() and COALESCE()
+-- Shorthand forms for typical CASE constructs
+--  defined in the SQL standard.
+--
+SELECT * FROM CASE_TBL WHERE COALESCE(f,i) = 4;
+</sql-statement>
+<sql-statement>
+SELECT * FROM CASE_TBL WHERE NULLIF(f,i) = 2;
+</sql-statement>
+<sql-statement>
+SELECT COALESCE(a.f, b.i, b.j)
+  FROM CASE_TBL a, CASE2_TBL b;
+</sql-statement>
+<sql-statement>
+SELECT *
+  FROM CASE_TBL a, CASE2_TBL b
+  WHERE COALESCE(a.f, b.i, b.j) = 2;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT *
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: i
+        	SELECT *
+	^
+<sql-statement>
+SELECT NULLIF(a.i,b.i) AS "NULLIF(a.i,b.i)",
+  NULLIF(b.i, 4) AS "NULLIF(b.i,4)"
+  FROM CASE_TBL a, CASE2_TBL b;
+</sql-statement>
+<sql-statement>
+SELECT *
+  FROM CASE_TBL a, CASE2_TBL b
+  WHERE COALESCE(f,b.i) = 2;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT *
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: i
+        	SELECT *
+	^
+<sql-statement>
+-- Tests for constant subexpression simplification
+explain (costs off)
+SELECT * FROM CASE_TBL WHERE NULLIF(1, 2) = 2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Tests for constant subexpression simplification
+	^
+<sql-statement>
+explain (costs off)
+SELECT * FROM CASE_TBL WHERE NULLIF(1, 1) IS NOT NULL;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+explain (costs off)
+SELECT * FROM CASE_TBL WHERE NULLIF(1, null) = 2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+--
+-- Examples of updates involving tables
+--
+UPDATE CASE_TBL
+  SET i = CASE WHEN i >= 3 THEN (- i)
+                ELSE (2 * i) END;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+SELECT * FROM CASE_TBL;
+</sql-statement>
+<sql-statement>
+UPDATE CASE_TBL
+  SET i = CASE WHEN i >= 2 THEN (2 * i)
+                ELSE (3 * i) END;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+SELECT * FROM CASE_TBL;
+</sql-statement>
+<sql-statement>
+UPDATE CASE_TBL
+  SET i = CASE WHEN b.i >= 2 THEN (2 * j)
+                ELSE (3 * j) END
+  FROM CASE2_TBL b
+  WHERE j = -CASE_TBL.i;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+SELECT * FROM CASE_TBL;
+</sql-statement>
+<sql-statement>
+--
+-- Nested CASE expressions
+--
+-- This test exercises a bug caused by aliasing econtext->caseValue_isNull
+-- with the isNull argument of the inner CASE's CaseExpr evaluation.  After
+-- evaluating the vol(null) expression in the inner CASE's second WHEN-clause,
+-- the isNull flag for the case test value incorrectly became true, causing
+-- the third WHEN-clause not to match.  The volatile function calls are needed
+-- to prevent constant-folding in the planner, which would hide the bug.
+-- Wrap this in a single transaction so the transient '=' operator doesn't
+-- cause problems in concurrent sessions
+BEGIN;
+</sql-statement>
+<sql-statement>
+CREATE FUNCTION vol(text) returns text as
+  'begin return $1; end' language plpgsql volatile;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	CREATE FUNCTION vol(text) returns text as
+	^
+<sql-statement>
+SELECT CASE
+  (CASE vol('bar')
+    WHEN 'foo' THEN 'it was foo!'
+    WHEN vol(null) THEN 'null input'
+    WHEN 'bar' THEN 'it was bar!' END
+  )
+  WHEN 'it was foo!' THEN 'foo recognized'
+  WHEN 'it was bar!' THEN 'bar recognized'
+  ELSE 'unrecognized' END;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT CASE
+	^
+        -stdin-:<main>:1:8: Error: At function: If, At function: Or, At function: Coalesce, At function: FromPg, At function: PgOp
+        	SELECT CASE
+	       ^
+            -stdin-:<main>:2:4: Error: At function: If, At function: Or
+            	  (CASE vol('bar')
+	   ^
+                -stdin-:<main>:2:4: Error: At function: Coalesce, At function: FromPg, At function: PgOp
+                	  (CASE vol('bar')
+	   ^
+                    -stdin-:<main>:2:9: Error: At function: PgCall
+                    	  (CASE vol('bar')
+	        ^
+                        -stdin-:<main>:2:9: Error: No such proc: vol
+                        	  (CASE vol('bar')
+	        ^
+                -stdin-:<main>:2:4: Error: At function: Coalesce, At function: FromPg, At function: PgOp
+                	  (CASE vol('bar')
+	   ^
+                    -stdin-:<main>:4:10: Error: At function: PgCall
+                    	    WHEN vol(null) THEN 'null input'
+	         ^
+                        -stdin-:<main>:4:10: Error: No such proc: vol
+                        	    WHEN vol(null) THEN 'null input'
+	         ^
+<sql-statement>
+-- In this case, we can't inline the SQL function without confusing things.
+CREATE DOMAIN foodomain AS text;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 272
+    	-- In this case, we can't inline the SQL function without confusing things.
+	^
+<sql-statement>
+CREATE FUNCTION volfoo(text) returns foodomain as
+  'begin return $1::foodomain; end' language plpgsql volatile;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	CREATE FUNCTION volfoo(text) returns foodomain as
+	^
+<sql-statement>
+CREATE FUNCTION inline_eq(foodomain, foodomain) returns boolean as
+  'SELECT CASE $2::text WHEN $1::text THEN true ELSE false END' language sql;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	CREATE FUNCTION inline_eq(foodomain, foodomain) returns boolean as
+	^
+<sql-statement>
+CREATE OPERATOR = (procedure = inline_eq,
+                   leftarg = foodomain, rightarg = foodomain);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 255
+    	CREATE OPERATOR = (procedure = inline_eq,
+	^
+<sql-statement>
+SELECT CASE volfoo('bar') WHEN 'foo'::foodomain THEN 'is foo' ELSE 'is not foo' END;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:39: Error: Unknown type: foodomain
+    	SELECT CASE volfoo('bar') WHEN 'foo'::foodomain THEN 'is foo' ELSE 'is not foo' END;
+	                                      ^
+<sql-statement>
+ROLLBACK;
+</sql-statement>
+<sql-statement>
+-- Test multiple evaluation of a CASE arg that is a read/write object (#14472)
+-- Wrap this in a single transaction so the transient '=' operator doesn't
+-- cause problems in concurrent sessions
+BEGIN;
+</sql-statement>
+<sql-statement>
+CREATE DOMAIN arrdomain AS int[];
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 272
+    	CREATE DOMAIN arrdomain AS int[];
+	^
+<sql-statement>
+CREATE FUNCTION make_ad(int,int) returns arrdomain as
+  'declare x arrdomain;
+   begin
+     x := array[$1,$2];
+     return x;
+   end' language plpgsql volatile;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	CREATE FUNCTION make_ad(int,int) returns arrdomain as
+	^
+<sql-statement>
+CREATE FUNCTION ad_eq(arrdomain, arrdomain) returns boolean as
+  'begin return array_eq($1, $2); end' language plpgsql;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	CREATE FUNCTION ad_eq(arrdomain, arrdomain) returns boolean as
+	^
+<sql-statement>
+CREATE OPERATOR = (procedure = ad_eq,
+                   leftarg = arrdomain, rightarg = arrdomain);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 255
+    	CREATE OPERATOR = (procedure = ad_eq,
+	^
+<sql-statement>
+SELECT CASE make_ad(1,2)
+  WHEN array[2,4]::arrdomain THEN 'wrong'
+  WHEN array[2,5]::arrdomain THEN 'still wrong'
+  WHEN array[1,2]::arrdomain THEN 'right'
+  END;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:20: Error: Unknown type: arrdomain
+    	  WHEN array[2,4]::arrdomain THEN 'wrong'
+	                   ^
+<sql-statement>
+ROLLBACK;
+</sql-statement>
+<sql-statement>
+-- Test interaction of CASE with ArrayCoerceExpr (bug #15471)
+BEGIN;
+</sql-statement>
+<sql-statement>
+CREATE TYPE casetestenum AS ENUM ('e', 'f', 'g');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 315
+    	CREATE TYPE casetestenum AS ENUM ('e', 'f', 'g');
+	^
+<sql-statement>
+SELECT
+  CASE 'foo'::text
+    WHEN 'foo' THEN ARRAY['a', 'b', 'c', 'd'] || enum_range(NULL::casetestenum)::text[]
+    ELSE ARRAY['x', 'y']
+    END;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:3:67: Error: Unknown type: casetestenum
+    	    WHEN 'foo' THEN ARRAY['a', 'b', 'c', 'd'] || enum_range(NULL::casetestenum)::text[]
+	                                                                  ^
+<sql-statement>
+ROLLBACK;
+</sql-statement>
+<sql-statement>
+--
+-- Clean up
+--
+DROP TABLE CASE_TBL;
+</sql-statement>
+<sql-statement>
+DROP TABLE CASE2_TBL;
+</sql-statement>

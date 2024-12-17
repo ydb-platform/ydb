@@ -1,10 +1,13 @@
 #include "utils.h"
+#include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
-#include <ydb/core/fq/libs/control_plane_storage/internal/utils.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 namespace NFq {
 
@@ -71,6 +74,7 @@ struct TTotalStatistics {
     TAggregate ResultBytes;
     TAggregate ResultRows;
     TAggregate IngressBytes;
+    TAggregate IngressDecompressedBytes;
     TAggregate IngressRows;
     TAggregate EgressBytes;
     TAggregate EgressRows;
@@ -125,6 +129,93 @@ TString FormatDurationUs(ui64 durationUs) {
     }
 
     return FormatDurationMs(durationUs / 1000);
+}
+
+namespace detail {
+
+struct TDurationParser {
+    constexpr static bool IsDigit(char c) noexcept {
+        return '0' <= c && c <= '9';
+    }
+
+    constexpr std::string_view ConsumeLastFraction() noexcept {
+        ConsumeWhitespace();
+        if (Src.empty()) {
+            return Src;
+        }
+
+        auto it = Src.end() - 1;
+        while (true) {
+            // we rely on non-empty number before fraction
+            if (IsDigit(*it) || it == Src.begin()) {
+                ++it;
+                break;
+            }
+            --it;
+        }
+        auto start = it - Src.begin();
+        auto res = Src.substr(start);
+        Src = Src.substr(0, start);
+        return res;
+    }
+
+    constexpr ui32 ConsumeNumberPortion() noexcept {
+        ui32 dec = 1;
+        ui32 res = 0;
+        while (!Src.empty() && IsDigit(Src.back())) {
+            res += (Src.back() - '0') * dec;
+            dec *= 10;
+            Src.remove_suffix(1);
+        }
+        return res;
+    }
+
+    constexpr void ConsumeWhitespace() noexcept {
+        while (!Src.empty() && Src.back() == ' ') {
+            Src.remove_suffix(1);
+        }
+    }
+
+    constexpr std::chrono::microseconds ParseDuration() {
+        auto fraction = ConsumeLastFraction();
+        if (fraction == "us") {
+            return std::chrono::microseconds{ConsumeNumberPortion()};
+        } else if (fraction == "ms") {
+            return std::chrono::milliseconds{ConsumeNumberPortion()};
+        }
+
+        std::chrono::microseconds result{};
+        if (fraction == "s") {
+            auto part = ConsumeNumberPortion();
+            if (!Src.empty() && Src.back() == '.') {
+                // parsed milliseconds (cantiseconds actually)
+                part *= 10;
+                result += std::chrono::milliseconds(part);
+
+                Src.remove_suffix(1);
+                result += std::chrono::seconds(ConsumeNumberPortion());
+            } else {
+                result += std::chrono::seconds{part};
+            }
+            fraction = ConsumeLastFraction();
+        }
+        if (fraction == "m") {
+            result += std::chrono::minutes{ConsumeNumberPortion()};
+            fraction = ConsumeLastFraction();
+        }
+
+        if (fraction == "h") {
+            result += std::chrono::hours{ConsumeNumberPortion()};
+        }
+        return result;
+    }
+
+    std::string_view Src;
+};
+}
+
+TDuration ParseDuration(TStringBuf str) {
+    return detail::TDurationParser{.Src = str}.ParseDuration();
 }
 
 TString FormatInstant(TInstant instant) {
@@ -202,6 +293,8 @@ void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const T
                         totals.ResultRows.Add(*sum);
                     } else if (name == "IngressBytes") {
                         totals.IngressBytes.Add(*sum);
+                    } else if (name == "IngressDecompressedBytes") {
+                        totals.IngressDecompressedBytes.Add(*sum);
                     } else if (name == "IngressRows") {
                         totals.IngressRows.Add(*sum);
                     } else if (name == "EgressBytes") {
@@ -341,7 +434,7 @@ void EnumeratePlans(NYson::TYsonWriter& writer, NJson::TJsonValue& value, ui32& 
     }
 }
 
-TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage) {
+TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* timeline) {
     TStringStream out;
     NYson::TYsonWriter writer(&out);
     writer.OnBeginMap();
@@ -371,6 +464,7 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage) {
                         totals.ResultBytes.Write(writer, "ResultBytes");
                         totals.ResultRows.Write(writer, "ResultRows");
                         totals.IngressBytes.Write(writer, "IngressBytes");
+                        totals.IngressDecompressedBytes.Write(writer, "IngressDecompressedBytes");
                         totals.IngressRows.Write(writer, "IngressRows");
                         totals.EgressBytes.Write(writer, "EgressBytes");
                         totals.EgressRows.Write(writer, "EgressRows");
@@ -381,8 +475,157 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage) {
             }
         }
     }
+    if (timeline) {
+        TPlanVisualizer planViz;
+        planViz.LoadPlans(plan);
+        *timeline = planViz.PrintSvg();
+    }
     writer.OnEndMap();
     return NJson2Yson::ConvertYson2Json(out.Str());
+}
+
+namespace {
+
+void SerializeStats(google::protobuf::RepeatedPtrField<Ydb::ValuePair>& dest, const THashMap<TString, i64>& stats) {
+    for (const auto& [name, stat] : stats) {
+        auto& elem = *dest.Add();
+        elem.mutable_key()->set_text_value(name);
+        elem.mutable_payload()->set_int64_value(stat);
+    }
+}
+
+struct TStatsAggregator {
+    bool TryExtractAggregates(const NJson::TJsonValue& node, const TString& name) {
+        auto dstAggr = Aggregates.find(name);
+        if (dstAggr != Aggregates.end()) {
+            if (auto sum = node.GetValueByPath("Sum")) {
+                dstAggr->second += sum->GetIntegerSafe();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool TryExtractSourceStats(const NJson::TJsonValue& node, const TString& name) {
+        constexpr TStringBuf prefix = "Ingress=";
+        if (!name.StartsWith(prefix)) {
+            return false;
+        }
+        bool success = false;
+        if (auto ingress = node.GetValueByPath("Ingress.Bytes.Sum")) {
+            auto source = name.substr(prefix.size());
+            Aggregates[source + ".Bytes"] += ingress->GetIntegerSafe();
+            success = true;
+        }
+        if (auto ingress = node.GetValueByPath("Ingress.DecompressedBytes.Sum")) {
+            auto source = name.substr(prefix.size());
+            Aggregates[source + ".DecompressedBytes"] += ingress->GetIntegerSafe();
+            success = true;
+        }
+        if (auto ingress = node.GetValueByPath("Ingress.Rows.Sum")) {
+            auto source = name.substr(prefix.size());
+            Aggregates[source + ".Rows"] += ingress->GetIntegerSafe();
+            success = true;
+        }
+        if (auto ingress = node.GetValueByPath("Ingress.Splits.Sum")) {
+            auto source = name.substr(prefix.size());
+            Aggregates[source + ".Splits"] += ingress->GetIntegerSafe();
+            success = true;
+        }
+        return success;
+    }
+
+    THashMap<TString, i64> Aggregates{std::pair<TString, i64>
+        {"IngressBytes", 0},
+        {"IngressDecompressedBytes", 0},
+        {"EgressBytes", 0},
+        {"IngressRows", 0},
+        {"EgressRows", 0},
+        {"InputBytes", 0},
+        {"OutputBytes", 0},
+        {"CpuTimeUs", 0}
+    };
+};
+
+void TraverseOperators(const NJson::TJsonValue& node, TStatsAggregator& aggregator) {
+    auto type = node.GetType();
+    if (type == NJson::JSON_MAP) {
+        if (auto source = node.GetValueByPath("ExternalDataSource")) {
+            if (auto sourceType = node.GetValueByPath("SourceType")) {
+                aggregator.Aggregates["Operator." + sourceType->GetStringSafe()]++;
+            }
+                        
+            if (auto format = node.GetValueByPath("Format")) {
+                aggregator.Aggregates["Format." + format->GetStringSafe()]++;
+            }
+
+            if (auto format = node.GetValueByPath("Compression")) {
+                aggregator.Aggregates["Compression." + format->GetStringSafe()]++;
+            }
+        } else if (auto name = node.GetValueByPath("Name")) {
+            aggregator.Aggregates["Operator." + name->GetStringSafe()]++;
+        }
+    } else if (type == NJson::JSON_ARRAY) {
+        for (const auto& subNode : node.GetArray()) {
+            TraverseOperators(subNode, aggregator);
+        }
+    }
+}
+
+void TraverseStats(const NJson::TJsonValue& node, const TString& name, TStatsAggregator& aggregator) {
+    auto type = node.GetType();
+    if (type == NJson::JSON_MAP) {
+        if (!aggregator.TryExtractAggregates(node, name) && !aggregator.TryExtractSourceStats(node, name)) {
+            for (const auto& [key, value] : node.GetMapSafe()) {
+                TraverseStats(value, key, aggregator);
+            }
+        }
+    } else if (type == NJson::JSON_ARRAY) {
+        for (const auto& subNode : node.GetArray()) {
+            if (auto nameNode = subNode.GetValueByPath("Name")) {
+                TraverseStats(subNode, name + "=" + nameNode->GetStringSafe(), aggregator);
+            }
+        }
+    }
+}
+
+void TraversePlans(const NJson::TJsonValue& node, TStatsAggregator& aggregator) {
+    if (auto* plans = node.GetValueByPath("Plans")) {
+        for (const auto& plan : plans->GetArray()) {
+            TraversePlans(plan, aggregator);
+        }
+    }
+
+    if (auto stats = node.GetValueByPath("Stats")) {
+        TraverseStats(*stats, "", aggregator);
+    }
+
+    if (auto operators = node.GetValueByPath("Operators")) {
+        TraverseOperators(*operators, aggregator);
+    }
+}
+}
+
+THashMap<TString, i64> AggregateStats(TStringBuf plan) {
+    TStatsAggregator aggregator;
+
+    NJson::TJsonReaderConfig jsonConfig;
+    NJson::TJsonValue root;
+    if (!NJson::ReadJsonTree(plan, &jsonConfig, &root)) {
+        return aggregator.Aggregates;
+    }
+    NJson::TJsonValue* plans = nullptr;
+    if (plans = root.GetValueByPath("Plan.Plans"); !plans) {
+        return aggregator.Aggregates;
+    }
+
+    for (const auto& subPlan : plans->GetArray()) {
+        if (!subPlan.GetValueByPath("Node Type")) {
+            continue;
+        }
+        TraversePlans(subPlan, aggregator);
+    }
+    return aggregator.Aggregates;
 }
 
 std::optional<ui64> WriteMetric(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const TString& column, const TString& name, const TString& tag) {
@@ -676,6 +919,105 @@ TString GetV1StatFromV2PlanV2(const TString& plan, double* cpuUsage) {
     return NJson2Yson::ConvertYson2Json(out.Str());
 }
 
+namespace {
+void RemapValue(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& key) {
+    writer.OnKeyedItem(key);
+    if (auto* keyNode = node.GetValueByPath(key)) {
+        switch (keyNode->GetType()) {
+        case NJson::JSON_BOOLEAN:
+            writer.OnBooleanScalar(keyNode->GetBoolean());
+            break;
+        case NJson::JSON_INTEGER:
+            writer.OnInt64Scalar(keyNode->GetInteger());
+            break;
+        case NJson::JSON_DOUBLE:
+            writer.OnDoubleScalar(keyNode->GetDouble());
+            break;
+        case NJson::JSON_STRING:
+        default:
+            writer.OnStringScalar(keyNode->GetStringSafe());
+            break;
+        }
+    } else {
+        writer.OnStringScalar("-");
+    }
+}
+
+void RemapNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& path, const TString& key) {
+    if (auto* subNode = node.GetValueByPath(path)) {
+        writer.OnKeyedItem(key);
+        writer.OnBeginMap();
+            RemapValue(writer, *subNode, "sum");
+            RemapValue(writer, *subNode, "count");
+            RemapValue(writer, *subNode, "avg");
+            RemapValue(writer, *subNode, "max");
+            RemapValue(writer, *subNode, "min");
+        writer.OnEndMap();
+    }
+}
+}
+
+TString GetPrettyStatistics(const TString& statistics) {
+    TStringStream out;
+    NYson::TYsonWriter writer(&out);
+    writer.OnBeginMap();
+    NJson::TJsonReaderConfig jsonConfig;
+    NJson::TJsonValue stat;
+    if (NJson::ReadJsonTree(statistics, &jsonConfig, &stat)) {
+
+        //  EXP 
+        if (stat.GetValueByPath("Columns")) {
+            return statistics;
+        }
+
+        for (const auto& p : stat.GetMap()) {
+            // YQv1
+            if (p.first.StartsWith("Graph=") || p.first.StartsWith("Precompute=")) {
+                writer.OnKeyedItem(p.first);
+                writer.OnBeginMap();
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.Tasks", "Tasks");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.CpuTimeUs", "CpuTimeUs");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressBytes", "IngressBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.DecompressedBytes", "DecompressedBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressRows", "IngressRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.InputBytes", "InputBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.InputRows", "InputRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.OutputBytes", "OutputBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.OutputRows", "OutputRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.ResultBytes", "ResultBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.ResultRows", "ResultRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressBytes", "EgressBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressRows", "EgressRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.MkqlMaxMemoryUsage", "MaxMemoryUsage");
+                writer.OnEndMap();
+            }
+            // YQv2
+            // if (p.first.StartsWith("Query")) 
+            else {
+                writer.OnKeyedItem(p.first);
+                writer.OnBeginMap();
+                    RemapNode(writer, p.second, "Tasks", "Tasks");
+                    RemapNode(writer, p.second, "CpuTimeUs", "CpuTimeUs");
+                    RemapNode(writer, p.second, "IngressBytes", "IngressBytes");
+                    RemapNode(writer, p.second, "IngressDecompressedBytes", "IngressDecompressedBytes");
+                    RemapNode(writer, p.second, "IngressRows", "IngressRows");
+                    RemapNode(writer, p.second, "InputBytes", "InputBytes");
+                    RemapNode(writer, p.second, "InputRows", "InputRows");
+                    RemapNode(writer, p.second, "OutputBytes", "OutputBytes");
+                    RemapNode(writer, p.second, "OutputRows", "OutputRows");
+                    RemapNode(writer, p.second, "ResultBytes", "ResultBytes");
+                    RemapNode(writer, p.second, "ResultRows", "ResultRows");
+                    RemapNode(writer, p.second, "EgressBytes", "EgressBytes");
+                    RemapNode(writer, p.second, "EgressRows", "EgressRows");
+                    RemapNode(writer, p.second, "MaxMemoryUsage", "MaxMemoryUsage");
+                writer.OnEndMap();
+            }
+        }
+    }
+    writer.OnEndMap();
+    return NJson2Yson::ConvertYson2Json(out.Str());
+}
+
 std::optional<int> GetValue(const NJson::TJsonValue& node, const TString& name) {
     if (auto* keyNode = node.GetValueByPath(name)) {
         auto result = keyNode->GetInteger();
@@ -756,58 +1098,129 @@ TPublicStat GetPublicStat(const TString& statistics) {
     return counters;
 }
 
-struct TNoneStatProcessor : IPlanStatProcessor {
-    Ydb::Query::StatsMode GetStatsMode() override {
-        return Ydb::Query::StatsMode::STATS_MODE_NONE;
+void CleanupPlans(NJson::TJsonValue& node) {
+    node.EraseValue("Stats");
+    if (auto* plans = node.GetValueByPath("Plans")) {
+        if (plans->IsArray()) {
+            for (auto& plan : plans->GetArraySafe()) {
+                CleanupPlans(plan);
+            }
+        }
+    }
+}
+
+TString CleanupPlanStats(const TString& plan) {
+    NJson::TJsonReaderConfig jsonConfig;
+    NJson::TJsonValue planRoot;
+
+    if (NJson::ReadJsonTree(plan, &jsonConfig, &planRoot)) {
+        planRoot.EraseValue("SimplifiedPlan");
+        if (auto* plan = planRoot.GetValueByPath("Plan")) {
+            CleanupPlans(*plan);
+            return NJson::WriteJson(&planRoot, false);
+        }
     }
 
-    TString ConvertPlan(TString& plan) override {
+    return plan;
+}
+
+TString SimplifiedPlan(const TString& plan) {
+    NJson::TJsonReaderConfig jsonConfig;
+    NJson::TJsonValue planRoot;
+
+    if (NJson::ReadJsonTree(plan, &jsonConfig, &planRoot)) {
+        if (auto* simplified = planRoot.GetValueByPath("SimplifiedPlan")) {
+            if (auto* plan = planRoot.GetValueByPath("Plan")) {
+                plan->Swap(*simplified);
+                planRoot.EraseValue("SimplifiedPlan");
+                return NJson::WriteJson(&planRoot, false);
+            }
+        }
+    }
+
+    return plan;
+}
+
+struct TNoneStatProcessor : IPlanStatProcessor {
+    NYdb::NQuery::EStatsMode GetStatsMode() override {
+        return NYdb::NQuery::EStatsMode::None;
+    }
+
+    TString ConvertPlan(const TString& plan) override {
         return plan;
     }
 
-    TString GetQueryStat(TString&, double& cpuUsage) override {
+    TString GetPlanVisualization(const TString& plan) override {
+        return plan;
+    }
+
+    TString GetQueryStat(const TString&, double& cpuUsage, TString*) override {
         cpuUsage = 0.0;
         return "";
     }
 
-    TPublicStat GetPublicStat(TString&) override {
+    TPublicStat GetPublicStat(const TString&) override {
         return TPublicStat{};
+    }
+
+    THashMap<TString, i64> GetFlatStat(TStringBuf) override {
+        return {};
     }
 };
 
 struct TBasicStatProcessor : TNoneStatProcessor {
-    Ydb::Query::StatsMode GetStatsMode() override {
-        return Ydb::Query::StatsMode::STATS_MODE_BASIC;
+    NYdb::NQuery::EStatsMode GetStatsMode() override {
+        return NYdb::NQuery::EStatsMode::Basic;
     }
 };
 
-struct TFullStatProcessor : IPlanStatProcessor {
-    Ydb::Query::StatsMode GetStatsMode() override {
-        return Ydb::Query::StatsMode::STATS_MODE_FULL;
+struct TPlanStatProcessor : IPlanStatProcessor {
+    NYdb::NQuery::EStatsMode GetStatsMode() override {
+        return NYdb::NQuery::EStatsMode::Full;
     }
 
-    TString ConvertPlan(TString& plan) override {
+    TString ConvertPlan(const TString& plan) override {
         return plan;
     }
 
-    TString GetQueryStat(TString& plan, double& cpuUsage) override {
-        return GetV1StatFromV2Plan(plan, &cpuUsage);
+    TString GetPlanVisualization(const TString& plan) override {
+        return plan;
     }
 
-    TPublicStat GetPublicStat(TString& stat) override {
-        return NFq::GetPublicStat(stat);
+    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline) override {
+        return GetV1StatFromV2Plan(plan, &cpuUsage, timeline);
+    }
+
+    TPublicStat GetPublicStat(const TString& stat) override {
+        return ::NFq::GetPublicStat(stat);
+    }
+
+    THashMap<TString, i64> GetFlatStat(TStringBuf plan) override {
+        return AggregateStats(plan);
     }
 };
 
-struct TProfileStatProcessor : TFullStatProcessor {
-    Ydb::Query::StatsMode GetStatsMode() override {
-        return Ydb::Query::StatsMode::STATS_MODE_PROFILE;
+struct TFullStatProcessor : TPlanStatProcessor {
+    TString GetPlanVisualization(const TString& plan) override {
+        return CleanupPlanStats(plan);
+    }
+};
+
+struct TCostStatProcessor : TPlanStatProcessor {
+    TString GetPlanVisualization(const TString& plan) override {
+        return SimplifiedPlan(plan);
+    }
+};
+
+struct TProfileStatProcessor : TPlanStatProcessor {
+    NYdb::NQuery::EStatsMode GetStatsMode() override {
+        return NYdb::NQuery::EStatsMode::Profile;
     }
 };
 
 struct TProdStatProcessor : TFullStatProcessor {
-    TString GetQueryStat(TString& plan, double& cpuUsage) override {
-        return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage));
+    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline) override {
+        return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage, timeline));
     }
 };
 
@@ -815,7 +1228,9 @@ std::unique_ptr<IPlanStatProcessor> CreateStatProcessor(const TString& statViewN
     // disallow none and basic stat since they do not support metering
     // if (statViewName == "stat_none") return std::make_unique<TNoneStatProcessor>();
     // if (statViewName == "stat_basc") return std::make_unique<TBasicStatProcessor>();
+    if (statViewName == "stat_plan") return std::make_unique<TPlanStatProcessor>();
     if (statViewName == "stat_full") return std::make_unique<TFullStatProcessor>();
+    if (statViewName == "stat_cost") return std::make_unique<TCostStatProcessor>();
     if (statViewName == "stat_prof") return std::make_unique<TProfileStatProcessor>();
     if (statViewName == "stat_prod") return std::make_unique<TProdStatProcessor>();
     return std::make_unique<TFullStatProcessor>();
@@ -823,19 +1238,31 @@ std::unique_ptr<IPlanStatProcessor> CreateStatProcessor(const TString& statViewN
 
 PingTaskRequestBuilder::PingTaskRequestBuilder(const NConfig::TCommonConfig& commonConfig, std::unique_ptr<IPlanStatProcessor>&& processor) 
     : Compressor(commonConfig.GetQueryArtifactsCompressionMethod(), commonConfig.GetQueryArtifactsCompressionMinSize())
-    , Processor(std::move(processor))
-{}
+    , Processor(std::move(processor)), ShowQueryTimeline(commonConfig.GetShowQueryTimeline()), MaxQueryTimelineSize(commonConfig.GetMaxQueryTimelineSize())
+{
+    if (!MaxQueryTimelineSize) {
+        MaxQueryTimelineSize = 200_KB;
+    }
+}
 
 Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(
-    const Ydb::TableStats::QueryStats& queryStats, 
+    const NYdb::NQuery::TExecStats& queryStats,
     const NYql::TIssues& issues, 
     std::optional<FederatedQuery::QueryMeta::ComputeStatus> computeStatus,
     std::optional<NYql::NDqProto::StatusIds::StatusCode> pendingStatusCode
 ) {
     Fq::Private::PingTaskRequest pingTaskRequest = Build(queryStats);
 
+    // Application-level issues, pass as is
     if (issues) {
         NYql::IssuesToMessage(issues, pingTaskRequest.mutable_issues());
+    }
+
+    // Builder own (internal) issues will be logged later, just warn the user
+    if (Issues) {
+        auto* issue = pingTaskRequest.add_issues();
+        issue->set_message("There are minor issues with query statistics processing. You can supply query ID and ask support for the information.");
+        issue->set_severity(NYql::TSeverityIds::S_WARNING);
     }
 
     if (computeStatus) {
@@ -850,11 +1277,12 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(
 }
 
 
-Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const Ydb::TableStats::QueryStats& queryStats) {
-    return Build(queryStats.query_plan(), queryStats.query_ast());
+Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const NYdb::NQuery::TExecStats& queryStats) {
+    const auto& statsProto = NYdb::TProtoAccessor().GetProto(queryStats); 
+    return Build(statsProto.query_plan(), statsProto.query_ast(), statsProto.compilation().duration_us(), statsProto.total_duration_us());
 }
 
-Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryPlan, const TString& queryAst) {
+Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryPlan, const TString& queryAst, int64_t compilationTimeUs, int64_t computeTimeUs) {
     Fq::Private::PingTaskRequest pingTaskRequest;
 
     Issues.Clear();
@@ -866,30 +1294,83 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
         Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error plan conversion: " << ex.what()));
     }
 
+    auto planView = plan;
+    try {
+        planView = Processor->GetPlanVisualization(planView);
+    } catch(const NJson::TJsonException& ex) {
+        Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error plan visualization: " << ex.what()));
+    }
+
     if (Compressor.IsEnabled()) {
         auto [astCompressionMethod, astCompressed] = Compressor.Compress(queryAst);
         pingTaskRequest.mutable_ast_compressed()->set_method(astCompressionMethod);
         pingTaskRequest.mutable_ast_compressed()->set_data(astCompressed);
 
-        auto [planCompressionMethod, planCompressed] = Compressor.Compress(plan);
+        auto [planCompressionMethod, planCompressed] = Compressor.Compress(planView);
         pingTaskRequest.mutable_plan_compressed()->set_method(planCompressionMethod);
         pingTaskRequest.mutable_plan_compressed()->set_data(planCompressed);
     } else {
         pingTaskRequest.set_ast(queryAst);
-        pingTaskRequest.set_plan(plan);
+        pingTaskRequest.set_plan(planView);
     }
 
     CpuUsage = 0.0;
     try {
-        auto stat = Processor->GetQueryStat(plan, CpuUsage);
+        TString timeline;
+        auto stat = Processor->GetQueryStat(plan, CpuUsage, ShowQueryTimeline ? &timeline : nullptr);
+
+        if (MaxQueryTimelineSize && timeline.size() > MaxQueryTimelineSize) {
+            Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Timeline size  " << timeline.size() << " exceeds limit of " << MaxQueryTimelineSize));
+            timeline = "";
+        }
+
         pingTaskRequest.set_statistics(stat);
         pingTaskRequest.set_dump_raw_statistics(true);
+        if (timeline) {
+            pingTaskRequest.set_timeline(timeline);
+        }
+        auto flatStat = Processor->GetFlatStat(plan);
+        flatStat["CompilationTimeUs"] = compilationTimeUs;
+        flatStat["ComputeTimeUs"] = computeTimeUs;
+        SerializeStats(*pingTaskRequest.mutable_flat_stats(), flatStat);
         PublicStat = Processor->GetPublicStat(stat);
-    } catch(const NJson::TJsonException& ex) {
-        Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error stat conversion: " << ex.what()));
+    } catch (const std::exception& e) {
+        Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error stat processing: " << e.what()));
     }
 
     return pingTaskRequest;
+}
+
+TString GetStatViewName(const TRunActorParams& params) {
+    static TStringBuf hint("--fq_dev_hint_");
+    auto p = params.Sql.find(hint);
+    if (p != params.Sql.npos) {
+        p += hint.size();
+        auto p1 = params.Sql.find("\n", p);
+        TString mode = params.Sql.substr(p, p1 == params.Sql.npos ? params.Sql.npos : p1 - p);
+        if (mode) {
+            return mode;
+        }
+    }
+
+    if (!params.Config.GetControlPlaneStorage().GetDumpRawStatistics()) {
+        return "stat_prod";
+    }
+
+    switch (params.Config.GetControlPlaneStorage().GetStatsMode()) {
+        case Ydb::Query::StatsMode::STATS_MODE_UNSPECIFIED:
+            return "stat_full";
+        case Ydb::Query::StatsMode::STATS_MODE_NONE:
+            return "stat_none";
+        case Ydb::Query::StatsMode::STATS_MODE_BASIC:
+            return "stat_basc";
+        case Ydb::Query::StatsMode::STATS_MODE_FULL:
+            return "stat_full";
+        case Ydb::Query::StatsMode::STATS_MODE_PROFILE:
+            return "stat_prof";
+        default:
+            return "stat_full";
+    }
 }
 
 } // namespace NFq

@@ -142,11 +142,15 @@ class Response(_SansIOResponse):
     #:    your code to the name change.
     implicit_sequence_conversion = True
 
-    #: Should this response object correct the location header to be RFC
-    #: conformant?  This is true by default.
+    #: If a redirect ``Location`` header is a relative URL, make it an
+    #: absolute URL, including scheme and domain.
+    #:
+    #: .. versionchanged:: 2.1
+    #:     This is disabled by default, so responses will send relative
+    #:     redirects.
     #:
     #: .. versionadded:: 0.8
-    autocorrect_location_header = True
+    autocorrect_location_header = False
 
     #: Should this response object automatically set the content-length
     #: header if possible?  This is true by default.
@@ -445,7 +449,7 @@ class Response(_SansIOResponse):
     def __exit__(self, exc_type, exc_value, tb):  # type: ignore
         self.close()
 
-    def freeze(self, no_etag: None = None) -> None:
+    def freeze(self) -> None:
         """Make the response object ready to be pickled. Does the
         following:
 
@@ -454,6 +458,9 @@ class Response(_SansIOResponse):
             :attr:`direct_passthrough`.
         *   Set the ``Content-Length`` header.
         *   Generate an ``ETag`` header if one is not already set.
+
+        .. versionchanged:: 2.1
+            Removed the ``no_etag`` parameter.
 
         .. versionchanged:: 2.0
             An ``ETag`` header is added, the ``no_etag`` parameter is
@@ -466,15 +473,6 @@ class Response(_SansIOResponse):
         # implicit_sequence_conversion and direct_passthrough.
         self.response = list(self.iter_encoded())
         self.headers["Content-Length"] = str(sum(map(len, self.response)))
-
-        if no_etag is not None:
-            warnings.warn(
-                "The 'no_etag' parameter is deprecated and will be"
-                " removed in Werkzeug 2.1.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-
         self.add_etag()
 
     def get_wsgi_headers(self, environ: "WSGIEnvironment") -> Headers:
@@ -798,7 +796,7 @@ class Response(_SansIOResponse):
         if environ["REQUEST_METHOD"] in ("GET", "HEAD"):
             # if the date is not in the headers, add it now.  We however
             # will not override an already existing header.  Unfortunately
-            # this header will be overriden by many WSGI servers including
+            # this header will be overridden by many WSGI servers including
             # wsgiref.
             if "date" not in self.headers:
                 self.headers["Date"] = http_date()
@@ -835,9 +833,9 @@ class Response(_SansIOResponse):
 
 
 class ResponseStream:
-    """A file descriptor like object used by the :class:`ResponseStreamMixin` to
-    represent the body of the stream.  It directly pushes into the response
-    iterable of the response object.
+    """A file descriptor like object used by :meth:`Response.stream` to
+    represent the body of the stream. It directly pushes into the
+    response iterable of the response object.
     """
 
     mode = "wb+"
@@ -877,15 +875,3 @@ class ResponseStream:
     @property
     def encoding(self) -> str:
         return self.response.charset
-
-
-class ResponseStreamMixin:
-    def __init__(self, *args: t.Any, **kwargs: t.Any) -> None:
-        warnings.warn(
-            "'ResponseStreamMixin' is deprecated and will be removed in"
-            " Werkzeug 2.1. 'Response' now includes the functionality"
-            " directly.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        super().__init__(*args, **kwargs)

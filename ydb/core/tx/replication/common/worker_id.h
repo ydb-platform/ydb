@@ -19,6 +19,8 @@ struct TWorkerId: std::tuple<ui64, ui64, ui64> {
 
     static TWorkerId Parse(const NKikimrReplication::TWorkerIdentity& proto);
     void Serialize(NKikimrReplication::TWorkerIdentity& proto) const;
+
+    void Out(IOutputStream& out) const;
 };
 
 }

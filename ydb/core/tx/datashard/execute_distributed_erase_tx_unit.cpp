@@ -18,7 +18,7 @@ class TExecuteDistributedEraseTxUnit : public TExecutionUnit {
 
 public:
     TExecuteDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::ExecuteDistributedEraseTx, false, self, pipeline)
+        : TExecutionUnit(EExecutionUnitKind::ExecuteDistributedEraseTx, true, self, pipeline)
     {
     }
 
@@ -91,11 +91,12 @@ public:
                 for (const auto& rs : readSets) {
                     NKikimrTxDataShard::TDistributedEraseRS body;
                     Y_ABORT_UNLESS(body.ParseFromArray(rs.Body.data(), rs.Body.size()));
-
                     Y_ABORT_UNLESS(presentRows.contains(rs.Origin));
-                    const bool ok = Execute(txc, request, presentRows.at(rs.Origin),
-                        DeserializeBitMap<TDynBitMap>(body.GetConfirmedRows()), writeVersion, op->GetGlobalTxId());
-                    Y_ABORT_UNLESS(ok);
+
+                    auto confirmedRows = DeserializeBitMap<TDynBitMap>(body.GetConfirmedRows());
+                    if (!Execute(txc, request, presentRows.at(rs.Origin), confirmedRows, writeVersion, op->GetGlobalTxId())) {
+                        return EExecutionStatus::Restart;
+                    }
                 }
             }
 
@@ -152,9 +153,9 @@ public:
 
             TVector<TRawTypeValue> key;
             for (size_t ki : xrange(tableInfo.KeyColumnTypes.size())) {
-                const auto& kt = tableInfo.KeyColumnTypes[ki];
+                const NScheme::TTypeId vtype = tableInfo.KeyColumnTypes[ki].GetTypeId();
                 const TCell& cell = keyCells.GetCells()[ki];
-                key.emplace_back(TRawTypeValue(cell.AsRef(), kt));
+                key.emplace_back(TRawTypeValue(cell.AsRef(), vtype));
             }
 
             if (breakWriteConflicts || checkVolatileDependencies) {
@@ -214,6 +215,7 @@ public:
                 /* participants */ { },
                 groupProvider ? groupProvider->GetCurrentChangeGroup() : std::nullopt,
                 volatileOrdered,
+                /* arbiter */ false,
                 txc);
             // Note: transaction is already committed, no additional waiting needed
         }

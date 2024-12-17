@@ -1,0 +1,30 @@
+commit 818d1471d7da1a1d857d83ce116551518e3641c6
+author: shadchin
+date: 2022-12-31T17:47:26+03:00
+
+    Fix grpcio
+
+--- a/src/python/grpcio/grpc/_auth.py	(4db089c5339d6c005f207b765616aee8fae74d0b)
++++ b/src/python/grpcio/grpc/_auth.py	(818d1471d7da1a1d857d83ce116551518e3641c6)
+@@ -14,6 +14,7 @@
+ """GRPCAuthMetadataPlugins for standard authentication."""
+ 
+ import inspect
++import sys
+ 
+ import grpc
+
+@@ -31,8 +31,11 @@
+         self._credentials = credentials
+         # Hack to determine if these are JWT creds and we need to pass
+         # additional_claims when getting a token
+-        self._is_jwt = 'additional_claims' in inspect.getfullargspec(
+-            credentials.get_access_token).args
++        if sys.version_info[0] == 2:
++            args = inspect.getargspec(credentials.get_access_token).args
++        else:
++            args = inspect.getfullargspec(credentials.get_access_token).args
++        self._is_jwt = 'additional_claims' in args
+ 
+     def __call__(self, context, callback):
+         try:

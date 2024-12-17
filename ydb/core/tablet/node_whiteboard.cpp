@@ -3,11 +3,9 @@
 #include <util/system/info.h>
 #include <util/system/hostname.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/mon_alloc/stats.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/process_stats.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/counters.h>
@@ -46,6 +44,9 @@ public:
         TabletIntrospectionData.Reset(NTracing::CreateTraceCollection(introspectionGroup));
 
         SystemStateInfo.SetHost(FQDNHostName());
+        if (const TString& nodeName = AppData(ctx)->NodeName; !nodeName.empty()) {
+            SystemStateInfo.SetNodeName(nodeName);
+        }
         SystemStateInfo.SetNumberOfCpus(NSystemInfo::NumberOfCpus());
         auto version = GetProgramRevision();
         if (!version.empty()) {
@@ -55,11 +56,13 @@ public:
         }
 
         SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());
-        ProcessStats.Fill(getpid());
-        if (ProcessStats.CGroupMemLim != 0) {
-            SystemStateInfo.SetMemoryLimit(ProcessStats.CGroupMemLim);
-        }
         ctx.Send(ctx.SelfID, new TEvPrivate::TEvUpdateRuntimeStats());
+
+        auto group = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils")
+            ->GetSubgroup("subsystem", "whiteboard");
+        MaxClockSkewWithPeerUsCounter = group->GetCounter("MaxClockSkewWithPeerUs");
+        MaxClockSkewPeerIdCounter = group->GetCounter("MaxClockSkewPeerId");
+
         ctx.Schedule(TDuration::Seconds(60), new TEvPrivate::TEvCleanupDeadTablets());
         ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateClockSkew());
         Become(&TNodeWhiteboardService::StateFunc);
@@ -75,7 +78,9 @@ protected:
     ui32 MaxClockSkewPeerId;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
     THolder<NTracing::ITraceCollection> TabletIntrospectionData;
-    TProcStat ProcessStats;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewWithPeerUsCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewPeerIdCounter;
 
     template <typename PropertyType>
     static ui64 GetDifference(PropertyType a, PropertyType b) {
@@ -380,6 +385,117 @@ protected:
         return modified;
     }
 
+    static void CopyField(::google::protobuf::Message& protoTo,
+                          const ::google::protobuf::Message& protoFrom,
+                          const ::google::protobuf::Reflection& reflectionTo,
+                          const ::google::protobuf::Reflection& reflectionFrom,
+                          const ::google::protobuf::FieldDescriptor* field) {
+        using namespace ::google::protobuf;
+        if (field->is_repeated()) {
+            FieldDescriptor::CppType type = field->cpp_type();
+            int size = reflectionFrom.FieldSize(protoFrom, field);
+            if (size != 0) {
+                reflectionTo.ClearField(&protoTo, field);
+                for (int i = 0; i < size; ++i) {
+                    switch (type) {
+                    case FieldDescriptor::CPPTYPE_INT32:
+                        reflectionTo.AddInt32(&protoTo, field, reflectionFrom.GetRepeatedInt32(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_INT64:
+                        reflectionTo.AddInt64(&protoTo, field, reflectionFrom.GetRepeatedInt64(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_UINT32:
+                        reflectionTo.AddUInt32(&protoTo, field, reflectionFrom.GetRepeatedUInt32(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_UINT64:
+                        reflectionTo.AddUInt64(&protoTo, field, reflectionFrom.GetRepeatedUInt64(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_DOUBLE:
+                        reflectionTo.AddDouble(&protoTo, field, reflectionFrom.GetRepeatedDouble(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_FLOAT:
+                        reflectionTo.AddFloat(&protoTo, field, reflectionFrom.GetRepeatedFloat(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_BOOL:
+                        reflectionTo.AddBool(&protoTo, field, reflectionFrom.GetRepeatedBool(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_ENUM:
+                        reflectionTo.AddEnum(&protoTo, field, reflectionFrom.GetRepeatedEnum(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_STRING:
+                        reflectionTo.AddString(&protoTo, field, reflectionFrom.GetRepeatedString(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_MESSAGE:
+                        reflectionTo.AddMessage(&protoTo, field)->CopyFrom(reflectionFrom.GetRepeatedMessage(protoFrom, field, i));
+                        break;
+                    }
+                }
+            }
+        } else {
+            if (reflectionFrom.HasField(protoFrom, field)) {
+                FieldDescriptor::CppType type = field->cpp_type();
+                switch (type) {
+                case FieldDescriptor::CPPTYPE_INT32:
+                    reflectionTo.SetInt32(&protoTo, field, reflectionFrom.GetInt32(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_INT64:
+                    reflectionTo.SetInt64(&protoTo, field, reflectionFrom.GetInt64(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_UINT32:
+                    reflectionTo.SetUInt32(&protoTo, field, reflectionFrom.GetUInt32(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_UINT64:
+                    reflectionTo.SetUInt64(&protoTo, field, reflectionFrom.GetUInt64(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_DOUBLE:
+                    reflectionTo.SetDouble(&protoTo, field, reflectionFrom.GetDouble(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_FLOAT:
+                    reflectionTo.SetFloat(&protoTo, field, reflectionFrom.GetFloat(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_BOOL:
+                    reflectionTo.SetBool(&protoTo, field, reflectionFrom.GetBool(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_ENUM:
+                    reflectionTo.SetEnum(&protoTo, field, reflectionFrom.GetEnum(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_STRING:
+                    reflectionTo.SetString(&protoTo, field, reflectionFrom.GetString(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_MESSAGE:
+                    reflectionTo.MutableMessage(&protoTo, field)->CopyFrom(reflectionFrom.GetMessage(protoFrom, field));
+                    break;
+                }
+            }
+        }
+    }
+
+    static void SelectiveCopy(::google::protobuf::Message& protoTo, const ::google::protobuf::Message& protoFrom, const ::google::protobuf::RepeatedField<int>& fields) {
+        using namespace ::google::protobuf;
+        const Descriptor& descriptor = *protoTo.GetDescriptor();
+        const Reflection& reflectionTo = *protoTo.GetReflection();
+        const Reflection& reflectionFrom = *protoFrom.GetReflection();
+        for (auto fieldNumber : fields) {
+            const FieldDescriptor* field = descriptor.FindFieldByNumber(fieldNumber);
+            if (field) {
+                CopyField(protoTo, protoFrom, reflectionTo, reflectionFrom, field);
+            }
+        }
+    }
+
+    template<typename TMessage, typename TRequest>
+    static void Copy(TMessage& to, const TMessage& from, const TRequest& request) {
+        if (request.FieldsRequiredSize() > 0) {
+            if (request.FieldsRequiredSize() == 1 && request.GetFieldsRequired(0) == -1) { // all fields
+                to.CopyFrom(from);
+            } else {
+                SelectiveCopy(to, from, request.GetFieldsRequired());
+            }
+        } else {
+            SelectiveCopy(to, from, GetDefaultWhiteboardFields<TMessage>());
+        }
+    }
+
     void SetRole(TStringBuf roleName) {
         for (const auto& role : SystemStateInfo.GetRoles()) {
             if (role == roleName) {
@@ -409,6 +525,7 @@ protected:
         HFunc(TEvWhiteboard::TEvBSGroupStateDelete, Handle);
         HFunc(TEvWhiteboard::TEvBSGroupStateRequest, Handle);
         HFunc(TEvWhiteboard::TEvSystemStateUpdate, Handle);
+        HFunc(TEvWhiteboard::TEvMemoryStatsUpdate, Handle);
         HFunc(TEvWhiteboard::TEvSystemStateAddEndpoint, Handle);
         HFunc(TEvWhiteboard::TEvSystemStateAddRole, Handle);
         HFunc(TEvWhiteboard::TEvSystemStateSetTenant, Handle);
@@ -445,9 +562,17 @@ protected:
 
     void Handle(TEvWhiteboard::TEvNodeStateUpdate::TPtr &ev, const TActorContext &ctx) {
         auto& nodeStateInfo = NodeStateInfo[ev->Get()->Record.GetPeerName()];
-        if (CheckedMerge(nodeStateInfo, ev->Get()->Record) >= 100) {
-            nodeStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+        ui64 previousChangeTime = nodeStateInfo.GetChangeTime();
+        ui64 currentChangeTime = ctx.Now().MilliSeconds();
+        ui64 previousBytesWritten = nodeStateInfo.GetBytesWritten();
+        ui64 currentBytesWritten = ev->Get()->Record.GetBytesWritten();
+        if (previousChangeTime && previousBytesWritten < currentBytesWritten && previousChangeTime < currentChangeTime) {
+            nodeStateInfo.SetWriteThroughput((currentBytesWritten - previousBytesWritten) * 1000 / (currentChangeTime - previousChangeTime));
+        } else {
+            nodeStateInfo.ClearWriteThroughput();
         }
+        nodeStateInfo.MergeFrom(ev->Get()->Record);
+        nodeStateInfo.SetChangeTime(currentChangeTime);
     }
 
     void Handle(TEvWhiteboard::TEvNodeStateDelete::TPtr &ev, const TActorContext &ctx) {
@@ -528,9 +653,17 @@ protected:
     }
 
     void Handle(TEvWhiteboard::TEvBSGroupStateUpdate::TPtr &ev, const TActorContext &ctx) {
-        auto& bSGroupStateInfo = BSGroupStateInfo[ev->Get()->Record.GetGroupID()];
-        if (CheckedMerge(bSGroupStateInfo, ev->Get()->Record) >= 100) {
-            bSGroupStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+        const auto& from = ev->Get()->Record;
+        auto& to = BSGroupStateInfo[from.GetGroupID()];
+        int modified = 0;
+        if (from.GetNoVDisksInGroup() && to.GetGroupGeneration() <= from.GetGroupGeneration()) {
+            modified += 100 * (2 - to.GetVDiskIds().empty() - to.GetVDiskNodeIds().empty());
+            to.ClearVDiskIds();
+            to.ClearVDiskNodeIds();
+        }
+        modified += CheckedMerge(to, from);
+        if (modified >= 100) {
+            to.SetChangeTime(ctx.Now().MilliSeconds());
         }
     }
 
@@ -543,6 +676,44 @@ protected:
         if (CheckedMerge(SystemStateInfo, ev->Get()->Record)) {
             SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
         }
+    }
+
+    void Handle(TEvWhiteboard::TEvMemoryStatsUpdate::TPtr &ev, const TActorContext &ctx) {
+        const auto& memoryStats = ev->Get()->Record;
+
+        // Note: copy stats to sys info fields for backward compatibility
+        if (memoryStats.HasAnonRss()) {
+            SystemStateInfo.SetMemoryUsed(memoryStats.GetAnonRss());
+        } else {
+            SystemStateInfo.ClearMemoryUsed();
+        }
+        if (memoryStats.HasHardLimit()) {
+            SystemStateInfo.SetMemoryLimit(memoryStats.GetHardLimit());
+        } else {
+            SystemStateInfo.ClearMemoryLimit();
+        }
+        if (memoryStats.HasAllocatedMemory()) {
+            SystemStateInfo.SetMemoryUsedInAlloc(memoryStats.GetAllocatedMemory());
+        } else {
+            SystemStateInfo.ClearMemoryUsedInAlloc();
+        }
+        if (memoryStats.HasSharedCacheConsumption()) {
+            SystemStateInfo.MutableSharedCacheStats()->SetUsedBytes(memoryStats.GetSharedCacheConsumption());
+        } else {
+            SystemStateInfo.MutableSharedCacheStats()->ClearUsedBytes();
+        }
+        if (memoryStats.HasSharedCacheLimit()) {
+            SystemStateInfo.MutableSharedCacheStats()->SetLimitBytes(memoryStats.GetSharedCacheLimit());
+        } else {
+            SystemStateInfo.MutableSharedCacheStats()->ClearLimitBytes();
+        }
+
+        SystemStateInfo.MutableMemoryStats()->Swap(&ev->Get()->Record);
+
+        // Note: there is no big reason (and an easy way) to compare the previous and the new memory stats
+        // and allocated memory stat is expected to change every time
+        // so always update change time unconditionally
+        SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
     }
 
     void Handle(TEvWhiteboard::TEvSystemStateAddEndpoint::TPtr &ev, const TActorContext &ctx) {
@@ -666,14 +837,6 @@ protected:
         }
     }
 
-    static void CopyTabletStateInfo(
-        NKikimrWhiteboard::TTabletStateInfo& dst,
-        const NKikimrWhiteboard::TTabletStateInfo& src,
-        const NKikimrWhiteboard::TEvTabletStateRequest&)
-    {
-        dst = src;
-    }
-
     void Handle(TEvWhiteboard::TEvTabletStateRequest::TPtr &ev, const TActorContext &ctx) {
         auto now = TMonotonic::Now();
         const auto& request = ev->Get()->Record;
@@ -696,7 +859,7 @@ protected:
                     for (const auto& pr : TabletStateInfo) {
                         if (pr.second.changetime() >= changedSince) {
                             NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
-                            CopyTabletStateInfo(tabletStateInfo, pr.second, request);
+                            Copy(tabletStateInfo, pr.second, request);
                         }
                     }
                 } else {
@@ -705,12 +868,12 @@ protected:
                         if (it != TabletStateInfo.end()) {
                             if (it->second.changetime() >= changedSince) {
                                 NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
-                                CopyTabletStateInfo(tabletStateInfo, it->second, request);
+                                Copy(tabletStateInfo, it->second, request);
                             }
                         }
                     }
                 }
-            } else if (request.groupby() == "Type,State") { // the only supported group-by for now
+            } else if (request.groupby() == "Type,State" || request.groupby() == "NodeId,Type,State") { // the only supported group-by for now
                 std::unordered_map<std::pair<NKikimrTabletBase::TTabletTypes::EType,
                     NKikimrWhiteboard::TTabletStateInfo::ETabletState>, NKikimrWhiteboard::TTabletStateInfo> stateGroupBy;
                 for (const auto& [id, stateInfo] : TabletStateInfo) {
@@ -741,7 +904,7 @@ protected:
         for (const auto& pr : NodeStateInfo) {
             if (pr.second.GetChangeTime() >= changedSince) {
                 NKikimrWhiteboard::TNodeStateInfo &nodeStateInfo = *record.AddNodeStateInfo();
-                nodeStateInfo.CopyFrom(pr.second);
+                Copy(nodeStateInfo, pr.second, request);
             }
         }
         response->Record.SetResponseTime(ctx.Now().MilliSeconds());
@@ -772,7 +935,7 @@ protected:
         for (const auto& pr : PDiskStateInfo) {
             if (pr.second.GetChangeTime() >= changedSince) {
                 NKikimrWhiteboard::TPDiskStateInfo &pDiskStateInfo = *record.AddPDiskStateInfo();
-                pDiskStateInfo.CopyFrom(pr.second);
+                Copy(pDiskStateInfo, pr.second, request);
             }
         }
         response->Record.SetResponseTime(ctx.Now().MilliSeconds());
@@ -796,7 +959,7 @@ protected:
         for (const auto& pr : VDiskStateInfo) {
             if (pr.second.GetChangeTime() >= changedSince) {
                 NKikimrWhiteboard::TVDiskStateInfo &vDiskStateInfo = *record.AddVDiskStateInfo();
-                vDiskStateInfo.CopyFrom(pr.second);
+                Copy(vDiskStateInfo, pr.second, request);
             }
         }
         response->Record.SetResponseTime(ctx.Now().MilliSeconds());
@@ -811,7 +974,7 @@ protected:
         for (const auto& pr : BSGroupStateInfo) {
             if (pr.second.GetChangeTime() >= changedSince) {
                 NKikimrWhiteboard::TBSGroupStateInfo &bSGroupStateInfo = *record.AddBSGroupStateInfo();
-                bSGroupStateInfo.CopyFrom(pr.second);
+                Copy(bSGroupStateInfo, pr.second, request);
             }
         }
         response->Record.SetResponseTime(ctx.Now().MilliSeconds());
@@ -825,7 +988,7 @@ protected:
         auto& record = response->Record;
         if (SystemStateInfo.GetChangeTime() >= changedSince) {
             NKikimrWhiteboard::TSystemStateInfo &systemStateInfo = *record.AddSystemStateInfo();
-            systemStateInfo.CopyFrom(SystemStateInfo);
+            Copy(systemStateInfo, SystemStateInfo, request);
         }
         response->Record.SetResponseTime(ctx.Now().MilliSeconds());
         ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
@@ -923,14 +1086,6 @@ protected:
         for (double d : loadAverage) {
             systemStatsUpdate->Record.AddLoadAverage(d);
         }
-        ProcessStats.Fill(getpid());
-        if (ProcessStats.AnonRss != 0) {
-            systemStatsUpdate->Record.SetMemoryUsed(ProcessStats.AnonRss);
-        }
-        if (ProcessStats.CGroupMemLim != 0) {
-            systemStatsUpdate->Record.SetMemoryLimit(ProcessStats.CGroupMemLim);
-        }
-        systemStatsUpdate->Record.SetMemoryUsedInAlloc(TAllocState::GetAllocatedMemoryEstimate());
         if (CheckedMerge(SystemStateInfo, systemStatsUpdate->Record)) {
             SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
         }
@@ -969,12 +1124,39 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvUpdateClockSkew::TPtr &, const TActorContext &ctx) {
+        MaxClockSkewWithPeerUsCounter->Set(abs(MaxClockSkewWithPeerUs));
+        MaxClockSkewPeerIdCounter->Set(MaxClockSkewPeerId);
+
         SystemStateInfo.SetMaxClockSkewWithPeerUs(MaxClockSkewWithPeerUs);
         SystemStateInfo.SetMaxClockSkewPeerId(MaxClockSkewPeerId);
         MaxClockSkewWithPeerUs = 0;
         ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateClockSkew());
     }
 };
+
+template<typename TMessage>
+::google::protobuf::RepeatedField<int> InitDefaultWhiteboardFields() {
+    using namespace ::google::protobuf;
+    const Descriptor& descriptor = *TMessage::GetDescriptor();
+    ::google::protobuf::RepeatedField<int> defaultFields;
+    int fieldCount = descriptor.field_count();
+    for (int index = 0; index < fieldCount; ++index) {
+        const FieldDescriptor* field = descriptor.field(index);
+        const auto& options(field->options());
+        if (options.HasExtension(NKikimrWhiteboard::DefaultField)) {
+            if (options.GetExtension(NKikimrWhiteboard::DefaultField)) {
+                defaultFields.Add(field->number());
+            }
+        }
+    }
+    return defaultFields;
+}
+
+template<typename TMessage>
+::google::protobuf::RepeatedField<int> GetDefaultWhiteboardFields() {
+    static ::google::protobuf::RepeatedField<int> defaultFields = InitDefaultWhiteboardFields<TMessage>();
+    return defaultFields;
+}
 
 IActor* CreateNodeWhiteboardService() {
     return new TNodeWhiteboardService();

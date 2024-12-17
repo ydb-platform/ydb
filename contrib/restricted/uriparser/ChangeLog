@@ -2,6 +2,33 @@ NOTE: uriparser is looking for help with a few things:
       https://github.com/uriparser/uriparser/labels/help%20wanted
       If you can help, please get in touch.  Thanks!
 
+2024-05-05 -- 0.9.8
+
+>>>>>>>>>>>>> SECURITY >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+  * Fixed: [CVE-2024-34402]
+      Protect against integer overflow in ComposeQueryEngine
+      (GitHub #183, GitHub #185)
+  * Fixed: [CVE-2024-34403]
+      Protect against integer overflow in ComposeQueryMallocExMm
+      (GitHub #183, GitHub #186)
+>>>>>>>>>>>>> SECURITY >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+  * Changed: Require CMake >=3.5.0 (GitHub #172)
+  * Added: CMake option URIPARSER_SHARED_LIBS=(ON|OFF) to control,
+      whether to produce a shared or static library for uriparser
+      and that alone, falls back to standard BUILD_SHARED_LIBS
+      if available, else defaults to "ON" (GitHub #169, GitHub #170)
+  * Improved: Document that scheme-based normalization a la
+      section 6.2.3 of RFC 3986 is a responsibility of the application
+      using uriparser (GitHub #173, GitHub #174)
+  * Improved: Document supported code points for functions uriEscape(Ex)W
+      (GitHub #171, GitHub #175)
+  * Infrastructure: Update Clang from 15 to 18 (GitHub #161, GitHub #187)
+  * Infrastructure: Adapt to breaking changes in Clang packaging (GitHub #160)
+  * Infrastructure: Get sanitizer CFLAGS and LDFLAGS back in sync (GitHub #161)
+  * Infrastructure: Pin GitHub Actions to specific commits for security
+      (GitHub #165)
+  * Soname: 1:31:0 — see https://verbump.de/ for what these numbers do
+
 2022-10-05 -- 0.9.7
 
   * Fixed: Multiple issues with IPv6 and IPvFuture literal parsing

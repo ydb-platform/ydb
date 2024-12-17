@@ -2,11 +2,11 @@
 
 #include "public.h"
 
-#include <library/cpp/yt/misc/preprocessor.h>
+#include <library/cpp/yt/misc/static_initializer.h>
 
 namespace NYT::NYTree {
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class TInternedAttributeKey
 {
@@ -43,10 +43,7 @@ void InternAttribute(const TString& uninternedKey, TInternedAttributeKey interne
 ////////////////////////////////////////////////////////////////////////////////
 
 #define REGISTER_INTERNED_ATTRIBUTE(uninternedKey, internedKey) \
-    YT_ATTRIBUTE_USED const void* PP_ANONYMOUS_VARIABLE(RegisterInterndAttribute) = [] { \
-            ::NYT::NYTree::InternAttribute(#uninternedKey, internedKey); \
-            return nullptr; \
-        } ();
+    YT_STATIC_INITIALIZER(::NYT::NYTree::InternAttribute(#uninternedKey, internedKey));
 
 ////////////////////////////////////////////////////////////////////////////////
 

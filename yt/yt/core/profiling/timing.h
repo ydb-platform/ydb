@@ -45,9 +45,12 @@ public:
     TInstant GetStartTime() const;
     TDuration GetElapsedTime() const;
     TValue GetElapsedValue() const;
+    //! Returns the time that has elapsed since the last call to Start().
+    TDuration GetCurrentDuration() const;
 
     TCpuInstant GetStartCpuTime() const;
     TCpuDuration GetElapsedCpuTime() const;
+    TCpuDuration GetCurrentCpuDuration() const;
 
     void Start();
     void StartIfNotActive();
@@ -57,8 +60,6 @@ public:
     void Persist(const TStreamPersistenceContext& context);
 
 private:
-    TCpuDuration GetCurrentCpuDuration() const;
-
     TCpuInstant StartTime_ = 0;
     TCpuDuration Duration_ = 0;
     bool Active_ = false;
@@ -126,6 +127,26 @@ private:
     TTimer* Timer_;
 
     void TryStopTimer() noexcept;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Calls #callback at the end of execution slice if it was longer than #threshold.
+class TFiberSliceTimer
+    : private NConcurrency::TContextSwitchGuard
+{
+public:
+    TFiberSliceTimer(TCpuDuration threshold, std::function<void(TCpuDuration)> callback);
+    ~TFiberSliceTimer();
+
+private:
+    const TCpuDuration Threshold_;
+    const std::function<void(TCpuDuration)> Callback_;
+
+    TCpuInstant LastInTime_;
+
+    void OnIn() noexcept;
+    void OnOut() noexcept;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

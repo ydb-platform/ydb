@@ -4,7 +4,7 @@
 #include <yt/cpp/mapreduce/common/retry_lib.h>
 #include <yt/cpp/mapreduce/raw_client/raw_requests.h>
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 static void CheckedSkip(IInputStream* input, size_t byteCount)
 {
@@ -12,7 +12,7 @@ static void CheckedSkip(IInputStream* input, size_t byteCount)
     Y_ENSURE(skipped == byteCount, "Premature end of YaMR stream");
 }
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 namespace NYT {
 
@@ -111,8 +111,8 @@ void TYaMRTableReader::ReadRow()
             Input_.ResetRetries();
 
             break;
-        } catch (const std::exception& ) {
-            if (!TLenvalTableReader::Retry()) {
+        } catch (const std::exception& ex) {
+            if (!TLenvalTableReader::Retry(std::make_exception_ptr(ex))) {
                 throw;
             }
         }
@@ -132,8 +132,8 @@ void TYaMRTableReader::SkipRow()
             ReadInteger(&value);
             CheckedSkip(&Input_, value);
             break;
-        } catch (const std::exception& ) {
-            if (!TLenvalTableReader::Retry()) {
+        } catch (const std::exception& ex) {
+            if (!TLenvalTableReader::Retry(std::make_exception_ptr(ex))) {
                 throw;
             }
         }

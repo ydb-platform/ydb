@@ -151,9 +151,10 @@ struct Schema : NIceDb::Schema {
         struct GroupID : Column<3, Schema::TabletFollowerGroup::GroupID::ColumnType> {};
         struct FollowerNode : Column<4, NScheme::NTypeIds::Uint32> {};
         struct Statistics : Column<5, NScheme::NTypeIds::String> { using Type = NKikimrHive::TTabletStatistics; };
+        struct DataCenter : Column<6, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<TabletID, FollowerID>;
-        using TColumns = TableColumns<TabletID, GroupID, FollowerID, FollowerNode, Statistics>;
+        using TColumns = TableColumns<TabletID, GroupID, FollowerID, FollowerNode, Statistics, DataCenter>;
     };
 
     struct TabletChannel : Table<2> {
@@ -177,9 +178,10 @@ struct Schema : NIceDb::Schema {
         struct Group : Column<3, NScheme::NTypeIds::Uint64> {};
         struct Version : Column<4, NScheme::NTypeIds::Uint64> {};
         struct Timestamp : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct DeletedAtGeneration : Column<6, NScheme::NTypeIds::Uint64> { static constexpr uint64_t Default = 0; };
 
         using TKey = TableKey<Tablet, Channel, Generation>;
-        using TColumns = TableColumns<Tablet, Channel, Generation, Group, Version, Timestamp>;
+        using TColumns = TableColumns<Tablet, Channel, Generation, Group, Version, Timestamp, DeletedAtGeneration>;
     };
 
     struct Node : Table<4> {
@@ -192,9 +194,11 @@ struct Schema : NIceDb::Schema {
         struct Drain : Column<6, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
         struct DrainInitiators : Column<8, NScheme::NTypeIds::String> { using Type = TVector<TActorId>; };
         struct Location : Column<9, NScheme::NTypeIds::String> { using Type = NActorsInterconnect::TNodeLocation; };
+        struct Name : Column<10, NScheme::NTypeIds::String> {};
+        struct BecomeUpOnRestart : Column<11, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<ID>;
-        using TColumns = TableColumns<ID, Local, Down, Freeze, ServicedDomains, Statistics, Drain, DrainInitiators, Location>;
+        using TColumns = TableColumns<ID, Local, Down, Freeze, ServicedDomains, Statistics, Drain, DrainInitiators, Location, Name, BecomeUpOnRestart>;
     };
 
     struct TabletCategory : Table<6> {
@@ -268,9 +272,11 @@ struct Schema : NIceDb::Schema {
         struct Primary : Column<4, NScheme::NTypeIds::Bool> {};
         struct HiveId : Column<5, NScheme::NTypeIds::Uint64> {};
         struct ServerlessComputeResourcesMode : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrSubDomains::EServerlessComputeResourcesMode; };
+        struct ScaleRecommenderPolicies : Column<7, NScheme::NTypeIds::String> { using Type = NKikimrHive::TScaleRecommenderPolicies; };
 
         using TKey = TableKey<SchemeshardId, PathId>;
-        using TColumns = TableColumns<SchemeshardId, PathId, Path, Primary, HiveId, ServerlessComputeResourcesMode>;
+        using TColumns = TableColumns<SchemeshardId, PathId, Path, Primary, HiveId, ServerlessComputeResourcesMode,
+            ScaleRecommenderPolicies>;
     };
 
     struct BlockedOwner : Table<18> {
@@ -299,12 +305,13 @@ struct Schema : NIceDb::Schema {
     };
 
     struct OperationsLog : Table<21> {
-        struct Timestamp : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Index : Column<1, NScheme::NTypeIds::Uint64> {};
         struct User : Column<2, NScheme::NTypeIds::String> {};
         struct Operation : Column<3, NScheme::NTypeIds::String> {}; // JSON
+        struct OperationTimestamp : Column<4, NScheme::NTypeIds::Uint64> {};
 
-        using TKey = TableKey<Timestamp>;
-        using TColumns = TableColumns<Timestamp, User, Operation>;
+        using TKey = TableKey<Index>;
+        using TColumns = TableColumns<Index, User, Operation, OperationTimestamp>;
     };
 
     using TTables = SchemaTables<

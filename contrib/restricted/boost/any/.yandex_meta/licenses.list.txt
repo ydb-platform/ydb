@@ -1,0 +1,26 @@
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+License
+
+Distributed under the [Boost Software License, Version 1.0](https://boost.org/LICENSE_1_0.txt).
+
+====================COPYRIGHT====================
+// Copyright Antony Polukhin, 2013-2024.
+
+
+====================COPYRIGHT====================
+// Copyright Antony Polukhin, 2020-2024.
+
+
+====================COPYRIGHT====================
+// Copyright Kevlin Henney, 2000, 2001, 2002. All rights reserved.
+
+
+====================COPYRIGHT====================
+// Copyright Ruslan Arutyunyan, 2019-2021.
+// Copyright Antony Polukhin, 2021-2024.

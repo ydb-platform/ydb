@@ -9,6 +9,8 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
 
+#include <ydb/library/services/services.pb.h>
+
 namespace NKikimr {
 namespace NGRpcProxy {
 

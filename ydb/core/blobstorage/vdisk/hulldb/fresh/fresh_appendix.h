@@ -161,6 +161,11 @@ namespace NKikimr {
             merger->AddFromFresh(It->MemRec, nullptr, It->Key, circaLsn);
         }
 
+        template <class THeap>
+        void PutToHeap(THeap& heap) {
+            heap.Add(this);
+        }
+
     private:
         TFreshAppendix *Apndx;
         TFreshAppendix::TVecIterator It;
@@ -419,6 +424,7 @@ namespace NKikimr {
         using TBase::Seek;
         using TBase::SeekToFirst;
         using TBase::PutToMerger;
+        using TBase::PutToHeap;
     };
 
     /////////////////////////////////////////////////////////////////////////////////////////
@@ -449,6 +455,7 @@ namespace NKikimr {
         using TBase::Seek;
         using TBase::ToString;
         using TBase::PutToMerger;
+        using TBase::PutToHeap;
     };
 
 } // NKikimr

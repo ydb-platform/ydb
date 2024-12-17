@@ -6,8 +6,8 @@
 #include <ydb/core/base/location.h>
 #include <ydb/core/discovery/discovery.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
@@ -87,9 +87,8 @@ public:
         Discoverer = {};
 
         auto issue = MakeIssue(ErrorToIssueCode(ev->Get()->Status), ev->Get()->Error);
-        google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issueMessages;
-        NYql::IssueToMessage(issue, issueMessages.Add());
-        Reply(ErrorToStatusCode(ev->Get()->Status), issueMessages);
+        Request->RaiseIssue(issue);
+        Reply(ErrorToStatusCode(ev->Get()->Status));
     }
 
     static NKikimrIssues::TIssuesIds::EIssueCode ErrorToIssueCode(TEvDiscovery::TEvError::EStatus status) {
@@ -135,14 +134,16 @@ public:
 
         TString cachedMessage, cachedMessageSsl;
 
-        if (services.empty() && !LookupResponse->CachedMessageData->CachedMessage.empty() &&
+        TString endpointId = Request->GetEndpointId();
+
+        if (endpointId.empty() && services.empty() && !LookupResponse->CachedMessageData->CachedMessage.empty() &&
                 !LookupResponse->CachedMessageData->CachedMessageSsl.empty()) {
             cachedMessage = LookupResponse->CachedMessageData->CachedMessage;
             cachedMessageSsl = LookupResponse->CachedMessageData->CachedMessageSsl;
         } else {
             auto cachedMessageData = NDiscovery::CreateCachedMessage(
                 {}, std::move(LookupResponse->CachedMessageData->InfoEntries),
-                std::move(services), NameserviceResponse);
+                std::move(services), std::move(endpointId), NameserviceResponse);
             cachedMessage = std::move(cachedMessageData.CachedMessage);
             cachedMessageSsl = std::move(cachedMessageData.CachedMessageSsl);
         }
@@ -159,9 +160,8 @@ public:
         PassAway();
     }
 
-    template <typename... Args>
-    void Reply(Args&&... args) {
-        Request->SendResult(std::forward<Args>(args)...);
+    void Reply(Ydb::StatusIds::StatusCode status) {
+        Request->ReplyWithYdbStatus(status);
         PassAway();
     }
 };

@@ -2,8 +2,8 @@
 
 #include <ydb/library/yql/providers/s3/range_helpers/file_tree_builder.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/protobuf/util/pb_io.h>
 #include <google/protobuf/text_format.h>
@@ -22,10 +22,10 @@ static void BuildPathsFromTree(const google::protobuf::RepeatedPtrField<NYql::NS
     }
     for (const auto& path : children) {
         const size_t prevSize = currentPath.size();
-        currentPath += path.GetName();
+        currentPath += path.GetName() != "/" ? path.GetName() : "";
         if (path.GetRead()) {
             auto isDirectory = path.GetIsDirectory();
-            auto readPath = isDirectory ? currentPath + "/" : currentPath;
+            auto readPath = isDirectory && path.GetName() != "/" ? currentPath + "/" : currentPath;
             paths.emplace_back(TPath{readPath, path.GetSize(), path.GetIsDirectory(), nextPathIndex++});
         }
         BuildPathsFromTree(path.GetChildren(), paths, currentPath, currentDepth + 1, nextPathIndex);
@@ -38,7 +38,7 @@ static void BuildPathsFromTree(const google::protobuf::RepeatedPtrField<NYql::NS
     BuildPathsFromTree(children, paths, currentPath, currentDepth, nextPathIndex);
 }
 
-void DecodeS3Range(const NS3::TSource& sourceDesc, const TString& data, TPathList& paths) {
+void DecodeS3Range(const TString& data, TPathList& paths) {
     NS3::TRange range;
     TStringInput input(data);
     range.Load(&input);
@@ -49,35 +49,15 @@ void DecodeS3Range(const NS3::TSource& sourceDesc, const TString& data, TPathLis
         TString buf;
         return BuildPathsFromTree(range.GetPaths(), paths, buf, 0, startPathIndex);
     }
-
-    std::unordered_map<TString, size_t> map(sourceDesc.GetDeprecatedPath().size());
-    for (auto i = 0; i < sourceDesc.GetDeprecatedPath().size(); ++i) {
-        map.emplace(sourceDesc.GetDeprecatedPath().Get(i).GetPath(), sourceDesc.GetDeprecatedPath().Get(i).GetSize());
-    }
-
-    for (auto i = 0; i < range.GetDeprecatedPath().size(); ++i) {
-        const auto& path = range.GetDeprecatedPath().Get(i);
-        auto it = map.find(path);
-        YQL_ENSURE(it != map.end());
-        paths.emplace_back(TPath{path, it->second, false, i + startPathIndex});
-    }
 }
 
-void ReadPathsList(const NS3::TSource& sourceDesc, const THashMap<TString, TString>& taskParams, const TVector<TString>& readRanges, TPathList& paths) {
+void ReadPathsList(const THashMap<TString, TString>& taskParams, const TVector<TString>& readRanges, TPathList& paths) {
     if (!readRanges.empty()) {
         for (auto readRange : readRanges) {
-            DecodeS3Range(sourceDesc, readRange, paths);
+            DecodeS3Range(readRange, paths);
         }
     } else if (const auto taskParamsIt = taskParams.find(S3ProviderName); taskParamsIt != taskParams.cend()) {
-        DecodeS3Range(sourceDesc, taskParamsIt->second, paths);
-    } else {
-        for (auto i = 0; i < sourceDesc.GetDeprecatedPath().size(); ++i) {
-            paths.emplace_back(TPath{
-                sourceDesc.GetDeprecatedPath().Get(i).GetPath(),
-                sourceDesc.GetDeprecatedPath().Get(i).GetSize(),
-                false,
-                static_cast<ui64>(i)});
-        }
+        DecodeS3Range(taskParamsIt->second, paths);
     }
 }
 

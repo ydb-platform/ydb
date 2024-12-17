@@ -1,35 +1,54 @@
 items:
-# Header
 - name: Оглавление
   href: index.yaml
 - name: Начало работы
-  items:
-  - name: Быстрый старт
-    href: getting_started/quickstart.md
-  - name: Kubernetes
-    href: getting_started/kubernetes.md
-  - name: Ansible
-    href: getting_started/ansible.md
-
-# Main
-- { name: Концепции,                               include: { mode: link, path: concepts/toc_p.yaml } }
-- { name: Практические руководства,                include: { mode: link, path: operations/toc_p.yaml } }
-- { name: Рекомендации,                            include: { mode: link, path: best_practices/toc_p.yaml } }
-- { name: Управление базами данных,                include: { mode: link, path: db/toc_p.yaml } }
-- { name: Управление кластером,                    include: { mode: link, path: cluster/toc_p.yaml } }
-
-# References
-- { name: YQL,                                     include: { mode: link, path: yql/toc_p.yaml } }
-- { name: Совместимость с PostgreSQL,              include: { mode: link, path: postgresql/toc_p.yaml } }
-- { name: Интеграции,                              include: { mode: link, path: integrations/toc_p.yaml } }
-- { name: Работа с YDB CLI,                        include: { mode: link, path: reference/ydb-cli/toc_p.yaml } }
-- { name: Работа с YDB SDK,                        include: { mode: link, path: reference/ydb-sdk/toc_p.yaml } }
-- { name: Работа с Kafka API,                      include: { mode: link, path: reference/kafka-api/toc_p.yaml } }
-- { name: Разработка,                              include: { mode: link, path: development/toc_p.yaml } }
-
-# Footer
-- { name: Вопросы и ответы,                        include: { mode: link, path: faq/toc_p.yaml } }
-- include: { mode: link, path: downloads/toc_p.yaml }
+  href: quickstart.md
+- name: Концепции
+  href: concepts/index.md
+  include:
+    mode: link
+    path: concepts/toc_p.yaml
+- name: Для DevOps
+  href: devops/index.md
+  include:
+    mode: link
+    path: devops/toc_p.yaml
+- name: Для разработчиков
+  href: dev/index.md
+  include:
+    mode: link
+    path: dev/toc_p.yaml
+- name: Для инженеров безопасности
+  href: security/index.md
+  include:
+    mode: link
+    path: security/toc_p.yaml
+- name: Для контрибьюторов
+  href: contributor/index.md
+  include:
+    mode: link
+    path: contributor/toc_p.yaml
+- name: Справка
+  include:
+    mode: link
+    path: reference/toc_p.yaml
+- name: Рецепты
+  href: recipes/index.md
+  include:
+    mode: link
+    path: recipes/toc_p.yaml
+- name: Вопросы и ответы
+  href: faq/index.md
+  include:
+    mode: link
+    path: faq/toc_p.yaml
+- name: Загрузки
+  href: downloads/index.md
 - name: Публичные материалы
-  href: public-talks.md
-- { name: Список изменений,                        include: { mode: link, path: toc_changelog.yaml } }
+  include:
+    mode: link
+    path: public-materials/toc_p.yaml
+- name: Список изменений
+  include:
+    mode: link
+    path: toc_changelog.yaml

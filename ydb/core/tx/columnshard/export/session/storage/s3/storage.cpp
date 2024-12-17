@@ -15,7 +15,8 @@ NKikimr::TConclusion<std::shared_ptr<IBlobsStorageOperator>> TS3StorageInitializ
         return TConclusionStatus::Fail("cannot build operator with this config: " + S3Settings.DebugString());
     }
     return std::shared_ptr<IBlobsStorageOperator>(new NBlobOperations::NTier::TOperator("__EXPORT:" + StorageName, NActors::TActorId(), extStorageConfig,
-        std::make_shared<NDataSharing::TStorageSharedBlobsManager>("__EXPORT:" + StorageName, storages->GetSharedBlobsManager()->GetSelfTabletId())));
+        std::make_shared<NDataSharing::TStorageSharedBlobsManager>("__EXPORT:" + StorageName, storages->GetSharedBlobsManager()->GetSelfTabletId()), 
+        storages->GetGeneration()));
 #else
     Y_UNUSED(storages);
     return TConclusionStatus::Fail("s3 not supported");

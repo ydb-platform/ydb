@@ -154,6 +154,7 @@ public:
     THashMap<TString, TString> AllowedServicePermissions = {{"service1-something.write", "root1/folder1"}};
     THashSet<TString> AllowedResourceIds;
     THashSet<TString> UnavailableUserPermissions;
+    TString ContainerId;
 
     grpc::Status Authorize(
             grpc::ServerContext*,
@@ -193,8 +194,6 @@ public:
                     "Authorize");
             }
 
-            auto& result = (*response->mutable_results())[checkId];
-
             if (IsIn(UnavailableUserPermissions, mockPermToFind)) {
                 return LogResponse(
                     grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable"),
@@ -202,9 +201,20 @@ public:
                     "Authorize");
             }
 
+            auto& result = (*response->mutable_results())[checkId];
+            result.set_resultcode(nebius::iam::v1::AuthorizeResult::PERMISSION_DENIED);
+
+            if (ContainerId && check.container_id() != ContainerId) {
+                result.set_resultcode(nebius::iam::v1::AuthorizeResult::PERMISSION_DENIED);
+                continue;
+            }
+
             bool allowedResource = true;
             if (!AllowedResourceIds.empty()) {
                 allowedResource = false;
+                if (IsIn(AllowedResourceIds, check.container_id())) {
+                    allowedResource = true;
+                }
                 for (const auto& resourcePath : check.resource_path().path()) {
                     if (IsIn(AllowedResourceIds, resourcePath.id())) {
                         allowedResource = true;
@@ -216,14 +226,14 @@ public:
                 if (IsIn(AllowedUserTokens, token)) {
                     if (IsIn(AllowedUserPermissions, mockPermToFind)) {
                         result.mutable_account()->mutable_user_account()->set_id(token);
-                        result.set_authorized(true);
+                        result.set_resultcode(nebius::iam::v1::AuthorizeResult::OK);
                     }
                 }
 
                 if (IsIn(AllowedServiceTokens, token)) {
                     if (IsIn(AllowedServicePermissions, mockPermToFind)) {
                         result.mutable_account()->mutable_service_account()->set_id(token);
-                        result.set_authorized(true);
+                        result.set_resultcode(nebius::iam::v1::AuthorizeResult::OK);
                     }
                 }
             }

@@ -141,7 +141,7 @@ DEFINE_REFCOUNTED_TYPE(IAsyncZeroCopyInputStream)
 //! Creates a zero-copy adapter from a given asynchronous stream.
 IAsyncZeroCopyInputStreamPtr CreateZeroCopyAdapter(
     IAsyncInputStreamPtr underlyingStream,
-    size_t blockSize = 64 * 1024);
+    size_t blockSize = 64_KB);
 
 //! Creates a copying adapter from a given asynchronous zero-copy stream.
 IAsyncInputStreamPtr CreateCopyingAdapter(IAsyncZeroCopyInputStreamPtr underlyingStream);
@@ -215,9 +215,10 @@ IAsyncZeroCopyInputStreamPtr CreateConcurrentAdapter(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// NB(levysotsky): Doesn't close the output stream.
 void PipeInputToOutput(
-    NConcurrency::IAsyncZeroCopyInputStreamPtr input,
-    NConcurrency::IAsyncOutputStreamPtr output);
+    const IAsyncZeroCopyInputStreamPtr& input,
+    const IAsyncOutputStreamPtr& output);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -64,7 +64,7 @@ message TRequestHeader
     repeated int32 declared_client_feature_ids = 36;
     repeated int32 required_server_feature_ids = 37;
 
-    optional int64 logical_request_weight = 38;
+    optional int64 logical_request_weight = 38 [default = 1];
 
     reserved 32;
 
@@ -106,6 +106,7 @@ message TBalancingExt
     optional bool enable_stickiness = 1;
     optional int32 sticky_group_size = 2 [default = 1];
     optional bool enable_client_stickiness = 3;
+    optional uint64 balancing_hint = 4;
 }
 
 message TCredentialsExt
@@ -138,6 +139,10 @@ message TCustomMetadataExt
 message TResponseHeader
 {
     optional NYT.NProto.TGuid request_id = 1;
+
+    // May be blank.
+    optional string service = 7;
+    optional string method = 8;
 
     // If omitted then OK is assumed.
     optional NYT.NProto.TError error = 2;

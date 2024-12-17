@@ -56,7 +56,6 @@ private:
 
     TString GetRequestPathPart(TStringBuf path, size_t partIdx) const;
     TString ExtractQueueNameFromPath(const TStringBuf path);
-    TString ExtractAccountNameFromPath(const TStringBuf path);
 
     ui64 CalculateRequestSizeInBytes(const THttpInput& input, const ui64 contentLength) const;
     void ExtractQueueAndAccountNames(const TStringBuf path);

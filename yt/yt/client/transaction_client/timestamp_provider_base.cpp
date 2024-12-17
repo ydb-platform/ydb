@@ -9,10 +9,11 @@
 namespace NYT::NTransactionClient {
 
 using namespace NConcurrency;
+using namespace NObjectClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = TransactionClientLogger;
+static constexpr auto& Logger = TransactionClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -20,23 +21,37 @@ TTimestampProviderBase::TTimestampProviderBase(std::optional<TDuration> latestTi
     : LatestTimestampUpdatePeriod_(latestTimestampUpdatePeriod)
 { }
 
-TFuture<TTimestamp> TTimestampProviderBase::GenerateTimestamps(int count)
+TFuture<TTimestamp> TTimestampProviderBase::GenerateTimestamps(int count, TCellTag clockClusterTag)
 {
     VERIFY_THREAD_AFFINITY_ANY();
 
-    YT_LOG_DEBUG("Generating fresh timestamps (Count: %v)", count);
+    YT_LOG_DEBUG("Generating fresh timestamps (Count: %v, ClockClusterTag: %v)",
+        count,
+        clockClusterTag);
 
-    return DoGenerateTimestamps(count).Apply(BIND(
+    return DoGenerateTimestamps(count, clockClusterTag).Apply(BIND(
         &TTimestampProviderBase::OnGenerateTimestamps,
         MakeStrong(this),
-        count));
+        count,
+        clockClusterTag));
 }
 
-TTimestamp TTimestampProviderBase::GetLatestTimestamp()
+
+std::atomic<TTimestamp>& TTimestampProviderBase::GetLatestTimestampReferenceByTag(TCellTag clockClusterTag)
+{
+    if (clockClusterTag == InvalidCellTag) {
+        return LatestTimestamp_;
+    } else {
+        auto guard = Guard(ClockClusterTagMapSpinLock_);
+        return LatestTimestampByClockCellTag_.try_emplace(clockClusterTag, MinTimestamp).first->second;
+    }
+}
+
+TTimestamp TTimestampProviderBase::GetLatestTimestamp(TCellTag clockClusterTag)
 {
     VERIFY_THREAD_AFFINITY_ANY();
 
-    auto result = LatestTimestamp_.load(std::memory_order::relaxed);
+    auto result = GetLatestTimestampReferenceByTag(clockClusterTag).load(std::memory_order::relaxed);
 
     if (LatestTimestampUpdatePeriod_ && ++GetLatestTimestampCallCounter_ == 1) {
         LatestTimestampExecutor_ = New<TPeriodicExecutor>(
@@ -47,11 +62,11 @@ TTimestamp TTimestampProviderBase::GetLatestTimestamp()
     }
 
     return result;
-
 }
 
 TFuture<TTimestamp> TTimestampProviderBase::OnGenerateTimestamps(
     int count,
+    TCellTag clockClusterTag,
     const TErrorOr<TTimestamp>& timestampOrError)
 {
     if (!timestampOrError.IsOK()) {
@@ -63,16 +78,18 @@ TFuture<TTimestamp> TTimestampProviderBase::OnGenerateTimestamps(
     auto firstTimestamp = timestampOrError.Value();
     auto lastTimestamp = firstTimestamp + count - 1;
 
-    YT_LOG_DEBUG("Fresh timestamps generated (Timestamps: %v-%v)",
+    YT_LOG_DEBUG("Fresh timestamps generated (Timestamps: %v-%v, ClockClusterTag: %v)",
         firstTimestamp,
-        lastTimestamp);
+        lastTimestamp,
+        clockClusterTag);
 
-    auto latestTimestamp = LatestTimestamp_.load(std::memory_order::relaxed);
+    auto& latestTimestamp = GetLatestTimestampReferenceByTag(clockClusterTag);
+    auto latestTimestampValue = latestTimestamp.load(std::memory_order::relaxed);
     while (true) {
-        if (latestTimestamp >= lastTimestamp) {
+        if (latestTimestampValue >= lastTimestamp) {
             break;
         }
-        if (LatestTimestamp_.compare_exchange_weak(latestTimestamp, lastTimestamp, std::memory_order::relaxed)) {
+        if (latestTimestamp.compare_exchange_weak(latestTimestampValue, lastTimestamp, std::memory_order::relaxed)) {
             break;
         }
     }
@@ -85,8 +102,7 @@ void TTimestampProviderBase::UpdateLatestTimestamp()
     VERIFY_THREAD_AFFINITY_ANY();
 
     YT_LOG_DEBUG("Updating latest timestamp");
-    GenerateTimestamps(1).Subscribe(
-        BIND([] (const TErrorOr<TTimestamp>& timestampOrError) {
+    GenerateTimestamps(1).Subscribe(BIND([] (const TErrorOr<TTimestamp>& timestampOrError) {
             if (timestampOrError.IsOK()) {
                 YT_LOG_DEBUG("Latest timestamp updated (Timestamp: %v)",
                     timestampOrError.Value());
@@ -94,6 +110,32 @@ void TTimestampProviderBase::UpdateLatestTimestamp()
                 YT_LOG_WARNING(timestampOrError, "Error updating latest timestamp");
             }
         }));
+
+    std::vector<TCellTag> cellTags;
+
+    {
+        auto guard = Guard(ClockClusterTagMapSpinLock_);
+
+        cellTags.reserve(LatestTimestampByClockCellTag_.size());
+        for (const auto& [cellTag, timestamp] : LatestTimestampByClockCellTag_) {
+            cellTags.push_back(cellTag);
+        }
+    }
+
+    for (const auto cellTag : cellTags) {
+        GenerateTimestamps(1, cellTag).Subscribe(
+        BIND([cellTag] (const TErrorOr<TTimestamp>& timestampOrError) {
+            if (timestampOrError.IsOK()) {
+                YT_LOG_DEBUG("Latest timestamp updated (Timestamp: %v, AlienCellTag: %v)",
+                    timestampOrError.Value(),
+                    cellTag);
+            } else {
+                YT_LOG_WARNING(timestampOrError, "Error updating latest timestamp (AlienCellTag: %v)",
+                cellTag);
+            }
+        }));
+
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

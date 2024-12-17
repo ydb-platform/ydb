@@ -11,15 +11,16 @@ SRCS(
     kqp_opt_phy_helpers.cpp
     kqp_opt_phy_stage_float_up.cpp
     kqp_opt_phy.cpp
+    predicate_collector.cpp
 )
 
 PEERDIR(
+    ydb/core/scheme
     ydb/core/kqp/common
     ydb/core/kqp/opt/physical/effects
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann
-    ydb/library/yql/providers/common/pushdown
 )
 
 YQL_LAST_ABI_VERSION()

@@ -35,7 +35,8 @@
 #include <ydb/core/fq/libs/control_plane_storage/proto/yq_internal.pb.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 #include <ydb/core/fq/libs/events/events.h>
-#include <ydb/core/fq/libs/exceptions/exceptions.h>
+#include <yql/essentials/utils/exceptions.h>
+#include <ydb/core/fq/libs/metrics/status_code_counters.h>
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
@@ -182,7 +183,7 @@ THashMap<TString, T> GetEntitiesWithVisibilityPriority(const TResultSet& resultS
         T entity;
         if (!entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for GetEntitiesWithVisibilityPriority. Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for GetEntitiesWithVisibilityPriority. Please contact internal support";
         }
         const auto visibility = entity.content().acl().visibility();
         if (ignorePrivateSources && visibility == FederatedQuery::Acl::PRIVATE) {
@@ -210,7 +211,7 @@ TVector<T> GetEntities(const TResultSet& resultSet, const TString& columnName, b
         T entity;
         if (!entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for GetEntities. Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for GetEntities. Please contact internal support";
         }
         const auto visibility = entity.content().acl().visibility();
         if (ignorePrivateSources && visibility == FederatedQuery::Acl::PRIVATE) {
@@ -580,6 +581,7 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
     };
 
     TCounters Counters;
+    TStatusCodeByScopeCounters::TPtr FailedStatusCodeCounters;
 
     ::NFq::TYqSharedResources::TPtr YqSharedResources;
 
@@ -606,6 +608,7 @@ public:
         const TString& tenantName)
         : TControlPlaneStorageUtils(config, s3Config, common, computeConfig)
         , Counters(counters, *Config)
+        , FailedStatusCodeCounters(MakeIntrusive<TStatusCodeByScopeCounters>("FinalFailedStatusCode", counters->GetSubgroup("component", "QueryDiagnostic")))
         , YqSharedResources(yqSharedResources)
         , CredProviderFactory(credProviderFactory)
         , TenantName(tenantName)
@@ -764,7 +767,7 @@ private:
                     issues.AddIssues(status.GetIssues());
                     internalIssues.AddIssues(status.GetIssues());
                 }
-            } catch (const TCodeLineException& exception) {
+            } catch (const NYql::TCodeLineException& exception) {
                 NYql::TIssue issue = MakeErrorIssue(exception.Code, exception.GetRawMessage());
                 issues.AddIssue(issue);
                 NYql::TIssue internalIssue = MakeErrorIssue(exception.Code, CurrentExceptionMessage());
@@ -840,7 +843,7 @@ private:
                 } else {
                     issues.AddIssues(status.GetIssues());
                 }
-            } catch (const TCodeLineException& exception) {
+            } catch (const NYql::TCodeLineException& exception) {
                 NYql::TIssue issue = MakeErrorIssue(exception.Code, exception.GetRawMessage());
                 issues.AddIssue(issue);
                 NYql::TIssue internalIssue = MakeErrorIssue(exception.Code, CurrentExceptionMessage());
@@ -916,6 +919,10 @@ private:
         std::shared_ptr<TResponseTasks> responseTasks,
         const TVector<TValidationQuery>& validators = {},
         TTxSettings transactionMode = TTxSettings::SerializableRW());
+
+    ui64 GetExecutionLimitMills(
+        FederatedQuery::QueryContent_QueryType queryType,
+        const TMaybe<TQuotaMap>& quotas);
 };
 
 }

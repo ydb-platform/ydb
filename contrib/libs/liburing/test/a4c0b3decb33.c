@@ -25,6 +25,7 @@
 #include "helpers.h"
 #include "../src/syscall.h"
 
+#ifndef CONFIG_USE_SANITIZER
 static void sleep_ms(uint64_t ms)
 {
 	usleep(ms * 1000);
@@ -110,7 +111,7 @@ static void execute_one(void);
 static void loop(void)
 {
 	int iter;
-	for (iter = 0; iter < 5000; iter++) {
+	for (iter = 0; iter < 50; iter++) {
 		int pid = fork();
 		if (pid < 0)
 			exit(1);
@@ -180,3 +181,9 @@ int main(int argc, char *argv[])
 	loop();
 	return T_EXIT_PASS;
 }
+#else
+int main(int argc, char *argv[])
+{
+	return T_EXIT_SKIP;
+}
+#endif

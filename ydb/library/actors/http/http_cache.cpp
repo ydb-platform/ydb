@@ -262,16 +262,15 @@ public:
     THashMap<TString, TActorId> Handlers;
 
     struct TCacheKey {
-        TString Host;
         TString URL;
         TString Headers;
 
         operator size_t() const {
-            return MultiHash(Host, URL, Headers);
+            return MultiHash(URL, Headers);
         }
 
         TString GetId() const {
-            return MD5::Calc(Host + ':' + URL + ':' + Headers);
+            return MD5::Calc(URL + ':' + Headers);
         }
     };
 
@@ -364,7 +363,7 @@ public:
     }
 
     static TCacheKey GetCacheKey(const NHttp::THttpIncomingRequest* request, const TCachePolicy& policy) {
-        return { ToString(request->Host), ToString(request->URL), GetCacheHeadersKey(request, policy) };
+        return {ToString(request->URL), GetCacheHeadersKey(request, policy)};
     }
 
     TActorId GetRequestHandler(NHttp::THttpIncomingRequestPtr request) {

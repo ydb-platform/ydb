@@ -1,0 +1,24 @@
+GO_LIBRARY()
+IF (TRUE)
+    SRCS(
+        exp_allocheaders_off.go
+        exp_arenas_off.go
+        exp_boringcrypto_off.go
+        exp_cacheprog_off.go
+        exp_cgocheck2_off.go
+        exp_coverageredesign_off.go
+        exp_exectracer2_off.go
+        exp_fieldtrack_off.go
+        exp_heapminimum512kib_off.go
+        exp_loopvar_off.go
+        exp_newinliner_off.go
+        exp_pagetrace_off.go
+        exp_preemptibleloops_off.go
+        exp_rangefunc_off.go
+        exp_regabiargs_off.go
+        exp_regabiwrappers_off.go
+        exp_staticlockranking_off.go
+        flags.go
+    )
+ENDIF()
+END()

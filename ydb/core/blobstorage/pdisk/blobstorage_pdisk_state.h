@@ -23,10 +23,11 @@ enum class EInitPhase {
 };
 
 enum EOwner {
-    OwnerSystem = 0, // Chunk0, SysLog chunks and CommonLog + just common log tracking, mens "for dynamic" in requests
+    OwnerSystem = 0, // Chunk0, SysLog chunks and CommonLog + just common log tracking, means "for dynamic" in requests
     OwnerUnallocated = 1, // Unallocated chunks, Trim scheduling, Slay commands
     OwnerBeginUser = 2,
     OwnerEndUser = 241,
+    OwnerMetadata = 250, // Metadata chunks, the real owner
     OwnerSystemLog = 251, // Not used to actually mark chunks, just for space tracking
     OwnerSystemReserve = 252, // Not used to actually mark chunks, just for space tracking, means "for static" in requests
     OwnerCommonStaticLog = 253, // Not used to actually mark chunks, just for space tracking
@@ -156,10 +157,14 @@ struct TOwnerData {
         return LogReader || InFlight->ChunkWrites.load() || InFlight->ChunkReads.load() || InFlight->LogWrites.load();
     }
 
+    bool ReadingLog() const {
+        return bool(LogReader);
+    }
+
     TString ToString() const {
         TStringStream str;
         str << "TOwnerData {";
-        str << "VDiskId# " << VDiskId.ToString();
+        str << "VDiskId# " << VDiskId.ToStringWOGeneration();
         str << " Status# " << RenderStatus(Status);
         str << " CurrentFirstLsnToKeep# " << CurrentFirstLsnToKeep;
         str << " LastWrittenCommitLsn# " << LastWrittenCommitLsn;

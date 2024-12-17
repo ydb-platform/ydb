@@ -5,8 +5,8 @@
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -26,18 +26,13 @@ struct TKqlTransformContext : TThrRefBase {
     NKqpProto::TKqpStatsQuery QueryStats;
     std::shared_ptr<const NKqpProto::TKqpPhyQuery> PhysicalQuery;
 
-    TVector<TSimpleSharedPtr<NKikimrMiniKQL::TResult>> MkqlResults;
-    TVector<NKikimrMiniKQL::TResult> PhysicalQueryResults;
-
     NYql::TExprNode::TPtr ExplainTransformerInput; // Explain transformer must work after other transformers, but use input before peephole
     TMaybe<NYql::NNodes::TKiDataQueryBlocks> DataQueryBlocks;
 
     void Reset() {
         ReplyTarget = {};
-        MkqlResults.clear();
         QueryStats = {};
         PhysicalQuery = nullptr;
-        PhysicalQueryResults.clear();
         ExplainTransformerInput = nullptr;
         DataQueryBlocks = Nothing();
     }

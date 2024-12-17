@@ -77,7 +77,7 @@ size_t TSizeFormatPrinter::RepeatedByteSizeLong(const google::protobuf::Message&
         case google::protobuf::FieldDescriptor::CppType::CPPTYPE_STRING: {
             size_t size = 0;
             for (int i = 0; i < fieldSize; i++) {
-                size += reflection->GetRepeatedString(message, field, i).Size() + 1 /* null terminated */;
+                size += reflection->GetRepeatedString(message, field, i).size() + 1 /* null terminated */;
             }
             return size;
         }
@@ -110,7 +110,7 @@ size_t TSizeFormatPrinter::ItemByteSizeLong(const google::protobuf::Message& mes
         case google::protobuf::FieldDescriptor::CppType::CPPTYPE_INT64:
             return sizeof(int64_t);
         case google::protobuf::FieldDescriptor::CppType::CPPTYPE_STRING:
-            return reflection->GetString(message, field).Size() + 1 /* null terminated */;
+            return reflection->GetString(message, field).size() + 1 /* null terminated */;
         case google::protobuf::FieldDescriptor::CppType::CPPTYPE_BOOL:
             return sizeof(bool);
         case google::protobuf::FieldDescriptor::CppType::CPPTYPE_ENUM:

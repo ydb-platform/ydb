@@ -11,6 +11,9 @@ namespace NKqpHelpers {
     using TEvExecuteDataQueryRequest = NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Table::ExecuteDataQueryRequest,
         Ydb::Table::ExecuteDataQueryResponse>;
 
+    using TEvExecuteSchemeQueryRequest = NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Table::ExecuteSchemeQueryRequest,
+        Ydb::Table::ExecuteSchemeQueryResponse>;
+
     using TEvCreateSessionRequest = NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Table::CreateSessionRequest,
         Ydb::Table::CreateSessionResponse>;
 
@@ -138,7 +141,7 @@ namespace NKqpHelpers {
     }
 
     inline TString FormatResult(const Ydb::ResultSet& rs) {
-        Cerr << JoinSeq(", ", rs.rows());
+        Cerr << JoinSeq(", ", rs.rows()) << Endl;
         return JoinSeq(", ", rs.rows());
     }
 
@@ -179,14 +182,22 @@ namespace NKqpHelpers {
         return FormatResult(response);
     }
 
+    inline auto KqpSimpleStaleRoSend(TTestActorRuntime& runtime, const TString& query, const TString& database = {}) {
+        return KqpSimpleSend(runtime, query, true, database);
+    }
+
     inline TString KqpSimpleStaleRoExec(TTestActorRuntime& runtime, const TString& query, const TString& database = {}) {
         return KqpSimpleExec(runtime, query, true, database);
     }
 
-    inline TString KqpSimpleBegin(TTestActorRuntime& runtime, TString& sessionId, TString& txId, const TString& query) {
+    inline auto KqpSimpleBeginSend(TTestActorRuntime& runtime, TString& sessionId, const TString& query) {
         sessionId = CreateSessionRPC(runtime);
+        return SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, /* txId */ {}, false /* commitTx */));
+    }
+
+    inline TString KqpSimpleBegin(TTestActorRuntime& runtime, TString& sessionId, TString& txId, const TString& query) {
         txId.clear();
-        auto response = AwaitResponse(runtime, SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, false /* commitTx */)));
+        auto response = AwaitResponse(runtime, KqpSimpleBeginSend(runtime, sessionId, query));
         if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
             return TStringBuilder() << "ERROR: " << response.operation().status();
         }
@@ -208,9 +219,13 @@ namespace NKqpHelpers {
         return FormatResult(result);
     }
 
-    inline TString KqpSimpleCommit(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
+    inline auto KqpSimpleSendCommit(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
         Y_ABORT_UNLESS(!txId.empty(), "commit on empty transaction");
-        auto response = AwaitResponse(runtime, SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, true /* commitTx */)));
+        return SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, true /* commitTx */));
+    }
+
+    inline TString KqpSimpleCommit(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
+        auto response = AwaitResponse(runtime, KqpSimpleSendCommit(runtime, sessionId, txId, query));
         if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
             return TStringBuilder() << "ERROR: " << response.operation().status();
         }
@@ -218,6 +233,31 @@ namespace NKqpHelpers {
         response.operation().result().UnpackTo(&result);
         Y_ABORT_UNLESS(result.tx_meta().id().empty(), "must be empty transaction");
         return FormatResult(result);
+    }
+
+    inline Ydb::Table::ExecuteSchemeQueryRequest MakeSchemeRequestRPC(
+        const TString& sql, const TString& sessionId)
+    {
+        Ydb::Table::ExecuteSchemeQueryRequest request;
+        request.set_session_id(sessionId);
+        request.set_yql_text(sql);
+        return request;
+    }
+
+    inline NThreading::TFuture<Ydb::Table::ExecuteSchemeQueryResponse> SendRequest(
+        TTestActorRuntime& runtime, Ydb::Table::ExecuteSchemeQueryRequest&& request, const TString& database = {})
+    {
+        return NRpcService::DoLocalRpc<TEvExecuteSchemeQueryRequest>(
+            std::move(request), database, /* token */ "", runtime.GetActorSystem(0));
+    }
+
+    inline TString KqpSchemeExec(TTestActorRuntime& runtime, const TString& query) {
+        TString sessionId = CreateSessionRPC(runtime);
+        auto response = AwaitResponse(runtime, SendRequest(runtime, MakeSchemeRequestRPC(query, sessionId)));
+        if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
+            return TStringBuilder() << "ERROR: " << response.operation().status();
+        }
+        return "SUCCESS";
     }
 
 } // namespace NKqpHelpers

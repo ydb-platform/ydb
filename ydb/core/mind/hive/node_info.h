@@ -64,16 +64,19 @@ public:
     bool Down;
     bool Freeze;
     bool Drain;
+    bool BecomeUpOnRestart = false;
     TVector<TActorId> DrainInitiators;
     TDrainSettings DrainSettings;
     std::unordered_map<TTabletInfo::EVolatileState, std::unordered_set<TTabletInfo*>> Tablets;
     std::unordered_map<TTabletTypes::EType, std::unordered_set<TTabletInfo*>> TabletsRunningByType;
     std::unordered_map<TFullObjectId, std::unordered_set<TTabletInfo*>> TabletsOfObject;
+    std::vector<TFullTabletId> FrozenTablets;
     TResourceRawValues ResourceValues; // accumulated resources from tablet metrics
     TResourceRawValues ResourceTotalValues; // actual used resources from the node (should be greater or equal one above)
     NMetrics::TAverageValue<TResourceRawValues, 20> AveragedResourceTotalValues;
     double NodeTotalUsage = 0;
     NMetrics::TFastRiseAverageValue<double, 20> AveragedNodeTotalUsage;
+    NMetrics::TAverageValue<double, 20> AveragedNodeTotalCpuUsage;
     TResourceRawValues ResourceMaximumValues;
     TInstant StartTime;
     TNodeLocation Location;
@@ -86,6 +89,8 @@ public:
     THashSet<TLeaderTabletInfo*> LockedTablets;
     mutable TInstant LastResourceChangeReaction;
     NKikimrHive::TNodeStatistics Statistics;
+    bool DeletionScheduled = false;
+    TString Name;
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;
@@ -128,7 +133,11 @@ public:
     ui32 GetTabletNeighboursCount(const TTabletInfo& tablet) const {
         auto it = TabletsOfObject.find(tablet.GetObjectId());
         if (it != TabletsOfObject.end()) {
-            return it->second.size();
+            auto count = it->second.size();
+            if (tablet.IsAliveOnLocal(Local)) {
+                --count;
+            }
+            return count;
         } else {
             return 0;
         }
@@ -223,7 +232,7 @@ public:
         }
     }
 
-    bool CanBeDeleted() const;
+    bool CanBeDeleted(TInstant now) const;
     void RegisterInDomains();
     void DeregisterInDomains();
     void Ping();
@@ -239,9 +248,9 @@ public:
     }
 
     double GetNodeUsageForTablet(const TTabletInfo& tablet) const;
-    double GetNodeUsage(EResourceToBalance resource = EResourceToBalance::Dominant) const;
+    double GetNodeUsage(EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
     double GetNodeUsage(const TResourceNormalizedValues& normValues,
-                        EResourceToBalance resource = EResourceToBalance::Dominant) const;
+                        EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
 
     ui64 GetTabletsRunningByType(TTabletTypes::EType tabletType) const;
 

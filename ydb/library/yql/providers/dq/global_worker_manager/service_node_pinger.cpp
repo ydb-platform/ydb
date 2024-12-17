@@ -1,8 +1,8 @@
 #include "service_node_pinger.h"
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/core/events.h>

@@ -7,6 +7,7 @@
 #include "params.h"
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
+#include <ydb/public/sdk//cpp/client/impl/ydb_internal/common/client_pid.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/string_helpers.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/db_driver_state/state.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/rpc_request_settings/settings.h>
@@ -14,7 +15,7 @@
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 #include <ydb/public/sdk/cpp/client/ydb_extension/extension.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NYdb {
 
@@ -208,10 +209,10 @@ public:
                     SetDatabaseHeader(meta, dbState->Database);
                 }
 
-                if (std::is_same<TService,Ydb::Discovery::V1::DiscoveryService>()) {
-                    meta.Aux.push_back({YDB_SDK_BUILD_INFO_HEADER, CreateSDKBuildInfo()});
-                }
+                static const TStringType clientPid = GetClientPIDHeaderValue();
 
+                meta.Aux.push_back({YDB_SDK_BUILD_INFO_HEADER, CreateSDKBuildInfo()});
+                meta.Aux.push_back({YDB_CLIENT_PID, clientPid});
                 meta.Aux.insert(meta.Aux.end(), requestSettings.Header.begin(), requestSettings.Header.end());
 
                 dbState->StatCollector.IncGRpcInFlight();
@@ -537,6 +538,12 @@ public:
                 if (!dbState->Database.empty()) {
                     SetDatabaseHeader(meta, dbState->Database);
                 }
+
+                static const TStringType clientPid = GetClientPIDHeaderValue();
+
+                meta.Aux.push_back({YDB_SDK_BUILD_INFO_HEADER, CreateSDKBuildInfo()});
+                meta.Aux.push_back({YDB_CLIENT_PID, clientPid});
+                meta.Aux.insert(meta.Aux.end(), requestSettings.Header.begin(), requestSettings.Header.end());
 
                 dbState->StatCollector.IncGRpcInFlight();
                 dbState->StatCollector.IncGRpcInFlightByHost(endpoint.GetEndpoint());

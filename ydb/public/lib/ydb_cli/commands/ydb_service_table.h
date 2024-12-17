@@ -19,9 +19,9 @@ public:
     TCommandTable();
 };
 
-class TCommandQuery : public TClientCommandTree {
+class TCommandTableQuery : public TClientCommandTree {
 public:
-    TCommandQuery();
+    TCommandTableQuery();
 };
 
 class TCommandIndex : public TClientCommandTree {
@@ -84,7 +84,7 @@ public:
 
 class TCommandQueryBase {
 protected:
-    void CheckQueryOptions() const;
+    void CheckQueryOptions(TClientCommand::TConfig& config) const;
     void CheckQueryFile();
 
 protected:
@@ -92,7 +92,7 @@ protected:
     TString QueryFile;
 };
 
-class TCommandExecuteQuery : public TTableCommand, TCommandQueryBase, TCommandWithParameters,
+class TCommandExecuteQuery : public TTableCommand, TCommandQueryBase, TCommandWithParameters, public TCommandWithOutput,
     public TInterruptibleCommand
 {
 public:
@@ -125,7 +125,7 @@ private:
     bool BasicStats = false;
 };
 
-class TCommandExplain : public TTableCommand, public TCommandWithFormat, TCommandQueryBase, TInterruptibleCommand {
+class TCommandExplain : public TTableCommand, public TCommandWithOutput, TCommandQueryBase, TInterruptibleCommand {
 public:
     TCommandExplain();
     TCommandExplain(TString query, TString queryType = "data", bool printAst = false);
@@ -145,7 +145,7 @@ private:
 };
 
 class TCommandReadTable : public TYdbCommand, public TCommandWithPath,
-    public TCommandWithFormat, public TInterruptibleCommand
+    public TCommandWithInput, public TCommandWithOutput, public TInterruptibleCommand
 {
 public:
     TCommandReadTable();
@@ -171,7 +171,7 @@ public:
     TCommandIndexAdd();
 };
 
-class TCommandIndexAddGlobal : public TYdbCommand, public TCommandWithPath, public TCommandWithFormat {
+class TCommandIndexAddGlobal : public TYdbCommand, public TCommandWithPath, public TCommandWithOutput {
 public:
     TCommandIndexAddGlobal(
         NTable::EIndexType type,

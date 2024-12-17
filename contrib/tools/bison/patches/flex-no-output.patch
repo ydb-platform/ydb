@@ -1,0 +1,15 @@
+--- a/src/scan-code.l	(index)
++++ b/src/scan-code.l	(working tree)
+@@ -18,1 +18,1 @@
+-%option prefix="code_" outfile="lex.yy.c"
++%option prefix="code_"
+--- a/src/scan-gram.l	(index)
++++ b/src/scan-gram.l	(working tree)
+@@ -18,1 +18,1 @@
+-%option prefix="gram_" outfile="lex.yy.c"
++%option prefix="gram_"
+--- a/src/scan-skel.l	(index)
++++ b/src/scan-skel.l	(working tree)
+@@ -18,1 +18,1 @@
+-%option prefix="skel_" outfile="lex.yy.c"
++%option prefix="skel_"

@@ -1,0 +1,13 @@
+diff --git a/place/vartmp/yamaker/openmp/destdir/kmp_runtime.cpp b/kmp_runtime.cpp
+index 6fa741a..fe931bb 100644
+--- a/kmp_runtime.cpp
++++ b/kmp_runtime.cpp
+@@ -74,7 +74,7 @@ char const __kmp_version_lock[] =
+ /* ------------------------------------------------------------------------ */
+ 
+ #if KMP_USE_MONITOR
+-kmp_info_t __kmp_monitor;
++kmp_info_t __kmp_monitor = {0};
+ #endif
+ 
+ /* Forward declarations */

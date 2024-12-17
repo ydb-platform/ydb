@@ -17,7 +17,6 @@ import threading
 import types
 
 import requests
-import six
 
 from requests_mock import adapter
 from requests_mock import exceptions
@@ -60,8 +59,9 @@ def _is_bound_method(method):
     bound_method 's self is a obj
     unbound_method 's self is None
     """
-    if isinstance(method, types.MethodType) and six.get_method_self(method):
+    if isinstance(method, types.MethodType) and hasattr(method, '__self__'):
         return True
+
     return False
 
 
@@ -74,7 +74,7 @@ def _set_method(target, name, method):
     If method is a bound_method, can direct setattr
     """
     if not isinstance(target, type) and not _is_bound_method(method):
-        method = six.create_bound_method(method, target)
+        method = types.MethodType(method, target)
 
     setattr(target, name, method)
 

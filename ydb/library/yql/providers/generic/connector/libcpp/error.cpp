@@ -1,8 +1,8 @@
 #include "error.h"
 
 #include <grpcpp/impl/codegen/status_code_enum.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 namespace NYql::NConnector {
@@ -37,6 +37,8 @@ namespace NYql::NConnector {
                 return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_UNSUPPORTED;
             case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_NOT_FOUND:
                 return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST;
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SCHEME_ERROR:
+                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_SCHEME_ERROR;
             default:
                 ythrow yexception() << "Unexpected YDB status code: " << ::Ydb::StatusIds::StatusCode_Name(error.status());
         }
@@ -69,4 +71,4 @@ namespace NYql::NConnector {
 
         return result;
     }
-}
+} // namespace NYql::NConnector

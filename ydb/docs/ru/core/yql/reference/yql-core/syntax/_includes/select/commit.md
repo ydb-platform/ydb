@@ -5,9 +5,9 @@
 
 Чтобы коммит выполнялся аналогичным образом автоматически после каждого выражения в запросе, можно использовать `PRAGMA autocommit;`.
 
-**Примеры:**
+### Примеры
 
-``` yql
+```yql
 INSERT INTO result1 SELECT * FROM my_table;
 INSERT INTO result2 SELECT * FROM my_table;
 COMMIT;

@@ -16,24 +16,15 @@ namespace NYT {
 
 using namespace NJson;
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 static void WriteErrorDescription(const TYtError& error, IOutputStream* out)
 {
-    (*out) << '\'' << error.GetMessage() << '\'';
+    (*out) << error.GetMessage();
     const auto& innerErrorList = error.InnerErrors();
     if (!innerErrorList.empty()) {
-        (*out) << " { ";
-        bool first = true;
-        for (const auto& innerError : innerErrorList) {
-            if (first) {
-                first = false;
-            } else {
-                (*out) << " ; ";
-            }
-            WriteErrorDescription(innerError, out);
-        }
-        (*out) << " }";
+        (*out) << ": ";
+        WriteErrorDescription(innerErrorList[0], out);
     }
 }
 
@@ -107,7 +98,7 @@ static TString DumpJobInfoForException(const TOperationId& operationId, const TV
     return output;
 }
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 TYtError::TYtError()
     : Code_(0)
@@ -118,9 +109,11 @@ TYtError::TYtError(const TString& message)
     , Message_(message)
 { }
 
-TYtError::TYtError(int code, const TString& message)
+TYtError::TYtError(int code, TString message, TVector<TYtError> innerError, TNode::TMapType attributes)
     : Code_(code)
     , Message_(message)
+    , InnerErrors_(innerError)
+    , Attributes_(attributes)
 { }
 
 TYtError::TYtError(const TJsonValue& value)
@@ -396,7 +389,12 @@ void TErrorResponse::Setup()
     *this << Error_.FullDescription();
 }
 
-////////////////////////////////////////////////////////////////////
+TTransportError::TTransportError(TYtError error)
+{
+    *this << error.FullDescription();
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 TOperationFailedError::TOperationFailedError(
     EState state,

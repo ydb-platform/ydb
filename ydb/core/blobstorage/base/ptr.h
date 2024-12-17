@@ -1,7 +1,8 @@
 #pragma once
 
 #include "defs.h"
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr {
 

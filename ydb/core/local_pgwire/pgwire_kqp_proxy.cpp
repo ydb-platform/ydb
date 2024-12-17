@@ -7,7 +7,7 @@
 #include <ydb/core/pgproxy/pg_proxy_events.h>
 #include <ydb/core/pgproxy/pg_proxy_types.h>
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -33,6 +33,7 @@ protected:
     bool NeedMeta_ = false;
     std::size_t RowsSelected_ = 0;
     TResponseEventPtr Response_;
+    std::vector<int16_t> ResponseFormat_;
 
     TPgwireKqpProxy(const TActorId owner, std::unordered_map<TString, TString> params, const TConnectionState& connection, TRequestEventPtr&& ev)
         : Owner_(owner)
@@ -115,7 +116,6 @@ protected:
                 return event;
             } else if (Connection_.Transaction.Status == 'E') {
                 // in error transaction
-                Response_->Tag = "ROLLBACK";
                 // ignore, reset to I
                 Connection_.Transaction.Status = 'I';
                 return {};
@@ -148,17 +148,11 @@ protected:
                 Response_->ErrorFields.push_back({'M', "Current transaction is aborted, commands ignored until end of transaction block"});
                 return {};
             }
-            if (q.StartsWith("SELECT")) {
-                Response_->Tag = "SELECT";
-            }
             auto event = MakeKqpRequest();
             NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
             request.SetAction(QueryAction_ = NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
-            if (q.StartsWith("CREATE") || q.StartsWith("ALTER") || q.StartsWith("DROP")) {
-                TStringBuf tag(q);
-                Response_->Tag = TStringBuilder() << tag.NextTok(' ') << " " << tag.NextTok(' ');
-            } else {
+            if (!q.StartsWith("CREATE") && !q.StartsWith("ALTER") && !q.StartsWith("DROP")) {
                 request.SetUsePublicResponseDataFormat(true);
                 request.MutableQueryCachePolicy()->set_keep_in_cache(true);
                 if (Connection_.Transaction.Status == 'I') {
@@ -182,6 +176,12 @@ protected:
         TBase::Send(NKqp::MakeKqpProxyID(TBase::SelfId().NodeId()), event.Release());
     }
 
+    void OnErrorTransaction() {
+        if (Response_->Tag == "COMMIT") {
+            Response_->Tag = "ROLLBACK";
+        }
+    }
+
     void UpdateConnectionWithKqpResponse(const NKikimrKqp::TEvQueryResponse& record) {
         Connection_.SessionId = record.GetResponse().GetSessionId();
 
@@ -201,18 +201,28 @@ protected:
                     Connection_.Transaction.Status = 'I';
                 }
             }
+        } else {
+            OnErrorTransaction();
         }
     }
 
-    static void FillError(const NKikimrKqp::TEvQueryResponse& record, std::vector<std::pair<char, TString>>& errorFields) {
+    static void FillError(const NKikimrKqp::TEvQueryResponse& record, typename TResponseEventPtr::element_type& response) {
         NYql::TIssues issues;
         NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
         NYdb::TStatus status(NYdb::EStatus(record.GetYdbStatus()), std::move(issues));
         TString message(TStringBuilder() << status);
-        errorFields.push_back({'E', "ERROR"});
-        errorFields.push_back({'M', message});
+        response.ErrorFields.push_back({'E', "ERROR"});
+        response.ErrorFields.push_back({'M', message});
         if (message.find("Error: Cannot find table") != TString::npos) {
-            errorFields.push_back({'C', "42P01"});
+            response.ErrorFields.push_back({'C', "42P01"});
+        }
+        if (record.GetYdbStatus() == Ydb::StatusIds::INTERNAL_ERROR) {
+            response.ErrorFields.push_back({'C', "XX000"});
+            response.DropConnection = true;
+        }
+        if (record.GetYdbStatus() == Ydb::StatusIds::BAD_SESSION) {
+            response.ErrorFields.push_back({'C', "08006"});
+            response.DropConnection = true;
         }
     }
 
@@ -253,7 +263,7 @@ protected:
             FillMeta(resultSet, response.get());
             NeedMeta_ = false;
         }
-        FillResultSet(resultSet, response.get()->DataRows);
+        FillResultSet(resultSet, response.get()->DataRows, ResponseFormat_);
         response->CommandCompleted = false;
         response->ReadyForQuery = false;
 
@@ -263,15 +273,20 @@ protected:
         TBase::Send(EventRequest_->Sender, response.release(), 0, EventRequest_->Cookie);
 
         BLOG_D(this->SelfId() << " Send stream data ack to " << ev->Sender);
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-        resp->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         resp->Record.SetFreeSpace(std::numeric_limits<i64>::max());
         TBase::Send(ev->Sender, resp.Release());
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         BLOG_D("Handling TEvKqp::TEvQueryResponse " << ev->Get()->Record.ShortDebugString());
-        NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record.GetRef();
+        NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record;
+        if (record.GetResponse().HasExtraInfo()) {
+            const auto& extraInfo = record.GetResponse().GetExtraInfo();
+            if (extraInfo.HasPgInfo() && extraInfo.GetPgInfo().HasCommandTag()) {
+                Response_->Tag = extraInfo.GetPgInfo().GetCommandTag();
+            }
+        }
         UpdateConnectionWithKqpResponse(record);
         try {
             if (record.HasYdbStatus()) {
@@ -283,7 +298,7 @@ protected:
                         Response_->Tag = TStringBuilder() << Response_->Tag << " " << RowsSelected_;
                     }
                 } else {
-                    FillError(record, Response_->ErrorFields);
+                    FillError(record, *Response_);
                 }
             } else {
                 Response_->ErrorFields.push_back({'E', "ERROR"});
@@ -383,7 +398,7 @@ public:
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         BLOG_D("Handling TEvKqp::TEvQueryResponse " << ev->Get()->Record.ShortDebugString());
-        NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record.GetRef();
+        NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record;
         try {
             if (record.HasYdbStatus()) {
                 if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
@@ -414,7 +429,7 @@ public:
                     }
                     Send(Owner_, new TEvEvents::TEvUpdateStatement(statement));
                 } else {
-                    FillError(record, Response_->ErrorFields);
+                    FillError(record, *Response_);
                 }
             } else {
                 Response_->ErrorFields.push_back({'E', "ERROR"});
@@ -448,6 +463,7 @@ public:
     }
 
     void Bootstrap() {
+        ResponseFormat_ = Portal_.BindData.ResultsFormat;
         auto event = ConvertQueryToRequest(Portal_.QueryData.Query);
         if (event) {
             for (unsigned int paramNum = 0; paramNum < Portal_.BindData.ParametersValue.size(); ++paramNum) {

@@ -126,7 +126,7 @@ struct is_wrapper<nvp<T> > {
 };
 
 
-} // seralization
+} // serialization
 } // boost
 
 

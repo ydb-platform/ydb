@@ -1,0 +1,656 @@
+<sql-statement>
+-- from http://www.depesz.com/index.php/2010/04/19/getting-unique-elements/
+CREATE TEMP TABLE articles (
+    id int CONSTRAINT articles_pkey PRIMARY KEY,
+    keywords text,
+    title text UNIQUE NOT NULL,
+    body text UNIQUE,
+    created date
+);
+</sql-statement>
+<sql-statement>
+CREATE TEMP TABLE articles_in_category (
+    article_id int,
+    category_id int,
+    changed date,
+    PRIMARY KEY (article_id, category_id)
+);
+</sql-statement>
+<sql-statement>
+-- test functional dependencies based on primary keys/unique constraints
+-- base tables
+-- group by primary key (OK)
+SELECT id, keywords, title, body, created
+FROM articles
+GROUP BY id;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap
+    	-- test functional dependencies based on primary keys/unique constraints
+	^
+        -stdin-:<main>:1:1: Error: At function: AsStruct
+        	-- test functional dependencies based on primary keys/unique constraints
+	^
+            -stdin-:<main>:4:12: Error: At function: Member
+            	SELECT id, keywords, title, body, created
+	           ^
+                -stdin-:<main>:4:12: Error: Member not found: _alias_articles.keywords
+                	SELECT id, keywords, title, body, created
+	           ^
+        -stdin-:<main>:4:22: Error: At function: Member
+        	SELECT id, keywords, title, body, created
+	                     ^
+            -stdin-:<main>:4:22: Error: Member not found: _alias_articles.title
+            	SELECT id, keywords, title, body, created
+	                     ^
+        -stdin-:<main>:4:29: Error: At function: Member
+        	SELECT id, keywords, title, body, created
+	                            ^
+            -stdin-:<main>:4:29: Error: Member not found: _alias_articles.body
+            	SELECT id, keywords, title, body, created
+	                            ^
+        -stdin-:<main>:4:35: Error: At function: Member
+        	SELECT id, keywords, title, body, created
+	                                  ^
+            -stdin-:<main>:4:35: Error: Member not found: _alias_articles.created
+            	SELECT id, keywords, title, body, created
+	                                  ^
+<sql-statement>
+-- group by unique not null (fail/todo)
+SELECT id, keywords, title, body, created
+FROM articles
+GROUP BY title;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap
+    	-- group by unique not null (fail/todo)
+	^
+        -stdin-:<main>:1:1: Error: At function: AsStruct
+        	-- group by unique not null (fail/todo)
+	^
+            -stdin-:<main>:2:8: Error: At function: Member
+            	SELECT id, keywords, title, body, created
+	       ^
+                -stdin-:<main>:2:8: Error: Member not found: _alias_articles.id
+                	SELECT id, keywords, title, body, created
+	       ^
+        -stdin-:<main>:2:12: Error: At function: Member
+        	SELECT id, keywords, title, body, created
+	           ^
+            -stdin-:<main>:2:12: Error: Member not found: _alias_articles.keywords
+            	SELECT id, keywords, title, body, created
+	           ^
+        -stdin-:<main>:2:29: Error: At function: Member
+        	SELECT id, keywords, title, body, created
+	                            ^
+            -stdin-:<main>:2:29: Error: Member not found: _alias_articles.body
+            	SELECT id, keywords, title, body, created
+	                            ^
+        -stdin-:<main>:2:35: Error: At function: Member
+        	SELECT id, keywords, title, body, created
+	                                  ^
+            -stdin-:<main>:2:35: Error: Member not found: _alias_articles.created
+            	SELECT id, keywords, title, body, created
+	                                  ^
+<sql-statement>
+-- group by unique nullable (fail)
+SELECT id, keywords, title, body, created
+FROM articles
+GROUP BY body;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap
+    	-- group by unique nullable (fail)
+	^
+        -stdin-:<main>:1:1: Error: At function: AsStruct
+        	-- group by unique nullable (fail)
+	^
+            -stdin-:<main>:2:8: Error: At function: Member
+            	SELECT id, keywords, title, body, created
+	       ^
+                -stdin-:<main>:2:8: Error: Member not found: _alias_articles.id
+                	SELECT id, keywords, title, body, created
+	       ^
+        -stdin-:<main>:2:12: Error: At function: Member
+        	SELECT id, keywords, title, body, created
+	           ^
+            -stdin-:<main>:2:12: Error: Member not found: _alias_articles.keywords
+            	SELECT id, keywords, title, body, created
+	           ^
+        -stdin-:<main>:2:22: Error: At function: Member
+        	SELECT id, keywords, title, body, created
+	                     ^
+            -stdin-:<main>:2:22: Error: Member not found: _alias_articles.title
+            	SELECT id, keywords, title, body, created
+	                     ^
+        -stdin-:<main>:2:35: Error: At function: Member
+        	SELECT id, keywords, title, body, created
+	                                  ^
+            -stdin-:<main>:2:35: Error: Member not found: _alias_articles.created
+            	SELECT id, keywords, title, body, created
+	                                  ^
+<sql-statement>
+-- group by something else (fail)
+SELECT id, keywords, title, body, created
+FROM articles
+GROUP BY keywords;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap
+    	-- group by something else (fail)
+	^
+        -stdin-:<main>:1:1: Error: At function: AsStruct
+        	-- group by something else (fail)
+	^
+            -stdin-:<main>:2:8: Error: At function: Member
+            	SELECT id, keywords, title, body, created
+	       ^
+                -stdin-:<main>:2:8: Error: Member not found: _alias_articles.id
+                	SELECT id, keywords, title, body, created
+	       ^
+        -stdin-:<main>:2:22: Error: At function: Member
+        	SELECT id, keywords, title, body, created
+	                     ^
+            -stdin-:<main>:2:22: Error: Member not found: _alias_articles.title
+            	SELECT id, keywords, title, body, created
+	                     ^
+        -stdin-:<main>:2:29: Error: At function: Member
+        	SELECT id, keywords, title, body, created
+	                            ^
+            -stdin-:<main>:2:29: Error: Member not found: _alias_articles.body
+            	SELECT id, keywords, title, body, created
+	                            ^
+        -stdin-:<main>:2:35: Error: At function: Member
+        	SELECT id, keywords, title, body, created
+	                                  ^
+            -stdin-:<main>:2:35: Error: Member not found: _alias_articles.created
+            	SELECT id, keywords, title, body, created
+	                                  ^
+<sql-statement>
+-- multiple tables
+-- group by primary key (OK)
+SELECT a.id, a.keywords, a.title, a.body, a.created
+FROM articles AS a, articles_in_category AS aic
+WHERE a.id = aic.article_id AND aic.category_id in (14,62,70,53,138)
+GROUP BY a.id;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap
+    	-- multiple tables
+	^
+        -stdin-:<main>:1:1: Error: At function: AsStruct
+        	-- multiple tables
+	^
+            -stdin-:<main>:3:14: Error: At function: Member
+            	SELECT a.id, a.keywords, a.title, a.body, a.created
+	             ^
+                -stdin-:<main>:3:14: Error: Member not found: _alias_a.keywords
+                	SELECT a.id, a.keywords, a.title, a.body, a.created
+	             ^
+        -stdin-:<main>:3:26: Error: At function: Member
+        	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                         ^
+            -stdin-:<main>:3:26: Error: Member not found: _alias_a.title
+            	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                         ^
+        -stdin-:<main>:3:35: Error: At function: Member
+        	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                                  ^
+            -stdin-:<main>:3:35: Error: Member not found: _alias_a.body
+            	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                                  ^
+        -stdin-:<main>:3:43: Error: At function: Member
+        	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                                          ^
+            -stdin-:<main>:3:43: Error: Member not found: _alias_a.created
+            	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                                          ^
+<sql-statement>
+-- group by something else (fail)
+SELECT a.id, a.keywords, a.title, a.body, a.created
+FROM articles AS a, articles_in_category AS aic
+WHERE a.id = aic.article_id AND aic.category_id in (14,62,70,53,138)
+GROUP BY aic.article_id, aic.category_id;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap
+    	-- group by something else (fail)
+	^
+        -stdin-:<main>:1:1: Error: At function: AsStruct
+        	-- group by something else (fail)
+	^
+            -stdin-:<main>:2:8: Error: At function: Member
+            	SELECT a.id, a.keywords, a.title, a.body, a.created
+	       ^
+                -stdin-:<main>:2:8: Error: Member not found: _alias_a.id
+                	SELECT a.id, a.keywords, a.title, a.body, a.created
+	       ^
+        -stdin-:<main>:2:14: Error: At function: Member
+        	SELECT a.id, a.keywords, a.title, a.body, a.created
+	             ^
+            -stdin-:<main>:2:14: Error: Member not found: _alias_a.keywords
+            	SELECT a.id, a.keywords, a.title, a.body, a.created
+	             ^
+        -stdin-:<main>:2:26: Error: At function: Member
+        	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                         ^
+            -stdin-:<main>:2:26: Error: Member not found: _alias_a.title
+            	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                         ^
+        -stdin-:<main>:2:35: Error: At function: Member
+        	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                                  ^
+            -stdin-:<main>:2:35: Error: Member not found: _alias_a.body
+            	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                                  ^
+        -stdin-:<main>:2:43: Error: At function: Member
+        	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                                          ^
+            -stdin-:<main>:2:43: Error: Member not found: _alias_a.created
+            	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                                          ^
+<sql-statement>
+-- JOIN syntax
+-- group by left table's primary key (OK)
+SELECT a.id, a.keywords, a.title, a.body, a.created
+FROM articles AS a JOIN articles_in_category AS aic ON a.id = aic.article_id
+WHERE aic.category_id in (14,62,70,53,138)
+GROUP BY a.id;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap
+    	-- JOIN syntax
+	^
+        -stdin-:<main>:1:1: Error: At function: AsStruct
+        	-- JOIN syntax
+	^
+            -stdin-:<main>:3:14: Error: At function: Member
+            	SELECT a.id, a.keywords, a.title, a.body, a.created
+	             ^
+                -stdin-:<main>:3:14: Error: Member not found: _alias_a.keywords
+                	SELECT a.id, a.keywords, a.title, a.body, a.created
+	             ^
+        -stdin-:<main>:3:26: Error: At function: Member
+        	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                         ^
+            -stdin-:<main>:3:26: Error: Member not found: _alias_a.title
+            	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                         ^
+        -stdin-:<main>:3:35: Error: At function: Member
+        	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                                  ^
+            -stdin-:<main>:3:35: Error: Member not found: _alias_a.body
+            	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                                  ^
+        -stdin-:<main>:3:43: Error: At function: Member
+        	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                                          ^
+            -stdin-:<main>:3:43: Error: Member not found: _alias_a.created
+            	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                                          ^
+<sql-statement>
+-- group by something else (fail)
+SELECT a.id, a.keywords, a.title, a.body, a.created
+FROM articles AS a JOIN articles_in_category AS aic ON a.id = aic.article_id
+WHERE aic.category_id in (14,62,70,53,138)
+GROUP BY aic.article_id, aic.category_id;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap
+    	-- group by something else (fail)
+	^
+        -stdin-:<main>:1:1: Error: At function: AsStruct
+        	-- group by something else (fail)
+	^
+            -stdin-:<main>:2:8: Error: At function: Member
+            	SELECT a.id, a.keywords, a.title, a.body, a.created
+	       ^
+                -stdin-:<main>:2:8: Error: Member not found: _alias_a.id
+                	SELECT a.id, a.keywords, a.title, a.body, a.created
+	       ^
+        -stdin-:<main>:2:14: Error: At function: Member
+        	SELECT a.id, a.keywords, a.title, a.body, a.created
+	             ^
+            -stdin-:<main>:2:14: Error: Member not found: _alias_a.keywords
+            	SELECT a.id, a.keywords, a.title, a.body, a.created
+	             ^
+        -stdin-:<main>:2:26: Error: At function: Member
+        	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                         ^
+            -stdin-:<main>:2:26: Error: Member not found: _alias_a.title
+            	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                         ^
+        -stdin-:<main>:2:35: Error: At function: Member
+        	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                                  ^
+            -stdin-:<main>:2:35: Error: Member not found: _alias_a.body
+            	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                                  ^
+        -stdin-:<main>:2:43: Error: At function: Member
+        	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                                          ^
+            -stdin-:<main>:2:43: Error: Member not found: _alias_a.created
+            	SELECT a.id, a.keywords, a.title, a.body, a.created
+	                                          ^
+<sql-statement>
+-- group by right table's (composite) primary key (OK)
+SELECT aic.changed
+FROM articles AS a JOIN articles_in_category AS aic ON a.id = aic.article_id
+WHERE aic.category_id in (14,62,70,53,138)
+GROUP BY aic.category_id, aic.article_id;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: AsStruct
+    	-- group by right table's (composite) primary key (OK)
+	^
+        -stdin-:<main>:2:8: Error: At function: Member
+        	SELECT aic.changed
+	       ^
+            -stdin-:<main>:2:8: Error: Member not found: _alias_aic.changed
+            	SELECT aic.changed
+	       ^
+<sql-statement>
+-- group by right table's partial primary key (fail)
+SELECT aic.changed
+FROM articles AS a JOIN articles_in_category AS aic ON a.id = aic.article_id
+WHERE aic.category_id in (14,62,70,53,138)
+GROUP BY aic.article_id;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: AsStruct
+    	-- group by right table's partial primary key (fail)
+	^
+        -stdin-:<main>:2:8: Error: At function: Member
+        	SELECT aic.changed
+	       ^
+            -stdin-:<main>:2:8: Error: Member not found: _alias_aic.changed
+            	SELECT aic.changed
+	       ^
+<sql-statement>
+-- example from documentation
+CREATE TEMP TABLE products (product_id int, name text, price numeric);
+</sql-statement>
+<sql-statement>
+CREATE TEMP TABLE sales (product_id int, units int);
+</sql-statement>
+<sql-statement>
+-- OK
+SELECT product_id, p.name, (sum(s.units) * p.price) AS sales
+    FROM products p LEFT JOIN sales s USING (product_id)
+    GROUP BY product_id, p.name, p.price;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: UnionAll, At function: Aggregate, At function: OrderedMap, At function: OrderedMap, At function: FlattenMembers
+    	-- OK
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: product_id
+        	-- OK
+	^
+<sql-statement>
+-- fail
+SELECT product_id, p.name, (sum(s.units) * p.price) AS sales
+    FROM products p LEFT JOIN sales s USING (product_id)
+    GROUP BY product_id;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: UnionAll, At function: Aggregate, At function: OrderedMap, At function: OrderedMap, At function: FlattenMembers
+    	-- fail
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: product_id
+        	-- fail
+	^
+<sql-statement>
+ALTER TABLE products ADD PRIMARY KEY (product_id);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE products ADD PRIMARY KEY (product_id);
+	^
+<sql-statement>
+-- OK now
+SELECT product_id, p.name, (sum(s.units) * p.price) AS sales
+    FROM products p LEFT JOIN sales s USING (product_id)
+    GROUP BY product_id;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: UnionAll, At function: Aggregate, At function: OrderedMap, At function: OrderedMap, At function: FlattenMembers
+    	-- OK now
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: product_id
+        	-- OK now
+	^
+<sql-statement>
+-- Drupal example, http://drupal.org/node/555530
+CREATE TEMP TABLE node (
+    nid SERIAL,
+    vid integer NOT NULL default '0',
+    type varchar(32) NOT NULL default '',
+    title varchar(128) NOT NULL default '',
+    uid integer NOT NULL default '0',
+    status integer NOT NULL default '1',
+    created integer NOT NULL default '0',
+    -- snip
+    PRIMARY KEY (nid, vid)
+);
+</sql-statement>
+<sql-statement>
+CREATE TEMP TABLE users (
+    uid integer NOT NULL default '0',
+    name varchar(60) NOT NULL default '',
+    pass varchar(32) NOT NULL default '',
+    -- snip
+    PRIMARY KEY (uid),
+    UNIQUE (name)
+);
+</sql-statement>
+<sql-statement>
+-- OK
+SELECT u.uid, u.name FROM node n
+INNER JOIN users u ON u.uid = n.uid
+WHERE n.type = 'blog' AND n.status = 1
+GROUP BY u.uid, u.name;
+</sql-statement>
+<sql-statement>
+-- OK
+SELECT u.uid, u.name FROM node n
+INNER JOIN users u ON u.uid = n.uid
+WHERE n.type = 'blog' AND n.status = 1
+GROUP BY u.uid;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: AsStruct
+    	-- OK
+	^
+        -stdin-:<main>:2:15: Error: At function: Member
+        	SELECT u.uid, u.name FROM node n
+	              ^
+            -stdin-:<main>:2:15: Error: Member not found: _alias_u.name
+            	SELECT u.uid, u.name FROM node n
+	              ^
+<sql-statement>
+-- Check views and dependencies
+-- fail
+CREATE TEMP VIEW fdv1 AS
+SELECT id, keywords, title, body, created
+FROM articles
+GROUP BY body;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	-- Check views and dependencies
+	^
+<sql-statement>
+-- OK
+CREATE TEMP VIEW fdv1 AS
+SELECT id, keywords, title, body, created
+FROM articles
+GROUP BY id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	-- OK
+	^
+<sql-statement>
+-- fail
+ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- fail
+	^
+<sql-statement>
+DROP VIEW fdv1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: View not found: 'fdv1'
+    	DROP VIEW fdv1;
+	^
+<sql-statement>
+-- multiple dependencies
+CREATE TEMP VIEW fdv2 AS
+SELECT a.id, a.keywords, a.title, aic.category_id, aic.changed
+FROM articles AS a JOIN articles_in_category AS aic ON a.id = aic.article_id
+WHERE aic.category_id in (14,62,70,53,138)
+GROUP BY a.id, aic.category_id, aic.article_id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	-- multiple dependencies
+	^
+<sql-statement>
+ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
+	^
+<sql-statement>
+ALTER TABLE articles_in_category DROP CONSTRAINT articles_in_category_pkey RESTRICT; --fail
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE articles_in_category DROP CONSTRAINT articles_in_category_pkey RESTRICT; --fail
+	^
+<sql-statement>
+DROP VIEW fdv2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: View not found: 'fdv2'
+    	DROP VIEW fdv2;
+	^
+<sql-statement>
+-- nested queries
+CREATE TEMP VIEW fdv3 AS
+SELECT id, keywords, title, body, created
+FROM articles
+GROUP BY id
+UNION
+SELECT id, keywords, title, body, created
+FROM articles
+GROUP BY id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	-- nested queries
+	^
+<sql-statement>
+ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
+	^
+<sql-statement>
+DROP VIEW fdv3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: View not found: 'fdv3'
+    	DROP VIEW fdv3;
+	^
+<sql-statement>
+CREATE TEMP VIEW fdv4 AS
+SELECT * FROM articles WHERE title IN (SELECT title FROM articles GROUP BY id);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	CREATE TEMP VIEW fdv4 AS
+	^
+<sql-statement>
+ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
+	^
+<sql-statement>
+DROP VIEW fdv4;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: View not found: 'fdv4'
+    	DROP VIEW fdv4;
+	^
+<sql-statement>
+-- prepared query plans: this results in failure on reuse
+PREPARE foo AS
+  SELECT id, keywords, title, body, created
+  FROM articles
+  GROUP BY id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 301
+    	-- prepared query plans: this results in failure on reuse
+	^
+<sql-statement>
+EXECUTE foo;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 302
+    	EXECUTE foo;
+	^
+<sql-statement>
+ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT;
+	^
+<sql-statement>
+EXECUTE foo;  -- fail
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 302
+    	EXECUTE foo;  -- fail
+	^

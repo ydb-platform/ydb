@@ -1,0 +1,11 @@
+--- contrib/python/yarl/tests/test_url.py	(index)
++++ contrib/python/yarl/tests/test_url.py	(working tree)
+@@ -12,7 +12,7 @@ def test_inheritance():
+ 
+     assert (
+         "Inheriting a class "
+-        "<class 'test_url.test_inheritance.<locals>.MyURL'> "
++        "<class '__tests__.test_url.test_inheritance.<locals>.MyURL'> "
+         "from URL is forbidden" == str(ctx.value)
+     )
+ 

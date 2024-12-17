@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
@@ -77,10 +78,9 @@ public:
         runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(tabletId, TActorId())));
         runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvForward(tabletId, nullptr)));
 
-        TAutoPtr<IEventHandle> handle;
-        auto forwardResult = runtime->GrabEdgeEventRethrow<TEvTabletResolver::TEvForwardResult>(handle);
-        UNIT_ASSERT(forwardResult && forwardResult->Tablet);
-        runtime->Send(new IEventHandle(forwardResult->Tablet, sender, new TEvents::TEvPoisonPill()));
+        auto ev = runtime->GrabEdgeEventRethrow<TEvTabletResolver::TEvForwardResult>(sender);
+        UNIT_ASSERT(ev && ev->Get()->Tablet);
+        runtime->Send(new IEventHandle(ev->Get()->Tablet, sender, new TEvents::TEvPoisonPill()));
         runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(tabletId, TActorId())));
     }
 

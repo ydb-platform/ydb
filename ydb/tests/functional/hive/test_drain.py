@@ -4,11 +4,12 @@ import logging
 import yatest
 from ydb.tests.library.common.delayed import wait_tablets_are_active
 from ydb.tests.library.common.types import Erasure
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.harness import param_constants
-from ydb.tests.library.kv.helpers import create_tablets_and_wait_for_start
+from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
 
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ TimeoutSeconds = 300
 class TestHive(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(
+        cls.cluster = KiKiMR(
             KikimrConfigGenerator(
                 Erasure.BLOCK_4_2,
                 additional_log_configs={
@@ -35,6 +36,9 @@ class TestHive(object):
             )
         )
         cls.cluster.start()
+        host = cls.cluster.nodes[1].host
+        mon_port = cls.cluster.nodes[1].mon_port
+        cls.swagger_client = SwaggerClient(host, mon_port)
 
     @classmethod
     def teardown_class(cls):
@@ -42,7 +46,10 @@ class TestHive(object):
             cls.cluster.stop()
 
     def test_drain_tablets(self):
-        all_tablet_ids = create_tablets_and_wait_for_start(self.cluster.client, TabletsCount, batch_size=TabletsCount)
+        path = '/Root/mydb'
+        table_path = '/Root/mydb/mytable'
+        self.cluster.scheme_client.make_directory(path)
+        all_tablet_ids = create_kv_tablets_and_wait_for_start(self.cluster.client, self.cluster.kv_client, self.swagger_client, TabletsCount, table_path)
         for node_id, node in self.cluster.nodes.items():
             if node_id == 1:
                 continue
@@ -66,5 +73,27 @@ class TestHive(object):
                 self.cluster.client,
                 all_tablet_ids,
             )
+
+            node.start()
+
+    def test_drain_on_stop(self):
+        path = '/Root/mydb'
+        table_path = '/Root/mydb/mytable'
+        self.cluster.scheme_client.make_directory(path)
+        all_tablet_ids = create_kv_tablets_and_wait_for_start(self.cluster.client, self.cluster.kv_client, self.swagger_client, TabletsCount, table_path)
+        for node_id, node in self.cluster.nodes.items():
+            if node_id == 1:
+                continue
+
+            logger.info(f"Stopping node {node_id}")
+
+            node.stop()
+
+            if not node.killed:
+                wait_tablets_are_active(
+                    self.cluster.client,
+                    all_tablet_ids,
+                    0,  # Tablets should already be active, as drain must be finished at this point
+                )
 
             node.start()

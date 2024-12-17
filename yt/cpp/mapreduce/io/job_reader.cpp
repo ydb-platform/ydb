@@ -16,7 +16,10 @@ TJobReader::TJobReader(const TFile& file)
     , BufferedInput_(&FdInput_, BUFFER_SIZE)
 { }
 
-bool TJobReader::Retry(const TMaybe<ui32>& /*rangeIndex*/, const TMaybe<ui64>& /*rowIndex*/)
+bool TJobReader::Retry(
+    const TMaybe<ui32>& /*rangeIndex*/,
+    const TMaybe<ui64>& /*rowIndex*/,
+    const std::exception_ptr& /*error*/)
 {
     return false;
 }

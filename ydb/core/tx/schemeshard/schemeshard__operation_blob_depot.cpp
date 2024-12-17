@@ -3,6 +3,7 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/protos/blob_depot_config.pb.h>
+#include <ydb/core/blob_depot/events.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -349,11 +350,11 @@ namespace NKikimr::NSchemeShard {
                 context.SS->ChangeTxState(db, OperationId, TTxState::CreateParts);
                 context.OnComplete.ActivateTx(OperationId);
 
-                context.SS->PersistPath(db, dstPath->PathId);
                 if (!acl.empty()) {
                     dstPath->ApplyACL(acl);
-                    context.SS->PersistACL(db, dstPath.Base());
                 }
+                context.SS->PersistPath(db, dstPath->PathId);
+
                 context.SS->BlobDepots[pathId] = blobDepot;
                 context.SS->PersistBlobDepot(db, pathId, *blobDepot);
                 context.SS->IncrementPathDbRefCount(pathId);

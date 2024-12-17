@@ -6,18 +6,6 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Forward declarations.
-class TStringBuilderBase;
-class TStringBuilder;
-class TDelimitedStringBuilderWrapper;
-
-template <size_t Length, class... TArgs>
-void Format(TStringBuilderBase* builder, const char (&format)[Length], TArgs&&... args);
-template <class... TArgs>
-void Format(TStringBuilderBase* builder, TStringBuf format, TArgs&&... args);
-
-////////////////////////////////////////////////////////////////////////////////
-
 //! A simple helper for constructing strings by a sequence of appends.
 class TStringBuilderBase
 {
@@ -75,11 +63,6 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class T>
-TString ToStringViaBuilder(const T& value, TStringBuf spec = TStringBuf("v"));
-
-////////////////////////////////////////////////////////////////////////////////
-
 //! Appends a certain delimiter starting from the second call.
 class TDelimitedStringBuilderWrapper
     : private TNonCopyable
@@ -87,19 +70,10 @@ class TDelimitedStringBuilderWrapper
 public:
     TDelimitedStringBuilderWrapper(
         TStringBuilderBase* builder,
-        TStringBuf delimiter = TStringBuf(", "))
-        : Builder_(builder)
-        , Delimiter_(delimiter)
-    { }
+        TStringBuf delimiter = TStringBuf(", "));
 
-    TStringBuilderBase* operator->()
-    {
-        if (!FirstCall_) {
-            Builder_->AppendString(Delimiter_);
-        }
-        FirstCall_ = false;
-        return Builder_;
-    }
+    TStringBuilderBase* operator->();
+    TStringBuilderBase* operator&();
 
 private:
     TStringBuilderBase* const Builder_;

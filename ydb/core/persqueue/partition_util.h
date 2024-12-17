@@ -4,8 +4,6 @@
 
 namespace NKikimr::NPQ {
 
-static const ui64 SET_OFFSET_COOKIE = 1;
-
 class TKeyLevel {
 public:
     friend IOutputStream& operator <<(IOutputStream& out, const TKeyLevel& value);
@@ -115,6 +113,7 @@ struct TPartition::THasDataReq {
     TActorId Sender;
     TMaybe<ui64> Cookie;
     TString ClientId;
+    TMaybe<TInstant> ReadTimestamp;
 
     bool operator < (const THasDataReq& req) const {
         return Num < req.Num;
@@ -134,5 +133,8 @@ void AddCheckDiskRequest(TEvKeyValue::TEvRequest *request, ui32 numChannels);
 NKikimrClient::TKeyValueRequest::EStorageChannel GetChannel(ui32 i);
 bool IsQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig,
                       bool isLocalDC);
+void AddCmdDeleteRange(TEvKeyValue::TEvRequest& request,
+                       TKeyPrefix::EType c,
+                       const TPartitionId& partitionId);
 
 } // namespace NKikimr::NPQ

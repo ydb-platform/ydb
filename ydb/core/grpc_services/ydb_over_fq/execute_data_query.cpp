@@ -6,23 +6,25 @@
 #include <ydb/core/grpc_services/local_grpc/local_grpc.h>
 #include <ydb/core/grpc_services/service_fq.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
 
 namespace NKikimr::NGRpcService {
 
 namespace NYdbOverFq {
 
-class ExecuteDataQueryRPC
+template <typename TDerived, typename TReq, typename TResp, bool IsStreaming>
+class ExecuteDataQueryRPCBase
     : public TRpcBase<
-        ExecuteDataQueryRPC, Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse> {
+        TDerived, TReq, TResp, !IsStreaming> {
 public:
     using TBase = TRpcBase<
-        ExecuteDataQueryRPC, Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse>;
-    static constexpr std::string_view RpcName = "ExecuteDataQuery";
+        TDerived, TReq, TResp, !IsStreaming>;
 
     using TBase::TBase;
+    using TBase::SelfId;
+    using typename TBase::TLogCtx;
 
     void Bootstrap(const TActorContext& ctx) {
-        Become(&ExecuteDataQueryRPC::CreateQueryState);
         CreateQuery(ctx);
     }
 
@@ -30,154 +32,70 @@ public:
 
     // CreateQueryImpl
 
-    STRICT_STFUNC(CreateQueryState,
-        HFunc(TEvFqCreateQueryResponse, TBase::HandleResponse<FederatedQuery::CreateQueryRequest>);
-    )
-
     void CreateQuery(const TActorContext& ctx) {
-        if (!GetProtoRequest()->query().has_yql_text()) {
-            LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                            "pseudo ExecuteDataQuery actorId: " << SelfId().ToString() << ", got request with id instead of text");
-            Reply(
+        if (!TBase::GetProtoRequest()->query().has_yql_text()) {
+            SRC_LOG_I("got request with id instead of text");
+            TBase::Reply(
                 Ydb::StatusIds::BAD_REQUEST,
-                "query id in ExecuteDataQuery is not supported",
+                TStringBuilder {} << "query id in " << TDerived::RpcName << " is not supported",
                 NKikimrIssues::TIssuesIds::EIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                 ctx);
             return;
         }
-        const auto& text = GetProtoRequest()->query().yql_text();
+        const auto& text = TBase::GetProtoRequest()->query().yql_text();
 
-        FederatedQuery::CreateQueryRequest req;
-        req.set_execute_mode(FederatedQuery::ExecuteMode::RUN);
-        auto& queryContent = *req.mutable_content();
-        queryContent.set_type(FederatedQuery::QueryContent_QueryType_ANALYTICS);
-        queryContent.set_name("Generated query from within");
-        queryContent.mutable_text()->assign(text);
-        queryContent.set_automatic(true);
-        auto& acl = *queryContent.mutable_acl();
-        acl.set_visibility(FederatedQuery::Acl_Visibility::Acl_Visibility_SCOPE);
-
-        LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                        "pseudo ExecuteDataQuery actorId: " << SelfId().ToString() << ", creating query");
-
-        MakeLocalCall(std::move(req), ctx);
+        TBase::CreateQuery(text, FederatedQuery::ExecuteMode::RUN, ctx);
     }
 
     void Handle(const FederatedQuery::CreateQueryResult& result, const TActorContext& ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-            "pseudo ExecuteDataQuery actorId: " << SelfId().ToString() << ", created query: " << result.query_id());
+        SRC_LOG_T("created query: " << result.query_id());
 
-        WaitForExecution(result.query_id(), ctx);
+        TBase::WaitForTermination(result.query_id(), ctx);
     }
 
     // WaitForExecutionImpl
 
-    STRICT_STFUNC(WaitForExecutionState,
-        HFunc(TEvFqGetQueryStatusRequest, HandleStatusRequest);
-        HFunc(TEvFqGetQueryStatusResponse, TBase::HandleResponse<FederatedQuery::GetQueryStatusRequest>);
-    )
+    void OnQueryTermination(const TString& queryId, FederatedQuery::QueryMeta_ComputeStatus status, const TActorContext& ctx) {
+        SRC_LOG_I(queryId, "finished query execution with status " << FederatedQuery::QueryMeta::ComputeStatus_Name(status));
 
-    void WaitForExecution(const TString& queryId, const TActorContext& ctx) {
-        QueryId_ = queryId;
-        auto reqEv = CreateStatusRequest();
-
-        Become(&ExecuteDataQueryRPC::WaitForExecutionState);
-        ctx.Send(SelfId(), reqEv);
-    }
-
-    using WaitRetryPolicy = IRetryPolicy<FederatedQuery::QueryMeta::ComputeStatus>;
-
-    static WaitRetryPolicy::IRetryState::TPtr CreateRetryState() {
-        return WaitRetryPolicy::GetExponentialBackoffPolicy([](FederatedQuery::QueryMeta::ComputeStatus status) {
-            return NFq::IsTerminalStatus(status) ? ERetryErrorClass::NoRetry : ERetryErrorClass::ShortRetry;
-        }, TDuration::MilliSeconds(10), TDuration::Seconds(1), TDuration::Seconds(5))->CreateRetryState();
-    }
-
-    TEvFqGetQueryStatusRequest* CreateStatusRequest() {
-        FederatedQuery::GetQueryStatusRequest req;
-        req.set_query_id(QueryId_);
-        return new TEvFqGetQueryStatusRequest(std::move(req));
-    }
-
-    void HandleStatusRequest(typename TEvFqGetQueryStatusRequest::TPtr& ev, const TActorContext& ctx) {
-        MakeLocalCall(std::move(ev->Get()->Message), ctx);
-    }
-
-    void Handle(const FederatedQuery::GetQueryStatusResult& result, const TActorContext& ctx) {
-        if (!NFq::IsTerminalStatus(result.status())) {
-            LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                "pseudo ExecuteDataQuery actorId: " << SelfId().ToString() << ", still waiting for query: " << QueryId_ <<
-                ", current status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(result.status()));
-            auto delay = WaitRetryState_->GetNextRetryDelay(result.status());
-            if (!delay) [[unlikely]] {
-                Reply(Ydb::StatusIds_StatusCode_INTERNAL_ERROR,
-                    TStringBuilder{} << "Created query " << QueryId_ << ", couldn't wait for finish, final status: " <<
-                    FederatedQuery::QueryMeta::ComputeStatus_Name(result.status()), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
-                return;
-            }
-            ctx.Schedule(*delay, CreateStatusRequest());
-            return;
-        }
-
-        if (result.status() != FederatedQuery::QueryMeta_ComputeStatus_COMPLETED) {
-            LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                "pseudo ExecuteDataQuery actorId: " << SelfId().ToString() << ", queryId: " << QueryId_ <<
-                ", finished with bad status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(result.status()));
-            Reply(Ydb::StatusIds_StatusCode_INTERNAL_ERROR,
-                TStringBuilder{} << "Created query " << QueryId_ << " finished with non-success status: " <<
-                    FederatedQuery::QueryMeta::ComputeStatus_Name(result.status()), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
-            return;
-        }
-
-        LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-            "pseudo ExecuteDataQuery actorId: " << SelfId().ToString() << ", queryId: " << QueryId_ <<
-            ", finished query execution");
-
-        GatherResultSetSizes(ctx);
+        // Whether query is successful or not, we want to call DescribeQuery
+        //   to get either ResultSet size or issues
+        TBase::DescribeQuery(queryId, ctx);
     }
 
     // GatherResultSetSizesImpl
 
-    STRICT_STFUNC(GatherResultSetSizesState,
-        HFunc(TEvFqDescribeQueryResponse, TBase::HandleResponse<FederatedQuery::DescribeQueryRequest>);
-    )
-
-    void GatherResultSetSizes(const TActorContext& ctx) {
-        FederatedQuery::DescribeQueryRequest req;
-        req.set_query_id(QueryId_);
-
-        Become(&ExecuteDataQueryRPC::GatherResultSetSizesState);
-        MakeLocalCall(std::move(req), ctx);
-    }
-
     void Handle(const FederatedQuery::DescribeQueryResult& result, const TActorContext& ctx) {
+        auto status = result.query().meta().status();
+        if (status != FederatedQuery::QueryMeta_ComputeStatus_COMPLETED) {
+            TString errorMsg = TStringBuilder{} << "created query " << result.query().meta().common().id() <<
+                " finished with non-success status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(status);
+            SRC_LOG_I("error: " << errorMsg);
+
+            NYql::TIssues issues;
+            issues.AddIssue(std::move(errorMsg));
+            NYql::IssuesFromMessage(result.query().issue(), issues);
+            TBase::Reply(Ydb::StatusIds_StatusCode_INTERNAL_ERROR, issues, ctx);
+            return;
+        }
+
         ResultSetSizes_.reserve(result.query().result_set_meta_size());
 
         for (const auto& meta : result.query().result_set_meta()) {
             ResultSetSizes_.push_back(meta.rows_count());
         }
 
-        GatherResultSets(ctx);
+        static_cast<TDerived*>(this)->HandleResultSets(result.query().meta().common().id(), ctx);
     }
 
-    // GatherResultSetsImpl
+    // HandleResultSetsImpl
 
-    STRICT_STFUNC(GatherResultSetsState,
-        HFunc(TEvFqGetResultDataRequest, HandleResultSetRequest);
-        HFunc(TEvFqGetResultDataResponse, TBase::HandleResponse<FederatedQuery::GetResultDataRequest>);
-    )
-
-    void GatherResultSets(const TActorContext& ctx) {
-        Become(&ExecuteDataQueryRPC::GatherResultSetsState);
-        MakeLocalCall(CreateResultSetRequest(0, 0), ctx);
-    }
-
-    FederatedQuery::GetResultDataRequest CreateResultSetRequest(i32 index, i64 offset) {
+    FederatedQuery::GetResultDataRequest CreateResultSetRequest(const TString& queryId, i32 index, i64 offset) {
         FederatedQuery::GetResultDataRequest msg;
 
         constexpr i64 RowsLimit = 1000;
 
-        msg.set_query_id(QueryId_);
+        msg.set_query_id(queryId);
         msg.set_result_set_index(index);
         msg.set_offset(offset);
         msg.set_limit(RowsLimit);
@@ -185,7 +103,38 @@ public:
     }
 
     void HandleResultSetRequest(typename TEvFqGetResultDataRequest::TPtr& ev, const TActorContext& ctx) {
-        MakeLocalCall(std::move(ev->Get()->Message), ctx);
+        TBase::MakeLocalCall(std::move(ev->Get()->Message), ctx);
+    }
+
+protected:
+    std::vector<i64> ResultSetSizes_;
+};
+
+class ExecuteDataQueryRPC
+    : public ExecuteDataQueryRPCBase<ExecuteDataQueryRPC, Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse, false> {
+public:
+    using TBase = ExecuteDataQueryRPCBase<
+        ExecuteDataQueryRPC, Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse, false>;
+    static constexpr std::string_view RpcName = "ExecuteDataQuery";
+
+    using TBase::TBase;
+    using TBase::Handle;
+    // GatherResultSetsImpl
+
+    STRICT_STFUNC(GatherResultSetsState,
+        HFunc(TEvFqGetResultDataRequest, HandleResultSetRequest);
+        HFunc(TEvFqGetResultDataResponse, TBase::template HandleResponse<FederatedQuery::GetResultDataRequest>);
+    )
+
+    void HandleResultSets(const TString& queryId, const TActorContext& ctx) {
+        if (ResultSetSizes_.empty()) {
+            SendReply(ctx);
+            return;
+        }
+
+        Become(&ExecuteDataQueryRPC::GatherResultSetsState);
+        QueryId_ = queryId;
+        MakeLocalCall(CreateResultSetRequest(queryId, 0, 0), ctx);
     }
 
     void Handle(const FederatedQuery::GetResultDataResult& result, const TActorContext& ctx) {
@@ -203,11 +152,11 @@ public:
         }
 
         if (resultSet->rows_size() < ResultSetSizes_[CurrentResultSet_]) {
-            MakeLocalCall(CreateResultSetRequest(CurrentResultSet_, resultSet->rows_size()), ctx);
+            MakeLocalCall(CreateResultSetRequest(QueryId_, CurrentResultSet_, resultSet->rows_size()), ctx);
         } else {
             Y_ABORT_UNLESS(resultSet->rows_size() == ResultSetSizes_[CurrentResultSet_]);
             if (++CurrentResultSet_ < static_cast<i64>(ResultSetSizes_.size())) {
-                MakeLocalCall(CreateResultSetRequest(CurrentResultSet_, 0), ctx);
+                MakeLocalCall(CreateResultSetRequest(QueryId_, CurrentResultSet_, 0), ctx);
             } else {
                 SendReply(ctx);
             }
@@ -222,20 +171,105 @@ public:
             *result.add_result_sets() = resultSet;
         }
         result.mutable_query_meta()->set_id(QueryId_);
-        ReplyWithResult(Ydb::StatusIds_StatusCode_SUCCESS, result, ctx);
+        TBase::ReplyWithResult(Ydb::StatusIds_StatusCode_SUCCESS, result, ctx);
+    }
+private:
+    TString QueryId_;
+    std::vector<Ydb::ResultSet> ResultSets_;
+    i32 CurrentResultSet_ = 0;
+};
+
+class StreamExecuteScanQueryRPC
+    : public ExecuteDataQueryRPCBase<StreamExecuteScanQueryRPC, Ydb::Table::ExecuteScanQueryRequest, Ydb::Table::ExecuteScanQueryPartialResponse, true> {
+public:
+    using TBase = ExecuteDataQueryRPCBase<
+        StreamExecuteScanQueryRPC, Ydb::Table::ExecuteScanQueryRequest, Ydb::Table::ExecuteScanQueryPartialResponse, true>;
+    static constexpr std::string_view RpcName = "StreamExecuteScanQuery";
+
+    using TBase::TBase;
+    using TBase::Handle;
+    using typename TBase::TLogCtx;
+
+    // StreamResultSetsImpl
+
+    STRICT_STFUNC(StreamResultSetsState,
+        HFunc(TEvFqGetResultDataRequest, HandleResultSetRequest);
+        HFunc(TEvFqGetResultDataResponse, TBase::template HandleResponse<FederatedQuery::GetResultDataRequest>);
+    )
+
+    void HandleResultSets(const TString& queryId, const TActorContext& ctx) {
+        if (ResultSetSizes_.size() > 1) {
+            NYql::TIssues issues;
+            issues.AddIssue("Scan query should have a single result set.");
+            issues.back().SetCode(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, NYql::TSeverityIds::S_ERROR);
+            Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
+            SRC_LOG_I(queryId, "failed: got " << ResultSetSizes_.size() << " result sets");
+            return;
+        }
+
+        Become(&StreamExecuteScanQueryRPC::StreamResultSetsState);
+        QueryId_ = queryId;
+        MakeLocalCall(CreateResultSetRequest(queryId, 0, 0), ctx);
+    }
+
+    void Handle(const FederatedQuery::GetResultDataResult& result, const TActorContext& ctx) {
+        Ydb::Table::ExecuteScanQueryPartialResponse response;
+        response.set_status(Ydb::StatusIds::SUCCESS);
+        *response.mutable_result()->mutable_result_set() = result.result_set();
+
+        TString respSerialized;
+        if (!response.SerializeToString(&respSerialized)) {
+            NYql::TIssues issues;
+            auto issueMsg = TStringBuilder{} << "failed to serialize ResultSet[" << CurrentResultSet_ << "][" <<
+                SentRowsInCurrRS_ << ":" << (SentRowsInCurrRS_ + result.result_set().rows_size()) << "]";
+            issues.AddIssue(issueMsg);
+            issues.back().SetCode(NYql::TIssuesIds::CORE_EXEC, NYql::TSeverityIds::S_ERROR);
+            SRC_LOG_I("error: " << issueMsg);
+            Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx);
+            return;
+        }
+
+        Request_->SendSerializedResult(std::move(respSerialized), Ydb::StatusIds::SUCCESS);
+        SentRowsInCurrRS_ += result.result_set().rows_size();
+
+        if (SentRowsInCurrRS_ < ResultSetSizes_[CurrentResultSet_]) {
+            SRC_LOG_T("RS[" << CurrentResultSet_ << "][" << (SentRowsInCurrRS_ - result.result_set().rows_size()) <<
+                ":" << SentRowsInCurrRS_ << "], still got " << (ResultSetSizes_[CurrentResultSet_] - CurrentResultSet_)
+            );
+            MakeLocalCall(CreateResultSetRequest(QueryId_, CurrentResultSet_, SentRowsInCurrRS_), ctx);
+        } else {
+            SRC_LOG_T("RS[" << CurrentResultSet_ << "][" <<
+                (SentRowsInCurrRS_ - result.result_set().rows_size()) << ":" << SentRowsInCurrRS_ << "], fully sent"
+            );
+
+            Y_ABORT_UNLESS(SentRowsInCurrRS_ == ResultSetSizes_[CurrentResultSet_]);
+            ++CurrentResultSet_;
+            SentRowsInCurrRS_ = 0;
+            if (CurrentResultSet_ < static_cast<i64>(ResultSetSizes_.size())) {
+                MakeLocalCall(CreateResultSetRequest(QueryId_, CurrentResultSet_, SentRowsInCurrRS_), ctx);
+            } else {
+                SRC_LOG_T("finish");
+                Request_->FinishStream(Ydb::StatusIds::SUCCESS);
+                this->Die(ctx);
+            }
+        }
     }
 
 private:
     TString QueryId_;
-    std::vector<i64> ResultSetSizes_;
     i32 CurrentResultSet_ = 0;
-    std::vector<Ydb::ResultSet> ResultSets_;
-    WaitRetryPolicy::IRetryState::TPtr WaitRetryState_ = CreateRetryState();
+    i64 SentRowsInCurrRS_ = 0;
 };
 
 std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> GetExecuteDataQueryExecutor(NActors::TActorId grpcProxyId) {
-    return [grpcProxyId = std::move(grpcProxyId)](std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    return [grpcProxyId](std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
         f.RegisterActor(new ExecuteDataQueryRPC(p.release(), grpcProxyId));
+    };
+}
+
+std::function<void(std::unique_ptr<IRequestNoOpCtx>, const IFacilityProvider&)> GetStreamExecuteScanQueryExecutor(NActors::TActorId grpcProxyId) {
+    return [grpcProxyId](std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+        f.RegisterActor(new StreamExecuteScanQueryRPC(p.release(), grpcProxyId));
     };
 }
 

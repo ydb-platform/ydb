@@ -1,8 +1,13 @@
 //
 // Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+// Copyright (c) 2022-2023 Alexander Grund
 //
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
+
+#ifndef NOMINMAX
+#    define NOMINMAX
+#endif
 
 #include <boost/locale/date_time.hpp>
 #include <boost/locale/formatting.hpp>
@@ -299,22 +304,23 @@ namespace boost { namespace locale {
 
     void date_time::time(double v)
     {
+        constexpr int64_t ns_in_s = static_cast<int64_t>(1000) * 1000 * 1000;
+
         double seconds;
         const double fract_seconds = std::modf(v, &seconds); // v = seconds + fract_seconds
         posix_time ptime;
         ptime.seconds = static_cast<int64_t>(seconds);
-        int64_t nano = static_cast<int64_t>(fract_seconds * 1e9);
+        int64_t nano = static_cast<int64_t>(fract_seconds * ns_in_s);
 
-        constexpr int64_t ns_in_s = static_cast<int64_t>(1000) * 1000 * 1000;
-        if(seconds < 0 && nano != 0) {
-            assert(nano < 0); // Same sign
-            seconds -= 1;
-            nano = ns_in_s + nano;
-        }
-        if(nano < 0)
-            nano = 0;
-        else if(nano >= ns_in_s)
-            nano = ns_in_s - 1;
+        if(nano < 0) {
+            // Add 1s from seconds to nano to make nano positive
+            ptime.seconds -= 1;
+            nano = std::max(int64_t(0), nano + ns_in_s); // std::max to handle rounding issues
+        } else if(nano >= ns_in_s)                       // Unlikely rounding issue, when fract_seconds is close to 1.
+            nano = ns_in_s - 1;                          // LCOV_EXCL_LINE
+
+        BOOST_ASSERT(nano < ns_in_s);
+        static_assert(ns_in_s <= std::numeric_limits<uint32_t>::max(), "Insecure cast");
         ptime.nanoseconds = static_cast<uint32_t>(nano);
         impl_->set_time(ptime);
     }
@@ -418,3 +424,5 @@ namespace boost { namespace locale {
     } // namespace time_zone
 
 }} // namespace boost::locale
+
+// boostinspect:nominmax

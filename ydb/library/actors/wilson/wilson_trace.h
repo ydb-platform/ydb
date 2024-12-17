@@ -1,13 +1,16 @@
 #pragma once
 
 #include <ydb/library/actors/core/monotonic.h>
-#include <ydb/library/actors/protos/actors.pb.h>
 
 #include <util/random/random.h>
 #include <util/random/fast.h>
 #include <util/stream/output.h>
 
 #include <array>
+
+namespace NActorsProto {
+    class TTraceId;
+} // NActorsProto
 
 namespace NWilson {
     class TTraceId {
@@ -23,15 +26,19 @@ namespace NWilson {
             ui32 Raw;
         };
 
+    public:
+        static constexpr ui8 MAX_VERBOSITY = 15;
+        static constexpr ui32 MAX_TIME_TO_LIVE = 4095;
+
     private:
         TTraceId(TTrace traceId, ui64 spanId, ui8 verbosity, ui32 timeToLive)
             : TraceId(traceId)
         {
             if (timeToLive == Max<ui32>()) {
-                timeToLive = 4095;
+                timeToLive = MAX_TIME_TO_LIVE;
             }
-            Y_ABORT_UNLESS(verbosity <= 15);
-            Y_ABORT_UNLESS(timeToLive <= 4095);
+            Y_ABORT_UNLESS(verbosity <= MAX_VERBOSITY);
+            Y_ABORT_UNLESS(timeToLive <= MAX_TIME_TO_LIVE);
             SpanId = spanId;
             Verbosity = verbosity;
             TimeToLive = timeToLive;
@@ -115,16 +122,7 @@ namespace NWilson {
             Y_DEBUG_ABORT_UNLESS(p - in == sizeof(TSerializedTraceId));
         }
 
-        TTraceId(const NActorsProto::TTraceId& pb)
-            : TTraceId()
-        {
-            if (pb.HasData()) {
-                const auto& data = pb.GetData();
-                if (data.size() == sizeof(TSerializedTraceId)) {
-                    *this = *reinterpret_cast<const TSerializedTraceId*>(data.data());
-                }
-            }
-        }
+        TTraceId(const NActorsProto::TTraceId& pb);
 
         void Serialize(TSerializedTraceId *out) const {
             char *p = *out;
@@ -137,13 +135,7 @@ namespace NWilson {
             Y_DEBUG_ABORT_UNLESS(p - *out == sizeof(TSerializedTraceId));
         }
 
-        void Serialize(NActorsProto::TTraceId *pb) const {
-            if (*this) {
-                TSerializedTraceId data;
-                Serialize(&data);
-                pb->SetData(reinterpret_cast<const char*>(&data), sizeof(data));
-            }
-        }
+        void Serialize(NActorsProto::TTraceId *pb) const;
 
         TTraceId& operator=(TTraceId&& other) {
             if (this != &other) {
@@ -182,6 +174,7 @@ namespace NWilson {
         }
 
         static TTraceId FromTraceparentHeader(const TStringBuf header, ui8 verbosity = 15);
+        TString ToTraceresponseHeader() const;
 
         TTraceId Span(ui8 verbosity) const {
             Validate();
@@ -213,6 +206,10 @@ namespace NWilson {
 
         ui8 GetVerbosity() const {
             return Verbosity;
+        }
+
+        ui32 GetTimeToLive() const {
+            return TimeToLive;
         }
 
         const void *GetTraceIdPtr() const { return TraceId.data(); }

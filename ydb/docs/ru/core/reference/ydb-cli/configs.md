@@ -8,7 +8,6 @@
 * `--all` — расширяет вывод команд до всей конфигурации (см. продвинутое конфигурирование)
 * `--allow-unknown-fields` — позволяет игнорировать неизвестные поля в конфигурации
 
-
 ```bash
 # Применить конфигурацию dynconfig.yaml на кластер
 {{ ydb-cli }} admin config replace -f dynconfig.yaml
@@ -41,7 +40,8 @@
 ## Сценарии
 
 ### Обновить основную конфигурацию кластера
- ```bash
+
+```bash
 # Получить конфигурацию кластера
 {{ ydb-cli }} admin config fetch > dynconfig.yaml
 # Отредактировать конфигурацию вашим любимым редактором
@@ -49,19 +49,27 @@ vim dynconfig.yaml
 # Применить конфигурацию dynconfig.yaml на кластер
 {{ ydb-cli }} admin config replace -f dynconfig.yaml
 ```
+
 аналогично в одну строчку:
+
 ```bash
 {{ ydb-cli }} admin config fetch | yq '.config.actor_system_config.scheduler.resolution = 128' | {{ ydb-cli }} admin config replace -f -
 ```
+
 вывод команды:
-```
+
+```text
 OK
 ```
+
 ### Посмотреть конфигурацию для определённого набора лейблов
+
 ```bash
 {{ ydb-cli }} admin config resolve --remote --label tenant=/Root/db1 --label canary=true
 ```
+
 вывод команды:
+
 ```yaml
 ---
 label_sets:
@@ -76,10 +84,13 @@ config:
 ```
 
 ### Посмотреть конфигурацию для определённого узла
+
 ```bash
 {{ ydb-cli }} admin config resolve --remote --node-id <node_id>
 ```
+
 вывод команды:
+
 ```yaml
 ---
 label_sets:
@@ -94,20 +105,26 @@ config:
 ```
 
 ### Сохранить все конфигурации локально
+
 ```bash
 {{ ydb-cli }} admin config fetch --all --output-directory <configs_dir>
 ls <configs_dir>
 ```
+
 вывод команды:
-```
+
+```text
 dynconfig.yaml volatile_1.yaml volatile_3.yaml
 ```
 
 ### Посмотреть все конфигурации локально
+
 ```bash
 {{ ydb-cli }} admin config fetch --all
 ```
+
 вывод команды:
+
 ```yaml
 ---
 metadata:
@@ -133,16 +150,19 @@ selectors:
   selector:
     tenant: /Root/db1
   config:
-    actor_system_config: !inheirt
+    actor_system_config: !inherit
       use_auto_config: true
       cpu_count: 12
 ```
 
 ### Посмотреть конечную конфигурацию для определённого узла из сохраненной локально исходной конфигурации
+
 ```bash
 {{ ydb-cli }} admin config resolve -k <configs_dir> --node-id <node_id>
 ```
+
 вывод команды:
+
 ```yaml
 ---
 label_sets:

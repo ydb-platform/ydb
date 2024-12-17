@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
+#include <ydb/library/pdisk_io/aio.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/fast.h>
 #include <util/folder/tempdir.h>

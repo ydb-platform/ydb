@@ -13,13 +13,13 @@ If your task needs absolutely all values, and their number is measured in dozens
 
 {% note warning "Attention" %}
 
-If the second argument is always NULL, the aggregation result is NULL.
+If the second argument is always `NULL`, the aggregation result is `NULL`.
 
 {% endnote %}
 
-When you use [aggregation factories](../../basic.md#aggregationfactory), a `Tuple` containing a value and a key is passed as the first [AGGREGATE_BY](#aggregateby) argument.
+When you use [aggregation factories](../../basic.md#aggregationfactory), a `Tuple` containing a value and a key is passed as the first [AGGREGATE_BY](../../aggregation.md#aggregateby) argument.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

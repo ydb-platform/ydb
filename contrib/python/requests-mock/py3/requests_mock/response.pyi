@@ -1,8 +1,7 @@
 # Stubs for requests_mock.response
 
+import io
 from typing import Any, Dict
-
-import six
 
 from requests import Request, Response
 from requests.cookies import RequestsCookieJar
@@ -14,7 +13,8 @@ class _FakeConnection:
     def send(self, request: Any, **kwargs: Any) -> None: ...
     def close(self) -> None: ...
 
-class _IOReader(six.BytesIO):
+class _IOReader(io.BytesIO):
+
     def read(self, *args: Any, **kwargs: Any) -> Any: ...
 
 def create_response(request: Any, **kwargs: Any) -> Response: ...

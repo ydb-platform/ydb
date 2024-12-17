@@ -1,0 +1,23 @@
+--- a/javacodegen.cpp
++++ b/javacodegen.cpp
+@@ -1681,4 +1681,8 @@ ostream &JavaTabCodeGen::source_error( const InputLoc &loc )
+ 	return cerr;
+ }
+ 
+-
++#undef _resume
++#undef _again
++#undef _eof_trans
++#undef _test_eof
++#undef _out
+--- a/rlscan.h
++++ b/rlscan.h
+@@ -33,7 +33,7 @@
+ using std::istream;
+ using std::ostream;
+ 
+-extern char *Parser_lelNames[];
++extern const char *Parser_lelNames[];
+ 
+ struct Scanner
+ {

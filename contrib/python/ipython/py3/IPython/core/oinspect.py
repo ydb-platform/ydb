@@ -460,7 +460,7 @@ class Inspector(Colorable):
 
     mime_hooks = traitlets.Dict(
         config=True,
-        help="dictionary of mime to callable to add informations into help mimebundle dict",
+        help="dictionary of mime to callable to add information into help mimebundle dict",
     ).tag(config=True)
 
     def __init__(
@@ -1196,7 +1196,7 @@ class Inspector(Colorable):
 
           - list_types(False): list all available object types for object matching.
         """
-        #print 'ps pattern:<%r>' % pattern # dbg
+        # print('ps pattern:<%r>' % pattern)  # dbg
 
         # defaults
         type_pattern = 'all'
@@ -1225,7 +1225,7 @@ class Inspector(Colorable):
                 raise ValueError('invalid namespace <%s>. Valid names: %s' %
                                  (name,ns_table.keys()))
 
-        #print 'type_pattern:',type_pattern # dbg
+        # print('type_pattern:',type_pattern)  # dbg
         search_result, namespaces_seen = set(), set()
         for ns_name in ns_search:
             ns = ns_table[ns_name]

@@ -14,7 +14,7 @@ public:
     TCommandMonitoring();
 };
 
-class TCommandSelfCheck : public TYdbSimpleCommand, public TCommandWithFormat {
+class TCommandSelfCheck : public TYdbSimpleCommand, public TCommandWithOutput {
 public:
     TCommandSelfCheck();
     void Config(TConfig& config) override;

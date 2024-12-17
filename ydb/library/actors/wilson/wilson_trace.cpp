@@ -3,7 +3,28 @@
 #include <util/generic/algorithm.h>
 #include <util/string/hex.h>
 
+#include <ydb/library/actors/protos/actors.pb.h>
+
 namespace NWilson {
+    TTraceId::TTraceId(const NActorsProto::TTraceId& pb)
+        : TTraceId()
+    {
+        if (pb.HasData()) {
+            const auto& data = pb.GetData();
+            if (data.size() == sizeof(TSerializedTraceId)) {
+                *this = *reinterpret_cast<const TSerializedTraceId*>(data.data());
+            }
+        }
+    }
+
+    void TTraceId::Serialize(NActorsProto::TTraceId *pb) const {
+        if (*this) {
+            TSerializedTraceId data;
+            Serialize(&data);
+            pb->SetData(reinterpret_cast<const char*>(&data), sizeof(data));
+        }
+    }
+
     TTraceId TTraceId::FromTraceparentHeader(const TStringBuf header, ui8 verbosity) {
         constexpr size_t versionChars = 2; // Only version 0 is supported
         constexpr size_t versionStart = 0;
@@ -22,7 +43,7 @@ namespace NWilson {
         constexpr size_t expectedHeaderSize =
             versionChars + traceIdChars + parentSpanIdChars + traceFlagsChars + 3;
 
-        if (header.Size() != expectedHeaderSize) {
+        if (header.size() != expectedHeaderSize) {
             return {};
         }
 
@@ -45,7 +66,7 @@ namespace NWilson {
         }
 
         ui8 version;
-        HexDecode(header.Data(), versionChars, &version);
+        HexDecode(header.data(), versionChars, &version);
         if (version != 0) {
             return {};
         }
@@ -54,14 +75,33 @@ namespace NWilson {
         ui64 spanId;
         static_assert(traceIdChars == 2 * sizeof(traceId));
         static_assert(parentSpanIdChars == 2 * sizeof(spanId));
-        HexDecode(header.Data() + traceIdStart, traceIdChars, &traceId);
-        HexDecode(header.Data() + parentSpanIdStart, parentSpanIdChars, &spanId);
+        HexDecode(header.data() + traceIdStart, traceIdChars, &traceId);
+        HexDecode(header.data() + parentSpanIdStart, parentSpanIdChars, &spanId);
 
         if ((traceId[0] == 0 && traceId[1] == 0) || spanId == 0) {
             return {};
         }
 
         return TTraceId(traceId, spanId, verbosity, Max<ui32>());
+    }
+
+    TString TTraceId::ToTraceresponseHeader() const {
+        if (!*this) {
+            return {};
+        }
+
+        TString result;
+        result.reserve(55); // 2 + 1 + 32 + 1 + 16 + 1 + 2 = 55
+
+        result += "00-";
+        result += GetHexTraceId();
+        result += "-";
+        result += HexEncode(GetSpanIdPtr(), GetSpanIdSize());
+        result += "-00";
+
+        std::for_each(result.begin(), result.vend(), [](char& c) { c = std::tolower(c); });
+
+        return result;
     }
 
     TString TTraceId::GetHexTraceId() const {

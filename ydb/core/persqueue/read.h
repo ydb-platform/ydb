@@ -264,6 +264,20 @@ namespace NPQ {
             auto& srcRequest = ev->Get()->Record;
 
             TKvRequest kvReq(TKvRequest::TypeWrite, ev->Sender, Max<ui64>(), TPartitionId(Max<ui32>()));
+
+            SaveCmdWrite(srcRequest, kvReq, ctx);
+
+            ui64 cookie = SaveKvRequest(std::move(kvReq));
+
+            auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+            request->Record = std::move(srcRequest);
+            request->Record.SetCookie(cookie);
+
+            ctx.Send(Tablet, request.Release()); // -> KV
+        }
+
+        void SaveCmdWrite(const NKikimrClient::TKeyValueRequest& srcRequest, TKvRequest& kvReq, const TActorContext& ctx)
+        {
             kvReq.Blobs.reserve(srcRequest.CmdWriteSize());
 
             for (ui32 i = 0; i < srcRequest.CmdWriteSize(); ++i) {

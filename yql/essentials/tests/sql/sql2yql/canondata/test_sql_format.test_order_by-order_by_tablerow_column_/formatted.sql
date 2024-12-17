@@ -3,6 +3,8 @@ USE plato;
 
 SELECT
     key
-FROM Input
+FROM
+    Input
 ORDER BY
-    TableRow().key;
+    TableRow().key
+;

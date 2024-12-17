@@ -139,6 +139,8 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
             Mon->EventGet->Inc();
         } else if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvBlock>) {
             Mon->EventBlock->Inc();
+        } else if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvGetBlock>) {
+            Mon->EventGetBlock->Inc();
         } else if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvDiscover>) {
             Mon->EventDiscover->Inc();
         } else if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvRange>) {
@@ -258,6 +260,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     void PushRequest(IActor *actor, TInstant deadline);
     void CheckDeadlines();
     void HandleNormal(TEvBlobStorage::TEvGet::TPtr &ev);
+    void HandleNormal(TEvBlobStorage::TEvGetBlock::TPtr &ev);
     void HandleNormal(TEvBlobStorage::TEvPut::TPtr &ev);
     void HandleNormal(TEvBlobStorage::TEvBlock::TPtr &ev);
     void HandleNormal(TEvBlobStorage::TEvPatch::TPtr &ev);
@@ -371,6 +374,7 @@ public:
 #define HANDLE_EVENTS(HANDLER) \
     hFunc(TEvBlobStorage::TEvPut, HANDLER); \
     hFunc(TEvBlobStorage::TEvGet, HANDLER); \
+    hFunc(TEvBlobStorage::TEvGetBlock, HANDLER); \
     hFunc(TEvBlobStorage::TEvBlock, HANDLER); \
     hFunc(TEvBlobStorage::TEvDiscover, HANDLER); \
     hFunc(TEvBlobStorage::TEvRange, HANDLER); \

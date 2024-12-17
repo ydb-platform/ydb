@@ -5,7 +5,10 @@ $foo = CAST(Unicode::ToLower("PLATO"u) AS String);
 INSERT INTO yt: $foo.Output
 SELECT
     *
-FROM yt: $foo.Input
-WHERE key < "100"
+FROM
+    yt: $foo.Input
+WHERE
+    key < '100'
 ORDER BY
-    key;
+    key
+;

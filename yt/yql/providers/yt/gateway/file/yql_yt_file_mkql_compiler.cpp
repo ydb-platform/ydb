@@ -373,7 +373,7 @@ TRuntimeNode ToList(TRuntimeNode list, NCommon::TMkqlBuildContext& ctx) {
 TType* BuildInputType(TYtSectionList input, NCommon::TMkqlBuildContext& ctx) {
     TVector<TType*> items;
     for (auto section: input) {
-        items.push_back(NCommon::BuildType(input.Ref(), *section.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx.ProgramBuilder));
+        items.push_back(ctx.BuildType(input.Ref(), *section.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()));
     }
     return items.size() == 1
         ? items.front()
@@ -383,7 +383,7 @@ TType* BuildInputType(TYtSectionList input, NCommon::TMkqlBuildContext& ctx) {
 TType* BuildOutputType(TYtOutSection output, NCommon::TMkqlBuildContext& ctx) {
     TVector<TType*> items;
     for (auto table: output) {
-        items.push_back(NCommon::BuildType(output.Ref(), *table.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx.ProgramBuilder));
+        items.push_back(ctx.BuildType(output.Ref(), *table.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()));
     }
     return items.size() == 1
         ? items.front()
@@ -629,6 +629,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             values = ApplyPathRangesAndSampling(values, itemType, ytMap.Input().Ref(), ctx);
 
             auto& lambdaInputType = GetSeqItemType(*ytMap.Mapper().Args().Arg(0).Ref().GetTypeAnn());
+            auto& lambdaOutputType = GetSeqItemType(*ytMap.Mapper().Body().Ref().GetTypeAnn());
 
             if (lambdaInputType.GetKind() == ETypeAnnotationKind::Multi) {
                 values = ExpandFlow(values, ctx);
@@ -641,7 +642,11 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, values}}, ytMap.Mapper().Ref().UniqueId());
             values = NCommon::MkqlBuildExpr(ytMap.Mapper().Body().Ref(), innerCtx);
 
-            if (ETypeAnnotationKind::Multi == GetSeqItemType(*ytMap.Mapper().Body().Ref().GetTypeAnn()).GetKind())
+            if (IsWideBlockType(lambdaOutputType)) {
+                values = ctx.ProgramBuilder.WideFromBlocks(values);
+            }
+
+            if (ETypeAnnotationKind::Multi == lambdaOutputType.GetKind())
                 values = NarrowFlow(values, ytMap, ctx);
 
             auto res = BuildTableOutput(values, ctx);

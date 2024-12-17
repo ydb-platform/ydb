@@ -1,3 +1,5 @@
 SELECT
     key
-FROM plato.Input;
+FROM
+    plato.Input
+;

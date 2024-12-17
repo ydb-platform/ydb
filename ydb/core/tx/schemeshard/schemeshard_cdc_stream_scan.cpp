@@ -53,6 +53,7 @@ private:
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
         Request->Record.SetTxId(ev->Get()->TxId);
         Send(SSActorId, Request.Release());
+        TActorBootstrapped::PassAway();
     }
 
 private:
@@ -126,7 +127,7 @@ public:
         }
 
         if (Finalize) {
-            Self->CdcStreamScanFinalizer = ctx.Register(new TCdcStreamScanFinalizer(ctx.SelfID, std::move(Finalize)));
+            ctx.Register(new TCdcStreamScanFinalizer(ctx.SelfID, std::move(Finalize)));
         }
     }
 

@@ -1,0 +1,2 @@
+{%- set publish = target.publish -%}
+{%- set libraries = target.consumer|selectattr('type', 'eq', 'library') -%}

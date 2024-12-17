@@ -6,9 +6,10 @@ USE plato;
 SELECT
     t.*,
     TableName() AS path
-FROM range("", "Input1", "Input2")
-    AS t
+FROM
+    range('', 'Input1', 'Input2') AS t
 ORDER BY
     path,
     key,
-    value;
+    value
+;

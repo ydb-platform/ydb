@@ -1,13 +1,17 @@
 USE plato;
 
-$data =
+$data = (
     SELECT
         Yson::Parse(CAST(key AS Yson)) AS key,
         text, -- missing colums
         subkey
-    FROM Input;
+    FROM
+        Input
+);
 
 SELECT
     key,
     subkey
-FROM $data;
+FROM
+    $data
+;

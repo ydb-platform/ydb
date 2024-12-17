@@ -1,7 +1,8 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
-PRAGMA yt.DisableOptimizers = "HorizontalJoin,MultiHorizontalJoin";
+
+PRAGMA yt.DisableOptimizers = 'HorizontalJoin,MultiHorizontalJoin';
 
 SELECT
     *
@@ -10,16 +11,18 @@ FROM (
         key,
         TableRecordIndex() AS record,
         TablePath() AS path
-    FROM Input
+    FROM
+        Input
     UNION ALL
     SELECT
         key,
         TableRecordIndex() AS record,
-        "d" AS path
-    FROM Input
-)
-    AS x
+        'd' AS path
+    FROM
+        Input
+) AS x
 ORDER BY
     key,
     record,
-    path;
+    path
+;

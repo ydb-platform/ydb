@@ -6,6 +6,8 @@
 #include <yt/yt/core/ypath/token.h>
 
 #include <yt/yt/library/ytprof/heap_profiler.h>
+
+#include <tcmalloc/malloc_extension.h>
 #endif
 
 namespace NYT::NYTProf {

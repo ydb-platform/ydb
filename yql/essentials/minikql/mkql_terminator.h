@@ -3,10 +3,18 @@
 #include <util/generic/noncopyable.h>
 #include <util/system/compiler.h>
 
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr {
 
 namespace NMiniKQL {
+
+class TTerminateException : public NYql::TErrorException
+{
+public:
+    TTerminateException();
+};
+
 ///////////////////////////////////////////////////////////////////////////////
 // ITerminator
 ///////////////////////////////////////////////////////////////////////////////

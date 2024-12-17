@@ -10,7 +10,8 @@ SELECT
         ($x) -> {
             RETURN $x;
         }
-    );
+    )
+;
 
 SELECT
     Yql::Sort(
@@ -23,7 +24,8 @@ SELECT
         ($x) -> {
             RETURN $x;
         }
-    );
+    )
+;
 
 SELECT
     Yql::Sort(
@@ -37,7 +39,8 @@ SELECT
         ($x) -> {
             RETURN $x;
         }
-    );
+    )
+;
 
 SELECT
     Yql::Sort(
@@ -55,7 +58,8 @@ SELECT
         ($x) -> {
             RETURN $x;
         }
-    );
+    )
+;
 
 SELECT
     Yql::Sort(
@@ -73,7 +77,8 @@ SELECT
         ($x) -> {
             RETURN $x;
         }
-    );
+    )
+;
 
 SELECT
     Yql::Sort(
@@ -91,4 +96,5 @@ SELECT
         ($x) -> {
             RETURN $x;
         }
-    );
+    )
+;

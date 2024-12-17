@@ -1,24 +1,29 @@
 PRAGMA WarnUntypedStringLiterals;
 PRAGMA UnicodeLiterals;
+
 $f = () -> {
     RETURN (
         "a"s,
         "b"u,
-        "c"
+        'c'
     );
 };
 
 SELECT
-    $f();
+    $f()
+;
+
 PRAGMA DisableWarnUntypedStringLiterals;
 PRAGMA DisableUnicodeLiterals;
+
 $g = () -> {
     RETURN (
         "a"s,
         "b"u,
-        "c"
+        'c'
     );
 };
 
 SELECT
-    $g();
+    $g()
+;

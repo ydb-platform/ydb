@@ -4,7 +4,8 @@ USE plato;
 $sub_raws = (
     SELECT
         ROW_NUMBER() OVER trivialWindow AS RowNum
-    FROM Input
+    FROM
+        Input
     WINDOW
         trivialWindow AS ()
 );
@@ -12,8 +13,12 @@ $sub_raws = (
 --INSERT INTO Output
 SELECT
     *
-FROM $sub_raws;
+FROM
+    $sub_raws
+;
 
 SELECT
     *
-FROM $sub_raws;
+FROM
+    $sub_raws
+;

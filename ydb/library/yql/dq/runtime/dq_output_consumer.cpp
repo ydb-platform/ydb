@@ -327,13 +327,15 @@ class TDqOutputHashPartitionConsumerBlock : public IDqOutputConsumer {
 public:
     TDqOutputHashPartitionConsumerBlock(TVector<IDqOutput::TPtr>&& outputs, TVector<TColumnInfo>&& keyColumns,
         const  NKikimr::NMiniKQL::TType* outputType,
-        const NKikimr::NMiniKQL::THolderFactory& holderFactory)
+        const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+        TMaybe<ui8> minFillPercentage)
         : OutputType_(static_cast<const NMiniKQL::TMultiType*>(outputType))
         , HolderFactory_(holderFactory)
         , Outputs_(std::move(outputs))
         , KeyColumns_(std::move(keyColumns))
         , ScalarColumnHashes_(KeyColumns_.size())
         , OutputWidth_(OutputType_->GetElementsCount())
+        , MinFillPercentage_(minFillPercentage)
     {
         TTypeInfoHelper helper;
         YQL_ENSURE(OutputWidth_ > KeyColumns_.size());
@@ -368,7 +370,7 @@ private:
         YQL_ENSURE(false, "Consume() called on wide block stream");
     }
 
-    void WideConsume(TUnboxedValue* values, ui32 count) final {
+    void WideConsume(TUnboxedValue values[], ui32 count) final {
         YQL_ENSURE(!IsWaitingFlag_);
         YQL_ENSURE(count == OutputWidth_);
 
@@ -379,7 +381,7 @@ private:
 
         TVector<const arrow::Datum*> datums;
         datums.reserve(count - 1);
-        for (ui32 i = 0; i + 1 < count; ++i) {
+        for (ui32 i = 0; i < count - 1; ++i) {
             datums.push_back(&TArrowBlock::From(values[i]).GetDatum());
         }
 
@@ -404,9 +406,10 @@ private:
                 if (src->is_scalar()) {
                     output.emplace_back(*src);
                 } else {
-                    IArrayBuilder::TArrayDataItem dataItem;
-                    dataItem.Data = src->array().get();
-                    dataItem.StartOffset = 0;
+                    IArrayBuilder::TArrayDataItem dataItem {
+                        .Data = src->array().get(),
+                        .StartOffset = 0,
+                    };
                     Builders_[j]->AddMany(&dataItem, 1, indexes, outputBlockLen);
                     output.emplace_back(Builders_[j]->Build(true));
                 }
@@ -418,11 +421,14 @@ private:
     }
 
     void DoConsume(TVector<std::unique_ptr<TArgsDechunker>>&& outputData) const {
+        Y_ENSURE(outputData.size() == Outputs_.size());
+
         while (!outputData.empty()) {
             bool hasData = false;
             for (size_t i = 0; i < Outputs_.size(); ++i) {
                 if (Outputs_[i]->IsFull()) {
                     IsWaitingFlag_ = true;
+                    Y_ENSURE(OutputData_.empty());
                     OutputData_ = std::move(outputData);
                     return;
                 }
@@ -474,7 +480,7 @@ private:
         return !IsWaitingFlag_;
     }
 
-    size_t GetHashPartitionIndex(const arrow::Datum** values, ui64 blockIndex) {
+    size_t GetHashPartitionIndex(const arrow::Datum* values[], ui64 blockIndex) {
         ui64 hash = 0;
         for (size_t keyId = 0; keyId < KeyColumns_.size(); keyId++) {
             const ui32 columnIndex = KeyColumns_[keyId].Index;
@@ -512,7 +518,7 @@ private:
             if (blockType->GetShape() == NMiniKQL::TBlockType::EShape::Many) {
                 auto itemType = blockType->GetItemType();
                 YQL_ENSURE(!itemType->IsPg(), "pg types are not supported yet");
-                Builders_.emplace_back(MakeArrayBuilder(helper, itemType, *NYql::NUdf::GetYqlMemoryPool(), maxBlockLen, nullptr));
+                Builders_.emplace_back(MakeArrayBuilder(helper, itemType, *NYql::NUdf::GetYqlMemoryPool(), maxBlockLen, nullptr, {.MinFillPercentage=MinFillPercentage_}));
             } else {
                 Builders_.emplace_back();
             }
@@ -529,6 +535,7 @@ private:
     const TVector<TColumnInfo> KeyColumns_;
     TVector<TMaybe<ui64>> ScalarColumnHashes_;
     const ui32 OutputWidth_;
+    const TMaybe<ui8> MinFillPercentage_;
 
     TVector<NUdf::IBlockItemHasher::TPtr> Hashers_;
     TVector<std::unique_ptr<IBlockReader>> Readers_;
@@ -597,7 +604,8 @@ IDqOutputConsumer::TPtr CreateOutputMapConsumer(IDqOutput::TPtr output) {
 IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
     TVector<IDqOutput::TPtr>&& outputs,
     TVector<TColumnInfo>&& keyColumns, const  NKikimr::NMiniKQL::TType* outputType,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory)
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    TMaybe<ui8> minFillPercentage)
 {
     YQL_ENSURE(!outputs.empty());
     YQL_ENSURE(!keyColumns.empty());
@@ -616,7 +624,7 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
         return MakeIntrusive<TDqOutputHashPartitionConsumerScalar>(std::move(outputs), std::move(keyColumns), outputType);
     }
 
-    return MakeIntrusive<TDqOutputHashPartitionConsumerBlock>(std::move(outputs), std::move(keyColumns), outputType, holderFactory);
+    return MakeIntrusive<TDqOutputHashPartitionConsumerBlock>(std::move(outputs), std::move(keyColumns), outputType, holderFactory, minFillPercentage);
 }
 
 IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth) {

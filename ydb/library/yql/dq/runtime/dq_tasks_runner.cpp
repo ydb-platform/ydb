@@ -1,4 +1,5 @@
 #include "dq_tasks_runner.h"
+#include "dq_tasks_counters.h"
 
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_multihopping.h>
@@ -163,7 +164,7 @@ NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, con
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NMiniKQL::TType* type,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TVector<IDqOutput::TPtr>&& outputs)
+    TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui8> minFillPercentage)
 {
     TMaybe<ui32> outputWidth;
     if (type->IsMulti()) {
@@ -184,7 +185,7 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
             GetColumnsInfo(type, outputDesc.GetHashPartition().GetKeyColumns(), keyColumns);
             YQL_ENSURE(!keyColumns.empty());
             YQL_ENSURE(outputDesc.GetHashPartition().GetPartitionsCount() == outputDesc.ChannelsSize());
-            return CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), type, holderFactory);
+            return CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), type, holderFactory, minFillPercentage);
         }
 
         case NDqProto::TTaskOutput::kBroadcast: {
@@ -240,10 +241,10 @@ public:
 
         if (Context.TypeEnv) {
             YQL_ENSURE(std::addressof(alloc) == std::addressof(TypeEnv().GetAllocator()));
-        } else {            
+        } else {
             AllocatedHolder->SelfTypeEnv = std::make_unique<TTypeEnvironment>(alloc);
         }
-        
+
     }
 
     ~TDqTaskRunner() {
@@ -261,7 +262,7 @@ public:
     }
 
     const TDqMeteringStats* GetMeteringStats() const override {
-        return &BillingStats;
+        return &MeteringStats;
     }
 
     ui64 GetTaskId() const override {
@@ -303,7 +304,7 @@ public:
 
         TComputationPatternOpts opts(alloc.Ref(), typeEnv, taskRunnerFactory,
             Context.FuncRegistry, NUdf::EValidateMode::None, validatePolicy, optLLVM, EGraphPerProcess::Multi,
-            AllocatedHolder->ProgramParsed.StatsRegistry.Get());
+            AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr);
 
         if (!SecureParamsProvider) {
             SecureParamsProvider = MakeSimpleSecureParamsProvider(Settings.SecureParams);
@@ -521,7 +522,10 @@ public:
 
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
             auto& inputDesc = task.GetInputs(i);
-            auto& inputStats = BillingStats.AddInputs();
+            TDqMeteringStats::TInputStats* inputStats = nullptr; 
+            if (task.EnableMetering()) {
+                inputStats = &MeteringStats.AddInputs();
+            }
 
             TVector<IDqInput::TPtr> inputs{Reserve(std::max<ui64>(inputDesc.ChannelsSize(), 1))}; // 1 is for "source" type of input.
             TInputTransformInfo* transform = nullptr;
@@ -584,11 +588,11 @@ public:
                 inputs.emplace_back(transform->TransformOutput);
                 entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
                     CreateInputUnionValue(transform->TransformOutput->GetInputType(), std::move(inputs), holderFactory,
-                        {&inputStats, transform->TransformOutputType}));
+                        {inputStats, transform->TransformOutputType}));
             } else {
                 entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
                     DqBuildInputValue(inputDesc, entry->InputItemTypes[i], std::move(inputs), holderFactory,
-                        {&inputStats, entry->InputItemTypes[i]}));
+                        {inputStats, entry->InputItemTypes[i]}));
             }
         }
 
@@ -740,6 +744,11 @@ public:
                     Stats->MkqlStats.emplace_back(TMkqlStat{key, value});
                 });
             }
+
+            Stats->OperatorStat.clear();
+            for (auto& [_, opStat] : CountersProvider.OperatorStat) {
+                Stats->OperatorStat.push_back(opStat);
+            }
         }
 
         if (Y_LIKELY(CollectBasic())) {
@@ -828,7 +837,7 @@ public:
     const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const override {
         return AllocatedHolder->ProgramParsed.CompGraph->GetHolderFactory();
     }
-    
+
     NKikimr::NMiniKQL::TScopedAlloc& GetAllocator() const override {
         return Alloc();
     }
@@ -952,6 +961,8 @@ private:
     TDqTaskRunnerSettings Settings;
     TLogFunc LogFunc;
     std::unique_ptr<NUdf::ISecureParamsProvider> SecureParamsProvider;
+    TDqTaskCountersProvider CountersProvider;
+
     struct TInputTransformInfo {
         NUdf::TUnboxedValue TransformInput;
         IDqAsyncInputBuffer::TPtr TransformOutput;
@@ -998,7 +1009,7 @@ private:
     bool TaskHasEffects = false;
 
     std::unique_ptr<TDqTaskRunnerStats> Stats;
-    TDqMeteringStats BillingStats;
+    TDqMeteringStats MeteringStats;
     TDuration RunComputeTime;
 
 private:

@@ -145,7 +145,6 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     if (!ready) {
         return TConclusionStatus::Fail("Not ready");
     }
-    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage());
     THashMap<ui64, TPortionLoadContext> portions0;
     THashSet<ui64> existPortions0;
     THashMap<ui64, std::map<TFullChunkAddress, TColumnChunkLoadContext>> columns0;
@@ -212,6 +211,8 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         return tasks;
     }
 
+    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage());
+    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
     {
         std::vector<TPatchItemRemoveV1> package;
         for (auto&& [portionId, chunkInfo] : columns1Remove) {

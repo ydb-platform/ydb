@@ -5,21 +5,24 @@
 /* yt can not */
 PRAGMA FlexibleTypes;
 
-$groupsrc =
+$groupsrc = (
     SELECT
         1 AS int32,
         2 AS value
     UNION ALL
     SELECT
         1 AS int32,
-        1 AS value;
+        1 AS value
+);
 
 SELECT
     int32,
     max(value) AS maxval,
     min(value) AS minval,
-FROM $groupsrc
+FROM
+    $groupsrc
 GROUP BY
     int32
 ASSUME ORDER BY
-    int32;
+    int32
+;

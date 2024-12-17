@@ -1,5 +1,6 @@
 RECURSE(
-    astdiff    
+    arrow_kernels_dump
+    astdiff
     pg_catalog_dump
     pg-make-test
     pgrun
@@ -9,4 +10,5 @@ RECURSE(
     udf_dep_stub
     udf_probe
     udf_resolver
+    yql_facade_run
 )

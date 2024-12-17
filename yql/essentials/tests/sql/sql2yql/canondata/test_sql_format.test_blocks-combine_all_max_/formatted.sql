@@ -16,4 +16,6 @@ SELECT
     max(if(key == 10u, TRUE)),
     max(if(key == 100u, TRUE)),
     max(if(key >= 10u, TRUE)),
-FROM Input;
+FROM
+    Input
+;

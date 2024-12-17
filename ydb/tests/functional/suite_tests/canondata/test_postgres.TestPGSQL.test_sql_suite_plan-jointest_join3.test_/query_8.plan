@@ -39,7 +39,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[Arg.ss1.x,Arg.ss2.q1,Arg.ss2.q2,Arg.ss2.y]"
                                             },
                                             {
                                                 "Condition": "ss1.x = ss2._equijoin_column_0",

@@ -1062,6 +1062,9 @@ private:
                 state->Statistics[state->MetricId++] = res.Statistics;
 
                 if (res.Fallback) {
+                    if (res.Timeout) {
+                        NotifyDqTimeout(state);
+                    }
                     if (state->Settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default) == EFallbackPolicy::Never || state->TypeCtx->ForceDq) {
                         auto issues = TIssues{TIssue(ctx.GetPosition(input->Pos()), "Gateway Error").SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING)};
                         issues.AddIssues(res.Issues());
@@ -1496,6 +1499,9 @@ private:
                     state->Metrics->IncCounter("dq", "Fallback");
                 }
                 state->Statistics[state->MetricId++].Entries.push_back(TOperationStatistics::TEntry("Fallback", 0, 0, 0, 0, 1));
+                if (res.Timeout) {
+                    NotifyDqTimeout(state);
+                }
                 // never fallback will be captured in yql_facade
                 auto issues = TIssues{TIssue(ctx.GetPosition(input->Pos()), "Gateway Error").SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING)};
                 issues.AddIssues(res.Issues());
@@ -1998,6 +2004,9 @@ private:
                             state->Metrics->IncCounter("dq", "Fallback");
                         }
                         state->Statistics[state->MetricId++].Entries.push_back(TOperationStatistics::TEntry("Fallback", 0, 0, 0, 0, 1));
+                        if (res.Timeout) {
+                            NotifyDqTimeout(state);
+                        }
                     }
 
                     CompleteNode(execState, node, [resIssues = res.Issues(), fallback = res.Fallback](const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) -> IGraphTransformer::TStatus {
@@ -2084,6 +2093,14 @@ private:
         }
         YQL_CLOG(TRACE, ProviderDq) << "After PeepHole\n" << NCommon::ExprToPrettyString(ctx, *output);
         return status;
+    }
+
+    static void NotifyDqTimeout(const TDqStatePtr& state) {
+        auto integrations = GetUniqueIntegrations(*state->TypeCtx);
+        std::for_each(integrations.cbegin(), integrations.cend(), std::bind(&IDqIntegration::NotifyDqTimeout, std::placeholders::_1));
+        if (state->Metrics) {
+            state->Metrics->IncCounter("dq", "Timeout");
+        }
     }
 
 private:

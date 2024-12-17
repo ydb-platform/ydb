@@ -1,6 +1,9 @@
 SELECT
     *
-FROM plato.Input
-WHERE key IN ("075", "023")
+FROM
+    plato.Input
+WHERE
+    key IN ('075', '023')
 ORDER BY
-    key;
+    key
+;

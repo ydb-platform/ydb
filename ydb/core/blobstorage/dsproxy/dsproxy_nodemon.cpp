@@ -51,6 +51,7 @@ TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<::NMonitoring::TDynamicCounters> 
         auto group = Group->GetSubgroup("subsystem", "restart");
         RestartPut = group->GetCounter("EvPut", true);
         RestartGet = group->GetCounter("EvGet", true);
+        RestartGetBlock = group->GetCounter("EvGetBlock", true);
         RestartPatch = group->GetCounter("EvPatch", true);
         RestartBlock = group->GetCounter("EvBlock", true);
         RestartDiscover = group->GetCounter("EvDiscover", true);

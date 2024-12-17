@@ -1,2 +1,3 @@
 SELECT
-    ListSort(DictItems(SimpleUdf::ComplexReturnType("banana")));
+    ListSort(DictItems(SimpleUdf::ComplexReturnType('banana')))
+;

@@ -129,6 +129,10 @@ public:
         UseBlockInput_ = true;
     }
 
+    void SetUseBlockOutput() {
+        UseBlockOutput_ = true;
+    }
+
     void SetTableOffsets(const TVector<ui64>& offsets);
 
     void Clear();
@@ -143,6 +147,7 @@ public:
 public:
     bool UseSkiff_ = false;
     bool UseBlockInput_ = false;
+    bool UseBlockOutput_ = false;
     TString OptLLVM_;
     TSystemFields SystemFields_;
 

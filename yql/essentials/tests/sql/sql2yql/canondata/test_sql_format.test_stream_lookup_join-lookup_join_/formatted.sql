@@ -1,4 +1,5 @@
-PRAGMA dq.UseWideChannels = "true";
+PRAGMA dq.UseWideChannels = 'true';
+
 USE plato;
 
 SELECT
@@ -8,8 +9,10 @@ SELECT
     h.fqdn AS fqdn,
     h.ip4 AS ip4,
     h.ip6 AS ip6
-FROM Event
-    AS e
-LEFT JOIN /*+ streamlookup() */ Host
-    AS h
-ON (e.host == h.hostname);
+FROM
+    Event AS e
+LEFT JOIN
+    /*+ streamlookup() */ Host AS h
+ON
+    (e.host == h.hostname)
+;

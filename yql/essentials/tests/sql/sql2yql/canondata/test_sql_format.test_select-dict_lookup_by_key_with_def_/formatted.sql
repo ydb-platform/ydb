@@ -10,5 +10,7 @@ $key_text = AsDict(
 
 SELECT
     value,
-    $key_text[key] ?? "unknown" AS key_text
-FROM plato.Input;
+    $key_text[key] ?? 'unknown' AS key_text
+FROM
+    plato.Input
+;

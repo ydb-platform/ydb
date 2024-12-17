@@ -9,8 +9,10 @@ $list = (
     FROM (
         SELECT
             Path
-        FROM folder("")
-        WHERE Type == "table" AND Path LIKE "Input%"
+        FROM
+            folder('')
+        WHERE
+            Type == 'table' AND Path LIKE 'Input%'
         ORDER BY
             Path DESC
         LIMIT 30
@@ -20,4 +22,6 @@ $list = (
 INSERT INTO Output WITH truncate
 SELECT
     count(*)
-FROM each($list);
+FROM
+    each($list)
+;

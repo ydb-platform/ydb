@@ -276,7 +276,7 @@ private:
                     inserter(name, cell.AsValue<ui32>());
                 } else if constexpr (std::is_same_v<T, TUuidHolder>) {
                     TStringStream ss;
-                    NUuid::UuidBytesToString(cell.Data(), ss);
+                    NUuid::UuidBytesToString(TString(cell.Data(), cell.Size()), ss);
                     inserter(name, TUuidHolder(ss.Str()));
                 }
             }
@@ -854,8 +854,8 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(InsertSingleUuidRow) {
-        Run<TUuidHolder>("/Root/path", UuidTable(), KeysOnly(), "INSERT INTO `/Root/path` (key, value) VALUES (Uuid(\"65df1ec1-a97d-47b2-ae56-3c023da6ee8c\"), 10);", {
-            {"keys_stream", {TStructRecordBase<TUuidHolder>(NTable::ERowOp::Upsert, {{"key", TUuidHolder("65df1ec1-a97d-47b2-ae56-3c023da6ee8c")}})}},
+        Run<TUuidHolder>("/Root/path", UuidTable(), KeysOnly(), "INSERT INTO `/Root/path` (key, value) VALUES (Uuid(\"65df1ec1-0000-47b2-ae56-3c023da6ee8c\"), 10);", {
+            {"keys_stream", {TStructRecordBase<TUuidHolder>(NTable::ERowOp::Upsert, {{"key", TUuidHolder("65df1ec1-0000-47b2-ae56-3c023da6ee8c")}})}},
         });
     }
 

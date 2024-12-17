@@ -54,7 +54,7 @@ PEERDIR(
     ydb/library/yql/providers/dq/expr_nodes
     ydb/library/yql/providers/generic/expr_nodes
     ydb/library/yql/providers/generic/proto
-    ydb/library/yql/providers/generic/connector/api/common
+    yql/essentials/providers/common/proto
     ydb/library/yql/providers/generic/connector/libcpp
     yql/essentials/providers/result/expr_nodes
     ydb/library/yql/utils/plan

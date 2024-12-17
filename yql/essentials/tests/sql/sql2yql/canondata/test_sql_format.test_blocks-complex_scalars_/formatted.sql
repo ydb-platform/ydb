@@ -8,6 +8,8 @@ SELECT
     2p AS pg,
     AsTuple(1, 2, Just(Just(2))) AS tuple,
     Just(Just(Just(AsTuple(1, 2, Just(Just(2)))))) AS double_tuple
-FROM Input
+FROM
+    Input
 ORDER BY
-    k;
+    k
+;

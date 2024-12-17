@@ -567,9 +567,6 @@ class Build(object):
         if force_ignore_local_files:
             self.ignore_local_files = True
 
-        if self.is_ide_build_type(self.build_type):
-            self.ignore_local_files = True
-
         self.pic = not is_positive('FORCE_NO_PIC')
 
     @property
@@ -667,10 +664,6 @@ class Build(object):
         return self.build_type == 'valgrind' or self.build_type == 'valgrind-release'
 
     @property
-    def is_ide(self):
-        return self.is_ide_build_type(self.build_type)
-
-    @property
     def profiler_type(self):
         if self.build_type == 'profile':
             return Profiler.Generic
@@ -678,10 +671,6 @@ class Build(object):
             return Profiler.GProf
         else:
             return None
-
-    @staticmethod
-    def is_ide_build_type(build_type):
-        return build_type == 'nobuild'
 
     def _configure_runtime_versions(self):
         try:
@@ -1000,8 +989,7 @@ class ToolchainOptions(object):
             self.c_compiler = self.params['c_compiler']
             self.cxx_compiler = self.params['cxx_compiler']
 
-            # TODO(somov): Требовать номер версии всегда.
-            self.compiler_version = self.params.get('gcc_version') or self.params.get('version') or '0'
+            self.compiler_version = self.params['version']
             self.compiler_version_list = list(map(int, self.compiler_version.split('.')))
 
         # 'match_root' at this point contains real name for references via toolchain
@@ -1011,15 +999,10 @@ class ToolchainOptions(object):
         self.triplet_opt = self.params.get('triplet_opt', {})
         self.target_opt = self.params.get('target_opt', [])
 
-        # TODO(somov): Убрать чтение настройки из os.environ.
-        self.werror_mode = preset('WERROR_MODE') or os.environ.get('WERROR_MODE') or self.params.get('werror_mode') or 'compiler_specific'
-
         # default C++ standard is set here, some older toolchains might need to redefine it in ya.conf.json
         self.cxx_std = self.params.get('cxx_std', 'c++20')
 
         self._env = tc_json.get('env', {})
-
-        self.android_ndk_version = self.params.get('android_ndk_version', None)
 
         logger.debug('c_compiler=%s', self.c_compiler)
         logger.debug('cxx_compiler=%s', self.cxx_compiler)
@@ -1452,7 +1435,6 @@ class GnuCompiler(Compiler):
                 '-fcolor-diagnostics',
                 # Enable aligned allocation
                 '-faligned-allocation',
-                '-fdebug-default-version=4',
             ]
         elif self.tc.is_gcc:
             if self.target.is_xtensa or self.target.is_tc32:
@@ -1466,6 +1448,8 @@ class GnuCompiler(Compiler):
                 ]
 
         self.c_warnings = [
+            # Fail compilation whenever a warning appears
+            '-Werror',
             # Enable default warnings subset
             '-Wall',
             '-Wextra',
@@ -1597,7 +1581,6 @@ class GnuCompiler(Compiler):
 
         emit('C_COMPILER', '"{}"'.format(self.tc.c_compiler))
         emit('OPTIMIZE', self.optimize)
-        emit('WERROR_MODE', self.tc.werror_mode)
         emit('_C_FLAGS', self.c_flags)
         emit('_C_FOPTIONS', self.c_foptions)
         emit('_STD_CXX_VERSION', preset('USER_STD_CXX_VERSION') or self.tc.cxx_std)
@@ -1797,30 +1780,13 @@ class MSVCToolchainOptions(ToolchainOptions):
         self.under_wine_link = self.under_wine_tools
         self.under_wine_lib = self.under_wine_tools
         self.system_msvc = self.params.get('system_msvc', False)
-        self.ide_msvs = self.params.get('ide_msvs', False)
         self.use_clang = self.params.get('use_clang', False)
         self.use_msvc_linker = is_positive('USE_MSVC_LINKER')
         self.use_arcadia_toolchain = self.params.get('use_arcadia_toolchain', False)
 
         self.sdk_version = None
 
-        if self.ide_msvs:
-            bindir = '$(VC_ExecutablePath_x64_x64)\\'
-            self.c_compiler = bindir + 'cl.exe'
-            self.cxx_compiler = self.c_compiler
-
-            self.link = bindir + 'link.exe'
-            self.lib = bindir + 'lib.exe'
-            self.masm_compiler = bindir + 'ml64.exe'
-
-            self.vc_root = None
-
-            sdk_dir = '$(WindowsSdkDir)'
-            self.sdk_version = '$(WindowsTargetPlatformVersion)'
-            self.kit_includes = win_path_fix(os.path.join(sdk_dir, 'Include', self.sdk_version))
-            self.kit_libs = win_path_fix(os.path.join(sdk_dir, 'Lib', self.sdk_version))
-
-        elif detector:
+        if detector:
             self.use_clang = is_positive('USE_CLANG_CL')
 
             self.masm_compiler = which('ml64.exe')
@@ -1841,12 +1807,7 @@ class MSVCToolchainOptions(ToolchainOptions):
             # TODO(somov): Определять автоматически self.version в этом случае
 
         else:
-            if self.version_at_least(2019):
-                self.sdk_version = '10.0.18362.0'
-                if is_positive('MSVC20'):  # XXX: temporary flag, remove after DTCC-123 is completed
-                    self.cxx_std = 'c++latest'
-            else:
-                self.sdk_version = '10.0.16299.0'
+            self.sdk_version = '10.0.18362.0'
             sdk_dir = '$WINDOWS_KITS_RESOURCE_GLOBAL'
 
             self.vc_root = self.name_marker if not self.use_clang else '$MSVC_FOR_CLANG_RESOURCE_GLOBAL'
@@ -1908,7 +1869,7 @@ class MSVCToolchain(MSVC, Toolchain):
         Toolchain.__init__(self, tc, build)
         MSVC.__init__(self, tc, build)
 
-        if self.tc.from_arcadia and not self.tc.ide_msvs:
+        if self.tc.from_arcadia:
             if not is_positive('DISABLE_YMAKE_CONF_CUSTOMIZATION'):
                 self.platform_projects.append('build/internal/platform/msvc')
             self.platform_projects.append('build/platform/wine')
@@ -1917,9 +1878,6 @@ class MSVCToolchain(MSVC, Toolchain):
         super(MSVCToolchain, self).print_toolchain()
 
         emit('TOOLCHAIN_ENV', format_env(self.tc.get_env(), list_separator=';'))
-
-        if self.tc.sdk_version:
-            emit('WINDOWS_KITS_VERSION', self.tc.sdk_version)
 
         if self.tc.under_wine_tools:
             emit('_UNDER_WINE_TOOLS', 'yes')
@@ -1931,8 +1889,6 @@ class MSVCToolchain(MSVC, Toolchain):
             emit('_UNDER_WINE_COMPILER', 'yes')
         if self.tc.use_clang:
             emit('CLANG_CL', 'yes')
-        if self.tc.ide_msvs:
-            emit('IDE_MSVS', 'yes')
         if self.tc.use_arcadia_toolchain:
             emit('USE_ARCADIA_TOOLCHAIN', 'yes')
         emit('_MSVC_TC_KIT_LIBS', self.tc.kit_libs)
@@ -1995,8 +1951,8 @@ class MSVCCompiler(MSVC, Compiler):
             '${hide:CPP_FAKEID}',
             # FIXME: This is quick fix to let catboost build from MSVS IDE
             # This place is questionable overall, see YMAKE-437
-            '/DARCADIA_ROOT=' + ('${ARCADIA_ROOT}' if not self.tc.ide_msvs else '.'),
-            '/DARCADIA_BUILD_ROOT=' + ('${ARCADIA_BUILD_ROOT}' if not self.tc.ide_msvs else '.'),
+            '/DARCADIA_ROOT=${ARCADIA_ROOT}',
+            '/DARCADIA_BUILD_ROOT=${ARCADIA_BUILD_ROOT}',
             '/DWIN32',
             '/D_WIN32',
             '/D_WINDOWS',
@@ -2045,7 +2001,10 @@ class MSVCCompiler(MSVC, Compiler):
         ]
         flags += self.tc.arch_opt
 
-        c_warnings = ['/we{}'.format(code) for code in warns_as_error]
+        c_warnings = [
+            "/WX",
+        ]
+        c_warnings += ['/we{}'.format(code) for code in warns_as_error]
         c_warnings += ['/w1{}'.format(code) for code in warns_enabled]
         c_warnings += ['/wd{}'.format(code) for code in warns_disabled]
         cxx_warnings = []
@@ -2079,6 +2038,9 @@ class MSVCCompiler(MSVC, Compiler):
                 flags.append('-m64')
 
             c_warnings += [
+                # Fail compilation whenever a warning appears
+                '-Werror',
+                # FIXME: enable -Wall and -Wextra in IGNIETFERRO-1992
                 '-Wno-parentheses',
                 # For nvcc to accept the above
                 '-Wno-unknown-warning-option',
@@ -2097,11 +2059,6 @@ class MSVCCompiler(MSVC, Compiler):
                 '-Wno-undefined-var-template',
             ]
 
-            if self.tc.ide_msvs:
-                cxx_warnings += [
-                    '-Wno-unused-command-line-argument',
-                ]
-
         defines.append('/D_WIN32_WINNT={0}'.format(WINDOWS_VERSION_MIN))
 
         if winapi_unicode:
@@ -2109,20 +2066,17 @@ class MSVCCompiler(MSVC, Compiler):
         else:
             defines += ['/D_MBCS']
 
-        vc_include = win_path_fix(os.path.join(self.tc.vc_root, 'include')) if not self.tc.ide_msvs else "$(VC_VC_IncludePath.Split(';')[0].Replace('\\','/'))"
+        vc_include = win_path_fix(os.path.join(self.tc.vc_root, 'include'))
 
-        if not self.tc.ide_msvs:
-            def include_flag(path):
-                return '{flag}"{path}"'.format(path=path, flag='/I ' if not self.tc.use_clang else '-imsvc')
+        def include_flag(path):
+            return '{flag}"{path}"'.format(path=path, flag='/I ' if not self.tc.use_clang else '-imsvc')
 
-            for name in ('shared', 'ucrt', 'um', 'winrt'):
-                flags.append(include_flag(win_path_fix(os.path.join(self.tc.kit_includes, name))))
-            flags.append(include_flag(vc_include))
+        for name in ('shared', 'ucrt', 'um', 'winrt'):
+            flags.append(include_flag(win_path_fix(os.path.join(self.tc.kit_includes, name))))
+        flags.append(include_flag(vc_include))
 
         if self.tc.use_clang:
             emit('CLANG_CL', 'yes')
-        if self.tc.ide_msvs:
-            emit('IDE_MSVS', 'yes')
         if self.tc.use_arcadia_toolchain:
             emit('USE_ARCADIA_TOOLCHAIN', 'yes')
 
@@ -2140,22 +2094,18 @@ class MSVCCompiler(MSVC, Compiler):
             emit('CFLAGS_PER_TYPE', '$CFLAGS_RELEASE')
         if self.build.is_debug:
             emit('CFLAGS_PER_TYPE', '$CFLAGS_DEBUG')
-        if self.build.is_ide:
-            emit('CFLAGS_PER_TYPE', '@[debug|$CFLAGS_DEBUG]@[release|$CFLAGS_RELEASE]')
 
         emit('_STD_CXX_VERSION', preset('USER_STD_CXX_VERSION') or self.tc.cxx_std)
 
         emit('_MSVC_FLAGS', flags)
 
-        ucrt_include = win_path_fix(os.path.join(self.tc.kit_includes, 'ucrt')) if not self.tc.ide_msvs else "$(UniversalCRT_IncludePath.Split(';')[0].Replace('\\','/'))"
+        ucrt_include = win_path_fix(os.path.join(self.tc.kit_includes, 'ucrt'))
 
         # clang-cl has '#include_next', and MSVC hasn't. It needs separately specified CRT and VC include directories for libc++ to include second in order standard C and C++ headers.
         if not self.tc.use_clang:
             emit('_CFLAGS_UCRT_VC_INCLUDES', '/DY_UCRT_INCLUDE="%s"' % ucrt_include, '/DY_MSVC_INCLUDE="%s"' % vc_include)
         else:
             emit('_CFLAGS_UCRT_VC_INCLUDES')
-
-        emit('WERROR_MODE', self.tc.werror_mode)
 
         print('@import "${CONF_ROOT}/conf/compilers/msvc_compiler.conf"')
 
@@ -2178,8 +2128,6 @@ class MSVCLinker(MSVC, Linker):
             emit('LINK_EXE_FLAGS_PER_TYPE', '$LINK_EXE_FLAGS_RELEASE')
         if self.build.is_debug:
             emit('LINK_EXE_FLAGS_PER_TYPE', '$LINK_EXE_FLAGS_DEBUG')
-        if self.build.is_ide and self.tc.ide_msvs:
-            emit('LINK_EXE_FLAGS_PER_TYPE', '@[debug|$LINK_EXE_FLAGS_DEBUG]@[release|$LINK_EXE_FLAGS_RELEASE]')
 
         print('@import "${CONF_ROOT}/conf/linkers/msvc_linker.conf"')
 
@@ -2432,7 +2380,7 @@ class Cuda(object):
             mtime = ' --mtime ${tool:"tools/mtime0"} '
             custom_pid = '--custom-pid ${tool:"tools/custom_pid"} '
         if not self.cuda_use_clang.value:
-            cmd = '$YMAKE_PYTHON ${input:"build/scripts/compile_cuda.py"}' + mtime + custom_pid + '$NVCC $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $NVCC_CFLAGS $SRCFLAGS ${hide;input:"build/platform/cuda/cuda_runtime_include.h"} $NVCC_ENV $CUDA_HOST_COMPILER_ENV ${hide;kv:"p CC"} ${hide;kv:"pc light-green"}'  # noqa E501
+            cmd = '$YMAKE_PYTHON ${input:"build/scripts/compile_cuda.py"}' + mtime + custom_pid + '$NVCC $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $SRCFLAGS ${hide;input:"build/platform/cuda/cuda_runtime_include.h"} $NVCC_ENV $CUDA_HOST_COMPILER_ENV ${hide;kv:"p CC"} ${hide;kv:"pc light-green"}'  # noqa E501
         else:
             cmd = '$CXX_COMPILER --cuda-path=$CUDA_ROOT $C_FLAGS_PLATFORM -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} $CXXFLAGS $SRCFLAGS $TOOLCHAIN_ENV ${hide;kv:"p CU"} ${hide;kv:"pc green"}'  # noqa E501
 
@@ -2547,7 +2495,7 @@ class Cuda(object):
             'Y_SDK_Root': '$WINDOWS_KITS_RESOURCE_GLOBAL',
         }
 
-        if not self.build.tc.ide_msvs and not is_positive('DISABLE_YMAKE_CONF_CUSTOMIZATION'):
+        if not is_positive('DISABLE_YMAKE_CONF_CUSTOMIZATION'):
             self.peerdirs.append('build/internal/platform/msvc')
         self.cuda_host_compiler_env.value = format_env(env)
         self.cuda_host_msvc_version.value = vc_version

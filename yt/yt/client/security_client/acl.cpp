@@ -157,12 +157,7 @@ void TSerializableAccessControlEntry::Persist(const TStreamPersistenceContext& c
     Persist(context, Subjects);
     Persist(context, Permissions);
     Persist(context, InheritanceMode);
-    // COMPAT(vovamelnikov)
-    if (context.IsLoad() && context.GetVersion() < 301305) {
-        SubjectTagFilter =  {};
-    } else {
-        Persist(context, SubjectTagFilter);
-    }
+    Persist(context, SubjectTagFilter);
     // NB: Columns and Vital are not persisted since this method is intended only for use in controller.
 }
 

@@ -749,6 +749,8 @@ message TKqpStreamLookupSettings {
     optional bool AllowInconsistentReads = 9 [default = false];
     optional uint32 LockNodeId = 10;
     optional bool KeepRowsOrder = 11;
+    optional bool AllowNullKeys = 12;
+    optional uint32 AllowNullKeysPrefixSize = 13;
 }
 
 message TKqpSequencerSettings {

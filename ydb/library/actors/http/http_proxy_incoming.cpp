@@ -62,7 +62,7 @@ public:
     }
 
     void Die(const TActorContext& ctx) override {
-        ctx.Send(Endpoint->Owner, new TEvHttpProxy::TEvHttpConnectionClosed(ctx.SelfID, std::move(RecycledRequests)));
+        ctx.Send(Endpoint->Owner, new TEvHttpProxy::TEvHttpIncomingConnectionClosed(ctx.SelfID, std::move(RecycledRequests)));
         TSocketImpl::Shutdown();
         TBase::Die(ctx);
     }
@@ -197,11 +197,28 @@ protected:
         Respond(event->Get()->Response, ctx);
     }
 
+    void HandleConnected(TEvHttpProxy::TEvHttpOutgoingDataChunk::TPtr event, const TActorContext& ctx) {
+        if (CurrentResponse != nullptr && CurrentResponse == event->Get()->DataChunk->GetResponse()) {
+            CurrentResponse->AddDataChunk(event->Get()->DataChunk);
+        } else {
+            auto itResponse = Responses.find(event->Get()->DataChunk->GetRequest());
+            if (itResponse != Responses.end() && itResponse->second == event->Get()->DataChunk->GetResponse()) {
+                itResponse->second->AddDataChunk(event->Get()->DataChunk);
+            } else {
+                LOG_ERROR_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - DataChunk request not found");
+                return Die(ctx);
+            }
+        }
+        LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") <- (data chunk "
+            << event->Get()->DataChunk->Size() << (event->Get()->DataChunk->IsEndOfData() ? " bytes, final)" : " bytes)"));
+        FlushOutput(ctx);
+    }
+
     bool Respond(THttpOutgoingResponsePtr response, const TActorContext& ctx) {
         THttpIncomingRequestPtr request = response->GetRequest();
-        response->Finish();
-        LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") <- (" << response->Status << " " << response->Message << ")");
-        if (!response->Status.StartsWith('2') && response->Status != "404") {
+        LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") <- ("
+            << response->Status << " " << response->Message << (response->IsDone() ? ")" : ") (incomplete)"));
+        if (!response->Status.StartsWith('2') && !response->Status.StartsWith('3') && response->Status != "404") {
             static constexpr size_t MAX_LOGGED_SIZE = 1024;
             LOG_DEBUG_S(ctx, HttpLog,
                         "(#"
@@ -232,37 +249,42 @@ protected:
 
     bool FlushOutput(const TActorContext& ctx) {
         while (CurrentResponse != nullptr) {
-            size_t size = CurrentResponse->Size();
+            auto* buffer = CurrentResponse->GetActiveBuffer();
+            size_t size = buffer->Size();
             if (size == 0) {
-                Y_ABORT_UNLESS(Requests.front() == CurrentResponse->GetRequest());
-                bool close = CurrentResponse->IsConnectionClose();
-                Requests.pop_front();
-                CleanupResponse(CurrentResponse);
-                if (!Requests.empty()) {
-                    auto it = Responses.find(Requests.front());
-                    if (it != Responses.end()) {
-                        CurrentResponse = it->second;
-                        Responses.erase(it);
-                        continue;
+                if (CurrentResponse->IsDone()) {
+                    Y_ABORT_UNLESS(Requests.front() == CurrentResponse->GetRequest());
+                    bool close = CurrentResponse->IsConnectionClose();
+                    Requests.pop_front();
+                    CleanupResponse(CurrentResponse);
+                    if (!Requests.empty()) {
+                        auto it = Responses.find(Requests.front());
+                        if (it != Responses.end()) {
+                            CurrentResponse = it->second;
+                            Responses.erase(it);
+                            continue;
+                        } else {
+                            LOG_ERROR_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - FlushOutput request not found");
+                            Die(ctx);
+                            return false;
+                        }
                     } else {
-                        LOG_ERROR_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - FlushOutput request not found");
-                        Die(ctx);
-                        return false;
+                        if (close) {
+                            LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed");
+                            Die(ctx);
+                            return false;
+                        } else {
+                            continue;
+                        }
                     }
                 } else {
-                    if (close) {
-                        LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed");
-                        Die(ctx);
-                        return false;
-                    } else {
-                        continue;
-                    }
+                    return true; // we don't have data to send, but the response is not done yet
                 }
             }
             bool read = false, write = false;
-            ssize_t res = TSocketImpl::Send(CurrentResponse->Data(), size, read, write);
+            ssize_t res = TSocketImpl::Send(buffer->Data(), size, read, write);
             if (res > 0) {
-                CurrentResponse->ChopHead(res);
+                buffer->ChopHead(res);
             } else if (-res == EINTR) {
                 continue;
             } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
@@ -297,6 +319,7 @@ protected:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPollerReady, HandleConnected);
             HFunc(TEvHttpProxy::TEvHttpOutgoingResponse, HandleConnected);
+            HFunc(TEvHttpProxy::TEvHttpOutgoingDataChunk, HandleConnected);
             HFunc(TEvPollerRegisterResult, HandleConnected);
         }
     }

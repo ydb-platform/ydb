@@ -83,7 +83,7 @@ message TFeatureFlags {
     optional bool EnableImplicitScanQueryInScripts = 61 [default = true];
     reserved 62; // EnablePredicateExtractForScanQueries
     optional bool AllowVDiskDefrag = 63 [default = true];
-    optional bool EnableAsyncHttpMon = 64 [default = true];
+    optional bool EnableAsyncHttpMon = 64 [default = true]; // deprecated: always true
     optional bool EnableChangefeeds = 65 [default = true];
     reserved 66; // EnableKqpScanQueryStreamLookup
     optional bool EnableKqpScanQueryMultipleOlapShardsReads = 67 [default = false];
@@ -179,4 +179,8 @@ message TFeatureFlags {
     optional bool EnableAntlr4Parser = 154 [default = false];
     optional bool EnableReleaseNodeNameOnGracefulShutdown = 155 [default = false];
     optional bool ForceDistconfDisable = 156 [default = false];
+    optional bool EnableScaleRecommender = 157 [default = false];
+    optional bool EnableVDiskThrottling = 158 [default = false];
+    optional bool EnableDataShardInMemoryStateMigration = 159 [default = true];
+    optional bool EnableDataShardInMemoryStateMigrationAcrossGenerations = 160 [default = false];
 }

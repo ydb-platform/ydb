@@ -5,4 +5,6 @@ SELECT
     e,
     a,
     f
-FROM plato.Input;
+FROM
+    plato.Input
+;

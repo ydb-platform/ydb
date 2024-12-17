@@ -3,7 +3,7 @@ USE plato;
 INSERT INTO Output
 SELECT
     1 AS key,
-    Just(Just("x")) AS subkey,
+    Just(Just('x')) AS subkey,
 UNION ALL
 SELECT
     2 AS key,
@@ -14,11 +14,16 @@ SELECT
     Just(Nothing(String?)) AS subkey,
 ORDER BY
     key,
-    subkey;
+    subkey
+;
+
 COMMIT;
 
 SELECT
     key,
     subkey
-FROM Output
-WHERE key == 2;
+FROM
+    Output
+WHERE
+    key == 2
+;

@@ -1,4 +1,5 @@
 PRAGMA DisableSimpleColumns;
+
 USE plato;
 
 FROM (
@@ -7,13 +8,13 @@ FROM (
         subkey || key AS subkey,
         value,
         ROW_NUMBER() OVER w AS rn
-    FROM Input1
+    FROM
+        Input1
     WINDOW
         w AS ()
-)
-    AS a
-JOIN Input2
-    AS b
+) AS a
+JOIN
+    Input2 AS b
 USING (key)
 SELECT
     a.key,
@@ -22,4 +23,5 @@ SELECT
     b.value
 ORDER BY
     a.key,
-    a.rn;
+    a.rn
+;

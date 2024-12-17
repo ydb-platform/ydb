@@ -29,17 +29,26 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort",
+                                        "Node Type": "TopSort-Aggregate",
                                         "Operators": [
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "argument.t1.q2"
+                                            },
                                             {
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 7
                                                     }
                                                 ],
-                                                "Limit": "1001",
-                                                "Name": "TopSort",
-                                                "TopSortBy": "argument.t1.q2"
+                                                "Name": "Aggregate",
+                                                "Phase": "Final"
                                             }
                                         ],
                                         "PlanNodeId": 8,
@@ -56,14 +65,15 @@
                                                         "Node Type": "Aggregate",
                                                         "Operators": [
                                                             {
-                                                                "Aggregation": "{_yql_agg_0: COUNT(item.t1.q1,state._yql_agg_0)}",
+                                                                "Aggregation": "{COUNT(item.t1.q1)}",
                                                                 "GroupBy": "item.t1.q2",
                                                                 "Inputs": [
                                                                     {
                                                                         "ExternalPlanNodeId": 5
                                                                     }
                                                                 ],
-                                                                "Name": "Aggregate"
+                                                                "Name": "Aggregate",
+                                                                "Phase": "Intermediate"
                                                             }
                                                         ],
                                                         "PlanNodeId": 6,
@@ -82,9 +92,9 @@
                                                                                     "q1",
                                                                                     "q2"
                                                                                 ],
-                                                                                "E-Cost": "No estimate",
-                                                                                "E-Rows": "No estimate",
-                                                                                "E-Size": "No estimate",
+                                                                                "E-Cost": "0",
+                                                                                "E-Rows": "0",
+                                                                                "E-Size": "0",
                                                                                 "LookupKeyColumns": [
                                                                                     "q1"
                                                                                 ],

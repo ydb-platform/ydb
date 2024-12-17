@@ -1,14 +1,16 @@
 USE plato;
-PRAGMA AnsiInForEmptyOrNullableItemsCollections = "true";
-PRAGMA yt.MapJoinLimit = "1m";
-PRAGMA yt.LookupJoinLimit = "64k";
-PRAGMA yt.LookupJoinMaxRows = "100";
+
+PRAGMA AnsiInForEmptyOrNullableItemsCollections = 'true';
+PRAGMA yt.MapJoinLimit = '1m';
+PRAGMA yt.LookupJoinLimit = '64k';
+PRAGMA yt.LookupJoinMaxRows = '100';
 
 INSERT INTO @T1
 SELECT
     Just('fooo'u) AS ID
 ORDER BY
-    ID;
+    ID
+;
 
 INSERT INTO @T2
 SELECT
@@ -16,30 +18,43 @@ SELECT
     '{}'y AS tags,
     'foo' AS ID
 ORDER BY
-    ID;
+    ID
+;
+
 COMMIT;
 
-$lost_ids =
+$lost_ids = (
     SELECT
         ID
-    FROM @T2
-    WHERE ID NOT IN (
-        SELECT
-            ID
-        FROM @T1
-    );
+    FROM
+        @T2
+    WHERE
+        ID NOT IN (
+            SELECT
+                ID
+            FROM
+                @T1
+        )
+);
 
-$lost_samples_after_align =
+$lost_samples_after_align = (
     SELECT
         *
-    FROM @T2
-    WHERE ID IN $lost_ids;
+    FROM
+        @T2
+    WHERE
+        ID IN $lost_ids
+);
 
 SELECT
     *
-FROM $lost_samples_after_align;
+FROM
+    $lost_samples_after_align
+;
 
 SELECT
     text || 'a' AS text,
     tags,
-FROM $lost_samples_after_align;
+FROM
+    $lost_samples_after_align
+;

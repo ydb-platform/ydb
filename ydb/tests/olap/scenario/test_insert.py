@@ -4,11 +4,10 @@ from ydb.tests.olap.scenario.helpers import (
     TestContext,
     CreateTable,
 )
-
+from helpers.thread_helper import TestThread
 from ydb import PrimitiveType
 from typing import List, Dict, Any
 from ydb.tests.olap.lib.utils import get_external_param
-import threading
 
 
 class TestInsert(BaseTestSet):
@@ -59,8 +58,8 @@ class TestInsert(BaseTestSet):
                 batch.append({"key": j + rows_count * i})
             data.append(batch)
 
-        thread1 = threading.Thread(target=self._loop_upsert, args=[ctx, data])
-        thread2 = threading.Thread(target=self._loop_insert, args=[ctx, inserts_count])
+        thread1 = TestThread(target=self._loop_upsert, args=[ctx, data])
+        thread2 = TestThread(target=self._loop_insert, args=[ctx, inserts_count])
 
         thread1.start()
         thread2.start()

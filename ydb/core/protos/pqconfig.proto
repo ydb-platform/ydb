@@ -62,7 +62,7 @@ message TPQConfig {
 
     optional NKikimrClient.TKeyValueRequest.ETactic Tactic = 13 [default = MAX_THROUGHPUT];
 
-    optional bool RequireCredentialsInNewProtocol = 14 [default = true];
+    optional bool RequireCredentialsInNewProtocol = 14 [default = false];
 
     optional string ClusterTablePath = 15 [default = ""];
     optional string VersionTablePath = 16 [default = ""];

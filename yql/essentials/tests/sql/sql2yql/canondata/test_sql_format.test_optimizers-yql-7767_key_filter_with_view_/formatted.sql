@@ -4,9 +4,12 @@ USE plato;
 
 SELECT
     key,
-    value || "_y" ?? "" AS value
-FROM range("", "Input1", "Input2")
-WHERE key > "010"
+    value || '_y' ?? '' AS value
+FROM
+    range('', 'Input1', 'Input2')
+WHERE
+    key > '010'
 ORDER BY
     key,
-    value;
+    value
+;

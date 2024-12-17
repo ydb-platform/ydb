@@ -53,6 +53,32 @@ public:
         }
     }
 
+    void AddTopic(ui64 topicId, const TString& path) override {
+        Y_ABORT_UNLESS(State == ETransactionState::COLLECTING);
+        ShardsIds.insert(topicId);
+        auto& shardInfo = ShardsInfo[topicId];
+
+        const auto [stringsIter, _] = TablePathes.insert(path);
+        const TStringBuf pathBuf = *stringsIter;
+        shardInfo.Pathes.insert(pathBuf);
+    }
+
+    void AddTopicsToShards() override {
+        if (!HasTopics()) {
+            return;
+        }
+
+        for (auto& topicId : GetTopicOperations().GetSendingTabletIds()) {
+            AddTopic(topicId, *GetTopicOperations().GetTabletName(topicId));
+            AddAction(topicId, EAction::READ);
+        }
+
+        for (auto& topicId : GetTopicOperations().GetReceivingTabletIds()) {
+            AddTopic(topicId, *GetTopicOperations().GetTabletName(topicId));
+            AddAction(topicId, EAction::WRITE);
+        }
+    }
+
     bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lockProto) override {
         Y_ABORT_UNLESS(State == ETransactionState::COLLECTING);
         TKqpLock lock(lockProto);
@@ -124,6 +150,22 @@ public:
         ShardsInfo.at(shardId).State = state;
     }
 
+    void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) override {
+        TopicOperations = std::move(topicOperations);
+    }
+
+    const NTopic::TTopicOperations& GetTopicOperations() const override {
+        return TopicOperations;
+    }
+
+    void BuildTopicTxs(NTopic::TTopicOperationTransactions& txs) override {
+        TopicOperations.BuildTopicTxs(txs);
+    }
+
+    bool HasTopics() const override {
+        return GetTopicOperations().GetSize() != 0;
+    }
+
     TVector<NKikimrDataEvents::TLock> GetLocks() const override {
         TVector<NKikimrDataEvents::TLock> locks;
         for (const auto& [_, shardInfo] : ShardsInfo) {
@@ -189,7 +231,8 @@ public:
     bool IsVolatile() const override {
         return !HasOlapTable()
             && !IsReadOnly()
-            && !IsSingleShard();
+            && !IsSingleShard()
+            && !HasTopics();
 
         // TODO: && !HasPersistentChannels;
         // Note: currently persistent channels are never used
@@ -342,7 +385,7 @@ public:
             shardInfo.State = EShardState::EXECUTING;
         }
 
-        AFL_ENSURE(ReceivingShards.empty() || !IsSingleShard() || HasOlapTable());
+        AFL_ENSURE(ReceivingShards.empty() || HasTopics() || !IsSingleShard() || HasOlapTable());
     }
 
     TCommitInfo GetCommitInfo() override {
@@ -439,6 +482,8 @@ private:
     std::optional<ui64> ArbiterColumnShard;
 
     THashSet<ui64> ShardsToWaitPrepare;
+
+    NTopic::TTopicOperations TopicOperations;
 
     ui64 MinStep = 0;
     ui64 MaxStep = 0;

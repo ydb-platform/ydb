@@ -6,20 +6,29 @@ USE plato;
 INSERT INTO @a
 SELECT
     *
-FROM Input
-WHERE key < "100"
+FROM
+    Input
+WHERE
+    key < '100'
 ORDER BY
-    key DESC;
+    key DESC
+;
+
 COMMIT;
 
 INSERT INTO Output
 SELECT
     *
-FROM @a
+FROM
+    @a
 ORDER BY
-    key DESC;
+    key DESC
+;
+
 COMMIT;
 
 SELECT
     *
-FROM Output;
+FROM
+    Output
+;

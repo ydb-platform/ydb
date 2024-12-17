@@ -106,8 +106,8 @@ TTransformationPipeline& TTransformationPipeline::AddIOAnnotation(bool withEpoch
     return *this;
 }
 
-TTransformationPipeline& TTransformationPipeline::AddTypeAnnotation(EYqlIssueCode issueCode) {
-    AddTypeAnnotationTransformer();
+TTransformationPipeline& TTransformationPipeline::AddTypeAnnotation(EYqlIssueCode issueCode, bool twoStages) {
+    AddTypeAnnotationTransformer(issueCode, twoStages);
     Transformers_.push_back(TTransformStage(
         CreateFunctorTransformer(&CheckWholeProgramType),
         "CheckWholeProgramType", issueCode));
@@ -235,19 +235,48 @@ TTransformationPipeline& TTransformationPipeline::AddTableMetadataLoaderTransfor
 }
 
 TTransformationPipeline& TTransformationPipeline::AddTypeAnnotationTransformer(
-    TAutoPtr<IGraphTransformer> callableTransformer, EYqlIssueCode issueCode)
+    TAutoPtr<IGraphTransformer> callableTransformer, EYqlIssueCode issueCode, ETypeCheckMode mode)
 {
+    TString stageName;
+    TString issue;
+    switch (mode) {
+    case ETypeCheckMode::Single:
+        stageName = "TypeAnnotation";
+        issue = "Type annotation";
+        break;
+    case ETypeCheckMode::Initial:
+        stageName = "InitialTypeAnnotation";
+        issue = "Type annotation";
+        break;
+    case ETypeCheckMode::Repeat:
+        stageName = "RepeatTypeAnnotation";
+        issue = "Type annotation (repeat)";
+        break;
+    }
+
     Transformers_.push_back(TTransformStage(
-        CreateTypeAnnotationTransformer(callableTransformer, *TypeAnnotationContext_),
-        "TypeAnnotation",
-        issueCode));
+        CreateTypeAnnotationTransformer(callableTransformer, *TypeAnnotationContext_, mode), stageName, issueCode, issue));
     return *this;
 }
 
-TTransformationPipeline& TTransformationPipeline::AddTypeAnnotationTransformer(EYqlIssueCode issueCode)
-{
+TTransformationPipeline& TTransformationPipeline::AddTypeAnnotationTransformerWithMode(EYqlIssueCode issueCode, ETypeCheckMode mode) {
     auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(*TypeAnnotationContext_);
-    return AddTypeAnnotationTransformer(callableTransformer, issueCode);
+    AddTypeAnnotationTransformer(callableTransformer, issueCode, mode);
+    return *this;
+}
+
+TTransformationPipeline& TTransformationPipeline::AddTypeAnnotationTransformer(EYqlIssueCode issueCode, bool twoStages)
+{
+    if (twoStages) {
+        std::shared_ptr<IGraphTransformer> callableTransformer(CreateExtCallableTypeAnnotationTransformer(*TypeAnnotationContext_).Release());
+        AddTypeAnnotationTransformer(MakeSharedTransformerProxy(callableTransformer), issueCode, ETypeCheckMode::Initial);
+        AddTypeAnnotationTransformer(MakeSharedTransformerProxy(callableTransformer), issueCode, ETypeCheckMode::Repeat);
+    } else {
+        auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(*TypeAnnotationContext_);
+        AddTypeAnnotationTransformer(callableTransformer, issueCode, ETypeCheckMode::Single);
+    }
+
+    return *this;
 }
 
 TAutoPtr<IGraphTransformer> TTransformationPipeline::Build(bool useIssueScopes) {

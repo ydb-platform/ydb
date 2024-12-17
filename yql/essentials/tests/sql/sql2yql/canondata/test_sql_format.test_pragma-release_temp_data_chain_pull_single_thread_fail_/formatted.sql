@@ -1,19 +1,22 @@
 /* dq can not */
 USE plato;
-PRAGMA yt.ReleaseTempData = "immediate";
-PRAGMA yt.InflightTempTablesLimit = "2";
+
+PRAGMA yt.ReleaseTempData = 'immediate';
+PRAGMA yt.InflightTempTablesLimit = '2';
 
 /* custom error:Too many temporary tables registered - limit is 2*/
 DEFINE ACTION $action($param) AS
     $key = CAST($param AS String);
-    $a = "Input";
+    $a = 'Input';
 
     $b = (
         SELECT
             key,
             value
-        FROM $a
-        WHERE key != ($key || ".1")
+        FROM
+            $a
+        WHERE
+            key != ($key || '.1')
         GROUP BY
             key,
             value
@@ -26,8 +29,10 @@ DEFINE ACTION $action($param) AS
         SELECT
             key,
             value
-        FROM $b
-        WHERE key != ($key || ".2")
+        FROM
+            $b
+        WHERE
+            key != ($key || '.2')
         GROUP BY
             key,
             value
@@ -40,8 +45,10 @@ DEFINE ACTION $action($param) AS
         SELECT
             key,
             value
-        FROM $c
-        WHERE key != ($key || ".3")
+        FROM
+            $c
+        WHERE
+            key != ($key || '.3')
         GROUP BY
             key,
             value
@@ -54,8 +61,10 @@ DEFINE ACTION $action($param) AS
         SELECT
             key,
             value
-        FROM $d
-        WHERE key != ($key || ".4")
+        FROM
+            $d
+        WHERE
+            key != ($key || '.4')
         GROUP BY
             key,
             value
@@ -68,8 +77,10 @@ DEFINE ACTION $action($param) AS
         SELECT
             key,
             value
-        FROM $e
-        WHERE key != ($key || ".5")
+        FROM
+            $e
+        WHERE
+            key != ($key || '.5')
         GROUP BY
             key,
             value
@@ -82,8 +93,10 @@ DEFINE ACTION $action($param) AS
         SELECT
             key,
             value
-        FROM $f
-        WHERE key != ($key || ".6")
+        FROM
+            $f
+        WHERE
+            key != ($key || '.6')
         GROUP BY
             key,
             value

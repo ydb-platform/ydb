@@ -3,7 +3,8 @@ USE plato;
 SELECT
     key,
     RANK() OVER w
-FROM Input
+FROM
+    Input
 GROUP BY
     key
 WINDOW
@@ -12,4 +13,5 @@ WINDOW
             key
     )
 ORDER BY
-    key;
+    key
+;

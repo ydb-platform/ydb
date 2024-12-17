@@ -21,7 +21,7 @@ ENDIF()
 
 PEERDIR(
     contrib/python/PyYAML
-    ydb/library/yql/providers/generic/connector/api/common
+    yql/essentials/providers/common/proto
     ydb/library/yql/providers/generic/connector/tests/utils/types
     ydb/public/api/protos
     yt/python/yt/yson

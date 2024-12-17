@@ -10,7 +10,8 @@ SELECT
     COUNT(*) OVER w2 AS w2_cnt,
     ROW_NUMBER() OVER w3 AS rn3,
     ROW_NUMBER() OVER w4 AS rn4,
-FROM Input
+FROM
+    Input
 WINDOW
     w1 AS (),
     w2 AS (
@@ -27,4 +28,5 @@ WINDOW
         ROWS BETWEEN 1 PRECEDING AND CURRENT ROW
     )
 ORDER BY
-    subkey;
+    subkey
+;

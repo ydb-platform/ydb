@@ -24,7 +24,6 @@ FROM AS_TABLE($osquery_data) MATCH_RECOGNIZE(
       LAST(LOGIN_SUCCESS_REMOTE.user) as remote_login_user,
       LAST(LOGIN_SUCCESS_REMOTE.dt) as remote_login_dt,
       LAST(SUSPICIOUS_ACTION_SOON.dt) as suspicious_action_dt,
-      LAST(SUSPICIOUS_ACTION_TIMEOUT.dt) as suspicious_action_timeout_dt,
       FIRST(LOGIN_FAILED_SAME_USER.dt) as brutforce_begin,
       FIRST(LOGIN_SUCCESS_SAME_USER.dt) as brutforce_end,
       LAST(LOGIN_SUCCESS_SAME_USER.user) as brutforce_login
@@ -32,7 +31,7 @@ FROM AS_TABLE($osquery_data) MATCH_RECOGNIZE(
     ONE ROW PER MATCH
     AFTER MATCH SKIP TO NEXT ROW
     PATTERN (
-      LOGIN_SUCCESS_REMOTE ANY_ROW1* (SUSPICIOUS_ACTION_SOON | SUSPICIOUS_ACTION_TIMEOUT) |
+      LOGIN_SUCCESS_REMOTE ANY_ROW1* SUSPICIOUS_ACTION_SOON |
       (LOGIN_FAILED_SAME_USER ANY_ROW2*){2,} LOGIN_SUCCESS_SAME_USER
     )
     DEFINE
@@ -47,8 +46,6 @@ FROM AS_TABLE($osquery_data) MATCH_RECOGNIZE(
             SUSPICIOUS_ACTION_SOON.host = LAST(LOGIN_SUCCESS_REMOTE.host) and
             SUSPICIOUS_ACTION_SOON.ev_type = "delete_all" and
             COALESCE(SUSPICIOUS_ACTION_SOON.dt - FIRST(LOGIN_SUCCESS_REMOTE.dt) <= 500, TRUE),
-        SUSPICIOUS_ACTION_TIMEOUT as
-            COALESCE(SUSPICIOUS_ACTION_TIMEOUT.dt - FIRST(LOGIN_SUCCESS_REMOTE.dt) > 500, TRUE),
         LOGIN_FAILED_SAME_USER as
             LOGIN_FAILED_SAME_USER.ev_type = "login" and
             LOGIN_FAILED_SAME_USER.ev_status <> "success" and

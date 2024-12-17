@@ -100,7 +100,8 @@ class Client(ABC):
                 self.protocol_version = PROTOCOL_VERSION_WITH_LOW_CARD
         if self._setting_status('date_time_input_format').is_writable:
             self.set_client_setting('date_time_input_format', 'best_effort')
-        if self._setting_status('allow_experimental_json_type').is_set:
+        if self._setting_status('allow_experimental_json_type').is_set and \
+                self._setting_status('cast_string_to_dynamic_user_inference').is_writable:
             self.set_client_setting('cast_string_to_dynamic_use_inference', '1')
 
 

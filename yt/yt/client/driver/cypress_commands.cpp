@@ -600,6 +600,13 @@ void TMoveCommand::Register(TRegistrar registrar)
         .Optional(/*init*/ false);
 
     registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_acl",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveAcl;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
         "pessimistic_quota_check",
         [] (TThis* command) -> auto& {
             return command->Options.PessimisticQuotaCheck;

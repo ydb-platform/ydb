@@ -27,7 +27,9 @@ TProgramFactory::TProgramFactory(const TProgramFactoryOptions& options)
     UserData_ = GetYqlModuleResolver(ExprContext_, ModuleResolver_, Options_.UserData_, {}, {});
 
     if (!ModuleResolver_) {
-        ythrow TCompileError("", ExprContext_.IssueManager.GetIssues().ToString()) << "failed to compile modules";
+        auto issues = ExprContext_.IssueManager.GetIssues();
+        CheckFatalIssues(issues);
+        ythrow TCompileError("", issues.ToString()) << "failed to compile modules";
     }
 
     TVector<TString> UDFsPaths;

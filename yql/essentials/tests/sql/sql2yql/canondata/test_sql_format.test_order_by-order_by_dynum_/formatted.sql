@@ -2,6 +2,8 @@
 /* syntax version 1 */
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    CAST(key AS DyNumber);
+    CAST(key AS DyNumber)
+;

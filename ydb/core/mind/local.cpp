@@ -253,7 +253,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TEvTabletPipe::TEvClientConnected {"
                     << "TabletId=" << msg->TabletId
                     << " Status=" << msg->Status
-                    << " ClientId=" << msg->ClientId);
+                    << " ClientId=" << msg->ClientId << "}");
         if (msg->ClientId != HivePipeClient)
             return;
         if (msg->Status == NKikimrProto::OK) {
@@ -267,7 +267,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
         LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TEvTabletPipe::TEvClientDestroyed {"
                     << "TabletId=" << msg->TabletId
-                    << " ClientId=" << msg->ClientId);
+                    << " ClientId=" << msg->ClientId << "}");
         if (msg->ClientId != HivePipeClient)
             return;
         HandlePipeDestroyed(ctx);

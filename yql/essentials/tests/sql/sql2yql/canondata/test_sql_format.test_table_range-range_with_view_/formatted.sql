@@ -2,4 +2,6 @@
 /* kikimr can not - range not supported */
 SELECT
     *
-FROM plato.range("", "InputA", "InputD");
+FROM
+    plato.range('', 'InputA', 'InputD')
+;

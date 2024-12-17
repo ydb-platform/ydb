@@ -83,6 +83,8 @@ public:
     bool ShouldRedirectStdoutToStderr() const;
 
 private:
+    const IRawClientPtr RawClient_;
+
     TOperationPreparer& OperationPreparer_;
     TUserJobSpec Spec_;
     TOperationOptions Options_;

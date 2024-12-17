@@ -8,9 +8,12 @@ def MyFunc(list):
 $record = (
     SELECT
         TableRow()
-    FROM plato.Input
+    FROM
+        plato.Input
 );
+
 $recordType = TypeOf(Unwrap($record));
+
 $udf = Python::MyFunc(
     CallableType(
         0,
@@ -29,8 +32,12 @@ $i, $j = (
 
 SELECT
     *
-FROM $i;
+FROM
+    $i
+;
 
 SELECT
     *
-FROM $j;
+FROM
+    $j
+;

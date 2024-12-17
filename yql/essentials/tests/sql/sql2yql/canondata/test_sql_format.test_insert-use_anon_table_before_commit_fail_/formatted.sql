@@ -5,8 +5,12 @@ USE plato;
 INSERT INTO @a
 SELECT
     *
-FROM Input;
+FROM
+    Input
+;
 
 SELECT
     *
-FROM @a;
+FROM
+    @a
+;

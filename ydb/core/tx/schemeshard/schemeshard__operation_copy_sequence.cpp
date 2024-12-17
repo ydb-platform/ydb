@@ -19,7 +19,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCopySequence TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -138,7 +138,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TCopySequence TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -271,7 +271,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCopySequence TProposedCopySequence"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
     void UpdateSequenceDescription(NKikimrSchemeOp::TSequenceDescription& descr) {

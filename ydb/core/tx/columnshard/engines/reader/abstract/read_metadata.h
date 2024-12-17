@@ -118,7 +118,7 @@ public:
 
     ISnapshotSchema::TPtr GetLoadSchemaVerified(const TPortionInfo& porition) const;
 
-    const std::shared_ptr<NArrow::TSchemaLite>& GetBlobSchema(const ui64 version) const {
+    NArrow::TSchemaLiteView GetBlobSchema(const ui64 version) const {
         return GetIndexVersions().GetSchemaVerified(version)->GetIndexInfo().ArrowSchema();
     }
 

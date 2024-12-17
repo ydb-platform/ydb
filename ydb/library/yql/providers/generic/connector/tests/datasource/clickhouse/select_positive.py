@@ -3,7 +3,7 @@ import itertools
 from dataclasses import replace
 from typing import Sequence
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
+from ydb.library.yql.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind, EGenericProtocol
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
 import ydb.library.yql.providers.generic.connector.tests.utils.types.clickhouse as clickhouse
@@ -201,8 +201,8 @@ class Factory:
                     datetime.datetime(1988, 11, 20, 12, 00, 00, 100000),
                 ],
             ],
-            data_source_kind=EDataSourceKind.CLICKHOUSE,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.CLICKHOUSE,
+            protocol=EGenericProtocol.NATIVE,
             pragmas=dict(),
             check_output_schema=True,
         )
@@ -240,10 +240,10 @@ class Factory:
             schema=schema_nullable,
             select_what=SelectWhat.asterisk(schema_nullable.columns),
             select_where=None,
-            data_source_kind=EDataSourceKind.CLICKHOUSE,
+            data_source_kind=EGenericDataSourceKind.CLICKHOUSE,
             data_in=data_in_nullable,
             data_out_=data_out_nullable,
-            protocol=EProtocol.NATIVE,
+            protocol=EGenericProtocol.NATIVE,
             pragmas=dict(),
             check_output_schema=True,
         )
@@ -297,8 +297,8 @@ class Factory:
                     42,
                 ],
             ],
-            data_source_kind=EDataSourceKind.CLICKHOUSE,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.CLICKHOUSE,
+            protocol=EGenericProtocol.NATIVE,
             pragmas=dict(),
         )
 
@@ -345,8 +345,8 @@ class Factory:
                     4,
                 ],
             ],
-            protocol=EProtocol.NATIVE,
-            data_source_kind=EDataSourceKind.CLICKHOUSE,
+            protocol=EGenericProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.CLICKHOUSE,
             pragmas=dict(),
         )
 
@@ -387,7 +387,7 @@ class Factory:
             ['one'],
         ]
 
-        data_source_kind = EDataSourceKind.CLICKHOUSE
+        data_source_kind = EGenericDataSourceKind.CLICKHOUSE
         test_case_name = 'pushdown'
 
         return [
@@ -399,13 +399,13 @@ class Factory:
                 select_what=SelectWhat(SelectWhat.Item(name='col_string')),
                 select_where=SelectWhere('col_int32 = 1'),
                 data_source_kind=data_source_kind,
-                protocol=EProtocol.NATIVE,
+                protocol=EGenericProtocol.NATIVE,
                 schema=schema,
             )
         ]
 
     def make_test_cases(self) -> Sequence[TestCase]:
-        protocols = [EProtocol.NATIVE, EProtocol.HTTP]
+        protocols = [EGenericProtocol.NATIVE, EGenericProtocol.HTTP]
 
         base_test_cases = list(
             itertools.chain(

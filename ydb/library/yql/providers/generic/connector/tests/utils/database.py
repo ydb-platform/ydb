@@ -1,23 +1,23 @@
 from dataclasses import dataclass
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from ydb.library.yql.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 
 
 @dataclass
 class Database:
     name: str
 
-    def __init__(self, name: str, kind: EDataSourceKind.ValueType):
+    def __init__(self, name: str, kind: EGenericDataSourceKind.ValueType):
         self.kind = kind
 
         match kind:
-            case EDataSourceKind.POSTGRESQL:
+            case EGenericDataSourceKind.POSTGRESQL:
                 # PostgreSQL implicitly converts all identifiers to lowercase,
                 # so we'd better make it first on our own
                 self.name = name[:63].lower()
-            case EDataSourceKind.CLICKHOUSE:
+            case EGenericDataSourceKind.CLICKHOUSE:
                 self.name = name[:255]
-            case EDataSourceKind.YDB:
+            case EGenericDataSourceKind.YDB:
                 # We use a different way of initialization when working with YDB.
                 # There is only one preinstalled database called
                 self.name = "local"
@@ -26,16 +26,16 @@ class Database:
 
     def exists(self) -> str:
         match self.kind:
-            case EDataSourceKind.POSTGRESQL:
+            case EGenericDataSourceKind.POSTGRESQL:
                 return f"SELECT 1 FROM pg_database WHERE datname = '{self.name}'"
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 
     def create(self) -> str:
         match self.kind:
-            case EDataSourceKind.CLICKHOUSE:
+            case EGenericDataSourceKind.CLICKHOUSE:
                 return f"CREATE DATABASE IF NOT EXISTS {self.name} ENGINE = Memory"
-            case EDataSourceKind.POSTGRESQL:
+            case EGenericDataSourceKind.POSTGRESQL:
                 return f"CREATE DATABASE {self.name}"
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
@@ -45,20 +45,20 @@ class Database:
 
     def missing_database_msg(self) -> str:
         match self.kind:
-            case EDataSourceKind.CLICKHOUSE:
+            case EGenericDataSourceKind.CLICKHOUSE:
                 return f"Database {self.name} doesn't exist"
-            case EDataSourceKind.POSTGRESQL:
+            case EGenericDataSourceKind.POSTGRESQL:
                 return f'database "{self.name}" does not exist'
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 
     def missing_table_msg(self) -> str:
         match self.kind:
-            case EDataSourceKind.CLICKHOUSE:
+            case EGenericDataSourceKind.CLICKHOUSE:
                 return 'table does not exist'
-            case EDataSourceKind.POSTGRESQL:
+            case EGenericDataSourceKind.POSTGRESQL:
                 return 'table does not exist'
-            case EDataSourceKind.YDB:
+            case EGenericDataSourceKind.YDB:
                 raise Exception("Fix me first in YQ-3315")
             case _:
                 raise Exception(f'invalid data source: {self.kind}')

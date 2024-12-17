@@ -6,12 +6,12 @@ namespace NYql {
     TString DumpGenericClusterConfig(const TGenericClusterConfig& clusterConfig) {
         TStringBuilder sb;
         sb << "name = " << clusterConfig.GetName()
-           << ", kind = " << NConnector::NApi::EDataSourceKind_Name(clusterConfig.GetKind())
+           << ", kind = " << NYql::EGenericDataSourceKind_Name(clusterConfig.GetKind())
            << ", database name = " << clusterConfig.GetDatabaseName()
            << ", database id = " << clusterConfig.GetDatabaseId()
            << ", endpoint = " << clusterConfig.GetEndpoint()
            << ", use tls = " << clusterConfig.GetUseSsl()
-           << ", protocol = " << NConnector::NApi::EProtocol_Name(clusterConfig.GetProtocol());
+           << ", protocol = " << NYql::EGenericProtocol_Name(clusterConfig.GetProtocol());
 
         for (const auto& [key, value] : clusterConfig.GetDataSourceOptions()) {
             sb << ", " << key << " = " << value;

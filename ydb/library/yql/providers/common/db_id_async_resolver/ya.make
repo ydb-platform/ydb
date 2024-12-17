@@ -7,7 +7,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/threading/future
-    ydb/library/yql/providers/generic/connector/api/common
+    ydb/library/yql/providers/common/proto
     ydb/library/yql/public/issue
 )
 

@@ -1,12 +1,16 @@
 PROTO_LIBRARY()
 
 PEERDIR(
-    ydb/library/yql/providers/generic/connector/api/common
+    ydb/library/yql/providers/common/proto
     ydb/public/api/protos
 )
 
 # Because Go is excluded in YDB protofiles
-EXCLUDE_TAGS(GO_PROTO)
+ONLY_TAGS(
+    CPP_PROTO
+    PY_PROTO
+    PY3_PROTO
+)
 
 SRCS(
     connector.proto

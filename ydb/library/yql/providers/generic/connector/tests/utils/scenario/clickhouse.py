@@ -1,7 +1,6 @@
 from typing import Sequence
 
-import ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 as data_source_pb2
-
+from ydb.library.yql.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 import ydb.library.yql.providers.generic.connector.tests.utils.artifacts as artifacts
 from ydb.library.yql.providers.generic.connector.tests.utils.comparator import assert_data_outs_equal
 from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
@@ -44,7 +43,9 @@ def prepare_table(
         return
 
     # create table
-    create_table_stmt = f"CREATE TABLE {dbTable} ({schema.yql_column_list(data_source_pb2.CLICKHOUSE)}) ENGINE = Memory"
+    create_table_stmt = (
+        f"CREATE TABLE {dbTable} ({schema.yql_column_list(EGenericDataSourceKind.CLICKHOUSE)}) ENGINE = Memory"
+    )
     LOGGER.debug(create_table_stmt)
     client.command(create_table_stmt)
 

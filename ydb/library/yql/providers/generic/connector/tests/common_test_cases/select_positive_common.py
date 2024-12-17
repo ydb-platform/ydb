@@ -2,7 +2,7 @@ import itertools
 from dataclasses import dataclass, replace
 from typing import Sequence, Optional
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
+from ydb.library.yql.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind, EGenericProtocol
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
@@ -89,9 +89,9 @@ class Factory:
                 SelectWhat.asterisk(column_list=schema.columns),
                 data_in,
                 (
-                    EDataSourceKind.CLICKHOUSE,
-                    EDataSourceKind.POSTGRESQL,
-                    EDataSourceKind.YDB,
+                    EGenericDataSourceKind.CLICKHOUSE,
+                    EGenericDataSourceKind.POSTGRESQL,
+                    EGenericDataSourceKind.YDB,
                 ),
             ),
             # SELECT COL1 FROM table
@@ -102,9 +102,9 @@ class Factory:
                     [10],
                 ],
                 (
-                    EDataSourceKind.CLICKHOUSE,
+                    EGenericDataSourceKind.CLICKHOUSE,
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
-                    EDataSourceKind.YDB,
+                    EGenericDataSourceKind.YDB,
                 ),
             ),
             # SELECT col1 FROM table
@@ -114,7 +114,7 @@ class Factory:
                     [1],
                     [10],
                 ],
-                (EDataSourceKind.POSTGRESQL,),  # works because of implicit cast to lowercase (COL1 -> col1)
+                (EGenericDataSourceKind.POSTGRESQL,),  # works because of implicit cast to lowercase (COL1 -> col1)
             ),
             # SELECT col2 FROM table
             (
@@ -124,9 +124,9 @@ class Factory:
                     [20],
                 ],
                 (
-                    EDataSourceKind.CLICKHOUSE,
-                    EDataSourceKind.POSTGRESQL,
-                    EDataSourceKind.YDB,
+                    EGenericDataSourceKind.CLICKHOUSE,
+                    EGenericDataSourceKind.POSTGRESQL,
+                    EGenericDataSourceKind.YDB,
                 ),
             ),
             # SELECT col2, COL1 FROM table
@@ -137,9 +137,9 @@ class Factory:
                     [20, 10],
                 ],
                 (
-                    EDataSourceKind.CLICKHOUSE,
+                    EGenericDataSourceKind.CLICKHOUSE,
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
-                    EDataSourceKind.YDB,
+                    EGenericDataSourceKind.YDB,
                 ),
             ),
             # SELECT col2, col1 FROM table
@@ -149,7 +149,7 @@ class Factory:
                     [2, 1],
                     [20, 10],
                 ],
-                (EDataSourceKind.POSTGRESQL,),  # works because of implicit cast to lowercase (COL1 -> col1)
+                (EGenericDataSourceKind.POSTGRESQL,),  # works because of implicit cast to lowercase (COL1 -> col1)
             ),
             # Simple math computation:
             # SELECT COL1 + col2 AS col3 FROM table
@@ -160,9 +160,9 @@ class Factory:
                     [30],
                 ],
                 (
-                    EDataSourceKind.CLICKHOUSE,
+                    EGenericDataSourceKind.CLICKHOUSE,
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
-                    EDataSourceKind.YDB,
+                    EGenericDataSourceKind.YDB,
                 ),
             ),
             # Select the same column multiple times with different aliases
@@ -180,9 +180,9 @@ class Factory:
                     [20, 20, 20, 20, 20],
                 ],
                 (
-                    EDataSourceKind.CLICKHOUSE,
-                    EDataSourceKind.POSTGRESQL,
-                    EDataSourceKind.YDB,
+                    EGenericDataSourceKind.CLICKHOUSE,
+                    EGenericDataSourceKind.POSTGRESQL,
+                    EGenericDataSourceKind.YDB,
                 ),
             ),
         )
@@ -197,7 +197,7 @@ class Factory:
                 test_case = TestCase(
                     data_in=data_in,
                     data_source_kind=data_source_kind,
-                    protocol=EProtocol.NATIVE,
+                    protocol=EGenericProtocol.NATIVE,
                     select_what=select_what,
                     select_where=None,
                     schema=schema,
@@ -250,7 +250,7 @@ class Factory:
         # We expect last line to be the answer
         data_out = [data_in[-1]]
 
-        data_source_kinds = [EDataSourceKind.CLICKHOUSE, EDataSourceKind.POSTGRESQL]
+        data_source_kinds = [EGenericDataSourceKind.CLICKHOUSE, EGenericDataSourceKind.POSTGRESQL]
 
         test_case_name = 'large_table'
 
@@ -259,7 +259,7 @@ class Factory:
             tc = TestCase(
                 name_=test_case_name,
                 data_source_kind=data_source_kind,
-                protocol=EProtocol.NATIVE,
+                protocol=EGenericProtocol.NATIVE,
                 data_in=data_in,
                 data_out_=data_out,
                 select_what=SelectWhat.asterisk(schema.columns),
@@ -274,16 +274,16 @@ class Factory:
 
         return test_cases
 
-    def make_test_cases(self, data_source_kind: EDataSourceKind) -> Sequence[TestCase]:
+    def make_test_cases(self, data_source_kind: EGenericDataSourceKind) -> Sequence[TestCase]:
         protocols = {
-            EDataSourceKind.CLICKHOUSE: [EProtocol.NATIVE, EProtocol.HTTP],
-            EDataSourceKind.POSTGRESQL: [EProtocol.NATIVE],
-            EDataSourceKind.YDB: [EProtocol.NATIVE],
+            EGenericDataSourceKind.CLICKHOUSE: [EGenericProtocol.NATIVE, EGenericProtocol.HTTP],
+            EGenericDataSourceKind.POSTGRESQL: [EGenericProtocol.NATIVE],
+            EGenericDataSourceKind.YDB: [EGenericProtocol.NATIVE],
         }
 
         base_test_cases = None
 
-        if data_source_kind == EDataSourceKind.YDB:
+        if data_source_kind == EGenericDataSourceKind.YDB:
             base_test_cases = self._column_selection()
         else:
             base_test_cases = list(

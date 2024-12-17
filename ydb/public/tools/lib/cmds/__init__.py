@@ -324,7 +324,7 @@ def deploy(arguments):
     initialize_working_dir(arguments)
     recipe = Recipe(arguments)
 
-    if os.path.exists(recipe.metafile_path()) and enable_survive_restart()::
+    if os.path.exists(recipe.metafile_path()) and enable_survive_restart():
         return start(arguments)
 
     if getattr(arguments, 'use_packages', None) is not None:

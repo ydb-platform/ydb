@@ -9,6 +9,9 @@ CREATE USER user_name [option]
 ```
 
 * `user_name` — имя пользователя. Может содержать строчные буквы латинского алфавита и цифры.
-* `option` — пароль пользователя:
-  * `PASSWORD 'password'` — создает пользователя с паролем `password`. Опция `ENCRYPTED` всегда включена.
+* `option` — опция команды:
+  * `PASSWORD 'password'` — создает пользователя с паролем `password`.
   * `PASSWORD NULL` — создает пользователя с пустым паролем.
+  * Если опустить данную опцию — это эквивалентно `PASSWORD NULL`.
+
+{% include [!](../../../../security/_includes/do-not-create-users-in-ldap.md) %}

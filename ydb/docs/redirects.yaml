@@ -37,8 +37,6 @@ common:
     to: /postgresql/import.md
   - from: /concepts/column-table.md
     to: /concepts/datamodel/table.md
-  - from: /concepts/auth.md
-    to: /concepts/security/authentication.md
 
 # DevOps-related redirects
   - from: /getting_started/kubernetes.md
@@ -186,11 +184,15 @@ common:
 
 # Security-related redirects
   - from: /cluster/access.md
-    to: /security/acess-management.md
+    to: /security/authorization.md
   - from: /cluster/audit-log.md
     to: /security/audit-log.md
   - from: /cluster/short-access-control-notation.md
     to: /security/short-access-control-notation.md
+  - from: /concepts/auth.md
+    to: /security/authentication.md
+  - from: /security/access-management.md
+    to: /security/authorization.md
 
 # Contributors-related redirects
   - from: /development/build-ya.md

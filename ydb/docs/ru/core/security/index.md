@@ -4,7 +4,10 @@
 
 Основные материалы:
 
-- [{#T}](access-management.md)
+- [{#T}](authentification.md)
+- [{#T}](authorization.md)
+- [{#T}](group.md)
+- [{#T}](right.md)
 - [{#T}](audit-log.md)
 - Шифрование:
 

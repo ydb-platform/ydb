@@ -9,7 +9,7 @@ ALTER USER user_name [ WITH ] option [ ... ]
 ```
 
 * `user_name` — имя пользователя.
-* `option` — пароль пользователя:
+* `option` — опция команды:
 
-  * `PASSWORD 'password'` — создает пользователя с паролем `password`. Опция `ENCRYPTED` всегда включена.
-  * `PASSWORD NULL` — создает пользователя с пустым паролем.
+  * `PASSWORD 'password'` — изменяет пароль на `password`.
+  * `PASSWORD NULL` — устанавливает пустой пароль.

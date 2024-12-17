@@ -70,7 +70,7 @@
 
 Для включения аутентификации по логину и паролю укажите значение `true` для ключа `enforce_user_token_requirement` в [конфигурационном файле](../reference/configuration/index.md#auth) кластера.
 
-Об управлении ролями и пользователями читайте в [{#T}](../security/access-management.md).
+Об управлении ролями и пользователями читайте в [{#T}](../security/authorization.md).
 
 ## Взаимодействие с LDAP каталогом {#ldap-auth-provider}
 

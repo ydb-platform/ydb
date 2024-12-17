@@ -583,12 +583,12 @@ void ValidateViewQuery(const TString& query, const TString& dbPath, NYql::TIssue
     }
 }
 
-TString BuildCreateViewStatement(TStringBuf name, const NView::TViewDescription& description, TStringBuf backupRoot) {
+TString BuildCreateViewQuery(TStringBuf name, const NView::TViewDescription& description, TStringBuf backupRoot) {
     auto [contextRecreation, select] = SplitViewQuery(description.GetQueryText());
 
     const TString query = std::format(
         "-- backup root: \"{}\"\n"
-        "{}"
+        "{}\n"
         "CREATE VIEW IF NOT EXISTS `{}` WITH (security_invoker = TRUE) AS\n"
         "    {};\n",
         backupRoot.data(),
@@ -636,7 +636,7 @@ void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPa
     LOG_D("Write view creation query to " << fsPath.GetPath().Quote());
 
     TFileOutput output(fsPath);
-    output << BuildCreateViewStatement(
+    output << BuildCreateViewQuery(
         TFsPath(dbPathRelativeToBackupRoot).GetName(),
         viewDescription,
         dbBackupRoot

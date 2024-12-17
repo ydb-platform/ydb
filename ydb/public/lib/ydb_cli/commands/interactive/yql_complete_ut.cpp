@@ -271,6 +271,13 @@ Y_UNIT_TEST_SUITE(YqlCompleteTests) {
         UNIT_ASSERT_VALUES_EQUAL(engine.Complete("编码").Candidates.size(), 0);
     }
 
+    Y_UNIT_TEST(WordBreak) {
+        TYQLCompletionEngine engine;
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("SELECT (").Candidates.size(), 28);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("SELECT (1)").Candidates.size(), 30);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("SELECT 1;").Candidates.size(), 33);
+    }
+
     Y_UNIT_TEST(Typing) {
         const auto queryUtf16 = TUtf16String::FromUtf8(
             "SELECT \n"

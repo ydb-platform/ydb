@@ -251,14 +251,32 @@ namespace NActors {
                     actor->Receive(ev);
 
                     // For logging
+                    auto getNameWithoutSpace = [&actor]() {
+                        auto name = actor->GetActorName();
+                        std::string nameWithoutSpace;
+                        for (auto sym : name) {
+                            if (sym == ' ') {
+                                nameWithoutSpace += '+';
+                            } else {
+                                nameWithoutSpace += sym;
+                            }
+                        }
+
+                        return nameWithoutSpace;
+                    };
+
                     TStringStream logOut;
-                    logOut << "Receive "
-                        << actor->GetActorName() << " "
-                        << actor->SelfId() << " "
-                        // << ev->Sender << " "
-                        << (void*)ev.Get() << " "
-                        << TInstant::Now().ToString() << "\n";
-                    Cerr << logOut.Str();
+
+                    if (ev) {
+                        logOut << "Receive "
+                            << actor->SelfId() << " "
+                            << ev->Sender << " "
+                            << (void*)ev.Get() << " "
+                            << TInstant::Now().ToString() << " "
+                            << getNameWithoutSpace() << "\n";
+                        Cerr << logOut.Str();
+                        logOut.Clear();
+                    }
 
                     hpnow = GetCycleCountFast();
                     hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
@@ -271,6 +289,12 @@ namespace NActors {
                     if (dyingActorsCnt) {
                         DropUnregistered();
                         mailbox->ProcessEvents(mailbox);
+
+                        logOut << "Die "
+                            << actor->SelfId() << " "
+                            << TInstant::Now().ToString() << "\n";
+                        Cerr << logOut.Str();
+                        logOut.Clear();
                         actor = nullptr;
                     }
 

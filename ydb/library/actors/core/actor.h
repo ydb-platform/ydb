@@ -688,7 +688,8 @@ namespace NActors {
 
         virtual TStringBuf GetActorName() override {
             auto actorIndex = GetActivityTypeIndex();
-            return TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetNameByIndex(actorIndex);
+            auto defaultName = TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetNameByIndex(actorIndex);
+            return defaultName;
         }
 
         static ui32 GetActivityTypeIndex() {

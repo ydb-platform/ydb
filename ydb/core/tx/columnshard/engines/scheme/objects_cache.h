@@ -88,7 +88,9 @@ private:
 
 public:
     std::shared_ptr<TSchemaObjectsCache> GetCache(const ui64 ownerPathId) {
-        AFL_VERIFY(ownerPathId);
+        if (!ownerPathId) {
+            return std::make_shared<TSchemaObjectsCache>();
+        }
         std::unique_lock lock(Mutex);
         auto findCache = CacheByTableOwner.FindPtr(ownerPathId);
         if (findCache) {

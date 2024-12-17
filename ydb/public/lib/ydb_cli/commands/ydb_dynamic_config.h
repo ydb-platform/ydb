@@ -9,12 +9,15 @@ namespace NYdb::NConsoleClient::NDynamicConfig {
 
 class TCommandConfig : public TClientCommandTree {
 public:
-    TCommandConfig();
+    TCommandConfig(std::optional<bool> overrideOnlyExplicitProfile = std::nullopt, bool allowEmptyDatabase = false);
+    void PropagateFlags(const TCommandFlags& flags) override;
+private:
+    std::optional<bool> OverrideOnlyExplicitProfile;
 };
 
 class TCommandConfigReplace : public TYdbCommand {
 public:
-    TCommandConfigReplace();
+    TCommandConfigReplace(bool allowEmptyDatabase);
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
     int Run(TConfig& config) override;
@@ -26,11 +29,12 @@ private:
     bool AllowUnknownFields = false;
     TString DynamicConfig;
     TString Filename;
+    bool AllowEmptyDatabase = false;
 };
 
 class TCommandConfigFetch : public TYdbCommand {
 public:
-    TCommandConfigFetch();
+    TCommandConfigFetch(bool allowEmptyDatabase);
     void Config(TConfig&) override;
     void Parse(TConfig&) override;
     int Run(TConfig& config) override;
@@ -39,6 +43,7 @@ private:
     bool All = false;
     bool StripMetadata = false;
     TString OutDir;
+    bool AllowEmptyDatabase = false;
 };
 
 class TCommandConfigResolve : public TYdbCommand {

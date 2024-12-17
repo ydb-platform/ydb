@@ -43,10 +43,10 @@ void TCommandMakeDirectory::Config(TConfig& config) {
 
 void TCommandMakeDirectory::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0);
 }
 
 int TCommandMakeDirectory::Run(TConfig& config) {
+    ParsePath(config, 0);
     NScheme::TSchemeClient client(CreateDriver(config));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.MakeDirectory(
@@ -78,10 +78,10 @@ void TCommandRemoveDirectory::Config(TConfig& config) {
 
 void TCommandRemoveDirectory::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0);
 }
 
 int TCommandRemoveDirectory::Run(TConfig& config) {
+    ParsePath(config, 0);
     TDriver driver = CreateDriver(config);
     NScheme::TSchemeClient schemeClient(driver);
     const auto settings = FillSettings(NScheme::TRemoveDirectorySettings());
@@ -245,10 +245,10 @@ void TCommandDescribe::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     Database = config.Database;
     ParseOutputFormats();
-    ParsePath(config, 0);
 }
 
 int TCommandDescribe::Run(TConfig& config) {
+    ParsePath(config, 0);
     TDriver driver = CreateDriver(config);
     NScheme::TSchemeClient client(driver);
     NScheme::TDescribePathResult result = client.DescribePath(
@@ -1059,7 +1059,6 @@ void TCommandList::Config(TConfig& config) {
 
 void TCommandList::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0, true);
     if (AdvancedMode && FromNewLine) {
         // TODO: add "consider using --format shell"
         throw TMisuseException() << "Options -1 and -l are incompatible";
@@ -1067,6 +1066,7 @@ void TCommandList::Parse(TConfig& config) {
 }
 
 int TCommandList::Run(TConfig& config) {
+    ParsePath(config, 0, true);
     TDriver driver = CreateDriver(config);
     ISchemePrinter::TSettings settings = {
         Path,
@@ -1129,7 +1129,6 @@ void TCommandPermissionGrant::Config(TConfig& config) {
 
 void TCommandPermissionGrant::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0);
     Subject = config.ParseResult->GetFreeArgs()[1];
     if (Subject.empty()) {
         throw TMisuseException() << "Missing required argument <subject>";
@@ -1140,6 +1139,7 @@ void TCommandPermissionGrant::Parse(TConfig& config) {
 }
 
 int TCommandPermissionGrant::Run(TConfig& config) {
+    ParsePath(config, 0);
     NScheme::TSchemeClient client(CreateDriver(config));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
@@ -1170,7 +1170,6 @@ void TCommandPermissionRevoke::Config(TConfig& config) {
 
 void TCommandPermissionRevoke::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0);
     Subject = config.ParseResult->GetFreeArgs()[1];
     if (Subject.empty()) {
         throw TMisuseException() << "Missing required argument <subject>";
@@ -1181,6 +1180,7 @@ void TCommandPermissionRevoke::Parse(TConfig& config) {
 }
 
 int TCommandPermissionRevoke::Run(TConfig& config) {
+    ParsePath(config, 0);
     NScheme::TSchemeClient client(CreateDriver(config));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
@@ -1211,7 +1211,6 @@ void TCommandPermissionSet::Config(TConfig& config) {
 
 void TCommandPermissionSet::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0);
     Subject = config.ParseResult->GetFreeArgs()[1];
     if (Subject.empty()) {
         throw TMisuseException() << "Missing required argument <subject>";
@@ -1222,6 +1221,7 @@ void TCommandPermissionSet::Parse(TConfig& config) {
 }
 
 int TCommandPermissionSet::Run(TConfig& config) {
+    ParsePath(config, 0);
     NScheme::TSchemeClient client(CreateDriver(config));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
@@ -1249,7 +1249,6 @@ void TCommandChangeOwner::Config(TConfig& config) {
 
 void TCommandChangeOwner::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0);
     Owner = config.ParseResult->GetFreeArgs()[1];
     if (!Owner){
         throw TMisuseException() << "Missing required argument <owner>";
@@ -1257,6 +1256,7 @@ void TCommandChangeOwner::Parse(TConfig& config) {
 }
 
 int TCommandChangeOwner::Run(TConfig& config) {
+    ParsePath(config, 0);
     NScheme::TSchemeClient client(CreateDriver(config));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
@@ -1283,10 +1283,10 @@ void TCommandPermissionClear::Config(TConfig& config) {
 
 void TCommandPermissionClear::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0);
 }
 
 int TCommandPermissionClear::Run(TConfig& config) {
+    ParsePath(config, 0);
     NScheme::TSchemeClient client(CreateDriver(config));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
@@ -1313,10 +1313,10 @@ void TCommandPermissionSetInheritance::Config(TConfig& config) {
 
 void TCommandPermissionSetInheritance::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0);
 }
 
 int TCommandPermissionSetInheritance::Run(TConfig& config) {
+    ParsePath(config, 0);
     NScheme::TSchemeClient client(CreateDriver(config));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
@@ -1343,10 +1343,10 @@ void TCommandPermissionClearInheritance::Config(TConfig& config) {
 
 void TCommandPermissionClearInheritance::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0);
 }
 
 int TCommandPermissionClearInheritance::Run(TConfig& config) {
+    ParsePath(config, 0);
     NScheme::TSchemeClient client(CreateDriver(config));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
@@ -1373,10 +1373,10 @@ void TCommandPermissionList::Config(TConfig& config) {
 
 void TCommandPermissionList::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0);
 }
 
 int TCommandPermissionList::Run(TConfig& config) {
+    ParsePath(config, 0);
     TDriver driver = CreateDriver(config);
     NScheme::TSchemeClient client(driver);
     NScheme::TDescribePathResult result = client.DescribePath(

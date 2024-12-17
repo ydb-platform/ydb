@@ -36,7 +36,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     , Settings(settings)
 {
     ValidateSettings();
-    AddCommand(std::make_unique<TCommandAdmin>());
+    AddDangerousCommand(std::make_unique<TCommandAdmin>());
     AddCommand(std::make_unique<TCommandAuth>());
     AddCommand(std::make_unique<TCommandDiscovery>());
     AddCommand(std::make_unique<TCommandScheme>());
@@ -54,6 +54,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     AddCommand(std::make_unique<TCommandTopic>());
     AddCommand(std::make_unique<TCommandWorkload>());
     AddCommand(std::make_unique<TCommandDebug>());
+    PropagateFlags(TCommandFlags{.Dangerous = false, .OnlyExplicitProfile = false});
 }
 
 void TClientCommandRootCommon::ValidateSettings() {
@@ -319,6 +320,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     stream << " [options...] <subcommand>" << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
     RenderCommandsDescription(stream, colors);
+    stream << Endl << Endl << colors.BoldColor() << "Commands in " << colors.Red() << colors.BoldColor() <<  "admin" << colors.OldColor() << colors.BoldColor() << " subtree may treat global flags and profile differently, see corresponding help" << colors.OldColor() << Endl;
     opts.SetCmdLineDescr(stream.Str());
 
     opts.GetLongOption("time").Hidden();
@@ -328,6 +330,11 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 }
 
 void TClientCommandRootCommon::Parse(TConfig& config) {
+    TClientCommandRootBase::Parse(config);
+    config.VerbosityLevel = std::min(static_cast<TConfig::EVerbosityLevel>(VerbosityLevel), TConfig::EVerbosityLevel::DEBUG);
+}
+
+void TClientCommandRootCommon::PostPrepare(TConfig& config) {
     if (ProfileFile.empty()) {
         config.ProfileFile = TStringBuilder() << HomeDir << '/' << Settings.YdbDir << "/config/config.yaml";
     } else {
@@ -339,12 +346,12 @@ void TClientCommandRootCommon::Parse(TConfig& config) {
     ProfileManager = CreateProfileManager(config.ProfileFile);
     ParseProfile();
 
-    TClientCommandRootBase::Parse(config);
     ParseDatabase(config);
     ParseCaCerts(config);
     ParseIamEndpoint(config);
 
-    config.VerbosityLevel = std::min(static_cast<TConfig::EVerbosityLevel>(VerbosityLevel), TConfig::EVerbosityLevel::DEBUG);
+    ParseCredentials(config);
+    ParseAddress(config);
 }
 
 namespace {
@@ -435,7 +442,7 @@ void TClientCommandRootCommon::ParseAddress(TConfig& config) {
         return;
     }
     // Priority 3. Active profile (if --profile option is not specified)
-    if (TryGetParamFromProfile("endpoint", ProfileManager->GetActiveProfile(), false, getAddress)) {
+    if (!config.OnlyExplicitProfile && TryGetParamFromProfile("endpoint", ProfileManager->GetActiveProfile(), false, getAddress)) {
         return;
     }
 }
@@ -510,6 +517,7 @@ void TClientCommandRootCommon::ParseDatabase(TConfig& config) {
         config.ConnectionParams["database"].push_back({param, sourceText});
         return false;
     };
+
     // Priority 1. Explicit --database option
     if (Database && getDatabase(Database, "explicit --database option", true)) {
         return;
@@ -519,7 +527,7 @@ void TClientCommandRootCommon::ParseDatabase(TConfig& config) {
         return;
     }
     // Priority 3. Active profile (if --profile option is not specified)
-    if (TryGetParamFromProfile("database", ProfileManager->GetActiveProfile(), false, getDatabase)) {
+    if (!config.OnlyExplicitProfile && TryGetParamFromProfile("database", ProfileManager->GetActiveProfile(), false, getDatabase)) {
         return;
     }
 }
@@ -574,19 +582,23 @@ void TClientCommandRootCommon::Validate(TConfig& config) {
             throw TMisuseException() << errors;
         }
     }
+
+    // TODO: Maybe NeedToConnect doesn't always mean that we don't need to check endpoint and database
+    // TODO: Now we supplying only one error while it is possible to return all errors at once,
+    //       maybe even erros from nested command's validate
     if (!config.NeedToConnect) {
         return;
     }
 
-    if (config.Address.empty()) {
-        throw TMisuseException() << "Missing required option 'endpoint'.";
+    if (config.Address.empty() && !config.AllowEmptyAddress) {
+        throw TMisuseException() << "Missing required option 'endpoint'." << (config.OnlyExplicitProfile ? " Profile ignored due to admin command use." : "");
     }
 
     if (config.Database.empty() && config.AllowEmptyDatabase) {
         // just skip the Database check
     } else if (config.Database.empty()) {
         throw TMisuseException()
-            << "Missing required option 'database'.";
+            << "Missing required option 'database'." << (config.OnlyExplicitProfile ? " Profile ignored due to admin command use." : "");
     } else if (!config.Database.StartsWith('/')) {
         throw TMisuseException() << "Path to a database \"" << config.Database
             << "\" is incorrect. It must be absolute and thus must begin with '/'.";

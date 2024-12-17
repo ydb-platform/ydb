@@ -663,7 +663,8 @@ namespace {
     }
 
     bool ParseAsyncReplicationSettingsBase(
-        TReplicationSettingsBase& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos
+        TReplicationSettingsBase& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos,
+        const TString& objectName = "replication"
     ) {
         for (auto setting : srcSettings) {
             auto name = setting.Name().Value();
@@ -688,6 +689,26 @@ namespace {
             } else if (name == "password_secret_name") {
                 dstSettings.EnsureStaticCredentials().PasswordSecretName =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "state") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (to_lower(value) == "done") {
+                    dstSettings.EnsureStateDone();
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Unknown " << objectName << " state: " << value));
+                    return false;
+                }
+            } else if (name == "failover_mode") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (to_lower(value) == "consistent") {
+                    dstSettings.EnsureStateDone(TReplicationSettings::EFailoverMode::Consistent);
+                } else if (to_lower(value) == "force") {
+                    dstSettings.EnsureStateDone(TReplicationSettings::EFailoverMode::Force);
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Unknown failover mode: " << value));
+                    return false;
+                }
             }
         }
 
@@ -752,26 +773,6 @@ namespace {
                 }
 
                 dstSettings.EnsureGlobalConsistency().CommitInterval = TDuration::FromValue(value);
-            } else if (name == "state") {
-                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
-                if (to_lower(value) == "done") {
-                    dstSettings.EnsureStateDone();
-                } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                        TStringBuilder() << "Unknown replication state: " << value));
-                    return false;
-                }
-            } else if (name == "failover_mode") {
-                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
-                if (to_lower(value) == "consistent") {
-                    dstSettings.EnsureStateDone(TReplicationSettings::EFailoverMode::Consistent);
-                } else if (to_lower(value) == "force") {
-                    dstSettings.EnsureStateDone(TReplicationSettings::EFailoverMode::Force);
-                } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                        TStringBuilder() << "Unknown failover mode: " << value));
-                    return false;
-                }
             }
         }
 
@@ -786,7 +787,7 @@ namespace {
     bool ParseTransferSettings(
         TTransferSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos
     ) {
-        return ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos);
+        return ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos, "transfer");
     }
 
     bool ParseBackupCollectionSettings(

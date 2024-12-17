@@ -2598,6 +2598,8 @@ public:
             op.SetName(pathPair.second);
 
             auto& config = *op.MutableConfig();
+
+            
             auto& params = *config.MutableSrcConnectionParams();
             if (const auto& connectionString = settings.Settings.ConnectionString) {
                 const auto parseResult = NYdb::ParseConnectionString(*connectionString);
@@ -2665,6 +2667,12 @@ public:
 
             auto& op = *tx.MutableAlterReplication();
             op.SetName(pathPair.second);
+
+            if (const auto& done = settings.Settings.StateDone) {
+                auto& state = *op.MutableState();
+                state.MutableDone()->SetFailoverMode(
+                    static_cast<NKikimrReplication::TReplicationState::TDone::EFailoverMode>(done->FailoverMode));
+            }
 
             if (settings.Settings.ConnectionString || settings.Settings.Endpoint || settings.Settings.Database ||
                     settings.Settings.OAuthToken || settings.Settings.StaticCredentials) {

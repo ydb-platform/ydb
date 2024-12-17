@@ -7676,6 +7676,33 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "CONNECTION_STRING and ENDPOINT/DATABASE are mutually exclusive");
         }
 
+                // check alter state
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    STATE = "DONE",
+                    FAILOVER_MODE = "FORCE"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            for (size_t i = 0; i < 10; ++i) {
+                const auto result = repl.DescribeReplication("/Root/transfer").ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+                const auto& desc = result.GetReplicationDescription();
+                if (desc.GetState() == TReplicationDescription::EState::Done) {
+                    break;
+                }
+
+                Sleep(TDuration::Seconds(1));
+            }
+        }
+
         // alter connection params
         {
             auto query = R"(

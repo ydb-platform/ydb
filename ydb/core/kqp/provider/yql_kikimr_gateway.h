@@ -773,7 +773,6 @@ struct TDropExternalTableSettings {
 };
 
 struct TReplicationSettingsBase {
-
     struct TOAuthToken {
         TString Token;
         TString TokenSecretName;
@@ -789,11 +788,32 @@ struct TReplicationSettingsBase {
         void Serialize(NKikimrReplication::TStaticCredentials& proto) const;
     };
 
+    struct TStateDone {
+        enum class EFailoverMode: ui32 {
+            Consistent = 1,
+            Force = 2,
+        };
+
+        EFailoverMode FailoverMode;
+    };
+
     TMaybe<TString> ConnectionString;
     TMaybe<TString> Endpoint;
     TMaybe<TString> Database;
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
+    TMaybe<TStateDone> StateDone;
+
+    using EFailoverMode = TStateDone::EFailoverMode;
+    TStateDone& EnsureStateDone(EFailoverMode mode = EFailoverMode::Consistent) {
+        if (!StateDone) {
+            StateDone = TStateDone{
+                .FailoverMode = mode,
+            };
+        }
+
+        return *StateDone;
+    }
 
     TOAuthToken& EnsureOAuthToken() {
         if (!OAuthToken) {
@@ -813,14 +833,6 @@ struct TReplicationSettingsBase {
 };
 
 struct TReplicationSettings : public TReplicationSettingsBase {
-    struct TStateDone {
-        enum class EFailoverMode: ui32 {
-            Consistent = 1,
-            Force = 2,
-        };
-
-        EFailoverMode FailoverMode;
-    };
 
     struct TRowConsistency {};
 
@@ -832,7 +844,6 @@ struct TReplicationSettings : public TReplicationSettingsBase {
 
     TMaybe<TRowConsistency> RowConsistency;
     TMaybe<TGlobalConsistency> GlobalConsistency;
-    TMaybe<TStateDone> StateDone;
 
     TRowConsistency& EnsureRowConsistency() {
         if (!RowConsistency) {
@@ -848,17 +859,6 @@ struct TReplicationSettings : public TReplicationSettingsBase {
         }
 
         return *GlobalConsistency;
-    }
-
-    using EFailoverMode = TStateDone::EFailoverMode;
-    TStateDone& EnsureStateDone(EFailoverMode mode = EFailoverMode::Consistent) {
-        if (!StateDone) {
-            StateDone = TStateDone{
-                .FailoverMode = mode,
-            };
-        }
-
-        return *StateDone;
     }
 };
 

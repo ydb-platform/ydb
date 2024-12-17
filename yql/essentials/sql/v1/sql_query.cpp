@@ -156,12 +156,21 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         "user",
         "password",
         "password_secret_name",
-        "state"
+    };
+
+    TSet<TString> stateSettings = {
+        "state",
+        "failover_mode",
     };
 
     const auto keyName = to_lower(key.Name);
-    if (!configSettings.count(keyName)) {
+    if (!configSettings.count(keyName) && !stateSettings.contains(keyName)) {
         ctx.Context().Error() << "Unknown transfer setting: " << key.Name;
+        return false;
+    }
+
+    if (create && stateSettings.count(keyName)) {
+        ctx.Context().Error() << key.Name << " is not supported in CREATE";
         return false;
     }
 

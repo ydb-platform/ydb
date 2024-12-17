@@ -67,7 +67,7 @@ private:
 
         switch (record.GetStatus()) {
             case NKikimrScheme::StatusSuccess:
-                if (desc.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeReplication) {
+                if (desc.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeReplication && desc.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeTransfer) {
                     auto issue = NYql::TIssue("Is not a replication");
                     Request_->RaiseIssue(issue);
                     return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);

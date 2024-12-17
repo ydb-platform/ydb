@@ -439,7 +439,7 @@ message EvictionToExternalStorageSettings {
 }
 
 message DateTypeColumnModeSettings {
-    // The row will be assigned a tier at the moment of time, when the value
+    // The row will be considered as expired or assigned a tier at the moment of time, when the value
     // stored in <column_name> is less than or equal to the current time (in epoch
     // time format), and <expire_after_seconds> has passed since that moment;
     // i.e. the expiration threshold is the value of <column_name> plus <expire_after_seconds>.

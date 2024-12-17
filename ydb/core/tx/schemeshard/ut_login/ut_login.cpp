@@ -57,12 +57,17 @@ std::function<void(ui32 nodeIdx, NKikimr::TAppData& appData)> InitializeAccountL
     };
 }
 
-void CheckSecurityState(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, size_t expectedPublicKeysSize, size_t expectedSidsSize) {
+struct TCheckSecurityStateExpectedValues {
+    size_t PublicKeysSize;
+    size_t SidsSize;
+};
+
+void CheckSecurityState(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, const TCheckSecurityStateExpectedValues& expectedValues) {
     UNIT_ASSERT(describeResult.HasPathDescription());
     UNIT_ASSERT(describeResult.GetPathDescription().HasDomainDescription());
     UNIT_ASSERT(describeResult.GetPathDescription().GetDomainDescription().HasSecurityState());
-    UNIT_ASSERT_VALUES_EQUAL(describeResult.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize(), expectedPublicKeysSize);
-    UNIT_ASSERT_VALUES_EQUAL(describeResult.GetPathDescription().GetDomainDescription().GetSecurityState().SidsSize(), expectedSidsSize);
+    UNIT_ASSERT_VALUES_EQUAL(describeResult.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize(), expectedValues.PublicKeysSize);
+    UNIT_ASSERT_VALUES_EQUAL(describeResult.GetPathDescription().GetDomainDescription().GetSecurityState().SidsSize(), expectedValues.SidsSize);
 }
 
 void CheckToken(const TString& token, const NKikimrScheme::TEvDescribeSchemeResult& describeResult, const TString& expectedUsername, const TString& expectedError = "") {
@@ -85,14 +90,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             Cerr << describe.DebugString() << Endl;
-            CheckSecurityState(describe, 0, 0);
+            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
         }
 
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
 
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, 0, 1);
+            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 1});
         }
 
         // public keys are filled after the first login
@@ -101,7 +106,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, 1, 1);
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
         }
 
         // check token
@@ -299,7 +304,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         auto resultLogin = Login(runtime, "user1@ldap", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
         auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-        CheckSecurityState(describe, 1, 1);
+        CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 0});
         CheckToken(resultLogin.token(), describe, "user1@ldap");
     }
 
@@ -310,7 +315,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: ldapuser@ldap.domain");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
         auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-        CheckSecurityState(describe, 1, 1);
+        CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 0});
     }
 
     Y_UNIT_TEST(DisableBuiltinAuthMechanism) {
@@ -318,127 +323,261 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestEnv env(runtime);
         runtime.GetAppData().AuthConfig.SetEnableLoginAuthentication(false);
         ui64 txId = 100;
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusPreconditionFailed, "Login authentication is disabled"}});
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            Cerr << describe.DebugString() << Endl;
+            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
+        }
+
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusPreconditionFailed}});
         auto resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Login authentication is disabled");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
-        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-        CheckSecurityState(describe, 1, 1);
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 0});
+        }
     }
 
     Y_UNIT_TEST(FailedLoginWithInvalidUser) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            Cerr << describe.DebugString() << Endl;
+            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
+        }
+
         CreateAlterLoginCreateGroup(runtime, ++txId, "/MyRoot", "group1");
         auto resultLogin = Login(runtime, "group1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid user");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
-        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-        CheckSecurityState(describe, 0, 1);
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
+        }
     }
 
     Y_UNIT_TEST(ChangeAcceptablePasswordParameters) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            Cerr << describe.DebugString() << Endl;
+            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
+        }
+
         // Password parameters:
         //  min length 0
         //  optional: lower case, upper case, numbers, special symbols from list !@#$%^&*()_+{}|<>?=
         // required: cannot contain username
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
-        auto resultLogin = Login(runtime, "user1", "password1");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-        CheckSecurityState(describe, 1, 1);
+
+        {
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+            auto resultLogin = Login(runtime, "user1", "password1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
+            CheckToken(resultLogin.token(), describe, "user1");
+        }
 
         // Accept password without lower case symbols
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "PASSWORDU2");
-         resultLogin = Login(runtime, "user2", "PASSWORDU2");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        {
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "PASSWORDU2");
+            auto resultLogin = Login(runtime, "user2", "PASSWORDU2");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 2});
+            CheckToken(resultLogin.token(), describe, "user2");
+        }
+
         // Password parameters:
         //  min length 0
         //  optional: upper case, numbers, special symbols from list !@#$%^&*()_+{}|<>?=
         //  required: lower case = 3, cannot contain username
-        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLowerCaseCount = 3});
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user3", "PASSWORDU3", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 lower case character"}});
+        {
+            SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLowerCaseCount = 3});
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user3", "PASSWORDU3", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 lower case character"}});
+            auto resultLogin = Login(runtime, "user3", "PASSWORDU3");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user3");
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 2});
+        }
+
         // Add lower case symbols to password
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user3", "PASswORDu3");
-        resultLogin = Login(runtime, "user3", "PASswORDu3");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        {
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user3", "PASswORDu3");
+            auto resultLogin = Login(runtime, "user3", "PASswORDu3");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 3});
+            CheckToken(resultLogin.token(), describe, "user3");
+        }
 
         // Accept password without upper case symbols
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user4", "passwordu4");
-        resultLogin = Login(runtime, "user4", "passwordu4");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        {
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user4", "passwordu4");
+            auto resultLogin = Login(runtime, "user4", "passwordu4");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 4});
+            CheckToken(resultLogin.token(), describe, "user4");
+        }
+
         // Password parameters:
         //  min length 0
         //  optional: lower case, numbers, special symbols from list !@#$%^&*()_+{}|<>?=
         //  required: upper case = 3, cannot contain username
-        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLowerCaseCount = 0, .MinUpperCaseCount = 3});
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user5", "passwordu5", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 upper case character"}});
+        {
+            SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLowerCaseCount = 0, .MinUpperCaseCount = 3});
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user5", "passwordu5", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 upper case character"}});
+            auto resultLogin = Login(runtime, "user5", "passwordu5");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user5");
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 4});
+        }
+
         // Add 3 upper case symbols to password
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user5", "PASswORDu5");
-        resultLogin = Login(runtime, "user5", "PASswORDu5");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        {
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user5", "PASswORDu5");
+            auto resultLogin = Login(runtime, "user5", "PASswORDu5");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 5});
+            CheckToken(resultLogin.token(), describe, "user5");
+        }
 
         // Accept short password
-        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinUpperCaseCount = 0});
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user6", "passwu6");
-        resultLogin = Login(runtime, "user6", "passwu6");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        {
+            SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinUpperCaseCount = 0});
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user6", "passwu6");
+            auto resultLogin = Login(runtime, "user6", "passwu6");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 6});
+            CheckToken(resultLogin.token(), describe, "user6");
+        }
+
         // Password parameters:
         //  min length 8
         //  optional: lower case, upper case, numbers, special symbols from list !@#$%^&*()_+{}|<>?=
         //  required: cannot contain username
-        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLength = 8});
         // Too short password
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user7", "passwu7", {{NKikimrScheme::StatusPreconditionFailed, "Password is too short"}});
+        {
+            SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLength = 8});
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user7", "passwu7", {{NKikimrScheme::StatusPreconditionFailed, "Password is too short"}});
+            auto resultLogin = Login(runtime, "user7", "passwu7");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user7");
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 6});
+        }
+
         // Password has correct length
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user7", "passwordu7");
-        resultLogin = Login(runtime, "user7", "passwordu7");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        {
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user7", "passwordu7");
+            auto resultLogin = Login(runtime, "user7", "passwordu7");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 7});
+            CheckToken(resultLogin.token(), describe, "user7");
+        }
 
         // Accept password without numbers
-        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLength = 0});
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user8", "passWorDueitgh");
-        resultLogin = Login(runtime, "user8", "passWorDueitgh");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        {
+            SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLength = 0});
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user8", "passWorDueitgh");
+            auto resultLogin = Login(runtime, "user8", "passWorDueitgh");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 8});
+            CheckToken(resultLogin.token(), describe, "user8");
+        }
+
         // Password parameters:
         //  min length 0
         //  optional: lower case, upper case,special symbols from list !@#$%^&*()_+{}|<>?=
         //  required: numbers = 3, cannot contain username
-        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinNumbersCount = 3});
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user9", "passwordunine", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 number"}});
+        {
+            SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinNumbersCount = 3});
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user9", "passwordunine", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 number"}});
+            auto resultLogin = Login(runtime, "user9", "passwordunine");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user9");
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 8});
+        }
+
         // Password with numbers
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user9", "pas1swo5rdu9");
-        resultLogin = Login(runtime, "user9", "pas1swo5rdu9");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        {
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user9", "pas1swo5rdu9");
+            auto resultLogin = Login(runtime, "user9", "pas1swo5rdu9");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 9});
+            CheckToken(resultLogin.token(), describe, "user9");
+        }
 
         // Accept password without special symbols
-        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinNumbersCount = 0});
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user10", "passWorDu10");
-        resultLogin = Login(runtime, "user10", "passWorDu10");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        {
+            SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinNumbersCount = 0});
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user10", "passWorDu10");
+            auto resultLogin = Login(runtime, "user10", "passWorDu10");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 10});
+            CheckToken(resultLogin.token(), describe, "user10");
+        }
+
         // Password parameters:
         //  min length 0
         //  optional: lower case, upper case, numbers
         //  required: special symbols from list !@#$%^&*()_+{}|<>?= , cannot contain username
-        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinSpecialCharsCount = 3});
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user11", "passwordu11", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 special character"}});
+        {
+            SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinSpecialCharsCount = 3});
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user11", "passwordu11", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 special character"}});
+            auto resultLogin = Login(runtime, "user11", "passwordu11");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user11");
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 10});
+        }
+
         // Password with special symbols
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user11", "passwordu11*&%#");
-        resultLogin = Login(runtime, "user11", "passwordu11*&%#");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        {
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user11", "passwordu11*&%#");
+            auto resultLogin = Login(runtime, "user11", "passwordu11*&%#");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 11});
+            CheckToken(resultLogin.token(), describe, "user11");
+        }
+
         // Password parameters:
         //  min length 0
         //  optional: lower case, upper case, numbers
         //  required: special symbols from list *# , cannot contain username
-        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.SpecialChars = "*#"}); // Only 2 special symbols are valid
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user12", "passwordu12*&%#", {{NKikimrScheme::StatusPreconditionFailed, "Password contains unacceptable characters"}});
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user12", "passwordu12*#");
-        resultLogin = Login(runtime, "user12", "passwordu12*#");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        {
+            SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.SpecialChars = "*#"}); // Only 2 special symbols are valid
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user12", "passwordu12*&%#", {{NKikimrScheme::StatusPreconditionFailed, "Password contains unacceptable characters"}});
+            auto resultLogin = Login(runtime, "user12", "passwordu12*&%#");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user12");
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 11});
+        }
+
+        {
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user12", "passwordu12*#");
+            auto resultLogin = Login(runtime, "user12", "passwordu12*#");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 12});
+            CheckToken(resultLogin.token(), describe, "user12");
+        }
     }
 
     Y_UNIT_TEST(AccountLockoutAndAutomaticallyUnlock) {
@@ -447,6 +586,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestEnv env(runtime);
         auto accountLockoutConfig = runtime.GetAppData().AuthConfig.GetAccountLockout();
         ui64 txId = 100;
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
+        }
+
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
         NKikimrScheme::TEvLoginResult resultLogin;
         for (size_t attempt = 0; attempt < accountLockoutConfig.GetAttemptThreshold(); attempt++) {
@@ -460,15 +605,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
 
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
+        }
+
         runtime.SimulateSleep(TDuration::Seconds(7));
 
         resultLogin = Login(runtime, "user1", "wrongpassword6");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-        CheckSecurityState(describe, 1, 1);
-        CheckToken(resultLogin.token(), describe, "user1");
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
+            CheckToken(resultLogin.token(), describe, "user1");
+        }
     }
 
     Y_UNIT_TEST(ResetFailedAttemptCount) {
@@ -477,11 +630,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestEnv env(runtime);
         auto accountLockoutConfig = runtime.GetAppData().AuthConfig.GetAccountLockout();
         ui64 txId = 100;
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
+        }
+
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
         NKikimrScheme::TEvLoginResult resultLogin;
         for (size_t attempt = 0; attempt < accountLockoutConfig.GetAttemptThreshold() - 1; attempt++) {
             resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << attempt);
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        }
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
         }
 
         runtime.SimulateSleep(TDuration::Seconds(7));
@@ -493,9 +657,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
         resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-        CheckSecurityState(describe, 1, 1);
-        CheckToken(resultLogin.token(), describe, "user1");
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
+            CheckToken(resultLogin.token(), describe, "user1");
+        }
     }
 
     Y_UNIT_TEST(ChangeAccountLockoutParameters) {
@@ -504,6 +671,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestEnv env(runtime);
         auto accountLockoutConfig = runtime.GetAppData().AuthConfig.GetAccountLockout();
         ui64 txId = 100;
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
+        }
+
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
         NKikimrScheme::TEvLoginResult resultLogin;
         for (size_t attempt = 0; attempt < accountLockoutConfig.GetAttemptThreshold(); attempt++) {
@@ -513,14 +686,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
 
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
+        }
+
         runtime.SimulateSleep(TDuration::Seconds(7));
 
         // Unlock user after 5 sec
         resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-        CheckSecurityState(describe, 1, 1);
-        CheckToken(resultLogin.token(), describe, "user1");
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
+            CheckToken(resultLogin.token(), describe, "user1");
+        }
 
         size_t newAttemptThreshold = 6;
         SetAccountLockoutParameters(runtime, TTestTxConfig::SchemeShard, {.AttemptThreshold = newAttemptThreshold, .AttemptResetDuration = "10s"});
@@ -535,6 +716,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // User is locked out after 6 attempts
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user2 is locked out");
 
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 2});
+        }
+
         // After 7 sec user2 must be locked out
         runtime.SimulateSleep(TDuration::Seconds(7));
         resultLogin = Login(runtime, "user2", "wrongpassword28");
@@ -545,9 +731,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // Unlock user after 10 sec
         resultLogin = Login(runtime, "user2", "password2");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-        describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-        CheckSecurityState(describe, 1, 1);
-        CheckToken(resultLogin.token(), describe, "user2");
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 2});
+            CheckToken(resultLogin.token(), describe, "user2");
+        }
     }
 
     Y_UNIT_TEST(UserStayLockedOutIfEnterValidPassword) {
@@ -556,6 +744,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestEnv env(runtime);
         auto accountLockoutConfig = runtime.GetAppData().AuthConfig.GetAccountLockout();
         ui64 txId = 100;
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
+        }
+
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
         NKikimrScheme::TEvLoginResult resultLogin;
         for (size_t attempt = 0; attempt < accountLockoutConfig.GetAttemptThreshold(); attempt++) {

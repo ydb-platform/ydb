@@ -46,7 +46,7 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
     TInstant now = TAppData::TimeProvider->Now();
     THashMap<TActorId, THolder<TCacheL2Response>> responses;
 
-    for (auto rm : evictedBlobs) {
+    for (const auto& rm : evictedBlobs) {
         const TKey& key = rm.first;
         TCacheValue::TPtr evicted = rm.second;
 
@@ -57,7 +57,7 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
         }
 
         Y_ABORT_UNLESS(key.TabletId == resp->TabletId, "PQ L2. Multiple topics in one PQ tablet.");
-        resp->Removed.push_back({key.Partition, key.Offset, key.PartNo, evicted});
+        resp->Removed.emplace_back(key.Partition, key.Offset, key.PartNo, evicted);
 
         RetentionTime = now - evicted->GetAccessTime();
         if (RetentionTime < KeepTime)

@@ -107,7 +107,7 @@ public:
     bool ProgressState(TOperationContext& context) override;
 };
 
-class TDone: public TSubOperationState {
+class TDoneBase: public TSubOperationState {
 protected:
     const TOperationId OperationId;
 
@@ -117,7 +117,20 @@ protected:
     }
 
 public:
-    explicit TDone(const TOperationId& id);
+    explicit TDoneBase(const TOperationId& id);
+    bool Process(TOperationContext& context);
+};
+
+class TDone: public TDoneBase {
+public:
+    using TDoneBase::TDoneBase;
+
+    bool ProgressState(TOperationContext& context) override;
+};
+
+class TDoneWithBarrier: public TDoneBase {
+public:
+    using TDoneBase::TDoneBase;
 
     bool ProgressState(TOperationContext& context) override;
     bool HandleReply(TEvPrivate::TEvCompleteBarrier__HandlePtr& ev, TOperationContext& context) override;

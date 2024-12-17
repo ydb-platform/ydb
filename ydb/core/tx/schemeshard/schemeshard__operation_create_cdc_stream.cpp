@@ -379,12 +379,12 @@ public:
 
 }; // TProposeAtTableWithInitialScan
 
-class TDoneWithInitialScan: public TDone {
+class TDoneWithInitialScan: public TDoneWithBarrier {
 public:
-    using TDone::TDone;
+    using TDoneWithBarrier::TDoneWithBarrier;
 
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
-        if (!TDone::HandleReply(ev, context)) {
+        if (!TDoneWithBarrier::HandleReply(ev, context)) {
             return false;
         }
 

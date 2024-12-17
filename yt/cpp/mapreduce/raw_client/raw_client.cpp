@@ -10,6 +10,7 @@
 #include <yt/cpp/mapreduce/http/requests.h>
 #include <yt/cpp/mapreduce/http/retry_request.h>
 
+#include <yt/cpp/mapreduce/interface/fluent.h>
 #include <yt/cpp/mapreduce/interface/operation.h>
 #include <yt/cpp/mapreduce/interface/tvm.h>
 
@@ -551,6 +552,189 @@ std::vector<TJobTraceEvent> THttpRawClient::GetJobTrace(
         result.push_back(ParseJobTraceEvent(traceEventNode));
     }
 
+    return result;
+}
+
+void THttpRawClient::MountTable(
+    TMutationId& mutationId,
+    const TYPath& path,
+    const TMountTableOptions& options)
+{
+    THttpHeader header("POST", "mount_table");
+    header.AddMutationId();
+    header.MergeParameters(NRawClient::SerializeTabletParams(Context_.Config->Prefix, path, options));
+    if (options.CellId_) {
+        header.AddParameter("cell_id", GetGuidAsString(*options.CellId_));
+    }
+    header.AddParameter("freeze", options.Freeze_);
+    RequestWithoutRetry(Context_, mutationId, header);
+}
+
+void THttpRawClient::UnmountTable(
+    TMutationId& mutationId,
+    const TYPath& path,
+    const TUnmountTableOptions& options)
+{
+    THttpHeader header("POST", "unmount_table");
+    header.AddMutationId();
+    header.MergeParameters(NRawClient::SerializeTabletParams(Context_.Config->Prefix, path, options));
+    header.AddParameter("force", options.Force_);
+    RequestWithoutRetry(Context_, mutationId, header);
+}
+
+void THttpRawClient::RemountTable(
+    TMutationId& mutationId,
+    const TYPath& path,
+    const TRemountTableOptions& options)
+{
+    THttpHeader header("POST", "remount_table");
+    header.AddMutationId();
+    header.MergeParameters(NRawClient::SerializeTabletParams(Context_.Config->Prefix, path, options));
+    RequestWithoutRetry(Context_, mutationId, header);
+}
+
+void THttpRawClient::ReshardTableByPivotKeys(
+    TMutationId& mutationId,
+    const TYPath& path,
+    const TVector<TKey>& keys,
+    const TReshardTableOptions& options)
+{
+    THttpHeader header("POST", "reshard_table");
+    header.AddMutationId();
+    header.MergeParameters(NRawClient::SerializeTabletParams(Context_.Config->Prefix, path, options));
+    header.AddParameter("pivot_keys", BuildYsonNodeFluently().List(keys));
+    RequestWithoutRetry(Context_, mutationId, header);
+}
+
+void THttpRawClient::ReshardTableByTabletCount(
+    TMutationId& mutationId,
+    const TYPath& path,
+    i64 tabletCount,
+    const TReshardTableOptions& options)
+{
+    THttpHeader header("POST", "reshard_table");
+    header.AddMutationId();
+    header.MergeParameters(NRawClient::SerializeTabletParams(Context_.Config->Prefix, path, options));
+    header.AddParameter("tablet_count", tabletCount);
+    RequestWithoutRetry(Context_, mutationId, header);
+}
+
+void THttpRawClient::InsertRows(
+    const TYPath& path,
+    const TNode::TListType& rows,
+    const TInsertRowsOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("PUT", "insert_rows");
+    header.SetInputFormat(TFormat::YsonBinary());
+    header.MergeParameters(NRawClient::SerializeParametersForInsertRows(Context_.Config->Prefix, path, options));
+    auto body = NodeListToYsonString(rows);
+    TRequestConfig config;
+    config.IsHeavy = true;
+    RequestWithoutRetry(Context_, mutationId, header, body, config);
+}
+
+void THttpRawClient::TrimRows(
+    const TYPath& path,
+    i64 tabletIndex,
+    i64 rowCount,
+    const TTrimRowsOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("POST", "trim_rows");
+    header.AddParameter("trimmed_row_count", rowCount);
+    header.AddParameter("tablet_index", tabletIndex);
+    header.MergeParameters(NRawClient::SerializeParametersForTrimRows(Context_.Config->Prefix, path, options));
+    TRequestConfig config;
+    config.IsHeavy = true;
+    RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+}
+
+TNode::TListType THttpRawClient::LookupRows(
+    const TYPath& path,
+    const TNode::TListType& keys,
+    const TLookupRowsOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("PUT", "lookup_rows");
+    header.AddPath(AddPathPrefix(path, Context_.Config->ApiVersion));
+    header.SetInputFormat(TFormat::YsonBinary());
+    header.SetOutputFormat(TFormat::YsonBinary());
+
+    header.MergeParameters(BuildYsonNodeFluently().BeginMap()
+        .DoIf(options.Timeout_.Defined(), [&] (TFluentMap fluent) {
+            fluent.Item("timeout").Value(static_cast<i64>(options.Timeout_->MilliSeconds()));
+        })
+        .Item("keep_missing_rows").Value(options.KeepMissingRows_)
+        .DoIf(options.Versioned_.Defined(), [&] (TFluentMap fluent) {
+            fluent.Item("versioned").Value(*options.Versioned_);
+        })
+        .DoIf(options.Columns_.Defined(), [&] (TFluentMap fluent) {
+            fluent.Item("column_names").Value(*options.Columns_);
+        })
+    .EndMap());
+
+    auto body = NodeListToYsonString(keys);
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, body, config);
+    return NodeFromYsonString(responseInfo.Response, ::NYson::EYsonType::ListFragment).AsList();
+}
+
+TNode::TListType THttpRawClient::SelectRows(
+    const TString& query,
+    const TSelectRowsOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "select_rows");
+    header.SetInputFormat(TFormat::YsonBinary());
+    header.SetOutputFormat(TFormat::YsonBinary());
+
+    header.MergeParameters(BuildYsonNodeFluently().BeginMap()
+        .Item("query").Value(query)
+        .DoIf(options.Timeout_.Defined(), [&] (TFluentMap fluent) {
+            fluent.Item("timeout").Value(static_cast<i64>(options.Timeout_->MilliSeconds()));
+        })
+        .DoIf(options.InputRowLimit_.Defined(), [&] (TFluentMap fluent) {
+            fluent.Item("input_row_limit").Value(*options.InputRowLimit_);
+        })
+        .DoIf(options.OutputRowLimit_.Defined(), [&] (TFluentMap fluent) {
+            fluent.Item("output_row_limit").Value(*options.OutputRowLimit_);
+        })
+        .Item("range_expansion_limit").Value(options.RangeExpansionLimit_)
+        .Item("fail_on_incomplete_result").Value(options.FailOnIncompleteResult_)
+        .Item("verbose_logging").Value(options.VerboseLogging_)
+        .Item("enable_code_cache").Value(options.EnableCodeCache_)
+    .EndMap());
+
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    return NodeFromYsonString(responseInfo.Response, ::NYson::EYsonType::ListFragment).AsList();
+}
+
+ui64 THttpRawClient::GenerateTimestamp()
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "generate_timestamp");
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    return NodeFromYsonString(responseInfo.Response).AsUint64();
+}
+
+TAuthorizationInfo THttpRawClient::WhoAmI()
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "auth/whoami", /*isApi*/ false);
+    auto requestResult = RequestWithoutRetry(Context_, mutationId, header);
+    TAuthorizationInfo result;
+
+    NJson::TJsonValue jsonValue;
+    bool ok = NJson::ReadJsonTree(requestResult.Response, &jsonValue, /*throwOnError*/ true);
+    Y_ABORT_UNLESS(ok);
+    result.Login = jsonValue["login"].GetString();
+    result.Realm = jsonValue["realm"].GetString();
     return result;
 }
 

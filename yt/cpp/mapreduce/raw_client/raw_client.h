@@ -2,6 +2,7 @@
 
 #include <yt/cpp/mapreduce/http/context.h>
 
+#include <yt/cpp/mapreduce/interface/client.h>
 #include <yt/cpp/mapreduce/interface/client_method_options.h>
 #include <yt/cpp/mapreduce/interface/raw_client.h>
 
@@ -187,6 +188,61 @@ public:
     std::vector<TJobTraceEvent> GetJobTrace(
         const TOperationId& operationId,
         const TGetJobTraceOptions& options = {}) override;
+
+    // Tables
+
+    void MountTable(
+        TMutationId& mutationId,
+        const TYPath& path,
+        const TMountTableOptions& options = {}) override;
+
+    void UnmountTable(
+        TMutationId& mutationId,
+        const TYPath& path,
+        const TUnmountTableOptions& options = {}) override;
+
+    void RemountTable(
+        TMutationId& mutationId,
+        const TYPath& path,
+        const TRemountTableOptions& options = {}) override;
+
+    void ReshardTableByPivotKeys(
+        TMutationId& mutationId,
+        const TYPath& path,
+        const TVector<TKey>& keys,
+        const TReshardTableOptions& options = {}) override;
+
+    void ReshardTableByTabletCount(
+        TMutationId& mutationId,
+        const TYPath& path,
+        i64 tabletCount,
+        const TReshardTableOptions& options = {}) override;
+
+    void InsertRows(
+        const TYPath& path,
+        const TNode::TListType& rows,
+        const TInsertRowsOptions& options = {}) override;
+
+    void TrimRows(
+        const TYPath& path,
+        i64 tabletIndex,
+        i64 rowCount,
+        const TTrimRowsOptions& options = {}) override;
+
+    TNode::TListType LookupRows(
+        const TYPath& path,
+        const TNode::TListType& keys,
+        const TLookupRowsOptions& options = {}) override;
+
+    TNode::TListType SelectRows(
+        const TString& query,
+        const TSelectRowsOptions& options = {}) override;
+
+    // Misc
+
+    ui64 GenerateTimestamp() override;
+
+    TAuthorizationInfo WhoAmI() override;
 
 private:
     const TClientContext Context_;

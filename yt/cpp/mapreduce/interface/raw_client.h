@@ -1,5 +1,6 @@
 #pragma once
 
+#include "client.h"
 #include "client_method_options.h"
 #include "operation.h"
 
@@ -181,6 +182,61 @@ public:
     virtual std::vector<TJobTraceEvent> GetJobTrace(
         const TOperationId& operationId,
         const TGetJobTraceOptions& options = {}) = 0;
+
+    // Tables
+
+    virtual void MountTable(
+        TMutationId& mutationId,
+        const TYPath& path,
+        const TMountTableOptions& options = {}) = 0;
+
+    virtual void UnmountTable(
+        TMutationId& mutationId,
+        const TYPath& path,
+        const TUnmountTableOptions& options = {}) = 0;
+
+    virtual void RemountTable(
+        TMutationId& mutationId,
+        const TYPath& path,
+        const TRemountTableOptions& options = {}) = 0;
+
+    virtual void ReshardTableByPivotKeys(
+        TMutationId& mutationId,
+        const TYPath& path,
+        const TVector<TKey>& keys,
+        const TReshardTableOptions& options = {}) = 0;
+
+    virtual void ReshardTableByTabletCount(
+        TMutationId& mutationId,
+        const TYPath& path,
+        i64 tabletCount,
+        const TReshardTableOptions& options = {}) = 0;
+
+    virtual void InsertRows(
+        const TYPath& path,
+        const TNode::TListType& rows,
+        const TInsertRowsOptions& options = {}) = 0;
+
+    virtual void TrimRows(
+        const TYPath& path,
+        i64 tabletIndex,
+        i64 rowCount,
+        const TTrimRowsOptions& options = {}) = 0;
+
+    virtual TNode::TListType LookupRows(
+        const TYPath& path,
+        const TNode::TListType& keys,
+        const TLookupRowsOptions& options = {}) = 0;
+
+    virtual TNode::TListType SelectRows(
+        const TString& query,
+        const TSelectRowsOptions& options = {}) = 0;
+
+    // Misc
+
+    virtual ui64 GenerateTimestamp() = 0;
+
+    virtual TAuthorizationInfo WhoAmI() = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

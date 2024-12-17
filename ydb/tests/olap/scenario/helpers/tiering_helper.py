@@ -16,6 +16,8 @@ class ObjectStorageParams:
     bucket: str
     access_key_secret: str
     secret_key_secret: str
+    access_key: str
+    secret_key: str
 
 
 class UpsertSecret(ScenarioTestHelper.IYqlble):
@@ -34,7 +36,11 @@ class UpsertSecret(ScenarioTestHelper.IYqlble):
 
     @override
     def to_yql(self, ctx: TestContext) -> str:
-        return f'UPSERT OBJECT `{self._name}` (TYPE SECRET) WITH (value="{self._value})'
+        return f'UPSERT OBJECT `{self._name}` (TYPE SECRET) WITH (value="{self._value}")'
+
+    @override
+    def params(self) -> Dict[str, str]:
+        return {"name": self._name}
 
 
 class CreateExternalDataSource(ScenarioTestHelper.IYqlble):
@@ -55,13 +61,18 @@ class CreateExternalDataSource(ScenarioTestHelper.IYqlble):
     @override
     def to_yql(self, ctx: TestContext) -> str:
         verb = "CREATE IF NOT EXISTS" if self._allow_existing else "CREATE"
-        return f'{verb} EXTERNAL DATA SOURCE `{ctx.get_full_path(self._path)}` WITH (' \
-               f'    SOURCE_TYPE="ObjectStorage",' \
+        return f'{verb} EXTERNAL DATA SOURCE `{ScenarioTestHelper(ctx).get_full_path(self._path)}` WITH (' \
+                '    SOURCE_TYPE="ObjectStorage",' \
                f'    LOCATION="http://{self._config.endpoint}/{self._config.bucket}",' \
-                '    AUTH_METHOD="AWS"' \
-                '    AWS_SECRET_ACCESS_KEY_SECRET_NAME="{self._config.access_key}"' \
-                '    AWS_ACCESS_KEY_ID_SECRET_NAME="{self._config.secret_key}"' \
+                '    AUTH_METHOD="AWS",' \
+               f'    AWS_SECRET_ACCESS_KEY_SECRET_NAME="{self._config.access_key_secret}",' \
+               f'    AWS_ACCESS_KEY_ID_SECRET_NAME="{self._config.secret_key_secret}",' \
+                '    AWS_REGION="ru-central1"' \
                 ')'
+
+    @override
+    def params(self) -> Dict[str, str]:
+        return {"path": self._path}
 
 
 class DropObjectBase(ScenarioTestHelper.IYqlble):
@@ -84,8 +95,13 @@ class DropObjectBase(ScenarioTestHelper.IYqlble):
 
     @override
     def to_yql(self, ctx: TestContext) -> str:
-        verb = "DROP IF EXISTS" if self._allow_existing else "DROP"
-        return f'{verb} {self._get_object_type()} {ctx.get_full_path(self._path)}'
+        return f'DROP {self._get_object_type()}' \
+               f'{" IF EXISTS" if self._missing_ok else ""}' \
+               f' `{ScenarioTestHelper(ctx).get_full_path(self._path)}`'
+
+    @override
+    def params(self) -> Dict[str, str]:
+        return {"path": self._path}
 
 
 class DropExternalDataSource(DropObjectBase):
@@ -112,3 +128,7 @@ class DropSecret(ScenarioTestHelper.IYqlble):
     def to_yql(self, ctx: TestContext) -> str:
         verb = "DROP IF EXISTS" if self._allow_existing else "DROP"
         return f'DROP OBJECT {self.name} (TYPE SECRET)'
+
+    @override
+    def params(self) -> Dict[str, str]:
+        return {"name": self._name}

@@ -117,7 +117,7 @@ class TestAlterTiering(BaseTestSet):
         return type(self).__name__;
 
     def _count_objects(self, bucket_config: ObjectStorageParams):
-        s3 = self._make_s3_client(bucket_config.access_key_secret, bucket_config.secret_key_secret, bucket_config.endpoint)
+        s3 = self._make_s3_client(bucket_config.access_key, bucket_config.secret_key, bucket_config.endpoint)
         paginator = s3.get_paginator('list_objects_v2')
         page_iterator = paginator.paginate(Bucket=bucket_config.bucket)
 
@@ -156,8 +156,10 @@ class TestAlterTiering(BaseTestSet):
             ObjectStorageParams(
                 endpoint=s3_endpoint,
                 bucket=bucket,
-                access_key_secret=s3_access_key,
-                secret_key_secret=s3_secret_key
+                access_key_secret=access_key_secret,
+                secret_key_secret=secret_key_secret,
+                access_key=s3_access_key,
+                secret_key=s3_secret_key
             ) for bucket in s3_buckets
         ]
 

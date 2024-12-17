@@ -8,10 +8,15 @@ std::shared_ptr<const TIndexInfo> TSchemaObjectsCache::GetIndexInfoCache(TIndexI
     const ui64 schemaVersion = indexInfo.GetVersion();
     std::unique_lock lock(SchemasMutex);
     auto* findSchema = SchemasByVersion.FindPtr(schemaVersion);
-    if (!findSchema || findSchema->expired()) {
-        SchemasByVersion[schemaVersion] = std::make_shared<TIndexInfo>(std::move(indexInfo));
+    std::shared_ptr<const TIndexInfo> cachedSchema;
+    if (findSchema) {
+        cachedSchema = findSchema->lock();
     }
-    return findSchema->lock();
+    if (!cachedSchema) {
+        cachedSchema = std::make_shared<TIndexInfo>(std::move(indexInfo));
+        SchemasByVersion[schemaVersion] = cachedSchema;
+    }
+    return cachedSchema;
 }
 
 }   // namespace NKikimr::NOlap

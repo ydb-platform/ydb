@@ -355,13 +355,15 @@ void TColumnShard::RunInit(const NKikimrTxColumnShard::TInitShard& proto, const 
 
     NIceDb::TNiceDb db(txc.DB);
 
-    AFL_VERIFY(proto.HasOwnerPathId());
-    OwnerPathId = proto.GetOwnerPathId();
-    Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, OwnerPathId);
+    if (proto.HasOwnerPathId()) {
+        OwnerPathId = proto.GetOwnerPathId();
+        Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, OwnerPathId);
+    }
 
-    AFL_VERIFY(proto.HasOwnerPathId());
-    OwnerPath = proto.GetOwnerPath();
-    Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPath, OwnerPath);
+    if (proto.HasOwnerPath()) {
+        OwnerPath = proto.GetOwnerPath();
+        Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPath, OwnerPath);
+    }
 
     for (auto& createTable : proto.GetTables()) {
         RunEnsureTable(createTable, version, txc);

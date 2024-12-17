@@ -162,6 +162,7 @@ void TSideEffects::ApplyOnExecute(TSchemeShard* ss, NTabletFlatExecutor::TTransa
                 "TSideEffects ApplyOnExecute"
                 << " at tablet# " << ss->TabletID());
 
+    DoDoneParts(ss, ctx);
     DoSetBarriers(ss, ctx);
     DoCheckBarriers(ss, txc, ctx);
     DoDoneParts(ss, ctx);

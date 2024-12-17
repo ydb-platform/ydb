@@ -528,7 +528,7 @@
         {
             "Name": "TKiDropTransfer",
             "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "KiDropReplication!"},
+            "Match": {"Type": "Callable", "Name": "KiDropTransfer!"},
             "Children": [
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},

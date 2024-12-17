@@ -293,11 +293,18 @@ bool CanPropagateWideBlockThroughChannel(
         return false;
     }
 
-    // Ensure that stage has blocks on top level (i.e. FromFlow(WideFromBlocks(...)))
-    if (!program.Lambda().Body().Maybe<TCoFromFlow>() ||
-        !program.Lambda().Body().Cast<TCoFromFlow>().Input().Maybe<TCoWideFromBlocks>())
-    {
-        return false;
+    if constexpr (!NYql::NBlockStreamIO::WideFromBlocks) {
+        // Ensure that stage has blocks on top level (i.e. (FromFlow(WideFromBlocks(...)))).
+        if (!program.Lambda().Body().Maybe<TCoFromFlow>() ||
+            !program.Lambda().Body().Cast<TCoFromFlow>().Input().Maybe<TCoWideFromBlocks>())
+        {
+            return false;
+        }
+    } else {
+        // Ensure that stage has blocks on top level (i.e. (WideFromBlocks(...))).
+        if (!program.Lambda().Body().Maybe<TCoWideFromBlocks>()) {
+            return false;
+        }
     }
 
     auto typeAnnotation = program.Lambda().Ref().GetTypeAnn();
@@ -371,31 +378,52 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                 if (auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>(); connection &&
                     CanPropagateWideBlockThroughChannel(connection.Cast().Output(), programs, TDqStageSettings::Parse(stage), ctx, typesCtx))
                 {
-                    TExprNode::TPtr newArgNode = ctx.Builder(oldArg.Pos())
-                        .Callable("FromFlow")
-                            .Callable(0, "WideFromBlocks")
-                                .Callable(0, "ToFlow")
-                                    .Add(0, newArg.Ptr())
+                    TExprNode::TPtr newArgNode;
+                    if constexpr (!NYql::NBlockStreamIO::WideFromBlocks) {
+                        newArgNode = ctx.Builder(oldArg.Pos())
+                            .Callable("FromFlow")
+                                .Callable(0, "WideFromBlocks")
+                                    .Callable(0, "ToFlow")
+                                        .Add(0, newArg.Ptr())
+                                    .Seal()
                                 .Seal()
                             .Seal()
-                        .Seal()
-                        .Build();
+                            .Build();
+                    } else {
+                        newArgNode = ctx.Builder(oldArg.Pos())
+                            .Callable("WideFromBlocks")
+                                .Add(0, newArg.Ptr())
+                            .Seal()
+                            .Build();
+                    }
+
                     argsMap.emplace(oldArg.Raw(), newArgNode);
 
                     auto stageUid = connection.Cast().Output().Stage().Ref().UniqueId();
 
-                    // Update input program with: FromFlow(WideFromBlocks($1)) → FromFlow($1)
-                    if (const auto& inputProgram = programs.at(stageUid); inputProgram.Lambda().Body().Maybe<TCoFromFlow>() &&
-                        inputProgram.Lambda().Body().Cast<TCoFromFlow>().Input().Maybe<TCoWideFromBlocks>())
-                    {
-                        auto newBody = Build<TCoFromFlow>(ctx, inputProgram.Lambda().Body().Cast<TCoFromFlow>().Pos())
-                            .Input(inputProgram.Lambda().Body().Cast<TCoFromFlow>().Input().Cast<TCoWideFromBlocks>().Input())
-                            .Done();
+                    const auto& inputProgram = programs.at(stageUid);
+                    TMaybeNode<TExprBase> newBody;
+                    if constexpr (!NYql::NBlockStreamIO::WideFromBlocks) {
+                        // Update input program with: (FromFlow(WideFromBlocks($1))) -> (FromFlow($1))
+                        if (inputProgram.Lambda().Body().Maybe<TCoFromFlow>() &&
+                            inputProgram.Lambda().Body().Cast<TCoFromFlow>().Input().Maybe<TCoWideFromBlocks>())
+                        {
+                            newBody = Build<TCoFromFlow>(ctx, inputProgram.Lambda().Body().Cast<TCoFromFlow>().Pos())
+                                .Input(inputProgram.Lambda().Body().Cast<TCoFromFlow>().Input().Cast<TCoWideFromBlocks>().Input())
+                                .Done();
+                        }
+                    } else {
+                        // Update input program with: (WideFromBlocks($1)) -> ($1)
+                        if (inputProgram.Lambda().Body().Maybe<TCoWideFromBlocks>()) {
+                            newBody = inputProgram.Lambda().Body().Cast<TCoWideFromBlocks>().Input();
+                        }
+                    }
 
+                    if (newBody) {
                         auto newInputProgram = Build<TKqpProgram>(ctx, inputProgram.Pos())
                             .Lambda()
                                 .Args(inputProgram.Lambda().Args())
-                                .Body(newBody)
+                                .Body(newBody.Cast())
                             .Build()
                             .ArgsType(inputProgram.ArgsType())
                             .Done();

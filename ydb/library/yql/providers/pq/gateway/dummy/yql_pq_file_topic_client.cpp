@@ -108,7 +108,7 @@ public:
         Y_UNUSED(maxByteSize);
 
         TVector<NYdb::NTopic::TReadSessionEvent::TEvent> res;
-        for (auto event = EventsQ_.Pop(block); !event.Empty() &&  res.size() <= maxEventsCount.GetOrElse(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
+        for (auto event = EventsQ_.Pop(block); !event.Empty() &&  res.size() < maxEventsCount.GetOrElse(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
             res.push_back(*event);
         }
         return res;
@@ -238,7 +238,7 @@ public:
 
     TVector<NYdb::NTopic::TWriteSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount) override {
         TVector<NYdb::NTopic::TWriteSessionEvent::TEvent> res;
-        for (auto event = EventsQ_.Pop(block); !event.Empty() &&  res.size() <= maxEventsCount.GetOrElse(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
+        for (auto event = EventsQ_.Pop(block); !event.Empty() &&  res.size() < maxEventsCount.GetOrElse(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
             res.push_back(*event);
         }
         return res;

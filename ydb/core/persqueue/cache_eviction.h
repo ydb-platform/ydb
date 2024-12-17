@@ -286,18 +286,33 @@ namespace NPQ {
             }
         }
 
+        TBlobId MakeBlobId(const TString& s)
+        {
+            TKey key(s);
+            return {key.GetPartition(), key.GetOffset(), key.GetPartNo(), key.GetCount(), key.GetInternalPartsCount()};
+        }
+
         void RenameBlobs(const TKvRequest& kvReq, TCacheL2Request& reqData, const TActorContext& ctx)
         {
-            Y_UNUSED(kvReq);
-            Y_UNUSED(reqData);
-            Y_UNUSED(ctx);
+            for (const auto& [oldKey, newKey] : kvReq.RenamedBlobs) {
+                TBlobId oldBlob = MakeBlobId(oldKey);
+                TBlobId newBlob = MakeBlobId(newKey);
+                if (RenameExists(ctx, oldBlob, newBlob)) {
+                    reqData.RenamedBlobs.emplace_back(std::piecewise_construct,
+                                                      std::make_tuple(oldBlob.Partition, oldBlob.Offset, oldBlob.PartNo, nullptr),
+                                                      std::make_tuple(newBlob.Partition, newBlob.Offset, newBlob.PartNo, nullptr));
+                }
+            }
         }
 
         void DeleteBlobs(const TKvRequest& kvReq, TCacheL2Request& reqData, const TActorContext& ctx)
         {
-            Y_UNUSED(kvReq);
-            Y_UNUSED(reqData);
-            Y_UNUSED(ctx);
+            for (const auto& key : kvReq.DeletedBlobs) {
+                TBlobId blob = MakeBlobId(key);
+                if (RemoveExists(ctx, blob)) {
+                    reqData.RemovedBlobs.emplace_back(kvReq.Partition, blob.Offset, blob.PartNo, nullptr);
+                }
+            }
         }
 
         void SavePrefetchBlobs(const TActorContext& ctx, const TKvRequest& kvReq, const TVector<bool>& store)
@@ -483,6 +498,26 @@ namespace NPQ {
         {
             TValueL1 value;
             return CheckExists(ctx, blob, value, true);
+        }
+
+        bool RenameExists(const TActorContext& ctx, const TBlobId& oldBlob, const TBlobId& newBlob)
+        {
+            Y_UNUSED(ctx);
+
+            auto it = Cache.find(oldBlob);
+            if (it == Cache.end()) {
+                return false;
+            }
+
+            TValueL1 value = it->second;
+            Cache.erase(it);
+
+            Cache[newBlob] = value;
+            Counters.Inc(value);
+            if (L1Strategy)
+                L1Strategy->SaveHeadBlob(newBlob);
+
+            return true;
         }
     };
 

@@ -83,6 +83,7 @@ struct TCacheL2Request {
     TVector<TCacheBlobL2> RemovedBlobs;
     TVector<TCacheBlobL2> ExpectedBlobs;
     TVector<TCacheBlobL2> MissedBlobs;
+    TVector<std::pair<TCacheBlobL2, TCacheBlobL2>> RenamedBlobs;
 
     explicit TCacheL2Request(ui64 tabletId)
         : TabletId(tabletId)

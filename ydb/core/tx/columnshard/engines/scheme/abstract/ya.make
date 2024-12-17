@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     index_info.cpp
+    column_ids.cpp
 )
 
 PEERDIR(

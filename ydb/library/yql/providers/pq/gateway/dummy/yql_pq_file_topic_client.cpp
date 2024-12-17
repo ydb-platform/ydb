@@ -70,7 +70,7 @@ public:
 
 private:
     bool CanPopPredicate() {
-        return !Events_.empty() && !Stopped_;
+        return !Events_.empty() || Stopped_;
     }
 
     size_t MaxSize_;

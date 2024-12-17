@@ -1,3 +1,5 @@
+## 2.18.0 ##
+
 * `ydb import file csv` command now saves import progress. Relaunching import command will continue from the line it was interrupted on
 * Use QueryService by default (`--executer generic`) in `ydb workload kv` and `ydb workload stock` commands
 * Use parquet format instead of CSV to fill tables in `ydb workload` benchmarks

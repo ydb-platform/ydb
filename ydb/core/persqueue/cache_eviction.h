@@ -57,6 +57,8 @@ namespace NPQ {
         TPartitionId Partition;
         ui32 MetadataWritesCount;
         TVector<TRequestedBlob> Blobs;
+        TVector<TString> DeletedBlobs;
+        TVector<std::pair<TString, TString>> RenamedBlobs;
 
         TKvRequest(ERequestType type, TActorId sender, ui64 cookie, const TPartitionId& partition)
         : Type(type)

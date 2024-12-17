@@ -266,6 +266,8 @@ namespace NPQ {
             TKvRequest kvReq(TKvRequest::TypeWrite, ev->Sender, Max<ui64>(), TPartitionId(Max<ui32>()));
 
             SaveCmdWrite(srcRequest, kvReq, ctx);
+            SaveCmdRename(srcRequest, kvReq, ctx);
+            SaveCmdDelete(srcRequest, kvReq, ctx);
 
             ui64 cookie = SaveKvRequest(std::move(kvReq));
 
@@ -307,6 +309,40 @@ namespace NPQ {
             request->Record.SetCookie(cookie);
 
             ctx.Send(Tablet, request.Release(), 0, 0, std::move(ev->TraceId)); // -> KV
+        }
+
+        void SaveCmdRename(const NKikimrClient::TKeyValueRequest& srcRequest, TKvRequest& kvReq, const TActorContext& ctx)
+        {
+            kvReq.RenamedBlobs.reserve(srcRequest.CmdRenameSize());
+
+            for (ui32 i = 0; i < srcRequest.CmdRenameSize(); ++i) {
+                const auto& cmd = srcRequest.GetCmdRename(i);
+                kvReq.RenamedBlobs.emplace_back(cmd.GetOldKey(), cmd.GetNewKey());
+            }
+
+            Y_UNUSED(ctx);
+        }
+
+        void SaveCmdDelete(const NKikimrClient::TKeyValueRequest& srcRequest, TKvRequest& kvReq, const TActorContext& ctx)
+        {
+            kvReq.DeletedBlobs.reserve(srcRequest.CmdRenameSize());
+
+            for (ui32 i = 0; i < srcRequest.CmdDeleteRangeSize(); ++i) {
+                const auto& cmd = srcRequest.GetCmdDeleteRange(i);
+                const auto& range = cmd.GetRange();
+                if (range.GetFrom() != range.GetTo()) {
+                    continue;
+                }
+                if (range.GetIncludeFrom() != range.GetIncludeTo()) {
+                    continue;
+                }
+                if (!range.GetIncludeFrom()) {
+                    continue;
+                }
+                kvReq.DeletedBlobs.emplace_back(range.GetFrom());
+            }
+
+            Y_UNUSED(ctx);
         }
 
         void Handle(TEvPqCache::TEvCacheL2Response::TPtr& ev, const TActorContext& ctx)

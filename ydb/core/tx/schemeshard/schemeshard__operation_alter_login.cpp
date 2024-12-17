@@ -213,7 +213,7 @@ public:
         for (auto pathId : subTree) {
             TPathElement::TPtr path = context.SS->PathsById.at(pathId);
             NACLib::TACL acl(path->ACL);
-            if (acl.RemoveAccess(user)) {
+            if (acl.TryRemoveAccess(user)) {
                 ++path->ACLVersion;
                 path->ACL = acl.SerializeAsString();
                 context.SS->PersistACL(db, path);

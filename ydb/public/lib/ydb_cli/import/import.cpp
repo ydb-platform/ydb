@@ -330,7 +330,7 @@ static const TDuration minSaveInterval = TDuration::Seconds(10);
 class TProgressFile {
 public:
     TProgressFile(const TString& sourceFilePath)
-        : SourceFilePath(sourceFilePath.empty() ? sourceFilePath : "std_input")
+        : SourceFilePath(!sourceFilePath.empty() ? sourceFilePath : "std_input")
     {
         std::vector<TString> pathParts;
         StringSplitter(sourceFilePath).Split('/').Collect(&pathParts);

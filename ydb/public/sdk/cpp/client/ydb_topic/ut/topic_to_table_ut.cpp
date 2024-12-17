@@ -2584,6 +2584,8 @@ protected:
     bool GetEnableOlapSink() const override;
     bool GetEnableHtapTx() const override;
     bool GetAllowOlapDataQuery() const override;
+
+    void CreateColumnTable(const TString& tablePath);
 };
 
 bool TFixtureSinks::GetEnableOltpSink() const
@@ -2604,6 +2606,23 @@ bool TFixtureSinks::GetEnableHtapTx() const
 bool TFixtureSinks::GetAllowOlapDataQuery() const
 {
     return true;
+}
+
+void TFixtureSinks::CreateColumnTable(const TString& tablePath)
+{
+    UNIT_ASSERT(!tablePath.empty());
+
+    TString path = (tablePath[0] != '/') ? ("/Root/" + tablePath) : tablePath;
+
+    NTable::TSession session = CreateTableSession();
+    auto desc = NTable::TTableBuilder()
+        .SetStoreType(NTable::EStoreType::Column)
+        .AddNonNullableColumn("key", EPrimitiveType::Utf8)
+        .AddNonNullableColumn("value", EPrimitiveType::Utf8)
+        .SetPrimaryKeyColumn("key")
+        .Build();
+    auto result = session.CreateTable(path, std::move(desc)).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
 Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_1, TFixtureSinks)
@@ -2798,6 +2817,74 @@ Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_5, TFixtureSinks)
     CheckTabletKeys("topic_A");
 
     UNIT_ASSERT_VALUES_EQUAL(GetTableRecordsCount("table_A"), 0);
+}
+
+Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_1, TFixtureSinks)
+{
+    CreateTopic("topic_A");
+    CreateColumnTable("/Root/table_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    auto records = MakeTableRecords();
+    WriteToTable("table_A", records, &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], MakeJsonDoc(records));
+
+    UNIT_ASSERT_VALUES_EQUAL(GetTableRecordsCount("table_A"), records.size());
+
+    CheckTabletKeys("topic_A");
+}
+
+Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_2, TFixtureSinks)
+{
+    CreateTopic("topic_A");
+    CreateTopic("topic_B");
+
+    CreateTable("/Root/table_A");
+    CreateColumnTable("/Root/table_B");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    auto records = MakeTableRecords();
+
+    WriteToTable("table_A", records, &tx);
+    WriteToTable("table_B", records, &tx);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx);
+
+    size_t topicMsgCnt = 10;
+    for (size_t i = 1; i <= topicMsgCnt; ++i) {
+        WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #" + std::to_string(i), &tx);
+    }
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], MakeJsonDoc(records));
+    }
+
+    {
+        auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), topicMsgCnt);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
+        UNIT_ASSERT_VALUES_EQUAL(messages[topicMsgCnt - 1], "message #" + std::to_string(topicMsgCnt));
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(GetTableRecordsCount("table_A"), records.size());
+    UNIT_ASSERT_VALUES_EQUAL(GetTableRecordsCount("table_B"), records.size());
+
+    CheckTabletKeys("topic_A");
+    CheckTabletKeys("topic_B");
 }
 }
 

@@ -75,7 +75,7 @@ Subcommand options:
 | `--message-rate` | Total target write rate in messages per second. Can't be used together with the `--byte-rate` option.<br/>Default value: `0` (no limit). |
 | `--byte-rate` | Total target write rate in bytes per second. Can't be used together with the `--message-rate` option. Use the `K`, `M`, or `G` suffix to set the rate in KB/s, MB/s, or GB/s, respectively.<br/>Default value: `0` (no limit). |
 | `--codec` | Codec used to compress messages on the client before sending them to the server.<br/>Compression increases CPU usage on the client when reading and writing messages, but usually enables you to reduce the amounts of data stored and transmitted over the network. When consumers read messages, they decompress them by the codec that was used to write the messages, with no special options needed.<br/>Acceptable values: `RAW` - no compression (default), `GZIP`, `ZSTD`. |
-| `--use-tx` | Use transactions.<br/>By defaul is disabled. |
+| `--use-tx` | Use transactions.<br/>Disabled by default. |
 | `--tx-commit-interval` | Transaction commit interval, in milliseconds. A transaction is committed if the time specified in the `--tx-commit-interval` parameter elapses or if the number of messages specified in the `--tx-commit-messages` parameter is written.<br/>Default value: `1000`. |
 | `--tx-commit-messages` | Number of messages required to commit a transaction. A transaction is committed if the time specified in the `--tx-commit-interval` parameter elapses or if the number of messages specified in the `--tx-commit-messages` parameter is written.<br/>Default value: `1 000 000`. |
 
@@ -216,7 +216,7 @@ Subcommand options:
 | `--consumers`, `-c` | Number of consumers.<br/>Default value: `1`. |
 | `--consumer-prefix` | Consumer name prefix.<br/>Default value: `workload-consumer`.<br/>For example, if the number of consumers `--consumers` is `2` and the prefix `--consumer-prefix` is `workload-consumer`, then the following consumer names will be used: `workload-consumer-0`, `workload-consumer-1`. |
 | `--threads`, `-t` | Number of consumer threads.<br/>Default value: `1`. |
-| `--use-tx` | Use transactions.<br/>By defaul is disabled. |
+| `--use-tx` | Use transactions.<br/>Disabled by default. |
 | `--tx-commit-interval` | Transaction commit interval, in milliseconds. A transaction is committed if the time specified in the `--tx-commit-interval` parameter elapses or if the number of messages specified in the `--tx-commit-messages` parameter is written.<br/>Default value: `1000`. |
 | `--tx-commit-messages` | Number of messages required to commit a transaction. A transaction is committed if the time specified in the `--tx-commit-interval` parameter elapses or if the number of messages specified in the `--tx-commit-messages` parameter is written.<br/>Default value: `1 000 000`. |
 

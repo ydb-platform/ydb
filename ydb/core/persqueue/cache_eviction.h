@@ -254,6 +254,8 @@ namespace NPQ {
             auto reqData = MakeHolder<TCacheL2Request>(TabletId);
 
             SaveBlobs(kvReq, *reqData, ctx);
+            RenameBlobs(kvReq, *reqData, ctx);
+            DeleteBlobs(kvReq, *reqData, ctx);
 
             auto l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
             ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
@@ -282,6 +284,20 @@ namespace NPQ {
                     << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
                     << " size " << reqBlob.Value.size() << " actorID " << ctx.SelfID);
             }
+        }
+
+        void RenameBlobs(const TKvRequest& kvReq, TCacheL2Request& reqData, const TActorContext& ctx)
+        {
+            Y_UNUSED(kvReq);
+            Y_UNUSED(reqData);
+            Y_UNUSED(ctx);
+        }
+
+        void DeleteBlobs(const TKvRequest& kvReq, TCacheL2Request& reqData, const TActorContext& ctx)
+        {
+            Y_UNUSED(kvReq);
+            Y_UNUSED(reqData);
+            Y_UNUSED(ctx);
         }
 
         void SavePrefetchBlobs(const TActorContext& ctx, const TKvRequest& kvReq, const TVector<bool>& store)

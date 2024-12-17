@@ -220,6 +220,9 @@ public:
         bool notChanged = true;
 
         if (ServeYaml) {
+            if (rec.HasDatabaseConfig()) {
+                notChanged = false;
+            }
             if (!(rec.HasYamlConfigNotChanged() && rec.GetYamlConfigNotChanged())) {
                 if (rec.HasYamlConfig()) {
                     YamlConfig = rec.GetYamlConfig();
@@ -285,7 +288,8 @@ public:
                      changes,
                      YamlConfig,
                      VolatileYamlConfigs,
-                     CurrentDynConfig),
+                     CurrentDynConfig,
+                     rec.HasDatabaseConfig() ? TMaybe<TString>(rec.GetDatabaseConfig()) : TMaybe<TString>{}),
                 IEventHandle::FlagTrackDelivery, Cookie);
 
             FirstUpdateSent = true;
@@ -357,6 +361,7 @@ private:
 
         request->Record.SetGeneration(Generation = NextGeneration++);
         request->Record.MutableOptions()->SetNodeId(SelfId().NodeId());
+        Cerr << " xxx 2 " << Tenant << Endl;
         request->Record.MutableOptions()->SetTenant(Tenant);
         request->Record.MutableOptions()->SetNodeType(NodeType);
         request->Record.MutableOptions()->SetHost(FQDNHostName());

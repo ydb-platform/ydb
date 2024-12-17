@@ -156,6 +156,7 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         "user",
         "password",
         "password_secret_name",
+        "state"
     };
 
     const auto keyName = to_lower(key.Name);

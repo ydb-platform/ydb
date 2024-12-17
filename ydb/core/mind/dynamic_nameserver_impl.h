@@ -78,10 +78,12 @@ public:
     }
 
     TDynamicNodeResolverBase(TActorId owner, ui32 nodeId, TDynamicConfigPtr config,
+                             std::shared_ptr<bool> needUpdateListNodesCache,
                              TAutoPtr<IEventHandle> origRequest, TInstant deadline)
         : Owner(owner)
         , NodeId(nodeId)
         , Config(config)
+        , NeedUpdateListNodesCache(needUpdateListNodesCache)
         , OrigRequest(origRequest)
         , Deadline(deadline)
     {
@@ -118,6 +120,7 @@ protected:
     TActorId Owner;
     ui32 NodeId;
     TDynamicConfigPtr Config;
+    std::shared_ptr<bool> NeedUpdateListNodesCache;
     TAutoPtr<IEventHandle> OrigRequest;
     const TInstant Deadline;
 
@@ -128,8 +131,9 @@ private:
 class TDynamicNodeResolver : public TDynamicNodeResolverBase {
 public:
     TDynamicNodeResolver(TActorId owner, ui32 nodeId, TDynamicConfigPtr config,
+                         std::shared_ptr<bool> needUpdateListNodesCache,
                          TAutoPtr<IEventHandle> origRequest, TInstant deadline)
-        : TDynamicNodeResolverBase(owner, nodeId, config, origRequest, deadline)
+        : TDynamicNodeResolverBase(owner, nodeId, config, needUpdateListNodesCache, origRequest, deadline)
     {
     }
 
@@ -140,8 +144,9 @@ public:
 class TDynamicNodeSearcher : public TDynamicNodeResolverBase {
 public:
     TDynamicNodeSearcher(TActorId owner, ui32 nodeId, TDynamicConfigPtr config,
+                         std::shared_ptr<bool> needUpdateListNodesCache,
                          TAutoPtr<IEventHandle> origRequest, TInstant deadline)
-        : TDynamicNodeResolverBase(owner, nodeId, config, origRequest, deadline)
+        : TDynamicNodeResolverBase(owner, nodeId, config, needUpdateListNodesCache, origRequest, deadline)
     {
     }
 
@@ -180,6 +185,8 @@ public:
 
     TDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup> &setup, ui32 resolvePoolId)
         : StaticConfig(setup)
+        , ListNodesCache(nullptr)
+        , NeedUpdateListNodesCache(std::make_shared<bool>(true))
         , ResolvePoolId(resolvePoolId)
     {
         Y_ABORT_UNLESS(StaticConfig->IsEntriesUnique());
@@ -258,6 +265,10 @@ private:
     TIntrusivePtr<TTableNameserverSetup> StaticConfig;
     std::array<TDynamicConfigPtr, DOMAINS_COUNT> DynamicConfigs;
     TVector<TActorId> ListNodesQueue;
+
+    TIntrusiveVector<TEvInterconnect::TNodeInfo>::TPtr ListNodesCache;
+    std::shared_ptr<bool> NeedUpdateListNodesCache;
+
     std::array<TActorId, DOMAINS_COUNT> NodeBrokerPipes;
     // When ListNodes requests are sent to NodeBroker tablets this
     // bitmap indicates domains which didn't answer yet.

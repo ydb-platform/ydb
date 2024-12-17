@@ -118,6 +118,17 @@ namespace NActors {
         friend bool operator >=(const TNodeLocation& x, const TNodeLocation& y) { return x.Compare(y) >= 0; }
     };
 
+    template<typename T>
+    class TIntrusiveVector : public TVector<T>, public TThrRefBase {
+    public:
+        using TPtr = TIntrusivePtr<TIntrusiveVector<T>>;
+        using TConstPtr = TIntrusiveConstPtr<TIntrusiveVector<T>>;
+
+        TIntrusiveVector() = default;
+        TIntrusiveVector(const TVector<T>& other) : TVector<T>(other) {}
+        TIntrusiveVector(TVector<T>&& other) : TVector<T>(std::move(other)) {}
+    };
+
     struct TEvInterconnect {
         enum EEv {
             EvForward = EventSpaceBegin(TEvents::ES_INTERCONNECT),
@@ -221,7 +232,15 @@ namespace NActors {
         };
 
         struct TEvNodesInfo: public TEventLocal<TEvNodesInfo, EvNodesInfo> {
-            TVector<TNodeInfo> Nodes;
+            TIntrusiveVector<TNodeInfo>::TConstPtr NodesPtr;
+            const TVector<TNodeInfo>& Nodes;
+
+            TEvNodesInfo(TIntrusiveVector<TNodeInfo>::TConstPtr nodesPtr)
+                : NodesPtr(nodesPtr)
+                , Nodes(*nodesPtr)
+            {
+                Y_ABORT_UNLESS(NodesPtr);
+            }
 
             const TNodeInfo* GetNodeInfo(ui32 nodeId) const {
                 for (const auto& x : Nodes) {

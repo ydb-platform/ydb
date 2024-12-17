@@ -3044,13 +3044,10 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvHive::TEvUpdateDomain, Handle);
         hFunc(TEvPrivate::TEvDeleteNode, Handle);
         hFunc(TEvHive::TEvRequestTabletDistribution, Handle);
-<<<<<<< HEAD
         hFunc(TEvHive::TEvRequestScaleRecommendation, Handle);
         hFunc(TEvPrivate::TEvRefreshScaleRecommendation, Handle);
         hFunc(TEvHive::TEvConfigureScaleRecommender, Handle);
-=======
         hFunc(TEvPrivate::TEvUpdateDataCenterFollowers, Handle);
->>>>>>> 093fd1f56c1... actually tie per-dc-followers to dc (#8069)
     }
 }
 
@@ -3153,13 +3150,10 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvProcessStorageBalancer::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvDeleteNode::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvRequestTabletDistribution::EventType, EnqueueIncomingEvent);
-<<<<<<< HEAD
         fFunc(TEvHive::TEvRequestScaleRecommendation::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvRefreshScaleRecommendation::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvConfigureScaleRecommender::EventType, EnqueueIncomingEvent);
-=======
         fFunc(TEvPrivate::TEvUpdateDataCenterFollowers::EventType, EnqueueIncomingEvent);
->>>>>>> 093fd1f56c1... actually tie per-dc-followers to dc (#8069)
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3460,7 +3454,6 @@ void THive::Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev) {
     Send(ev->Sender, response.release());
 }
 
-<<<<<<< HEAD
 void THive::MakeScaleRecommendation() {
     BLOG_D("[MSR] Started");
     
@@ -3583,10 +3576,10 @@ void THive::Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev) {
 void THive::Handle(TEvHive::TEvConfigureScaleRecommender::TPtr& ev) {
     BLOG_D("Handle TEvHive::TEvConfigureScaleRecommender(" << ev->Get()->Record.ShortDebugString() << ")");
     Execute(CreateConfigureScaleRecommender(ev));
-=======
+}
+
 void THive::Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
     Execute(CreateUpdateDcFollowers(ev->Get()->DataCenter));
->>>>>>> 093fd1f56c1... actually tie per-dc-followers to dc (#8069)
 }
 
 TVector<TNodeId> THive::GetNodesForWhiteboardBroadcast(size_t maxNodesToReturn) {

@@ -577,13 +577,10 @@ protected:
     void Handle(TEvHive::TEvUpdateDomain::TPtr& ev);
     void Handle(TEvPrivate::TEvDeleteNode::TPtr& ev);
     void Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev);
-<<<<<<< HEAD
     void Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev);
     void Handle(TEvPrivate::TEvRefreshScaleRecommendation::TPtr& ev);
     void Handle(TEvHive::TEvConfigureScaleRecommender::TPtr& ev);
-=======
     void Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev);
->>>>>>> 093fd1f56c1... actually tie per-dc-followers to dc (#8069)
 
 protected:
     void RestartPipeTx(ui64 tabletId);

@@ -1542,7 +1542,7 @@ public:
             }
 
             case TKikimrKey::Type::Transfer: {
-                auto settings = NCommon::ParseWriteReplicationSettings(TExprList(node->Child(4)), ctx);
+                auto settings = NCommon::ParseWriteTransferSettings(TExprList(node->Child(4)), ctx);
                 YQL_ENSURE(settings.Mode);
                 auto mode = settings.Mode.Cast();
 
@@ -1551,8 +1551,8 @@ public:
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Transfer().Build(key.GetTransferPath())
-                        //.Targets(settings.Targets.Cast())
-                        .TransferSettings(settings.ReplicationSettings.Cast())
+                        .Targets(settings.Targets.Cast())
+                        .TransferSettings(settings.TransferSettings.Cast())
                         .Settings(settings.Other)
                         .Done()
                         .Ptr();
@@ -1561,7 +1561,7 @@ public:
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Transfer().Build(key.GetTransferPath())
-                        .TransferSettings(settings.ReplicationSettings.Cast())
+                        .TransferSettings(settings.TransferSettings.Cast())
                         .Settings(settings.Other)
                         .Done()
                         .Ptr();

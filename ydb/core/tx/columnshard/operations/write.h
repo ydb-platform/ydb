@@ -59,7 +59,7 @@ private:
     YDB_READONLY_DEF(std::optional<ui32>, GranuleShardingVersionId);
     YDB_READONLY(NEvWrite::EModificationType, ModificationType, NEvWrite::EModificationType::Upsert);
     bool WritePortions = false;
-    const std::shared_ptr<TAtomicCounter> Activity = std::make_shared<TAtomicCounter>();
+    const std::shared_ptr<TAtomicCounter> Activity = std::make_shared<TAtomicCounter>(1);
 
 public:
     using TPtr = std::shared_ptr<TWriteOperation>;

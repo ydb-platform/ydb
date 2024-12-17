@@ -128,6 +128,7 @@ void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationDa
 
 void TWriteOperation::AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const {
     Y_ABORT_UNLESS(Status != EOperationStatus::Draft);
+    AFL_VERIFY(*Activity);
     *Activity = 0;
     TBlobGroupSelector dsGroupSelector(owner.Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);

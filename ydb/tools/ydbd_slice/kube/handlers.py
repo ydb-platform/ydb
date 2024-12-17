@@ -2,13 +2,12 @@ import re
 import os
 import sys
 import logging
-import time
 
 from collections import defaultdict
 from kubernetes.client import Configuration
 
 from ydb.tools.ydbd_slice import nodes, handlers
-from ydb.tools.ydbd_slice.kube import api, kubectl, yaml, generate, cms, dynconfig
+from ydb.tools.ydbd_slice.kube import api, kubectl, yaml, generate, cms, dynconfig, docker
 
 
 logger = logging.getLogger(__name__)
@@ -182,8 +181,20 @@ def manifests_ydb_filter_components(project_path, manifests, update_components):
     return result
 
 
+def slice_docker_load(api_client, project_path, manifests, docker_tar_path):
+    node_list = get_nodes(api_client, project_path, manifests)
+    if len(node_list) == 0:
+        logger.info('no nodes found, nothing to load.')
+        return
+    remote_path = f"/Berkanavt/kikimr/{docker.DOCKER_IMAGE_TAR}"
+    node_list = nodes.Nodes(node_list)
+    node_list.copy(docker_tar_path, remote_path)
+    handlers.ctr_image_import(node_list)
+
 #
 # macro level nodeclaim functions
+
+
 def slice_namespace_apply(api_client, project_path, manifests):
     for (path, _, kind, _, _, data) in manifests:
         if kind != 'namespace':
@@ -265,6 +276,8 @@ def wait_for_storage(api_client, project_path, manifests):
 
 #
 # macro level ydb functions
+
+
 def slice_ydb_apply(api_client, project_path, manifests, dynamic_config_type):
     # process storages first
     for (path, api_version, kind, namespace, name, data) in manifests:
@@ -458,7 +471,7 @@ def slice_generate(project_path, user, slice_name, template, template_vars):
         sys.exit(f'Slice template {template} not implemented.')
 
 
-def slice_install(project_path, manifests, wait_ready, dynamic_config_type):
+def slice_install(project_path, manifests, wait_ready, dynamic_config_type, docker_tar_path=None):
     with api.ApiClient() as api_client:
         slice_namespace_apply(api_client, project_path, manifests)
         slice_nodeclaim_apply(api_client, project_path, manifests)
@@ -466,14 +479,18 @@ def slice_install(project_path, manifests, wait_ready, dynamic_config_type):
         slice_ydb_delete(api_client, project_path, manifests)
         slice_ydb_storage_wait_pods_deleted(api_client, project_path, manifests)
         slice_nodeclaim_format(api_client, project_path, manifests)
+        if docker_tar_path is not None:
+            slice_docker_load(api_client, project_path, manifests, docker_tar_path)
         slice_ydb_apply(api_client, project_path, manifests, dynamic_config_type)
         slice_ydb_wait_ready(api_client, project_path, manifests, wait_ready)
 
 
-def slice_update(project_path, manifests, wait_ready, dynamic_config_type):
+def slice_update(project_path, manifests, wait_ready, dynamic_config_type, docker_tar_path=None):
     with api.ApiClient() as api_client:
         slice_nodeclaim_apply(api_client, project_path, manifests)
         slice_nodeclaim_wait_ready(api_client, project_path, manifests)
+        if docker_tar_path is not None:
+            slice_docker_load(api_client, project_path, manifests, docker_tar_path)
         slice_ydb_apply(api_client, project_path, manifests, dynamic_config_type)
         slice_ydb_restart(api_client, project_path, manifests)
         slice_ydb_wait_ready(api_client, project_path, manifests, wait_ready)

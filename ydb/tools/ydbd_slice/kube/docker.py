@@ -12,6 +12,7 @@ DOCKER_IMAGE_YDBD_PACKAGE_SPEC = 'ydb/tools/ydbd_slice/image/pkg.json'
 DOCKER_IMAGE_REGISTRY = 'cr.yandex'
 DOCKER_IMAGE_REPOSITORY = 'crpbo4q9lbgkn85vr1rm'
 DOCKER_IMAGE_NAME = 'ydb'
+DOCKER_IMAGE_TAR = 'ydb_docker.tar'
 DOCKER_IMAGE_FULL_NAME = '%s/%s/%s' % (DOCKER_IMAGE_REGISTRY, DOCKER_IMAGE_REPOSITORY, DOCKER_IMAGE_NAME)
 
 
@@ -68,6 +69,13 @@ def docker_inspect(obj):
         raise RuntimeError("docker inspect: failed with code %d, error: %s" % (proc.returncode, stderr))
     else:
         return json.loads(stdout)
+
+
+def docker_image_save(obj, output_path):
+    proc = subprocess.Popen(['docker', 'image', 'save', obj, '-o', output_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    _, stderr = proc.communicate()
+    if proc.returncode != 0:
+        raise RuntimeError("docker image save: failed with code %d, error: %s" % (proc.returncode, stderr))
 
 
 def docker_push(image):

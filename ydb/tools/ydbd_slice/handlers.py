@@ -28,6 +28,11 @@ def format_drivers(nodes):
     nodes.execute_async(cmd)
 
 
+def ctr_image_import(nodes, tar_path):
+    cmd = f"sudo ctr image import {tar_path} && rm -rf {tar_path}"
+    nodes.execute_async(cmd)
+
+
 def clear_registered_slots(nodes):
     nodes.execute_async("sudo find /Berkanavt/ -maxdepth 1 -type d  -name 'kikimr_*' -exec  rm -rf -- {} \;")  # noqa: W605
 

@@ -693,7 +693,7 @@ def add_format_mode(modes):
 
 #
 # docker and kube scenarios
-def build_and_push_docker_image(build_args, docker_package, build_ydbd, image, force_rebuild):
+def build_docker_image(build_args, docker_package, output_path, build_ydbd, image, force_rebuild):
     if docker_package is None:
         docker_package = docker.DOCKER_IMAGE_YDBD_PACKAGE_SPEC
 
@@ -712,7 +712,16 @@ def build_and_push_docker_image(build_args, docker_package, build_ydbd, image, f
     else:
         logger.debug('ydb image %s is already present on host, using existing image', image)
 
-    docker.docker_push(image)
+    if output_path is not None:
+        docker.docker_image_save(image, output_path)
+
+
+def push_docker_image(image):
+    image_details = docker.docker_inspect(image)
+    if image_details is not None:
+        docker.docker_push(image)
+    else:
+        logger.error('ydb image %s is not present on host, skip', image)
 
 
 def add_arguments_docker_build_with_remainder(mode, add_force_rebuild=False):
@@ -736,6 +745,10 @@ def add_arguments_docker_build_with_remainder(mode, add_force_rebuild=False):
         help='Optional: docker image tag to mark image after build. Conflicts with "-i" argument. Default is {user}-latest.',
     )
     group.add_argument(
+        '-o', '--output-path',
+        help='Optional: output path to save docker image as tar archive after build',
+    )
+    group.add_argument(
         "--build_args",
         metavar="BUILD_ARGS",
         default=['-r'],
@@ -744,13 +757,24 @@ def add_arguments_docker_build_with_remainder(mode, add_force_rebuild=False):
     )
 
 
+def add_arguments_docker_push_with_remainder(mode):
+    group = mode.add_argument_group('docker push options')
+    group.add_argument(
+        '-i', '--image',
+        help='Optional: docker image name and tag to push. Conflicts with "-t" argument.',
+    )
+    group.add_argument(
+        '-t', '--tag',
+        help='Optional: docker image tag to push. Conflicts with "-i" argument. Default is {user}-latest.',
+    )
+
+
 def add_docker_build_mode(modes):
     def _run(args):
         logger.debug("starting docker-build cmd with args '%s'", args)
         try:
             image = docker.get_image_from_args(args)
-            build_and_push_docker_image(args.build_args, args.docker_package, False, image, force_rebuild=True)
-
+            build_docker_image(args.build_args, args.docker_package, args.output_path, False, image, force_rebuild=True)
             logger.info('docker-build finished')
         except RuntimeError as e:
             logger.error(e.args[0])
@@ -762,6 +786,26 @@ def add_docker_build_mode(modes):
         description="Build YDB docker image."
     )
     add_arguments_docker_build_with_remainder(mode, add_force_rebuild=False)
+    mode.set_defaults(handler=_run)
+
+
+def add_docker_push_mode(modes):
+    def _run(args):
+        logger.debug("starting docker-push cmd with args '%s'", args)
+        try:
+            image = docker.get_image_from_args(args)
+            push_docker_image(image)
+            logger.info('docker-push finished')
+        except RuntimeError as e:
+            logger.error(e.args[0])
+            sys.exit(1)
+
+    mode = modes.add_parser(
+        "docker-push",
+        parents=[],
+        description="Push YDB docker image."
+    )
+    add_arguments_docker_push_with_remainder(mode)
     mode.set_defaults(handler=_run)
 
 
@@ -823,13 +867,15 @@ def add_kube_install_mode(modes):
     def _run(args):
         logger.debug("starting kube-install cmd with args '%s'", args)
         try:
+            docker_tar_path = None
             image = docker.get_image_from_args(args)
             if not args.use_prebuilt_image:
-                build_and_push_docker_image(args.build_args, args.docker_package, False, image, force_rebuild=args.force_rebuild)
+                docker_tar_path = f"{args.path}/{docker.DOCKER_IMAGE_TAR}"
+                build_docker_image(args.build_args, args.docker_package, docker_tar_path, False, image, force_rebuild=args.force_rebuild)
 
             manifests = kube_handlers.get_all_manifests(args.path)
             kube_handlers.manifests_ydb_set_image(args.path, manifests, image)
-            kube_handlers.slice_install(args.path, manifests, args.wait_ready, args.dynamic_config_type)
+            kube_handlers.slice_install(args.path, manifests, args.wait_ready, args.dynamic_config_type, docker_tar_path)
 
             logger.info('kube-install finished')
         except RuntimeError as e:
@@ -870,14 +916,16 @@ def add_kube_update_mode(modes):
     def _run(args):
         logger.debug("starting kube-update cmd with args '%s'", args)
         try:
+            docker_tar_path = None
             image = docker.get_image_from_args(args)
             if not args.use_prebuilt_image:
-                build_and_push_docker_image(args.build_args, args.docker_package, False, image, force_rebuild=args.force_rebuild)
+                docker_tar_path = f"{args.path}/{docker.DOCKER_IMAGE_TAR}"
+                build_docker_image(args.build_args, args.docker_package, docker_tar_path, False, image, force_rebuild=args.force_rebuild)
 
             manifests = kube_handlers.get_all_manifests(args.path)
             manifests = kube_handlers.manifests_ydb_filter_components(args.path, manifests, args.components)
             kube_handlers.manifests_ydb_set_image(args.path, manifests, image)
-            kube_handlers.slice_update(args.path, manifests, args.wait_ready, args.dynamic_config_type)
+            kube_handlers.slice_update(args.path, manifests, args.wait_ready, args.dynamic_config_type, args.use_prebuilt_image, docker_tar_path)
 
             logger.info('kube-update finished')
         except RuntimeError as e:
@@ -1194,6 +1242,7 @@ def main():
         add_format_mode(modes)
         add_explain_mode(modes)
         add_docker_build_mode(modes)
+        add_docker_push_mode(modes)
         add_kube_generate_mode(modes)
         add_kube_install_mode(modes)
         add_kube_update_mode(modes)

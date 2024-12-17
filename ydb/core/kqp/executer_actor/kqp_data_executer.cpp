@@ -1788,7 +1788,9 @@ private:
                     dataTransaction.SerializeAsString(),
                     GetSnapshot().Step,
                     GetSnapshot().TxId,
-                    NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT,
+                    Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
+                        ? NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT
+                        : NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE,
                     flags));
             } else {
                 YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW);
@@ -2138,6 +2140,13 @@ private:
                 YQL_ENSURE(!VolatileTx);
                 TasksGraph.GetMeta().AllowInconsistentReads = true;
                 ImmediateTx = true;
+                break;
+            case NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW:
+                if (Request.LocksOp != ELocksOp::Commit) {
+                    YQL_ENSURE(!VolatileTx);
+                    TasksGraph.GetMeta().AllowInconsistentReads = true;
+                    ImmediateTx = true;
+                }
                 break;
 
             default:

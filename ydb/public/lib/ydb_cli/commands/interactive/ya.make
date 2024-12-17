@@ -6,7 +6,7 @@ SRCS(
     string_util.cpp
     yql_complete.cpp
     yql_highlight.cpp
-    yql_name_source.cpp
+    yql_namespace.cpp
     yql_position.cpp
     yql_syntax.cpp
 )

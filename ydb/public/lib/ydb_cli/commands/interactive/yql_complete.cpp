@@ -2,7 +2,7 @@
 
 #include "c3_engine.h"
 #include "string_util.h"
-#include "yql_name_source.h"
+#include "yql_namespace.h"
 #include "yql_syntax.h"
 
 #include <yql/essentials/sql/v1/format/sql_format.h>
@@ -57,7 +57,7 @@ namespace NYdb {
 
             std::ranges::remove_if(tokens, IsIdKeyword);
 
-            TYQLKeywordSource keywordSource([&] {
+            TYQLKeywords keywordSource([&] {
                 TYQLNamesList names;
                 for (const auto& token : tokens) {
                     auto content = c3.GetVocabulary().getDisplayName(token.Number);

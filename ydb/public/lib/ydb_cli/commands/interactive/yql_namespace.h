@@ -14,17 +14,16 @@ namespace NYdb {
         using TYQLName = std::string;
         using TYQLNamesList = TVector<TYQLName>;
 
-        // TODO: Find a better name
-        class TYQLNameSource {
+        class TYQLNamespace {
         public:
             virtual TFuture<TYQLNamesList> GetNames() = 0;
             virtual TFuture<TYQLNamesList> GetNamesStartingWith(TStringBuf prefix);
-            virtual ~TYQLNameSource() = default;
+            virtual ~TYQLNamespace() = default;
         };
 
-        class TYQLKeywordSource final: public TYQLNameSource {
+        class TYQLKeywords final: public TYQLNamespace {
         public:
-            explicit TYQLKeywordSource(TYQLNamesList keywords);
+            explicit TYQLKeywords(TYQLNamesList keywords);
 
             TFuture<TYQLNamesList> GetNames() override;
 

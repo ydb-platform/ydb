@@ -1,4 +1,4 @@
-#include "yql_name_source.h"
+#include "yql_namespace.h"
 
 #include <util/charset/utf8.h>
 
@@ -7,7 +7,7 @@ namespace NYdb {
 
         using NThreading::MakeFuture;
 
-        TFuture<TYQLNamesList> TYQLNameSource::GetNamesStartingWith(TStringBuf prefix) {
+        TFuture<TYQLNamesList> TYQLNamespace::GetNamesStartingWith(TStringBuf prefix) {
             return GetNames().Apply([prefix = ToLowerUTF8(TYQLName(prefix))](auto&& future) {
                 TYQLNamesList names = future.GetValue();
                 auto removed = std::ranges::remove_if(names, [&](const TYQLName& name) {
@@ -18,12 +18,12 @@ namespace NYdb {
             });
         }
 
-        TYQLKeywordSource::TYQLKeywordSource(TYQLNamesList keywords)
+        TYQLKeywords::TYQLKeywords(TYQLNamesList keywords)
             : Keywords(std::move(keywords))
         {
         }
 
-        TFuture<TYQLNamesList> TYQLKeywordSource::GetNames() {
+        TFuture<TYQLNamesList> TYQLKeywords::GetNames() {
             return MakeFuture(Keywords);
         }
 

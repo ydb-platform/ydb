@@ -2924,28 +2924,28 @@ TTtlTierSettings::TTtlTierSettings(const TExpression& expression, const TAction&
 std::optional<TTtlTierSettings> TTtlTierSettings::FromProto(const Ydb::Table::TtlTier& tier) {
     std::optional<TExpression> expression;
     switch (tier.expression_case()) {
-        case Ydb::Table::TtlTier::kDateTypeColumn:
+    case Ydb::Table::TtlTier::kDateTypeColumn:
         expression = TDateTypeColumnModeSettings(
             tier.date_type_column().column_name(), TDuration::Seconds(tier.date_type_column().expire_after_seconds()));
         break;
-        case Ydb::Table::TtlTier::kValueSinceUnixEpoch:
+    case Ydb::Table::TtlTier::kValueSinceUnixEpoch:
         expression = TValueSinceUnixEpochModeSettings(tier.value_since_unix_epoch().column_name(),
             TProtoAccessor::FromProto(tier.value_since_unix_epoch().column_unit()),
             TDuration::Seconds(tier.value_since_unix_epoch().expire_after_seconds()));
         break;
-        case Ydb::Table::TtlTier::EXPRESSION_NOT_SET:
+    case Ydb::Table::TtlTier::EXPRESSION_NOT_SET:
         return std::nullopt;
     }
 
     TAction action;
     switch (tier.action_case()) {
-        case Ydb::Table::TtlTier::kDelete:
+    case Ydb::Table::TtlTier::kDelete:
         action = TTtlDeleteAction();
         break;
-        case Ydb::Table::TtlTier::kEvictToExternalStorage:
+    case Ydb::Table::TtlTier::kEvictToExternalStorage:
             action = TTtlEvictToExternalStorageAction(tier.evict_to_external_storage().storage());
             break;
-        case Ydb::Table::TtlTier::ACTION_NOT_SET:
+    case Ydb::Table::TtlTier::ACTION_NOT_SET:
             return std::nullopt;
     }
 
@@ -3057,8 +3057,8 @@ TValueSinceUnixEpochModeSettings::EUnit TValueSinceUnixEpochModeSettings::UnitFr
 }
 
 TTtlEvictToExternalStorageAction::TTtlEvictToExternalStorageAction(const TString& storageName)
-    : Storage_(storageName) {
-}
+    : Storage_(storageName)
+{}
 
 void TTtlEvictToExternalStorageAction::SerializeTo(Ydb::Table::EvictionToExternalStorageSettings& proto) const {
     proto.set_storage(Storage_);

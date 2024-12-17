@@ -168,8 +168,6 @@ kqpconfig:
     value: "{ydb_yql_syntax_version}"
   - name: "_KqpAllowNewEngine"
     value: "true"
-  - name: "_KqpForceNewEngine"
-    value: "{ydb_force_new_engine}"
 interconnect_config:
   start_tcp: true
 sqs_config:

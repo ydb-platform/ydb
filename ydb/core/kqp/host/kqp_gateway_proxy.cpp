@@ -508,7 +508,7 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
             auto* tierProto = resultSettings.MutableEnabled()->AddTiers();
             tierProto->SetApplyAfterSeconds(tier.ApplyAfter.Seconds());
             if (tier.StorageName) {
-                tierProto->MutableEvictToExternalStorage()->SetStorageName(*tier.StorageName);
+                tierProto->MutableEvictToExternalStorage()->SetStorage(*tier.StorageName);
             } else {
                 tierProto->MutableDelete();
             }

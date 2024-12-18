@@ -321,21 +321,22 @@ bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::Read
 }
 
 void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto) {
-    if (!settings.ColumnUnit) {
-        auto& opts = *proto.mutable_date_type_column_v1();
-        opts.set_column_name(settings.ColumnName);
-    } else {
-        auto& opts = *proto.mutable_value_since_unix_epoch_v1();
-        opts.set_column_name(settings.ColumnName);
-        opts.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(*settings.ColumnUnit));
-    }
     for (const auto& tier : settings.Tiers) {
-        auto* tierProto = proto.add_tiers();
-        tierProto->set_apply_after_seconds(tier.ApplyAfter.Seconds());
-        if (tier.StorageName) {
-            tierProto->mutable_evict_to_external_storage()->set_storage_name(*tier.StorageName);
+        auto* outTier = proto.mutable_tiered_ttl()->add_tiers();
+        if (!settings.ColumnUnit) {
+            auto& expr = *outTier->mutable_date_type_column();
+            expr.set_column_name(settings.ColumnName);
+            expr.set_expire_after_seconds(tier.ApplyAfter.Seconds());
         } else {
-            tierProto->mutable_delete_();
+            auto& expr = *outTier->mutable_value_since_unix_epoch();
+            expr.set_column_name(settings.ColumnName);
+            expr.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(*settings.ColumnUnit));
+            expr.set_expire_after_seconds(tier.ApplyAfter.Seconds());
+        }
+        if (tier.StorageName) {
+            outTier->mutable_evict_to_external_storage()->set_storage(*tier.StorageName);
+        } else {
+            outTier->mutable_delete_();
         }
     }
 }

@@ -154,16 +154,7 @@ public:
                 continue;
             }
 
-            if (filterHandler.GetPurecalcFilter()) {
-                PushToFilter(filterHandler, offsets, columnIndex, values, numberRows);
-                continue;
-            }
-
-            // Clients without filters
-            LOG_ROW_DISPATCHER_TRACE("Add " << numberRows << " rows to client " << consumer->GetFilterId() << " without filtering");
-            for (ui64 rowId = 0; rowId < numberRows; ++rowId) {
-                consumer->OnFilteredData(rowId);
-            }
+            PushToFilter(filterHandler, offsets, columnIndex, values, numberRows);
         }
         Stats.AddFilterLatency(TInstant::Now() - startFilter);
     }
@@ -193,7 +184,9 @@ public:
         LOG_ROW_DISPATCHER_TRACE("Create filter with id " << filter->GetFilterId());
 
         IPurecalcFilter::TPtr purecalcFilter;
-        if (filter->GetWhereFilter()) {
+        if (const auto& predicate = filter->GetWhereFilter()) {
+            LOG_ROW_DISPATCHER_TRACE("Create purecalc filter for predicate '" << predicate << "' (client id: " << filter->GetFilterId() << ")");
+
             auto filterStatus = CreatePurecalcFilter(filter);
             if (filterStatus.IsFail()) {
                 return filterStatus;
@@ -225,9 +218,6 @@ public:
 
 private:
     void PushToFilter(const TFilterHandler& filterHandler, const TVector<ui64>& offsets, const TVector<ui64>& columnIndex, const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values, ui64 numberRows) {
-        const auto filter = filterHandler.GetPurecalcFilter();
-        Y_ENSURE(filter, "Expected initialized filter");
-
         const auto consumer = filterHandler.GetConsumer();
         const auto& columnIds = consumer->GetColumnIds();
 
@@ -246,8 +236,15 @@ private:
             }
         }
 
-        LOG_ROW_DISPATCHER_TRACE("Pass " << numberRows << " rows to purecalc filter (client id: " << consumer->GetFilterId() << ")");
-        filter->FilterData(result, numberRows);
+        if (const auto filter = filterHandler.GetPurecalcFilter()) {
+            LOG_ROW_DISPATCHER_TRACE("Pass " << numberRows << " rows to purecalc filter (client id: " << consumer->GetFilterId() << ")");
+            filter->FilterData(result, numberRows);
+        } else {
+            LOG_ROW_DISPATCHER_TRACE("Add " << numberRows << " rows to client " << consumer->GetFilterId() << " without filtering");
+            for (ui64 rowId = 0; rowId < numberRows; ++rowId) {
+                consumer->OnFilteredData(rowId);
+            }
+        }
     }
 
 private:

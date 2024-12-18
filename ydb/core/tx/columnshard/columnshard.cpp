@@ -34,7 +34,9 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
     ctx.Send(BufferizationWriteActorId, new TEvents::TEvPoisonPill);
     ctx.Send(DataAccessorsControlActorId, new TEvents::TEvPoisonPill);
-    OperationsManager->StopWriting();
+    if (!!OperationsManager) {
+        OperationsManager->StopWriting();
+    }
     if (PrioritizationClientId) {
         NPrioritiesQueue::TCompServiceOperator::UnregisterClient(PrioritizationClientId);
     }

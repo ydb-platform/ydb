@@ -47,10 +47,11 @@ void TestHeavy(const ui32 v, ui32 numWorkers) {
     options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, numWorkers);
     runtime.DispatchEvents(options);
     for (const auto& a : cc) {
-        THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>();
+        auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
         for (auto i = 1; i <= NODES; ++i) {
-            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(i, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            nodes->emplace_back(TEvInterconnect::TNodeInfo(i, "::", "localhost", "localhost", 1234, TNodeLocation()));
         }
+        THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>(nodes);
         runtime.Send(new NActors::IEventHandle(a, edge, nodesInfo.Release()), 0, true);
     }
 

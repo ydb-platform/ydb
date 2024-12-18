@@ -142,6 +142,7 @@ TOperationPreparer::TOperationPreparer(TClientPtr client, TTransactionId transac
     : Client_(std::move(client))
     , TransactionId_(transactionId)
     , FileTransaction_(MakeHolder<TPingableTransaction>(
+        Client_->GetRawClient(),
         Client_->GetRetryPolicy(),
         Client_->GetContext(),
         TransactionId_,
@@ -489,15 +490,18 @@ TYPath TJobPreparer::GetCachePath() const
 
 void TJobPreparer::CreateStorage() const
 {
-    Create(
+    RequestWithRetry<void>(
         OperationPreparer_.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-        OperationPreparer_.GetContext(),
-        Options_.FileStorageTransactionId_,
-        GetCachePath(),
-        NT_MAP,
-        TCreateOptions()
-            .IgnoreExisting(true)
-            .Recursive(true));
+        [this] (TMutationId& mutationId) {
+            RawClient_->Create(
+                mutationId,
+                Options_.FileStorageTransactionId_,
+                GetCachePath(),
+                NT_MAP,
+                TCreateOptions()
+                    .IgnoreExisting(true)
+                    .Recursive(true));
+        });
 }
 
 int TJobPreparer::GetFileCacheReplicationFactor() const
@@ -516,17 +520,19 @@ void TJobPreparer::CreateFileInCypress(const TString& path) const
         attributes["expiration_timeout"] = Options_.FileExpirationTimeout_->MilliSeconds();
     }
 
-    Create(
+    RequestWithRetry<void>(
         OperationPreparer_.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-        OperationPreparer_.GetContext(),
-        Options_.FileStorageTransactionId_,
-        path,
-        NT_FILE,
-        TCreateOptions()
-            .IgnoreExisting(true)
-            .Recursive(true)
-            .Attributes(attributes)
-    );
+        [this, &path, &attributes] (TMutationId& mutationId) {
+            RawClient_->Create(
+                mutationId,
+                Options_.FileStorageTransactionId_,
+                path,
+                NT_FILE,
+                TCreateOptions()
+                    .IgnoreExisting(true)
+                    .Recursive(true)
+                    .Attributes(attributes));
+        });
 }
 
 TString TJobPreparer::PutFileToCypressCache(
@@ -553,12 +559,11 @@ TString TJobPreparer::PutFileToCypressCache(
         GetCachePath(),
         putFileToCacheOptions);
 
-    Remove(
+    RequestWithRetry<void>(
         OperationPreparer_.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-        OperationPreparer_.GetContext(),
-        transactionId,
-        path,
-        TRemoveOptions().Force(true));
+        [this, &transactionId, &path] (TMutationId& mutationId) {
+            RawClient_->Remove(mutationId, transactionId, path, TRemoveOptions().Force(true));
+        });
 
     return cachePath;
 }
@@ -609,6 +614,7 @@ TString TJobPreparer::UploadToRandomPath(const IItemToUpload& itemToUpload) cons
     {
         TFileWriter writer(
             uniquePath,
+            OperationPreparer_.GetClient()->GetRawClient(),
             OperationPreparer_.GetClientRetryPolicy(),
             OperationPreparer_.GetClient()->GetTransactionPinger(),
             OperationPreparer_.GetContext(),
@@ -746,23 +752,27 @@ TString TJobPreparer::UploadToCache(const IItemToUpload& itemToUpload) const
 
 void TJobPreparer::UseFileInCypress(const TRichYPath& file)
 {
-    if (!Exists(
+    auto exists = RequestWithRetry<bool>(
         OperationPreparer_.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-        OperationPreparer_.GetContext(),
-        file.TransactionId_.GetOrElse(OperationPreparer_.GetTransactionId()),
-        file.Path_))
+        [this, &file] (TMutationId /*mutationId*/) {
+            return RawClient_->Exists(
+                file.TransactionId_.GetOrElse(OperationPreparer_.GetTransactionId()),
+                file.Path_);
+        });
+    if (!exists)
     {
         ythrow yexception() << "File " << file.Path_ << " does not exist";
     }
 
     if (ShouldMountSandbox()) {
-        auto size = Get(
+        auto size = RequestWithRetry<i64>(
             OperationPreparer_.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-            OperationPreparer_.GetContext(),
-            file.TransactionId_.GetOrElse(OperationPreparer_.GetTransactionId()),
-            file.Path_ + "/@uncompressed_data_size")
-            .AsInt64();
-
+            [this, &file] (TMutationId /*mutationId*/) {
+                return RawClient_->Get(
+                    file.TransactionId_.GetOrElse(OperationPreparer_.GetTransactionId()),
+                    file.Path_ + "/@uncompressed_data_size")
+                    .AsInt64();
+            });
         TotalFileSize_ += RoundUpFileSize(static_cast<ui64>(size));
     }
     CypressFiles_.push_back(file);
@@ -835,7 +845,10 @@ void TJobPreparer::UploadSmallFile(const TSmallJobFile& smallFile)
 
 bool TJobPreparer::IsLocalMode() const
 {
-    return UseLocalModeOptimization(OperationPreparer_.GetContext(), OperationPreparer_.GetClientRetryPolicy());
+    return UseLocalModeOptimization(
+        OperationPreparer_.GetClient()->GetRawClient(),
+        OperationPreparer_.GetContext(),
+        OperationPreparer_.GetClientRetryPolicy());
 }
 
 void TJobPreparer::PrepareJobBinary(const IJob& job, int outputTableCount, bool hasState)

@@ -9,12 +9,12 @@ SELECT
 
 COMMIT;
 
-$a =
+$a = (
     SELECT
         *
     FROM
         @foo
-;
+);
 
 SELECT
     *

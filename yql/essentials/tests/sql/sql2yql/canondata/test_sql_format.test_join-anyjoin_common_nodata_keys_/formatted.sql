@@ -2,14 +2,14 @@
 /* syntax version 1 */
 USE plato;
 
-$a =
+$a = (
     SELECT
         AsTuple(1, 2) AS k1,
         1 AS k2,
         2 AS v
-;
+);
 
-$b =
+$b = (
     SELECT
         AsTuple(1, 2) AS k1,
         1 AS k2,
@@ -19,7 +19,7 @@ $b =
         AsTuple(1, 2) AS k1,
         1 AS k2,
         3 AS v1
-;
+);
 
 INSERT INTO @a
 SELECT

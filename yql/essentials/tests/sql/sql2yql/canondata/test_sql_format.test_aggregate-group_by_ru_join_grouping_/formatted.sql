@@ -1,11 +1,11 @@
 USE plato;
 
-$t =
+$t = (
     SELECT DISTINCT
         key
     FROM
         Input
-;
+);
 
 SELECT
     key,

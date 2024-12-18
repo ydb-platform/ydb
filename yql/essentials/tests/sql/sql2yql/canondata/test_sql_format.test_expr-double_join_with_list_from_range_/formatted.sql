@@ -1,5 +1,5 @@
 /* postgres can not */
-$list =
+$list = (
     SELECT
         lst,
         row_number() OVER (
@@ -15,16 +15,16 @@ $list =
         )
             FLATTEN LIST BY lst
     )
-;
+);
 
-$usr =
+$usr = (
     SELECT
         value,
         CAST(key AS Uint16) + 3us AS age,
         CAST(key AS Uint16) + 7us AS age1
     FROM
         plato.Input
-;
+);
 
 SELECT
     u.*,

@@ -405,7 +405,7 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
         LOG_WARN_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session without AuthInfo : " << DiscoveryConverter->GetPrintableString()
                                                          << " sourceId " << SourceId << " from " << PeerName);
         SessionsWithoutAuth.Inc();
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             CloseSession("Unauthenticated access is forbidden, please provide credentials", NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
             return;
         }
@@ -474,7 +474,7 @@ void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
     }
 
     std::optional<ui32> preferedPartition = PreferedPartition == Max<ui32>() ? std::nullopt : std::optional(PreferedPartition);
-    PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID, Config, PQInfo->PartitionChooser, PQInfo->PartitionGraph, FullConverter, SourceId, preferedPartition));
+    PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID, Config, PQInfo->PartitionChooser, PQInfo->PartitionGraph, FullConverter, SourceId, preferedPartition, {}));
 }
 
 void TWriteSessionActor::Handle(NPQ::TEvPartitionChooser::TEvChooseResult::TPtr& ev, const NActors::TActorContext& ctx) {

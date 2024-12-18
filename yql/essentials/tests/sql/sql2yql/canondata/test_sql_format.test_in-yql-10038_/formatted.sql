@@ -3,8 +3,8 @@ USE plato;
 
 INSERT INTO @input
 SELECT
-    "foo" AS reqid,
-    "touch" AS ui,
+    'foo' AS reqid,
+    'touch' AS ui,
     AsList(1, 2, 236273) AS test_ids
 ;
 
@@ -12,7 +12,7 @@ COMMIT;
 
 $dict = (
     SELECT
-        "foo" AS reqid
+        'foo' AS reqid
 );
 
 SELECT

@@ -3,7 +3,7 @@ PRAGMA DisablePullUpFlatMapOverJoin;
 
 USE plato;
 
-PRAGMA yt.MapJoinLimit = "1m";
+PRAGMA yt.MapJoinLimit = '1m';
 
 FROM (
     SELECT

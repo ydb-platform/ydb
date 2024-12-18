@@ -4,7 +4,7 @@ USE plato;
 
 PRAGMA AnsiOrderByLimitInUnionAll;
 
-$foo =
+$foo = (
     SELECT
         *
     FROM
@@ -15,9 +15,9 @@ $foo =
     FROM
         Input
     LIMIT 2
-;
+);
 
-$bar =
+$bar = (
     SELECT
         *
     FROM
@@ -30,7 +30,7 @@ $bar =
             Input
         LIMIT 2
     )
-;
+);
 
 SELECT
     *

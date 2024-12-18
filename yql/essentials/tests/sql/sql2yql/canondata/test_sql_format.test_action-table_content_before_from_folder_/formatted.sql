@@ -2,7 +2,7 @@
 /* postgres can not */
 USE plato;
 
-PRAGMA yt.EvaluationTableSizeLimit = "1";
+PRAGMA yt.EvaluationTableSizeLimit = '1';
 
 SELECT
     *
@@ -14,9 +14,9 @@ $tables = (
     SELECT
         aggregate_list(Path) AS dates
     FROM
-        folder("")
+        folder('')
     WHERE
-        Path LIKE "Input%"
+        Path LIKE 'Input%'
 );
 
 SELECT

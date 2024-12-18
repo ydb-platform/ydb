@@ -18,26 +18,29 @@ public:
     class TRange {
     public:
         TRange()
-            : FromIndex(-1)
-            , ToIndex(-1)
+        : FromIndex(Max())
+        , ToIndex(Max())
+        , NfaIndex_(Max())
         {
         }
 
         explicit TRange(ui64 index)
-                : FromIndex(index)
-                , ToIndex(index)
+            : FromIndex(index)
+            , ToIndex(index)
+            , NfaIndex_(Max())
         {
         }
 
         TRange(ui64 from, ui64 to)
-                : FromIndex(from)
-                , ToIndex(to)
+            : FromIndex(from)
+            , ToIndex(to)
+            , NfaIndex_(Max())
         {
             MKQL_ENSURE(FromIndex <= ToIndex, "Internal logic error");
         }
 
         bool IsValid() const {
-            return true;
+            return FromIndex != Max<size_t>() && ToIndex != Max<size_t>();
         }
 
         size_t From() const {
@@ -48,6 +51,11 @@ public:
         size_t To() const {
             MKQL_ENSURE(IsValid(), "Internal logic error");
             return ToIndex;
+        }
+
+        [[nodiscard]] size_t NfaIndex() const {
+            MKQL_ENSURE(IsValid(), "Internal logic error");
+            return NfaIndex_;
         }
 
         size_t Size() const {
@@ -61,8 +69,9 @@ public:
         }
 
     private:
-        ui64 FromIndex;
-        ui64 ToIndex;
+        size_t FromIndex;
+        size_t ToIndex;
+        size_t NfaIndex_;
     };
 
     TRange Append(NUdf::TUnboxedValue&& value) {
@@ -156,14 +165,12 @@ class TSparseList {
 
     private:
         //TODO consider to replace hash table with contiguous chunks
-        using TAllocator = TMKQLAllocator<std::pair<const size_t, TItem>, EMemorySubPool::Temporary>;
-
         using TStorage = std::unordered_map<
             size_t,
             TItem,
             std::hash<size_t>,
             std::equal_to<size_t>,
-            TAllocator>;
+            TMKQLAllocator<std::pair<const size_t, TItem>, EMemorySubPool::Temporary>>;
 
         TStorage Storage;
     };
@@ -178,8 +185,9 @@ public:
     public:
         TRange()
             : Container()
-            , FromIndex(-1)
-            , ToIndex(-1)
+            , FromIndex(Max())
+            , ToIndex(Max())
+            , NfaIndex_(Max())
         {
         }
 
@@ -187,6 +195,7 @@ public:
             : Container(other.Container)
             , FromIndex(other.FromIndex)
             , ToIndex(other.ToIndex)
+            , NfaIndex_(other.NfaIndex_)
         {
             LockRange(FromIndex, ToIndex);
         }
@@ -195,6 +204,7 @@ public:
             : Container(other.Container)
             , FromIndex(other.FromIndex)
             , ToIndex(other.ToIndex)
+            , NfaIndex_(other.NfaIndex_)
         {
             other.Reset();
         }
@@ -212,6 +222,7 @@ public:
             Container = other.Container;
             FromIndex = other.FromIndex;
             ToIndex = other.ToIndex;
+            NfaIndex_ = other.NfaIndex_;
             LockRange(FromIndex, ToIndex);
             return *this;
         }
@@ -224,20 +235,21 @@ public:
             Container = other.Container;
             FromIndex = other.FromIndex;
             ToIndex = other.ToIndex;
+            NfaIndex_ = other.NfaIndex_;
             other.Reset();
             return *this;
         }
 
         friend inline bool operator==(const TRange& lhs, const TRange& rhs) {
-            return std::tie(lhs.FromIndex, lhs.ToIndex) == std::tie(rhs.FromIndex, rhs.ToIndex);
+            return std::tie(lhs.FromIndex, lhs.ToIndex, lhs.NfaIndex_) == std::tie(rhs.FromIndex, rhs.ToIndex, rhs.NfaIndex_);
         }
 
         friend inline bool operator<(const TRange& lhs, const TRange& rhs) {
-            return std::tie(lhs.FromIndex, lhs.ToIndex) < std::tie(rhs.FromIndex, rhs.ToIndex);
+            return std::tie(lhs.FromIndex, lhs.ToIndex, lhs.NfaIndex_) < std::tie(rhs.FromIndex, rhs.ToIndex, rhs.NfaIndex_);
         }
 
         bool IsValid() const {
-            return static_cast<bool>(Container);
+            return static_cast<bool>(Container) && FromIndex != Max<size_t>() && ToIndex != Max<size_t>();
         }
 
         size_t From() const {
@@ -248,6 +260,15 @@ public:
         size_t To() const {
             MKQL_ENSURE(IsValid(), "Internal logic error");
             return ToIndex;
+        }
+
+        [[nodiscard]] size_t NfaIndex() const {
+            MKQL_ENSURE(IsValid(), "Internal logic error");
+            return NfaIndex_;
+        }
+
+        void NfaIndex(size_t index) {
+            NfaIndex_ = index;
         }
 
         size_t Size() const {
@@ -264,16 +285,17 @@ public:
         void Release() {
             UnlockRange(FromIndex, ToIndex);
             Container.Reset();
-            FromIndex = -1;
-            ToIndex = -1;
+            FromIndex = Max();
+            ToIndex = Max();
+            NfaIndex_ = Max();
         }
 
         void Save(TMrOutputSerializer& serializer) const {
-            serializer(Container, FromIndex, ToIndex);
+            serializer(Container, FromIndex, ToIndex, NfaIndex_);
        }
 
         void Load(TMrInputSerializer& serializer) {
-            serializer(Container, FromIndex, ToIndex);
+            serializer(Container, FromIndex, ToIndex, NfaIndex_);
         }
 
     private:
@@ -281,6 +303,7 @@ public:
             : Container(container)
             , FromIndex(index)
             , ToIndex(index)
+            , NfaIndex_(Max())
         {}
 
         void LockRange(size_t from, size_t to) {
@@ -297,13 +320,15 @@ public:
 
         void Reset() {
             Container.Reset();
-            FromIndex = -1;
-            ToIndex = -1;
+            FromIndex = Max();
+            ToIndex = Max();
+            NfaIndex_ = Max();
         }
 
         TContainerPtr Container;
         size_t FromIndex;
         size_t ToIndex;
+        size_t NfaIndex_;
     };
 
 public:

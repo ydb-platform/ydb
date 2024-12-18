@@ -2,8 +2,8 @@
 USE plato;
 
 PRAGMA DisableSimpleColumns;
-PRAGMA yt.MapJoinLimit = "1m";
-PRAGMA yt.JoinEnableStarJoin = "true";
+PRAGMA yt.MapJoinLimit = '1m';
+PRAGMA yt.JoinEnableStarJoin = 'true';
 
 $subq = (
     SELECT

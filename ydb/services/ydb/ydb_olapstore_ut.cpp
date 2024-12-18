@@ -325,16 +325,18 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         TKikimrWithGrpcAndRootSchema server(appConfig);
         EnableDebugLogs(server);
 
-        auto connection = ConnectToServer(server);
+        TClient annoyingClient(*server.ServerSettings);
+        annoyingClient.GrantConnect("alice@builtin");
+        annoyingClient.GrantConnect("bob@builtin");
 
         TTestOlapTableOptions opts;
         opts.TsType = pkFirstType;
         opts.HashFunction = "HASH_FUNCTION_MODULO_N";
         CreateOlapTable<NotNull>(*server.ServerSettings, "log1", opts);
 
-        TClient annoyingClient(*server.ServerSettings);
         annoyingClient.ModifyOwner("/Root/OlapStore", "log1", "alice@builtin");
 
+        auto connection = ConnectToServer(server);
         {
             NYdb::NTable::TTableClient client(connection, NYdb::NTable::TClientSettings().AuthToken("bob@builtin"));
 

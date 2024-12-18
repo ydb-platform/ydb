@@ -140,6 +140,7 @@ TFiberManagerConfigPtr TFiberManagerConfig::ApplyDynamic(const TFiberManagerDyna
         result->FiberStackPoolSizes[key] = value;
     }
     UpdateYsonStructField(result->MaxIdleFibers, dynamicConfig->MaxIdleFibers);
+    result->Postprocess();
     return result;
 }
 

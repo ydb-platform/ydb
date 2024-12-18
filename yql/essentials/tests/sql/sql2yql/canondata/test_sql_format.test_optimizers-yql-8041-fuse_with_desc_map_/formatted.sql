@@ -8,7 +8,7 @@ $i = (
     FROM
         Input
     WHERE
-        key < "100"
+        key < '100'
     ORDER BY
         key DESC
     LIMIT 1000
@@ -19,7 +19,7 @@ SELECT DISTINCT
 FROM
     $i
 WHERE
-    value != ""
+    value != ''
 ORDER BY
     key
 ;

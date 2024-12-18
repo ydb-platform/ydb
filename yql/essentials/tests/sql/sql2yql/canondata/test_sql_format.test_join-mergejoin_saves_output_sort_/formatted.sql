@@ -2,10 +2,10 @@ PRAGMA DisableSimpleColumns;
 
 USE plato;
 
-PRAGMA yt.JoinMergeTablesLimit = "10";
-PRAGMA yt.JoinMergeUnsortedFactor = "0";
-PRAGMA yt.JoinAllowColumnRenames = "true";
-PRAGMA yt.JoinMergeSetTopLevelFullSort = "true";
+PRAGMA yt.JoinMergeTablesLimit = '10';
+PRAGMA yt.JoinMergeUnsortedFactor = '0';
+PRAGMA yt.JoinAllowColumnRenames = 'true';
+PRAGMA yt.JoinMergeSetTopLevelFullSort = 'true';
 
 FROM
     SortedBySubkeyValue AS a

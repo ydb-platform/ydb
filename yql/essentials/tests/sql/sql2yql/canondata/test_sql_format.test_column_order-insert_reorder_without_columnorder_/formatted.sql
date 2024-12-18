@@ -2,7 +2,7 @@
 USE plato;
 
 PRAGMA DisableOrderedColumns;
-PRAGMA warning("disable", "4517");
+PRAGMA warning('disable', '4517');
 
 $Group = 1u;
 
@@ -16,5 +16,5 @@ SELECT
 FROM
     Input
 WHERE
-    key == "150"
+    key == '150'
 LIMIT 1;

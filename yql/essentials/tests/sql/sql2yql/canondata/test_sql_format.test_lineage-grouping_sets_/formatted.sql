@@ -1,6 +1,6 @@
 USE plato;
 
-$data =
+$data = (
     SELECT
         key,
         subkey,
@@ -12,7 +12,7 @@ $data =
             (key, subkey),
             (subkey, value)
         )
-;
+);
 
 INSERT INTO @tmp WITH TRUNCATE
 SELECT

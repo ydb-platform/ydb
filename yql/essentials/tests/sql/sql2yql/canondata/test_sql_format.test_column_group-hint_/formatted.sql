@@ -1,82 +1,82 @@
 USE plato;
 
-$i1 =
+$i1 = (
     SELECT
         *
     FROM
         Input
     WHERE
-        a > "a"
-;
+        a > 'a'
+);
 
 -- several publish consumers with same groups
-$i2 =
+$i2 = (
     SELECT
         *
     FROM
         Input
     WHERE
-        a > "a1"
-;
+        a > 'a1'
+);
 
 -- several publish consumers with different groups
-$i3 =
+$i3 = (
     SELECT
         *
     FROM
         Input
     WHERE
-        a < "a2"
-;
+        a < 'a2'
+);
 
 -- several consumers including publish
-$i4 =
+$i4 = (
     SELECT
         *
     FROM
         Input
     WHERE
-        a != "a"
-;
+        a != 'a'
+);
 
 -- several publish consumers with and without groups
 -- test column group spec normalization
-INSERT INTO Output1 WITH column_groups = "{g1=[a;b;c];def=#}"
+INSERT INTO Output1 WITH column_groups = '{g1=[a;b;c];def=#}'
 SELECT
     *
 FROM
     $i1
 ;
 
-INSERT INTO Output1 WITH column_groups = "{def=#;g1=[c;a;b];}"
+INSERT INTO Output1 WITH column_groups = '{def=#;g1=[c;a;b];}'
 SELECT
     *
 FROM
     $i2
 ;
 
-INSERT INTO Output2 WITH column_groups = "{def=#}"
+INSERT INTO Output2 WITH column_groups = '{def=#}'
 SELECT
     *
 FROM
     $i2
 ;
 
-INSERT INTO Output2 WITH column_groups = "{def=#}"
+INSERT INTO Output2 WITH column_groups = '{def=#}'
 SELECT
     *
 FROM
     $i3
 ;
 
-INSERT INTO Output3 WITH column_groups = "{g1=[a;b;c];def=#}"
+INSERT INTO Output3 WITH column_groups = '{g1=[a;b;c];def=#}'
 SELECT
     *
 FROM
     $i1
 ;
 
-INSERT INTO Output3 WITH column_groups = "{g1=[a;b;c];def=#}"
+INSERT INTO Output3 WITH column_groups = '{g1=[a;b;c];def=#}'
 SELECT
     *
 FROM

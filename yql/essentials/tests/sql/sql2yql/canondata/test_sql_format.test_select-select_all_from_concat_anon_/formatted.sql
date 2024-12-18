@@ -8,7 +8,7 @@ SELECT
 
 COMMIT;
 
-$name = "fo" || "o";
+$name = 'fo' || 'o';
 
 SELECT
     *

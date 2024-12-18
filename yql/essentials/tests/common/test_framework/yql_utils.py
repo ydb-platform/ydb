@@ -883,7 +883,7 @@ def normalize_source_code_path(s):
     s = re.sub(r'\b(contrib/)(ydb/library/yql.*)', r'\2', s)
     # replace line number in source code with 'xxx'
     s = re.sub(r'\b(yql/[\w/]+(?:\.cpp|\.h)):(?:\d+)', r'\1:xxx', s)
-    return re.sub(r'(/lib/yql/[\w/]+(?:\.yql|\.sql)):(?:\d+):(?:\d+)', r'\1:xxx:yyy', s)
+    return re.sub(r'(/lib/yql/[\w/]+(?:\.yql|\.yqls|\.sql)):(?:\d+):(?:\d+)', r'\1:xxx:yyy', s)
 
 
 def do_get_files(suite, config, DATA_PATH, config_key):

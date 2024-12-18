@@ -8,7 +8,7 @@ SELECT
 FROM
     plato.Input
 WHERE
-    value != "111"
+    value != '111'
 LIMIT 3;
 
 COMMIT;

@@ -35,6 +35,7 @@ TTCMallocConfigPtr TTCMallocConfig::ApplyDynamic(const TTCMallocConfigPtr& dynam
     // TODO(babenko): fix this mess
     auto mergedConfig = CloneYsonStruct(dynamicConfig);
     mergedConfig->HeapSizeLimit->MemoryProfileDumpPath = HeapSizeLimit->MemoryProfileDumpPath;
+    mergedConfig->Postprocess();
     return mergedConfig;
 }
 

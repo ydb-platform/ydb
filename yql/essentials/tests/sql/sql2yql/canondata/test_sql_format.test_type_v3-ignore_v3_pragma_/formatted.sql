@@ -6,7 +6,7 @@ PRAGMA yt.IgnoreTypeV3;
 
 SELECT
     key,
-    Yson::LookupString(subkey, "a") AS a,
+    Yson::LookupString(subkey, 'a') AS a,
 FROM
     Input
 ;

@@ -2,13 +2,9 @@
 
 PY3_LIBRARY()
 
-VERSION(2.4.1)
+VERSION(3.0.0)
 
 LICENSE(Apache-2.0)
-
-PEERDIR(
-    contrib/python/six
-)
 
 NO_LINT()
 

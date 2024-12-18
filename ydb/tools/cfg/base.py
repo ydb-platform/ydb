@@ -353,17 +353,17 @@ class ClusterDetailsProvider(object):
     def _get_datacenter(self, host_description):
         if host_description.get("datacenter") is not None:
             return str(host_description.get("datacenter"))
-        return str(self._walle.get_datacenter(host_description["name"]))
+        return str(self._walle.get_datacenter(host_description.get("name", host_description.get("host"))))
 
     def _get_rack(self, host_description):
         if host_description.get("rack") is not None:
             return str(host_description.get("rack"))
-        return str(self._walle.get_rack(host_description["name"]))
+        return str(self._walle.get_rack(host_description.get("name", host_description.get("host"))))
 
     def _get_body(self, host_description):
         if host_description.get("body") is not None:
             return str(host_description.get("body"))
-        return str(self._walle.get_body(host_description["name"]))
+        return str(self._walle.get_body(host_description.get("name", host_description.get("host"))))
 
     def _collect_drives_info(self, host_description):
         host_config_id = host_description.get("host_config_id", None)
@@ -381,7 +381,7 @@ class ClusterDetailsProvider(object):
 
     def __collect_host_info(self, node_id, host_description):
         return KiKiMRHost(
-            hostname=host_description["name"],
+            hostname=host_description.get("name", host_description.get("host")),
             node_id=host_description.get("node_id", node_id),
             drives=self._collect_drives_info(host_description),
             ic_port=host_description.get("ic_port", DEFAULT_INTERCONNECT_PORT),
@@ -475,7 +475,7 @@ class ClusterDetailsProvider(object):
     def host_configs(self):
         converted_host_configs = []
         for host_config in self.__cluster_description.get("host_configs", []):
-            host_config_drives = host_config.get("drives", [])
+            host_config_drives = host_config.get("drives", host_config.get("drive", []))
             converted_host_configs.append(
                 HostConfig(
                     host_config_id=host_config["host_config_id"],

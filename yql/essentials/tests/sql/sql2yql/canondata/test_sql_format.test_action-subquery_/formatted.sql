@@ -9,7 +9,7 @@ DEFINE SUBQUERY $q($name, $a) AS
         FROM
             $name
     );
-    $b = "_foo";
+    $b = '_foo';
 
     SELECT
         key || $a || $b AS key
@@ -22,7 +22,7 @@ $z = (
     SELECT
         key
     FROM
-        $q("Input", "_bar")
+        $q('Input', '_bar')
 );
 
 SELECT
@@ -32,14 +32,14 @@ SELECT
 SELECT
     key
 FROM
-    $q("Input", "_baz")
+    $q('Input', '_baz')
 ORDER BY
     key
 ;
 
 DEFINE SUBQUERY $e() AS
     SELECT
-        "hello"
+        'hello'
     ;
 END DEFINE;
 

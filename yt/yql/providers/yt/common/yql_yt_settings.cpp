@@ -466,7 +466,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, BlockReaderSupportedDataTypes)
         .Parser([](const TString& v) {
             TSet<TString> vec;
-            StringSplitter(v).SplitBySet(",").AddTo(&vec);
+            StringSplitter(v).SplitBySet(",;| ").AddTo(&vec);
             TSet<NUdf::EDataSlot> res;
             for (auto& s: vec) {
                 res.emplace(NUdf::GetDataSlot(s));
@@ -477,7 +477,18 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, JobBlockInputSupportedDataTypes)
         .Parser([](const TString& v) {
             TSet<TString> vec;
-            StringSplitter(v).SplitBySet(",").AddTo(&vec);
+            StringSplitter(v).SplitBySet(",;| ").AddTo(&vec);
+            TSet<NUdf::EDataSlot> res;
+            for (auto& s: vec) {
+                res.emplace(NUdf::GetDataSlot(s));
+            }
+            return res;
+        });
+    REGISTER_SETTING(*this, JobBlockOutputSupportedTypes);
+    REGISTER_SETTING(*this, JobBlockOutputSupportedDataTypes)
+        .Parser([](const TString& v) {
+            TSet<TString> vec;
+            StringSplitter(v).SplitBySet(",;| ").AddTo(&vec);
             TSet<NUdf::EDataSlot> res;
             for (auto& s: vec) {
                 res.emplace(NUdf::GetDataSlot(s));
@@ -509,6 +520,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, MaxColumnGroups);
     REGISTER_SETTING(*this, ExtendedStatsMaxChunkCount);
     REGISTER_SETTING(*this, JobBlockInput);
+    REGISTER_SETTING(*this, JobBlockOutput).Parser([](const TString& v) { return FromString<EBlockOutputMode>(v); });
     REGISTER_SETTING(*this, _EnableYtDqProcessWriteConstraints);
     REGISTER_SETTING(*this, CompactForDistinct);
 }

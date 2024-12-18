@@ -835,6 +835,7 @@ private:
     TFlightControl FlightControl;
     TAtomicBlockCounter QuitCounter;
     TString LastWarning;
+    bool ReadOnly;
     TDeque<IAsyncIoOperation*> Trash;
     TMutex TrashMutex;
 
@@ -843,7 +844,7 @@ private:
 public:
     TRealBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap)
+            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, bool readOnly)
         : Mon(mon)
         , Path(path)
         , CompletionThreads(nullptr)
@@ -864,6 +865,7 @@ public:
         , DeviceInFlight(FastClp2(deviceInFlight))
         , FlightControl(CountTrailingZeroBits(DeviceInFlight))
         , LastWarning(IsPowerOf2(deviceInFlight) ? "" : "Device inflight must be a power of 2")
+        , ReadOnly(readOnly)
     {
         if (sectorMap) {
             DriveData = TDriveData();
@@ -1038,6 +1040,7 @@ protected:
     }
 
     void TrimSync(ui32 size, ui64 offset) override {
+        Y_ABORT_UNLESS(!ReadOnly);
         IAsyncIoOperation* op = IoContext->CreateAsyncIoOperation(nullptr, {}, nullptr);
         IoContext->PreparePTrim(op, size, offset);
         IsTrimEnabled = IoContext->DoTrim(op);
@@ -1064,6 +1067,7 @@ protected:
     void PwriteAsync(const void *data, ui64 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId,
             NWilson::TTraceId *traceId) override {
         Y_ABORT_UNLESS(completionAction);
+        Y_ABORT_UNLESS(!ReadOnly);
         if (!IsInitialized) {
             completionAction->Release(PCtx->ActorSystem);
             return;
@@ -1080,6 +1084,7 @@ protected:
 
     void FlushAsync(TCompletionAction *completionAction, TReqId reqId) override {
         Y_ABORT_UNLESS(completionAction);
+        Y_ABORT_UNLESS(!ReadOnly);
         if (!IsInitialized) {
             completionAction->Release(PCtx->ActorSystem);
             return;
@@ -1348,9 +1353,9 @@ class TCachedBlockDevice : public TRealBlockDevice {
 public:
     TCachedBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk)
+            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk, bool readOnly)
         : TRealBlockDevice(path, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
-                maxQueuedCompletionActions, completionThreadsCount, sectorMap)
+                maxQueuedCompletionActions, completionThreadsCount, sectorMap, readOnly)
         , ReadsInFly(0)
         , PDisk(pdisk)
     {}
@@ -1486,14 +1491,14 @@ public:
 
 IBlockDevice* CreateRealBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
         ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-        ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk) {
+        ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk, bool readOnly) {
     return new TCachedBlockDevice(path, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
-            maxQueuedCompletionActions, completionThreadsCount, sectorMap, pdisk);
+            maxQueuedCompletionActions, completionThreadsCount, sectorMap, pdisk, readOnly);
 }
 
 IBlockDevice* CreateRealBlockDeviceWithDefaults(const TString &path, TPDiskMon &mon, TDeviceMode::TFlags flags,
-        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk) {
-    IBlockDevice *device = CreateRealBlockDevice(path, mon, 0, 0, 4, flags, 8, 1, sectorMap, pdisk);
+        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk, bool readOnly) {
+    IBlockDevice *device = CreateRealBlockDevice(path, mon, 0, 0, 4, flags, 8, 1, sectorMap, pdisk, readOnly);
     device->Initialize(std::make_shared<TPDiskCtx>(actorSystem));
     return device;
 }

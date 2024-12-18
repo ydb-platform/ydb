@@ -502,7 +502,9 @@ namespace Tests {
         NKikimrBlobStorage::TDefineStoragePool DescribeStoragePool(const TString& name);
         void RemoveStoragePool(const TString& name);
 
-
+        void Grant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights);
+        void GrantConnect(const TString& subject);
+        
         TAutoPtr<NMsgBusProxy::TBusResponse> HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type,
                 const TVector<ui32>& allowed_node_ids, const TVector<TSubDomainKey>& allowed_domains = {}, const TChannelsBindings& binding = {});
 

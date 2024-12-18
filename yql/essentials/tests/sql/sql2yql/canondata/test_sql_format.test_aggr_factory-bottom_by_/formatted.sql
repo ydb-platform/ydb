@@ -8,13 +8,13 @@ $t = AsList(
     AsStruct(7 AS key, 111 AS value)
 );
 
-$f = AGGREGATION_FACTORY("bottomby", 3);
+$f = AGGREGATION_FACTORY('bottomby', 3);
 
 SELECT
     Yql::Aggregate(
         $t, AsTuple(), AsTuple(
             AsTuple(
-                AsAtom("res"),
+                AsAtom('res'),
                 $f(
                     ListItemType(TypeOf($t)), ($z) -> {
                         RETURN AsTuple($z.value, $z.key);

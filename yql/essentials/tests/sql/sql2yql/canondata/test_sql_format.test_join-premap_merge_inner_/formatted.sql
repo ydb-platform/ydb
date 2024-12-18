@@ -3,7 +3,7 @@ PRAGMA DisablePullUpFlatMapOverJoin;
 
 USE plato;
 
-PRAGMA yt.JoinMergeTablesLimit = "10";
+PRAGMA yt.JoinMergeTablesLimit = '10';
 
 FROM (
     SELECT

@@ -6,6 +6,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #include <util/folder/path.h>
 #include <util/generic/hash_set.h>
@@ -129,7 +130,9 @@ class TRestoreClient {
     TRestoreResult CheckSchema(const TString& dbPath, const NTable::TTableDescription& desc);
     TRestoreResult RestoreData(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const NTable::TTableDescription& desc);
     TRestoreResult RestoreIndexes(const TString& dbPath, const NTable::TTableDescription& desc);
+    TRestoreResult RestoreChangefeeds(const TFsPath& path, const TString& dbPath);
     TRestoreResult RestorePermissions(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const THashSet<TString>& oldEntries);
+    TRestoreResult RestoreConsumers(const TString& topicPath, const TVector<NTopic::TConsumer>& consumers);
 
     THolder<NPrivate::IDataWriter> CreateDataWriter(const TString& dbPath, const TRestoreSettings& settings,
         const NTable::TTableDescription& desc, const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators);
@@ -147,6 +150,7 @@ private:
     NOperation::TOperationClient OperationClient;
     NScheme::TSchemeClient SchemeClient;
     NTable::TTableClient TableClient;
+    NTopic::TTopicClient TopicClient;
     std::shared_ptr<TLog> Log;
 
 }; // TRestoreClient

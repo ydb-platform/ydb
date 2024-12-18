@@ -101,6 +101,20 @@ public:
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,
             Ydb::BSConfig::ReplaceStorageConfigResult& /*result*/)
     {}
+
+    bool IsDistconfEnableQuery() const {
+        NKikimrConfig::TAppConfig newConfig;
+        try {
+            newConfig = NYaml::Parse(GetProtoRequest()->yaml_config());
+        } catch (const std::exception&) {
+            return false; // assuming no distconf enabled in this config
+        }
+        if (!newConfig.HasBlobStorageConfig()) {
+            return false;
+        }
+        const NKikimrConfig::TBlobStorageConfig& bsConfig = newConfig.GetBlobStorageConfig();
+        return bsConfig.HasAutoconfigSettings();
+    }
 };
 
 class TFetchStorageConfigRequest : public TBSConfigRequestGrpc<TFetchStorageConfigRequest, TEvFetchStorageConfigRequest,
@@ -123,6 +137,10 @@ public:
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& record,
             Ydb::BSConfig::FetchStorageConfigResult& result) {
         result.set_yaml_config(record.GetFetchStorageConfig().GetYAML());
+    }
+
+    bool IsDistconfEnableQuery() const {
+        return false;
     }
 };
 

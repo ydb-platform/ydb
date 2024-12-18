@@ -1,3 +1,7 @@
+
+## 2.18.0 ##
+
+* `ydb import file csv` command now saves import progress. Relaunching import command will continue from the line it was interrupted on
 * Use QueryService by default (`--executer generic`) in `ydb workload kv` and `ydb workload stock` commands
 * Use parquet format instead of CSV to fill tables in `ydb workload` benchmarks
 * Made `--consumer` flag in `ydb topic read` command optional. Now if this flag is not specified, reading is performed in no-consumer mode. In this mode partition IDs should be specified with `--partition-ids` option. 
@@ -10,7 +14,7 @@
 * Fixed a bug in TPC-H tables schema where the `partsupp` table had incorrect list of key columns
 * Enhanced parallelism of data restoring in `ydb tools restore`
 * Fixed a bug where `ydb tools restore` was failing with `Too much data` if `--upload-batch-bytes` option value was set exactly to it's maximum possible value (16MiB)
-* Added `ydb debug ping` command for performance and connectivity debugging
+* _awaiting release ydb server 25.1_ Added `ydb debug ping` command for performance and connectivity debugging
 
 ## 2.16.0 ##
 

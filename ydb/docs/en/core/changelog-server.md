@@ -36,7 +36,7 @@ Release date: August 20, 2024.
 * [Resolved](https://github.com/ydb-platform/ydb/pull/6615) race conditions in asynchronous change delivery (asynchronous indexes, CDC).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/5993) a crash that sometimes occurred during [TTL-based](./concepts/ttl) deletions.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/5760) an issue with PDisk status display in the [CMS](./concepts/glossary#cms).
-* [Fixed](https://github.com/ydb-platform/ydb/pull/6008) a bug where soft tablet transfer (drain) from a node could hang (#vporyadke).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/6008) a bug where soft tablet transfer (drain) from a node could hang.
 * [Resolved](https://github.com/ydb-platform/ydb/pull/6445) a problem where the interconnect proxy on a node without restarts would stop when adding another node to the cluster.
 * [Corrected](https://github.com/ydb-platform/ydb/pull/7023) string escaping in error messages.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/6695) free memory accounting in the interconnect.

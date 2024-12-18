@@ -2,10 +2,11 @@ name: Coverage-run
 
 on:
   workflow_dispatch:
+      inputs:
         branch:
-        description: 'Choose additional branch to run'
-        required: true
-        default: 'main'
+          description: 'Choose additional branch to run'
+          required: true
+          default: 'main'
 
 jobs:
   main:

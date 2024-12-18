@@ -2346,4 +2346,54 @@ partitioning_settings {
             }
         )"));
     }
+
+    Y_UNIT_TEST(Checksums) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        const auto* dataChecksum = s3Mock.GetData().FindPtr("/data_00.csv.sha256");
+        UNIT_ASSERT(dataChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(*dataChecksum, "eec941c7 data_00.csv");
+
+        const auto* metadataChecksum = s3Mock.GetData().FindPtr("/metadata.json.sha256");
+        UNIT_ASSERT(metadataChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "f71ad64a metadata.json");
+
+        const auto* schemeChecksum = s3Mock.GetData().FindPtr("/scheme.pb.sha256");
+        UNIT_ASSERT(schemeChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(*schemeChecksum, "bbc132af scheme.pb");
+
+        const auto* permissionsChecksum = s3Mock.GetData().FindPtr("/permissions.pb.sha256");
+        UNIT_ASSERT(permissionsChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(*permissionsChecksum, "41935b38 permissions.pb");
+    }
 }

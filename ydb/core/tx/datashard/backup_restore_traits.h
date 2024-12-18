@@ -47,6 +47,10 @@ inline TString DataKey(const TString& objKeyPattern, ui32 n, EDataFormat format,
     return Sprintf("%s/data_%02d%s", objKeyPattern.c_str(), n, ext.c_str());
 }
 
+inline TString ChecksumKey(const TString& objKey) {
+    return Sprintf("%s.sha256", objKey.c_str());
+}
+
 } // NBackupRestoreTraits
 } // NDataShard
 } // NKikimr

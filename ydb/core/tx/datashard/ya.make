@@ -152,6 +152,7 @@ SRCS(
     execution_unit.h
     execution_unit_ctors.h
     execution_unit_kind.h
+    export_checksum.cpp
     export_common.cpp
     export_iface.cpp
     export_iface.h
@@ -254,6 +255,7 @@ PEERDIR(
     library/cpp/l1_distance
     library/cpp/l2_distance
     ydb/core/actorlib_impl
+    ydb/core/backup/common
     ydb/core/base
     ydb/core/change_exchange
     ydb/core/engine

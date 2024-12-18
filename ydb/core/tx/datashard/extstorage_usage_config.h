@@ -60,6 +60,12 @@ public:
         return NBackupRestoreTraits::DataKey(ObjectKeyPattern, Shard, format, codec);
     }
 
+    inline TString GetRelativeDataKey(
+        NBackupRestoreTraits::EDataFormat format,
+        NBackupRestoreTraits::ECompressionCodec codec) const {
+        return NBackupRestoreTraits::DataKey("", Shard, format, codec);
+    }
+
 }; // TS3Settings
 }
 

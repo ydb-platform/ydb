@@ -53,7 +53,7 @@ public:
         THashSet<TString> tiers;
         for (const auto& tier : Description.GetTtlSettings().GetEnabled().GetTiers()) {
             if (tier.HasEvictToExternalStorage()) {
-                tiers.emplace(tier.GetEvictToExternalStorage().GetStorageName());
+                tiers.emplace(tier.GetEvictToExternalStorage().GetStorage());
             }
         }
         return tiers;

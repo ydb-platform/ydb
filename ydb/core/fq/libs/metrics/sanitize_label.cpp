@@ -1,12 +1,13 @@
-#include "common.h"
+﻿#include "sanitize_label.h"
 
 #include <util/generic/string.h>
 
 namespace NFq {
 
-TString CleanupCounterValueString(const TString& value) {
-    TString clean;
-    constexpr auto valueLenghtLimit = 200;
+TString SanitizeLabel(const TString& value) {
+    TString result;
+    result.reserve(value.size());
+    constexpr auto labelLengthLimit = 200;
 
     for (auto c : value) {
         switch (c) {
@@ -19,13 +20,13 @@ TString CleanupCounterValueString(const TString& value) {
         case '\\':
             continue;
         default:
-            clean.push_back(c);
-            if (clean.size() == valueLenghtLimit) {
-                break;
+            result.push_back(c);
+            if (result.size() == labelLengthLimit) {
+                return result;
             }
         }
     }
-    return clean;
+    return result;
 }
 
 } // namespace NFq

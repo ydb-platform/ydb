@@ -1,7 +1,6 @@
 #include "row_dispatcher.h"
 
 #include "actors_factory.h"
-#include "common.h"
 #include "coordinator.h"
 #include "leader_election.h"
 
@@ -15,6 +14,7 @@
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/fq/libs/metrics/sanitize_label.h>
 #include <ydb/core/mon/mon.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
@@ -598,7 +598,7 @@ void TRowDispatcher::UpdateMetrics() {
 
 void TRowDispatcher::SetQueryMetrics(const TQueryStatKey& queryKey, ui64 unreadBytesMax, ui64 unreadBytesAvg, i64 readLagMessagesMax) {
     auto queryGroup = Metrics.Counters->GetSubgroup("query_id", queryKey.QueryId);
-    auto topicGroup = queryGroup->GetSubgroup("read_group", CleanupCounterValueString(queryKey.ReadGroup));
+    auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(queryKey.ReadGroup));
     topicGroup->GetCounter("MaxUnreadBytes")->Set(unreadBytesMax);
     topicGroup->GetCounter("AvgUnreadBytes")->Set(unreadBytesAvg);
     topicGroup->GetCounter("MaxReadLag")->Set(readLagMessagesMax);
@@ -740,7 +740,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("Received TEvStartSession from " << ev->Sender << ", read group " << ev->Get()->Record.GetSource().GetReadGroup() << ", topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " part id " << ev->Get()->Record.GetPartitionId() << " query id " << ev->Get()->Record.GetQueryId() << " cookie " << ev->Cookie);
     auto queryGroup = Metrics.Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
-    auto topicGroup = queryGroup->GetSubgroup("read_group", CleanupCounterValueString(ev->Get()->Record.GetSource().GetReadGroup()));
+    auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(ev->Get()->Record.GetSource().GetReadGroup()));
     topicGroup->GetCounter("StartSession", true)->Inc();
 
     NodesTracker.AddNode(ev->Sender.NodeId());

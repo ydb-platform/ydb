@@ -46,12 +46,14 @@ struct TEvHttpProxy {
         EvHttpOutgoingRequest,
         EvHttpIncomingResponse,
         EvHttpOutgoingResponse,
-        EvHttpConnectionOpened,
-        EvHttpConnectionClosed,
+        EvHttpIncomingConnectionClosed,
+        EvHttpOutgoingConnectionClosed,
+        EvHttpOutgoingConnectionAvailable,
         EvHttpAcceptorClosed,
         EvResolveHostRequest,
         EvResolveHostResponse,
         EvReportSensors,
+        EvHttpOutgoingDataChunk,
         EvEnd
     };
 
@@ -113,6 +115,7 @@ struct TEvHttpProxy {
     struct TEvHttpOutgoingRequest : NActors::TEventLocal<TEvHttpOutgoingRequest, EvHttpOutgoingRequest> {
         THttpOutgoingRequestPtr Request;
         TDuration Timeout;
+        bool AllowConnectionReuse = false;
 
         TEvHttpOutgoingRequest(THttpOutgoingRequestPtr request)
             : Request(std::move(request))
@@ -121,6 +124,11 @@ struct TEvHttpProxy {
         TEvHttpOutgoingRequest(THttpOutgoingRequestPtr request, TDuration timeout)
             : Request(std::move(request))
             , Timeout(timeout)
+        {}
+
+        TEvHttpOutgoingRequest(THttpOutgoingRequestPtr request, bool allowConnectionReuse)
+            : Request(std::move(request))
+            , AllowConnectionReuse(allowConnectionReuse)
         {}
     };
 
@@ -163,27 +171,41 @@ struct TEvHttpProxy {
         {}
     };
 
-    struct TEvHttpConnectionOpened : NActors::TEventLocal<TEvHttpConnectionOpened, EvHttpConnectionOpened> {
-        TString PeerAddress;
-        TActorId ConnectionID;
+    struct TEvHttpOutgoingDataChunk : NActors::TEventLocal<TEvHttpOutgoingDataChunk, EvHttpOutgoingDataChunk> {
+        THttpOutgoingDataChunkPtr DataChunk;
 
-        TEvHttpConnectionOpened(const TString& peerAddress, const TActorId& connectionID)
-            : PeerAddress(peerAddress)
-            , ConnectionID(connectionID)
+        TEvHttpOutgoingDataChunk(THttpOutgoingDataChunkPtr dataChunk)
+            : DataChunk(std::move(dataChunk))
         {}
     };
 
-    struct TEvHttpConnectionClosed : NActors::TEventLocal<TEvHttpConnectionClosed, EvHttpConnectionClosed> {
+    struct TEvHttpIncomingConnectionClosed : NActors::TEventLocal<TEvHttpIncomingConnectionClosed, EvHttpIncomingConnectionClosed> {
         TActorId ConnectionID;
         TDeque<THttpIncomingRequestPtr> RecycledRequests;
 
-        TEvHttpConnectionClosed(const TActorId& connectionID)
-            : ConnectionID(connectionID)
-        {}
-
-        TEvHttpConnectionClosed(const TActorId& connectionID, TDeque<THttpIncomingRequestPtr> recycledRequests)
+        TEvHttpIncomingConnectionClosed(const TActorId& connectionID, TDeque<THttpIncomingRequestPtr> recycledRequests)
             : ConnectionID(connectionID)
             , RecycledRequests(std::move(recycledRequests))
+        {}
+    };
+
+    struct TEvHttpOutgoingConnectionClosed : NActors::TEventLocal<TEvHttpOutgoingConnectionClosed, EvHttpOutgoingConnectionClosed> {
+        TActorId ConnectionID;
+        TString Destination;
+
+        TEvHttpOutgoingConnectionClosed(const TActorId& connectionID, const TString& destination)
+            : ConnectionID(connectionID)
+            , Destination(destination)
+        {}
+    };
+
+    struct TEvHttpOutgoingConnectionAvailable : NActors::TEventLocal<TEvHttpOutgoingConnectionAvailable, EvHttpOutgoingConnectionAvailable> {
+        TActorId ConnectionID;
+        TString Destination;
+
+        TEvHttpOutgoingConnectionAvailable(const TActorId& connectionID, const TString& destination)
+            : ConnectionID(connectionID)
+            , Destination(destination)
         {}
     };
 

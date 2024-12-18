@@ -1,6 +1,6 @@
 USE plato;
 
-PRAGMA yt.JoinEnableStarJoin = "true";
+PRAGMA yt.JoinEnableStarJoin = 'true';
 
 INSERT INTO @x
 SELECT

@@ -4,11 +4,11 @@ USE plato;
 
 SELECT
     key,
-    value || "_y" ?? "" AS value
+    value || '_y' ?? '' AS value
 FROM
-    range("", "Input1", "Input2")
+    range('', 'Input1', 'Input2')
 WHERE
-    key > "010"
+    key > '010'
 ORDER BY
     key,
     value

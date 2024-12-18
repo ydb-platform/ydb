@@ -185,3 +185,44 @@ message TMessageWithEnums
     repeated EEnum enum_rep_not_packed_without_option = 8 [packed = false];
     repeated EEnum enum_rep_packed_without_option = 9 [packed = true];
 }
+
+message TAnotherMessageWithEnums
+{
+    enum EEnum {
+        VALUE0 = 0;
+        VALUE1 = 1;
+    };
+
+    optional EEnum enum_strictly_checked = 1 [(NYT.NYson.NProto.strict_enum_value_check) = true];
+    optional EEnum enum_not_strictly_checked = 2 [(NYT.NYson.NProto.strict_enum_value_check) = false];
+    optional EEnum enum_unspecified = 3;
+    optional EEnum enum_strict_string = 4 [
+        (NYT.NYson.NProto.strict_enum_value_check) = true,
+        (NYT.NYson.NProto.enum_yson_storage_type) = EYST_STRING
+    ];
+    optional EEnum enum_non_strict_string = 5 [
+        (NYT.NYson.NProto.strict_enum_value_check) = false,
+        (NYT.NYson.NProto.enum_yson_storage_type) = EYST_STRING
+    ];
+}
+
+message TAnotherMessageWithEnumsV2
+{
+    enum EEnum {
+        VALUE0 = 0;
+        VALUE1 = 1;
+        VALUE2 = 2;
+    };
+
+    optional EEnum enum_strictly_checked = 1 [(NYT.NYson.NProto.strict_enum_value_check) = true];
+    optional EEnum enum_not_strictly_checked = 2 [(NYT.NYson.NProto.strict_enum_value_check) = false];
+    optional EEnum enum_unspecified = 3;
+    optional EEnum enum_strict_string = 4 [
+        (NYT.NYson.NProto.strict_enum_value_check) = true,
+        (NYT.NYson.NProto.enum_yson_storage_type) = EYST_STRING
+    ];
+    optional EEnum enum_non_strict_string = 5 [
+        (NYT.NYson.NProto.strict_enum_value_check) = false,
+        (NYT.NYson.NProto.enum_yson_storage_type) = EYST_STRING
+    ];
+}

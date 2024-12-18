@@ -85,7 +85,7 @@ SELECT
 FROM
     InputString
 WHERE
-    value < "a" AND value > "c"
+    value < 'a' AND value > 'c'
 ;
 
 SELECT
@@ -93,5 +93,5 @@ SELECT
 FROM
     InputOptString
 WHERE
-    value < "a" AND value > "c"
+    value < 'a' AND value > 'c'
 ;

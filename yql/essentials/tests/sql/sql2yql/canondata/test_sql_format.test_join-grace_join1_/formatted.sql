@@ -12,5 +12,5 @@ JOIN
 ON
     cntr.country_id == cust.country_id
 WHERE
-    cntr.country_id == "11"
+    cntr.country_id == '11'
 ;

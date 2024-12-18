@@ -4,7 +4,7 @@ USE plato;
 
 $a = (
     SELECT
-        CAST(Unicode::ToUpper("o"u) AS String) || "utpu"
+        CAST(Unicode::ToUpper("o"u) AS String) || 'utpu'
 );
 
 $a = $a || CAST(Unicode::ToLower("T"u) AS String);
@@ -15,5 +15,5 @@ INSERT INTO $a (
     value
 )
 VALUES
-    (1, "foo", FALSE)
+    (1, 'foo', FALSE)
 ;

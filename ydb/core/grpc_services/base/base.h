@@ -906,7 +906,7 @@ public:
     void SetDiskQuotaExceeded(bool) override {
     }
 
-    void RefreshToken(const TString& token, const TActorContext& ctx, TActorId id);
+    void RefreshToken(const TString& token, const TActorContext& ctx, TActorId id, NWilson::TTraceId traceId = {});
 
     void SetRespHook(TRespHook&&) override {
         /* cannot add hook to bidirect streaming */

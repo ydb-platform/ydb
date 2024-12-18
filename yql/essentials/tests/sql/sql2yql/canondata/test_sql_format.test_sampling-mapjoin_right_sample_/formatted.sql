@@ -3,7 +3,7 @@
 /* syntax version 1 */
 USE plato;
 
-PRAGMA yt.MapJoinLimit = "1m";
+PRAGMA yt.MapJoinLimit = '1m';
 PRAGMA DisableSimpleColumns;
 
 SELECT

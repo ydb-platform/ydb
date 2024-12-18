@@ -1,6 +1,6 @@
 USE plato;
 
-$min_ts_for_stat_calculation = DateTime::ToSeconds(CurrentUtcDate() - Interval("P1D"));
+$min_ts_for_stat_calculation = DateTime::ToSeconds(CurrentUtcDate() - Interval('P1D'));
 
 INSERT INTO @a
 SELECT
@@ -10,7 +10,7 @@ FROM (
         1ul AS puid,
         CurrentUtcTimestamp() AS timestamp,
         [1, 2] AS segments,
-        "a" AS dummy1
+        'a' AS dummy1
 )
 ASSUME ORDER BY
     puid,
@@ -25,7 +25,7 @@ FROM (
         4ul AS puid,
         CurrentUtcTimestamp() AS timestamp,
         [3, 2] AS segments,
-        "a" AS dummy1
+        'a' AS dummy1
 )
 ASSUME ORDER BY
     puid,
@@ -40,7 +40,7 @@ FROM (
         2ul AS puid,
         Just(CurrentUtcTimestamp()) AS timestamp,
         [2, 3] AS segments,
-        "a" AS dummy2
+        'a' AS dummy2
 )
 ASSUME ORDER BY
     puid,

@@ -257,7 +257,7 @@ struct TTestSchema {
             UNIT_ASSERT(tier.EvictAfter);
             UNIT_ASSERT_EQUAL(specials.TtlColumn, tier.TtlColumn);
             auto* tierSettings = ttlSettings->MutableEnabled()->AddTiers();
-            tierSettings->MutableEvictToExternalStorage()->SetStorageName(tier.Name);
+            tierSettings->MutableEvictToExternalStorage()->SetStorage(tier.Name);
             tierSettings->SetApplyAfterSeconds(tier.EvictAfter->Seconds());
         }
         if (specials.HasTtl()) {

@@ -5,16 +5,16 @@ USE plato;
 
 INSERT INTO Output
 SELECT
-    key || "foo" AS key2
+    key || 'foo' AS key2
 FROM
     Input
 ;
 
 COMMIT;
 
-$input =
+$input = (
     PROCESS Output
-;
+);
 
 $c = EvaluateCode(ReprCode(FormatType(TypeOf($input))));
 
@@ -24,16 +24,16 @@ SELECT
 
 INSERT INTO Output WITH TRUNCATE
 SELECT
-    key || "foo" AS key3
+    key || 'foo' AS key3
 FROM
     Input
 ;
 
 COMMIT;
 
-$input =
+$input = (
     PROCESS Output
-;
+);
 
 $c = EvaluateCode(ReprCode(FormatType(TypeOf($input))));
 

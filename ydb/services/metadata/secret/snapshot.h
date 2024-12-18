@@ -22,9 +22,9 @@ protected:
     virtual TString DoSerializeToString() const override;
 public:
     using TBase::TBase;
-    bool CheckSecretAccess(const TSecretIdOrValue& sIdOrValue, const std::optional<NACLib::TUserToken>& userToken) const;
+    bool CheckSecretAccess(const TSecretIdOrValue& sIdOrValue, const NACLib::TUserToken& userToken) const;
     bool PatchString(TString& stringForPath) const;
-    bool GetSecretValue(const TSecretIdOrValue& secretId, TString& result) const;
+    TConclusion<TString> GetSecretValue(const TSecretIdOrValue& secretId) const;
     std::vector<TSecretId> GetSecretIds(const std::optional<NACLib::TUserToken>& userToken, const TString& secretId) const;
 };
 

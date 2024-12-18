@@ -14,6 +14,7 @@
 #include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <library/cpp/yson/node/node.h>
+#include <library/cpp/yson/writer.h>
 
 #include <library/cpp/string_utils/levenshtein_diff/levenshtein_diff.h>
 #include <library/cpp/enumbitset/enumbitset.h>
@@ -2262,6 +2263,7 @@ public:
     virtual void RegisterPackage(const TString& package) = 0;
     virtual bool SetPackageDefaultVersion(const TString& package, ui32 version) = 0;
     virtual const TExportTable* GetModule(const TString& module) const = 0;
+    virtual void WriteStatistics(NYson::TYsonWriter& writer) = 0;
     /*
     Create new resolver which will use already collected modules in readonly manner.
     Parent resolver should be alive while using child due to raw data sharing.

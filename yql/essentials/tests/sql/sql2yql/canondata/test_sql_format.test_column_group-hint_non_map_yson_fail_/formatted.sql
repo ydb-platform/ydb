@@ -2,7 +2,7 @@
 USE plato;
 
 -- bad yson
-INSERT INTO Output WITH column_groups = "[abc]"
+INSERT INTO Output WITH column_groups = '[abc]'
 SELECT
     *
 FROM

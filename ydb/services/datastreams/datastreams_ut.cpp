@@ -105,13 +105,10 @@ public:
         }
 
         Driver = std::make_unique<TDriver>(std::move(driverConfig));
-        DataStreamsClient = std::make_unique<NYDS_V1::TDataStreamsClient>(*Driver,
-             TCommonClientSettings()
-                 .AuthToken("user@builtin"));
 
         {
             NYdb::NScheme::TSchemeClient schemeClient(*Driver);
-            NYdb::NScheme::TPermissions permissions("user@builtin", {"ydb.generic.read", "ydb.generic.write"});
+            NYdb::NScheme::TPermissions permissions("user@builtin", {"ydb.database.connect", "ydb.generic.read", "ydb.generic.write"});
 
             auto result = schemeClient.ModifyPermissions("/Root",
                 NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
@@ -120,11 +117,18 @@ public:
             UNIT_ASSERT(result.IsSuccess());
         }
 
-        TClient client(*(KikimrServer->ServerSettings));
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 client.AlterUserAttributes("/", "Root", {{"folder_id", DEFAULT_FOLDER_ID},
-                                                                          {"cloud_id", DEFAULT_CLOUD_ID},
-                                                                          {"database_id", "root"}}));
+        {
+            TClient alterClient(*(KikimrServer->ServerSettings));
+            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+                                    alterClient.AlterUserAttributes("/", "Root", {{"folder_id", DEFAULT_FOLDER_ID},
+                                                                            {"cloud_id", DEFAULT_CLOUD_ID},
+                                                                            {"database_id", "root"}}));        
+        }
+
+        DataStreamsClient = std::make_unique<NYDS_V1::TDataStreamsClient>(*Driver,
+             TCommonClientSettings()
+                 .AuthToken("user@builtin"));
+                                                               
     }
 
 public:
@@ -180,6 +184,13 @@ ui32 CheckMeteringFile(TTempFileHandle* meteringFile, const TString& streamPath,
     return schemaFoundTimes;
 }
 
+void GrantConnect(const TDriver& driver, const TString& user) {
+    NYdb::NScheme::TSchemeClient permissionClient(driver);
+    NYdb::NScheme::TPermissions permissions(user, {"ydb.database.connect"});
+    auto result = permissionClient.ModifyPermissions("/Root",
+        NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)).ExtractValueSync();
+    UNIT_ASSERT(result.IsSuccess());
+}
 
 #define Y_UNIT_TEST_NAME this->Name_;
 
@@ -1389,6 +1400,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::EPriority::PRI_DEBUG);
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NLog::EPriority::PRI_DEBUG);
 
+        GrantConnect(*driver, "user2@builtin");
+
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
 
         TString dataStr = "9876543210";
@@ -1615,6 +1628,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
+        GrantConnect(*driver, "user2@builtin");
+
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
         NYdb::NScheme::TSchemeClient schemeClient(*driver);
         {
@@ -1670,6 +1685,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         }
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::EPriority::PRI_DEBUG);
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NLog::EPriority::PRI_DEBUG);
+
+        GrantConnect(*driver, "user2@builtin");
 
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
 
@@ -2184,6 +2201,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
+        GrantConnect(*driver, "user2@builtin");
 
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
         NYdb::NScheme::TSchemeClient schemeClient(*driver);

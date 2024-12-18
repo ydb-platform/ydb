@@ -7,7 +7,7 @@ $data = (
     SELECT
         key AS kk,
         subkey AS sk,
-        "data: " || value AS value
+        'data: ' || value AS value
     FROM
         Input
     WHERE

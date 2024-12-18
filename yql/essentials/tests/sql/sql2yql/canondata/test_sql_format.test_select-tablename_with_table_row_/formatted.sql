@@ -6,7 +6,7 @@ SELECT
 FROM
     Input
 WHERE
-    key > "010"
+    key > '010'
 ORDER BY
     rowid
 ;

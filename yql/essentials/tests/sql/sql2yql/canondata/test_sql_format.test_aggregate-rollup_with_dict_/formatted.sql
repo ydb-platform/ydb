@@ -10,7 +10,7 @@ SELECT
 FROM
     Input AS t
 GROUP BY
-    ROLLUP (t.`dict`["c"] AS val)
+    ROLLUP (t.`dict`['c'] AS val)
 ORDER BY
     val,
     cnt

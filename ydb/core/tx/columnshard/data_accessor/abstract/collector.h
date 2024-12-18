@@ -25,7 +25,7 @@ private:
     const ui64 PathId;
 
     virtual THashMap<ui64, TPortionDataAccessor> DoAskData(
-        const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& callback) = 0;
+        const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& callback, const TString& consumer) = 0;
     virtual void DoModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) = 0;
 
 public:
@@ -39,7 +39,8 @@ public:
         : PathId(pathId) {
     }
 
-    THashMap<ui64, TPortionDataAccessor> AskData(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& callback);
+    THashMap<ui64, TPortionDataAccessor> AskData(
+        const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& callback, const TString& consumer);
     void ModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) {
         return DoModifyPortions(add, remove);
     }

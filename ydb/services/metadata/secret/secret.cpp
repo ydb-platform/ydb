@@ -38,14 +38,22 @@ TString TSecretId::SerializeToString() const {
     return sb;
 }
 
-
 TString TSecretIdOrValue::DebugString() const {
-    if (SecretId) {
-        return SecretId->SerializeToString();
-    } else if (Value) {
-        return MD5::Calc(*Value);
-    }
-    return "";
+    return std::visit(TOverloaded(
+        [](std::monostate) -> TString{
+            return "__NONE__";
+        },
+        [](const TSecretId& id) -> TString{
+            return id.SerializeToString();
+        },
+        [](const TSecretName& name) -> TString{
+            return name.SerializeToString();
+        },
+        [](const TString& value) -> TString{
+            return MD5::Calc(value);
+        }
+    ),
+    State);
 }
 
 }

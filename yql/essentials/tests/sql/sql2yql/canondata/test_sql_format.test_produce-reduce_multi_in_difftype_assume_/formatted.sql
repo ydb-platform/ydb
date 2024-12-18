@@ -13,9 +13,9 @@ $reducer = ($key, $stream) -> {
     $stream = YQL::OrderedMap(
         $stream, ($item) -> {
             RETURN AsStruct(
-                YQL::Guess($item, AsAtom("0")).t1 AS t1,
-                YQL::Guess($item, AsAtom("1")).t2 AS t2,
-                YQL::Guess($item, AsAtom("2")).t3 AS t3,
+                YQL::Guess($item, AsAtom('0')).t1 AS t1,
+                YQL::Guess($item, AsAtom('1')).t2 AS t2,
+                YQL::Guess($item, AsAtom('2')).t3 AS t3,
             );
         }
     );

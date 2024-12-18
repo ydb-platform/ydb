@@ -1,6 +1,6 @@
 /* syntax version 1 */
 /* postgres can not */
-$in =
+$in = (
     SELECT
         value,
         SUM(unwrap(CAST(subkey AS uint32))) OVER w1 AS sum1,
@@ -30,7 +30,7 @@ $in =
                 value DESC
             ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
         )
-;
+);
 
 SELECT
     value,

@@ -1,9 +1,9 @@
 /* syntax version 1 */
 USE plato;
 
-PRAGMA yt.JoinMergeTablesLimit = "10";
-PRAGMA yt.JoinMergeUnsortedFactor = "0";
-PRAGMA yt.JoinAllowColumnRenames = "true";
+PRAGMA yt.JoinMergeTablesLimit = '10';
+PRAGMA yt.JoinMergeUnsortedFactor = '0';
+PRAGMA yt.JoinAllowColumnRenames = 'true';
 
 FROM
     Input1 AS a

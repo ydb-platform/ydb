@@ -15,7 +15,7 @@ SELECT
 ;
 
 SELECT
-    length("foo")
+    length('foo')
 ;
 
 SELECT
@@ -24,12 +24,12 @@ SELECT
 
 $f = () -> {
     RETURN () -> {
-        RETURN AsDict(AsTuple("foo", AsList(AsStruct(AsTuple(1) AS bar))));
+        RETURN AsDict(AsTuple('foo', AsList(AsStruct(AsTuple(1) AS bar))));
     };
 };
 
 SELECT
-    $f()()["foo"][0].bar.0
+    $f()()['foo'][0].bar.0
 ;
 
 SELECT

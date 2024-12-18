@@ -7,7 +7,7 @@ $to_int = ($x) -> {
 };
 
 $to_in_list = ($col) -> {
-    RETURN ListMap(String::SplitToList($col, ","), $to_int);
+    RETURN ListMap(String::SplitToList($col, ','), $to_int);
 };
 
 $input = (
@@ -17,7 +17,7 @@ $input = (
     FROM
         Input
     WHERE
-        value == "aaa"
+        value == 'aaa'
 );
 
 SELECT

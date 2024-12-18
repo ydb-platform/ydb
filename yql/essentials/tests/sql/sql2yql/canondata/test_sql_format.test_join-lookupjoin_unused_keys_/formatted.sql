@@ -1,8 +1,8 @@
 /* syntax version 1 */
 USE plato;
 
-PRAGMA yt.LookupJoinLimit = "64k";
-PRAGMA yt.LookupJoinMaxRows = "100";
+PRAGMA yt.LookupJoinLimit = '64k';
+PRAGMA yt.LookupJoinMaxRows = '100';
 
 SELECT
     v3

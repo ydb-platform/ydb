@@ -2340,7 +2340,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                     FORMAT = 'json',
                     INITIAL_SCAN = TRUE,
                     VIRTUAL_TIMESTAMPS = FALSE,
-                    RESOLVED_TIMESTAMPS = Interval("PT1S"),
+                    BARRIERS_INTERVAL = Interval("PT1S"),
                     RETENTION_PERIOD = Interval("P1D"),
                     TOPIC_MIN_ACTIVE_PARTITIONS = 10,
                     AWS_REGION = 'aws:region'
@@ -2360,7 +2360,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("true"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("virtual_timestamps"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("false"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("resolved_timestamps"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("barriers_interval"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("retention_period"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("topic_min_active_partitions"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("aws_region"));
@@ -4702,12 +4702,12 @@ select FormatType($f());
             USE plato;
             CREATE TABLE tableName (
                 Key Uint32, PRIMARY KEY (Key),
-                CHANGEFEED feedName WITH (MODE = "KEYS_ONLY", FORMAT = "json", RESOLVED_TIMESTAMPS = "foo")
+                CHANGEFEED feedName WITH (MODE = "KEYS_ONLY", FORMAT = "json", BARRIERS_INTERVAL = "foo")
             );
         )";
         auto res = SqlToYql(req);
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:102: Error: Literal of Interval type is expected for RESOLVED_TIMESTAMPS\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:100: Error: Literal of Interval type is expected for BARRIERS_INTERVAL\n");
     }
 
     Y_UNIT_TEST(InvalidChangefeedRetentionPeriod) {

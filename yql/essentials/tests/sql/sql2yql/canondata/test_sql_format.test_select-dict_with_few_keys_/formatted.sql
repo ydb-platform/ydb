@@ -5,9 +5,9 @@ USE plato;
 $dict = (
     SELECT
         AsDict(
-            AsTuple("key", CAST(key AS uint32) ?? 0),
-            AsTuple("sk", CAST(subkey AS uint32) ?? 1),
-            AsTuple("str", CAST(ByteAt(value, 0) AS uint32) ?? 256)
+            AsTuple('key', CAST(key AS uint32) ?? 0),
+            AsTuple('sk', CAST(subkey AS uint32) ?? 1),
+            AsTuple('str', CAST(ByteAt(value, 0) AS uint32) ?? 256)
         ) AS dd
     FROM
         Input

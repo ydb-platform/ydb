@@ -2,8 +2,8 @@
 /* kikimr can not */
 USE plato;
 
-PRAGMA yt.MapJoinLimit = "1M";
-PRAGMA yt.TmpFolder = "//custom_tmp";
+PRAGMA yt.MapJoinLimit = '1M';
+PRAGMA yt.TmpFolder = '//custom_tmp';
 
 -- MapJoin with table content
 $input = (

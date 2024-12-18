@@ -140,6 +140,7 @@ public:
     ui32 PhysicalStageId = 0;
     ui32 Tasks = 0;
     const NJson::TJsonValue* StatsNode = nullptr;
+    TString OperatorInfo;
 };
 
 struct TColorPalette {

@@ -20,7 +20,7 @@ $results = (
     FROM
         $records
     WHERE
-        host IS NOT NULL AND recordType == "RESULT"
+        host IS NOT NULL AND recordType == 'RESULT'
     GROUP BY
         ip,
         host
@@ -34,7 +34,7 @@ $bans = (
     FROM
         $records
     WHERE
-        host IS NOT NULL AND recordType == "BAN_DETECTED"
+        host IS NOT NULL AND recordType == 'BAN_DETECTED'
     GROUP BY
         ip,
         host

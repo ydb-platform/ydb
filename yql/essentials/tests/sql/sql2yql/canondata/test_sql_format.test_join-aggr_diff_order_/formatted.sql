@@ -1,7 +1,7 @@
 USE plato;
 
-PRAGMA yt.JoinMergeForce = "1";
-PRAGMA yt.JoinMergeTablesLimit = "10";
+PRAGMA yt.JoinMergeForce = '1';
+PRAGMA yt.JoinMergeTablesLimit = '10';
 
 SELECT
     key1,
@@ -16,7 +16,7 @@ FROM (
         FROM
             Input8
         WHERE
-            subkey != "bar"
+            subkey != 'bar'
     ) AS a
     JOIN ANY (
         SELECT
@@ -24,7 +24,7 @@ FROM (
         FROM
             Input8
         WHERE
-            subkey != "foo"
+            subkey != 'foo'
     ) AS b
     ON
         a.key == b.key AND a.subkey == b.subkey

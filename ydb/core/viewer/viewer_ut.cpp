@@ -722,7 +722,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 }
                 case TEvInterconnect::EvNodesInfo: {
                     auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
+                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
                     UNIT_ASSERT_EQUAL(nodes.size(), 2);
                     staticNodeId = nodes[0];
                     sharedDynNodeId = nodes[1];
@@ -801,7 +801,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 }
                 case TEvInterconnect::EvNodesInfo: {
                     auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
+                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
                     UNIT_ASSERT_EQUAL(nodes.size(), 3);
                     staticNodeId = nodes[0];
                     sharedDynNodeId = nodes[1];
@@ -884,7 +884,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 }
                 case TEvInterconnect::EvNodesInfo: {
                     auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
+                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
                     UNIT_ASSERT_EQUAL(nodes.size(), 3);
                     staticNodeId = nodes[0];
                     sharedDynNodeId = nodes[1];
@@ -970,7 +970,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 }
                 case TEvInterconnect::EvNodesInfo: {
                     auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
+                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
                     UNIT_ASSERT_EQUAL(nodes.size(), 4);
                     staticNodeId = nodes[0];
                     sharedDynNodeId = nodes[1];

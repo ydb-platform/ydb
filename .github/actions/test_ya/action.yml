@@ -282,6 +282,7 @@ runs:
         )
 
 
+        TESTMO_BRANCH_TAG="${GITHUB_REF_NAME//\//-}"
         TESTMO_BRANCH_TAG="$GITHUB_REF_NAME"
         TESTMO_ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
         TESTMO_PR_NUMBER=${{ github.event.number }}

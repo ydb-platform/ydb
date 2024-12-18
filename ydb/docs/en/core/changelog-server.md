@@ -27,7 +27,7 @@ Release date: August 20, 2024.
 
 ### Bug fixes
 
-* Added a check on the size of the local transaction before its commit to fix [errors]https://github.com/db-platform/ydb/issues/6677 ) in the work of schematic operations when export/backup large databases. 
+* Added a check on the size of the local transaction before its commit to fix [errors](https://github.com/db-platform/ydb/issues/6677) in the work of schematic operations when export/backup large databases.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/7709) duplicate results in select queries when reducing quotas in [DataShard](./concepts/glossary#data-shard).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/6461) [errors](https://github.com/ydb-platform/ydb/issues/6220) occurring during [coordinator](./concepts/glossary#coordinator) state changes.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/5992) issues during the initial CDC scan.

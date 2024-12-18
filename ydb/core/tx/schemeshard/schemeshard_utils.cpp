@@ -268,6 +268,7 @@ auto CalcVectorKmeansTreePostingImplTableDescImpl(
         parentColumn->SetName(NTableVectorKmeansTreeIndex::PostingTable_ParentColumn);
         parentColumn->SetType("Uint32");
         parentColumn->SetTypeId(NScheme::NTypeIds::Uint32);
+        parentColumn->SetNotNull(true);
     }
     implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::PostingTable_ParentColumn);
     FillIndexImplTableColumns(GetColumns(baseTable), implTableColumns, implTableDesc);
@@ -310,18 +311,21 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
         parentColumn->SetName(NTableVectorKmeansTreeIndex::LevelTable_ParentColumn);
         parentColumn->SetType("Uint32");
         parentColumn->SetTypeId(NScheme::NTypeIds::Uint32);
+        parentColumn->SetNotNull(true);
     }
     {
         auto idColumn = implTableDesc.AddColumns();
         idColumn->SetName(NTableVectorKmeansTreeIndex::LevelTable_IdColumn);
         idColumn->SetType("Uint32");
         idColumn->SetTypeId(NScheme::NTypeIds::Uint32);
+        idColumn->SetNotNull(true);
     }
     {
         auto centroidColumn = implTableDesc.AddColumns();
         centroidColumn->SetName(NTableVectorKmeansTreeIndex::LevelTable_EmbeddingColumn);
         centroidColumn->SetType("String");
         centroidColumn->SetTypeId(NScheme::NTypeIds::String);
+        centroidColumn->SetNotNull(true);
     }
 
     implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::LevelTable_ParentColumn);

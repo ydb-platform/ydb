@@ -23,6 +23,8 @@ namespace NDetail::NRawClient {
 
 TOperationAttributes ParseOperationAttributes(const TNode& node);
 
+TJobAttributes ParseJobAttributes(const TNode& node);
+
 TCheckPermissionResponse ParseCheckPermissionResponse(const TNode& node);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -34,53 +36,6 @@ void ExecuteBatch(
     const TClientContext& context,
     TRawBatchRequest& batchRequest,
     const TExecuteBatchOptions& options = TExecuteBatchOptions());
-
-//
-// Jobs
-//
-
-TJobAttributes GetJob(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TOperationId& operationId,
-    const TJobId& jobId,
-    const TGetJobOptions& options = TGetJobOptions());
-
-TListJobsResult ListJobs(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TOperationId& operationId,
-    const TListJobsOptions& options = TListJobsOptions());
-
-::TIntrusivePtr<IFileReader> GetJobInput(
-    const TClientContext& context,
-    const TJobId& jobId,
-    const TGetJobInputOptions& options = TGetJobInputOptions());
-
-::TIntrusivePtr<IFileReader> GetJobFailContext(
-    const TClientContext& context,
-    const TOperationId& operationId,
-    const TJobId& jobId,
-    const TGetJobFailContextOptions& options = TGetJobFailContextOptions());
-
-TString GetJobStderrWithRetries(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TOperationId& operationId,
-    const TJobId& jobId,
-    const TGetJobStderrOptions& /* options */ = TGetJobStderrOptions());
-
-::TIntrusivePtr<IFileReader> GetJobStderr(
-    const TClientContext& context,
-    const TOperationId& operationId,
-    const TJobId& jobId,
-    const TGetJobStderrOptions& options = TGetJobStderrOptions());
-
-std::vector<TJobTraceEvent> GetJobTrace(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TOperationId& operationId,
-    const TGetJobTraceOptions& options = TGetJobTraceOptions());
 
 //
 // File cache

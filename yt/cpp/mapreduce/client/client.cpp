@@ -53,8 +53,6 @@
 #include <util/string/type.h>
 #include <util/system/env.h>
 
-using namespace NYT::NDetail::NRawClient;
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -711,7 +709,7 @@ IOperationPtr TClientBase::AttachOperation(const TOperationId& operationId)
 
 EOperationBriefState TClientBase::CheckOperation(const TOperationId& operationId)
 {
-    return NYT::NDetail::CheckOperation(RawClient_, ClientRetryPolicy_, Context_, operationId);
+    return NYT::NDetail::CheckOperation(RawClient_, ClientRetryPolicy_, operationId);
 }
 
 void TClientBase::AbortOperation(const TOperationId& operationId)
@@ -1053,14 +1051,11 @@ void TClient::MountTable(
     const TMountTableOptions& options)
 {
     CheckShutdown();
-
-    THttpHeader header("POST", "mount_table");
-    SetTabletParams(header, path, options);
-    if (options.CellId_) {
-        header.AddParameter("cell_id", GetGuidAsString(*options.CellId_));
-    }
-    header.AddParameter("freeze", options.Freeze_);
-    RetryRequestWithPolicy(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, header);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &path, &options] (TMutationId& mutationId) {
+            RawClient_->MountTable(mutationId, path, options);
+        });
 }
 
 void TClient::UnmountTable(
@@ -1068,11 +1063,11 @@ void TClient::UnmountTable(
     const TUnmountTableOptions& options)
 {
     CheckShutdown();
-
-    THttpHeader header("POST", "unmount_table");
-    SetTabletParams(header, path, options);
-    header.AddParameter("force", options.Force_);
-    RetryRequestWithPolicy(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, header);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &path, &options] (TMutationId& mutationId) {
+            RawClient_->UnmountTable(mutationId, path, options);
+        });
 }
 
 void TClient::RemountTable(
@@ -1080,10 +1075,11 @@ void TClient::RemountTable(
     const TRemountTableOptions& options)
 {
     CheckShutdown();
-
-    THttpHeader header("POST", "remount_table");
-    SetTabletParams(header, path, options);
-    RetryRequestWithPolicy(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, header);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &path, &options] (TMutationId& mutationId) {
+            RawClient_->RemountTable(mutationId, path, options);
+        });
 }
 
 void TClient::FreezeTable(
@@ -1108,11 +1104,11 @@ void TClient::ReshardTable(
     const TReshardTableOptions& options)
 {
     CheckShutdown();
-
-    THttpHeader header("POST", "reshard_table");
-    SetTabletParams(header, path, options);
-    header.AddParameter("pivot_keys", BuildYsonNodeFluently().List(keys));
-    RetryRequestWithPolicy(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, header);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &path, &keys, &options] (TMutationId& mutationId) {
+            RawClient_->ReshardTableByPivotKeys(mutationId, path, keys, options);
+        });
 }
 
 void TClient::ReshardTable(
@@ -1121,11 +1117,11 @@ void TClient::ReshardTable(
     const TReshardTableOptions& options)
 {
     CheckShutdown();
-
-    THttpHeader header("POST", "reshard_table");
-    SetTabletParams(header, path, options);
-    header.AddParameter("tablet_count", tabletCount);
-    RetryRequestWithPolicy(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, header);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &path, tabletCount, &options] (TMutationId& mutationId) {
+            RawClient_->ReshardTableByTabletCount(mutationId, path, tabletCount, options);
+        });
 }
 
 void TClient::InsertRows(
@@ -1134,16 +1130,11 @@ void TClient::InsertRows(
     const TInsertRowsOptions& options)
 {
     CheckShutdown();
-
-    THttpHeader header("PUT", "insert_rows");
-    header.SetInputFormat(TFormat::YsonBinary());
-    // TODO: use corresponding raw request
-    header.MergeParameters(SerializeParametersForInsertRows(Context_.Config->Prefix, path, options));
-
-    auto body = NodeListToYsonString(rows);
-    TRequestConfig config;
-    config.IsHeavy = true;
-    RetryRequestWithPolicy(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, header, body, config);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &path, &rows, &options] (TMutationId /*mutationId*/) {
+            RawClient_->InsertRows(path, rows, options);
+        });
 }
 
 void TClient::DeleteRows(
@@ -1162,16 +1153,11 @@ void TClient::TrimRows(
     const TTrimRowsOptions& options)
 {
     CheckShutdown();
-
-    THttpHeader header("POST", "trim_rows");
-    header.AddParameter("trimmed_row_count", rowCount);
-    header.AddParameter("tablet_index", tabletIndex);
-    // TODO: use corresponding raw request
-    header.MergeParameters(NRawClient::SerializeParametersForTrimRows(Context_.Config->Prefix, path, options));
-
-    TRequestConfig config;
-    config.IsHeavy = true;
-    RetryRequestWithPolicy(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, header, {}, config);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &path, tabletIndex, rowCount, &options] (TMutationId /*mutationId*/) {
+            RawClient_->TrimRows(path, tabletIndex, rowCount, options);
+        });
 }
 
 TNode::TListType TClient::LookupRows(
@@ -1180,31 +1166,11 @@ TNode::TListType TClient::LookupRows(
     const TLookupRowsOptions& options)
 {
     CheckShutdown();
-
-    Y_UNUSED(options);
-    THttpHeader header("PUT", "lookup_rows");
-    header.AddPath(AddPathPrefix(path, Context_.Config->ApiVersion));
-    header.SetInputFormat(TFormat::YsonBinary());
-    header.SetOutputFormat(TFormat::YsonBinary());
-
-    header.MergeParameters(BuildYsonNodeFluently().BeginMap()
-        .DoIf(options.Timeout_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("timeout").Value(static_cast<i64>(options.Timeout_->MilliSeconds()));
-        })
-        .Item("keep_missing_rows").Value(options.KeepMissingRows_)
-        .DoIf(options.Versioned_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("versioned").Value(*options.Versioned_);
-        })
-        .DoIf(options.Columns_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("column_names").Value(*options.Columns_);
-        })
-    .EndMap());
-
-    auto body = NodeListToYsonString(keys);
-    TRequestConfig config;
-    config.IsHeavy = true;
-    auto result = RetryRequestWithPolicy(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, header, body, config);
-    return NodeFromYsonString(result.Response, ::NYson::EYsonType::ListFragment).AsList();
+    return RequestWithRetry<TNode::TListType>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &path, &keys, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->LookupRows(path, keys, options);
+        });
 }
 
 TNode::TListType TClient::SelectRows(
@@ -1212,32 +1178,11 @@ TNode::TListType TClient::SelectRows(
     const TSelectRowsOptions& options)
 {
     CheckShutdown();
-
-    THttpHeader header("GET", "select_rows");
-    header.SetInputFormat(TFormat::YsonBinary());
-    header.SetOutputFormat(TFormat::YsonBinary());
-
-    header.MergeParameters(BuildYsonNodeFluently().BeginMap()
-        .Item("query").Value(query)
-        .DoIf(options.Timeout_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("timeout").Value(static_cast<i64>(options.Timeout_->MilliSeconds()));
-        })
-        .DoIf(options.InputRowLimit_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("input_row_limit").Value(*options.InputRowLimit_);
-        })
-        .DoIf(options.OutputRowLimit_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("output_row_limit").Value(*options.OutputRowLimit_);
-        })
-        .Item("range_expansion_limit").Value(options.RangeExpansionLimit_)
-        .Item("fail_on_incomplete_result").Value(options.FailOnIncompleteResult_)
-        .Item("verbose_logging").Value(options.VerboseLogging_)
-        .Item("enable_code_cache").Value(options.EnableCodeCache_)
-    .EndMap());
-
-    TRequestConfig config;
-    config.IsHeavy = true;
-    auto result = RetryRequestWithPolicy(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, header, {}, config);
-    return NodeFromYsonString(result.Response, ::NYson::EYsonType::ListFragment).AsList();
+    return RequestWithRetry<TNode::TListType>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &query, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->SelectRows(query, options);
+        });
 }
 
 void TClient::AlterTableReplica(const TReplicaId& replicaId, const TAlterTableReplicaOptions& options)
@@ -1249,27 +1194,21 @@ void TClient::AlterTableReplica(const TReplicaId& replicaId, const TAlterTableRe
 ui64 TClient::GenerateTimestamp()
 {
     CheckShutdown();
-    THttpHeader header("GET", "generate_timestamp");
-    TRequestConfig config;
-    config.IsHeavy = true;
-    auto requestResult = RetryRequestWithPolicy(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, header, {}, config);
-    return NodeFromYsonString(requestResult.Response).AsUint64();
+    return RequestWithRetry<ui64>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this] (TMutationId /*mutationId*/) {
+            return RawClient_->GenerateTimestamp();
+        });
 }
 
 TAuthorizationInfo TClient::WhoAmI()
 {
     CheckShutdown();
-
-    THttpHeader header("GET", "auth/whoami", /* isApi = */ false);
-    auto requestResult = RetryRequestWithPolicy(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, header);
-    TAuthorizationInfo result;
-
-    NJson::TJsonValue jsonValue;
-    bool ok = NJson::ReadJsonTree(requestResult.Response, &jsonValue, /* throwOnError = */ true);
-    Y_ABORT_UNLESS(ok);
-    result.Login = jsonValue["login"].GetString();
-    result.Realm = jsonValue["realm"].GetString();
-    return result;
+    return RequestWithRetry<TAuthorizationInfo>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this] (TMutationId /*mutationId*/) {
+            return RawClient_->WhoAmI();
+        });
 }
 
 TOperationAttributes TClient::GetOperation(
@@ -1324,7 +1263,12 @@ TJobAttributes TClient::GetJob(
     const TGetJobOptions& options)
 {
     CheckShutdown();
-    return NRawClient::GetJob(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, operationId, jobId, options);
+    auto result = RequestWithRetry<NYson::TYsonString>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &operationId, &jobId, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->GetJob(operationId, jobId, options);
+        });
+    return NRawClient::ParseJobAttributes(NodeFromYsonString(result.AsStringBuf()));
 }
 
 TListJobsResult TClient::ListJobs(
@@ -1332,7 +1276,11 @@ TListJobsResult TClient::ListJobs(
     const TListJobsOptions& options)
 {
     CheckShutdown();
-    return NRawClient::ListJobs(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, operationId, options);
+    return RequestWithRetry<TListJobsResult>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &operationId, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->ListJobs(operationId, options);
+        });
 }
 
 IFileReaderPtr TClient::GetJobInput(
@@ -1340,7 +1288,7 @@ IFileReaderPtr TClient::GetJobInput(
     const TGetJobInputOptions& options)
 {
     CheckShutdown();
-    return NRawClient::GetJobInput(Context_, jobId, options);
+    return RawClient_->GetJobInput(jobId, options);
 }
 
 IFileReaderPtr TClient::GetJobFailContext(
@@ -1349,7 +1297,7 @@ IFileReaderPtr TClient::GetJobFailContext(
     const TGetJobFailContextOptions& options)
 {
     CheckShutdown();
-    return NRawClient::GetJobFailContext(Context_, operationId, jobId, options);
+    return RawClient_->GetJobFailContext(operationId, jobId, options);
 }
 
 IFileReaderPtr TClient::GetJobStderr(
@@ -1358,7 +1306,7 @@ IFileReaderPtr TClient::GetJobStderr(
     const TGetJobStderrOptions& options)
 {
     CheckShutdown();
-    return NRawClient::GetJobStderr(Context_, operationId, jobId, options);
+    return RawClient_->GetJobStderr(operationId, jobId, options);
 }
 
 std::vector<TJobTraceEvent> TClient::GetJobTrace(
@@ -1366,7 +1314,11 @@ std::vector<TJobTraceEvent> TClient::GetJobTrace(
     const TGetJobTraceOptions& options)
 {
     CheckShutdown();
-    return NRawClient::GetJobTrace(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, operationId, options);
+    return RequestWithRetry<std::vector<TJobTraceEvent>>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &operationId, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->GetJobTrace(operationId, options);
+        });
 }
 
 TNode::TListType TClient::SkyShareTable(
@@ -1459,21 +1411,6 @@ ITransactionPingerPtr TClient::GetTransactionPinger()
 TClientPtr TClient::GetParentClientImpl()
 {
     return this;
-}
-
-template <class TOptions>
-void TClient::SetTabletParams(
-    THttpHeader& header,
-    const TYPath& path,
-    const TOptions& options)
-{
-    header.AddPath(AddPathPrefix(path, Context_.Config->Prefix));
-    if (options.FirstTabletIndex_) {
-        header.AddParameter("first_tablet_index", *options.FirstTabletIndex_);
-    }
-    if (options.LastTabletIndex_) {
-        header.AddParameter("last_tablet_index", *options.LastTabletIndex_);
-    }
 }
 
 void TClient::CheckShutdown() const

@@ -525,7 +525,7 @@ def cluster_type_args():
         metavar="CLUSTER_TYPE",
         required=True,
         help="Erasure type for slice",
-        choices=["block-4-2", "mirror-3dc-3-nodes-in-memory", "mirror", "mirror-3dc-9-nodes"],
+        choices=["block-4-2-8-nodes", "mirror-3-dc-3-nodes-in-memory", "mirror-3-dc-3-nodes", "mirror-3-dc-9-nodes"],
     )
     return args
 
@@ -742,13 +742,24 @@ def add_format_mode(modes, walle_provider):
 def add_sample_config_mode(modes):
     def _run(args):
         cluster_type = args.cluster_type
-        if cluster_type == "block-4-2":
-            f = rs.find("/ydbd_slice/baremetal/templates/block-4-2.yaml").decode()
-            if args.output_file is not None and args.output_file != "":
-                with open(args.output_file) as f1:
-                    f1.write(f)
-            else:
-                print(f)
+        template_path = ""
+        if cluster_type == "block-4-2-8-nodes":
+            template_path = "/ydbd_slice/baremetal/templates/block-4-2-8-nodes.yaml"
+        elif cluster_type == "mirror-3-dc-3-nodes-in-memory":
+            pass
+        elif cluster_type == "mirror-3-dc-3-nodes":
+            template_path = "/ydbd_slice/baremetal/templates/mirror-3-dc-3-nodes.yaml"
+        elif cluster_type == "mirror-3-dc-9-nodes":
+            template_path = "/ydbd_slice/baremetal/templates/mirror-3-dc-9-nodes.yaml"
+        else:
+            raise "Unreachable code"  # TODO(shmel1k@): improve error
+
+        f = rs.find(template_path).decode()
+        if args.output_file is not None and args.output_file != "":
+            with open(args.output_file, "w+") as f1:
+                f1.write(f)
+        else:
+            print(f)
 
     mode = modes.add_parser(
         "sample-config",

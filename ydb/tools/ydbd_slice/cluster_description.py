@@ -35,7 +35,7 @@ class ClusterDetails(ClusterDetailsProvider):
         self._cluster_description_file = cluster_description_path
         self._walle_provider = walle_provider
 
-        super(ClusterDetails, self).__init__(self.template, self._walle_provider)
+        super(ClusterDetails, self).__init__(self.template, self._walle_provider, use_new_style_cfg=True)
 
     @property
     def template(self):
@@ -150,11 +150,10 @@ class Configurator(object):
         random.seed(self.RANDOM_SEED)
         all_configs = generator.get_all_configs()
         for cfg_name, cfg_value in all_configs.items():
-            if cfg_name in ("config.yaml", "kikimr.cfg", "dynamic_server.cfg"):
-                write_to_file(
-                    os.path.join(dir, cfg_name),
-                    cfg_value
-                )
+            write_to_file(
+                os.path.join(dir, cfg_name),
+                cfg_value
+            )
 
         write_to_file(
             os.path.join(dir, "key.txt"),

@@ -175,7 +175,7 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
     THashMap<TString, NYql::TKikimrPathId> sequences;
 
     for (const auto& sequenceDesc : entry.Sequences) {
-        sequences[sequenceDesc.GetName()] = 
+        sequences[sequenceDesc.GetName()] =
             NYql::TKikimrPathId(sequenceDesc.GetPathId().GetOwnerId(), sequenceDesc.GetPathId().GetLocalId());
     }
 
@@ -187,7 +187,7 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         const TString typeName = GetTypeName(NScheme::TTypeInfoMod{columnDesc.PType, columnDesc.PTypeMod});
         auto defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED;
         NYql::TKikimrPathId defaultFromSequencePathId = {};
-        
+
         if (columnDesc.IsDefaultFromSequence()) {
             defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE;
             auto sequenceIt = sequences.find(columnDesc.DefaultFromSequence);
@@ -196,7 +196,7 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         } else if (columnDesc.IsDefaultFromLiteral()) {
             defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
         }
-        
+
         tableMeta->Columns.emplace(
             columnDesc.Name,
             NYql::TKikimrColumnMetadata(
@@ -400,11 +400,21 @@ TString GetDebugString(const std::pair<NKikimr::TIndexId, TString>& id) {
     return TStringBuilder() << " Path: " << id.second  << " TableId: " << id.first;
 }
 
-void UpdateMetadataIfSuccess(NYql::TKikimrTableMetadataPtr ptr, size_t idx, const TTableMetadataResult& value) {
-    if (value.Success()) {
-        ptr->SecondaryGlobalIndexMetadata[idx] = value.Metadata;
+void UpdateMetadataIfSuccess(NYql::TKikimrTableMetadataPtr& implTable, const TTableMetadataResult& value) {
+    if (!value.Success()) {
+        return;
     }
-
+    auto nextImplTable = value.Metadata;
+    if (!implTable) {
+        implTable = std::move(nextImplTable);
+        return;
+    }
+    YQL_ENSURE(!implTable->Next);
+    YQL_ENSURE(implTable->Name != nextImplTable->Name);
+    if (implTable->Name > value.Metadata->Name) {
+        std::swap(implTable, nextImplTable);
+    }
+    implTable->Next = std::move(nextImplTable);
 }
 
 void SetError(TTableMetadataResult& externalDataSourceMetadata, const TString& error) {
@@ -621,25 +631,25 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
     TVector<NThreading::TFuture<TGenericResult>> children;
     children.reserve(indexesCount);
 
-    tableMetadata->SecondaryGlobalIndexMetadata.resize(indexesCount);
+    tableMetadata->ImplTables.resize(indexesCount);
     const ui64 tableOwnerId = tableMetadata->PathId.OwnerId();
 
     for (size_t i = 0; i < indexesCount; i++) {
         const auto& index = tableMetadata->Indexes[i];
-        const auto indexTablePaths = NSchemeHelpers::CreateIndexTablePath(tableName, index.Type, index.Name);
-        for (const auto& indexTablePath : indexTablePaths) {
+        auto& implTable = tableMetadata->ImplTables[i];
+        const auto implTablePaths = NSchemeHelpers::CreateIndexTablePath(tableName, index.Type, index.Name);
+        for (const auto& implTablePath : implTablePaths) {
             if (!index.SchemaVersion) {
                 LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load index metadata without schema version check index: " << index.Name);
                 children.push_back(
-                    LoadTableMetadata(cluster, indexTablePath,
+                    LoadTableMetadata(cluster, implTablePath,
                         TLoadTableMetadataSettings().WithPrivateTables(true), database, userToken)
-                        .Apply([i, tableMetadata](const TFuture<TTableMetadataResult>& result) {
+                        .Apply([&implTable](const TFuture<TTableMetadataResult>& result) {
                             auto value = result.GetValue();
-                            UpdateMetadataIfSuccess(tableMetadata, i, value);
+                            UpdateMetadataIfSuccess(implTable, value);
                             return static_cast<TGenericResult>(value);
                         })
                 );
-
             } else {
                 LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load index metadata with schema version check"
                     << "index: " << index.Name
@@ -650,10 +660,10 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
                 auto ownerId = index.PathOwnerId ? index.PathOwnerId : tableOwnerId; //for compat with 20-2
                 children.push_back(
                     LoadIndexMetadataByPathId(cluster,
-                        NKikimr::TIndexId(ownerId, index.LocalPathId, index.SchemaVersion), indexTablePath, database, userToken)
-                        .Apply([i, tableMetadata](const TFuture<TTableMetadataResult>& result) {
+                        NKikimr::TIndexId(ownerId, index.LocalPathId, index.SchemaVersion), implTablePath, database, userToken)
+                        .Apply([&implTable](const TFuture<TTableMetadataResult>& result) {
                             auto value = result.GetValue();
-                            UpdateMetadataIfSuccess(tableMetadata, i, value);
+                            UpdateMetadataIfSuccess(implTable, value);
                             return static_cast<TGenericResult>(value);
                         })
                 );
@@ -909,6 +919,9 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                     case EKind::KindIndex: {
                         Y_ENSURE(entry.ListNodeEntry, "expected children list");
                         for (const auto& child : entry.ListNodeEntry->Children) {
+                            if (!table.EndsWith(child.Name)) {
+                                continue;
+                            }
                             TIndexId pathId = TIndexId(child.PathId, child.SchemaVersion);
 
                             LoadTableMetadataCache(cluster, std::make_pair(pathId, table), settings, database, userToken)
@@ -916,6 +929,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             {
                                 promise.SetValue(result.GetValue());
                             });
+                            break;
                         }
                         break;
                     }

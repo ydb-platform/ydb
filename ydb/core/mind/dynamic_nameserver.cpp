@@ -141,7 +141,8 @@ void TDynamicNameserver::Bootstrap(const TActorContext &ctx)
 void TDynamicNameserver::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     Y_ABORT_UNLESS(ev->Get()->Config);
     const auto& config = *ev->Get()->Config;
-    if (config.GetBlobStorageConfig().HasAutoconfigSettings()) {
+    if (config.HasSelfManagementConfig() && config.GetSelfManagementConfig().GetEnabled()) {
+        // self-management through distconf is enabled and we are operating based on their tables, so apply them now
         auto newStaticConfig = BuildNameserverTable(config);
         if (StaticConfig->StaticNodeTable != newStaticConfig->StaticNodeTable) {
             StaticConfig = std::move(newStaticConfig);

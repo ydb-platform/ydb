@@ -22,10 +22,10 @@
 * [Добавлено](https://github.com/ydb-platform/ydb-embedded-ui/pull/889) отображение текущей версии YDB UI.
 * [Добавлена](https://github.com/ydb-platform/ydb-embedded-ui/issues/944) возможность сохранения запроса из редактора горячими клавишами.
 * Поддержано [создание директорий из UI](https://github.com/ydb-platform/ydb-embedded-ui/issues/958).
-* [Контрол авторефреша](https://github.com/ydb-platform/ydb-embedded-ui/pull/976) на всех страницах.
+* [Добавлена возможность](https://github.com/ydb-platform/ydb-embedded-ui/pull/976) задать интервал фонового обновления данных на всех страницах.
 * [Улучшено](https://github.com/ydb-platform/ydb-embedded-ui/issues/955) отображения ACL.
-* Включен автокомплит по умолчанию.
-* Добавлена поддержка view.
+* Включен автокомплит в редакторе запросов по умолчанию.
+* [Добавлена](https://github.com/ydb-platform/ydb-embedded-ui/pull/834) поддержка view.
 
 
 **Исправления ошибок:**

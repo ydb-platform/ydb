@@ -1416,9 +1416,9 @@ public:
         TNodeId NodeId;
         TNodeLocation Location;
 
-        THostRecord(TEvInterconnect::TNodeInfo nodeInfo)
+        THostRecord(const TEvInterconnect::TNodeInfo& nodeInfo)
             : NodeId(nodeInfo.NodeId)
-            , Location(std::move(nodeInfo.Location))
+            , Location(nodeInfo.Location)
         {}
 
         THostRecord(const NKikimrBlobStorage::TNodeIdentifier& node)

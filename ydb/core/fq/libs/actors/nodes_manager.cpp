@@ -325,7 +325,6 @@ private:
 
             auto nodesInfo = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
             nodesInfo->reserve(res.nodes().size());
-            THolder<TEvInterconnect::TEvNodesInfo> nameServiceUpdateReq(new TEvInterconnect::TEvNodesInfo(nodesInfo));
 
             Peers.clear();
             std::set<ui32> nodeIds; // may be not unique
@@ -358,6 +357,7 @@ private:
 
             LOG_T("Send NodeInfo with size: " << nodesInfo->size() << " to DynamicNameserver");
             if (!nodesInfo->empty()) {
+                THolder<TEvInterconnect::TEvNodesInfo> nameServiceUpdateReq(new TEvInterconnect::TEvNodesInfo(nodesInfo));
                 Send(GetNameserviceActorId(), nameServiceUpdateReq.Release());
             }
         } catch (yexception &e) {

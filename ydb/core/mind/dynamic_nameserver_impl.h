@@ -69,6 +69,19 @@ struct TDynamicConfig : public TThrRefBase {
 
 using TDynamicConfigPtr = TIntrusivePtr<TDynamicConfig>;
 
+class TListNodesCache : public TSimpleRefCount<TListNodesCache> {
+public:
+    TListNodesCache();
+
+    void Update(TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr newNodes, TInstant newExpire);
+    void Invalidate();
+    bool NeedUpdate(TInstant now) const;
+    TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr GetNodes() const;
+private:
+    TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr Nodes;
+    TInstant Expire;
+};
+
 class TDynamicNodeResolverBase : public TActorBootstrapped<TDynamicNodeResolverBase> {
 public:
     using TBase = TActorBootstrapped<TDynamicNodeResolverBase>;
@@ -78,12 +91,12 @@ public:
     }
 
     TDynamicNodeResolverBase(TActorId owner, ui32 nodeId, TDynamicConfigPtr config,
-                             std::shared_ptr<bool> needUpdateListNodesCache,
+                             TIntrusivePtr<TListNodesCache> listNodesCache,
                              TAutoPtr<IEventHandle> origRequest, TInstant deadline)
         : Owner(owner)
         , NodeId(nodeId)
         , Config(config)
-        , NeedUpdateListNodesCache(needUpdateListNodesCache)
+        , ListNodesCache(listNodesCache)
         , OrigRequest(origRequest)
         , Deadline(deadline)
     {
@@ -120,7 +133,7 @@ protected:
     TActorId Owner;
     ui32 NodeId;
     TDynamicConfigPtr Config;
-    std::shared_ptr<bool> NeedUpdateListNodesCache;
+    TIntrusivePtr<TListNodesCache> ListNodesCache;
     TAutoPtr<IEventHandle> OrigRequest;
     const TInstant Deadline;
 
@@ -131,9 +144,9 @@ private:
 class TDynamicNodeResolver : public TDynamicNodeResolverBase {
 public:
     TDynamicNodeResolver(TActorId owner, ui32 nodeId, TDynamicConfigPtr config,
-                         std::shared_ptr<bool> needUpdateListNodesCache,
+                         TIntrusivePtr<TListNodesCache> listNodesCache,
                          TAutoPtr<IEventHandle> origRequest, TInstant deadline)
-        : TDynamicNodeResolverBase(owner, nodeId, config, needUpdateListNodesCache, origRequest, deadline)
+        : TDynamicNodeResolverBase(owner, nodeId, config, listNodesCache, origRequest, deadline)
     {
     }
 
@@ -144,9 +157,9 @@ public:
 class TDynamicNodeSearcher : public TDynamicNodeResolverBase {
 public:
     TDynamicNodeSearcher(TActorId owner, ui32 nodeId, TDynamicConfigPtr config,
-                         std::shared_ptr<bool> needUpdateListNodesCache,
+                         TIntrusivePtr<TListNodesCache> listNodesCache,
                          TAutoPtr<IEventHandle> origRequest, TInstant deadline)
-        : TDynamicNodeResolverBase(owner, nodeId, config, needUpdateListNodesCache, origRequest, deadline)
+        : TDynamicNodeResolverBase(owner, nodeId, config, listNodesCache, origRequest, deadline)
     {
     }
 
@@ -185,8 +198,7 @@ public:
 
     TDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup> &setup, ui32 resolvePoolId)
         : StaticConfig(setup)
-        , ListNodesCache(nullptr)
-        , NeedUpdateListNodesCache(std::make_shared<bool>(true))
+        , ListNodesCache(MakeIntrusive<TListNodesCache>())
         , ResolvePoolId(resolvePoolId)
     {
         Y_ABORT_UNLESS(StaticConfig->IsEntriesUnique());
@@ -265,9 +277,7 @@ private:
     TIntrusivePtr<TTableNameserverSetup> StaticConfig;
     std::array<TDynamicConfigPtr, DOMAINS_COUNT> DynamicConfigs;
     TVector<TActorId> ListNodesQueue;
-
-    TIntrusiveVector<TEvInterconnect::TNodeInfo>::TPtr ListNodesCache;
-    std::shared_ptr<bool> NeedUpdateListNodesCache;
+    TIntrusivePtr<TListNodesCache> ListNodesCache;
 
     std::array<TActorId, DOMAINS_COUNT> NodeBrokerPipes;
     // When ListNodes requests are sent to NodeBroker tablets this

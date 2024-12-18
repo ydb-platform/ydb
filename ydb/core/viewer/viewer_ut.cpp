@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
     };
 
     void ChangeListNodes(TEvInterconnect::TEvNodesInfo::TPtr* ev, int nodesTotal) {
-        auto& nodes = (*ev)->Get()->Nodes;
+        auto& nodes = const_cast<TVector<TEvInterconnect::TNodeInfo>&>((*ev)->Get()->Nodes);
 
         auto sample = nodes[0];
         nodes.clear();

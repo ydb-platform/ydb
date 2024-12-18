@@ -99,7 +99,7 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
         if (!tier.HasEvictToExternalStorage()) {
             continue;
         }
-        const TString& tierPathString = tier.GetEvictToExternalStorage().GetStorageName();
+        const TString& tierPathString = tier.GetEvictToExternalStorage().GetStorage();
         TPath tierPath = TPath::Resolve(tierPathString, context.SS);
         if (!tierPath.IsResolved() || tierPath.IsDeleted() || tierPath.IsUnderDeleting()) {
             errors.AddError("Object not found: " + tierPathString);

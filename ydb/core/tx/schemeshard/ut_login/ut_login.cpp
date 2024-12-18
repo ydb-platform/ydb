@@ -217,7 +217,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
             AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
             TestModificationResults(runtime, txId, TVector<TExpectedResult>{{
-                missingOk ? NKikimrScheme::StatusSuccess : NKikimrScheme::StatusPreconditionFailed
+                missingOk ? NKikimrScheme::StatusSuccess : NKikimrScheme::StatusPreconditionFailed,
+                missingOk ? "" : "User not found"
             }});
         }
     }
@@ -244,7 +245,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
 
         CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1",
-            TVector<TExpectedResult>{{NKikimrScheme::StatusPreconditionFailed}});
+            TVector<TExpectedResult>{{NKikimrScheme::StatusPreconditionFailed, "User user1 owns /MyRoot/Dir1/DirSub1 and can't be removed"}});
         
         // check user still exists and has their rights:
         {
@@ -272,7 +273,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestEnv env(runtime);
         runtime.GetAppData().AuthConfig.SetEnableLoginAuthentication(false);
         ui64 txId = 100;
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusPreconditionFailed}});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusPreconditionFailed, "Login authentication is disabled"}});
         auto resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Login authentication is disabled");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");

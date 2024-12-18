@@ -1,7 +1,5 @@
 {% note alert %}
 
-{% include [only_allow_for_oltp_text](only_allow_for_oltp_text.md) %}
-
 {% include [not_allow_for_olap_text](not_allow_for_olap_text.md) %}
 
 {% endnote %}

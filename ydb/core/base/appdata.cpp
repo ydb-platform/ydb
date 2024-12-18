@@ -17,6 +17,7 @@
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/data_integrity_trails.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/replication.pb.h>
@@ -63,6 +64,7 @@ struct TAppData::TImpl {
     NKikimrSharedCache::TSharedCacheConfig SharedCacheConfig;
     NKikimrConfig::TMetadataCacheConfig MetadataCacheConfig;
     NKikimrReplication::TReplicationDefaults ReplicationConfig;
+    NKikimrProto::TDataIntegrityTrailsConfig DataIntegrityTrailsConfig;
 };
 
 TAppData::TAppData(
@@ -116,6 +118,7 @@ TAppData::TAppData(
     , SharedCacheConfig(Impl->SharedCacheConfig)
     , MetadataCacheConfig(Impl->MetadataCacheConfig)
     , ReplicationConfig(Impl->ReplicationConfig)
+    , DataIntegrityTrailsConfig(Impl->DataIntegrityTrailsConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
 {}
 

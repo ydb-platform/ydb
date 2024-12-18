@@ -7,7 +7,7 @@ void TTablesStorage::OnAddObject(const TPathId& pathId, TColumnTableInfo::TPtr o
         std::optional<TString> usedExternalStorage;
         switch (tier.GetActionCase()) {
             case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
-                usedExternalStorage = tier.GetEvictToExternalStorage().GetStorageName();
+                usedExternalStorage = tier.GetEvictToExternalStorage().GetStorage();
                 break;
             case NKikimrSchemeOp::TTTLSettings_TTier::kDelete:
             case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:
@@ -27,7 +27,7 @@ void TTablesStorage::OnRemoveObject(const TPathId& pathId, TColumnTableInfo::TPt
         std::optional<TString> usedExternalStorage;
         switch (tier.GetActionCase()) {
             case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
-                usedExternalStorage = tier.GetEvictToExternalStorage().GetStorageName();
+                usedExternalStorage = tier.GetEvictToExternalStorage().GetStorage();
                 break;
             case NKikimrSchemeOp::TTTLSettings_TTier::kDelete:
             case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:

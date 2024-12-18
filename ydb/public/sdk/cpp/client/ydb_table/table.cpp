@@ -1491,6 +1491,12 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const TString& table, EDataForma
     return Impl_->BulkUpsert(table, format, data, schema, settings);
 }
 
+TAsyncBulkUpsertResult TTableClient::BulkUpsert(const TVector<TString> &tables, const TVector<ui64> &numrows,
+        const TString& data, const TString& schema, const TBulkUpsertSettings& settings)
+{
+    return Impl_->BulkUpsert(tables, numrows, data, schema, settings);
+}
+
 TAsyncReadRowsResult TTableClient::ReadRows(const TString& table, TValue&& rows, const TVector<TString>& columns,
     const TReadRowsSettings& settings)
 {

@@ -47,6 +47,12 @@ message Permissions {
     repeated string permission_names = 2;
 }
 
+message ConsistencyShardingTablet {
+    uint64 tablet_id = 1;
+    uint64 left_closed = 2;
+    uint64 right_opened = 3;
+}
+
 message Entry {
     enum Type {
         TYPE_UNSPECIFIED = 0;
@@ -84,6 +90,8 @@ message Entry {
 
     // Virtual timestamp when the object was created
     VirtualTimestamp created_at = 9;
+
+    repeated ConsistencyShardingTablet sharding_info = 10;
 }
 
 message ListDirectoryResult {

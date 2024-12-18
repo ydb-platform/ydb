@@ -102,9 +102,9 @@ namespace NTxProxy {
 
 TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
     const NLongTxService::TLongTxId& longTxId, const TString& dedupId,
-    const TString& databaseName, const TString& path,
+    const TString& databaseName, const std::vector<TString>& tables, const std::vector<ui64> &numrows,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-    std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite);
+    std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite, const ui32 cookie);
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
@@ -207,7 +207,7 @@ public:
         StartTime = TAppData::TimeProvider->Now();
         ImmediateWrite = AppData(ctx)->FeatureFlags.GetEnableImmediateWritingOnBulkUpsert();
         OnBeforeStart(ctx);
-        ResolveTable(GetTable(), ctx);
+        ResolveTables(ctx);
     }
 
     void Die(const NActors::TActorContext& ctx) override {
@@ -286,7 +286,9 @@ private:
     }
 
     virtual TString GetDatabase() = 0;
-    virtual const TString& GetTable() = 0;
+    virtual const TString &GetTable(ui32 idx) = 0;
+    virtual ui64 GetTableSize(ui64 idx) = 0;
+    virtual ui32 GetNumTables() = 0;
     virtual const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const = 0;
     virtual bool CheckAccess(TString& errorMessage) = 0;
     virtual TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const = 0;
@@ -318,7 +320,7 @@ private:
     }
 
 private:
-    STFUNC(StateWaitResolveTable) {
+    STFUNC(StateWaitResolveTables) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
@@ -330,7 +332,7 @@ private:
     }
 
     TStringBuilder LogPrefix() {
-        return TStringBuilder() << "Bulk upsert to table '" << GetTable() << "'";
+        return TStringBuilder() << "Bulk upsert to tables '" << GetTable(0) << "'"; // TODO
     }
 
     static bool SameDstType(NScheme::TTypeInfo type1, NScheme::TTypeInfo type2, bool allowConvert) {
@@ -354,6 +356,7 @@ private:
     }
 
     bool BuildSchema(const NActors::TActorContext& ctx, TString& errorMessage, bool makeYqbSchema) {
+        // TODO: validate each column has identical schema (or in the same columnstore)
         Y_UNUSED(ctx);
         Y_ABORT_UNLESS(ResolveNamesResult);
 
@@ -558,29 +561,33 @@ private:
         return true;
     }
 
-    void ResolveTable(const TString& table, const NActors::TActorContext& ctx) {
+    void ResolveTables(const NActors::TActorContext& ctx) {
         // TODO: check all params;
         // Cerr << *Request->GetProtoRequest() << Endl;
 
         AuditContextStart();
 
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
-        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-        entry.Path = ::NKikimr::SplitPath(table);
-        if (entry.Path.empty()) {
-            return ReplyWithError(
-                Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "Bulk upsert. Invalid table path specified: '" << table << "'", ctx);
+        
+        for(ui32 i = 0; i<GetNumTables(); i++) {
+            const TString &table = GetTable(i);
+            NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+            entry.Path = ::NKikimr::SplitPath(table);
+            if (entry.Path.empty()) {
+                return ReplyWithError(
+                    Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "Bulk upsert. Invalid table path specified: '" << table << "'", ctx);
+                }
+            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
+            entry.SyncVersion = true;
+            entry.ShowPrivatePath = AllowWriteToPrivateTable;
+            request->ResultSet.emplace_back(entry);
         }
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
-        entry.SyncVersion = true;
-        entry.ShowPrivatePath = AllowWriteToPrivateTable;
-        request->ResultSet.emplace_back(entry);
         ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, 0, Span.GetTraceId());
 
         TimeoutTimerActorId = CreateLongTimer(ctx, Timeout,
             new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
 
-        TBase::Become(&TThis::StateWaitResolveTable);
+        TBase::Become(&TThis::StateWaitResolveTables);
     }
 
     void HandleTimeout(const TActorContext& ctx) {
@@ -594,18 +601,28 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request;
 
-        Y_ABORT_UNLESS(request.ResultSet.size() == 1);
-        const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = request.ResultSet.front();
+        const NSchemeCache::TSchemeCacheNavigate::TEntry& base_entry = request.ResultSet.front();
 
-        if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-            return ReplyWithError(entry.Status, ctx);
+
+        for(auto &entry: request.ResultSet) {
+            if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                return ReplyWithError(entry.Status, ctx);
+            }
+
+            if (entry.TableId.IsSystemView()) {
+                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "is not supported. Table is a system view", ctx);
+            }
+
+            if(entry.Kind != base_entry.Kind) {
+                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "All tables in MultiBulkUpsert mode should have identical schema" ,ctx);
+            }
         }
 
-        TableKind = entry.Kind;
+        TableKind = base_entry.Kind;
         bool isColumnTable = (TableKind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
 
-        if (entry.TableId.IsSystemView()) {
-            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "is not supported. Table is a system view", ctx);
+        if(request.ResultSet.size() > 1) {
+            Y_ABORT_UNLESS(isColumnTable);
         }
 
         // TODO: fast fail for all tables?
@@ -821,10 +838,18 @@ private:
         Y_ABORT_UNLESS(Batch);
 
         TBase::Become(&TThis::StateWaitWriteBatchResult);
-        ui32 batchNo = 0;
-        TString dedupId = ToString(batchNo);
+
+        std::vector<TString> tables;
+        std::vector<ui64> numrows;
+
+        for(ui32 i = 0; i<GetNumTables(); i++) {
+            tables.emplace_back(GetTable(i));
+            numrows.emplace_back(GetTableSize(i));
+        }
+
+        TString dedupId = ToString(0);
         DoLongTxWriteSameMailbox(
-            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues, ImmediateWrite);
+                ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), tables, numrows, ResolveNamesResult, Batch, Issues, ImmediateWrite, 0);
     }
 
     void RollbackLongTx(const TActorContext& ctx) {
@@ -850,7 +875,8 @@ private:
                 RaiseIssue(issue);
             }
             return ReplyWithResult(status, ctx);
-        } else if (ImmediateWrite) {
+        }
+        if (ImmediateWrite) {
             return ReplyWithResult(status, ctx);
         } else {
             CommitLongTx(ctx);

@@ -1032,6 +1032,20 @@ void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::
 void ConvertDirectoryEntry(const NKikimrSchemeOp::TPathDescription& from, Ydb::Scheme::Entry* to, bool processAcl) {
     ConvertDirectoryEntry(from.GetSelf(), to, processAcl);
 
+    if(from.has_columntabledescription()) {
+        auto &desc = from.GetColumnTableDescription();
+        const auto& sharding = desc.GetSharding();
+        auto &tabletInfo = sharding.GetHashSharding().GetTabletsForConsistency();
+
+        for(auto &tablet: tabletInfo) {
+            Ydb::Scheme::ConsistencyShardingTablet toTablet;
+            toTablet.set_tablet_id(tablet.GetHashIntervalLeftClosed());
+            toTablet.set_left_closed(tablet.GetHashIntervalRightOpened());
+
+            *to->add_sharding_info() = toTablet;
+        }
+    }
+
     switch (from.GetSelf().GetPathType()) {
     case NKikimrSchemeOp::EPathTypeTable:
         to->set_size_bytes(from.GetTableStats().GetDataSize() + from.GetTableStats().GetIndexSize());

@@ -32,11 +32,12 @@ protected:
     const bool NoTxWrite = false;
 
 public:
-    TLongTxWriteBase(const TString& databaseName, const TString& path, const TString& token, const TLongTxId& longTxId, const TString& dedupId,
+    TLongTxWriteBase(const TString& databaseName, const std::vector<TString>& tables, const std::vector<ui64> &numrows, const TString& token, const TLongTxId& longTxId, const TString& dedupId,
         const bool noTxWrite)
         : NoTxWrite(noTxWrite)
         , DatabaseName(databaseName)
-        , Path(path)
+        , Tables(tables)
+        , NumRows(numrows)
         , DedupId(dedupId)
         , LongTxId(longTxId)
         , ActorSpan(0, NWilson::TTraceId::NewTraceId(0, Max<ui32>()), "TLongTxWriteBase") {
@@ -57,69 +58,87 @@ protected:
             return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "There was an error during table query");
         }
 
-        auto& entry = resp.ResultSet[0];
+        std::unordered_map<ui64, std::vector<NEvWrite::TWriteInfo>> splits;
 
-        if (UserToken && entry.SecurityObject) {
-            const ui32 access = NACLib::UpdateRow;
-            if (!entry.SecurityObject->CheckAccess(access, *UserToken)) {
-                RaiseIssue(MakeIssue(
-                    NKikimrIssues::TIssuesIds::ACCESS_DENIED, TStringBuilder() << "User has no permission to perform writes to this table"
-                                                                               << " user: " << UserToken->GetUserSID() << " path: " << Path));
-                return ReplyError(Ydb::StatusIds::UNAUTHORIZED);
-            }
-        }
+        // TODO: GetSize ignores slices, so I temporary use it here to get the size of the full batch 
+        InFlightSize += ExtractDataAccessor(0)->GetSize();
 
-        auto accessor = ExtractDataAccessor();
-        AFL_VERIFY(!InFlightSize);
-        InFlightSize = accessor->GetSize();
         const i64 sizeInFlight = MemoryInFlight.Add(InFlightSize);
         if (TLimits::MemoryInFlightWriting < (ui64)sizeInFlight && sizeInFlight != InFlightSize) {
             return ReplyError(Ydb::StatusIds::OVERLOADED, "a lot of memory in flight");
         }
-        if (NCSIndex::TServiceOperator::IsEnabled()) {
-            TBase::Send(
-                NCSIndex::MakeServiceId(TBase::SelfId().NodeId()), new NCSIndex::TEvAddData(accessor->GetDeserializedBatch(), Path,
-                                                                       std::make_shared<NCSIndex::TNaiveDataUpsertController>(TBase::SelfId())));
-        } else {
-            IndexReady = true;
-        }
 
-        auto shardsSplitter = NEvWrite::IShardsSplitter::BuildSplitter(entry);
-        if (!shardsSplitter) {
-            return ReplyError(Ydb::StatusIds::BAD_REQUEST, "Shard splitter not implemented for table kind");
-        }
 
-        auto initStatus = shardsSplitter->SplitData(entry, *accessor);
-        if (!initStatus.Ok()) {
-            return ReplyError(initStatus.GetStatus(), initStatus.GetErrorMessage());
-        }
-        accessor.reset();
-
-        const auto& splittedData = shardsSplitter->GetSplitData();
-        const auto& shardsInRequest = splittedData.GetShardRequestsCount();
-        InternalController =
-            std::make_shared<NEvWrite::TWritersController>(shardsInRequest, this->SelfId(), LongTxId, NoTxWrite);
-
-        InternalController->GetCounters()->OnSplitByShards(shardsInRequest);
-        ui32 sumBytes = 0;
-        ui32 rowsCount = 0;
-        ui32 writeIdx = 0;
-        for (auto& [shard, infos] : splittedData.GetShardsInfo()) {
-            for (auto&& shardInfo : infos) {
-                InternalController->GetCounters()->OnRequest(shardInfo->GetRowsCount(), shardInfo->GetBytes());
-                sumBytes += shardInfo->GetBytes();
-                rowsCount += shardInfo->GetRowsCount();
-                this->Register(
-                    new NEvWrite::TShardWriter(shard, shardsSplitter->GetTableId(), shardsSplitter->GetSchemaVersion(), DedupId, shardInfo,
-                        ActorSpan, InternalController, ++writeIdx, NEvWrite::EModificationType::Replace, NoTxWrite, TDuration::Seconds(20)));
+        int tableNum = 0;
+        for(auto& entry: resp.ResultSet) {
+            if (UserToken && entry.SecurityObject) {
+                const ui32 access = NACLib::UpdateRow;
+                if (!entry.SecurityObject->CheckAccess(access, *UserToken)) {
+                    // RaiseIssue(MakeIssue(
+                    //     NKikimrIssues::TIssuesIds::ACCESS_DENIED, TStringBuilder() << "User has no permission to perform writes to this table"
+                    //                                                                << " user: " << UserToken->GetUserSID() << " path: " << Path));
+                    return ReplyError(Ydb::StatusIds::UNAUTHORIZED);
+                }
             }
+
+            auto accessor = ExtractDataAccessor(tableNum);
+
+            if (NCSIndex::TServiceOperator::IsEnabled()) {
+                // AFL_VERIFY(false);
+                // TBase::Send(
+                //     NCSIndex::MakeServiceId(TBase::SelfId().NodeId()), new NCSIndex::TEvAddData(accessor->GetDeserializedBatch(), Tables, NumRows,
+                //                                                            std::make_shared<NCSIndex::TNaiveDataUpsertController>(TBase::SelfId())));
+            } else {
+                IndexReady = true;
+            }
+
+            auto shardsSplitter = NEvWrite::IShardsSplitter::BuildSplitter(entry);
+            if (!shardsSplitter) {
+                return ReplyError(Ydb::StatusIds::BAD_REQUEST, "Shard splitter not implemented for table kind");
+            }
+
+            auto initStatus = shardsSplitter->SplitData(entry, *accessor);
+            if (!initStatus.Ok()) {
+                return ReplyError(initStatus.GetStatus(), initStatus.GetErrorMessage());
+            }
+            accessor.reset();
+
+            const auto& splittedData = shardsSplitter->GetSplitData();
+
+            ui64 tableId = entry.TableId.PathId.LocalPathId;
+
+            for (auto& [shard, infos] : splittedData.GetShardsInfo()) {
+                for (auto&& shardInfo : infos) {
+                    NEvWrite::TWriteInfo writeInfo;
+                    writeInfo.TableId = tableId;
+                    writeInfo.SchemaVersion = shardsSplitter->GetSchemaVersion();
+                    writeInfo.Data = shardInfo;
+                    splits[shard].push_back(writeInfo);
+                }
+            }
+
+            tableNum++;
         }
-        pSpan.Attribute("affected_shards_count", (long)splittedData.GetShardsInfo().size());
-        pSpan.Attribute("bytes", (long)sumBytes);
-        pSpan.Attribute("rows", (long)rowsCount);
-        pSpan.Attribute("shards_count", (long)splittedData.GetShardsCount());
-        AFL_DEBUG(NKikimrServices::LONG_TX_SERVICE)("affected_shards_count", splittedData.GetShardsInfo().size())(
-            "shards_count", splittedData.GetShardsCount())("path", Path)("shards_info", splittedData.ShortLogString(32));
+
+        ui64 writeIdx = 0;
+
+        InternalController =
+                std::make_shared<NEvWrite::TWritersController>(splits.size(), this->SelfId(), LongTxId, NoTxWrite);
+
+        InternalController->GetCounters()->OnSplitByShards(splits.size());
+
+        for(auto &[shard, infos]: splits) {
+            this->Register(
+                new NEvWrite::TShardWriter(shard, std::move(infos), DedupId,
+                    ActorSpan, InternalController, writeIdx++, NEvWrite::EModificationType::Replace, NoTxWrite, TDuration::Seconds(20)));
+        }
+
+        // pSpan.Attribute("affected_shards_count", (long)splittedData.GetShardsInfo().size());
+        // pSpan.Attribute("bytes", (long)sumBytes);
+        // pSpan.Attribute("rows", (long)rowsCount);
+        // pSpan.Attribute("shards_count", (long)splittedData.GetShardsCount());
+        // AFL_DEBUG(NKikimrServices::LONG_TX_SERVICE)("affected_shards_count", splittedData.GetShardsInfo().size())(
+        //     "shards_count", splittedData.GetShardsCount())("path", Path)("shards_info", splittedData.ShortLogString(32));
         this->Become(&TThis::StateMain);
     }
 
@@ -185,14 +204,15 @@ private:
     }
 
 protected:
-    virtual std::unique_ptr<NEvWrite::IShardsSplitter::IEvWriteDataAccessor> ExtractDataAccessor() = 0;
+    virtual std::unique_ptr<NEvWrite::IShardsSplitter::IEvWriteDataAccessor> ExtractDataAccessor(int table) = 0;
     virtual void RaiseIssue(const NYql::TIssue& issue) = 0;
     virtual void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message = TString()) = 0;
     virtual void ReplySuccess() = 0;
 
 protected:
     const TString DatabaseName;
-    const TString Path;
+    const std::vector<TString> Tables;
+    const std::vector<ui64> NumRows;
     const TString DedupId;
     TLongTxId LongTxId;
 
@@ -230,19 +250,17 @@ class TLongTxWriteInternal: public TLongTxWriteBase<TLongTxWriteInternal> {
         }
     };
 
-    std::unique_ptr<NEvWrite::IShardsSplitter::IEvWriteDataAccessor> DataAccessor;
-
 public:
     explicit TLongTxWriteInternal(const TActorId& replyTo, const TLongTxId& longTxId, const TString& dedupId, const TString& databaseName,
-        const TString& path, std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-        std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite)
-        : TBase(databaseName, path, TString(), longTxId, dedupId, noTxWrite)
+        const std::vector<TString>& tables, const std::vector<ui64> &numrows, std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
+        std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite, const ui32 cookie)
+        : TBase(databaseName, tables, numrows, TString(), longTxId, dedupId, noTxWrite)
         , ReplyTo(replyTo)
         , NavigateResult(navigateResult)
         , Batch(batch)
-        , Issues(issues) {
+        , Issues(issues)
+        , Cookie(cookie) {
         Y_ABORT_UNLESS(Issues);
-        DataAccessor = std::make_unique<TParsedBatchData>(Batch);
     }
 
     void Bootstrap() {
@@ -251,9 +269,12 @@ public:
     }
 
 protected:
-    std::unique_ptr<NEvWrite::IShardsSplitter::IEvWriteDataAccessor> ExtractDataAccessor() override {
-        AFL_VERIFY(DataAccessor);
-        return std::move(DataAccessor);
+    std::unique_ptr<NEvWrite::IShardsSplitter::IEvWriteDataAccessor> ExtractDataAccessor(int table) override {
+        size_t start = 0;
+        for(int i=0; i<table;i++) {
+            start += NumRows[i];
+        }
+        return std::make_unique<TParsedBatchData>(Batch->Slice(start, NumRows[table]));
     }
 
     void RaiseIssue(const NYql::TIssue& issue) override {
@@ -264,12 +285,12 @@ protected:
         if (!message.empty()) {
             Issues->AddIssue(NYql::TIssue(message));
         }
-        this->Send(ReplyTo, new TEvents::TEvCompleted(0, status));
+        this->Send(ReplyTo, new TEvents::TEvCompleted(0, status), 0, Cookie);
         PassAway();
     }
 
     void ReplySuccess() override {
-        this->Send(ReplyTo, new TEvents::TEvCompleted(0, Ydb::StatusIds::SUCCESS));
+        this->Send(ReplyTo, new TEvents::TEvCompleted(0, Ydb::StatusIds::SUCCESS), 0, Cookie);
         PassAway();
     }
 
@@ -278,14 +299,15 @@ private:
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> NavigateResult;
     std::shared_ptr<arrow::RecordBatch> Batch;
     std::shared_ptr<NYql::TIssues> Issues;
+    const ui32 Cookie;
 };
 
 TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo, const NLongTxService::TLongTxId& longTxId,
-    const TString& dedupId, const TString& databaseName, const TString& path,
+    const TString& dedupId, const TString& databaseName, const std::vector<TString>& tables, const std::vector<ui64> &numrows,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-    std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite) {
+    std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite, const ui32 cookie) {
     return ctx.RegisterWithSameMailbox(
-        new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, batch, issues, noTxWrite));
+        new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, tables, numrows, navigateResult, batch, issues, noTxWrite, cookie));
 }
 
 //

@@ -3,12 +3,13 @@
 #include "defs.h"
 
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/base.pb.h>
+#include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/protos/whiteboard_disk_states.pb.h>
 
 namespace NKikimr {
     namespace NMonGroup {
-
         class TBase {
         public:
             TBase(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
@@ -703,28 +704,99 @@ public:                                                                         
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
-        // TResponseStatusGroup
+        // THandleClassGroup
         ///////////////////////////////////////////////////////////////////////////////////
-        class TResponseStatusGroup : public TBase {
+        class THandleClassGroup : public TBase {
         public:
-            GROUP_CONSTRUCTOR(TResponseStatusGroup)
+            GROUP_CONSTRUCTOR(THandleClassGroup)
             {
-                COUNTER_INIT(ResponsesWithStatusError, true);
-                COUNTER_INIT(ResponsesWithStatusRace, true);
-                COUNTER_INIT(ResponsesWithStatusBlocked, true);
-                COUNTER_INIT(ResponsesWithStatusOutOfSpace, true);
-                COUNTER_INIT(ResponsesWithStatusDeadline, true);
-                COUNTER_INIT(ResponsesWithStatusNotReady, true);
-                COUNTER_INIT(ResponsesWithStatusVdiskErrorState, true);
+                COUNTER_INIT(VGetDiscover, true);
+                COUNTER_INIT(VGetFast, true);
+                COUNTER_INIT(VGetAsync, true);
+                COUNTER_INIT(VGetLow, true);
+                COUNTER_INIT(VPutTabletLog, true);
+                COUNTER_INIT(VPutUserData, true);
+                COUNTER_INIT(VPutAsyncBlob, true);
             }
 
-            COUNTER_DEF(ResponsesWithStatusError);
-            COUNTER_DEF(ResponsesWithStatusRace);
-            COUNTER_DEF(ResponsesWithStatusBlocked);
-            COUNTER_DEF(ResponsesWithStatusOutOfSpace);
-            COUNTER_DEF(ResponsesWithStatusDeadline);
-            COUNTER_DEF(ResponsesWithStatusNotReady);
-            COUNTER_DEF(ResponsesWithStatusVdiskErrorState);
+            COUNTER_DEF(VGetDiscover);
+            COUNTER_DEF(VGetFast);
+            COUNTER_DEF(VGetAsync);
+            COUNTER_DEF(VGetLow);
+            COUNTER_DEF(VPutTabletLog);
+            COUNTER_DEF(VPutUserData);
+            COUNTER_DEF(VPutAsyncBlob);
+            
+            const ::NMonitoring::TDeprecatedCounter &GetCounter(NKikimrBlobStorage::EGetHandleClass handleClass) const {
+                switch (handleClass) {
+                    case NKikimrBlobStorage::AsyncRead:
+                        return VGetAsync();
+                    case NKikimrBlobStorage::FastRead:
+                        return VGetFast();
+                    case NKikimrBlobStorage::Discover:
+                        return VGetDiscover();
+                    case NKikimrBlobStorage::LowRead:
+                        return VGetLow();
+                }
+            }
+            const ::NMonitoring::TDeprecatedCounter &GetCounter(NKikimrBlobStorage::EPutHandleClass handleClass) const {
+                switch (handleClass) {
+                    case NKikimrBlobStorage::TabletLog:
+                        return VPutTabletLog();
+                    case NKikimrBlobStorage::AsyncBlob:
+                        return VPutAsyncBlob();
+                    case NKikimrBlobStorage::UserData:
+                        return VPutUserData();
+                }
+            }
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TResponseStatusGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TResponseStatusGroup {
+        public:
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> Group;
+
+            THandleClassGroup ResponsesWithStatusError;
+            THandleClassGroup ResponsesWithStatusRace;
+            THandleClassGroup ResponsesWithStatusBlocked;
+            THandleClassGroup ResponsesWithStatusOutOfSpace;
+            THandleClassGroup ResponsesWithStatusDeadline;
+            THandleClassGroup ResponsesWithStatusNotReady;
+            THandleClassGroup ResponsesWithStatusVdiskErrorState;
+
+            TResponseStatusGroup(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
+                : Group(counters->GetSubgroup("subsystem", "statuses"))
+                , ResponsesWithStatusError(Group, "status", "ERROR")
+                , ResponsesWithStatusRace(Group, "status", "RACE")
+                , ResponsesWithStatusBlocked(Group, "status", "BLOCKED")
+                , ResponsesWithStatusOutOfSpace(Group, "status", "OUT_OF_SPACE")
+                , ResponsesWithStatusDeadline(Group, "status", "DEADLINE")
+                , ResponsesWithStatusNotReady(Group, "status", "NOT_READY")
+                , ResponsesWithStatusVdiskErrorState(Group, "status", "VDISK_STATUS_ERROR")
+            {}
+
+            template <typename THandleClassType>
+            const ::NMonitoring::TDeprecatedCounter &GetCounter(NKikimrProto::EReplyStatus status, THandleClassType handleClass) const {
+                switch (status) {
+                    case NKikimrProto::ERROR:
+                        return ResponsesWithStatusError.GetCounter(handleClass);
+                    case NKikimrProto::RACE:
+                        return ResponsesWithStatusRace.GetCounter(handleClass);
+                    case NKikimrProto::BLOCKED:
+                        return ResponsesWithStatusBlocked.GetCounter(handleClass);
+                    case NKikimrProto::OUT_OF_SPACE:
+                        return ResponsesWithStatusOutOfSpace.GetCounter(handleClass);
+                    case NKikimrProto::DEADLINE:
+                        return ResponsesWithStatusDeadline.GetCounter(handleClass);
+                    case NKikimrProto::NOTREADY:
+                        return ResponsesWithStatusNotReady.GetCounter(handleClass);
+                    case NKikimrProto::VDISK_ERROR_STATE:
+                        return ResponsesWithStatusVdiskErrorState.GetCounter(handleClass);
+                    default: break;
+                }
+            }
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

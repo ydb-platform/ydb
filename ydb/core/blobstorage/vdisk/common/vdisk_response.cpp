@@ -7,16 +7,10 @@
 namespace NKikimr {
 
 template <class TRecord>
-void ReportResponse(TRecord record, const TLogoBlobID& blobId, const TIntrusivePtr<TVDiskContext>& vCtx);
-
-template <class TRecord>
-void ReportOSStatus(TRecord record, const TLogoBlobID& blobId, const TIntrusivePtr<TVDiskContext>& vCtx);
+void ReportResponse(const TRecord& record, const TIntrusivePtr<TVDiskContext>& vCtx);
 void LogOOSStatus(ui32 flags, const TLogoBlobID& blobId, const TString& vDiskLogPrefix, std::atomic<ui32>& curFlags);
 void UpdateMonOOSStatus(ui32 flags, const std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup);
-
-template <class TRecord>
-void ReportResponseStatus(TRecord record, const TLogoBlobID& blobId, const TIntrusivePtr<TVDiskContext>& vCtx);
-void UpdateMonResponseStatus(NKikimrProto::EReplyStatus status, const std::shared_ptr<NMonGroup::TResponseStatusGroup>& monGroup);
+void UpdateMonResponseStatus(NKikimrProto::EReplyStatus status, HandleClassType handleClass, const std::shared_ptr<NMonGroup::TResponseStatusGroup>& monGroup);
 
 void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEventBase *ev, ui64 cookie, const TIntrusivePtr<TVDiskContext>& vCtx) {
     ui32 channel = TInterconnectChannels::IC_BLOBSTORAGE;
@@ -28,20 +22,20 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
 
 void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEventBase *ev, ui64 cookie, ui32 channel, const TIntrusivePtr<TVDiskContext>& vCtx) {
     if (vCtx) {
-        switch(ev->Type()) {
-            case TEvBlobStorage::TEvVPutResult::EventType: {
-                TEvBlobStorage::TEvVPutResult* event = static_cast<TEvBlobStorage::TEvVPutResult *>(ev);
-                ReportResponse(event->Record, LogoBlobIDFromLogoBlobID(event->Record.GetBlobID()), vCtx);
-                break;
+        switch (ev->Type()) {
+#define HANDLE_EVENT(T)                              \
+            case T::EventType: {                     \
+                T *event = static_cast<T *>(ev);     \
+                ReportResponse(event->Record, vCtx); \
+                break;                               \
             }
-            case TEvBlobStorage::TEvVMultiPutResult::EventType: {
-                TEvBlobStorage::TEvVMultiPutResult *event = static_cast<TEvBlobStorage::TEvVMultiPutResult *>(ev);
-                if (event->Record.ItemsSize() > 0) {
-                    const auto& item = event->Record.GetItems(0);
-                    ReportResponse(event->Record, LogoBlobIDFromLogoBlobID(item.GetBlobID()), vCtx);
-                }
-                break;
-            }
+                
+                HANDLE_EVENT(TEvBlobStorage::TEvVPutResult)
+                HANDLE_EVENT(TEvBlobStorage::TEvVMultiPutResult)
+                HANDLE_EVENT(TEvBlobStorage::TEvVGetResult)
+                HANDLE_EVENT(TEvBlobStorage::TEvVGetBlockResult)
+                HANDLE_EVENT(TEvBlobStorage::TEvVCollectGarbageResult)
+#undef HANDLE_EVENT
         }
     }
 
@@ -76,43 +70,75 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
     }
 }
 
-template <class TRecord>
-void ReportResponse(TRecord record, const TLogoBlobID& blobId, const TIntrusivePtr<TVDiskContext>& vCtx) {
-    ReportOSStatus(record, blobId, vCtx);
-    ReportResponseStatus(record, blobId, vCtx);
-}
+template <typename T, typename Tuple>
+struct IsInTypes;
 
-template <class TRecord>
-void ReportResponseStatus(TRecord record, const TLogoBlobID& blobId, const TIntrusivePtr<TVDiskContext>& vCtx) {
-   UpdateMonResponseStatus(record.GetStatus(), vCtx->ResponseStatusMonGroup);
-}
+template <typename T, typename... Types>
+struct IsInTypes<T, std::tuple<Types...>> {
+    static constexpr bool value = (std::is_same_v<T, Types> || ...);
+};
 
-void UpdateMonResponseStatus(NKikimrProto::EReplyStatus status, const std::shared_ptr<NMonGroup::TResponseStatusGroup>& monGroup) {
-    if (!monGroup) {
-        return;
+struct TReportingOSStatus {
+    using EnableFor = std::tuple<
+        NKikimrBlobStorage::TEvVPutResult,
+        NKikimrBlobStorage::TEvVMultiPutResult>;
+
+    template <typename TRecord>
+    static void Report(const TRecord& record, const TIntrusivePtr<TVDiskContext>& vCtx) {
+        LogOOSStatus(record.GetStatusFlags(), LogoBlobIDFromLogoBlobID(record.GetBlobID()), vCtx->VDiskLogPrefix, vCtx->CurrentOOSStatusFlag);
+        UpdateMonOOSStatus(record.GetStatusFlags(), vCtx->OOSMonGroup);
     }
 
-    if (status == NKikimrProto::ERROR) {
-         monGroup->ResponsesWithStatusError().Inc();
-    } else if (status == NKikimrProto::RACE) {
-        monGroup->ResponsesWithStatusRace().Inc();
-    } else if (status == NKikimrProto::BLOCKED) {
-        monGroup->ResponsesWithStatusBlocked().Inc();
-    } else if (status == NKikimrProto::OUT_OF_SPACE) {
-        monGroup->ResponsesWithStatusOutOfSpace().Inc();
-    } else if (status == NKikimrProto::DEADLINE) {
-        monGroup->ResponsesWithStatusDeadline().Inc();
-    } else if (status == NKikimrProto::NOTREADY) {
-        monGroup->ResponsesWithStatusNotReady().Inc();
-    } else if (status == NKikimrProto::VDISK_ERROR_STATE) {
-        monGroup->ResponsesWithStatusVdiskErrorState().Inc();
+    template<>
+    void Report(const NKikimrBlobStorage::TEvVMultiPutResult& record, const TIntrusivePtr<TVDiskContext>& vCtx) {
+        if (record.ItemsSize() > 0) {
+            const auto& item = record.GetItems(0);
+            LogOOSStatus(record.GetStatusFlags(), LogoBlobIDFromLogoBlobID(item.GetBlobID()), vCtx->VDiskLogPrefix, vCtx->CurrentOOSStatusFlag);
+            UpdateMonOOSStatus(record.GetStatusFlags(), vCtx->OOSMonGroup);
+        }
+    }
+};
+
+struct TReportingResponseStatus {
+    using EnableFor = std::tuple<
+        NKikimrBlobStorage::TEvVPutResult,
+        NKikimrBlobStorage::TEvVMultiPutResult,
+        NKikimrBlobStorage::TEvVGetResult,
+        NKikimrBlobStorage::TEvVGetBlockResult,
+        NKikimrBlobStorage::TEvVCollectGarbageResult>;
+
+    template <typename TRecord>
+    static void Report(const TRecord& record, const TIntrusivePtr<TVDiskContext>& vCtx) {
+        UpdateMonResponseStatus(record.GetStatus(), record.GetHandleClass(), vCtx->ResponseStatusMonGroup);
+    }
+
+    template<>
+    void Report(const NKikimrBlobStorage::TEvVMultiPutResult& record, const TIntrusivePtr<TVDiskContext>& vCtx) {
+    for (const auto& item : record.GetItems()) {
+        UpdateMonResponseStatus(item.GetStatus(), record.GetHandleClass(), vCtx->ResponseStatusMonGroup);
     }
 }
+};
+
+#define DEFUNE_REPORT(NAME)                                                                              \
+    template <typename TRecord>                                                                          \
+    typename std::enable_if<IsInTypes<TRecord, TReporting##NAME::EnableFor>::value>::type Report##NAME(  \
+            const TRecord& record, const TIntrusivePtr<TVDiskContext>& vCtx) {                           \
+        TReporting##NAME::Report(record, vCtx);                                                          \
+    }                                                                                                    \
+                                                                                                         \
+    template <typename TRecord>                                                                          \
+    typename std::enable_if<!IsInTypes<TRecord, TReporting##NAME::EnableFor>::value>::type Report##NAME( \
+            const TRecord& record, const TIntrusivePtr<TVDiskContext>& vCtx) {}
+
+    DEFUNE_REPORT(OSStatus)
+    DEFUNE_REPORT(ResponseStatus)
+#undef DEFUNE_REPORT
 
 template <class TRecord>
-void ReportOSStatus(TRecord record, const TLogoBlobID& blobId, const TIntrusivePtr<TVDiskContext>& vCtx) {
-    LogOOSStatus(record.GetStatusFlags(), blobId, vCtx->VDiskLogPrefix, vCtx->CurrentOOSStatusFlag);
-    UpdateMonOOSStatus(record.GetStatusFlags(), vCtx->OOSMonGroup);
+void ReportResponse(const TRecord& record, const TIntrusivePtr<TVDiskContext>& vCtx) {
+    ReportOSStatus(record, vCtx);
+    ReportResponseStatus(record, vCtx);
 }
 
 void LogOOSStatus(ui32 flags, const TLogoBlobID& blobId, const TString& vDiskLogPrefix, std::atomic<ui32>& curFlags) {
@@ -155,6 +181,15 @@ void UpdateMonOOSStatus(ui32 flags, const std::shared_ptr<NMonGroup::TOutOfSpace
     } else if (flags & NKikimrBlobStorage::StatusDiskSpaceLightYellowMove) {
         monGroup->ResponsesWithDiskSpaceLightYellowMove().Inc();
     }
+}
+
+void UpdateMonResponseStatus(NKikimrProto::EReplyStatus status, HandleClassType handleClass,
+        const std::shared_ptr<NMonGroup::TResponseStatusGroup>& monGroup) {
+    if (!monGroup) {
+        return;
+    }
+
+    monGroup->GetCounter(status, handleClass).Inc();
 }
 
 } //NKikimr

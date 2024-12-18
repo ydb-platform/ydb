@@ -1,7 +1,5 @@
 #pragma once
 
-#pragma once
-
 #include "ydb_command.h"
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
@@ -10,8 +8,8 @@
 namespace NYdb {
 
 namespace NQuery {
-    class TExecuteQueryIterator;
     class TQueryClient;
+    class TSession;
 } // namespace NQuery
 
 namespace NDebug {
@@ -31,6 +29,7 @@ public:
         Select1,
         SchemeCache,
         TxProxy,
+        MaxPingKind,
     };
 
 public:
@@ -39,17 +38,17 @@ public:
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
+    static bool PingPlainGrpc(NDebug::TDebugClient& client);
+    static bool PingPlainKqp(NDebug::TDebugClient& client);
+    static bool PingGrpcProxy(NDebug::TDebugClient& client);
+    static bool PingSchemeCache(NDebug::TDebugClient& client);
+    static bool PingTxProxy(NDebug::TDebugClient& client);
+
+    static bool PingKqpSelect1(NQuery::TQueryClient& client, const TString& query);
+    static bool PingKqpSelect1(NQuery::TSession& session, const TString& query);
+
 private:
     int RunCommand(TConfig& config);
-    int PrintResponse(NQuery::TExecuteQueryIterator& result);
-
-    bool PingPlainGrpc(NDebug::TDebugClient& client);
-    bool PingPlainKqp(NDebug::TDebugClient& client);
-    bool PingGrpcProxy(NDebug::TDebugClient& client);
-    bool PingSchemeCache(NDebug::TDebugClient& client);
-    bool PingTxProxy(NDebug::TDebugClient& client);
-
-    bool PingKqpSelect1(NQuery::TQueryClient& client, const TString& query);
 
 private:
     int Count;

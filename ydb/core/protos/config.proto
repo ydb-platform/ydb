@@ -1725,6 +1725,7 @@ message TColumnShardConfig {
     optional uint64 MemoryLimitScanPortion = 27 [default = 100000000];
     optional string ReaderClassName = 28;
     optional bool AllowNullableColumnsInPK = 29 [default = false];
+    optional uint32 RestoreDataOnWriteTimeoutSeconds = 30;
 }
 
 message TSchemeShardConfig {

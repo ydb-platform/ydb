@@ -39,6 +39,7 @@ public:
     };
 
 private:
+    YDB_ACCESSOR_DEF(TString, ScanIdentifier);
     const ESorting Sorting = ESorting::ASC;   // Sorting inside returned batches
     std::shared_ptr<TPKRangesFilter> PKRangesFilter;
     TProgramContainer Program;

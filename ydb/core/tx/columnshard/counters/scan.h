@@ -64,6 +64,7 @@ public:
         UndeliveredEvent /* "UndeliveredEvent" */,
         CannotAddInFlight /* "CannotAddInFlight" */,
         ProblemOnStart /*ProblemOnStart*/,
+        AbortFromTablet /*AbortFromTablet*/,
 
         COUNT
     };

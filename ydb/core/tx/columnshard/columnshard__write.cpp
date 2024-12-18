@@ -93,12 +93,15 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)("tablet_id", TabletID())("event", "TEvWritePortionResult");
     std::vector<TNoDataWrite> noDataWrites = ev->Get()->DetachNoDataWrites();
     for (auto&& i : noDataWrites) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "no_data_write_finished")("writing_size", i.GetDataSize())("writing_id", i.GetWriteMeta().GetId());
         Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
     }
     if (ev->Get()->GetWriteStatus() == NKikimrProto::OK) {
         std::vector<TInsertedPortions> writtenPacks = ev->Get()->DetachInsertedPacks();
         const TMonotonic now = TMonotonic::Now();
         for (auto&& i : writtenPacks) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", i.GetDataSize())("event", "data_write_finished")(
+                "writing_id", i.GetWriteMeta().GetId());
             Counters.OnWritePutBlobsSuccess(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount());
             Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
         }
@@ -115,6 +118,8 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
         for (auto&& i : writtenPacks) {
             Counters.OnWritePutBlobsFailed(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount());
             Counters.GetCSCounters().OnWritePutBlobsFail(now - i.GetWriteMeta().GetWriteStartInstant());
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", i.GetDataSize())("event", "data_write_error")(
+                "writing_id", i.GetWriteMeta().GetId());
             Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
         }
         Execute(new TTxBlobsWritingFailed(this, ev->Get()->GetWriteStatus(), std::move(writtenPacks)), ctx);
@@ -131,10 +136,11 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
     auto baseAggregations = wBuffer.GetAggregations();
     wBuffer.InitReplyReceived(TMonotonic::Now());
 
-    Counters.GetWritesMonitor()->OnFinishWrite(wBuffer.GetSumSize(), wBuffer.GetAggregations().size());
-
     for (auto&& aggr : baseAggregations) {
         const auto& writeMeta = aggr->GetWriteMeta();
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "blobs_write_finished")("writing_size", aggr->GetSize())(
+            "writing_id", writeMeta.GetId())("status", putResult.GetPutStatus());
+        Counters.GetWritesMonitor()->OnFinishWrite(aggr->GetSize(), 1);
 
         if (!TablesManager.IsReadyForWrite(writeMeta.GetTableId())) {
             ACFL_ERROR("event", "absent_pathId")("path_id", writeMeta.GetTableId())("has_index", TablesManager.HasPrimaryIndex());
@@ -210,7 +216,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         granuleShardingVersion = record.GetGranuleShardingVersion();
     }
 
-    NEvWrite::TWriteMeta writeMeta(writeId, pathId, source, granuleShardingVersion);
+    NEvWrite::TWriteMeta writeMeta(writeId, pathId, source, granuleShardingVersion, TGUID::CreateTimebased().AsGuidString());
     if (record.HasModificationType()) {
         writeMeta.SetModificationType(TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(record.GetModificationType()));
     }
@@ -569,13 +575,9 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     if (overloadStatus != EOverloadStatus::None) {
         std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(
             TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
-        OverloadWriteFail(overloadStatus, NEvWrite::TWriteMeta(0, pathId, source, {}), arrowData->GetSize(), cookie, std::move(result), ctx);
+        OverloadWriteFail(overloadStatus, NEvWrite::TWriteMeta(0, pathId, source, {}, TGUID::CreateTimebased().AsGuidString()), arrowData->GetSize(), cookie, std::move(result), ctx);
         return;
     }
-
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", arrowData->GetSize())(
-        "in_flight", Counters.GetWritesMonitor()->GetWritesInFlight())("sizE_in_flight", Counters.GetWritesMonitor()->GetWritesSizeInFlight());
-    Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize());
 
     std::optional<ui32> granuleShardingVersionId;
     if (record.HasGranuleShardingVersionId()) {
@@ -597,9 +599,14 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     OperationsManager->RegisterLock(lockId, Generation());
     auto writeOperation = OperationsManager->RegisterOperation(
         pathId, lockId, cookie, granuleShardingVersionId, *mType, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
+
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", arrowData->GetSize())("operation_id", writeOperation->GetIdentifier())(
+        "in_flight", Counters.GetWritesMonitor()->GetWritesInFlight())("size_in_flight", Counters.GetWritesMonitor()->GetWritesSizeInFlight());
+    Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize());
+
     Y_ABORT_UNLESS(writeOperation);
     writeOperation->SetBehaviour(behaviour);
-    NOlap::TWritingContext wContext(pathId, SelfId(), schema, StoragesManager, Counters.GetIndexationCounters().SplitterCounters,
+    NOlap::TWritingContext wContext(TabletID(), SelfId(), schema, StoragesManager, Counters.GetIndexationCounters().SplitterCounters,
         Counters.GetCSCounters().WritingCounters, NOlap::TSnapshot::Max(), writeOperation->GetActivityChecker());
     arrowData->SetSeparationPoints(GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(pathId)->GetBucketPositions());
     writeOperation->Start(*this, arrowData, source, wContext);

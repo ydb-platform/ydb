@@ -43,10 +43,12 @@ bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite_TOperation& proto, cons
 TConclusion<std::shared_ptr<arrow::RecordBatch>> TArrowData::ExtractBatch() {
     Y_ABORT_UNLESS(!!IncomingData);
     std::shared_ptr<arrow::RecordBatch> result;
+    TMemoryProfileGuard mpg8("TArrowData::ExtractBatch");
     if (PayloadSchema) {
-        result = NArrow::DeserializeBatch(IncomingData, PayloadSchema);
+        result = NArrow::DeserializeBatch(TString(IncomingData.begin(), IncomingData.end()), PayloadSchema);
     } else {
-        result = NArrow::DeserializeBatch(IncomingData, std::make_shared<arrow::Schema>(BatchSchema->GetSchema()->fields()));
+        result = NArrow::DeserializeBatch(
+            TString(IncomingData.begin(), IncomingData.end()), std::make_shared<arrow::Schema>(BatchSchema->GetSchema()->fields()));
     }
 
     TString emptyString;

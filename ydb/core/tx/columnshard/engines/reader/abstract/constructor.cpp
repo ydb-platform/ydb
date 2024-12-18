@@ -78,6 +78,7 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> IScannerConstructor::Bu
         return result.DetachResult();
     } else {
         (*result)->Limit = ItemsLimit;
+        (*result)->SetScanIdentifier(read.GetScanIdentifier());
         return result.DetachResult();
     }
 }

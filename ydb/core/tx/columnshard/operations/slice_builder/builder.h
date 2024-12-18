@@ -8,7 +8,7 @@
 
 namespace NKikimr::NOlap {
 
-class TBuildSlicesTask: public NConveyor::ITask {
+class TBuildSlicesTask: public NConveyor::ITask, public NColumnShard::TMonitoringObjectsCounter<TBuildSlicesTask> {
 private:
     NEvWrite::TWriteData WriteData;
     const ui64 TabletId;

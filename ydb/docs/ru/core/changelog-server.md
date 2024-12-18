@@ -13,8 +13,7 @@
 * Добавлена возможность аутентификации [динамических нод](./concepts/glossary#dynamic) по SSL-сертификату.
 * Реализовано удаление неактивных узлов из [Hive](./concepts/glossary#hive) без его перезапуска.
 * Улучшено управление inflight pings при перезапуске Hive в кластерах большого размера.
-* [Изменен](https://github.com/ydb-platform/ydb/pull/6381) порядок установления соединения с узлами при перезапуске Hive. 
-
+* [Изменен](https://github.com/ydb-platform/ydb/pull/6381) порядок установления соединения с узлами при перезапуске Hive.
 
 **YDB UI:**
 
@@ -29,7 +28,6 @@
 * Включен автокомплит в редакторе запросов по умолчанию.
 * [Добавлена](https://github.com/ydb-platform/ydb-embedded-ui/pull/834) поддержка view.
 
-
 **Исправления ошибок:**
 
 * Исправлена [ошибка](https://github.com/ydb-platform/ydb/issues/6677), которая приводила к неработоспособности схемных операции при выполнении экспорта/бекапа больших баз, добавлением проверки на размер локальной транзакции до её коммита. В случае превышения, локальная транзакция будет отменена.
@@ -38,14 +36,14 @@
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/5992) ошибки, возникающие в момент первичного сканирования CDC.
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/6615) состояние гонки в асинхронной доставке изменений (асинхронные индексы, CDC).
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/5993) редкая ошибка, из-за которой удаление по [TTL](./concepts/ttl) приводило к аварийному завершению процесса.
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/5760) ошибка отображения статуса PDisk в интерфейсе [CMS](./concepts/glossary#cms). 
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/5760) ошибка отображения статуса PDisk в интерфейсе [CMS](./concepts/glossary#cms).
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/6008) ошибки, из-за которых мягкий перенос (drain) таблеток с узла мог зависать.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/6445) ошибка остановки interconnect proxy на узле, работающем без перезапусков, при добавлении другого узла в кластер.
 * [Исправлен](https://github.com/ydb-platform/ydb/pull/6695) учет свободной памяти в interconnect.
 * [Исправлены](https://github.com/ydb-platform/ydb/issues/6405) счетчики UnreplicatedPhantoms/UnreplicatedNonPhantoms в VDisk.
 * [Исправлена](https://github.com/ydb-platform/ydb/issues/6398) обработка пустых запросов сборки мусора на VDisk.
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/5894) управление настройками TVDiskControls через CMS.
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/5883) ошибка загрузки данных, созданных более новыми версиями VDisk. 
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/5883) ошибка загрузки данных, созданных более новыми версиями VDisk.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/5862) ошибка выполнении запроса `REPLACE INTO` со значением по умолчанию.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/7714) ошибка исполнения запросов, в которых выполнялось несколько left join'ов к одной строковой таблице.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/7740) потеря точности для float/double типов при использовании CDC.

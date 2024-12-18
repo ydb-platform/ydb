@@ -277,7 +277,7 @@ class TCreatePQ: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<NPQState::TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDoneWithBarrier>(OperationId);
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }

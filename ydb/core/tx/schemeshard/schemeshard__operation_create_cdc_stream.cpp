@@ -103,7 +103,7 @@ class TNewCdcStream: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDoneWithBarrier>(OperationId);
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -379,12 +379,23 @@ public:
 
 }; // TProposeAtTableWithInitialScan
 
-class TDoneWithInitialScan: public TDoneWithBarrier {
+class TDoneWithInitialScan: public TDone {
 public:
-    using TDoneWithBarrier::TDoneWithBarrier;
+    using TDone::TDone;
 
-    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
-        if (!TDoneWithBarrier::HandleReply(ev, context)) {
+    bool ProgressState(TOperationContext& context) override {
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " ProgressState");
+
+        context.OnComplete.Barrier(OperationId, "DoneBarrier");
+        return false;
+    }
+
+    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr&, TOperationContext& context) override {
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " HandleReply TEvCompleteBarrier");
+
+        if (!TDone::Process(context)) {
             return false;
         }
 
@@ -464,7 +475,7 @@ class TNewCdcStreamAtTable: public TSubOperation {
             if (InitialScan) {
                 return MakeHolder<TDoneWithInitialScan>(OperationId);
             } else {
-                return MakeHolder<TDoneWithBarrier>(OperationId);
+                return MakeHolder<TDone>(OperationId);
             }
         default:
             return nullptr;

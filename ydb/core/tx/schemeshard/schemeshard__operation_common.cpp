@@ -422,7 +422,7 @@ bool TDeletePartsAndDone::ProgressState(TOperationContext& context) {
 
 // TDone
 //
-TDoneBase::TDoneBase(const TOperationId& id)
+TDone::TDone(const TOperationId& id)
     : OperationId(id)
 {
     auto events = AllIncomingEvents();
@@ -430,10 +430,7 @@ TDoneBase::TDoneBase(const TOperationId& id)
     IgnoreMessages(DebugHint(), events);
 }
 
-bool TDoneBase::Process(TOperationContext& context) {
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " Process");
-
+bool TDone::Process(TOperationContext& context) {
     const auto* txState = context.SS->FindTx(OperationId);
 
     const auto& pathId = txState->TargetPathId;
@@ -483,18 +480,9 @@ bool TDoneBase::Process(TOperationContext& context) {
 }
 
 bool TDone::ProgressState(TOperationContext& context) {
-    return Process(context);
-}
-
-bool TDoneWithBarrier::ProgressState(TOperationContext& context) {
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " ProgressState");
 
-    context.OnComplete.Barrier(OperationId, "DoneBarrier");
-    return false;
-}
-
-bool TDoneWithBarrier::HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr&, TOperationContext& context) {
     return Process(context);
 }
 

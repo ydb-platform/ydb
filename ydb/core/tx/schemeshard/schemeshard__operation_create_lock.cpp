@@ -75,7 +75,7 @@ class TCreateLock: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDoneWithBarrier>(OperationId);
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }

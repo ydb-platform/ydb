@@ -107,7 +107,7 @@ public:
     bool ProgressState(TOperationContext& context) override;
 };
 
-class TDoneBase: public TSubOperationState {
+class TDone: public TSubOperationState {
 protected:
     const TOperationId OperationId;
 
@@ -116,24 +116,12 @@ protected:
             << " opId# " << OperationId;
     }
 
-public:
-    explicit TDoneBase(const TOperationId& id);
     bool Process(TOperationContext& context);
-};
 
-class TDone: public TDoneBase {
 public:
-    using TDoneBase::TDoneBase;
+    explicit TDone(const TOperationId& id);
 
     bool ProgressState(TOperationContext& context) override;
-};
-
-class TDoneWithBarrier: public TDoneBase {
-public:
-    using TDoneBase::TDoneBase;
-
-    bool ProgressState(TOperationContext& context) override;
-    bool HandleReply(TEvPrivate::TEvCompleteBarrier__HandlePtr& ev, TOperationContext& context) override;
 };
 
 namespace NPQState {

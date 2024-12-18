@@ -14,6 +14,7 @@ PEERDIR(
     yql/essentials/providers/common/transform
     yql/essentials/providers/common/schema/expr
     yql/essentials/providers/common/mkql
+    yql/essentials/providers/common/mkql_simple_file
     yql/essentials/providers/common/codec
     yql/essentials/providers/result/expr_nodes
     yql/essentials/core/peephole_opt

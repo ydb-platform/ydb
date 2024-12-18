@@ -13,10 +13,12 @@
 #include <yql/essentials/providers/common/transform/yql_exec.h>
 #include <yql/essentials/providers/common/transform/yql_lazy_init.h>
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
+#include <yql/essentials/providers/common/mkql_simple_file/mkql_simple_file.h>
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_opt_literal.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
 #include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
@@ -67,6 +69,13 @@ public:
             return SyncStatus(status);
         }
 
+        TUserDataTable crutches = State_->Types->UserDataStorageCrutches;
+        TUserDataTable files;
+        auto filesRes = NCommon::FreezeUsedFiles(*optimized, files, *State_->Types, ctx, [](const TString&) { return true; }, crutches);
+        if (filesRes.first.Level != TStatus::Ok) {
+            return filesRes;
+        }
+
         TVector<TString> columns(NCommon::GetResOrPullColumnHints(*input));
         if (columns.empty()) {
             columns = NCommon::GetStructFields(lambda.Ref().GetTypeAnn());
@@ -84,8 +93,11 @@ public:
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *State_->FunctionRegistry);
         NCommon::TMkqlCommonCallableCompiler compiler;
+
         NCommon::TMkqlBuildContext mkqlCtx(compiler, pgmBuilder, ctx);
         auto root = NCommon::MkqlBuildExpr(*optimized, mkqlCtx);
+
+        root = TransformProgram(root, files, env);
 
         TExploringNodeVisitor explorer;
         explorer.Walk(root.GetNode(), env);
@@ -146,6 +158,17 @@ public:
         input->SetState(TExprNode::EState::ExecutionComplete);
         input->SetResult(ctx.NewAtom(input->Pos(), out.Str()));
         return SyncOk();
+    }
+
+private:
+    TRuntimeNode TransformProgram(TRuntimeNode root, const TUserDataTable& files, TTypeEnvironment& env) {
+        TExploringNodeVisitor explorer;
+        explorer.Walk(root.GetNode(), env);
+        bool wereChanges = false;
+        TRuntimeNode program = SinglePassVisitCallables(root, explorer,
+            TSimpleFileTransformProvider(State_->FunctionRegistry, files), env, true, wereChanges);
+        program = LiteralPropagationOptimization(program, env, true);
+        return program;
     }
 
 private:

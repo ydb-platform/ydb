@@ -146,7 +146,6 @@ private:
             }
 
             auto schemaSnapshot = Self->TablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema();
-            auto schema = schemaSnapshot->GetSchema();
             auto index = schemaSnapshot->GetColumnIdOptional(columnName);
             if (!index) {
                 return TTxController::TProposeResult(
@@ -164,7 +163,7 @@ private:
         if (!Self->SetupTtl(pathTtls)) {
             return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL not started");
         }
-        Self->TablesManager.MutablePrimaryIndex().OnTieringModified(Self->Tiers, Self->TablesManager.GetTtl(), {});
+        Self->TablesManager.MutablePrimaryIndex().OnTieringModified(Self->TablesManager.GetTtl());
 
         return TTxController::TProposeResult();
     }

@@ -217,6 +217,7 @@ private:
 
 protected:
     std::optional<TDataAccessorsResult> FetchedDataAccessors;
+    virtual NDataLocks::ELockCategory GetLockCategory() const = 0;
     virtual void DoDebugString(TStringOutput& out) const = 0;
     virtual void DoCompile(TFinalizationContext& context) = 0;
     virtual void DoOnAfterCompile() {}
@@ -241,7 +242,7 @@ protected:
         return DoBuildDataLock();
     }
 
-    std::shared_ptr<TDataAccessorsRequest> PortionsToAccess = std::make_shared<TDataAccessorsRequest>();
+    std::shared_ptr<TDataAccessorsRequest> PortionsToAccess = std::make_shared<TDataAccessorsRequest>(TaskIdentifier);
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) = 0;
 
 public:

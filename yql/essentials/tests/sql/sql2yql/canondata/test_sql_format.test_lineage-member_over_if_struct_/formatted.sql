@@ -3,13 +3,14 @@ SELECT
     *
 FROM (
     SELECT
-        IF(key == "foo", LAG(data) OVER w, data)
+        IF(key == 'foo', LAG(data) OVER w, data)
     FROM (
         SELECT
             TableRow() AS data,
             key,
             value
-        FROM plato.Input
+        FROM
+            plato.Input
     )
     WINDOW
         w AS (
@@ -17,4 +18,5 @@ FROM (
                 key
         )
 )
-    FLATTEN COLUMNS;
+    FLATTEN COLUMNS
+;

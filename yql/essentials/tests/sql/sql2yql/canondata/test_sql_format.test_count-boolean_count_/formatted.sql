@@ -1,11 +1,17 @@
 SELECT
     count(*)
-FROM plato.Input;
+FROM
+    plato.Input
+;
 
 SELECT
     count(e)
-FROM plato.Input;
+FROM
+    plato.Input
+;
 
 SELECT
     count(DISTINCT e)
-FROM plato.Input;
+FROM
+    plato.Input
+;

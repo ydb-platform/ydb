@@ -22,7 +22,7 @@ namespace NYql::NDq {
 
         // MaybeFillToken sets IAM-token within DataSourceInstance.
         // Returns string containing error, if it happened.
-        TString MaybeFillToken(NConnector::NApi::TDataSourceInstance& dsi) const;
+        TString MaybeFillToken(NYql::TGenericDataSourceInstance& dsi) const;
 
     private:
         TString StaticIAMToken_;
@@ -32,6 +32,7 @@ namespace NYql::NDq {
     TGenericTokenProvider::TPtr
     CreateGenericTokenProvider(
         const TString& staticIamToken,
-        const TString& serviceAccountId, const TString& ServiceAccountIdSignature,
+        const TString& serviceAccountId, 
+        const TString& serviceAccountIdSignature,
         const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);
 } // namespace NYql::NDq

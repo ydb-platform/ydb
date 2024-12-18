@@ -54,7 +54,7 @@ using NYT::FromProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr i64 MaxTracingTagLength = 1000;
+constexpr i64 MaxTracingTagLength = 1'000;
 static const TString DisabledSelectQueryTracingTag = "Tag is disabled, look for enable_select_query_tracing_tag parameter";
 
 TString SanitizeTracingTag(const TString& originalTag)
@@ -514,6 +514,7 @@ TFuture<NCypressClient::TNodeId> TClientBase::MoveNode(
     req->set_preserve_expiration_time(options.PreserveExpirationTime);
     req->set_preserve_expiration_timeout(options.PreserveExpirationTimeout);
     req->set_preserve_owner(options.PreserveOwner);
+    req->set_preserve_acl(options.PreserveAcl);
     req->set_pessimistic_quota_check(options.PessimisticQuotaCheck);
     req->set_enable_cross_cell_copying(options.EnableCrossCellCopying);
 

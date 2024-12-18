@@ -5,7 +5,7 @@ import six
 from hashlib import md5
 
 import ymake
-from _common import stripext, rootrel_arc_src, listid, pathid, lazy, get_no_lint_value
+from _common import stripext, rootrel_arc_src, listid, pathid, lazy, get_no_lint_value, ugly_conftest_exception
 
 
 YA_IDE_VENV_VAR = 'YA_IDE_VENV'
@@ -15,12 +15,12 @@ DEFAULT_FLAKE8_FILE_PROCESSING_TIME = "1.5"  # in seconds
 DEFAULT_BLACK_FILE_PROCESSING_TIME = "1.5"  # in seconds
 
 
-def _split_macro_call(macro_call, data, item_size, chunk_size=1024):
+def _split_macro_call(macro_call, data, item_size, chunk_size=1024, compress=False):
     index = 0
     length = len(data)
     offset = item_size * chunk_size
     while index + 1 < length:
-        macro_call(data[index : index + offset])
+        macro_call(([] if compress else ['DONT_COMPRESS']) + data[index : index + offset])
         index += offset
 
 
@@ -507,10 +507,10 @@ def onpy_srcs(unit, *args):
         if py_files2res:
             # Compile original and generated sources into target for proper cython coverage calculation
             for files2res in (py_files2res, cpp_files2res):
-                unit.onresource_files([x for name, path in files2res for x in ('DEST', name, path)])
+                unit.onresource_files(['DONT_COMPRESS'] + [x for name, path in files2res for x in ('DEST', name, path)])
 
         if include_map:
-            data = []
+            data = ['DONT_COMPRESS']
             prefix = 'resfs/cython/include'
             for line in sorted(
                 '{}/{}={}'.format(prefix, filename, ':'.join(sorted(files)))
@@ -541,6 +541,7 @@ def onpy_srcs(unit, *args):
 
         if py3:
             mod_list_md5 = md5()
+            compress = False
             for path, mod in pys:
                 mod_list_md5.update(six.ensure_binary(mod))
                 if not (venv and is_extended_source_search_enabled(path, unit)):
@@ -552,17 +553,21 @@ def onpy_srcs(unit, *args):
                         dst = path + uniq_suffix(path, unit)
                         unit.on_py3_compile_bytecode([root_rel_path + '-', path, dst])
                         res += ['DEST', dest + '.yapyc3', dst + '.yapyc3']
+                    if not compress and ugly_conftest_exception(path):
+                        compress = True
 
             if py_namespaces:
                 # Note: Add md5 to key to prevent key collision if two or more PY_SRCS() used in the same ya.make
-                ns_res = []
+                ns_res = ['DONT_COMPRESS']
                 for path, ns in sorted(py_namespaces.items()):
                     key = '{}/{}/{}'.format(PY_NAMESPACE_PREFIX, mod_list_md5.hexdigest(), path)
                     namespaces = ':'.join(sorted(ns))
                     ns_res += ['-', '{}="{}"'.format(key, namespaces)]
                 unit.onresource(ns_res)
 
-            _split_macro_call(unit.onresource_files, res, (3 if with_py else 0) + (3 if with_pyc else 0))
+            _split_macro_call(
+                unit.onresource_files, res, (3 if with_py else 0) + (3 if with_pyc else 0), compress=compress
+            )
             add_python_lint_checks(
                 unit, 3, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split()
             )
@@ -571,12 +576,7 @@ def onpy_srcs(unit, *args):
                 root_rel_path = rootrel_arc_src(path, unit)
                 if with_py:
                     key = '/py_modules/' + mod
-                    res += [
-                        path,
-                        key,
-                        '-',
-                        'resfs/src/{}={}'.format(key, root_rel_path),
-                    ]
+                    res += [path, key, '-', 'resfs/src/{}=${{rootrel;input;context=TEXT:"{}"}}'.format(key, path)]
                 if with_pyc:
                     src = unit.resolve_arc_path(path) or path
                     dst = path + uniq_suffix(path, unit)
@@ -595,7 +595,7 @@ def onpy_srcs(unit, *args):
             pyis_dups = ', '.join(name for name in sorted(pyis_dups))
             ymake.report_configure_error('Duplicate(s) is found in the PY_SRCS macro: {}'.format(pyis_dups))
 
-        res = []
+        res = ['DONT_COMPRESS']
         for path, mod in pyis:
             dest = 'py/' + mod.replace('.', '/') + '.pyi'
             res += ['DEST', dest, path]
@@ -671,7 +671,7 @@ def onpy_doctests(unit, *args):
     The packages should be part of a test (listed as sources of the test or its PEERDIRs).
     """
     if unit.get('PY3TEST_BIN' if is_py3(unit) else 'PYTEST_BIN') != 'no':
-        unit.onresource(['-', 'PY_DOCTEST_PACKAGES="{}"'.format(' '.join(args))])
+        unit.onresource(['DONT_COMPRESS', '-', 'PY_DOCTEST_PACKAGES="{}"'.format(' '.join(args))])
 
 
 def py_register(unit, func, py3):
@@ -716,7 +716,7 @@ def py_main(unit, arg):
     unit_needs_main = unit.get('MODULE_TYPE') in ('PROGRAM', 'DLL')
     if unit_needs_main:
         py_program(unit, is_py3(unit))
-    unit.onresource(['-', 'PY_MAIN={}'.format(arg)])
+    unit.onresource(['DONT_COMPRESS', '-', 'PY_MAIN={}'.format(arg)])
 
 
 def onpy_main(unit, arg):
@@ -748,7 +748,7 @@ def onpy_constructor(unit, arg):
         arg = arg + '=init'
     else:
         arg[arg.index(':')] = '='
-    unit.onresource(['-', 'py/constructors/{}'.format(arg)])
+    unit.onresource(['DONT_COMPRESS', '-', 'py/constructors/{}'.format(arg)])
 
 
 def onpy_enums_serialization(unit, *args):

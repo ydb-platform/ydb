@@ -1,50 +1,61 @@
 /* syntax version 1 */
 /* postgres can not */
 $t = AsList(AsStruct(1 AS a), AsStruct(2 AS a));
-$f = AGGREGATION_FACTORY("mode");
+$f = AGGREGATION_FACTORY('mode');
 
 SELECT
     Yql::Aggregate(
         $t, AsTuple(), AsTuple(
             AsTuple(
-                AsAtom("res"), $f(
+                AsAtom('res'), $f(
                     ListItemType(TypeOf($t)), ($z) -> {
-                        RETURN $z.a
+                        RETURN $z.a;
                     }
                 )
             )
         )
-    );
-$f = AGGREGATION_FACTORY("topfreq", 10, 20);
+    )
+;
+
+$f = AGGREGATION_FACTORY('topfreq', 10, 20);
 
 SELECT
     Yql::Aggregate(
         $t, AsTuple(), AsTuple(
             AsTuple(
-                AsAtom("res"), $f(
+                AsAtom('res'), $f(
                     ListItemType(TypeOf($t)), ($z) -> {
-                        RETURN $z.a
+                        RETURN $z.a;
                     }
                 )
             )
         )
-    );
+    )
+;
+
 USE plato;
 
 INSERT INTO @a
 SELECT
     *
-FROM as_table($t);
+FROM
+    as_table($t)
+;
+
 COMMIT;
 
 SELECT
     AGGREGATE_BY(a, $f)
-FROM @a;
+FROM
+    @a
+;
 
 SELECT
     ListSort(
         AGGREGATE_BY(DISTINCT a, $f), ($x) -> {
-            RETURN $x.Value
+            RETURN $x.Value;
         }
     )
-FROM @a;
+FROM
+    @a
+;

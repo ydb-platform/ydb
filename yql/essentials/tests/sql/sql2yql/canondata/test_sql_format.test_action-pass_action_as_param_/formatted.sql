@@ -1,13 +1,24 @@
 /* syntax version 1 */
 /* postgres can not */
 DEFINE ACTION $dup($x) AS
-    DO $x();
-    DO $x();
+    DO
+        $x()
+    ;
+    DO
+        $x()
+    ;
 END DEFINE;
-DO $dup(EMPTY_ACTION);
+
+DO
+    $dup(EMPTY_ACTION)
+;
 
 DEFINE ACTION $sel_foo() AS
     SELECT
-        "foo";
+        'foo'
+    ;
 END DEFINE;
-DO $dup($sel_foo);
+
+DO
+    $dup($sel_foo)
+;

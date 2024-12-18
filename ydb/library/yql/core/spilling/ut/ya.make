@@ -4,16 +4,19 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
 
+# https://github.com/ydb-platform/ydb/issues/12513
+IF (SANITIZER_TYPE == "address")
+    TAG(ya:not_autocheck)
+ENDIF()
+
 IF (SANITIZER_TYPE OR NOT OPENSOURCE)
     REQUIREMENTS(ram:10)
 ENDIF()
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 

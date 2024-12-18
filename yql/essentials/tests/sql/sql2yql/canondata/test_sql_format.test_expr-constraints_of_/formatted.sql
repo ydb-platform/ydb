@@ -1,21 +1,26 @@
 /* syntax version 1 */
 /* postgres can not */
-PRAGMA warning("disable", "4510");
+PRAGMA warning('disable', '4510');
+
 USE plato;
 
-$foo =
+$foo = (
     SELECT
         subkey,
         key,
         value AS v
-    FROM Input
+    FROM
+        Input
     ORDER BY
         subkey ASC,
         key DESC
-    LIMIT 0;
+    LIMIT 0
+);
 
-$x =
-    PROCESS $foo;
+$x = (
+    PROCESS $foo
+);
 
 SELECT
-    YQL::ConstraintsOf($x) AS constraints;
+    YQL::ConstraintsOf($x) AS constraints
+;

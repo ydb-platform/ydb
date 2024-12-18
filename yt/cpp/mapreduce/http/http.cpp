@@ -207,7 +207,7 @@ void THttpHeader::AddOperationId(const TOperationId& operationId, bool overwrite
     AddParameter("operation_id", GetGuidAsString(operationId), overwrite);
 }
 
-void THttpHeader::AddMutationId()
+TMutationId THttpHeader::AddMutationId()
 {
     TGUID guid;
 
@@ -220,11 +220,18 @@ void THttpHeader::AddMutationId()
     guid.dw[2] = GetPID() ^ MicroSeconds();
 
     AddParameter("mutation_id", GetGuidAsString(guid), true);
+
+    return guid;
 }
 
 bool THttpHeader::HasMutationId() const
 {
     return Parameters_.contains("mutation_id");
+}
+
+void THttpHeader::SetMutationId(TMutationId mutationId)
+{
+    AddParameter("mutation_id", GetGuidAsString(mutationId), /*overwrite*/ true);
 }
 
 void THttpHeader::SetToken(const TString& token)

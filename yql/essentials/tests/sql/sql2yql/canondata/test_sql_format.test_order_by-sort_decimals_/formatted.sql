@@ -1,23 +1,31 @@
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    CAST(c AS Decimal (13, 3));
+    CAST(c AS Decimal (13, 3))
+;
 
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    CAST(c AS Decimal (13, 3)) DESC;
+    CAST(c AS Decimal (13, 3)) DESC
+;
 
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    CAST(d AS Decimal (5, 1));
+    CAST(d AS Decimal (5, 1))
+;
 
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    CAST(d AS Decimal (5, 1)) DESC;
+    CAST(d AS Decimal (5, 1)) DESC
+;

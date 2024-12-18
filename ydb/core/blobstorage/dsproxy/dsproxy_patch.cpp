@@ -585,6 +585,11 @@ public:
         Become(&TBlobStorageGroupPatchRequest::MovedPatchState);
         IsMovedPatch = true;
         std::optional<ui32> subgroupIdx = 0;
+        ReceivedResponseFlags.resize(VDisks.size(), false);
+        ErrorResponseFlags.resize(VDisks.size(), false);
+        EmptyResponseFlags.resize(VDisks.size(), false);
+        ForceStopFlags.resize(VDisks.size(), false);
+        SlowFlags.resize(VDisks.size(), false);
 
         if (OkVDisksWithParts) {
             ui32 okVDiskIdx = RandomNumber<ui32>(OkVDisksWithParts.size());

@@ -273,7 +273,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         if (enforceUserTokenCheckRequirement) {
             UNIT_ASSERT_EQUAL(reqResultWithInvalidToken, std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
         } else {
-            UNIT_ASSERT_EQUAL(reqResultWithInvalidToken, std::make_pair(Ydb::StatusIds::SUCCESS, grpc::StatusCode::OK));
+            UNIT_ASSERT_EQUAL(reqResultWithInvalidToken, std::make_pair(Ydb::StatusIds::UNAUTHORIZED, grpc::StatusCode::OK));
         }
 
         UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/blabla", "invalid token"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
@@ -823,6 +823,87 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
 
         client.CreateSession().Apply(createSessionHandler).Wait();
         UNIT_ASSERT(done);
+    }
+
+    Y_UNIT_TEST(InMemoryTables) {
+        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
+        server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnablePublicApiKeepInMemory(true);
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(location));
+
+        auto client = NYdb::NTable::TTableClient(connection);
+        auto createSessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT(!createSessionResult.IsTransportError());
+        auto session = createSessionResult.GetSession();
+
+        auto createTableResult = session.CreateTable("/Root/Table", client.GetTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::Int32)
+            .AddNullableColumn("Value", EPrimitiveType::String)
+            .SetPrimaryKeyColumn("Key")
+            // Note: only needed because this test doesn't initial table profiles
+            .BeginStorageSettings()
+                .SetTabletCommitLog0("ssd")
+                .SetTabletCommitLog1("ssd")
+            .EndStorageSettings()
+            .BeginColumnFamily("default")
+                .SetData("ssd")
+                .SetKeepInMemory(true)
+            .EndColumnFamily()
+            .Build()).ExtractValueSync();
+        UNIT_ASSERT_C(createTableResult.IsSuccess(), (NYdb::TStatus&)createTableResult);
+
+        {
+            auto describeTableResult = session.DescribeTable("/Root/Table").ExtractValueSync();
+            UNIT_ASSERT_C(describeTableResult.IsSuccess(), (NYdb::TStatus&)describeTableResult);
+            auto desc = describeTableResult.GetTableDescription();
+            auto families = desc.GetColumnFamilies();
+            UNIT_ASSERT_VALUES_EQUAL(families.size(), 1u);
+            auto family = families.at(0);
+            UNIT_ASSERT_VALUES_EQUAL(family.GetKeepInMemory(), true);
+        }
+
+        {
+            auto alterTableResult = session.AlterTable("/Root/Table", NYdb::NTable::TAlterTableSettings()
+                .BeginAlterColumnFamily("default")
+                    .SetKeepInMemory(false)
+                .EndAlterColumnFamily()).ExtractValueSync();
+            UNIT_ASSERT_C(alterTableResult.IsSuccess(), (NYdb::TStatus&)alterTableResult);
+        }
+
+        {
+            auto describeTableResult = session.DescribeTable("/Root/Table").ExtractValueSync();
+            UNIT_ASSERT_C(describeTableResult.IsSuccess(), (NYdb::TStatus&)describeTableResult);
+            auto desc = describeTableResult.GetTableDescription();
+            auto families = desc.GetColumnFamilies();
+            UNIT_ASSERT_VALUES_EQUAL(families.size(), 1u);
+            auto family = families.at(0);
+            // Note: server cannot currently distinguish between implicitly
+            // unset and explicitly disabled, so it returns the former.
+            UNIT_ASSERT_VALUES_EQUAL(family.GetKeepInMemory(), Nothing());
+        }
+
+        {
+            auto alterTableResult = session.AlterTable("/Root/Table", NYdb::NTable::TAlterTableSettings()
+                .BeginAlterColumnFamily("default")
+                    .SetKeepInMemory(true)
+                .EndAlterColumnFamily()).ExtractValueSync();
+            UNIT_ASSERT_C(alterTableResult.IsSuccess(), (NYdb::TStatus&)alterTableResult);
+        }
+
+        {
+            auto describeTableResult = session.DescribeTable("/Root/Table").ExtractValueSync();
+            UNIT_ASSERT_C(describeTableResult.IsSuccess(), (NYdb::TStatus&)describeTableResult);
+            auto desc = describeTableResult.GetTableDescription();
+            auto families = desc.GetColumnFamilies();
+            UNIT_ASSERT_VALUES_EQUAL(families.size(), 1u);
+            auto family = families.at(0);
+            UNIT_ASSERT_VALUES_EQUAL(family.GetKeepInMemory(), true);
+        }
     }
 }
 

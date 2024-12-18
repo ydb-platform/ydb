@@ -16,6 +16,7 @@ def processRows(prefix, rowList, separator):
     
     return result;
 @@;
+
 $udf = Python::processRows(
     Callable<(String, List<Struct<Name: String, Value: String>>, String) -> List<Struct<Result: String>>>,
     $udfScript
@@ -25,33 +26,40 @@ $data = (
     SELECT
         key AS Name,
         value AS Value
-    FROM plato.Input0
+    FROM
+        plato.Input0
 );
-$prefix = ">>";
+
+$prefix = '>>';
 
 $p1 = (
     PROCESS $data
-    USING $udf($prefix, TableRows(), "=")
-    WHERE Name != "foo"
+    USING $udf($prefix, TableRows(), '=')
+    WHERE
+        Name != 'foo'
 );
 
 $p2 = (
     SELECT
         Result AS Data
-    FROM $p1
+    FROM
+        $p1
 );
 
 $p3 = (
     PROCESS $p2
-    USING Streaming::Process(TableRows(), "grep", AsList("180"))
+    USING Streaming::Process(TableRows(), 'grep', AsList('180'))
 );
 
 $p4 = (
     SELECT
         Data AS FinalResult
-    FROM $p3
+    FROM
+        $p3
 );
 
 SELECT
     Avg(Length(FinalResult)) AS AvgResultLength
-FROM $p4;
+FROM
+    $p4
+;

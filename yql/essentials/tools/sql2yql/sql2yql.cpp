@@ -103,9 +103,7 @@ bool TestFormat(
         Cerr << "Failed to format query: " << issues.ToString() << Endl;
         return false;
     }
-    NYql::TAstParseResult frmParseRes = NSQLTranslation::SqlToYql(query, settings);
-    TStringStream frmYqlProgram;
-    frmParseRes.Root->PrettyPrintTo(frmYqlProgram, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);
+    NYql::TAstParseResult frmParseRes = NSQLTranslation::SqlToYql(frmQuery, settings);
     if (!frmParseRes.Issues.Empty()) {
         frmParseRes.Issues.PrintWithProgramTo(Cerr, queryFile, frmQuery);
         if (AnyOf(frmParseRes.Issues, [](const auto& issue) { return issue.GetSeverity() == NYql::TSeverityIds::S_ERROR;})) {
@@ -116,6 +114,8 @@ bool TestFormat(
         Cerr << "No error reported, but no yql compiled result!" << Endl << Endl;
         return false;
     }
+    TStringStream frmYqlProgram;
+    frmParseRes.Root->PrettyPrintTo(frmYqlProgram, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);
     if (yqlProgram.Str() != frmYqlProgram.Str()) {
         Cerr << "source query's AST and formatted query's AST are not same\n";
         return false;

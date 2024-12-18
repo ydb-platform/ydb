@@ -10,33 +10,43 @@ $t = AsList(
     AsStruct(1 AS a),
     AsStruct(9 AS a)
 );
-$f = AGGREGATION_FACTORY("top", 3);
+
+$f = AGGREGATION_FACTORY('top', 3);
 
 SELECT
     Yql::Aggregate(
         $t, AsTuple(), AsTuple(
             AsTuple(
-                AsAtom("res"),
+                AsAtom('res'),
                 $f(
                     ListItemType(TypeOf($t)), ($z) -> {
-                        RETURN $z.a
+                        RETURN $z.a;
                     }
                 )
             )
         )
-    );
+    )
+;
+
 USE plato;
 
 INSERT INTO @a
 SELECT
     *
-FROM as_table($t);
+FROM
+    as_table($t)
+;
+
 COMMIT;
 
 SELECT
     AGGREGATE_BY(a, $f)
-FROM @a;
+FROM
+    @a
+;
 
 SELECT
     AGGREGATE_BY(DISTINCT a, $f)
-FROM @a;
+FROM
+    @a
+;

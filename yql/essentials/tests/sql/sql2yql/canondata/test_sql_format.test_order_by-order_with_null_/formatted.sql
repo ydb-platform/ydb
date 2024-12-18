@@ -4,22 +4,27 @@ USE plato;
 $input = (
     SELECT
         NULL AS key,
-        "0" AS subkey,
-        "kkk" AS value
+        '0' AS subkey,
+        'kkk' AS value
     UNION ALL
     SELECT
         *
-    FROM Input
+    FROM
+        Input
 );
 
 SELECT
     *
-FROM $input
+FROM
+    $input
 ORDER BY
-    key ASC;
+    key ASC
+;
 
 SELECT
     *
-FROM $input
+FROM
+    $input
 ORDER BY
-    key DESC;
+    key DESC
+;

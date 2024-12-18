@@ -177,6 +177,10 @@ bool TPathElement::IsReplication() const {
     return PathType == EPathType::EPathTypeReplication;
 }
 
+bool TPathElement::IsTransfer() const {
+    return PathType == EPathType::EPathTypeTransfer;
+}
+
 bool TPathElement::IsBlobDepot() const {
     return PathType == EPathType::EPathTypeBlobDepot;
 }

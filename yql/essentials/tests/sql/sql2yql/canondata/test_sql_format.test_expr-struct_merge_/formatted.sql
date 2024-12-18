@@ -2,6 +2,7 @@
 $merge = ($_name, $l, $r) -> {
     RETURN Coalesce($l, 0) + Coalesce($r, 0);
 };
+
 $left = <|a: 1, b: 2, c: 3|>;
 $right = <|c: 1, d: 2, e: 3|>;
 
@@ -11,4 +12,5 @@ SELECT
     StructIntersection($left, $right),
     StructIntersection($left, $right, $merge),
     StructDifference($left, $right),
-    StructSymmetricDifference($left, $right);
+    StructSymmetricDifference($left, $right)
+;

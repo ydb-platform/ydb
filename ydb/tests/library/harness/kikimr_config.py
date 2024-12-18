@@ -69,7 +69,6 @@ def _load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure,
     data = data.format(
         ydb_result_rows_limit=os.getenv("YDB_KQP_RESULT_ROWS_LIMIT", 1000),
         ydb_yql_syntax_version=os.getenv("YDB_YQL_SYNTAX_VERSION", "1"),
-        ydb_force_new_engine=os.getenv("YDB_KQP_FORCE_NEW_ENGINE", "true"),
         ydb_defaut_tablet_node_ids=str(default_tablet_node_ids),
         ydb_default_log_level=int(LogLevels.from_string(os.getenv("YDB_DEFAULT_LOG_LEVEL", "NOTICE"))),
         ydb_domain_name=ydb_domain_name,
@@ -156,6 +155,7 @@ class KikimrConfigGenerator(object):
             default_user_sid=None,
             pg_compatible_expirement=False,
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
+            kafka_api_port=None,
             metadata_section=None,
     ):
         if extra_feature_flags is None:
@@ -248,12 +248,12 @@ class KikimrConfigGenerator(object):
         if os.getenv('YDB_KQP_ENABLE_IMMEDIATE_EFFECTS', 'false').lower() == 'true':
             self.yaml_config["table_service_config"]["enable_kqp_immediate_effects"] = True
 
-        if os.getenv('YDB_TABLE_ENABLE_PREPARED_DDL', 'false').lower() == 'true':
-            self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
-
         if os.getenv('PGWIRE_LISTENING_PORT', ''):
             self.yaml_config["local_pg_wire_config"] = {}
             self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')
+
+        if os.getenv('YDB_TABLE_ENABLE_PREPARED_DDL', 'false').lower() == 'true':
+            self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
 
         if disable_iterator_reads:
             self.yaml_config["table_service_config"]["enable_kqp_scan_query_source_read"] = False
@@ -430,6 +430,13 @@ class KikimrConfigGenerator(object):
 
             self.yaml_config["feature_flags"]["enable_external_data_sources"] = True
             self.yaml_config["feature_flags"]["enable_script_execution_operations"] = True
+
+        if kafka_api_port is not None:
+            kafka_proxy_config = dict()
+            kafka_proxy_config["enable_kafka_proxy"] = True
+            kafka_proxy_config["listening_port"] = kafka_api_port
+
+            self.yaml_config["kafka_proxy_config"] = kafka_proxy_config
 
         self.full_config = dict()
         if metadata_section:

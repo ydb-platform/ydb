@@ -3,30 +3,35 @@ USE plato;
 SELECT
     k1,
     sum(subkey)
-FROM Input
+FROM
+    Input
 GROUP BY
     key + 1u AS k1
 ORDER BY
-    k1;
+    k1
+;
 
 SELECT
     k1,
     k2,
     sum(subkey)
-FROM Input
+FROM
+    Input
 GROUP BY
     key + 1u AS k1,
     key + 2u AS k2
 ORDER BY
     k1,
-    k2;
+    k2
+;
 
 SELECT
     k1,
     k2,
     k3,
     sum(subkey)
-FROM Input
+FROM
+    Input
 GROUP BY
     key + 1u AS k1,
     key + 2u AS k2,
@@ -34,7 +39,8 @@ GROUP BY
 ORDER BY
     k1,
     k2,
-    k3;
+    k3
+;
 
 SELECT
     k1,
@@ -42,7 +48,8 @@ SELECT
     k3,
     k4,
     sum(subkey)
-FROM Input
+FROM
+    Input
 GROUP BY
     key + 1u AS k1,
     key + 2u AS k2,
@@ -52,7 +59,8 @@ ORDER BY
     k1,
     k2,
     k3,
-    k4;
+    k4
+;
 
 SELECT
     k1,
@@ -61,7 +69,8 @@ SELECT
     k4,
     k5,
     sum(subkey)
-FROM Input
+FROM
+    Input
 GROUP BY
     key + 1u AS k1,
     key + 2u AS k2,
@@ -73,4 +82,5 @@ ORDER BY
     k2,
     k3,
     k4,
-    k5;
+    k5
+;

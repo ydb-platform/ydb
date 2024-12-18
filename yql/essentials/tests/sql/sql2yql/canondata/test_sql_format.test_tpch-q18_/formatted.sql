@@ -5,10 +5,12 @@ $in = (
     SELECT
         l_orderkey,
         sum(l_quantity) AS sum_l_quantity
-    FROM plato.lineitem
+    FROM
+        plato.lineitem
     GROUP BY
         l_orderkey
-    HAVING sum(l_quantity) > 315
+    HAVING
+        sum(l_quantity) > 315
 );
 
 $join1 = (
@@ -18,11 +20,12 @@ $join1 = (
         o.o_orderkey AS o_orderkey,
         o.o_orderdate AS o_orderdate,
         o.o_totalprice AS o_totalprice
-    FROM plato.customer
-        AS c
-    JOIN plato.orders
-        AS o
-    ON c.c_custkey == o.o_custkey
+    FROM
+        plato.customer AS c
+    JOIN
+        plato.orders AS o
+    ON
+        c.c_custkey == o.o_custkey
 );
 
 SELECT
@@ -32,11 +35,12 @@ SELECT
     j.o_orderdate AS o_orderdate,
     j.o_totalprice AS o_totalprice,
     sum(i.sum_l_quantity) AS sum_l_quantity
-FROM $join1
-    AS j
-JOIN $in
-    AS i
-ON i.l_orderkey == j.o_orderkey
+FROM
+    $join1 AS j
+JOIN
+    $in AS i
+ON
+    i.l_orderkey == j.o_orderkey
 GROUP BY
     j.c_name,
     j.c_custkey,

@@ -460,46 +460,13 @@ private:
             case EUploadSource::CSV:
             {
                 auto& data = GetSourceData();
-                auto& cvsSettings = GetCsvSettings();
-                ui32 skipRows = cvsSettings.skip_rows();
-                auto& delimiter = cvsSettings.delimiter();
-                auto& nullValue = cvsSettings.null_value();
-                bool withHeader = cvsSettings.header();
-
-                auto reader = NFormats::TArrowCSV::Create(SrcColumns, withHeader, NotNullColumns);
+                auto& csvSettings = GetCsvSettings();
+                auto reader = NFormats::TArrowCSVScheme::Create(SrcColumns, csvSettings.header(), NotNullColumns);
                 if (!reader.ok()) {
                     errorMessage = reader.status().ToString();
                     return false;
                 }
-                const auto& quoting = cvsSettings.quoting();
-                if (quoting.quote_char().length() > 1) {
-                    errorMessage = TStringBuilder() << "Wrong quote char '" << quoting.quote_char() << "'";
-                    return false;
-                }
-                const char qchar = quoting.quote_char().empty() ? '"' : quoting.quote_char().front();
-                reader->SetQuoting(!quoting.disabled(), qchar, !quoting.double_quote_disabled());
-                reader->SetSkipRows(skipRows);
-
-                if (!delimiter.empty()) {
-                    if (delimiter.size() != 1) {
-                        errorMessage = TStringBuilder() << "Wrong delimiter '" << delimiter << "'";
-                        return false;
-                    }
-
-                    reader->SetDelimiter(delimiter[0]);
-                }
-
-                if (!nullValue.empty()) {
-                    reader->SetNullValue(nullValue);
-                }
-
-                if (data.size() > NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE) {
-                    ui32 blockSize = NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE;
-                    blockSize *= data.size() / blockSize + 1;
-                    reader->SetBlockSize(blockSize);
-                }
-
-                Batch = reader->ReadSingleBatch(data, errorMessage);
+                Batch = reader->ReadSingleBatch(data, csvSettings, errorMessage);
                 if (!Batch) {
                     return false;
                 }

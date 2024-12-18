@@ -1,5 +1,43 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.17.0 {#2-17-0}
+
+Released on December 4, 2024. To update to version **2.17.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+
+### Performance
+
+* Improved performance of parallel [importing data from the file system](./reference/ydb-cli/export-import/tools-restore.md) using the `{{ ydb-cli }} tools restore` command.
+
+### Bug fixes
+
+* Fixed a bug in the table schema created by the `{{ ydb-cli }} workload tpch` command where the `partsupp` table contained an incorrect list of key columns.
+* Resolved an issue where the `{{ ydb-cli }} tools restore` command failed with the error "Too much data" if the maximum value of the `--upload-batchbytes` option was set to 16 MB.
+
+## Version 2.16.0 {#2-16-0}
+
+Released on November 26, 2024. To update to version **2.16.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+
+### Features
+
+* Improved throughput of the `{{ ydb-cli }} import file csv` command by up to 3 times.
+* Added support for running the [stock benchmark](./reference/ydb-cli/commands/workload/stock.md) with [column-oriented tables](./concepts/datamodel/table.md#column-oriented-tables).
+* Added support for [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601)–formatted timestamps in `{{ ydb-cli }} topic` commands.
+* Added the `--explain-ast` option to the `ydb sql` command, which prints the query AST.
+* Added ANSI SQL syntax highlighting in interactive mode.
+* Added support for [PostgreSQL syntax](./postgresql/intro.md) in the `{{ ydb-cli }} workload tpch` and `{{ ydb-cli }} workload tpcds` benchmarks.
+* Introduced the `-c` option for the `{{ ydb-cli }} workload tpcds run` command to compare results with expected values and display differences.
+* Added log events for the `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` commands.
+* Enhanced the `{{ ydb-cli }} tools restore` command to display error locations.
+
+### Backward incompatible changes
+
+* Changed the default value of the `{{ ydb-cli }} topic write` command's `--codec` option to `RAW`.
+
+### Bug fixes
+
+* Fixed the progress bar in the `{{ ydb-cli }} workload import` command.
+* Resolved an issue where restoring from a backup using the `--import-data` option could fail if the table's partitioning had changed.
+
 ## Version 2.10.0 {#2-10-0}
 
 Released on June 24, 2024. To update to version **2.10.0**, select the [Downloads](downloads/index.md#ydb-cli) section.

@@ -1,8 +1,8 @@
 /* syntax version 1 */
 /* postgres can not */
 /* yt can not */
-PRAGMA warning("disable", "4510");
-PRAGMA warning("disable", "1108");
+PRAGMA warning('disable', '4510');
+PRAGMA warning('disable', '1108');
 
 SELECT
     YQL::RangeComputeFor(
@@ -13,5 +13,6 @@ SELECT
                 OR $row.y == 2 AND $row.z > 8 AND $row.z < 20
             )
         ),
-        AsTuple(AsAtom("x"), AsAtom("y"), AsAtom("z"))
-    );
+        AsTuple(AsAtom('x'), AsAtom('y'), AsAtom('z'))
+    )
+;

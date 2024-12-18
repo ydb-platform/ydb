@@ -352,7 +352,6 @@ public:
 
     TActorId TabletMigrator;
 
-    TActorId CdcStreamScanFinalizer;
     ui32 MaxCdcInitialScanShardsInFlight = 10;
 
     TDuration StatsMaxExecuteTime;
@@ -495,6 +494,10 @@ public:
 
     void ConfigureBackgroundCleaningQueue(
         const NKikimrConfig::TBackgroundCleaningConfig& config,
+        const TActorContext &ctx);
+
+    void ConfigureLoginProvider(
+        const ::NKikimrProto::TAuthConfig& config,
         const TActorContext &ctx);
 
     void StartStopCompactionQueues();

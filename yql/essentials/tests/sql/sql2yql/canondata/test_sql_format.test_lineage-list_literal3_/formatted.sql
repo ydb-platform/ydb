@@ -1,14 +1,18 @@
 USE plato;
 
-$key =
+$key = (
     SELECT
         min(key)
-    FROM Input;
+    FROM
+        Input
+);
 
-$value =
+$value = (
     SELECT
         min(value)
-    FROM Input;
+    FROM
+        Input
+);
 
 INSERT INTO Output
 SELECT

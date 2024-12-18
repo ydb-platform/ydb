@@ -179,6 +179,12 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleRestore(TKiRestore node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
     TStatus HandleCreateUser(TKiCreateUser node, TExprContext& ctx) override {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
             << "CreateUser is not yet implemented for intent determination transformer"));
@@ -384,6 +390,8 @@ private:
             case TKikimrKey::Type::Replication:
                 return TStatus::Ok;
             case TKikimrKey::Type::BackupCollection:
+                return TStatus::Ok;
+            case TKikimrKey::Type::Sequence:
                 return TStatus::Ok;
         }
 
@@ -613,6 +621,7 @@ public:
 
         if (node.IsCallable(TKiBackup::CallableName())
             || node.IsCallable(TKiBackupIncremental::CallableName())
+            || node.IsCallable(TKiRestore::CallableName())
         ) {
             return true;
         }
@@ -838,10 +847,21 @@ public:
             ? settings.ValueType.Cast()
             : Build<TCoAtom>(ctx, node->Pos()).Value("Null").Done();
 
+        TString sequence;
+
+        if (key.GetKeyType() == TKikimrKey::Type::Sequence) {
+            sequence = key.GetSequencePath();
+        } else if (key.GetKeyType() == TKikimrKey::Type::PGObject) {
+            sequence = key.GetPGObjectId();
+        } else {
+            YQL_ENSURE(false, "Invalid key type for sequence");
+        }
+        
+
         return Build<TKiAlterSequence>(ctx, node->Pos())
             .World(node->Child(0))
             .DataSink(node->Child(1))
-            .Sequence().Build(key.GetPGObjectId())
+            .Sequence().Build(sequence)
             .ValueType(valueType)
             .SequenceSettings(settings.SequenceSettings.Cast())
             .Settings(settings.Other)
@@ -1260,6 +1280,21 @@ public:
                 }
                 break;
             }
+            case TKikimrKey::Type::Sequence: {
+                NCommon::TWriteSequenceSettings settings = NCommon::ParseSequenceSettings(TExprList(node->Child(4)), ctx);
+
+                YQL_ENSURE(settings.Mode);
+                auto mode = settings.Mode.Cast();
+
+                if (mode == "alter" || mode == "alter_if_exists") {
+                    return MakeAlterSequence(node, settings, key, ctx);
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Unknown operation type for sequence"));
+                    return nullptr;
+                }
+
+                break;
+            }
             case TKikimrKey::Type::Object:
             {
                 NCommon::TWriteObjectSettings settings = NCommon::ParseWriteObjectSettings(TExprList(node->Child(4)), ctx);
@@ -1525,6 +1560,14 @@ public:
                         .Ptr();
                 } else if (mode == "backupIncremental") {
                     return Build<TKiBackupIncremental>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .BackupCollection().Build(key.GetBackupCollectionPath().Name)
+                        .Prefix().Build(key.GetBackupCollectionPath().Prefix)
+                        .Done()
+                        .Ptr();
+                } else if (mode == "restore") {
+                    return Build<TKiRestore>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .BackupCollection().Build(key.GetBackupCollectionPath().Name)
@@ -1808,6 +1851,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = TMaybeNode<TKiBackupIncremental>(input)) {
         return HandleBackupIncremental(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiRestore>(input)) {
+        return HandleRestore(node.Cast(), ctx);
     }
 
     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSink) Unsupported function: "

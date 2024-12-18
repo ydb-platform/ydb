@@ -1,8 +1,6 @@
 #include "protobuf_helpers.h"
 #include "mpl.h"
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/core/compression/codec.h>
 
 #include <yt/yt/core/logging/log.h>
@@ -12,6 +10,8 @@
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <library/cpp/yt/misc/cast.h>
+
+#include <library/cpp/yt/threading/spin_lock.h>
 
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/io/zero_copy_stream.h>
@@ -310,14 +310,15 @@ class TProtobufExtensionRegistry
 public:
     void AddAction(TRegisterAction action) override
     {
-        YT_VERIFY(State_ == EState::Uninitialized);
+        YT_VERIFY(State_.load() == EState::Uninitialized);
 
-        Actions_.push_back(std::move(action));
+        RegisterActions_.push_back(std::move(action));
     }
 
     void RegisterDescriptor(const TProtobufExtensionDescriptor& descriptor) override
     {
-        YT_VERIFY(State_ == EState::Initializing);
+        YT_VERIFY(State_.load() == EState::Initializing);
+        YT_VERIFY(InitializationLock_.IsLocked());
 
         EmplaceOrCrash(ExtensionTagToExtensionDescriptor_, descriptor.Tag, descriptor);
         EmplaceOrCrash(ExtensionNameToExtensionDescriptor_, descriptor.Name, descriptor);
@@ -347,28 +348,38 @@ private:
         Initialized
     };
 
-    EState State_ = EState::Uninitialized;
+    std::atomic<EState> State_ = EState::Uninitialized;
+    NThreading::TSpinLock InitializationLock_;
+    std::vector<TRegisterAction> RegisterActions_;
 
     THashMap<int, TProtobufExtensionDescriptor> ExtensionTagToExtensionDescriptor_;
     THashMap<TString, TProtobufExtensionDescriptor> ExtensionNameToExtensionDescriptor_;
 
-    std::vector<TRegisterAction> Actions_;
-
     void EnsureInitialized()
     {
-        if (State_ == EState::Initialized) {
+        // Fast path
+        if (State_.load(std::memory_order::relaxed) == EState::Initialized) {
             return;
         }
 
-        YT_VERIFY(State_ == EState::Uninitialized);
-        State_ = EState::Initializing;
+        // Slow path
+        {
+            auto guard = Guard(InitializationLock_);
 
-        for (const auto& action : Actions_) {
-            action();
+            if (State_.load() == EState::Initialized) {
+                return;
+            }
+
+            YT_VERIFY(State_.load() == EState::Uninitialized);
+            State_.store(EState::Initializing);
+
+            for (const auto& action : RegisterActions_) {
+                action();
+            }
+            RegisterActions_.clear();
+
+            State_.store(EState::Initialized);
         }
-        Actions_.clear();
-
-        State_ = EState::Initialized;
     }
 };
 
@@ -379,7 +390,7 @@ IProtobufExtensionRegistry* IProtobufExtensionRegistry::Get()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Intermediate extension representation for proto<->yson converter.
+//! Intermediate extension representation for proto<->YSON converter.
 struct TExtension
 {
     //! Extension tag.
@@ -389,7 +400,7 @@ struct TExtension
     TString Data;
 };
 
-//! Intermediate extension set representation for proto<->yson converter.
+//! Intermediate extension set representation for proto<->YSON converter.
 struct TExtensionSet
 {
     std::vector<TExtension> Extensions;

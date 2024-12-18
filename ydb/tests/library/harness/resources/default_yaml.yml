@@ -160,6 +160,7 @@ feature_flags:
   enable_persistent_query_stats: true
   enable_scheme_transactions_at_scheme_shard: true
   enable_mvcc_snapshot_reads: true
+  enable_antlr4_parser: true
 kqpconfig:
   settings:
   - name: "_ResultRowsLimit"
@@ -168,8 +169,6 @@ kqpconfig:
     value: "{ydb_yql_syntax_version}"
   - name: "_KqpAllowNewEngine"
     value: "true"
-  - name: "_KqpForceNewEngine"
-    value: "{ydb_force_new_engine}"
 interconnect_config:
   start_tcp: true
 sqs_config:

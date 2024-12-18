@@ -5,8 +5,6 @@
 
 #include <yt/yt/core/misc/error.h>
 
-#include <yt/yt/core/misc/singleton.h>
-
 namespace NYT::NYTree {
 
 using namespace NYson;

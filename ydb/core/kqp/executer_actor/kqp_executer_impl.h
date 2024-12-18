@@ -28,6 +28,7 @@
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/grpc_services/local_rate_limiter.h>
+#include <ydb/core/kqp/common/control.h>
 
 #include <ydb/services/metadata/secret/fetcher.h>
 #include <ydb/services/metadata/secret/snapshot.h>
@@ -146,6 +147,7 @@ public:
         , StreamResult(streamResult)
         , StatementResultIndex(statementResultIndex)
     {
+        EnableReadsMerge = *MergeDatashardReadsControl() == 1;
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
         TasksGraph.GetMeta().Database = Database;
@@ -1084,7 +1086,11 @@ protected:
         return result;
     }
 
-    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, const bool shardsResolved, const bool limitTasksPerNode) {
+    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, const bool shardsResolved, bool limitTasksPerNode) {
+        if (EnableReadsMerge) {
+            limitTasksPerNode = true;
+        }
+
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, ui64> assignedShardsCount;
 
@@ -1793,7 +1799,8 @@ protected:
 
         LOG_E("Sending timeout response to: " << Target);
 
-        this->Shutdown();
+        // Pass away immediately, since we already sent response - don't wait for stats.
+        this->PassAway();
     }
 
     virtual void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status,
@@ -2025,6 +2032,7 @@ protected:
 
     ui32 StatementResultIndex;
     bool AlreadyReplied = false;
+    bool EnableReadsMerge = false;
 
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);

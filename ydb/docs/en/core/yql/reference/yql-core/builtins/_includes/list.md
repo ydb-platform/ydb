@@ -401,7 +401,7 @@ FROM my_table;
 
 ## ListHas {#listhas}
 
-Show whether the list contains the specified element.
+Show whether the list contains the specified element. In this case, `NULL` values are considered equal to each other, and with a `NULL` input list, the result is always `false`.
 
 {% if feature_column_container_type %}
 
@@ -516,10 +516,13 @@ Specifics:
 
 * The end is not included, i.e. `ListFromRange(1,3) == AsList(1,2)`.
 * The type for the resulting elements is selected as the broadest from the argument types. For example, `ListFromRange(1, 2, 0.5)` results in a `Double` list.
+* If the start and the end is one of the date representing type, the step has to be `Interval`.
 * The list is "lazy", but if it's used incorrectly, it can still consume a lot of RAM.
 * If the step is positive and the end is less than or equal to the start, the result list is empty.
 * If the step is negative and the end is greater than or equal to the start, the result list is empty.
 * If the step is neither positive nor negative (0 or NaN), the result list is empty.
+* If any of the parameters is optional, the result list is optional.
+* If any of the parameters is `NULL`, the result is `NULL`.
 
 ### Examples
 
@@ -527,6 +530,13 @@ Specifics:
 SELECT
     ListFromRange(-2, 2), -- [-2, -1, 0, 1]
     ListFromRange(2, 1, -0.5); -- [2.0, 1.5]
+```
+
+### Signature
+
+```yql
+ListFromRange(T{Flags:AutoMap}, T{Flags:AutoMap}, T?)->LazyList<T> -- T — numeric type
+ListFromRange(T{Flags:AutoMap}, T{Flags:AutoMap}, I?)->LazyList<T> -- T — type, representing date/time, I — interval
 ```
 
 ## ListReplicate {#listreplicate}

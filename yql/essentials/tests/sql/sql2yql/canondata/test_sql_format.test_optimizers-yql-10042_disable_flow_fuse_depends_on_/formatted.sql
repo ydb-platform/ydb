@@ -9,8 +9,10 @@ FROM (
     SELECT
         key AS a,
         key AS b
-    FROM Input0
+    FROM
+        Input0
 )
 ORDER BY
     first,
-    second;
+    second
+;

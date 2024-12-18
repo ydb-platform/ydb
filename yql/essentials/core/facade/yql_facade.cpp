@@ -874,7 +874,7 @@ TProgram::TFutureStatus TProgram::LineageAsync(const TString& username, IOutputS
         .AddPreTypeAnnotation()
         .AddExpressionEvaluation(*FunctionRegistry_)
         .AddIOAnnotation()
-        .AddTypeAnnotation()
+        .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
         .AddPostTypeAnnotation()
         .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
         .AddCheckExecution(false)
@@ -937,7 +937,7 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
             .AddPreTypeAnnotation()
             .AddExpressionEvaluation(*FunctionRegistry_)
             .AddIOAnnotation()
-            .AddTypeAnnotation()
+            .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
             .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
             .Build();
 
@@ -1012,7 +1012,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
         .AddPreTypeAnnotation()
         .AddExpressionEvaluation(*FunctionRegistry_)
         .AddIOAnnotation()
-        .AddTypeAnnotation()
+        .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
         .AddPostTypeAnnotation()
         .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
         .AddOptimization()
@@ -1080,7 +1080,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation();
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
@@ -1139,7 +1139,7 @@ TProgram::TFutureStatus TProgram::LineageAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation();
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
@@ -1220,7 +1220,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation();
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
     pipeline.AddPostTypeAnnotation();
     pipeline.Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput");
     pipeline.AddOptimization();
@@ -1297,7 +1297,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation();
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
@@ -1598,14 +1598,13 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
     }
 
     TStringStream out;
-    NYson::TYsonWriter writer(&out);
+    NYson::TYsonWriter writer(&out, OutputFormat_);
     // Header
     writer.OnBeginMap();
     writer.OnKeyedItem("ExecutionStatistics");
     writer.OnBeginMap();
 
     // Providers
-    bool hasStatistics = false;
     THashSet<TStringBuf> processed;
     for (auto& datasink : TypeCtx_->DataSinks) {
         TStringStream providerOut;
@@ -1613,7 +1612,6 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
         if (datasink->CollectStatistics(providerWriter, totalOnly)) {
             writer.OnKeyedItem(datasink->GetName());
             writer.OnRaw(providerOut.Str());
-            hasStatistics = true;
             processed.insert(datasink->GetName());
         }
     }
@@ -1624,7 +1622,6 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
             if (datasource->CollectStatistics(providerWriter, totalOnly)) {
                 writer.OnKeyedItem(datasource->GetName());
                 writer.OnRaw(providerOut.Str());
-                hasStatistics = true;
             }
         }
     }
@@ -1655,20 +1652,23 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
 
     writer.OnEndMap(); // system
 
+    if (TypeCtx_->Modules) {
+        writer.OnKeyedItem("moduleResolver");
+        writer.OnBeginMap();
+        TypeCtx_->Modules->WriteStatistics(writer);
+        writer.OnEndMap();
+    }
+
     // extra
     for (const auto &[k, extraYson] : extraYsons) {
         writer.OnKeyedItem(k);
         writer.OnRaw(extraYson);
-        hasStatistics = true;
     }
 
     // Footer
     writer.OnEndMap();
     writer.OnEndMap();
-    if (hasStatistics) {
-        return out.Str();
-    }
-    return Nothing();
+    return out.Str();
 }
 
 TMaybe<TString> TProgram::GetDiscoveredData() {
@@ -1677,7 +1677,7 @@ TMaybe<TString> TProgram::GetDiscoveredData() {
     }
 
     TStringStream out;
-    NYson::TYsonWriter writer(&out);
+    NYson::TYsonWriter writer(&out, OutputFormat_);
     writer.OnBeginMap();
     for (auto& datasource: TypeCtx_->DataSources) {
         TStringStream providerOut;
@@ -1711,6 +1711,7 @@ TIssues TProgram::Issues() const {
         result.AddIssues(ExprCtx_->IssueManager.GetIssues());
     }
     result.AddIssues(FinalIssues_);
+    CheckFatalIssues(result);
     return result;
 }
 
@@ -1720,6 +1721,7 @@ TIssues TProgram::CompletedIssues() const {
         result.AddIssues(ExprCtx_->IssueManager.GetCompletedIssues());
     }
     result.AddIssues(FinalIssues_);
+    CheckFatalIssues(result);
     return result;
 }
 

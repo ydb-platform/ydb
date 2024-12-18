@@ -38,6 +38,6 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     const TOptimizerHints& hints = {}
 );
 
-IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& ctx, const ui32 maxDPccpDPTableSize);
+IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& ctx, const ui32 maxDPHypDPTableSize, TExprContext& ectx);
 
 } // namespace NYql::NDq

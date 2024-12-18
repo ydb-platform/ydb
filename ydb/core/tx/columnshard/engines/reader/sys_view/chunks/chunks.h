@@ -27,7 +27,7 @@ private:
 public:
     using TBase::TBase;
 
-    virtual std::unique_ptr<TScanIteratorBase> StartScan(const std::shared_ptr<TReadContext>& /*readContext*/) const override;
+    virtual std::unique_ptr<TScanIteratorBase> StartScan(const std::shared_ptr<TReadContext>& readContext) const override;
     virtual std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const override;
 };
 
@@ -127,7 +127,7 @@ private:
                 AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
                 NActors::TActivationContext::AsActorContext().Send(
                     OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
-                                 std::make_shared<TApplyResult>(result.GetPortions(), std::move(WaitingCountersGuard))));
+                                 std::make_shared<TApplyResult>(result.ExtractPortionsVector(), std::move(WaitingCountersGuard))));
             }
         }
 

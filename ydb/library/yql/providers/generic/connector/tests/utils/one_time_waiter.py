@@ -4,7 +4,7 @@ import time
 
 import yatest.common
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
 from ydb.library.yql.providers.generic.connector.tests.utils.docker_compose import DockerComposeHelper
 
@@ -17,7 +17,7 @@ class OneTimeWaiter:
     def __init__(
         self,
         docker_compose_file_path: str,
-        data_source_kind: EDataSourceKind,
+        data_source_kind: EGenericDataSourceKind,
         expected_tables: Sequence[str],
     ):
         docker_compose_file_abs_path = yatest.common.source_path(docker_compose_file_path)

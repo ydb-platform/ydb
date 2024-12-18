@@ -1,5 +1,6 @@
 #include "memory_usage_tracker.h"
-#include "singleton.h"
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 namespace NYT {
 

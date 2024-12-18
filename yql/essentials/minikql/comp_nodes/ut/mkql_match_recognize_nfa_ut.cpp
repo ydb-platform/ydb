@@ -59,7 +59,7 @@ struct TNfaSetup {
         for (auto& d: Defines) {
             defines.push_back(d);
         }
-        return TNfa(transitionGraph, MatchedVars, defines);
+        return TNfa(transitionGraph, MatchedVars, defines, TAfterMatchSkipTo{EAfterMatchSkipTo::PastLastRow, ""});
     }
 
     TComputationNodeFactory GetAuxCallableFactory() {
@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(MatchRecognizeNfa) {
             }
             std::visit(TNfaTransitionDestinationVisitor([&](size_t toNode) -> size_t {
                 if (auto *tr = std::get_if<TEpsilonTransitions>(&graph->Transitions[toNode])) {
-                    UNIT_ASSERT_UNEQUAL(tr->size(), 1);
+                    UNIT_ASSERT_UNEQUAL(tr->To.size(), 1);
                 }
                 return toNode;
             }), graph->Transitions[node]);
@@ -239,33 +239,40 @@ Y_UNIT_TEST_SUITE(MatchRecognizeNfa) {
         }
     }
     Y_UNIT_TEST(SingleVarRepeatedAndCheckRanges) {
+        constexpr size_t inputSize = 100;
+        constexpr size_t seriesLength = 6;
         TScopedAlloc alloc(__LOCATION__);
         THolderFactory holderFactory(alloc.Ref(), memUsage);
-        // "A{4, 6}"
-        const TRowPattern pattern{{TRowPatternFactor{"A", 4, 6, false, false, false}}};
+        // "A{1, 6}"
+        const TRowPattern pattern{
+            {TRowPatternFactor{"A", 1, seriesLength, false, false, false}}
+        };
         TNfaSetup setup{pattern};
         auto& defineA = setup.Defines.at(0);
         auto& ctx = setup.Ctx();
-        defineA->SetValue(ctx, NUdf::TUnboxedValuePod{true});
         TSparseList list;
-        for (size_t i = 0; i != 100; ++i) {
+        defineA->SetValue(ctx, NUdf::TUnboxedValuePod{true});
+        for (size_t i = 0; i < inputSize; ++i) {
             setup.Nfa.ProcessRow(list.Append(NUdf::TUnboxedValue{}), ctx);
-            if (i < 3) {
+            if (i + 1 < seriesLength) {
                 UNIT_ASSERT_VALUES_EQUAL(0, setup.GetMatchedCount());
-            } else if (i <= 5) {
-                UNIT_ASSERT_VALUES_EQUAL(i - 2, setup.GetMatchedCount());
-            } else { //expect 3 matches
-                THashSet<size_t> expectedFrom{i - 5, i - 4, i - 3};
-                for (size_t c = 0; c != 3; ++c) {
-                    auto m = setup.Nfa.GetMatched();
-                    UNIT_ASSERT(m);
-                    UNIT_ASSERT_VALUES_EQUAL(1, m->size()); //single var
-                    auto v = m->at(0);
-                    UNIT_ASSERT_VALUES_EQUAL(1, v.size()); //single range
-                    expectedFrom.erase(v[0].From());
-                    UNIT_ASSERT_VALUES_EQUAL(i, v[0].To());
+            } else {
+                TVector<size_t> expectedTo(seriesLength);
+                Iota(expectedTo.begin(), expectedTo.end(), i - seriesLength + 1);
+                for (size_t matchCount = 0; matchCount < seriesLength; ++matchCount) {
+                    auto match = setup.Nfa.GetMatched();
+                    UNIT_ASSERT_C(match, i);
+                    auto vars = match->Vars;
+                    UNIT_ASSERT_VALUES_EQUAL_C(1, vars.size(), i);
+                    auto var = vars[0];
+                    UNIT_ASSERT_VALUES_EQUAL_C(1, var.size(), i);
+                    if (auto expectedToIter = Find(expectedTo, var[0].To());
+                        expectedToIter != expectedTo.end()) {
+                        expectedTo.erase(expectedToIter);
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL_C(i - seriesLength + 1, var[0].From(), i);
                 }
-                UNIT_ASSERT_VALUES_EQUAL(0, expectedFrom.size());
+                UNIT_ASSERT_VALUES_EQUAL_C(0, expectedTo.size(), i);
             }
         }
     }
@@ -333,96 +340,101 @@ Y_UNIT_TEST_SUITE(MatchRecognizeNfa) {
     }
 
     //Match every contiguous subset (n*n of input size)
-    //Pattern: Any*
-    //Input any event matches Any
+    //Pattern: Any{1,100}
+    //Input: any event matches Any
     Y_UNIT_TEST(AnyStar) {
+        constexpr size_t inputSize = 100;
         TScopedAlloc alloc(__LOCATION__);
         THolderFactory holderFactory(alloc.Ref(), memUsage);
-        //"Any*"
         const TRowPattern pattern{{
-            TRowPatternFactor{"A", 1, 1000000000, false, false, false},
+            TRowPatternFactor{"ANY", 1, inputSize, false, false, false},
         }};
         TNfaSetup setup{pattern};
         auto& defineA = setup.Defines.at(0);
         auto& ctx = setup.Ctx();
         defineA->SetValue(ctx, NUdf::TUnboxedValuePod{true});
         TSparseList list;
-        const size_t inputSize = 100;
-        size_t totalMatches = 0;
-        for (size_t i = 0; i != inputSize; ++i) {
+        for (size_t i = 0; i < inputSize; ++i) {
             setup.Nfa.ProcessRow(list.Append(NUdf::TUnboxedValue{}), ctx);
-            const auto matches = setup.GetMatchedCount();
-            totalMatches += matches;
-            UNIT_ASSERT_VALUES_EQUAL(i + 1, matches);
-            UNIT_ASSERT_VALUES_EQUAL(i + 1, setup.Nfa.GetActiveStatesCount());
+            if (i + 1 == inputSize) {
+                UNIT_ASSERT_VALUES_EQUAL((i + 1) * (i + 4) / 2 - 1, setup.Nfa.GetActiveStatesCount());
+                UNIT_ASSERT_VALUES_EQUAL(inputSize, setup.GetMatchedCount());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL((i + 1) * (i + 4) / 2, setup.Nfa.GetActiveStatesCount());
+                UNIT_ASSERT_VALUES_EQUAL(0, setup.GetMatchedCount());
+            }
         }
-        UNIT_ASSERT_VALUES_EQUAL(inputSize * (inputSize + 1) / 2, totalMatches);
     }
-
-    Y_UNIT_TEST(UnusedVarIgnored) {
+    Y_UNIT_TEST(AnyStarUnused) {
+        constexpr size_t inputSize = 100;
         TScopedAlloc alloc(__LOCATION__);
         THolderFactory holderFactory(alloc.Ref(), memUsage);
         const TRowPattern pattern{{
-            TRowPatternFactor{"ANY", 1, 100, false, false, true},
+            TRowPatternFactor{"ANY", 1, inputSize, false, false, true},
         }};
         TNfaSetup setup{pattern};
         auto& defineA = setup.Defines.at(0);
         auto& ctx = setup.Ctx();
         defineA->SetValue(ctx, NUdf::TUnboxedValuePod{true});
         TSparseList list;
-        const size_t inputSize = 100;
-        for (size_t i = 0; i != inputSize; ++i) {
+        for (size_t i = 0; i < inputSize; ++i) {
             setup.Nfa.ProcessRow(list.Append(NUdf::TUnboxedValue{}), ctx);
-            UNIT_ASSERT_EQUAL(0, setup.Nfa.GetMatched().value()[0].size());
+            if (i + 1 == inputSize) {
+                UNIT_ASSERT_VALUES_EQUAL((i + 1) * (i + 4) / 2 - 1, setup.Nfa.GetActiveStatesCount());
+                UNIT_ASSERT_VALUES_EQUAL(inputSize, setup.GetMatchedCount());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL((i + 1) * (i + 4) / 2, setup.Nfa.GetActiveStatesCount());
+                UNIT_ASSERT_VALUES_EQUAL(0, setup.GetMatchedCount());
+            }
         }
     }
 
     //Pattern: A*
     //Input: intermittent series events that match A
     Y_UNIT_TEST(AStar) {
+        constexpr size_t inputSize = 100;
+        constexpr size_t seriesPeriod = 10;
+        constexpr size_t seriesLength = 3;
         TScopedAlloc alloc(__LOCATION__);
         THolderFactory holderFactory(alloc.Ref(), memUsage);
-        //"A*"
         const TRowPattern pattern{{
-            TRowPatternFactor{"A", 1, 1000000000, false, false, false},
+            TRowPatternFactor{"A", 1, seriesLength, false, false, false},
         }};
         TNfaSetup setup{pattern};
         auto& defineA = setup.Defines.at(0);
         auto& ctx = setup.Ctx();
         TSparseList list;
-        const size_t inputSize = 100;
-        const size_t seriesPeriod = 10;
-        const size_t seriesLength =  3;
-        size_t totalMatches = 0;
-        //Intermittent series of matched events
-        for (size_t i = 0; i != inputSize; ++i) {
-            defineA->SetValue(ctx, NUdf::TUnboxedValuePod{i % seriesPeriod < seriesLength});
+        for (size_t i = 0; i < inputSize; ++i) {
+            auto seriesIndex = i % seriesPeriod;
+            defineA->SetValue(ctx, NUdf::TUnboxedValuePod{seriesIndex < seriesLength});
             setup.Nfa.ProcessRow(list.Append(NUdf::TUnboxedValue{}), ctx);
-            const auto matches = setup.GetMatchedCount();
-            totalMatches += matches;
-            if (i % seriesPeriod < seriesLength) {
-                UNIT_ASSERT_VALUES_EQUAL(i % seriesPeriod + 1, matches);
-                UNIT_ASSERT(setup.Nfa.GetActiveStatesCount() <= 2 * seriesLength);
+            if (seriesIndex + 1 == seriesLength) {
+                UNIT_ASSERT_VALUES_EQUAL(seriesLength, setup.GetMatchedCount());
+                UNIT_ASSERT_VALUES_EQUAL(seriesIndex * (seriesIndex + 3) / 2, setup.Nfa.GetActiveStatesCount());
+            } else if (seriesIndex < seriesLength) {
+                UNIT_ASSERT_VALUES_EQUAL(0, setup.GetMatchedCount());
+                UNIT_ASSERT_VALUES_EQUAL((seriesIndex + 1) * (seriesIndex + 4) / 2, setup.Nfa.GetActiveStatesCount());
+            } else if (seriesIndex == seriesLength) {
+                UNIT_ASSERT_VALUES_EQUAL((seriesIndex - 1) * seriesIndex / 2, setup.GetMatchedCount());
+                UNIT_ASSERT_VALUES_EQUAL(0, setup.Nfa.GetActiveStatesCount());
             } else {
-                UNIT_ASSERT_VALUES_EQUAL(0, matches);
+                UNIT_ASSERT_VALUES_EQUAL(0, setup.GetMatchedCount());
                 UNIT_ASSERT_VALUES_EQUAL(0, setup.Nfa.GetActiveStatesCount());
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(
-            (inputSize / seriesPeriod) * (seriesLength * (seriesLength + 1)) / 2,
-            totalMatches)
-        ;
     }
 
     //Pattern: A ANY* B
     //Input: x x x A x x x B x x x
     Y_UNIT_TEST(A_AnyStar_B_SingleMatch) {
+        constexpr size_t inputSize = 100;
+        constexpr size_t offsetA = 24;
+        constexpr size_t offsetB = 75;
         TScopedAlloc alloc(__LOCATION__);
         THolderFactory holderFactory(alloc.Ref(), memUsage);
-        //"A ANY* B"
         const TRowPattern pattern{{
             TRowPatternFactor{"A", 1, 1, false, false, false},
-            TRowPatternFactor{"ANY", 1, 1000000000, false, false, false},
+            TRowPatternFactor{"ANY", 1, offsetB - offsetA - 1, false, false, false},
             TRowPatternFactor{"B", 1, 1, false, false, false},
         }};
         TNfaSetup setup{pattern};
@@ -432,26 +444,37 @@ Y_UNIT_TEST_SUITE(MatchRecognizeNfa) {
         auto& ctx = setup.Ctx();
         TSparseList list;
         defineAny->SetValue(ctx, NUdf::TUnboxedValuePod{true});
-        const size_t size = 100;
-        //Number of active states doesn't depend on input size for a single match
-        for (size_t i = 0; i != size; ++i) {
-            defineA->SetValue(ctx, NUdf::TUnboxedValuePod{i == 10});
-            defineB->SetValue(ctx, NUdf::TUnboxedValuePod{i == 60});
+        for (size_t i = 0; i < inputSize; ++i) {
+            defineA->SetValue(ctx, NUdf::TUnboxedValuePod{i == offsetA});
+            defineB->SetValue(ctx, NUdf::TUnboxedValuePod{i == offsetB});
             setup.Nfa.ProcessRow(list.Append(NUdf::TUnboxedValue{}), ctx);
-            UNIT_ASSERT_VALUES_EQUAL(i == 60 ? 1 : 0, setup.GetMatchedCount());
-            UNIT_ASSERT(setup.Nfa.GetActiveStatesCount() <= 3);
+            UNIT_ASSERT_VALUES_EQUAL(i == offsetB ? 1 : 0, setup.GetMatchedCount());
+            if (i < offsetA) {
+                UNIT_ASSERT_VALUES_EQUAL(0, setup.Nfa.GetActiveStatesCount());
+            } else if (i == offsetA) {
+                UNIT_ASSERT_VALUES_EQUAL(1, setup.Nfa.GetActiveStatesCount());
+            } else if (i + 1 < offsetB) {
+                UNIT_ASSERT_VALUES_EQUAL(2, setup.Nfa.GetActiveStatesCount());
+            } else if (i + 1 == offsetB) {
+                UNIT_ASSERT_VALUES_EQUAL(1, setup.Nfa.GetActiveStatesCount());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(0, setup.Nfa.GetActiveStatesCount());
+            }
         }
     }
 
     //Pattern: A ANY* B
     //Input: x x x A x x x B x x x A x x x B ...
     Y_UNIT_TEST(A_AnyStar_B_Series) {
+        constexpr size_t inputSize = 100;
+        constexpr size_t seriesPeriod = 10;
+        constexpr size_t offsetA = 2;
+        constexpr size_t offsetB = 7;
         TScopedAlloc alloc(__LOCATION__);
         THolderFactory holderFactory(alloc.Ref(), memUsage);
-        //"A ANY* B"
         const TRowPattern pattern{{
             TRowPatternFactor{"A", 1, 1, false, false, false},
-            TRowPatternFactor{"ANY", 1, 1000000000, false, false, false},
+            TRowPatternFactor{"ANY", 1, offsetB - offsetA - 1, false, false, false},
             TRowPatternFactor{"B", 1, 1, false, false, false},
         }};
         TNfaSetup setup{pattern};
@@ -461,45 +484,40 @@ Y_UNIT_TEST_SUITE(MatchRecognizeNfa) {
         auto& ctx = setup.Ctx();
         TSparseList list;
         defineAny->SetValue(ctx, NUdf::TUnboxedValuePod{true});
-        const size_t inputSize = 100;
-        const size_t seriesPeriod = 10;
-        const size_t offsetA = 2;
-        const size_t offsetB = 7;
-        size_t totalMatches = 0;
-        for (size_t i = 0; i != inputSize; ++i) {
-            defineA->SetValue(ctx, NUdf::TUnboxedValuePod{i % seriesPeriod == offsetA});
-            defineB->SetValue(ctx, NUdf::TUnboxedValuePod{i % seriesPeriod == offsetB});
+        for (size_t i = 0; i < inputSize; ++i) {
+            auto seriesIndex = i % seriesPeriod;
+            defineA->SetValue(ctx, NUdf::TUnboxedValuePod{seriesIndex == offsetA});
+            defineB->SetValue(ctx, NUdf::TUnboxedValuePod{seriesIndex == offsetB});
             setup.Nfa.ProcessRow(list.Append(NUdf::TUnboxedValue{}), ctx);
-            const auto expectedMatches = (i / seriesPeriod + 1);
-            if (i % seriesPeriod == offsetB) {
-                //Any matched A is a part for every subsequent B, because B matches ANY
-                const auto matches = setup.GetMatchedCount();
-                totalMatches += expectedMatches;
-                UNIT_ASSERT_VALUES_EQUAL(expectedMatches, matches);
+            UNIT_ASSERT_VALUES_EQUAL(seriesIndex == offsetB ? 1 : 0, setup.GetMatchedCount());
+            if (seriesIndex < offsetA) {
+                UNIT_ASSERT_VALUES_EQUAL(0, setup.Nfa.GetActiveStatesCount());
+            } else if (seriesIndex == offsetA) {
+                UNIT_ASSERT_VALUES_EQUAL(1, setup.Nfa.GetActiveStatesCount());
+            } else if (seriesIndex + 1 < offsetB) {
+                UNIT_ASSERT_VALUES_EQUAL(2, setup.Nfa.GetActiveStatesCount());
+            } else if (seriesIndex + 1 == offsetB) {
+                UNIT_ASSERT_VALUES_EQUAL(1, setup.Nfa.GetActiveStatesCount());
             } else {
-                UNIT_ASSERT_VALUES_EQUAL(0, setup.GetMatchedCount());
-                const auto expectedStates = (i / seriesPeriod + 1) * 2 + 2;
-                UNIT_ASSERT(setup.Nfa.GetActiveStatesCount() <= expectedStates);
+                UNIT_ASSERT_VALUES_EQUAL(0, setup.Nfa.GetActiveStatesCount());
             }
         }
-        const auto seriesCount = inputSize / seriesPeriod;
-        UNIT_ASSERT_VALUES_EQUAL(
-                seriesCount * (seriesCount + 1) / 2,
-                totalMatches
-        );
     }
 
     //Pattern: A ANY* B ANY* C
     //Input: x x x A x x x B x x x C x x x
     Y_UNIT_TEST(A_AnyStar_B_AnyStar_C_SingleMatch) {
+        constexpr size_t inputSize = 100;
+        constexpr size_t offsetA = 20;
+        constexpr size_t offsetB = 50;
+        constexpr size_t offsetC = 80;
         TScopedAlloc alloc(__LOCATION__);
         THolderFactory holderFactory(alloc.Ref(), memUsage);
-        //"A ANY* B ANY* C"
         const TRowPattern pattern{{
             TRowPatternFactor{"A", 1, 1, false, false, false},
-            TRowPatternFactor{"ANY", 1, 1000000000, false, false, false},
+            TRowPatternFactor{"ANY", 1, offsetB - offsetA - 1, false, false, false},
             TRowPatternFactor{"B", 1, 1, false, false, false},
-            TRowPatternFactor{"ANY", 1, 1000000000, false, false, false},
+            TRowPatternFactor{"ANY", 1, offsetC - offsetB - 1, false, false, false},
             TRowPatternFactor{"C", 1, 1, false, false, false},
         }};
         TNfaSetup setup{pattern};
@@ -510,18 +528,77 @@ Y_UNIT_TEST_SUITE(MatchRecognizeNfa) {
         auto& ctx = setup.Ctx();
         TSparseList list;
         defineAny->SetValue(ctx, NUdf::TUnboxedValuePod{true});
-        const size_t inputSize = 100;
-        const size_t seriesPeriod = 100;
-        const size_t offsetA = 20;
-        const size_t offsetB = 50;
-        const size_t offsetC = 80;
-        for (size_t i = 0; i != inputSize; ++i) {
-            defineA->SetValue(ctx, NUdf::TUnboxedValuePod{i % seriesPeriod == offsetA});
-            defineB->SetValue(ctx, NUdf::TUnboxedValuePod{i % seriesPeriod == offsetB});
-            defineC->SetValue(ctx, NUdf::TUnboxedValuePod{i % seriesPeriod == offsetC});
+        for (size_t i = 0; i < inputSize; ++i) {
+            defineA->SetValue(ctx, NUdf::TUnboxedValuePod{i == offsetA});
+            defineB->SetValue(ctx, NUdf::TUnboxedValuePod{i == offsetB});
+            defineC->SetValue(ctx, NUdf::TUnboxedValuePod{i == offsetC});
             setup.Nfa.ProcessRow(list.Append(NUdf::TUnboxedValue{}), ctx);
-            const auto matches = setup.GetMatchedCount();
-            UNIT_ASSERT_VALUES_EQUAL(i == 80 ? 1: 0, matches);
+            UNIT_ASSERT_VALUES_EQUAL(i == offsetC ? 1 : 0, setup.GetMatchedCount());
+            if (i < offsetA) {
+                UNIT_ASSERT_VALUES_EQUAL(0, setup.Nfa.GetActiveStatesCount());
+            } else if (i == offsetA) {
+                UNIT_ASSERT_VALUES_EQUAL(1, setup.Nfa.GetActiveStatesCount());
+            } else if (i + 1 < offsetB) {
+                UNIT_ASSERT_VALUES_EQUAL(2, setup.Nfa.GetActiveStatesCount());
+            } else if (i + 1 == offsetB || i == offsetB) {
+                UNIT_ASSERT_VALUES_EQUAL(1, setup.Nfa.GetActiveStatesCount());
+            } else if (i + 1 < offsetC) {
+                UNIT_ASSERT_VALUES_EQUAL(2, setup.Nfa.GetActiveStatesCount());
+            } else if (i + 1 == offsetC) {
+                UNIT_ASSERT_VALUES_EQUAL(1, setup.Nfa.GetActiveStatesCount());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(0, setup.Nfa.GetActiveStatesCount());
+            }
+        }
+    }
+
+    //Pattern: A ANY* B ANY* C
+    //Input: x x x A x x x B x x x C x x x A x x x B x x x C x x x
+    Y_UNIT_TEST(A_AnyStar_B_AnyStar_C_Series) {
+        constexpr size_t inputSize = 100;
+        constexpr size_t seriesPeriod = 10;
+        constexpr size_t offsetA = 2;
+        constexpr size_t offsetB = 5;
+        constexpr size_t offsetC = 8;
+        TScopedAlloc alloc(__LOCATION__);
+        THolderFactory holderFactory(alloc.Ref(), memUsage);
+        const TRowPattern pattern{{
+            TRowPatternFactor{"A", 1, 1, false, false, false},
+            TRowPatternFactor{"ANY", 1, offsetB - offsetA - 1, false, false, false},
+            TRowPatternFactor{"B", 1, 1, false, false, false},
+            TRowPatternFactor{"ANY", 1, offsetC - offsetB - 1, false, false, false},
+            TRowPatternFactor{"C", 1, 1, false, false, false},
+        }};
+        TNfaSetup setup{pattern};
+        auto& defineA = setup.Defines.at(0);
+        auto& defineAny = setup.Defines.at(1);
+        auto& defineB = setup.Defines.at(2);
+        auto& defineC = setup.Defines.at(3);
+        auto& ctx = setup.Ctx();
+        TSparseList list;
+        defineAny->SetValue(ctx, NUdf::TUnboxedValuePod{true});
+        for (size_t i = 0; i < inputSize; ++i) {
+            auto seriesIndex = i % seriesPeriod;
+            defineA->SetValue(ctx, NUdf::TUnboxedValuePod{seriesIndex == offsetA});
+            defineB->SetValue(ctx, NUdf::TUnboxedValuePod{seriesIndex == offsetB});
+            defineC->SetValue(ctx, NUdf::TUnboxedValuePod{seriesIndex == offsetC});
+            setup.Nfa.ProcessRow(list.Append(NUdf::TUnboxedValue{}), ctx);
+            UNIT_ASSERT_VALUES_EQUAL(seriesIndex == offsetC ? 1 : 0, setup.GetMatchedCount());
+            if (seriesIndex < offsetA) {
+                UNIT_ASSERT_VALUES_EQUAL(0, setup.Nfa.GetActiveStatesCount());
+            } else if (seriesIndex == offsetA) {
+                UNIT_ASSERT_VALUES_EQUAL(1, setup.Nfa.GetActiveStatesCount());
+            } else if (seriesIndex + 1 < offsetB) {
+                UNIT_ASSERT_VALUES_EQUAL(2, setup.Nfa.GetActiveStatesCount());
+            } else if (seriesIndex + 1 == offsetB || seriesIndex == offsetB) {
+                UNIT_ASSERT_VALUES_EQUAL(1, setup.Nfa.GetActiveStatesCount());
+            } else if (seriesIndex + 1 < offsetC) {
+                UNIT_ASSERT_VALUES_EQUAL(2, setup.Nfa.GetActiveStatesCount());
+            } else if (seriesIndex + 1 == offsetC) {
+                UNIT_ASSERT_VALUES_EQUAL(1, setup.Nfa.GetActiveStatesCount());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(0, setup.Nfa.GetActiveStatesCount());
+            }
         }
     }
 }

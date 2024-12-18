@@ -38,22 +38,6 @@ def extract_macro_calls2(unit, macro_value_name):
     return calls
 
 
-def ongenerate_script(unit, *args):
-    """
-    heretic@ promised to make tutorial here
-    Don't forget
-    Feel free to remind
-    """
-    flat, kv = common.sort_by_keywords({'OUT': -1, 'TEMPLATE': -1, 'CUSTOM_PROPERTY': -1}, args)
-    if len(kv.get('TEMPLATE', [])) > len(kv.get('OUT', [])):
-        ymake.report_configure_error('To many arguments for TEMPLATE parameter')
-    prev = unit.get(['GENERATE_SCRIPT_VALUE']) or ''
-    new_val = (
-        prev + ' ' + six.ensure_str(base64.b64encode(six.ensure_binary(json.dumps(list(args)), encoding='utf-8')))
-    ).strip()
-    unit.set(['GENERATE_SCRIPT_VALUE', new_val])
-
-
 def onjava_module(unit, *args):
     args_delim = unit.get('ARGS_DELIM')
 
@@ -72,8 +56,6 @@ def onjava_module(unit, *args):
         'JAVA_SRCS': extract_macro_calls(unit, 'JAVA_SRCS_VALUE', args_delim),
         'JAVAC_FLAGS': extract_macro_calls(unit, 'JAVAC_FLAGS_VALUE', args_delim),
         'ANNOTATION_PROCESSOR': extract_macro_calls(unit, 'ANNOTATION_PROCESSOR_VALUE', args_delim),
-        'EXTERNAL_JAR': [],
-        'MAVEN_GROUP_ID': [],
         'JAR_INCLUDE_FILTER': extract_macro_calls(unit, 'JAR_INCLUDE_FILTER_VALUE', args_delim),
         'JAR_EXCLUDE_FILTER': extract_macro_calls(unit, 'JAR_EXCLUDE_FILTER_VALUE', args_delim),
         # TODO remove when java test dart is in prod
@@ -90,7 +72,6 @@ def onjava_module(unit, *args):
         'IDEA_EXCLUDE': extract_macro_calls(unit, 'IDEA_EXCLUDE_DIRS_VALUE', args_delim),
         'IDEA_RESOURCE': extract_macro_calls(unit, 'IDEA_RESOURCE_DIRS_VALUE', args_delim),
         'IDEA_MODULE_NAME': extract_macro_calls(unit, 'IDEA_MODULE_NAME_VALUE', args_delim),
-        'GENERATE_SCRIPT': extract_macro_calls2(unit, 'GENERATE_SCRIPT_VALUE'),
         'FAKEID': extract_macro_calls(unit, 'FAKEID', args_delim),
         'TEST_DATA': extract_macro_calls(unit, 'TEST_DATA_VALUE', args_delim),
         'JAVA_FORBIDDEN_LIBRARIES': extract_macro_calls(unit, 'JAVA_FORBIDDEN_LIBRARIES_VALUE', args_delim),
@@ -170,15 +151,14 @@ def onjava_module(unit, *args):
             )
         data['WITH_JDK'] = extract_macro_calls(unit, 'WITH_JDK_VALUE', args_delim)
 
-    if not data['EXTERNAL_JAR']:
-        # IMPORTANT before switching vcs_info.py to python3 the value was always evaluated to $YMAKE_PYTHON but no
-        # code in java dart parser extracts its value only checks this key for existance.
-        data['EMBED_VCS'] = [['yes']]
-        # FORCE_VCS_INFO_UPDATE is responsible for setting special value of VCS_INFO_DISABLE_CACHE__NO_UID__
-        macro_val = extract_macro_calls(unit, 'FORCE_VCS_INFO_UPDATE', args_delim)
-        macro_str = macro_val[0][0] if macro_val and macro_val[0] and macro_val[0][0] else ''
-        if macro_str and macro_str == 'yes':
-            data['VCS_INFO_DISABLE_CACHE__NO_UID__'] = macro_val
+    # IMPORTANT before switching vcs_info.py to python3 the value was always evaluated to $YMAKE_PYTHON but no
+    # code in java dart parser extracts its value only checks this key for existance.
+    data['EMBED_VCS'] = [['yes']]
+    # FORCE_VCS_INFO_UPDATE is responsible for setting special value of VCS_INFO_DISABLE_CACHE__NO_UID__
+    macro_val = extract_macro_calls(unit, 'FORCE_VCS_INFO_UPDATE', args_delim)
+    macro_str = macro_val[0][0] if macro_val and macro_val[0] and macro_val[0][0] else ''
+    if macro_str and macro_str == 'yes':
+        data['VCS_INFO_DISABLE_CACHE__NO_UID__'] = macro_val
 
     for java_srcs_args in data['JAVA_SRCS']:
         external = None
@@ -236,18 +216,7 @@ def on_add_detekt_report_check(unit, *args):
         unit.onadd_check(['detekt.report'] + list(args))
 
 
-# Ymake java modules related macroses
-
-
-def onexternal_jar(unit, *args):
-    args = list(args)
-    flat, kv = common.sort_by_keywords({'SOURCES': 1}, args)
-    if not flat:
-        ymake.report_configure_error('EXTERNAL_JAR requires exactly one resource URL of compiled jar library')
-    res = flat[0]
-    resid = res[4:] if res.startswith('sbr:') else res
-    unit.set(['JAR_LIB_RESOURCE', resid])
-    unit.set(['JAR_LIB_RESOURCE_URL', res])
+# Ymake java modules related macros
 
 
 def on_check_java_srcdir(unit, *args):
@@ -363,7 +332,7 @@ def parse_words(words):
         yield o, templates[min(i, len(templates) - 1)], props
 
 
-def on_ymake_generate_script(unit, *args):
+def ongenerate_script(unit, *args):
     for out, tmpl, props in parse_words(list(args)):
         unit.on_add_gen_java_script([out, tmpl] + list(props))
 

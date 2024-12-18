@@ -137,6 +137,8 @@ TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSo
     }
     source->MutableStageData().AddBatch(
         std::make_shared<NArrow::TGeneralContainer>(arrow::RecordBatch::Make(TIndexInfo::ArrowSchemaSnapshot(), Count, columns)));
+    source->SetUsedRawBytes(0);
+    source->Finalize({});
     return true;
 }
 
@@ -150,7 +152,7 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
     NMiniKQL::TThrowingBindTerminator bind;
     Script->OnExecute();
     while (!Script->IsFinished(CurrentStepIdx)) {
-        if (source->GetStageData().IsEmpty()) {
+        if (source->HasStageData() && source->GetStageData().IsEmpty()) {
             source->OnEmptyStageData();
             break;
         }
@@ -182,7 +184,11 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
         guard->Release();
         return false;
     }
-    data->RegisterAllocationGuard(std::move(guard));
+    if (StageIndex == EStageFeaturesIndexes::Accessors) {
+        data->MutableStageData().SetAccessorsGuard(std::move(guard));
+    } else {
+        data->RegisterAllocationGuard(std::move(guard));
+    }
     Step.Next();
     auto task = std::make_shared<TStepAction>(data, std::move(Step), data->GetContext()->GetCommonContext()->GetScanActorId());
     NConveyor::TScanServiceOperator::SendTaskToExecute(task);
@@ -190,11 +196,12 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
 }
 
 TAllocateMemoryStep::TFetchingStepAllocation::TFetchingStepAllocation(
-    const std::shared_ptr<IDataSource>& source, const ui64 mem, const TFetchingScriptCursor& step)
+    const std::shared_ptr<IDataSource>& source, const ui64 mem, const TFetchingScriptCursor& step, const EStageFeaturesIndexes stageIndex)
     : TBase(mem)
     , Source(source)
     , Step(step)
-    , TasksGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard()) {
+    , TasksGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard())
+    , StageIndex(stageIndex) {
 }
 
 void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(const TString& errorMessage) {
@@ -219,7 +226,7 @@ TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(const std::shared_ptr<ID
         size += sizeLocal;
     }
 
-    auto allocation = std::make_shared<TFetchingStepAllocation>(source, size, step);
+    auto allocation = std::make_shared<TFetchingStepAllocation>(source, size, step, StageIndex);
     NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(source->GetContext()->GetProcessMemoryControlId(),
         source->GetContext()->GetCommonContext()->GetScanId(), source->GetMemoryGroupId(), { allocation }, (ui32)StageIndex);
     return false;
@@ -332,8 +339,7 @@ public:
         , StartIndex(startIndex)
         , OriginalRecordsCount(originalRecordsCount)
         , Guard(source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard())
-        , Step(step)
-    {
+        , Step(step) {
     }
 
     virtual TConclusionStatus DoExecuteImpl() override {
@@ -366,7 +372,7 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IData
         resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
         AFL_VERIFY((ui32)resultBatch->num_columns() == context->GetProgramInputColumns()->GetColumnNamesVector().size());
         if (auto filter = source->GetStageResult().GetNotAppliedFilter()) {
-            filter->Apply(resultBatch, StartIndex, RecordsCount);
+            filter->Apply(resultBatch, NArrow::TColumnFilter::TApplyContext(StartIndex, RecordsCount).SetTrySlices(true));
         }
         if (resultBatch && resultBatch->num_rows()) {
             NArrow::TStatusValidator::Validate(context->GetReadMetadata()->GetProgram().ApplyProgram(resultBatch));
@@ -386,7 +392,7 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
     }
     for (auto&& i : source->GetStageResult().GetPagesToResultVerified()) {
         if (source->GetIsStartedByCursor() && !source->GetContext()->GetCommonContext()->GetScanCursor()->CheckSourceIntervalUsage(
-                source->GetSourceId(), i.GetIndexStart(), i.GetRecordsCount())) {
+                                                  source->GetSourceId(), i.GetIndexStart(), i.GetRecordsCount())) {
             continue;
         }
         plan->AddStep<TBuildResultStep>(i.GetIndexStart(), i.GetRecordsCount());

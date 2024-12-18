@@ -4,5 +4,8 @@ SELECT
     key,
     subkey,
     value
-FROM plato.Input
-WHERE value REGEXP "^a";
+FROM
+    plato.Input
+WHERE
+    value REGEXP '^a'
+;

@@ -12,11 +12,14 @@ SELECT
     avg(l_extendedprice) AS avg_price,
     avg(l_discount) AS avg_disc,
     count(*) AS count_order
-FROM plato.lineitem
-WHERE CAST(l_shipdate AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D"))
+FROM
+    plato.lineitem
+WHERE
+    CAST(l_shipdate AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval('P100D'))
 GROUP BY
     l_returnflag,
     l_linestatus
 ORDER BY
     l_returnflag,
-    l_linestatus;
+    l_linestatus
+;

@@ -484,4 +484,86 @@ TAutoPtr<IGraphTransformer> GetDqIntegrationPeepholeTransformer(bool beforeDqTra
     return dqIntegrationPeepholePipeline.Build();
 }
 
+NNodes::TCoNameValueTupleList TKqpStreamLookupSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
+    TVector<TCoNameValueTuple> settings;
+
+    auto strategyTypeToString = [](const EStreamLookupStrategyType& type) {
+        switch (type) {
+            case EStreamLookupStrategyType::Unspecified:
+                break;
+            case EStreamLookupStrategyType::LookupRows:
+                return LookupStrategyName;
+            case EStreamLookupStrategyType::LookupJoinRows:
+                return LookupJoinStrategyName;
+            case EStreamLookupStrategyType::LookupSemiJoinRows:
+                return LookupSemiJoinStrategyName;
+        }
+
+        YQL_ENSURE(false, "Unspecified stream lookup startegy type: " << type);
+    };
+
+    settings.emplace_back(
+        Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(StrategySettingName)
+            .Value<TCoAtom>().Build(strategyTypeToString(Strategy))
+        .Done()
+    );
+
+    if (AllowNullKeysPrefixSize) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(AllowNullKeysSettingName)
+                .Value<TCoAtom>().Build(ToString(*AllowNullKeysPrefixSize))
+            .Done()
+        );
+    }
+
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add(settings)
+        .Done();
+}
+
+TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameValueTupleList& list) {
+    TKqpStreamLookupSettings settings;
+
+    auto getLookupStrategyType = [](const TStringBuf& type) {
+        if (type == LookupStrategyName) {
+            return EStreamLookupStrategyType::LookupRows;
+        } else if (type == LookupJoinStrategyName) {
+            return EStreamLookupStrategyType::LookupJoinRows;
+        } else if (type == LookupSemiJoinStrategyName) {
+            return EStreamLookupStrategyType::LookupSemiJoinRows;
+        } else {
+            YQL_ENSURE(false, "Unknown stream lookup startegy type: " << type);
+        }
+    };
+
+    for (const auto& tuple : list) {
+        auto name = tuple.Name().Value();
+        if (name == StrategySettingName) {
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+            settings.Strategy = getLookupStrategyType(tuple.Value().Cast<TCoAtom>().Value());
+        } else if (name == AllowNullKeysSettingName) {
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+            settings.AllowNullKeysPrefixSize = FromString<ui32>(tuple.Value().Cast<TCoAtom>().Value());
+        } else {
+            YQL_ENSURE(false, "Unknown KqpStreamLookup setting name '" << name << "'");
+        }
+    }
+
+    return settings;
+}
+
+TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TKqlStreamLookupTable& node) {
+    return TKqpStreamLookupSettings::Parse(node.Settings());
+}
+
+TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TKqlStreamLookupIndex& node) {
+    return TKqpStreamLookupSettings::Parse(node.Settings());
+}
+
+TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TKqpCnStreamLookup& node) {
+    return TKqpStreamLookupSettings::Parse(node.Settings());
+}
+
 } // namespace NYql

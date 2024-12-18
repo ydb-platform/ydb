@@ -11,6 +11,7 @@ SRCS(
     topic_workload_stats.cpp
     topic_workload_stats_collector.cpp
     topic_workload_writer.cpp
+    topic_workload_writer_producer.cpp
     topic_workload_reader.cpp
     topic_workload_reader_transaction_support.cpp
     topic_workload.cpp
@@ -30,7 +31,9 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_table
     ydb/public/sdk/cpp/client/ydb_topic
     ydb/public/sdk/cpp/client/ydb_types/operation
-    ydb/public/sdk/cpp/client/ydb_types/status    
+    ydb/public/sdk/cpp/client/ydb_types/status
+    library/cpp/unified_agent_client
+    library/cpp/histogram/hdr
 )
 
 END()

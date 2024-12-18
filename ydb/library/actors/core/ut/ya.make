@@ -3,7 +3,6 @@ UNITTEST_FOR(ydb/library/actors/core)
 FORK_SUBTESTS()
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TIMEOUT(1200)
     TAG(ya:fat)
     SPLIT_FACTOR(20)
     REQUIREMENTS(
@@ -11,7 +10,6 @@ IF (SANITIZER_TYPE)
     )
 ELSE()
     SIZE(MEDIUM)
-    TIMEOUT(600)
 ENDIF()
 
 

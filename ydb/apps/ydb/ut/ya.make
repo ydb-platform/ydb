@@ -1,11 +1,9 @@
 UNITTEST()
 
 IF (SANITIZER_TYPE)
-    TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -28,6 +26,7 @@ SRCS(
 PEERDIR(
     ydb/public/sdk/cpp/client/ydb_topic
     ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/lib/ydb_cli/commands/topic_workload
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)

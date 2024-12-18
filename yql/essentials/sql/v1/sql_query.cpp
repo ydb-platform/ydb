@@ -45,10 +45,15 @@ void TSqlQuery::AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node) {
 }
 
 static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
-        const TRule_replication_settings_entry& in, TTranslation& ctx, bool create)
+        const TRule_replication_settings_entry& in, TSqlExpression& ctx, bool create)
 {
     auto key = IdEx(in.GetRule_an_id1(), ctx);
-    auto value = BuildLiteralSmartString(ctx.Context(), ctx.Token(in.GetToken3()));
+    auto value = ctx.Build(in.GetRule_expr3());
+
+    if (!value) {
+        ctx.Context().Error() << "Invalid replication setting: " << key.Name;
+        return false;
+    }
 
     TSet<TString> configSettings = {
         "connection_string",
@@ -61,13 +66,18 @@ static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
         "password_secret_name",
     };
 
+    TSet<TString> modeSettings = {
+        "consistency_level",
+        "commit_interval",
+    };
+
     TSet<TString> stateSettings = {
         "state",
         "failover_mode",
     };
 
     const auto keyName = to_lower(key.Name);
-    if (!configSettings.count(keyName) && !stateSettings.count(keyName)) {
+    if (!configSettings.count(keyName) && !modeSettings.count(keyName) && !stateSettings.count(keyName)) {
         ctx.Context().Error() << "Unknown replication setting: " << key.Name;
         return false;
     }
@@ -75,6 +85,23 @@ static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
     if (create && stateSettings.count(keyName)) {
         ctx.Context().Error() << key.Name << " is not supported in CREATE";
         return false;
+    }
+
+    if (!create && modeSettings.count(keyName)) {
+        ctx.Context().Error() << key.Name << " is not supported in ALTER";
+        return false;
+    }
+
+    if (keyName == "commit_interval") {
+        if (value->GetOpName() != "Interval") {
+            ctx.Context().Error() << "Literal of Interval type is expected for " << key.Name;
+            return false;
+        }
+    } else {
+        if (!value->IsLiteral() || value->GetLiteralType() != "String") {
+            ctx.Context().Error() << "Literal of String type is expected for " << key.Name;
+            return false;
+        }
     }
 
     if (!out.emplace(keyName, value).second) {
@@ -85,7 +112,7 @@ static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
 }
 
 static bool AsyncReplicationSettings(std::map<TString, TNodePtr>& out,
-        const TRule_replication_settings& in, TTranslation& ctx, bool create)
+        const TRule_replication_settings& in, TSqlExpression& ctx, bool create)
 {
     if (!AsyncReplicationSettingsEntry(out, in.GetRule_replication_settings_entry1(), ctx, create)) {
         return false;
@@ -110,7 +137,7 @@ static bool AsyncReplicationTarget(std::vector<std::pair<TString, TString>>& out
 }
 
 static bool AsyncReplicationAlterAction(std::map<TString, TNodePtr>& settings,
-        const TRule_alter_replication_action& in, TTranslation& ctx)
+        const TRule_alter_replication_action& in, TSqlExpression& ctx)
 {
     // TODO(ilnaz): support other actions
     return AsyncReplicationSettings(settings, in.GetRule_alter_replication_set_setting1().GetRule_replication_settings3(), ctx, false);
@@ -982,7 +1009,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             std::map<TString, TNodePtr> settings;
-            if (!AsyncReplicationSettings(settings, node.GetRule_replication_settings10(), *this, true)) {
+            TSqlExpression expr(Ctx, Mode);
+            if (!AsyncReplicationSettings(settings, node.GetRule_replication_settings10(), expr, true)) {
                 return false;
             }
 
@@ -1302,11 +1330,12 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             std::map<TString, TNodePtr> settings;
-            if (!AsyncReplicationAlterAction(settings, node.GetRule_alter_replication_action5(), *this)) {
+            TSqlExpression expr(Ctx, Mode);
+            if (!AsyncReplicationAlterAction(settings, node.GetRule_alter_replication_action5(), expr)) {
                 return false;
             }
             for (auto& block : node.GetBlock6()) {
-                if (!AsyncReplicationAlterAction(settings, block.GetRule_alter_replication_action2(), *this)) {
+                if (!AsyncReplicationAlterAction(settings, block.GetRule_alter_replication_action2(), expr)) {
                     return false;
                 }
             }
@@ -2978,6 +3007,9 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             Ctx.FlexibleTypes = true;
             Ctx.IncrementMonCounter("sql_pragma", "FlexibleTypes");
         } else if (normalizedPragma == "disableflexibletypes") {
+            Ctx.Warning(Ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
+                << "Deprecated pragma DisableFlexibleTypes - it will be removed soon. "
+                   "Consider submitting bug report if FlexibleTypes doesn't work for you";
             Ctx.FlexibleTypes = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableFlexibleTypes");
         } else if (normalizedPragma == "ansicurrentrow") {

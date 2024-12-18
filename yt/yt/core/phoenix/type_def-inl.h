@@ -14,7 +14,7 @@
 
 #include <yt/yt/core/concurrency/fls.h>
 
-#include <library/cpp/yt/misc/preprocessor.h>
+#include <library/cpp/yt/misc/static_initializer.h>
 
 #include <concepts>
 
@@ -78,7 +78,7 @@ namespace NYT::NPhoenix2::NDetail {
     template <> \
     struct TPhoenixTypeInitializer__<type> \
     { \
-        [[maybe_unused]] static inline const void* Dummy = &::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type, false>(); \
+        YT_STATIC_INITIALIZER(::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type, false>()); \
     }
 
 #define PHOENIX_DEFINE_TEMPLATE_TYPE(type, typeArgs) \
@@ -88,7 +88,7 @@ namespace NYT::NPhoenix2::NDetail {
     template <> \
     struct TPhoenixTypeInitializer__<type<PP_DEPAREN(typeArgs)>> \
     { \
-        [[maybe_unused]] static inline const void* Dummy = &::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type<PP_DEPAREN(typeArgs)>, true>(); \
+        YT_STATIC_INITIALIZER(::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type<PP_DEPAREN(typeArgs)>, true>()); \
     }
 
 #define PHOENIX_DEFINE_OPAQUE_TYPE(type) \
@@ -104,7 +104,7 @@ namespace NYT::NPhoenix2::NDetail {
     template <> \
     struct TPhoenixTypeInitializer__<type> \
     { \
-        [[maybe_unused]] static inline const void* Dummy = &::NYT::NPhoenix2::NDetail::RegisterOpaqueTypeDescriptorImpl<type>(); \
+        YT_STATIC_INITIALIZER(::NYT::NPhoenix2::NDetail::RegisterOpaqueTypeDescriptorImpl<type>()); \
     }
 
 #define PHOENIX_REGISTER_FIELD(fieldTag, fieldName) \

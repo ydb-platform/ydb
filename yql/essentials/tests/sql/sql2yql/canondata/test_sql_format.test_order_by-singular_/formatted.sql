@@ -13,9 +13,13 @@ ORDER BY
     x,
     y,
     z,
-    w;
+    w
+;
+
 COMMIT;
 
 SELECT
     *
-FROM @foo;
+FROM
+    @foo
+;

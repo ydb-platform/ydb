@@ -241,6 +241,7 @@ python3 = NixSourceProject(
     ],
     disable_includes=[
         "pydtrace_probes.h",
+        "crtassem.h",
         "blake2-kat.h",
         "bluetooth/",
         "bluetooth.h",

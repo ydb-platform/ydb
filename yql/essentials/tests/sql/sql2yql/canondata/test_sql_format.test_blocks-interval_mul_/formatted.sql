@@ -17,10 +17,11 @@ SELECT
     a.wi * b.i64,
     a.ni * b.u64,
     a.wi * b.u64,
-FROM Dates
-    AS a
-CROSS JOIN Dates
-    AS b;
+FROM
+    Dates AS a
+CROSS JOIN
+    Dates AS b
+;
 
 SELECT
     b.i8 * a.ni,
@@ -39,7 +40,8 @@ SELECT
     b.i64 * a.wi,
     b.u64 * a.ni,
     b.u64 * a.wi,
-FROM Dates
-    AS a
-CROSS JOIN Dates
-    AS b;
+FROM
+    Dates AS a
+CROSS JOIN
+    Dates AS b
+;

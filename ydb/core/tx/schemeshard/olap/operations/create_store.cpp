@@ -44,7 +44,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateOlapStore TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -125,7 +125,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateOlapStore TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -210,7 +210,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateOlapStore TProposedWaitParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

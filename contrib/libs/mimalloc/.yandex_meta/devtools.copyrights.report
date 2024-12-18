@@ -29,16 +29,6 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     COPYRIGHT_SERVICE_LABEL 21dec668d9ab2431f46cc70979134ba7
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        src/bitmap.c [2:4]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 25dcefb85a8e188fc5c56da58857f739
 BELONGS ya.make
     License text:
@@ -58,38 +48,12 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/mimalloc-internal.h [2:4]
-        include/mimalloc-types.h [2:4]
-        include/mimalloc.h [2:4]
         src/alloc-aligned.c [2:4]
         src/alloc-override.c [2:4]
         src/alloc-posix.c [2:4]
-        src/alloc.c [2:4]
         src/heap.c [2:4]
-        src/init.c [2:4]
         src/options.c [2:4]
-        src/os.c [2:4]
         src/stats.c [2:4]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 28da6750f9f70938a34a2683265c5f37
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/mimalloc-atomic.h [2:4]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 4d891fec2fadb396208278a6d4280c2c
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        src/bitmap.h [2:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 5b7d847fe742e0704b8071bd0042a721
 BELONGS ya.make
@@ -102,7 +66,7 @@ BELONGS ya.make
         include/mimalloc-new-delete.h [2:4]
         include/mimalloc-override.h [2:4]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 5fc5246a7da6971940f2a93100292b4d
+KEEP     COPYRIGHT_SERVICE_LABEL 5f21aa30041415548b09b1e8e25da7fb
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
@@ -111,9 +75,19 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         src/arena.c [2:4]
+        src/segment-map.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5fc5246a7da6971940f2a93100292b4d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
         src/random.c [2:4]
 
-KEEP     COPYRIGHT_SERVICE_LABEL fe43a4aab9cf694378c07b2f43474c64
+KEEP     COPYRIGHT_SERVICE_LABEL 8417b808fabacd093257b7972e1b7c8f
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
@@ -121,9 +95,9 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        src/region.c [2:4]
+        include/mimalloc/atomic.h [2:4]
 
-KEEP     COPYRIGHT_SERVICE_LABEL feb05913c2d79921f57fa41bec01920f
+KEEP     COPYRIGHT_SERVICE_LABEL bb2ecc7d3573627ff5673fd4981120f7
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
@@ -131,8 +105,49 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        src/alloc-override-osx.c [2:4]
+        src/bitmap.c [2:4]
+        src/bitmap.h [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e7f053f38ca4d796d9d56538f0ce1ac7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/mimalloc.h [2:4]
+        include/mimalloc/internal.h [2:4]
+        include/mimalloc/prim.h [2:4]
+        include/mimalloc/track.h [2:4]
+        src/libc.c [2:4]
+        src/os.c [2:4]
+        src/prim/osx/prim.c [2:4]
+        src/prim/prim.c [2:4]
+        src/prim/unix/prim.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fc7c1095a8a64f3166ead9be4cfabb96
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/mimalloc/types.h [2:4]
+        src/alloc.c [2:4]
+        src/free.c [2:4]
         src/page-queue.c [2:4]
         src/page.c [2:4]
         src/segment.c [2:4]
-        src/static.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fe63ec86a6a35162f9131f69ba4bc3e6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/init.c [2:4]
+        src/prim/osx/alloc-override-zone.c [2:4]

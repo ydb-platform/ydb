@@ -12,8 +12,13 @@ jsonFile = sys.argv[2]
 headerOutFile = sys.argv[3]
 declOutFile = sys.argv[4]
 defsOutFile = sys.argv[5]
+nodeNspace = sys.argv[6] if len(sys.argv) >= 7 else ""
+nodeNspacePrefix = nodeNspace + "::" if nodeNspace else ""
+
+os.environ['NODES_NAMESPACE'] = nodeNspace
 
 env = Environment(loader=FileSystemLoader(templateDir))
+env.globals['ENV'] = os.getenv
 template = env.get_template(templateFilename)
 
 json_data = open(jsonFile)
@@ -24,8 +29,10 @@ json_data.close()
 for node in model["Nodes"]:
     aux = node["aux"] = {}
 
+    aux["qName"] = nodeNspacePrefix + node["Name"]
     aux["stubName"] = node["Name"] + "Stub"
     aux["stubMaybeName"] = node["Name"] + "MaybeStub"
+    aux["qStubMaybeName"] = nodeNspacePrefix + node["Name"] + "MaybeStub"
     aux["stubBuilderName"] = node["Name"] + "BuilderStub"
     aux["stubBuilderAliasName"] = node["Name"] + "Builder"
 
@@ -109,6 +116,11 @@ for node in model["Nodes"]:
 
     aux["generateBuilderStub"] = node["Builder"]["Generate"] != "None" and node["Builder"]["Kind"] != "List"
     aux["generateBuilder"] = node["Builder"]["Generate"] == "Auto"
+    if isListBuilder(node):
+        if node["Builder"]["ListItemType"] in nodesMap:
+            aux["qListItemType"] = nodeNspacePrefix + node["Builder"]["ListItemType"]
+        else:
+            aux["qListItemType"] = node["Builder"]["ListItemType"]
 
     # Get all children
     allChildren = []
@@ -174,6 +186,7 @@ for node in model["Nodes"]:
         for child in node["Children"]:
             addUsages(child["Type"])
     aux["usages"] = usages
+    aux["qUsages"] = [name if name not in nodesMap else nodeNspacePrefix + name for name in usages]
     aux["typenames"] = declarations
 
     usages = []

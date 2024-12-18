@@ -6,7 +6,6 @@ TEST_SRCS(
     test_compatibility.py
 )
 
-TIMEOUT(3600)
 SIZE(LARGE)
 TAG(ya:fat)
 

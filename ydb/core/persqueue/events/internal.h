@@ -489,19 +489,17 @@ struct TEvPQ {
     };
 
     struct TEvBlobRequest : public TEventLocal<TEvBlobRequest, EvBlobRequest> {
-        TEvBlobRequest(const TString& user, const ui64 cookie, const NPQ::TPartitionId& partition, const ui64 readOffset,
+        TEvBlobRequest(const TString& user, const ui64 cookie, const NPQ::TPartitionId& partition,
                        TVector<NPQ::TRequestedBlob>&& blobs)
         : User(user)
         , Cookie(cookie)
         , Partition(partition)
-        , ReadOffset(readOffset)
         , Blobs(std::move(blobs))
         {}
 
         TString User;
         ui64 Cookie;
         NPQ::TPartitionId Partition;
-        ui64 ReadOffset;
         TVector<NPQ::TRequestedBlob> Blobs;
     };
 

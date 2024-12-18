@@ -1,21 +1,28 @@
 USE plato;
-PRAGMA yt.MapJoinLimit = "1M";
 
-$i =
+PRAGMA yt.MapJoinLimit = '1M';
+
+$i = (
     SELECT
         TableRecordIndex() AS ind,
         t.*
-    FROM Input
-        AS t;
+    FROM
+        Input AS t
+);
 
-$filter =
+$filter = (
     SELECT
         min(ind) AS ind
-    FROM $i
+    FROM
+        $i
     GROUP BY
-        subkey;
+        subkey
+);
 
 SELECT
     *
-FROM Input
-WHERE TableRecordIndex() IN $filter;
+FROM
+    Input
+WHERE
+    TableRecordIndex() IN $filter
+;

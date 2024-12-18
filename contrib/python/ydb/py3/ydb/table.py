@@ -4,6 +4,15 @@ import ydb
 from abc import abstractmethod
 import logging
 import enum
+import typing
+
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+)
 
 from . import (
     issues,
@@ -1193,6 +1202,14 @@ class BaseTableClient(ITableClient):
 
 
 class TableClient(BaseTableClient):
+    def __init__(self, driver, table_client_settings=None):
+        # type:(ydb.Driver, ydb.TableClientSettings) -> None
+        super().__init__(driver=driver, table_client_settings=table_client_settings)
+        self._pool: Optional[SessionPool] = None
+
+    def __del__(self):
+        self._stop_pool_if_needed()
+
     def async_scan_query(self, query, parameters=None, settings=None):
         # type: (ydb.ScanQuery, tuple, ydb.BaseRequestSettings) -> ydb.AsyncResponseIterator
         request = _scan_query_request_factory(query, parameters, settings)
@@ -1218,6 +1235,213 @@ class TableClient(BaseTableClient):
             settings,
             (),
         )
+
+    def _init_pool_if_needed(self):
+        if self._pool is None:
+            self._pool = SessionPool(self._driver, 10)
+
+    def _stop_pool_if_needed(self, timeout=10):
+        if self._pool is not None:
+            self._pool.stop(timeout=timeout)
+
+    def create_table(
+        self,
+        path: str,
+        table_description: "TableDescription",
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+    ) -> "ydb.Operation":
+        """
+        Create a YDB table.
+
+        :param path: A table path
+        :param table_description: TableDescription instanse.
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+
+        :return: Operation or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        def callee(session: Session):
+            return session.create_table(path=path, table_description=table_description, settings=settings)
+
+        return self._pool.retry_operation_sync(callee)
+
+    def drop_table(
+        self,
+        path: str,
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+    ) -> "ydb.Operation":
+        """
+        Drop a YDB table.
+
+        :param path: A table path
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+
+        :return: Operation or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        def callee(session: Session):
+            return session.drop_table(path=path, settings=settings)
+
+        return self._pool.retry_operation_sync(callee)
+
+    def alter_table(
+        self,
+        path: str,
+        add_columns: Optional[List["ydb.Column"]] = None,
+        drop_columns: Optional[List[str]] = None,
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+        alter_attributes: Optional[Optional[Dict[str, str]]] = None,
+        add_indexes: Optional[List["ydb.TableIndex"]] = None,
+        drop_indexes: Optional[List[str]] = None,
+        set_ttl_settings: Optional["ydb.TtlSettings"] = None,
+        drop_ttl_settings: Optional[Any] = None,
+        add_column_families: Optional[List["ydb.ColumnFamily"]] = None,
+        alter_column_families: Optional[List["ydb.ColumnFamily"]] = None,
+        alter_storage_settings: Optional["ydb.StorageSettings"] = None,
+        set_compaction_policy: Optional[str] = None,
+        alter_partitioning_settings: Optional["ydb.PartitioningSettings"] = None,
+        set_key_bloom_filter: Optional["ydb.FeatureFlag"] = None,
+        set_read_replicas_settings: Optional["ydb.ReadReplicasSettings"] = None,
+    ) -> "ydb.Operation":
+        """
+        Alter a YDB table.
+
+        :param path: A table path
+        :param add_columns: List of ydb.Column to add
+        :param drop_columns: List of column names to drop
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+        :param alter_attributes: Dict of attributes to alter
+        :param add_indexes: List of ydb.TableIndex to add
+        :param drop_indexes: List of index names to drop
+        :param set_ttl_settings: ydb.TtlSettings to set
+        :param drop_ttl_settings: Any to drop
+        :param add_column_families: List of ydb.ColumnFamily to add
+        :param alter_column_families: List of ydb.ColumnFamily to alter
+        :param alter_storage_settings: ydb.StorageSettings to alter
+        :param set_compaction_policy: Compaction policy
+        :param alter_partitioning_settings: ydb.PartitioningSettings to alter
+        :param set_key_bloom_filter: ydb.FeatureFlag to set key bloom filter
+
+        :return: Operation or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        def callee(session: Session):
+            return session.alter_table(
+                path=path,
+                add_columns=add_columns,
+                drop_columns=drop_columns,
+                settings=settings,
+                alter_attributes=alter_attributes,
+                add_indexes=add_indexes,
+                drop_indexes=drop_indexes,
+                set_ttl_settings=set_ttl_settings,
+                drop_ttl_settings=drop_ttl_settings,
+                add_column_families=add_column_families,
+                alter_column_families=alter_column_families,
+                alter_storage_settings=alter_storage_settings,
+                set_compaction_policy=set_compaction_policy,
+                alter_partitioning_settings=alter_partitioning_settings,
+                set_key_bloom_filter=set_key_bloom_filter,
+                set_read_replicas_settings=set_read_replicas_settings,
+            )
+
+        return self._pool.retry_operation_sync(callee)
+
+    def describe_table(
+        self,
+        path: str,
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+    ) -> "ydb.TableSchemeEntry":
+        """
+        Describe a YDB table.
+
+        :param path: A table path
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+
+        :return: TableSchemeEntry or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        def callee(session: Session):
+            return session.describe_table(path=path, settings=settings)
+
+        return self._pool.retry_operation_sync(callee)
+
+    def copy_table(
+        self,
+        source_path: str,
+        destination_path: str,
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+    ) -> "ydb.Operation":
+        """
+        Copy a YDB table.
+
+        :param source_path: A table path
+        :param destination_path: Destination table path
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+
+        :return: Operation or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        def callee(session: Session):
+            return session.copy_table(
+                source_path=source_path,
+                destination_path=destination_path,
+                settings=settings,
+            )
+
+        return self._pool.retry_operation_sync(callee)
+
+    def copy_tables(
+        self,
+        source_destination_pairs: List[Tuple[str, str]],
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+    ) -> "ydb.Operation":
+        """
+        Copy a YDB tables.
+
+        :param source_destination_pairs: List of tuples (source_path, destination_path)
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+
+        :return: Operation or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        def callee(session: Session):
+            return session.copy_tables(source_destination_pairs=source_destination_pairs, settings=settings)
+
+        return self._pool.retry_operation_sync(callee)
+
+    def rename_tables(
+        self,
+        rename_items: List[Tuple[str, str]],
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+    ) -> "ydb.Operation":
+        """
+        Rename a YDB tables.
+
+        :param rename_items: List of tuples (current_name, desired_name)
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+
+        :return: Operation or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        def callee(session: Session):
+            return session.rename_tables(rename_items=rename_items, settings=settings)
+
+        return self._pool.retry_operation_sync(callee)
 
 
 def _make_index_description(index):

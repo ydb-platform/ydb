@@ -3,12 +3,25 @@
 #include <util/system/types.h>
 #include <util/generic/array_ref.h>
 #include <util/generic/vector.h>
+#include <util/stream/format.h>
 
 namespace NKikimr {
 namespace NTable {
 namespace NFwd {
 
     struct TConf {
+        void Describe(IOutputStream &out) const noexcept
+        {
+            out
+                << "TConf{"
+                << "high=" << HumanReadableSize(AheadHi, SF_BYTES)
+                << ",low=" << HumanReadableSize(AheadLo, SF_BYTES)
+                << ",edge=" << Edge
+                << ",tablet=" << Tablet
+                << ",trace=" << Trace
+                << "}";
+        }
+
         /*_ Cache lines read ahead settings     */
 
         ui64 AheadHi = 1;

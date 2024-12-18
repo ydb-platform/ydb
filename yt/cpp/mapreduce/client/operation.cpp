@@ -319,6 +319,7 @@ TSimpleOperationIo CreateSimpleOperationIo(
         TOperationPreparationContext(
             inputs,
             outputs,
+            preparer.GetClient()->GetRawClient(),
             preparer.GetContext(),
             preparer.GetClientRetryPolicy(),
             preparer.GetTransactionId()),
@@ -491,6 +492,7 @@ TSimpleOperationIo CreateSimpleOperationIoHelper(
         TOperationPreparationContext(
             structuredInputs,
             structuredOutputs,
+            preparer.GetClient()->GetRawClient(),
             preparer.GetContext(),
             preparer.GetClientRetryPolicy(),
             preparer.GetTransactionId()),
@@ -499,7 +501,12 @@ TSimpleOperationIo CreateSimpleOperationIoHelper(
         hints);
 
     TVector<TSmallJobFile> formatConfigList;
-    TFormatBuilder formatBuilder(preparer.GetClientRetryPolicy(), preparer.GetContext(), preparer.GetTransactionId(), options);
+    TFormatBuilder formatBuilder(
+        preparer.GetClient()->GetRawClient(),
+        preparer.GetClientRetryPolicy(),
+        preparer.GetContext(),
+        preparer.GetTransactionId(),
+        options);
 
     auto [inputFormat, inputFormatConfig] = formatBuilder.CreateFormat(
         structuredJob,
@@ -545,17 +552,21 @@ TSimpleOperationIo CreateSimpleOperationIoHelper(
 }
 
 EOperationBriefState CheckOperation(
+    const IRawClientPtr& rawClient,
     const IClientRetryPolicyPtr& clientRetryPolicy,
     const TClientContext& context,
     const TOperationId& operationId)
 {
-    auto attributes = GetOperation(
+    auto attributes = RequestWithRetry<TOperationAttributes>(
         clientRetryPolicy->CreatePolicyForGenericRequest(),
-        context,
-        operationId,
-        TGetOperationOptions().AttributeFilter(TOperationAttributeFilter()
-            .Add(EOperationAttribute::State)
-            .Add(EOperationAttribute::Result)));
+        [&rawClient, &operationId] (TMutationId /*mutationId*/) {
+            return rawClient->GetOperation(
+                operationId,
+                TGetOperationOptions().AttributeFilter(TOperationAttributeFilter()
+                    .Add(EOperationAttribute::State)
+                    .Add(EOperationAttribute::Result)));
+        });
+
     Y_ABORT_UNLESS(attributes.BriefState,
         "get_operation for operation %s has not returned \"state\" field",
         GetGuidAsString(operationId).data());
@@ -587,16 +598,17 @@ EOperationBriefState CheckOperation(
 
 void WaitForOperation(
     const IClientRetryPolicyPtr& clientRetryPolicy,
+    const IRawClientPtr& rawClient,
     const TClientContext& context,
     const TOperationId& operationId)
 {
     const TDuration checkOperationStateInterval =
-        UseLocalModeOptimization(context, clientRetryPolicy)
+        UseLocalModeOptimization(rawClient, context, clientRetryPolicy)
         ? Min(TDuration::MilliSeconds(100), context.Config->OperationTrackerPollPeriod)
         : context.Config->OperationTrackerPollPeriod;
 
     while (true) {
-        auto status = CheckOperation(clientRetryPolicy, context, operationId);
+        auto status = CheckOperation(rawClient, clientRetryPolicy, context, operationId);
         if (status == EOperationBriefState::Completed) {
             YT_LOG_INFO("Operation %v completed (%v)",
                 operationId,
@@ -760,10 +772,17 @@ void BuildUserJobFluently(
         .Item("redirect_stdout_to_stderr").Value(preparer.ShouldRedirectStdoutToStderr());
 }
 
-// Might return undefined value.
-TNode GetNirvanaBlockUrlFromContext()
+struct TNirvanaContext
 {
-    auto filePath = TString("/slot/sandbox/j/job_context.json");
+    TNode BlockUrl;
+    TNode Annotations;
+};
+
+// Try to detect if we are inside nirvana operation and reat nirvana job context.
+// Items of TNirvanaContext might be Undefined, if we are not inside nirvana context (or if nirvana context is unexpected)
+TNirvanaContext GetNirvanaContext()
+{
+    static const auto filePath = TString("/slot/sandbox/j/job_context.json");
     auto nvYtOperationId = GetEnv("NV_YT_OPERATION_ID");
     if (nvYtOperationId.empty()) {
         return {};
@@ -779,13 +798,20 @@ TNode GetNirvanaBlockUrlFromContext()
         YT_LOG_ERROR("Failed to load nirvana job context: %v", ex.what());
         return {};
     }
+
+    TNirvanaContext result;
+
     const auto* url = json.GetValueByPath("meta.blockURL");
-    if (!url || !url->IsString()) {
-        return {};
+    if (url && url->IsString()) {
+        result.BlockUrl = url->GetString();
+        result.BlockUrl.Attributes()["_type_tag"] = "url";
     }
 
-    TNode result = url->GetString();
-    result.Attributes()["_type_tag"] = "url";
+    const auto* annotations = json.GetValueByPath("meta.annotations");
+    if (annotations && annotations->IsMap()) {
+        result.Annotations = NodeFromJsonValue(*annotations);
+    }
+
     return result;
 }
 
@@ -806,9 +832,13 @@ void BuildCommonOperationPart(
 
     startedBySpec["binary"] = properties->BinaryPath;
     startedBySpec["binary_name"] = properties->BinaryName;
-    auto nirvanaBlockUrl = GetNirvanaBlockUrlFromContext();
-    if (!nirvanaBlockUrl.IsUndefined()) {
-        startedBySpec["nirvana_block_url"] = nirvanaBlockUrl;
+    auto nirvanaContext = GetNirvanaContext();
+    if (!nirvanaContext.BlockUrl.IsUndefined()) {
+        startedBySpec["nirvana_block_url"] = nirvanaContext.BlockUrl;
+    }
+
+    if (!nirvanaContext.Annotations.IsUndefined()) {
+        MergeNodes((*specNode)["annotations"], nirvanaContext.Annotations);
     }
 
     TString pool;
@@ -947,26 +977,32 @@ template <typename TSpec>
 void CreateDebugOutputTables(const TSpec& spec, const TOperationPreparer& preparer)
 {
     if (spec.StderrTablePath_.Defined()) {
-        NYT::NDetail::Create(
+        RequestWithRetry<void>(
             preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-            preparer.GetContext(),
-            TTransactionId(),
-            *spec.StderrTablePath_,
-            NT_TABLE,
-            TCreateOptions()
-                .IgnoreExisting(true)
-                .Recursive(true));
+            [&spec, &preparer] (TMutationId& mutationId) {
+                preparer.GetClient()->GetRawClient()->Create(
+                    mutationId,
+                    TTransactionId(),
+                    *spec.StderrTablePath_,
+                    NT_TABLE,
+                    TCreateOptions()
+                        .IgnoreExisting(true)
+                        .Recursive(true));
+            });
     }
     if (spec.CoreTablePath_.Defined()) {
-        NYT::NDetail::Create(
+        RequestWithRetry<void>(
             preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-            preparer.GetContext(),
-            TTransactionId(),
-            *spec.CoreTablePath_,
-            NT_TABLE,
-            TCreateOptions()
-                .IgnoreExisting(true)
-                .Recursive(true));
+            [&spec, &preparer] (TMutationId& mutationId) {
+                preparer.GetClient()->GetRawClient()->Create(
+                    mutationId,
+                    TTransactionId(),
+                    *spec.CoreTablePath_,
+                    NT_TABLE,
+                    TCreateOptions()
+                        .IgnoreExisting(true)
+                        .Recursive(true));
+            });
     }
 }
 
@@ -977,12 +1013,18 @@ void CreateOutputTable(
     Y_ENSURE(path.Path_, "Output table is not set");
     if (!path.Create_.Defined()) {
         // If `create` attribute is defined
-        Create(
+        RequestWithRetry<void>(
             preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-            preparer.GetContext(), preparer.GetTransactionId(), path.Path_, NT_TABLE,
-            TCreateOptions()
-                .IgnoreExisting(true)
-                .Recursive(true));
+            [&preparer, &path] (TMutationId& mutationId) {
+                preparer.GetClient()->GetRawClient()->Create(
+                    mutationId,
+                    preparer.GetTransactionId(),
+                    path.Path_,
+                    NT_TABLE,
+                    TCreateOptions()
+                        .IgnoreExisting(true)
+                        .Recursive(true));
+            });
     }
 }
 
@@ -1002,13 +1044,15 @@ void CheckInputTablesExist(
     Y_ENSURE(!paths.empty(), "Input tables are not set");
     for (auto& path : paths) {
         auto curTransactionId =  path.TransactionId_.GetOrElse(preparer.GetTransactionId());
+        auto exists = RequestWithRetry<bool>(
+            preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
+            [&preparer, &curTransactionId, &path] (TMutationId /*mutationId*/) {
+                return preparer.GetClient()->GetRawClient()->Exists(
+                    curTransactionId,
+                    path.Path_);
+            });
         Y_ENSURE_EX(
-            path.Cluster_.Defined() ||
-            Exists(
-                preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-                preparer.GetContext(),
-                curTransactionId,
-                path.Path_),
+            path.Cluster_.Defined() || exists,
             TApiUsageError() << "Input table '" << path.Path_ << "' doesn't exist");
     }
 }
@@ -1615,6 +1659,7 @@ void ExecuteMapReduce(
     VerifyHasElements(structuredInputs, "inputs");
 
     TFormatBuilder formatBuilder(
+        preparer->GetClient()->GetRawClient(),
         preparer->GetClientRetryPolicy(),
         preparer->GetContext(),
         preparer->GetTransactionId(),
@@ -1639,6 +1684,7 @@ void ExecuteMapReduce(
             TOperationPreparationContext(
                 structuredInputs,
                 mapperOutput,
+                preparer->GetClient()->GetRawClient(),
                 preparer->GetContext(),
                 preparer->GetClientRetryPolicy(),
                 preparer->GetTransactionId()),
@@ -1708,6 +1754,7 @@ void ExecuteMapReduce(
                 TOperationPreparationContext(
                     inputs,
                     outputs,
+                    preparer->GetClient()->GetRawClient(),
                     preparer->GetContext(),
                     preparer->GetClientRetryPolicy(),
                     preparer->GetTransactionId()),
@@ -1773,6 +1820,7 @@ void ExecuteMapReduce(
             TOperationPreparationContext(
                 structuredInputs,
                 structuredOutputs,
+                preparer->GetClient()->GetRawClient(),
                 preparer->GetContext(),
                 preparer->GetClientRetryPolicy(),
                 preparer->GetTransactionId()),
@@ -2193,11 +2241,13 @@ class TOperation::TOperationImpl
 {
 public:
     TOperationImpl(
+        IRawClientPtr rawClient,
         IClientRetryPolicyPtr clientRetryPolicy,
         TClientContext context,
         const TMaybe<TOperationId>& operationId = {})
-        : ClientRetryPolicy_(clientRetryPolicy)
+        : RawClient_(std::move(rawClient))
         , Context_(std::move(context))
+        , ClientRetryPolicy_(clientRetryPolicy)
         , Id_(operationId)
         , PreparedPromise_(::NThreading::NewPromise<void>())
         , StartedPromise_(::NThreading::NewPromise<void>())
@@ -2264,8 +2314,10 @@ private:
     void ValidateOperationStarted() const;
 
 private:
-    IClientRetryPolicyPtr ClientRetryPolicy_;
+    const IRawClientPtr RawClient_;
     const TClientContext Context_;
+
+    IClientRetryPolicyPtr ClientRetryPolicy_;
     TMaybe<TOperationId> Id_;
     TMutex Lock_;
 
@@ -2465,7 +2517,7 @@ void TOperation::TOperationImpl::OnStatusUpdated(const TString& newStatus)
         auto registry = TAbortableRegistry::Get();
         registry->Add(
             operationId,
-            ::MakeIntrusive<TOperationAbortable>(this_->ClientRetryPolicy_, this_->Context_, operationId));
+            ::MakeIntrusive<TOperationAbortable>(this_->RawClient_, this_->ClientRetryPolicy_, operationId));
         // We have to own an IntrusivePtr to registry to prevent use-after-free
         auto removeOperation = [registry, operationId] (const ::NThreading::TFuture<void>&) {
             registry->Remove(operationId);
@@ -2588,7 +2640,9 @@ void TOperation::TOperationImpl::OnStarted(const TOperationId& operationId)
     StartedPromise_.SetValue();
 }
 
-void TOperation::TOperationImpl::UpdateAttributesAndCall(bool needJobStatistics, std::function<void(const TOperationAttributes&)> func)
+void TOperation::TOperationImpl::UpdateAttributesAndCall(
+    bool needJobStatistics,
+    std::function<void(const TOperationAttributes&)> func)
 {
     {
         auto g = Guard(Lock_);
@@ -2601,15 +2655,17 @@ void TOperation::TOperationImpl::UpdateAttributesAndCall(bool needJobStatistics,
         }
     }
 
-    TOperationAttributes attributes = NDetail::GetOperation(
+    auto attributes = RequestWithRetry<TOperationAttributes>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        Context_,
-        *Id_,
-        TGetOperationOptions().AttributeFilter(TOperationAttributeFilter()
-            .Add(EOperationAttribute::Result)
-            .Add(EOperationAttribute::Progress)
-            .Add(EOperationAttribute::State)
-            .Add(EOperationAttribute::BriefProgress)));
+        [this] (TMutationId /*mutationId*/) {
+            return RawClient_->GetOperation(
+                *Id_,
+                TGetOperationOptions().AttributeFilter(TOperationAttributeFilter()
+                    .Add(EOperationAttribute::Result)
+                    .Add(EOperationAttribute::Progress)
+                    .Add(EOperationAttribute::State)
+                    .Add(EOperationAttribute::BriefProgress)));
+        });
 
     func(attributes);
 
@@ -2628,37 +2684,61 @@ void TOperation::TOperationImpl::FinishWithException(std::exception_ptr e)
 void TOperation::TOperationImpl::AbortOperation()
 {
     ValidateOperationStarted();
-    NYT::NDetail::AbortOperation(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, *Id_);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this] (TMutationId& mutationId) {
+            RawClient_->AbortOperation(mutationId, *Id_);
+        });
 }
 
 void TOperation::TOperationImpl::CompleteOperation()
 {
     ValidateOperationStarted();
-    NYT::NDetail::CompleteOperation(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, *Id_);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this] (TMutationId& mutationId) {
+            RawClient_->CompleteOperation(mutationId, *Id_);
+        });
 }
 
 void TOperation::TOperationImpl::SuspendOperation(const TSuspendOperationOptions& options)
 {
     ValidateOperationStarted();
-    NYT::NDetail::SuspendOperation(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, *Id_, options);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &options] (TMutationId& mutationId) {
+            RawClient_->SuspendOperation(mutationId, *Id_, options);
+        });
 }
 
 void TOperation::TOperationImpl::ResumeOperation(const TResumeOperationOptions& options)
 {
     ValidateOperationStarted();
-    NYT::NDetail::ResumeOperation(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, *Id_, options);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &options] (TMutationId& mutationId) {
+            RawClient_->ResumeOperation(mutationId, *Id_, options);
+        });
 }
 
 TOperationAttributes TOperation::TOperationImpl::GetAttributes(const TGetOperationOptions& options)
 {
     ValidateOperationStarted();
-    return NYT::NDetail::GetOperation(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, *Id_, options);
+    return RequestWithRetry<TOperationAttributes>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->GetOperation(*Id_, options);
+        });
 }
 
 void TOperation::TOperationImpl::UpdateParameters(const TUpdateOperationParametersOptions& options)
 {
     ValidateOperationStarted();
-    return NYT::NDetail::UpdateOperationParameters(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, *Id_, options);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &options] (TMutationId /*mutationId*/) {
+            RawClient_->UpdateOperationParameters(*Id_, options);
+        });
 }
 
 TJobAttributes TOperation::TOperationImpl::GetJob(const TJobId& jobId, const TGetJobOptions& options)
@@ -2771,13 +2851,19 @@ const TClientContext& TOperation::TOperationImpl::GetContext() const
 
 TOperation::TOperation(TClientPtr client)
     : Client_(std::move(client))
-    , Impl_(::MakeIntrusive<TOperationImpl>(Client_->GetRetryPolicy(), Client_->GetContext()))
+    , Impl_(::MakeIntrusive<TOperationImpl>(
+        Client_->GetRawClient(),
+        Client_->GetRetryPolicy(),
+        Client_->GetContext()))
 {
 }
 
 TOperation::TOperation(TOperationId id, TClientPtr client)
     : Client_(std::move(client))
-    , Impl_(::MakeIntrusive<TOperationImpl>(Client_->GetRetryPolicy(), Client_->GetContext(), id))
+    , Impl_(::MakeIntrusive<TOperationImpl>(
+        Client_->GetRawClient(),
+        Client_->GetRetryPolicy(),
+        Client_->GetContext(), id))
 {
 }
 

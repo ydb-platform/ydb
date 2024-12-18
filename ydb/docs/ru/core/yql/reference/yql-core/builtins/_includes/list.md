@@ -610,7 +610,7 @@ ListAll(List<Bool>?)->Bool?
 
 ## ListHas {#listhas}
 
-Содержит ли список указанный элемент.
+Содержит ли список указанный элемент. При этом `NULL` значения считаются равными друг другу, а при `NULL` входном списке результат всегда `false`.
 
 ### Примеры
 
@@ -634,8 +634,8 @@ SELECT ListHas($l1, 6);  -- false
 ### Сигнатура
 
 ```yql
-ListHas(List<T>, T)->Bool
-ListHas(List<T>?, T)->Bool?
+ListHas(List<T>, U)->Bool
+ListHas(List<T>?, U)->Bool
 ```
 
 ## ListHead, ListLast {#listheadlast}
@@ -799,7 +799,8 @@ SELECT ListFromRange(Datetime("2022-05-23T15:30:00Z"), Datetime("2022-05-30T15:3
 ### Сигнатура
 
 ```yql
-ListFromRange(T, T)->LazyList<T> -- T - числовой тип или тип, представляющий дату/время
+ListFromRange(T{Flags:AutoMap}, T{Flags:AutoMap}, T?)->LazyList<T> -- T — числовой тип
+ListFromRange(T{Flags:AutoMap}, T{Flags:AutoMap}, I?)->LazyList<T> -- T — тип, представляющий дату/время, I — интервал
 ```
 
 ## ListReplicate {#listreplicate}

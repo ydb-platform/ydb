@@ -1,0 +1,32 @@
+{#- empty string #}
+val prepareMainProtos = tasks.register<Copy>("prepareMainProtos") {
+    from("$project_root") {
+{#- list of all current project proto files -#}
+{%-     for proto in target.proto_files %}
+        include("{{ proto }}")
+{%-     endfor %}
+    }
+    into(mainProtosDir)
+}
+
+{%  if libraries|length -%}
+val extractMainLibrariesProtos = tasks.register<Copy>("extractMainLibrariesProtos") {
+    from("$project_root") {
+{#- list of all library directories -#}
+{%-     for library in libraries -%}
+{%-         set path_and_jar = rsplit(library.jar, '/', 2) %}
+        include("{{ path_and_jar[0] }}/**/*.proto")
+{%-     endfor %}
+    }
+    into(mainExtractedIncludeProtosDir)
+}
+
+{% endif -%}
+afterEvaluate {
+    tasks.getByName("extractProto").dependsOn(prepareMainProtos)
+{%- if libraries|length %}
+    tasks.getByName("extractProto").dependsOn(extractMainLibrariesProtos)
+{%- endif %}
+}
+
+tasks.getByName("sourcesJar").dependsOn("generateProto")

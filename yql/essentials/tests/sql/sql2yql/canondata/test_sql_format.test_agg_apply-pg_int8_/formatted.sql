@@ -14,7 +14,6 @@ FROM (
         (1l),
         (2l),
         (3l)
-)
-    AS a (
-        key
-    );
+) AS a (
+    key
+);

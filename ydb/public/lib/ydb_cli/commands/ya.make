@@ -9,7 +9,10 @@ SRCS(
     query_workload.cpp
     ydb_admin.cpp
     ydb_benchmark.cpp
+    ydb_cluster.cpp
+    ydb_debug.cpp
     ydb_dynamic_config.cpp
+    ydb_ping.cpp
     ydb_profile.cpp
     ydb_root_common.cpp
     ydb_service_auth.cpp
@@ -22,6 +25,7 @@ SRCS(
     ydb_service_topic.cpp
     ydb_service_table.cpp
     ydb_sql.cpp
+    ydb_storage_config.cpp
     ydb_tools.cpp
     ydb_workload.cpp
     ydb_workload_import.cpp
@@ -35,6 +39,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/threading/local_executor
     ydb/library/backup
+    ydb/library/formats/arrow/csv/table
     ydb/library/workload
     ydb/library/yaml_config/public
     ydb/public/lib/operation_id
@@ -47,10 +52,13 @@ PEERDIR(
     ydb/public/lib/ydb_cli/commands/ydb_discovery
     ydb/public/lib/ydb_cli/commands/sdk_core_access
     ydb/public/lib/ydb_cli/dump
+    ydb/public/lib/ydb_cli/dump/files
     ydb/public/lib/ydb_cli/import
     ydb/public/lib/ydb_cli/topic
     ydb/public/sdk/cpp/client/draft
+    ydb/public/sdk/cpp/client/ydb_bsconfig
     ydb/public/sdk/cpp/client/ydb_coordination
+    ydb/public/sdk/cpp/client/ydb_debug
     ydb/public/sdk/cpp/client/ydb_export
     ydb/public/sdk/cpp/client/ydb_import
     ydb/public/sdk/cpp/client/ydb_monitoring
@@ -62,6 +70,8 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_topic
     ydb/public/sdk/cpp/client/ydb_types/credentials/login
 )
+
+GENERATE_ENUM_SERIALIZATION(ydb_ping.h)
 
 END()
 

@@ -39,6 +39,9 @@ message TDqPqTopicSource {
     bool SharedReading = 15;
     string ReconnectPeriod = 16; // disabled by default, example of a parameter: 5m
     bool EnabledLLVM = 17;
+    string ReadGroup = 18;
+    string Format = 19;
+    string RowType = 20; // Final row type with metadata columns
 }
 
 message TDqPqTopicSink {

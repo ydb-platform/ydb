@@ -2,6 +2,7 @@
 #include "probes.h"
 
 #include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
@@ -11,11 +12,14 @@
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_meta_extractor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor_base.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <ydb/core/fq/libs/events/events.h>
@@ -82,7 +86,7 @@ struct TRowDispatcherReadActorMetrics {
     }
 
     ~TRowDispatcherReadActorMetrics() {
-        SubGroup->RemoveSubgroup("id", TxId);
+        SubGroup->RemoveSubgroup("tx_id", TxId);
     }
 
     TString TxId;
@@ -119,7 +123,7 @@ class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public NYql::
         }
 
     public:
-        TVector<TString> Data;
+        TVector<TRope> Data;
         i64 UsedSpace = 0;
         ui64 NextOffset = 0;
         ui64 PartitionId;
@@ -155,7 +159,6 @@ class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public NYql::
     };
 
 private:
-    std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
     const TString Token;
     TMaybe<NActors::TActorId> CoordinatorActorId;
     NActors::TActorId LocalRowDispatcherActorId;
@@ -166,7 +169,12 @@ private:
     bool SchedulePrintStatePeriod = false;
     bool ProcessStateScheduled = false;
     bool InFlyAsyncInputData = false;
-    TCounters Counters; 
+    TCounters Counters;
+
+    // Parsing info
+    std::vector<std::optional<ui64>> ColumnIndexes;  // Output column index in schema passed into RowDispatcher
+    const TType* InputDataType = nullptr;  // Multi type (comes from Row Dispatcher)
+    std::unique_ptr<NKikimr::NMiniKQL::TValuePackerTransport<true>> DataUnpacker;
 
     struct SessionInfo {
         enum class ESessionStatus {
@@ -197,7 +205,7 @@ private:
         ui64 PartitionId;
         ui64 Generation;
     };
-    
+
     TMap<ui64, SessionInfo> Sessions;
     const THolderFactory& HolderFactory;
     const i64 MaxBufferSize;
@@ -211,6 +219,7 @@ public:
         const TTxId& txId,
         ui64 taskId,
         const THolderFactory& holderFactory,
+        const TTypeEnvironment& typeEnv,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
         NPq::NProto::TDqReadTaskParams&& readParams,
         const NActors::TActorId& computeActorId,
@@ -265,9 +274,9 @@ public:
     void PassAway() override;
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override;
     std::vector<ui64> GetPartitionsToRead() const;
-    std::pair<NUdf::TUnboxedValuePod, i64> CreateItem(const TString& data);
+    void AddMessageBatch(TRope&& serializedBatch, NKikimr::NMiniKQL::TUnboxedValueBatch& buffer);
     void ProcessState();
-    void Stop(const TString& message);
+    void Stop(NDqProto::StatusIds::StatusCode status, TIssues issues);
     void StopSessions();
     void ReInit(const TString& reason);
     void PrintInternalState();
@@ -285,6 +294,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         const TTxId& txId,
         ui64 taskId,
         const THolderFactory& holderFactory,
+        const TTypeEnvironment& typeEnv,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
         NPq::NProto::TDqReadTaskParams&& readParams,
         const NActors::TActorId& computeActorId,
@@ -300,11 +310,26 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , HolderFactory(holderFactory)
         , MaxBufferSize(bufferSize)
 {
-    MetadataFields.reserve(SourceParams.MetadataFieldsSize());
-    TPqMetaExtractor fieldsExtractor;
-    for (const auto& fieldName : SourceParams.GetMetadataFields()) {
-        MetadataFields.emplace_back(fieldName, fieldsExtractor.FindExtractorLambda(fieldName));
+    const auto programBuilder = std::make_unique<TProgramBuilder>(typeEnv, *holderFactory.GetFunctionRegistry());
+
+    // Parse output schema (expected struct output type)
+    const auto& outputTypeYson = SourceParams.GetRowType();
+    const auto outputItemType = NCommon::ParseTypeFromYson(TStringBuf(outputTypeYson), *programBuilder, Cerr);
+    YQL_ENSURE(outputItemType, "Failed to parse output type: " << outputTypeYson);
+    YQL_ENSURE(outputItemType->IsStruct(), "Output type " << outputTypeYson << " is not struct");
+    const auto structType = static_cast<TStructType*>(outputItemType);
+
+    // Build input schema and unpacker (for data comes from RowDispatcher)
+    TVector<TType* const> inputTypeParts;
+    inputTypeParts.reserve(SourceParams.ColumnsSize());
+    ColumnIndexes.resize(structType->GetMembersCount());
+    for (size_t i = 0; i < SourceParams.ColumnsSize(); ++i) {
+        const auto index = structType->GetMemberIndex(SourceParams.GetColumns().Get(i));
+        inputTypeParts.emplace_back(structType->GetMemberType(index));
+        ColumnIndexes[index] = i;
     }
+    InputDataType = programBuilder->NewMultiType(inputTypeParts);
+    DataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(InputDataType);
 
     IngressStats.Level = statsLevel;
     SRC_LOG_I("Start read actor, local row dispatcher " << LocalRowDispatcherActorId.ToString() << ", metadatafields: " << JoinSeq(',', SourceParams.GetMetadataFields()));
@@ -427,18 +452,18 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     i64 usedSpace = 0;
     buffer.clear();
     do {
-        auto& readyBatch = ReadyBuffer.front();
+        auto readyBatch = std::move(ReadyBuffer.front());
+        ReadyBuffer.pop();
 
-        for (const auto& message : readyBatch.Data) {
-            auto [item, size] = CreateItem(message);
-            buffer.push_back(std::move(item));
+        for (auto& messageBatch : readyBatch.Data) {
+            AddMessageBatch(std::move(messageBatch), buffer);
         }
+
         usedSpace += readyBatch.UsedSpace;
         freeSpace -= readyBatch.UsedSpace;
         TPartitionKey partitionKey{TString{}, readyBatch.PartitionId};
         PartitionToOffset[partitionKey] = readyBatch.NextOffset;
         SRC_LOG_T("NextOffset " << readyBatch.NextOffset);
-        ReadyBuffer.pop();
     } while (freeSpace > 0 && !ReadyBuffer.empty());
 
     ReadyBufferSizeBytes -= usedSpace;
@@ -505,7 +530,10 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) 
     if (!CheckSession(sessionInfo, ev, partitionId)) {
         return;
     }
-    Stop(ev->Get()->Record.GetMessage());
+
+    NYql::TIssues issues;
+    IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
+    Stop(ev->Get()->Record.GetStatusCode(), issues);
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
@@ -642,11 +670,9 @@ void TDqPqRdReadActor::ReInit(const TString& reason) {
     PrintInternalState();
 }
 
-void TDqPqRdReadActor::Stop(const TString& message) {
-    NYql::TIssues issues;
-    issues.AddIssue(NYql::TIssue{message});
-    SRC_LOG_E("Stop read actor, error: " << message);
-    Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST)); // TODO: use UNAVAILABLE ?
+void TDqPqRdReadActor::Stop(NDqProto::StatusIds::StatusCode status, TIssues issues) {
+    SRC_LOG_E("Stop read actor, status: " << NYql::NDqProto::StatusIds_StatusCode_Name(status) << ", issues: " << issues.ToOneLineString());
+    Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), status));
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr& ev) {
@@ -664,7 +690,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr&
         TActorId rowDispatcherActorId = ActorIdFromProto(p.GetActorId());
         for (auto partitionId : p.GetPartitionId()) {
             if (Sessions.contains(partitionId)) {
-                Stop("Internal error: session already exists");
+                Stop(NDqProto::StatusIds::INTERNAL_ERROR, {TIssue("Session already exists")});
                 return;
             }
             SRC_LOG_I("Create session to RD (" << rowDispatcherActorId << "), partitionId " << partitionId);
@@ -735,10 +761,16 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
 
     ui64 bytes = 0;
     for (const auto& message : ev->Get()->Record.GetMessages()) {
-        SRC_LOG_T("Json: " << message.GetJson());    
-        activeBatch.Data.emplace_back(message.GetJson());
-        sessionInfo.NextOffset = message.GetOffset() + 1;
-        bytes += message.GetJson().size();
+        const auto& offsets = message.GetOffsets();
+        if (offsets.empty()) {
+            Stop(NDqProto::StatusIds::INTERNAL_ERROR, {TIssue("Got unexpected empty batch from row dispatcher")});
+            return;
+        }
+
+        activeBatch.Data.emplace_back(ev->Get()->GetPayload(message.GetPayloadId()));
+        bytes += activeBatch.Data.back().GetSize();
+
+        sessionInfo.NextOffset = *offsets.rbegin() + 1;
         SRC_LOG_T("TEvMessageBatch NextOffset " << sessionInfo.NextOffset);
     }
     activeBatch.UsedSpace = bytes;
@@ -748,25 +780,30 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
     NotifyCA();
 }
 
-std::pair<NUdf::TUnboxedValuePod, i64> TDqPqRdReadActor::CreateItem(const TString& data) {
-    i64 usedSpace = 0;
-    NUdf::TUnboxedValuePod item;
-    if (MetadataFields.empty()) {
-        item = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
-        usedSpace += data.size();
-        return std::make_pair(item, usedSpace);
-    } 
+void TDqPqRdReadActor::AddMessageBatch(TRope&& messageBatch, NKikimr::NMiniKQL::TUnboxedValueBatch& buffer) {
+    // TDOD: pass multi type directly to CA, without transforming it into struct
 
-    NUdf::TUnboxedValue* itemPtr;
-    item = HolderFactory.CreateDirectArrayHolder(MetadataFields.size() + 1, itemPtr);
-    *(itemPtr++) = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
-    usedSpace += data.size();
+    NKikimr::NMiniKQL::TUnboxedValueBatch parsedData(InputDataType);
+    DataUnpacker->UnpackBatch(MakeChunkedBuffer(std::move(messageBatch)), HolderFactory, parsedData);
 
-    for ([[maybe_unused]] const auto& [name, extractor] : MetadataFields) {
-        auto ub = NYql::NUdf::TUnboxedValuePod(0);  // TODO: use real values
-        *(itemPtr++) = std::move(ub);
+    while (!parsedData.empty()) {
+        const auto* parsedRow = parsedData.Head();
+
+        NUdf::TUnboxedValue* itemPtr;
+        NUdf::TUnboxedValuePod item = HolderFactory.CreateDirectArrayHolder(ColumnIndexes.size(), itemPtr);
+        for (const auto index : ColumnIndexes) {
+            if (index) {
+                YQL_ENSURE(*index < parsedData.Width(), "Unexpected data width " << parsedData.Width() << ", failed to extract column by index " << index);
+                *(itemPtr++) = parsedRow[*index];
+            } else {
+                // TODO: support metadata fields here
+                *(itemPtr++) = NUdf::TUnboxedValuePod::Zero();
+            }
+        }
+
+        buffer.emplace_back(std::move(item));
+        parsedData.Pop();
     }
-    return std::make_pair(item, usedSpace);
 }
 
 void TDqPqRdReadActor::Handle(NActors::TEvents::TEvPong::TPtr& ev) {
@@ -856,6 +893,7 @@ void TDqPqRdReadActor::NotifyCA() {
 }
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
+    const TTypeEnvironment& typeEnv,
     NPq::NProto::TDqPqTopicSource&& settings,
     ui64 inputIndex,
     TCollectStatsLevel statsLevel,
@@ -884,6 +922,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
         txId,
         taskId,
         holderFactory,
+        typeEnv,
         std::move(settings),
         std::move(readTaskParamsMsg),
         computeActorId,

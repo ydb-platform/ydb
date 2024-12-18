@@ -1,5 +1,6 @@
 /* custom error:Argument with name age was already used for positional argument #2*/
 USE plato;
+
 $udfScript = @@
 def AppendInfo(a_name, a_age = None, a_region = None):
     res = a_name.decode('utf-8')
@@ -9,6 +10,7 @@ def AppendInfo(a_name, a_age = None, a_region = None):
         res += ", region: " + repr(a_region)
     return res.encode('utf-8')
 @@;
+
 $udf = Python3::AppendInfo(Callable<(name: String, [age: Int32?, region: Int32?]) -> String>, $udfScript);
 
 $data = (
@@ -16,10 +18,13 @@ $data = (
         CAST(key AS int32) AS age,
         CAST(subkey AS int32) AS region,
         value AS name
-    FROM Input
+    FROM
+        Input
 );
 
 SELECT
     $udf(name, age, age AS age) AS val
-FROM $data;
+FROM
+    $data
+;
 -- age is reused as named after positional

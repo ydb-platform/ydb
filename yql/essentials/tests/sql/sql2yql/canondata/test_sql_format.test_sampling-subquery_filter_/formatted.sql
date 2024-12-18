@@ -6,8 +6,12 @@ SELECT
 FROM (
     SELECT
         key
-    FROM plato.Input
-    WHERE subkey != "1"
+    FROM
+        plato.Input
+    WHERE
+        subkey != '1'
 )
-    TABLESAMPLE BERNOULLI (44)
-WHERE key > "50";
+TABLESAMPLE BERNOULLI (44)
+WHERE
+    key > '50'
+;

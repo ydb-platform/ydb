@@ -697,6 +697,21 @@ class AIOResponsesRaiseForStatusSessionTestCase(AsyncTestCase):
 
         self.assertEqual(response.status, 400)
 
+    @aioresponses()
+    @skipIf(condition=AIOHTTP_VERSION < Version('3.9.0'),
+            reason='aiohttp<3.9.0 does not support callable raise_for_status '
+                   'arguments for requests')
+    async def test_callable_raise_for_status(self, m):
+        async def raise_for_status(response: ClientResponse):
+            if response.status >= 400:
+                raise Exception("callable raise_for_status")
+
+        m.get(self.url, status=400)
+        with self.assertRaises(Exception) as cm:
+            await self.session.get(self.url,
+                                   raise_for_status=raise_for_status)
+        self.assertEqual(str(cm.exception), "callable raise_for_status")
+
 
 class AIOResponseRedirectTest(AsyncTestCase):
 
@@ -802,3 +817,18 @@ class AIOResponseRedirectTest(AsyncTestCase):
         self.assertEqual(str(response.url), f"{base_url}/baz")
         self.assertEqual(len(response.history), 1)
         self.assertEqual(str(response.history[0].url), url)
+
+    async def _test_pass_through_unmatched_requests(self):
+        matched_url = "https://matched_example.org"
+        unmatched_url = "https://httpbin.org/get"
+        params_unmatched = {'foo': 'bar'}
+
+        with aioresponses(passthrough_unmatched=True) as m:
+            m.post(URL(matched_url), status=200)
+            mocked_response = await self.session.post(URL(matched_url))
+            response = await self.session.get(
+                URL(unmatched_url), params=params_unmatched
+            )
+            self.assertEqual(response.status, 200)
+            self.assertEqual(str(response.url), 'https://httpbin.org/get?foo=bar')
+            self.assertEqual(mocked_response.status, 200)

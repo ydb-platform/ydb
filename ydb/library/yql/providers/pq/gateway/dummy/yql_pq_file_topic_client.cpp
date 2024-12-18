@@ -109,7 +109,7 @@ public:
 
         TVector<NYdb::NTopic::TReadSessionEvent::TEvent> res;
         for (auto event = EventsQ_.Pop(block); !event.Empty() &&  res.size() < maxEventsCount.GetOrElse(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
-            res.push_back(*event);
+            res.push_back(std::move(*event));
         }
         return res;
     }
@@ -349,7 +349,7 @@ private:
                 offset += content.size() + 1;
                 fo.Write(content);
                 fo.Write('\n');
-            } while((maybeMsg = EventsMsgQ_.Pop(false)));
+            } while ((maybeMsg = EventsMsgQ_.Pop(false)));
             fo.Flush();
             EventsQ_.Push(std::move(acks), 1 + acks.Acks.size());
             EventsQ_.Push(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()}, 1);

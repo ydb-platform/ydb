@@ -547,6 +547,10 @@ private:
                                  client.AlterUserAttributes("/", "Root", {{"folder_id", "folder4"},
                                                                           {"cloud_id", "cloud4"},
                                                                           {"database_id", "database4"}}));
+ 
+        client.CreateGroup("/Root", "Service1_id@as");
+        client.CreateGroup("/Root", "proxy_sa@as");
+
         NACLib::TDiffACL acl;
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull, "Service1_id@as");
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull, "proxy_sa@as");

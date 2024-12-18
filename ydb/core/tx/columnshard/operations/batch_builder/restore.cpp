@@ -75,15 +75,15 @@ void TModificationRestoreTask::SendErrorMessage(
 }
 
 TDuration TModificationRestoreTask::GetTimeout() const {
-    static const TDuration criticalTimeoutDuration = TDuration::Seconds(30);
+    static const TDuration criticalTimeoutDuration = TDuration::Seconds(1200);
     if (!HasAppData()) {
         return criticalTimeoutDuration;
     }
-    if (!AppDataVerified().GetColumnShardConfig().HasRestoreDataOnWriteTimeoutSeconds() ||
-        !AppDataVerified().GetColumnShardConfig().GetRestoreDataOnWriteTimeoutSeconds()) {
+    if (!AppDataVerified().ColumnShardConfig.HasRestoreDataOnWriteTimeoutSeconds() ||
+        !AppDataVerified().ColumnShardConfig.GetRestoreDataOnWriteTimeoutSeconds()) {
         return criticalTimeoutDuration;
     }
-    return TDuration::Seconds(AppDataVerified().GetColumnShardConfig().GetRestoreDataOnWriteTimeoutSeconds());
+    return TDuration::Seconds(AppDataVerified().ColumnShardConfig.GetRestoreDataOnWriteTimeoutSeconds());
 }
 
 }   // namespace NKikimr::NOlap

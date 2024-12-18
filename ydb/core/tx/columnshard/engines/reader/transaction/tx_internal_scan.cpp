@@ -36,7 +36,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     auto scanComputeActor = InternalScanEvent->Sender;
     const TSnapshot snapshot = request.ReadToSnapshot.value_or(NOlap::TSnapshot(Self->LastPlannedStep, Self->LastPlannedTxId));
     const NActors::TLogContextGuard gLogging =
-        NActors::TLogContextBuilder::Build()("tablet", Self->TabletID())("snapshot", snapshot.DebugString());
+        NActors::TLogContextBuilder::Build()("tablet", Self->TabletID())("snapshot", snapshot.DebugString())("task_id", request.TaskIdentifier);
     TReadMetadataPtr readMetadataRange;
     TScannerConstructorContext context(snapshot, 0, request.GetReverse());
     {
@@ -69,7 +69,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         }
     }
     TStringBuilder detailedInfo;
-    if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD)) {
+    if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD_SCAN)) {
         detailedInfo << " read metadata: (" << readMetadataRange->DebugString() << ")";
     }
 

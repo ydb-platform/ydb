@@ -96,9 +96,9 @@ bool TActor::CheckActivity() {
         return true;
     }
     AbortedFlag = true;
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "restoring_aborted");
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "restoring_cancelled_from_operation");
     SwitchStage(std::nullopt, EStage::Finished);
-    RestoreTask->OnError("restore task aborted");
+    RestoreTask->OnError("restore task aborted through operation cancelled");
     PassAway();
     return false;
 }

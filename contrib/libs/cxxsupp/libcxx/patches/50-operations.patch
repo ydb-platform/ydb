@@ -1,8 +1,8 @@
 diff --git a/src/filesystem/path_parser.h b/src/filesystem/path_parser.h
-index c6e63e8..630391f 100644
+index 28a8f24..a546604 100644
 --- a/src/filesystem/path_parser.h
 +++ b/src/filesystem/path_parser.h
-@@ -337,15 +337,19 @@ private:
+@@ -323,15 +323,17 @@ private:
        return consumeNSeparators(consumeName(P, End), End, 2);
    }
  
@@ -17,9 +17,7 @@ index c6e63e8..630391f 100644
      return nullptr;
    }
 +#else
-+  PosPtr consumeRootName(PosPtr /*P*/, PosPtr /*End*/) const noexcept {
-+    return nullptr;
-+  }
++  PosPtr consumeRootName(PosPtr /*P*/, PosPtr /*End*/) const noexcept { return nullptr; }
 +#endif
  };
  

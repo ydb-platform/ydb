@@ -1,15 +1,15 @@
 diff --git a/include/locale b/include/locale
-index 56fa8db..df12287 100644
+index 70d22ff..2806396 100644
 --- a/include/locale
 +++ b/include/locale
-@@ -2557,7 +2557,11 @@ public:
-         : time_put<_CharT, _OutputIterator>(__nm, __refs) {}
+@@ -2168,7 +2168,11 @@ public:
+       : time_put<_CharT, _OutputIterator>(__nm, __refs) {}
  
  protected:
 +#if defined(_MSC_VER) && defined(__clang__)
-+    ~time_put_byname() {}
++  ~time_put_byname() {}
 +#else
-     _LIBCPP_HIDE_FROM_ABI_VIRTUAL ~time_put_byname() override {}
+   _LIBCPP_HIDE_FROM_ABI_VIRTUAL ~time_put_byname() override {}
 +#endif
  };
  

@@ -261,7 +261,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
 
         auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
-            new IEventHandle((*ev)->Sender, (*ev)->Recipient, new TEvInterconnect::TEvNodesInfo(nodes))
+            new IEventHandle((*ev)->Recipient, (*ev)->Sender, new TEvInterconnect::TEvNodesInfo(nodes))
         );
         ev->Swap(newEv);
     }

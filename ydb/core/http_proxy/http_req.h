@@ -58,7 +58,7 @@ struct THttpResponseData {
     TString ErrorText{"OK"};
     TString YmqStatusCode;
     ui32 YmqHttpCode;
-    bool YmqIsFifo;
+    bool YmqIsFifo = false;
 
     TString DumpBody(MimeTypes contentType);
 };

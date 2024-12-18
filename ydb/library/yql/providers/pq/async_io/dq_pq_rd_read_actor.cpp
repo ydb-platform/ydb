@@ -797,8 +797,7 @@ void TDqPqRdReadActor::AddMessageBatch(TRope&& messageBatch, NKikimr::NMiniKQL::
                 *(itemPtr++) = parsedRow[*index];
             } else {
                 // TODO: support metadata fields here
-                auto ub = NYql::NUdf::TUnboxedValuePod(0);
-                *(itemPtr++) = std::move(ub);
+                *(itemPtr++) = NUdf::TUnboxedValuePod::Zero();
             }
         }
 

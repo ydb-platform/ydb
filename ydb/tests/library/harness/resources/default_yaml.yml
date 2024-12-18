@@ -134,6 +134,7 @@ grpc_config:
   host: "{ydb_grpc_host}"
   services:
   - "legacy"
+  - "tablet_service"
   - "yql"
   - "discovery"
   - "cms"
@@ -159,8 +160,13 @@ feature_flags:
   enable_persistent_query_stats: true
   enable_scheme_transactions_at_scheme_shard: true
   enable_mvcc_snapshot_reads: true
+  enable_antlr4_parser: true
 kqpconfig:
   settings:
+  - name: "_ResultRowsLimit"
+    value: "{ydb_result_rows_limit}"
+  - name: "_KqpYqlSyntaxVersion"
+    value: "{ydb_yql_syntax_version}"
   - name: "_KqpAllowNewEngine"
     value: "true"
 interconnect_config:
@@ -255,5 +261,3 @@ federated_query_config:
       uri: ""
   pinger:
     ping_period: "30s"
-column_shard_config:
-  disabled_on_scheme_shard: false

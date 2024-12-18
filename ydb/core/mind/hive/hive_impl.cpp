@@ -196,13 +196,12 @@ void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet, TSideEffects& 
 }
 
 TInstant THive::GetAllowedBootingTime() {
-    auto connectedNodes = TabletCounters->Simple()[NHive::COUNTER_NODES_CONNECTED].Get();
-    BLOG_D(connectedNodes << " nodes connected out of " << ExpectedNodes);
-    if (connectedNodes == 0) {
-        return {};
+    BLOG_D("ProcessBootQueue: " << AliveNodes << " nodes connected out of " << ExpectedNodes);
+    if (AliveNodes == 0) {
+        return TInstant::Max();
     }
-    TInstant result = LastConnect + MaxTimeBetweenConnects * std::max<i64>(static_cast<i64>(ExpectedNodes) - static_cast<i64>(connectedNodes), 1);
-    if (connectedNodes < ExpectedNodes) {
+    TInstant result = LastConnect + MaxTimeBetweenConnects * std::max<i64>(static_cast<i64>(ExpectedNodes) - static_cast<i64>(AliveNodes), 1);
+    if (AliveNodes < ExpectedNodes) {
         result = std::max(result, StartTime() + GetWarmUpBootWaitingPeriod());
     }
     result = std::min(result, StartTime() + GetMaxWarmUpPeriod());

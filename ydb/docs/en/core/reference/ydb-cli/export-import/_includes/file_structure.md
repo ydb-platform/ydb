@@ -4,13 +4,14 @@ The file structure outlined below is used to export data both to the file system
 
 ## Directories {#dir}
 
-Each database directory has a counterpart directory in the file structure. The directory hierarchy in the file structure matches the directory hierarchy in the database. If a certain database directory includes no items (neither tables nor subdirectories), the first structure of such a directory includes one file of zero size named `empty_dir`.
+Each database directory has a corresponding directory in the file structure. Each of them includes a `permissions.pb` file, which describes the directory ACL and owner in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format. The directory hierarchy in the file structure mirrors the hierarchy in the database. If a database directory contains no items (neither tables nor subdirectories), directory in the file structure includes an empty file named `empty_dir`.
 
 ## Tables {#tables}
 
 For each table in the database, there's a same-name directory in the file structure's directory hierarchy that includes:
 
 - The `scheme.pb` file describing the table structure and parameters in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format
+- The `permissions.pb` file describes the table ACL and owner in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format
 - One or more `data_XX.csv` files with the table data in `csv` format, where `XX` is the file's sequence number. The export starts with the `data_00.csv` file, with a next file created whenever the current file exceeds 100 MB.
 - Directories describing the [changefeeds](https://ydb.tech/docs/en/concepts/cdc). Directory names match the names of the changefeeds. Each directory contains the following files:
   - The `changefeed_description.pb` file describing the changefeed in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format.
@@ -25,19 +26,24 @@ The format of data files is `.csv`, where each row corresponds to a record in th
 1,"%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82"
 ```
 
-## Example {#example}
+## Examples {#example}
+
+### Tables {#example-table}
 
 When you export the tables created under [{#T}]({{ quickstart-path }}) in Getting started, the system will create the following file structure:
 
 ```text
 ├── episodes
 │   ├── data_00.csv
+│   ├── permissions.pb
 │   └── scheme.pb
 ├── seasons
 │   ├── data_00.csv
+│   ├── permissions.pb
 │   └── scheme.pb
 └── series
     ├── data_00.csv
+    ├── permissions.pb
     └── scheme.pb
     └── updates_feed
         └── changefeed_description.pb
@@ -118,3 +124,25 @@ consumers {
     value: "data-streams"
   }
 }
+```
+
+### Directories {#example-directory}
+
+When you export an empty directory `directory`, the system will create the following file structure:
+
+```markdown
+└── directory
+    ├── permissions.pb
+    └── empty_dir
+```
+
+When you export a directory `directory` with the nested table `table`, the system will create the following file structure:
+
+```markdown
+└── directory
+    ├── permissions.pb
+    └── table
+        ├── data_00.csv
+        ├── permissions.pb
+        └── scheme.pb
+```

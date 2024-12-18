@@ -138,9 +138,11 @@ public:
     void SetImmediateWriteEdge(NIceDb::TNiceDb& db, const TRowVersion& version);
     bool PromoteImmediateWriteEdge(const TRowVersion& version, TTransactionContext& txc);
     bool PromoteImmediateWriteEdgeReplied(const TRowVersion& version);
+    void RestoreImmediateWriteEdge(const TRowVersion& version, const TRowVersion& replied);
 
     TRowVersion GetUnprotectedReadEdge() const;
     bool PromoteUnprotectedReadEdge(const TRowVersion& version);
+    void RestoreUnprotectedReadEdge(const TRowVersion& version);
 
     std::pair<TRowVersion, bool> GetFollowerReadEdge() const;
     bool PromoteFollowerReadEdge(const TRowVersion& version, bool repeatable, TTransactionContext& txc);

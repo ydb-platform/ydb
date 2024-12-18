@@ -67,6 +67,8 @@ def _load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure,
     if isinstance(data, bytes):
         data = data.decode('utf-8')
     data = data.format(
+        ydb_result_rows_limit=os.getenv("YDB_KQP_RESULT_ROWS_LIMIT", 1000),
+        ydb_yql_syntax_version=os.getenv("YDB_YQL_SYNTAX_VERSION", "1"),
         ydb_defaut_tablet_node_ids=str(default_tablet_node_ids),
         ydb_default_log_level=int(LogLevels.from_string(os.getenv("YDB_DEFAULT_LOG_LEVEL", "NOTICE"))),
         ydb_domain_name=ydb_domain_name,
@@ -249,6 +251,9 @@ class KikimrConfigGenerator(object):
         if os.getenv('PGWIRE_LISTENING_PORT', ''):
             self.yaml_config["local_pg_wire_config"] = {}
             self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')
+
+        if os.getenv('YDB_TABLE_ENABLE_PREPARED_DDL', 'false').lower() == 'true':
+            self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
 
         if disable_iterator_reads:
             self.yaml_config["table_service_config"]["enable_kqp_scan_query_source_read"] = False

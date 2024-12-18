@@ -33,6 +33,7 @@ Parameter name | Parameter description
 `--dry-run` | Do not restore tables. Make sure that:<br/><ul><li>— All dump tables are present in the DB.</li><li>— Schemas of all dump tables correspond to schemas of DB tables.
 --restore-data VAL       Whether to restore data or not (default: 1)
 --restore-indexes VAL    Whether to restore indexes or not (default: 1)
+--restore-acl VAL        Whether to restore ACL and owner or not (default: 1)
 --skip-document-tables VAL
 Document API tables cannot be restored for now. Specify this option to skip such tables
 (default: 0)

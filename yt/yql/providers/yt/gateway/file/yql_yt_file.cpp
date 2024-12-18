@@ -1235,6 +1235,12 @@ private:
             req.Table(), attrs, req.IgnoreYamrDsv(), req.IgnoreWeakSchema()
         );
 
+        if (attrs.AsMap().contains("erasure_codec") && attrs["erasure_codec"].AsString() != "none") {
+            info.Attrs["erasure_codec"] = attrs["erasure_codec"].AsString();
+        }
+        if (attrs.AsMap().contains("optimize_for") && attrs["optimize_for"].AsString() != "scan") {
+            info.Attrs["optimize_for"] = attrs["optimize_for"].AsString();
+        }
         if (attrs.AsMap().contains("schema_mode") && attrs["schema_mode"].AsString() == "weak") {
             info.Attrs["schema_mode"] = attrs["schema_mode"].AsString();
         }

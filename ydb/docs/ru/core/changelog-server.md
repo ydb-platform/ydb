@@ -6,23 +6,28 @@
 
 **Функциональность:**
 
-* Добавлена возможность [задать приоритеты](./devops/manual/maintenance-without-downtime#priority) задач обслуживания в [системе управления кластером](./concepts/glossary#cms).
+* Добавлена возможность [задать приоритеты](./devops/manual/maintenance-without-downtime#priority) задачам обслуживания в [системе управления кластером](./concepts/glossary#cms).
 * Добавлена [настройка стабильных имён](./reference/configuration/#node-broker-config) для узлов кластера в рамках тенанта.
 * Добавлено получение вложенных групп от LDAP-сервера. В LDAP-конфигурации улучшен парсинг хостов и добавлена настройка для отключения встроенной аутентификацию по логину и паролю.
 * Добавлена возможность аутентификации [динамических нод](./concepts/glossary#dynamic) по SSL-сертификату.
 * Реализовано удаление неактивных узлов из [Hive](./concepts/glossary#hive) без его перезапуска.
 * Улучшено управление inflight pings при перезапуске Hive в кластерах большого размера.
+* [Изменен](https://github.com/ydb-platform/ydb/pull/6381) порядок установления соединения с узлами при перезапуске Hive. 
 
-**Встроенный UI:**
+**YDB UI:**
 
 * Добавлена возможность задать TTL для сессии пользователя в конфигурационном файле.
-* Добавлена сортировка по `CPUTime` в таблицы со списком запросов.
+* Добавлена сортировка по `CPUTime` в таблицу со списком запросов.
 * Добавлена статистика для колоночных таблиц.
-* Исправлена потеря точности при работа с double/float.
+* Исправлена потеря точности при работе с double/float.
+* [Добавлено](https://github.com/ydb-platform/ydb-embedded-ui/pull/889) отображение текущей версии YDB UI.
+* [Добавлена](https://github.com/ydb-platform/ydb-embedded-ui/issues/944) возможность сохранения запроса из редактора горячими клавишами.
+* Поддержано [создание директорий из UI](https://github.com/ydb-platform/ydb-embedded-ui/issues/958).
+* [Контрол авторефреша](https://github.com/ydb-platform/ydb-embedded-ui/pull/976) на всех страницах.
+* [Улучшено](https://github.com/ydb-platform/ydb-embedded-ui/issues/955) отображения ACL.
+* Включен автокомплит по умолчанию.
+* Добавлена поддержка view.
 
-**Производительность:**
-
-* [Изменен](https://github.com/ydb-platform/ydb/pull/6381) порядок установления соединения с узлами при перезапуске Hive.
 
 **Исправления ошибок:**
 
@@ -35,7 +40,6 @@
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/5760) ошибка отображения статуса PDisk в интерфейсе [CMS](./concepts/glossary#cms). 
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/6008) ошибки, из-за которых мягкий перенос (drain) таблеток с узла мог зависать.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/6445) ошибка остановки interconnect proxy на узле, работающем без перезапусков, при добавлении другого узла в кластер.
-* [Исправлено](https://github.com/ydb-platform/ydb/pull/7023) экранирование строк в сообщениях об ошибках.
 * [Исправлен](https://github.com/ydb-platform/ydb/pull/6695) учет свободной памяти в interconnect.
 * [Исправлены](https://github.com/ydb-platform/ydb/issues/6405) счетчики UnreplicatedPhantoms/UnreplicatedNonPhantoms в VDisk.
 * [Исправлена](https://github.com/ydb-platform/ydb/issues/6398) обработка пустых запросов сборки мусора на VDisk.

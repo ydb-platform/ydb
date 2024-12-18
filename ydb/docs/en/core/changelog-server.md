@@ -6,30 +6,31 @@ Release date: August 20, 2024.
 
 ### Functionality
 
-* Added [task priorities](./devops/manual/maintenance-without-downtime#priority) in the [CMS](./concepts/glossary#cms).
-* Added a [configuration for stable names](./reference/configuration/#node-broker-config) of cluster nodes.
-* Added support for retrieving nested groups from an LDAP server.
-* Improved host parsing and added an option to disable built-in login/password authentication in LDAP configuration.
-* Enabled SSL certificate-based authentication for [dynamic nodes](./concepts/glossary#dynamic).
-* Implemented removal of inactive nodes from [Hive](./concepts/glossary#hive) without requiring a restart.
-* Enhanced inflight ping management during Hive restarts in large clusters.
+* Added the ability to set [task priorities](./devops/manual/maintenance-without-downtime#priority) for maintenance in the cluster management system.
+* Introduced [stable naming configuration](./reference/configuration/#node-broker-config) for cluster nodes within a tenant.
+* Enabled retrieval of nested groups from the LDAP server, improved host parsing in the LDAP configuration and added an option to disable built-in authentication via login and password.
+* Added support for authenticating [dynamic nodes](./concepts/glossary#dynamic) using SSL certificates.
+* Implemented the removal of inactive nodes from [Hive](./concepts/glossary#hive) without requiring a restart.
+* Improved management of inflight pings during Hive restarts in large clusters.
+* Changed the order of establishing connections with nodes during Hive restarts.
 
-### Embedded UI
+### YDB UI
 
-* Added the ability to set a TTL for user sessions via the configuration file.
-* Added sorting by `CPUTime` in the query list table.
-* Added statistics for columnar tables.
-* Enabled transaction mode configurations for queries using asynchronous indexes or replica reads.
-* Corrected precision loss for double/float types.
-
-### Performance
-
-* [Changed](https://github.com/ydb-platform/ydb/pull/6381) the order of establishing connections to nodes during Hive restarts to improve performance.
+* [Added](https://github.com/ydb-platform/ydb/pull/7485) the option to set a TTL for user sessions in the configuration file.
+* [Added](https://github.com/ydb-platform/ydb-embedded-ui/issues/996) sorting by `CPUTime` in the queries list table.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/7779) precision loss when working with double/float data types.
+* [Displayed](https://github.com/ydb-platform/ydb-embedded-ui/pull/889) the current version of YDB UI.
+* [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/944) the ability to save queries from the editor using hotkeys.
+* [Supported](https://github.com/ydb-platform/ydb-embedded-ui/pull/958) the creation of directories via the UI.
+* [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/976) an auto-refresh control on all pages.
+* [Improved](https://github.com/ydb-platform/ydb-embedded-ui/pull/955) ACL display.
+* Enabled autocomplete by default.
+* Added support for views.
 
 ### Bug fixes
 
 * Fixed an [issue](https://github.com/ydb-platform/ydb/issues/6677) where schema operations failed during the export/backup of large databases by adding a check for local transaction size before committing. Transactions exceeding the limit are now aborted.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/7709) duplicate results in SELECT queries when reducing quotas in [DataShard](./concepts/glossary#data-shard).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/7709) duplicate results in select queries when reducing quotas in [DataShard](./concepts/glossary#data-shard).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/6461) [errors](https://github.com/ydb-platform/ydb/issues/6220) occurring during [coordinator](./concepts/glossary#tablet-types) state changes.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/5992) issues during the initial CDC scan.
 * [Resolved](https://github.com/ydb-platform/ydb/pull/6615) race conditions in asynchronous change delivery (asynchronous indexes, CDC).

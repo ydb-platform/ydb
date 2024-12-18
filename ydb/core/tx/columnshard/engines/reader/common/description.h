@@ -12,6 +12,7 @@ private:
     TSnapshot Snapshot;
     TProgramContainer Program;
     std::shared_ptr<IScanCursor> ScanCursor;
+    YDB_ACCESSOR_DEF(TString, ScanIdentifier);
 
 public:
     // Table

@@ -216,9 +216,9 @@ TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(const std::shared_ptr<ID
     ui64 size = PredefinedSize.value_or(0);
     for (auto&& i : Packs) {
         ui32 sizeLocal = source->GetColumnsVolume(i.GetColumns().GetColumnIds(), i.GetMemType());
-        if (source->GetStageData().GetUseFilter() && source->GetContext()->GetReadMetadata()->Limit && i.GetMemType() != EMemType::Blob) {
+        if (source->GetStageData().GetUseFilter() && i.GetMemType() != EMemType::Blob && source->GetContext()->GetReadMetadata()->HasLimit()) {
             const ui32 filtered =
-                source->GetStageData().GetFilteredCount(source->GetRecordsCount(), source->GetContext()->GetReadMetadata()->Limit);
+                source->GetStageData().GetFilteredCount(source->GetRecordsCount(), source->GetContext()->GetReadMetadata()->GetLimitRobust());
             if (filtered < source->GetRecordsCount()) {
                 sizeLocal = sizeLocal * 1.0 * filtered / source->GetRecordsCount();
             }
@@ -257,7 +257,7 @@ TString TFetchingScript::DebugString() const {
 }
 
 TFetchingScript::TFetchingScript(const TSpecialReadContext& context)
-    : Limit(context.GetReadMetadata()->Limit) {
+    : Limit(context.GetReadMetadata()->GetLimitRobust()) {
 }
 
 void TFetchingScript::Allocation(const std::set<ui32>& entityIds, const EStageFeaturesIndexes stage, const EMemType mType) {

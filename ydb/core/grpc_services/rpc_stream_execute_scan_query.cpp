@@ -225,7 +225,8 @@ private:
             &req->parameters(),
             req->collect_stats(),
             nullptr, // query_cache_policy
-            nullptr
+            nullptr,
+            NKqp::NPrivateEvents::TQueryRequestSettings().SetCollectFullDiagnostics(req->Getcollect_full_diagnostics())
         );
 
         ev->Record.MutableRequest()->SetCollectDiagnostics(req->Getcollect_full_diagnostics());

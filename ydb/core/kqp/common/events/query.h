@@ -288,7 +288,7 @@ public:
     }
 
     bool GetCollectDiagnostics() const {
-        return QuerySettings.CollectFullDiagnostics;
+        return RequestCtx ? QuerySettings.CollectFullDiagnostics : Record.MutableRequest()->GetCollectDiagnostics();
     }
 
     ui32 CalculateSerializedSize() const override {

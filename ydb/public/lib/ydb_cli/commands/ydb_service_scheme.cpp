@@ -4,6 +4,7 @@
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <util/string/join.h>
@@ -80,8 +81,9 @@ int TCommandRemoveDirectory::Run(TConfig& config) {
     if (Recursive) {
         NTable::TTableClient tableClient(driver);
         NTopic::TTopicClient topicClient(driver);
+        NQuery::TQueryClient queryClient(driver);
         const auto prompt = Prompt.GetOrElse(ERecursiveRemovePrompt::Once);
-        ThrowOnError(RemoveDirectoryRecursive(schemeClient, tableClient, topicClient, Path, prompt, settings));
+        ThrowOnError(RemoveDirectoryRecursive(schemeClient, tableClient, &topicClient, &queryClient, Path, prompt, settings));
     } else {
         if (Prompt) {
             if (!NConsoleClient::Prompt(*Prompt, Path, NScheme::ESchemeEntryType::Directory)) {

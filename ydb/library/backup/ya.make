@@ -6,10 +6,13 @@ PEERDIR(
     library/cpp/string_utils/quote
     util
     ydb/library/dynumber
+    ydb/library/yql/sql/v1/format
     ydb/public/api/grpc
     ydb/public/api/protos
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/yson_value
+    ydb/public/sdk/cpp/client/draft
+    ydb/public/sdk/cpp/client/ydb_driver
     ydb/public/sdk/cpp/client/ydb_proto
     ydb/public/sdk/cpp/client/ydb_scheme
     ydb/public/sdk/cpp/client/ydb_table

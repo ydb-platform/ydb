@@ -4,6 +4,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_import/import.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
@@ -36,8 +37,9 @@ public:
 } // NPrivate
 
 class TRestoreClient {
-    TRestoreResult RestoreFolder(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings);
+    TRestoreResult RestoreFolder(const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings);
     TRestoreResult RestoreTable(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings);
+    TRestoreResult RestoreView(const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings);
 
     TRestoreResult CheckSchema(const TString& dbPath, const NTable::TTableDescription& desc);
     TRestoreResult RestoreData(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const NTable::TTableDescription& desc);
@@ -48,7 +50,8 @@ public:
         NImport::TImportClient& importClient,
         NOperation::TOperationClient& operationClient,
         NScheme::TSchemeClient& SchemeClient,
-        NTable::TTableClient& tableClient);
+        NTable::TTableClient& tableClient,
+        NQuery::TQueryClient& queryClient);
 
     TRestoreResult Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings = {});
 
@@ -57,6 +60,19 @@ private:
     NOperation::TOperationClient& OperationClient;
     NScheme::TSchemeClient& SchemeClient;
     NTable::TTableClient& TableClient;
+    NQuery::TQueryClient& QueryClient;
+
+    struct TRestoreViewCall {
+        TFsPath FsPath;
+        TString DbRestoreRoot;
+        TString DbPathRelativeToRestoreRoot;
+        TRestoreSettings Settings;
+        bool IsAlreadyExisting;
+    };
+    // Views usually depend on other objects.
+    // If the dependency is not created yet, then the view restoration will fail.
+    // We retry failed view creation attempts until either all views are created, or the errors are persistent.
+    TVector<TRestoreViewCall> ViewRestorationCalls;
 
 }; // TRestoreClient
 

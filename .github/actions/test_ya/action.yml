@@ -257,6 +257,7 @@ runs:
         if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
           params+=(${{ inputs.additional_ya_make_args }})
         fi
+        
 
         if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
           params+=(--bazel-remote-store)
@@ -392,6 +393,18 @@ runs:
           set -e
           RC=`cat exit_code`
 
+          mkdir -p "$CURRENT_PUBLIC_DIR/coverage_reports"
+          if [ -d "$YA_MAKE_OUT_DIR/py3.coverage.report" ]; then
+            cp -r "$YA_MAKE_OUT_DIR/py3.coverage.report" "$CURRENT_PUBLIC_DIR/coverage_reports/"
+          else
+            echo "Directory $YA_MAKE_OUT_DIR/py3.coverage.report does not exist. Skipping copy."
+          fi
+          if [ -d "$YA_MAKE_OUT_DIR/coverage.report" ]; then
+            cp -r $YA_MAKE_OUT_DIR/coverage.report $CURRENT_PUBLIC_DIR/coverage_reports/
+          else
+            echo "Directory $YA_MAKE_OUT_DIR/coverage.report does not exist. Skipping copy."
+          fi
+          
           .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true
 
           # convert to chromium trace

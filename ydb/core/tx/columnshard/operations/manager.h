@@ -126,6 +126,12 @@ class TOperationsManager {
 
 public:
 
+    void StopWriting() {
+        for (auto&& i : Operations) {
+            i.second->StopWriting();
+        }
+    }
+
     TWriteOperation::TPtr GetOperationByInsertWriteIdVerified(const TInsertWriteId insertWriteId) const {
         auto it = InsertWriteIdToOpWriteId.find(insertWriteId);
         AFL_VERIFY(it != InsertWriteIdToOpWriteId.end());

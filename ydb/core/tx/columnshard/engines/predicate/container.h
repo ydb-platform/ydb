@@ -49,6 +49,23 @@ private:
     }
 
 public:
+    bool IsSchemaEqualTo(const std::shared_ptr<arrow::Schema>& schema) const {
+        if (!Object) {
+            return false;
+        }
+        return Object->IsEqualSchema(schema);
+    }
+
+    bool IsEqualPointTo(const TPredicateContainer& item) const {
+        if (!Object != !item.Object) {
+            return false;
+        }
+        if (!Object) {
+            return IsForwardInterval() == item.IsForwardInterval();
+        }
+        return Object->IsEqualTo(*item.Object);
+    }
+
     NArrow::ECompareType GetCompareType() const {
         return CompareType;
     }

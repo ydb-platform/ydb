@@ -1186,7 +1186,7 @@ TCheckFunc HasColumnTableTtlSettingsTier(const TString& columnName, const TDurat
         UNIT_ASSERT_VALUES_EQUAL(tier.GetApplyAfterSeconds(), evictAfter.Seconds());
         if (storageName) {
             UNIT_ASSERT(tier.HasEvictToExternalStorage());
-            UNIT_ASSERT_VALUES_EQUAL(tier.GetEvictToExternalStorage().GetStorageName(), storageName);
+            UNIT_ASSERT_VALUES_EQUAL(tier.GetEvictToExternalStorage().GetStorage(), storageName);
         } else {
             UNIT_ASSERT(tier.HasDelete());
         }

@@ -242,7 +242,7 @@ public:
                     tierInfo = TTierInfo::MakeTtl(TDuration::Seconds(tier.GetApplyAfterSeconds()), ttlColumnName, unitsInSecond);
                     break;
                 case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
-                    tierInfo = std::make_shared<TTierInfo>(tier.GetEvictToExternalStorage().GetStorageName(),
+                    tierInfo = std::make_shared<TTierInfo>(tier.GetEvictToExternalStorage().GetStorage(),
                         TDuration::Seconds(tier.GetApplyAfterSeconds()), ttlColumnName, unitsInSecond);
                     break;
                 case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:
@@ -273,7 +273,7 @@ public:
         for (const auto& tier : ttlSettings.GetTiers()) {
             switch (tier.GetActionCase()) {
                 case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
-                    usedTiers.emplace(tier.GetEvictToExternalStorage().GetStorageName());
+                    usedTiers.emplace(tier.GetEvictToExternalStorage().GetStorage());
                     break;
                 case NKikimrSchemeOp::TTTLSettings_TTier::kDelete:
                 case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:

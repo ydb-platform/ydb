@@ -11,5 +11,5 @@ SELECT
     1 IN (), -- false
     NULL IN Nothing(EmptyList?), -- Nothing<Bool?>
     NULL IN Nothing(EmptyDict?), -- Nothing<Bool?>
-    NULL IN Nothing(ParseType("Tuple<>?")), -- Nothing<Bool?>
+    NULL IN Nothing(ParseType('Tuple<>?')), -- Nothing<Bool?>
 ;

@@ -2,7 +2,7 @@
 USE plato;
 
 -- too short group
-INSERT INTO Output WITH column_groups = "{g1=[a];def=#}"
+INSERT INTO Output WITH column_groups = '{g1=[a];def=#}'
 SELECT
     *
 FROM

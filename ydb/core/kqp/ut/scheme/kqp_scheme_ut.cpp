@@ -2785,6 +2785,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(AlterIndexImplTableUsingPublicAPI) {
         TKikimrRunner kikimr;
+        kikimr.GetTestClient().GrantConnect("user@builtin");
+        
         auto adminSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(adminSession);
 
@@ -5477,8 +5479,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
             auto ttl = desc.GetTableDescription().GetTtlSettings();
             UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).StorageName, "tier1");
-            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers()[0].GetApplyAfter(), TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(), "tier1");
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TDateTypeColumnModeSettings>(ttl->GetTiers()[0].GetExpression()).GetExpireAfter(), TDuration::Seconds(10));
         }
         auto query2 = TStringBuilder() << R"(
             --!syntax_v1
@@ -5493,8 +5495,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
             auto ttl = desc.GetTableDescription().GetTtlSettings();
             UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).StorageName, "tier2");
-            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers()[0].GetApplyAfter(), TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(), "tier2");
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TDateTypeColumnModeSettings>(ttl->GetTiers()[0].GetExpression()).GetExpireAfter(), TDuration::Seconds(10));
         }
 
         auto query3 = TStringBuilder() << R"(
@@ -5524,8 +5526,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
             auto ttl = desc.GetTableDescription().GetTtlSettings();
             UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).StorageName, "tier1");
-            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers()[0].GetApplyAfter(), TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(), "tier1");
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TDateTypeColumnModeSettings>(ttl->GetTiers()[0].GetExpression()).GetExpireAfter(), TDuration::Seconds(10));
         }
 
         auto query5 = TStringBuilder() << R"(
@@ -6712,7 +6714,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     `/Root/table` AS `/Root/replica`
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
-                    CONSISTENCY_MODE = "FOO"
+                    CONSISTENCY_LEVEL = "FOO"
                 );
             )";
 
@@ -6727,7 +6729,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     `/Root/table` AS `/Root/replica`
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
-                    CONSISTENCY_MODE = "ROW",
+                    CONSISTENCY_LEVEL = "ROW",
                     COMMIT_INTERVAL = Interval("PT10S")
                 );
             )";
@@ -8522,11 +8524,11 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 2);
             auto evictTier = ttl->GetTiers()[0];
             UNIT_ASSERT(std::holds_alternative<TTtlEvictToExternalStorageAction>(evictTier.GetAction()));
-            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(evictTier.GetAction()).StorageName, "tier1");
-            UNIT_ASSERT_VALUES_EQUAL(evictTier.GetApplyAfter(), TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(evictTier.GetAction()).GetStorage(), "tier1");
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TDateTypeColumnModeSettings>(evictTier.GetExpression()).GetExpireAfter(), TDuration::Seconds(10));
             auto deleteTier = ttl->GetTiers()[1];
             UNIT_ASSERT(std::holds_alternative<TTtlDeleteAction>(deleteTier.GetAction()));
-            UNIT_ASSERT_VALUES_EQUAL(deleteTier.GetApplyAfter(), TDuration::Hours(1));
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TDateTypeColumnModeSettings>(deleteTier.GetExpression()).GetExpireAfter(), TDuration::Hours(1));
         }
         {
             auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() <<  R"(` RESET (TTL);)";

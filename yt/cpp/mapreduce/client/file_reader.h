@@ -22,6 +22,7 @@ class TStreamReaderBase
 {
 public:
     TStreamReaderBase(
+        const IRawClientPtr& rawClient,
         IClientRetryPolicyPtr clientRetryPolicy,
         ITransactionPingerPtr transactionPinger,
         const TClientContext& context,
@@ -33,6 +34,7 @@ protected:
     TYPath Snapshot(const TYPath& path);
 
 protected:
+    const IRawClientPtr RawClient_;
     const TClientContext Context_;
 
 private:
@@ -60,6 +62,7 @@ class TFileReader
 public:
     TFileReader(
         const TRichYPath& path,
+        const IRawClientPtr& rawClient,
         IClientRetryPolicyPtr clientRetryPolicy,
         ITransactionPingerPtr transactionPinger,
         const TClientContext& context,
@@ -86,6 +89,7 @@ public:
     TBlobTableReader(
         const TYPath& path,
         const TKey& key,
+        const IRawClientPtr& rawClient,
         IClientRetryPolicyPtr clientRetryPolicy,
         ITransactionPingerPtr transactionPinger,
         const TClientContext& context,

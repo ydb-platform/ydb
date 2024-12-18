@@ -1,8 +1,8 @@
 /* syntax version 1 */
 USE plato;
 
-$foo = [<|"x": 1|>];
-$bar = [<|"x": 1, "y": NULL|>];
+$foo = [<|'x': 1|>];
+$bar = [<|'x': 1, 'y': NULL|>];
 
 INSERT INTO Output
 SELECT

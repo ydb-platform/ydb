@@ -38,7 +38,7 @@ SELECT
     histogram(age) OVER w1 AS hist,
     median(age) OVER w1 AS median,
     percentile(age, 0.9) OVER w1 AS perc90,
-    aggregate_by(age, aggregation_factory("count")) OVER w1 AS aggby
+    aggregate_by(age, aggregation_factory('count')) OVER w1 AS aggby
 FROM
     $data
 WINDOW

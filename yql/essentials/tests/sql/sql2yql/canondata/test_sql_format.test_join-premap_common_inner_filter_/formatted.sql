@@ -11,7 +11,7 @@ FROM (
     FROM
         Input1
     WHERE
-        value != "ddd"
+        value != 'ddd'
 ) AS a
 JOIN
     Input2 AS b

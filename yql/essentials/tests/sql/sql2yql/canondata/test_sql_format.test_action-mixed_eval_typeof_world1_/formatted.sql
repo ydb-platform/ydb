@@ -13,11 +13,11 @@ $force_remove_members = ($struct, $to_remove) -> {
                     }
                 );
                 RETURN FuncCode(
-                    "AsStruct",
+                    'AsStruct',
                     ListMap(
                         $to_keep,
                         ($x) -> {
-                            RETURN ListCode(AtomCode($x), FuncCode("Member", $st, AtomCode($x)));
+                            RETURN ListCode(AtomCode($x), FuncCode('Member', $st, AtomCode($x)));
                         }
                     )
                 );

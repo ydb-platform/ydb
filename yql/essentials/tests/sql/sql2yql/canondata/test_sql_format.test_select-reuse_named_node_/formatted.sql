@@ -2,7 +2,7 @@
 USE plato;
 
 $x = ($key) -> {
-    RETURN "aa" || $key;
+    RETURN 'aa' || $key;
 };
 
 SELECT

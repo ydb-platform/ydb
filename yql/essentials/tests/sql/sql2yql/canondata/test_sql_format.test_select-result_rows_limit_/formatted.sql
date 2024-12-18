@@ -2,10 +2,10 @@
 /* postgres can not */
 USE plato;
 
-PRAGMA ResultRowsLimit = "2";
+PRAGMA ResultRowsLimit = '2';
 
 SELECT
-    key || "a" AS key
+    key || 'a' AS key
 FROM
     Input
 ORDER BY
@@ -13,7 +13,7 @@ ORDER BY
 ;
 
 SELECT
-    key || "b" AS key
+    key || 'b' AS key
 FROM
     Input
 ORDER BY

@@ -22,10 +22,10 @@ $data = (
         plato.Input1
 );
 
-$prefix = ">>";
+$prefix = '>>';
 
 PROCESS $data
-USING $udf($prefix, TableRows(), "=")
+USING $udf($prefix, TableRows(), '=')
 WHERE
-    Name != "foo"
+    Name != 'foo'
 ;

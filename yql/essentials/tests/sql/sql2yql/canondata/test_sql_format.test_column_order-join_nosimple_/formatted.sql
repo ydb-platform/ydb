@@ -5,12 +5,12 @@ USE plato;
 PRAGMA OrderedColumns;
 PRAGMA DisableSimpleColumns;
 
-$foo =
+$foo = (
     SELECT
         1 AS sk,
-        "150" AS key,
+        '150' AS key,
         2 AS v
-;
+);
 
 SELECT
     *

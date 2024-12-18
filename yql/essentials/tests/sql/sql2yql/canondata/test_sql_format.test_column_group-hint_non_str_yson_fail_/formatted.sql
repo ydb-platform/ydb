@@ -2,7 +2,7 @@
 USE plato;
 
 -- bad yson
-INSERT INTO Output WITH column_groups = "{g1=[3;a]}"
+INSERT INTO Output WITH column_groups = '{g1=[3;a]}'
 SELECT
     *
 FROM

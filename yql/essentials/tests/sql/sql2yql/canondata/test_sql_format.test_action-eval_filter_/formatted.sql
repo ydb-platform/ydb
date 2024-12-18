@@ -2,14 +2,14 @@
 /* postgres can not */
 USE plato;
 
-$arg1 = "" || "";
+$arg1 = '' || '';
 
 $arg2 = ($_item) -> {
     RETURN TRUE;
 };
 
-$arg3 = "" || "";
-$arg4 = "" || "raw";
+$arg3 = '' || '';
+$arg4 = '' || 'raw';
 
 SELECT
     count(*)

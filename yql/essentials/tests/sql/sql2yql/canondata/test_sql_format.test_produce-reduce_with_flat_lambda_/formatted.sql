@@ -6,12 +6,12 @@ $udf_stream = ($input) -> {
     RETURN $input;
 };
 
-$res =
+$res = (
     REDUCE Input0
     ON
         key
     USING ALL $udf_stream(TableRows())
-;
+);
 
 SELECT
     *

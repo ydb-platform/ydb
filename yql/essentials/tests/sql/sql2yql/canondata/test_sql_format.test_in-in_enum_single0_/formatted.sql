@@ -3,5 +3,5 @@ SELECT
 FROM
     plato.Input
 WHERE
-    key IN ("023")
+    key IN ('023')
 ;

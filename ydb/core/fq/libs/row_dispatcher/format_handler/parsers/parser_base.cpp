@@ -10,8 +10,8 @@ namespace NFq::NRowDispatcher {
 
 //// TTypeParser
 
-TTypeParser::TTypeParser(const TSourceLocation& location)
-    : Alloc(location, NKikimr::TAlignedPagePoolCounters(), true, false)
+TTypeParser::TTypeParser(const TSourceLocation& location, const TCountersDesc& counters)
+    : Alloc(location, NKikimr::TAlignedPagePoolCounters(counters.CountersRoot, counters.MkqlCountersName), true, false)
     , FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {}))
     , TypeEnv(std::make_unique<NKikimr::NMiniKQL::TTypeEnvironment>(Alloc))
     , ProgramBuilder(std::make_unique<NKikimr::NMiniKQL::TProgramBuilder>(*TypeEnv, *FunctionRegistry))
@@ -57,8 +57,8 @@ void TTopicParserBase::TStats::Clear() {
 
 //// TTopicParserBase
 
-TTopicParserBase::TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location)
-    : TTypeParser(location)
+TTopicParserBase::TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location, const TCountersDesc& counters)
+    : TTypeParser(location, counters)
     , Consumer(std::move(consumer))
 {}
 

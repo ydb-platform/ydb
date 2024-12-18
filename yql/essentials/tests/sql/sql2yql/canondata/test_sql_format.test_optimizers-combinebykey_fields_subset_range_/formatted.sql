@@ -4,5 +4,5 @@ SELECT
 FROM
     plato.CONCAT(Input0, Input1)
 WHERE
-    (key == "075" OR key == "150")
+    (key == '075' OR key == '150')
 ;

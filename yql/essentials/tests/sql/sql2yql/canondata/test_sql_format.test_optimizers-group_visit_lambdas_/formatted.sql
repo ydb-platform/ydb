@@ -7,9 +7,9 @@ SELECT
     value,
     TablePath() AS path
 FROM
-    range("", "Input1", "Input5")
+    range('', 'Input1', 'Input5')
 WHERE
-    key != ""
+    key != ''
 ORDER BY
     key,
     subkey,

@@ -39,7 +39,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[Arg.tt1.tt1_id,Arg.tt1.joincol,Arg.tt2.tt2_id]"
                                             },
                                             {
                                                 "Condition": "tt1.joincol = tt2.joincol",

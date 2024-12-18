@@ -6,8 +6,8 @@ PRAGMA DisableSimpleColumns;
 
 /* yt_local_var: MAP_JOIN_LIMIT = 30 */
 /* yqlrun_var: MAP_JOIN_LIMIT = 1000 */
-PRAGMA yt.MapJoinLimit = "MAP_JOIN_LIMIT";
-PRAGMA yt.MapJoinShardCount = "10";
+PRAGMA yt.MapJoinLimit = 'MAP_JOIN_LIMIT';
+PRAGMA yt.MapJoinShardCount = '10';
 
 SELECT
     *

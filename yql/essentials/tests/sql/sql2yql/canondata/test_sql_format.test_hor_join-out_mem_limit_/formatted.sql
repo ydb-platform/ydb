@@ -2,8 +2,8 @@
 /* kikimr can not - yt pragma */
 USE plato;
 
-PRAGMA yt.MaxExtraJobMemoryToFuseOperations = "550m";
-PRAGMA yt.CombineCoreLimit = "128m";
+PRAGMA yt.MaxExtraJobMemoryToFuseOperations = '550m';
+PRAGMA yt.CombineCoreLimit = '128m';
 
 $i = (
     SELECT
@@ -11,7 +11,7 @@ $i = (
     FROM
         Input
     WHERE
-        key < "900"
+        key < '900'
 );
 
 SELECT

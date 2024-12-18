@@ -8,7 +8,7 @@ INSERT INTO plato.Output WITH truncate (
 SELECT
     key,
     subkey,
-    "1" AS value
+    '1' AS value
 FROM
     plato.Input
 ;

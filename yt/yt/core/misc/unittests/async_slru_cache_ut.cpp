@@ -1,5 +1,9 @@
 #include <yt/yt/core/test_framework/framework.h>
 
+#include <yt/yt/core/concurrency/public.h>
+#include <yt/yt/core/concurrency/fair_share_action_queue.h>
+#include <yt/yt/core/concurrency/thread_pool.h>
+
 #include <yt/yt/core/misc/async_slru_cache.h>
 #include <yt/yt/core/misc/property.h>
 
@@ -11,6 +15,10 @@ namespace NYT {
 namespace {
 
 using namespace NProfiling;
+
+////////////////////////////////////////////////////////////////////////////////
+
+const NLogging::TLogger Logger("Main");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -109,9 +117,23 @@ public:
         : TAsyncSlruCacheBase(std::move(config)), EnableResurrection_(enableResurrection)
     { }
 
-    DEFINE_BYVAL_RO_PROPERTY(int, ItemCount, 0);
-    DEFINE_BYVAL_RO_PROPERTY(int, TotalAdded, 0);
-    DEFINE_BYVAL_RO_PROPERTY(int, TotalRemoved, 0);
+    int GetItemCount() const
+    {
+        auto guard = Guard(Lock_);
+        return Keys_.size();
+    }
+
+    int GetTotalAdded() const
+    {
+        auto guard = Guard(Lock_);
+        return TotalAdded_;
+    }
+
+    int GetTotalRemoved() const
+    {
+        auto guard = Guard(Lock_);
+        return TotalRemoved_;
+    }
 
 protected:
     i64 GetWeight(const TSimpleCachedValuePtr& value) const override
@@ -119,24 +141,42 @@ protected:
         return value->Weight;
     }
 
-    void OnAdded(const TSimpleCachedValuePtr& /*value*/) override
+    void OnAdded(const TSimpleCachedValuePtr& value) override
     {
-        ++ItemCount_;
+        YT_LOG_DEBUG("Item add (Item: %v)", value->GetKey());
+        auto guard = Guard(Lock_);
+
+        if (!Keys_.find(value->GetKey()).IsEnd()) {
+            YT_LOG_ALERT("Item already exist (Item: %v)", value->GetKey());
+        }
+
+        EmplaceOrCrash(Keys_, value->GetKey());
         ++TotalAdded_;
     }
 
-    void OnRemoved(const TSimpleCachedValuePtr& /*value*/) override
+    void OnRemoved(const TSimpleCachedValuePtr& value) override
     {
-        --ItemCount_;
+        YT_LOG_DEBUG("Item remove (Item: %v)", value->GetKey());
+        auto guard = Guard(Lock_);
+
+        if (Keys_.find(value->GetKey()).IsEnd()) {
+            YT_LOG_ALERT("Item not found (Item: %v)", value->GetKey());
+        }
+
+        EraseOrCrash(Keys_, value->GetKey());
         ++TotalRemoved_;
-        EXPECT_GE(ItemCount_, 0);
     }
+
     bool IsResurrectionSupported() const override
     {
         return EnableResurrection_;
     }
 
 private:
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    THashSet<int> Keys_;
+    int TotalAdded_ = 0;
+    int TotalRemoved_ = 0;
     bool EnableResurrection_;
 };
 
@@ -462,6 +502,49 @@ TEST(TAsyncSlruCacheTest, AddRemoveWithResurrection)
             EXPECT_EQ(cache->GetItemCount(), cache->GetSize());
         }
     }
+}
+
+TEST(TAsyncSlruCacheTest, AddRemoveStressTest)
+{
+    auto threadPool = NConcurrency::CreateThreadPool(2, "AddRemoveStressTest");
+
+    constexpr int cacheSize = 5;
+    constexpr int valueCount = 20;
+    auto config = CreateCacheConfig(cacheSize);
+    auto cache = New<TCountingSlruCache>(std::move(config));
+
+    std::vector<TSimpleCachedValuePtr> values;
+
+    for (int i = 0; i < valueCount; ++i) {
+        values.push_back(New<TSimpleCachedValue>(i, i));
+    }
+
+    auto callback = BIND([&] {
+        std::vector<TCountingSlruCache::TInsertCookie> cookies;
+
+        for (int i = 0; i < valueCount; ++i) {
+            auto cookie = cache->BeginInsert(i);
+            cookies.emplace_back(std::move(cookie));
+        }
+
+        for (int i = 0; i < valueCount; ++i) {
+            cookies.back().EndInsert(values[i]);
+            cookies.pop_back();
+        }
+    });
+
+    for (int i = 0; i < 100; i++) {
+        std::vector<TFuture<void>> futures;
+        futures.reserve(2);
+
+        for (int j = 0; j < 2; j++) {
+            futures.push_back(callback.AsyncVia(threadPool->GetInvoker()).Run());
+        }
+
+        NConcurrency::WaitFor(AllSucceeded(futures)).ThrowOnError();
+    }
+
+    threadPool->Shutdown();
 }
 
 TEST(TAsyncSlruCacheTest, AddThenImmediatelyRemove)

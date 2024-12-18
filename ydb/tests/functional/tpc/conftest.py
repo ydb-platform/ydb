@@ -17,9 +17,11 @@ class FunctionalTestBase:
         ))
         cls.cluster.start()
         node = cls.cluster.nodes[1]
-        YdbCluster.ydb_endpoint = f'grpc://{node.host}:{node.grpc_port}'
-        YdbCluster.ydb_database = f'{cls.cluster.domain_name}/test_db'
-        YdbCluster.ydb_mon_port = node.mon_port
+        YdbCluster.reset(
+            ydb_endpoint=f'grpc://{node.host}:{node.grpc_port}',
+            ydb_database=f'{cls.cluster.domain_name}/test_db',
+            ydb_mon_port=node.mon_port
+        )
         db = f'/{YdbCluster.ydb_database}'
         cls.cluster.create_database(
             db,

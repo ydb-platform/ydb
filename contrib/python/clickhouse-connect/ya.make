@@ -22,6 +22,10 @@ NO_COMPILER_WARNINGS()
 
 NO_LINT()
 
+NO_CHECK_IMPORTS(
+    clickhouse_connect.cc_sqlalchemy.*
+)
+
 PY_SRCS(
     TOP_LEVEL
     clickhouse_connect/__init__.py

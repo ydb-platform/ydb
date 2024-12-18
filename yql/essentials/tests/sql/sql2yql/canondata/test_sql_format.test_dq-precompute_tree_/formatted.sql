@@ -1,29 +1,29 @@
 USE plato;
 
-$a =
+$a = (
     SELECT
         max(key)
     FROM
         Input
-;
+);
 
-$b =
+$b = (
     SELECT
         min(subkey)
     FROM
         Input
     WHERE
         key < $a
-;
+);
 
-$c =
+$c = (
     SELECT
         min(key)
     FROM
         Input
     WHERE
-        key < "080"
-;
+        key < '080'
+);
 
 SELECT
     *

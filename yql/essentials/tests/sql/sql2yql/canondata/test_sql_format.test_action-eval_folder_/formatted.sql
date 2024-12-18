@@ -5,5 +5,5 @@ USE plato;
 SELECT
     *
 FROM
-    Folder(``, "foo;bar")
+    Folder(``, 'foo;bar')
 ;

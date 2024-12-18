@@ -353,4 +353,8 @@ TStringBuf NormalizeCallableName(TStringBuf name);
 
 void CheckExpectedTypeAndColumnOrder(const TExprNode& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx);
 
+namespace NBlockStreamIO {
+    constexpr bool WideFromBlocks = false;
+} // namespace NBlockStreamIO
+
 }

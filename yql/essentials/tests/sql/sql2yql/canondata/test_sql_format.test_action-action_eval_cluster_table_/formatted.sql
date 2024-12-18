@@ -8,7 +8,7 @@ SELECT
 FROM
     yt: $foo.Input
 WHERE
-    key < "100"
+    key < '100'
 ORDER BY
     key
 ;

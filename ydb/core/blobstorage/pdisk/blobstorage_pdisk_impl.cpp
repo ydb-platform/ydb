@@ -47,7 +47,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     , BlockDevice(CreateRealBlockDevice(cfg->GetDevicePath(), Mon,
                     HPCyclesMs(ReorderingMs), DriveModel.SeekTimeNs(), cfg->DeviceInFlight,
                     TDeviceMode::LockFile | (cfg->UseSpdkNvmeDriver ? TDeviceMode::UseSpdk : 0),
-                    cfg->MaxQueuedCompletionActions, cfg->CompletionThreadsCount, cfg->SectorMap, this))
+                    cfg->MaxQueuedCompletionActions, cfg->CompletionThreadsCount, cfg->SectorMap, this, cfg->ReadOnly))
     , Cfg(cfg)
     , CreationTime(TInstant::Now())
     , ExpectedSlotCount(cfg->ExpectedSlotCount)
@@ -1725,14 +1725,14 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
 // Owner initialization
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void TPDisk::ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str) {
+void TPDisk::ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str, NKikimrProto::EReplyStatus status) {
     TStringStream error;
     error << "PDiskId# " << PCtx->PDiskId << " YardInit error for VDiskId# " << evYardInit.VDisk.ToStringWOGeneration()
         << " reason# " << str;
     P_LOG(PRI_ERROR, BPD01, error.Str());
     ui64 writeBlockSize = ForsetiOpPieceSizeCached;
     ui64 readBlockSize = ForsetiOpPieceSizeCached;
-    PCtx->ActorSystem->Send(evYardInit.Sender, new NPDisk::TEvYardInitResult(NKikimrProto::ERROR,
+    PCtx->ActorSystem->Send(evYardInit.Sender, new NPDisk::TEvYardInitResult(status,
         DriveModel.SeekTimeNs() / 1000ull, DriveModel.Speed(TDriveModel::OP_TYPE_READ),
         DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
         DriveModel.BulkWriteBlockSize(),
@@ -1767,8 +1767,12 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(ownerData.OperationLog, "YardInitForKnownVDisk, OwnerId# " << owner
             << ", evYardInit# " << evYardInit.ToString());
 
-    TFirstUncommitted firstUncommitted = CommonLogger->FirstUncommitted.load();
-    ownerData.LogEndPosition = TOwnerData::TLogEndPosition(firstUncommitted.ChunkIdx, firstUncommitted.SectorIdx);
+    if (Cfg->ReadOnly) {
+        ownerData.LogEndPosition = TOwnerData::TLogEndPosition(LastInitialChunkIdx, LastInitialSectorIdx);
+    } else {
+        TFirstUncommitted firstUncommitted = CommonLogger->FirstUncommitted.load();
+        ownerData.LogEndPosition = TOwnerData::TLogEndPosition(firstUncommitted.ChunkIdx, firstUncommitted.SectorIdx);
+    }
 
     ownerData.OwnerRound = evYardInit.OwnerRound;
     TOwnerRound ownerRound = evYardInit.OwnerRound;
@@ -1889,6 +1893,11 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         auto it = VDiskOwners.find(vDiskId);
         if (it != VDiskOwners.end()) {
             YardInitForKnownVDisk(evYardInit, it->second);
+            return;
+        }
+
+        if (Cfg->ReadOnly) {
+            ReplyErrorYardInitResult(evYardInit, "PDisk is in ReadOnly mode. Marker# BPD47", NKikimrProto::CORRUPTED);
             return;
         }
 
@@ -3445,6 +3454,16 @@ void TPDisk::EnqueueAll() {
 
     while (InputQueue.GetWaitingSize() > 0) {
         TRequestBase* request = InputQueue.Pop();
+
+        if (Cfg->ReadOnly && HandleReadOnlyIfWrite(request)) {
+            LOG_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " ReqId# %" PRIu64
+                " got write request in ReadOnly mode type# %" PRIu64,
+                (ui32)PCtx->PDiskId, (ui64)request->ReqId.Id, (ui32)request->GetType());
+
+            delete request;
+            return;
+        }
+
         P_LOG(PRI_TRACE, BPD83, "EnqueueAll, pop from InputQueue", (requestType, TypeName(*request)), (alreadyProcessedReqs, processedReqs));
         AtomicSub(InputQueueCost, request->Cost);
         if (IsQueuePaused) {
@@ -3750,6 +3769,77 @@ void TPDisk::UpdateMinLogCostNs() {
                 cbs->MaxBudget = ForsetiMinLogCostNs;
             }
         }
+    }
+}
+
+// Handles write requests (only in read-only mode). Returns true, if request is a write request.
+bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
+    const TActorId& sender = request->Sender;
+    TString errorReason = "PDisk is in read-only mode";
+
+    switch (request->GetType()) {
+        // Reads and other operations that can be processed in read-only mode.
+        case ERequestType::RequestLogRead:
+        case ERequestType::RequestLogReadContinue:
+        case ERequestType::RequestLogReadResultProcess:
+        case ERequestType::RequestLogSectorRestore:
+        case ERequestType::RequestChunkRead:
+        case ERequestType::RequestChunkReadPiece:
+        case ERequestType::RequestYardInit:
+        case ERequestType::RequestCheckSpace:
+        case ERequestType::RequestHarakiri:
+        case ERequestType::RequestYardSlay:
+        case ERequestType::RequestYardControl:
+        case ERequestType::RequestWhiteboartReport:
+        case ERequestType::RequestHttpInfo:
+        case ERequestType::RequestStopDevice:
+        case ERequestType::RequestReadMetadata:
+        case ERequestType::RequestInitialReadMetadataResult:
+        case ERequestType::RequestUndelivered:
+        case ERequestType::RequestNop:
+        case ERequestType::RequestConfigureScheduler:
+        case ERequestType::RequestPushUnformattedMetadataSector:
+        case ERequestType::RequestContinueReadMetadata:
+            return false;
+
+        // Can't be processed in read-only mode.
+        case ERequestType::RequestLogWrite: {
+            TLogWrite &ev = *static_cast<TLogWrite*>(request);
+            NPDisk::TEvLogResult* result = new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, errorReason);
+            result->Results.push_back(NPDisk::TEvLogResult::TRecord(ev.Lsn, ev.Cookie));
+            PCtx->ActorSystem->Send(sender, result);
+            ev.Replied = true;
+            return true;
+        }
+        case ERequestType::RequestChunkWrite: {
+            TChunkWrite &ev = *static_cast<TChunkWrite*>(request);
+            SendChunkWriteError(ev, errorReason, NKikimrProto::CORRUPTED);
+            return true;
+        }
+        case ERequestType::RequestChunkReserve:
+            PCtx->ActorSystem->Send(sender, new NPDisk::TEvChunkReserveResult(NKikimrProto::CORRUPTED, 0, errorReason));
+            return true;
+        case ERequestType::RequestChunkLock:
+            PCtx->ActorSystem->Send(sender, new NPDisk::TEvChunkLockResult(NKikimrProto::CORRUPTED, {}, 0, errorReason));
+            return true;
+        case ERequestType::RequestChunkUnlock:
+            PCtx->ActorSystem->Send(sender, new NPDisk::TEvChunkUnlockResult(NKikimrProto::CORRUPTED, 0, errorReason));
+            return true;
+        case ERequestType::RequestChunkForget:
+            PCtx->ActorSystem->Send(sender, new NPDisk::TEvChunkForgetResult(NKikimrProto::CORRUPTED, 0, errorReason));
+            return true;
+
+        case ERequestType::RequestWriteMetadata:
+        case ERequestType::RequestWriteMetadataResult:
+        case ERequestType::RequestTryTrimChunk:
+        case ERequestType::RequestReleaseChunks:
+        case ERequestType::RequestChunkWritePiece:
+        case ERequestType::RequestChunkTrim:
+        case ERequestType::RequestAskForCutLog:
+        case ERequestType::RequestCommitLogChunks:
+        case ERequestType::RequestLogCommitDone:
+            // These requests don't require response.
+            return true;
     }
 }
 

@@ -46,7 +46,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::SwitchToError(const TString& reason) {
-        STLOG(PRI_ERROR, BS_NODE, NWDC38, "SwitchToError", (RootState, RootState), (Reason, reason));
+        STLOG(PRI_NOTICE, BS_NODE, NWDC38, "SwitchToError", (RootState, RootState), (Reason, reason));
         if (Scepter) {
             UnbecomeRoot();
         }
@@ -163,6 +163,11 @@ namespace NKikimr::NStorage {
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC31, "ProcessCollectConfigs", (RootState, RootState), (NodeQuorum, nodeQuorum),
             (ConfigQuorum, configQuorum), (Res, *res));
+
+        if (nodeQuorum && !configQuorum) {
+            // check if there is quorum of no-distconf config along the cluster
+        }
+
         if (!nodeQuorum || !configQuorum) {
             return "no quorum for CollectConfigs";
         }
@@ -327,14 +332,8 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TStorageConfig *configToPropose = nullptr;
         std::optional<NKikimrBlobStorage::TStorageConfig> propositionBase;
 
-        bool canPropose = false;
-        if (StorageConfig->HasBlobStorageConfig()) {
-            if (const auto& bsConfig = StorageConfig->GetBlobStorageConfig(); bsConfig.HasAutoconfigSettings()) {
-                if (const auto& settings = bsConfig.GetAutoconfigSettings(); settings.HasDefineBox()) {
-                    canPropose = true;
-                }
-            }
-        }
+        auto& sc = *StorageConfig;
+        const bool canPropose = sc.HasBlobStorageConfig() && sc.GetBlobStorageConfig().HasDefineBox();
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC59, "ProcessCollectConfigs", (BaseConfig, baseConfig),
             (PersistedConfig, persistedConfig), (ProposedConfig, proposedConfig), (CanPropose, canPropose));
@@ -378,12 +377,12 @@ namespace NKikimr::NStorage {
             }
             UpdateFingerprint(configToPropose);
 
-            const bool error = StorageConfig && configToPropose->GetGeneration() <= StorageConfig->GetGeneration();
+            const bool error = configToPropose->GetGeneration() <= sc.GetGeneration();
 
             STLOG(error ? PRI_ERROR : PRI_INFO, BS_NODE, NWDC60, "ProcessCollectConfigs proposing config",
                 (ConfigToPropose, *configToPropose),
                 (PropositionBase, propositionBase),
-                (StorageConfig, StorageConfig),
+                (StorageConfig, sc),
                 (BaseConfig, static_cast<bool>(baseConfig)),
                 (PersistedConfig, static_cast<bool>(persistedConfig)),
                 (ProposedConfig, static_cast<bool>(proposedConfig)),

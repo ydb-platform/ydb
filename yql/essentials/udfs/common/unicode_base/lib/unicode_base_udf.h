@@ -106,11 +106,12 @@ namespace {
         const char* input = inputStr.data();
         const int base = static_cast<int>(args[1].GetOrDefault<ui16>(0));
         char* pos = nullptr;
+        errno = 0;
         unsigned long long res = std::strtoull(input, &pos, base);
         if (!res && errno == EINVAL) {
             UdfTerminate("Incorrect base");
         }
-        
+
         ui64 ret = static_cast<ui64>(res);
         if (!res && pos == input) {
             UdfTerminate("Input string is not a number");
@@ -128,6 +129,7 @@ namespace {
         const char* input = inputStr.data();
         const int base = static_cast<int>(args[1].GetOrDefault<ui16>(0));
         char* pos = nullptr;
+        errno = 0;
         unsigned long long res = std::strtoull(input, &pos, base);
         if (!res && errno == EINVAL) {
             return TUnboxedValuePod();
@@ -139,7 +141,7 @@ namespace {
         }
         if ((res == ULLONG_MAX && errno == ERANGE) || ret != res) {
             return TUnboxedValuePod();
-        } 
+        }
         if (*pos) {
             return TUnboxedValuePod();
         }

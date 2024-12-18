@@ -4,12 +4,12 @@ USE plato;
 INSERT INTO Output1
 SELECT
     key AS key,
-    "" AS subkey,
-    "value:" || value AS value
+    '' AS subkey,
+    'value:' || value AS value
 FROM
     Input
 WHERE
-    key < "100"
+    key < '100'
 ORDER BY
     key
 ;
@@ -17,12 +17,12 @@ ORDER BY
 INSERT INTO Output2
 SELECT
     key AS key,
-    "" AS subkey,
-    "value:" || value AS value
+    '' AS subkey,
+    'value:' || value AS value
 FROM
     Input
 WHERE
-    key < "200"
+    key < '200'
 ORDER BY
     key
 ;

@@ -6,16 +6,16 @@ SELECT
     v1,
     v2
 FROM
-    RANGE("", "Input1", "Input2")
+    RANGE('', 'Input1', 'Input2')
 WHERE
-    key == "037"
+    key == '037'
 ;
 
 SELECT
     v1,
     v2
 FROM
-    RANGE("", "Input1", "Input2")
+    RANGE('', 'Input1', 'Input2')
 WHERE
-    key == "150" AND subkey == "1"
+    key == '150' AND subkey == '1'
 ;

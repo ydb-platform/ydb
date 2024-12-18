@@ -13,7 +13,7 @@ SELECT
     AsList(key) AS no_block_list,
     AsSet(key) AS no_block_set_and_void,
     CAST(key AS Double) AS no_block_cast,
-    AsTuple(key, DyNumber("123")) AS no_block_dynumber,
+    AsTuple(key, DyNumber('123')) AS no_block_dynumber,
 FROM
     Input
 ;

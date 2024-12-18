@@ -120,11 +120,9 @@ public:
         return result;
     }
 
-    [[nodiscard]] static std::vector<ui32> AddSpecialFieldIds(const std::vector<ui32>& baseColumnIds) {
-        std::vector<ui32> result = baseColumnIds;
+    static void AddSpecialFieldIds(std::vector<ui32>& baseColumnIds) {
         const auto& cIds = GetSystemColumnIds();
-        result.insert(result.end(), cIds.begin(), cIds.end());
-        return result;
+        baseColumnIds.insert(baseColumnIds.end(), cIds.begin(), cIds.end());
     }
 
     [[nodiscard]] static std::set<ui32> AddSpecialFieldIds(const std::set<ui32>& baseColumnIds) {

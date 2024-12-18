@@ -5,13 +5,13 @@ $t = AsList(
     AsStruct(2 AS key, 100 AS value)
 );
 
-$f = AGGREGATION_FACTORY("maxby");
+$f = AGGREGATION_FACTORY('maxby');
 
 SELECT
     Yql::Aggregate(
         $t, AsTuple(), AsTuple(
             AsTuple(
-                AsAtom("res"),
+                AsAtom('res'),
                 $f(
                     ListItemType(TypeOf($t)), ($z) -> {
                         RETURN AsTuple($z.value, $z.key);
@@ -22,13 +22,13 @@ SELECT
     )
 ;
 
-$f = AGGREGATION_FACTORY("maxby", 10);
+$f = AGGREGATION_FACTORY('maxby', 10);
 
 SELECT
     Yql::Aggregate(
         $t, AsTuple(), AsTuple(
             AsTuple(
-                AsAtom("res"),
+                AsAtom('res'),
                 $f(
                     ListItemType(TypeOf($t)), ($z) -> {
                         RETURN AsTuple($z.value, $z.key);

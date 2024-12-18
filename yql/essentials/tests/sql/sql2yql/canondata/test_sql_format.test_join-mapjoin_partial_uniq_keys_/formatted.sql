@@ -5,7 +5,7 @@ PRAGMA DisableSimpleColumns;
 /* ignore runonopt plan diff */
 USE plato;
 
-PRAGMA yt.MapJoinLimit = "1m";
+PRAGMA yt.MapJoinLimit = '1m';
 
 -- YQL-5582
 $join = (
@@ -19,7 +19,7 @@ $join = (
         FROM
             Input
         WHERE
-            value > "bbb"
+            value > 'bbb'
     ) AS a
     LEFT JOIN
         Input AS b

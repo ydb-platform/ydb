@@ -1,13 +1,13 @@
 USE plato;
 
-$i =
+$i = (
     SELECT
         *
     FROM
         Input
     WHERE
-        a > "a"
-;
+        a > 'a'
+);
 
 SELECT
     a,

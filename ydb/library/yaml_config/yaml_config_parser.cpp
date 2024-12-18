@@ -1101,29 +1101,24 @@ namespace NKikimr::NYaml {
     void PrepareBlobStorageConfig(NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
         auto* bsConfig = config.MutableBlobStorageConfig();
 
-        if (bsConfig && bsConfig->HasServiceSet()) {
-            if (bsConfig->GetServiceSet().GroupsSize()) {
-                return;  // no autoconfig
+        if (!bsConfig->HasServiceSet()) {
+            bsConfig->MutableServiceSet()->AddAvailabilityDomains(1);
+        }
+
+        if (bsConfig->HasAutoconfigSettings()) { // some syntactic sugar for distconf, when it's enabled
+            auto *autoconfigSettings = bsConfig->MutableAutoconfigSettings();
+
+            if (!autoconfigSettings->HasErasureSpecies()) {
+                autoconfigSettings->SetErasureSpecies(ephemeralConfig.GetStaticErasure());
             }
-        }
-
-        bsConfig->MutableServiceSet()->AddAvailabilityDomains(1);
-
-        auto* autoconfigSettings = bsConfig->MutableAutoconfigSettings();
-        autoconfigSettings->ClearDefineHostConfig();
-        autoconfigSettings->ClearDefineBox();
-
-        if (!autoconfigSettings->HasErasureSpecies()) {
-            autoconfigSettings->SetErasureSpecies(ephemeralConfig.GetStaticErasure());
-        }
-        if (!autoconfigSettings->PDiskFilterSize()) {
-            const TString defaultDiskType(ephemeralConfig.GetDefaultDiskType());
-            auto pdiskType = NKikimrConfig::TExtendedHostConfigDrive::TransformTypeToTypeForTHostConfigDrive<const TString, NKikimrBlobStorage::EPDiskType>(&defaultDiskType);
-            autoconfigSettings->AddPDiskFilter()->AddProperty()->SetType(pdiskType);
-        }
-        if (!autoconfigSettings->HasGeometry()) {
-            if (ephemeralConfig.HasFailDomainType() &&
-                ephemeralConfig.GetFailDomainType() != NKikimrConfig::TEphemeralInputFields::Rack) {
+            if (!autoconfigSettings->PDiskFilterSize()) {
+                const TString defaultDiskType(ephemeralConfig.GetDefaultDiskType());
+                auto pdiskType = NKikimrConfig::TExtendedHostConfigDrive::TransformTypeToTypeForTHostConfigDrive<
+                    const TString, NKikimrBlobStorage::EPDiskType>(&defaultDiskType);
+                autoconfigSettings->AddPDiskFilter()->AddProperty()->SetType(pdiskType);
+            }
+            if (!autoconfigSettings->HasGeometry() && ephemeralConfig.HasFailDomainType() &&
+                    ephemeralConfig.GetFailDomainType() != NKikimrConfig::TEphemeralInputFields::Rack) {
                 auto* geometry = autoconfigSettings->MutableGeometry();
                 const auto& range = FailDomainGeometryRanges.at(ephemeralConfig.GetFailDomainType());
                 geometry->SetRealmLevelBegin(range.RealmLevelBegin);
@@ -1133,13 +1128,17 @@ namespace NKikimr::NYaml {
             }
         }
 
+        // these fields will be filled right now
+        bsConfig->ClearDefineHostConfig();
+        bsConfig->ClearDefineBox();
+
         bool hostConfigIdAssigned = false;
         bool hostConfigIdProvided = false;
         constexpr ui64 defaultHostConfigId = 1;
         THashSet<ui64> validHostConfigIds;
 
         for (const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {
-            auto *hostconf = autoconfigSettings->AddDefineHostConfig();
+            auto *hostconf = bsConfig->AddDefineHostConfig();
             hostConfig.CopyToTDefineHostConfig(*hostconf);
             if (hostConfig.HasHostConfigId()) {
                 hostConfigIdProvided = true;
@@ -1174,7 +1173,7 @@ namespace NKikimr::NYaml {
             }
 
             if (!defineBox) {
-                defineBox = autoconfigSettings->MutableDefineBox();
+                defineBox = bsConfig->MutableDefineBox();
                 defineBox->SetBoxId(1);
             }
 

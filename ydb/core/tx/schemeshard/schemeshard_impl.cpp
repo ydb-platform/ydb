@@ -4512,10 +4512,6 @@ void TSchemeShard::Die(const TActorContext &ctx) {
         ctx.Send(TabletMigrator, new TEvents::TEvPoisonPill());
     }
 
-    if (CdcStreamScanFinalizer) {
-        ctx.Send(CdcStreamScanFinalizer, new TEvents::TEvPoisonPill());
-    }
-
     IndexBuildPipes.Shutdown(ctx);
     CdcStreamScanPipes.Shutdown(ctx);
     ShardDeleter.Shutdown(ctx);

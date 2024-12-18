@@ -8,7 +8,7 @@ The `tools restore` command creates the items of the database schema in the data
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
-If the table already exists in the database, no changes will be made to its schema. If some columns present in the imported files are missing in the database or have mismatching types, this may lead to the data import operation failing.
+If the table or directory already exists in the database, no changes will be made to its schema and ACL. If some columns present in the imported files are missing in the database or have mismatching types, this may lead to the data import operation failing.
 
 To import data to the table, use the [YQL `REPLACE` command](../../../../yql/reference/syntax/replace_into.md). If the table included any records before the import, the records whose keys are present in the imported files are replaced by the data from the file. The records whose keys are absent in the imported files aren't affected.
 
@@ -25,6 +25,8 @@ To import data to the table, use the [YQL `REPLACE` command](../../../../yql/ref
 `--restore-data VAL`: Enables/disables data import, 1 (yes) or 0 (no), defaults to 1. If set to 0, the import only creates items in the schema without populating them with data. If there's no data in the file system (only the schema has been exported), it doesn't make sense to change this option.
 
 `--restore-indexes VAL`: Enables/disables import of indexes, 1 (yes) or 0 (no), defaults to 1. If set to 0, the import won't either register secondary indexes in the data schema or populate them with data.
+
+`--restore-acl VAL`: Enables/disables import of ACL, 1 (yes) or 0 (no), defaults to 1. If set to 0, the import creates items in the schema with an empty ACL, and their owner will be the user who started the import.
 
 `--dry-run`: Matching the data schemas in the database and file system without updating the database, 1 (yes) or 0 (no), defaults to 0. When enabled, the system checks that:
 

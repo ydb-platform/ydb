@@ -425,9 +425,7 @@ bool TDeletePartsAndDone::ProgressState(TOperationContext& context) {
 TDone::TDone(const TOperationId& id)
     : OperationId(id)
 {
-    auto events = AllIncomingEvents();
-    events.erase(TEvPrivate::TEvCompleteBarrier::EventType);
-    IgnoreMessages(DebugHint(), events);
+    IgnoreMessages(DebugHint(), AllIncomingEvents());
 }
 
 bool TDone::Process(TOperationContext& context) {

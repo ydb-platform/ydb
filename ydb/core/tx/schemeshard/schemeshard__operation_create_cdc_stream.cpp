@@ -381,7 +381,13 @@ public:
 
 class TDoneWithInitialScan: public TDone {
 public:
-    using TDone::TDone;
+    explicit TDoneWithInitialScan(const TOperationId& id)
+        : TDone(id)
+    {
+        auto events = AllIncomingEvents();
+        events.erase(TEvPrivate::TEvCompleteBarrier::EventType);
+        IgnoreMessages(DebugHint(), events);
+    }
 
     bool ProgressState(TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

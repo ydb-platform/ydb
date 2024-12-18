@@ -26,14 +26,14 @@ TStatus RemoveTable(TTableClient& client, const TString& path, const TDropTableS
     });
 }
 
-TStatus RemoveThrowQuery(const TString& entryType, NQuery::TQueryClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
+TStatus DropSchemeObject(const TString& objectType, NQuery::TQueryClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
     return client.RetryQuerySync([&](NQuery::TSession session) {
         const auto executionSettings = NQuery::TExecuteQuerySettings()
             .TraceId(settings.TraceId_)
             .RequestType(settings.RequestType_)
             .Header(settings.Header_)
             .ClientTimeout(settings.ClientTimeout_);
-        const auto query = TStringBuilder() << "DROP " << entryType << " `" << path << "`";
+        const auto query = TStringBuilder() << "DROP " << objectType << " `" << path << "`";
         return session.ExecuteQuery(query, NQuery::TTxControl::NoTx(), executionSettings).ExtractValueSync();
     });
 }
@@ -61,7 +61,7 @@ TStatus RemoveExternalTable(TTableClient& client, const TString& path, const TRe
 }
 
 TStatus RemoveView(NQuery::TQueryClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
-    return RemoveThrowQuery("VIEW", client, path, settings);
+    return DropSchemeObject("VIEW", client, path, settings);
 }
 
 TStatus RemoveTopic(TTopicClient& client, const TString& path, const TDropTopicSettings& settings) {

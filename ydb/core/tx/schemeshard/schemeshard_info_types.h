@@ -3126,7 +3126,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             using namespace NTableIndex::NTableVectorKmeansTreeIndex;
             TString name = PostingTable;
             if (needsBuildTable || NeedsAnotherLevel()) {
-                name += Level % 2 != 0 ? BuildPostingTableSuffix0 : BuildPostingTableSuffix1;
+                name += Level % 2 != 0 ? BuildSuffix0 : BuildSuffix1;
             }
             return name;
         }
@@ -3134,7 +3134,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Y_ASSERT(Parent != 0);
             using namespace NTableIndex::NTableVectorKmeansTreeIndex;
             TString name = PostingTable;
-            name += Level % 2 != 0 ? BuildPostingTableSuffix1 : BuildPostingTableSuffix0;
+            name += Level % 2 != 0 ? BuildSuffix1 : BuildSuffix0;
             return name;
         }
     };

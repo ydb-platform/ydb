@@ -1230,7 +1230,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnName: "modified_at"
                 Tiers {
                     EvictToExternalStorage {
-                        StorageName: "/Root/abc"
+                        Storage: "/Root/abc"
                     }
                     ApplyAfterSeconds: 3600
                 }

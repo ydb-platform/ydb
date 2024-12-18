@@ -553,7 +553,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Tiers: {
                         ApplyAfterSeconds: 360
                         EvictToExternalStorage {
-                            StorageName: "Tier1"
+                            Storage: "Tier1"
                         }
                     }
                 }
@@ -579,7 +579,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Tiers: {
                         ApplyAfterSeconds: 3600000000
                         EvictToExternalStorage {
-                            StorageName: "Tier1"
+                            Storage: "Tier1"
                         }
                     }
                 }
@@ -732,7 +732,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Tiers: {
                         ApplyAfterSeconds: 3600000000
                         EvictToExternalStorage {
-                            StorageName: "Tier1"
+                            Storage: "Tier1"
                         }
                     }
                 }

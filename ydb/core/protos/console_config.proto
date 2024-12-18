@@ -514,6 +514,7 @@ message TConfigSubscriptionNotification {
     optional string YamlConfig = 5;
     optional bool YamlConfigNotChanged = 6;
     repeated TVolatileYamlConfig VolatileConfigs = 7;
+    optional string DatabaseConfig = 8;
     optional NKikimrConfig.TAppConfig RawConsoleConfig = 103; // Used for correct next startup config prediction
 }
 

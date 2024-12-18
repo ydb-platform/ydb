@@ -801,6 +801,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev
     subscription->NodeId = rec.GetOptions().GetNodeId();
     subscription->Host = rec.GetOptions().GetHost();
     subscription->Tenant = rec.GetOptions().GetTenant();
+    Cerr << " xxx 3 " << subscription->Tenant << " " << rec.GetServeYaml() << Endl;
     subscription->NodeType = rec.GetOptions().GetNodeType();
 
     subscription->ItemKinds.insert(rec.GetConfigItemKinds().begin(), rec.GetConfigItemKinds().end());
@@ -1224,10 +1225,12 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateSubscriptions::TPtr &ev, cons
 
 void TConfigsProvider::Handle(TEvPrivate::TEvUpdateYamlConfig::TPtr &ev, const TActorContext &ctx) {
     YamlConfig = ev->Get()->YamlConfig;
+    YamlConfigPerDatabase = ev->Get()->YamlConfigPerDatabase;
     VolatileYamlConfigs.clear();
 
     YamlConfigVersion = NYamlConfig::GetVersion(YamlConfig);
     VolatileYamlConfigHashes.clear();
+
     for (auto& [id, config] : ev->Get()->VolatileYamlConfigs) {
         auto doc = NFyaml::TDocument::Parse(config);
         // we strip it to provide old format for config dispatcher
@@ -1262,6 +1265,15 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateYamlConfig::TPtr &ev, const T
             }
 
             subscription->VolatileYamlConfigHashes = VolatileYamlConfigHashes;
+
+            if (YamlConfigPerDatabase.contains(subscription->Tenant)) {
+                request->Record.SetDatabaseConfig(YamlConfigPerDatabase[subscription->Tenant]);
+            } else {
+                Cerr << " xxx search " << subscription->Tenant << Endl;
+                if (YamlConfigPerDatabase.size() > 0) {
+                    Cerr << " xxx has " << YamlConfigPerDatabase.begin()->first << Endl;
+                }
+            }
 
             ctx.Send(subscription->Worker, request.Release());
         }

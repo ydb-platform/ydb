@@ -375,6 +375,35 @@ namespace TEvConsole {
                 }
             }
         }
+
+        TEvConfigSubscriptionNotification(
+            ui64 generation,
+            const NKikimrConfig::TAppConfig &config,
+            const THashSet<ui32> &affectedKinds,
+            const TString &yamlConfig,
+            const TMap<ui64, TString> &volatileYamlConfigs,
+            const NKikimrConfig::TAppConfig &rawConfig,
+            const TMaybe<TString> dbc)
+        {
+            Record.SetGeneration(generation);
+            Record.MutableConfig()->CopyFrom(config);
+            Record.MutableRawConsoleConfig()->CopyFrom(rawConfig);
+            for (ui32 kind : affectedKinds)
+                Record.AddAffectedKinds(kind);
+
+            if (!yamlConfig.empty()) {
+                Record.SetYamlConfig(yamlConfig);
+                for (auto &[id, config] : volatileYamlConfigs) {
+                    auto *volatileConfig = Record.AddVolatileConfigs();
+                    volatileConfig->SetId(id);
+                    volatileConfig->SetConfig(config);
+                }
+            }
+            if (dbc) {
+                Record.SetDatabaseConfig(*dbc);
+            }
+        }
+
     };
 
     /**

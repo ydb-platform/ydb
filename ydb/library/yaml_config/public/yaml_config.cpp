@@ -128,45 +128,19 @@ TYamlConfigModel ParseConfig(NFyaml::TDocument& doc) {
     auto root = doc.Root().Map();
     res.Config = root.at("config");
 
-    auto allowedLabels = root.at("allowed_labels").Map();
+    if (root.Has("selector_config")) {
+        auto selectorConfig = root.at("selector_config").Sequence();
 
-    for (auto it = allowedLabels.begin(); it != allowedLabels.end(); ++it) {
-        auto type = it->Value().Map().at("type");
-        if (!type || type.Type() != NFyaml::ENodeType::Scalar) {
-            ythrow TYamlConfigEx() << "Label type should be Scalar";
+        for (auto it = selectorConfig.begin(); it != selectorConfig.end(); ++it) {
+            TYamlConfigModel::TSelectorModel selector;
+
+            auto selectorRoot = it->Map();
+            selector.Description = selectorRoot.at("description").Scalar();
+            selector.Config = selectorRoot.at("config");
+            selector.Selector = ParseSelector(selectorRoot.at("selector"));
+
+            res.Selectors.push_back(selector);
         }
-
-        EYamlConfigLabelTypeClass classType;
-
-        if (auto classIt = ClassMapping.find(type.Scalar()); classIt != ClassMapping.end()) {
-            classType = classIt->second;
-        } else {
-            ythrow TYamlConfigEx() << "Unsupported label type: " << type.Scalar();
-        }
-
-        auto label = res.AllowedLabels.try_emplace(
-            it->Key().Scalar(),
-            TLabelType{classType, TSet<TString>{""}});
-
-        if (auto labelDesc = it->Value().Map()["values"]; labelDesc) {
-            auto values = labelDesc.Map();
-            for(auto it2 = values.begin(); it2 != values.end(); ++it2) {
-                label.first->second.Values.insert(it2->Key().Scalar());
-            }
-        }
-    }
-
-    auto selectorConfig = root.at("selector_config").Sequence();
-
-    for (auto it = selectorConfig.begin(); it != selectorConfig.end(); ++it) {
-        TYamlConfigModel::TSelectorModel selector;
-
-        auto selectorRoot = it->Map();
-        selector.Description = selectorRoot.at("description").Scalar();
-        selector.Config = selectorRoot.at("config");
-        selector.Selector = ParseSelector(selectorRoot.at("selector"));
-
-        res.Selectors.push_back(selector);
     }
 
     return res;
@@ -727,6 +701,10 @@ bool IsVolatileConfig(const TString& config) {
 
 bool IsMainConfig(const TString& config) {
     return IsConfigKindEquals(config, "MainConfig");
+}
+
+bool IsDatabaseConfig(const TString& config) {
+    return IsConfigKindEquals(config, "DatabaseConfig");
 }
 
 TString StripMetadata(const TString& config) {

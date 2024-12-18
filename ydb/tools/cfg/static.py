@@ -7,7 +7,6 @@ import itertools
 import logging
 import subprocess
 import tempfile
-import copy
 
 import yaml
 from ydb.core.fq.libs.config.protos.fq_config_pb2 import TConfig as TFederatedQueryConfig
@@ -866,8 +865,7 @@ class StaticConfigGenerator(object):
 
             try:
                 output = subprocess.check_output(
-                    cmd_base
-                    + [
+                    cmd_base + [
                         "--ring-level-begin",
                         str(rx_begin),
                         "--ring-level-end",
@@ -880,8 +878,7 @@ class StaticConfigGenerator(object):
                 )
             except subprocess.CalledProcessError:
                 output = subprocess.check_output(
-                    cmd_base
-                    + [
+                    cmd_base + [
                         "--dx",
                         fail_domain_type,
                     ]

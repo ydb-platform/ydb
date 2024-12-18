@@ -635,17 +635,22 @@ struct TKikimrTableMetadata : public TThrRefBase {
         return proto.SerializeAsString();
     }
 
-    std::pair<TIntrusivePtr<TKikimrTableMetadata>, TIndexDescription::EIndexState> GetIndexMetadata(const TString& indexName) const {
+    std::pair<TIntrusivePtr<TKikimrTableMetadata>, const TIndexDescription*> GetIndex(std::string_view indexName) const {
         YQL_ENSURE(Indexes.size(), "GetIndexMetadata called for table without indexes");
         YQL_ENSURE(Indexes.size() == ImplTables.size(), "index metadata has not been loaded yet");
         for (size_t i = 0; i < Indexes.size(); i++) {
             if (Indexes[i].Name == indexName) {
                 auto implTable = ImplTables[i];
                 YQL_ENSURE(implTable, "unexpected empty metadata for index " << indexName);
-                return {std::move(implTable), Indexes[i].State};
+                return {std::move(implTable), &Indexes[i]};
             }
         }
-        return {nullptr, TIndexDescription::EIndexState::Invalid};
+        return {nullptr, nullptr};
+    }
+
+    std::pair<TIntrusivePtr<TKikimrTableMetadata>, TIndexDescription::EIndexState> GetIndexMetadata(std::string_view indexName) const {
+        auto [implTable, index] = GetIndex(indexName);
+        return {std::move(implTable), index ? index->State : TIndexDescription::EIndexState::Invalid};
     }
 
     bool IsOlap() const {

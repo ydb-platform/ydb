@@ -246,7 +246,7 @@ TStatus AnnotateReadTable(const TExprNode::TPtr& node, TExprContext& ctx, const 
     TKikimrTableMetadataPtr meta;
 
     if (readIndex) {
-        meta = table.second->Metadata->GetIndexMetadata(TString(node->Child(TKqlReadTableIndex::idx_Index)->Content())).first;
+        meta = table.second->Metadata->GetIndexMetadata(node->Child(TKqlReadTableIndex::idx_Index)->Content()).first;
         if (!meta) {
             return TStatus::Error;
         }
@@ -560,7 +560,7 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
         if (!EnsureAtom(*index, ctx)) {
             return TStatus::Error;
         }
-        auto indexMeta = table.second->Metadata->GetIndexMetadata(TString(index->Content())).first;
+        auto indexMeta = table.second->Metadata->GetIndexMetadata(index->Content()).first;
 
         if (!CalcKeyColumnsCount(ctx, node->Pos(), *structType, *table.second, *indexMeta, keyColumnsCount)) {
             return TStatus::Error;

@@ -185,7 +185,7 @@ public:
 
         IPurecalcFilter::TPtr purecalcFilter;
         if (const auto& predicate = filter->GetWhereFilter()) {
-            LOG_ROW_DISPATCHER_TRACE("Create purecalc filter for predicate '" << predicate << "' (client id: " << filter->GetFilterId() << ")");
+            LOG_ROW_DISPATCHER_TRACE("Create purecalc filter for predicate '" << predicate << "' (filter id: " << filter->GetFilterId() << ")");
 
             auto filterStatus = CreatePurecalcFilter(filter);
             if (filterStatus.IsFail()) {
@@ -237,13 +237,11 @@ private:
         }
 
         if (const auto filter = filterHandler.GetPurecalcFilter()) {
-            LOG_ROW_DISPATCHER_TRACE("Pass " << numberRows << " rows to purecalc filter (client id: " << consumer->GetFilterId() << ")");
+            LOG_ROW_DISPATCHER_TRACE("Pass " << numberRows << " rows to purecalc filter (filter id: " << consumer->GetFilterId() << ")");
             filter->FilterData(result, numberRows);
-        } else {
+        } else if (numberRows) {
             LOG_ROW_DISPATCHER_TRACE("Add " << numberRows << " rows to client " << consumer->GetFilterId() << " without filtering");
-            for (ui64 rowId = 0; rowId < numberRows; ++rowId) {
-                consumer->OnFilteredData(rowId);
-            }
+            consumer->OnFilteredBatch(0, numberRows - 1);
         }
     }
 

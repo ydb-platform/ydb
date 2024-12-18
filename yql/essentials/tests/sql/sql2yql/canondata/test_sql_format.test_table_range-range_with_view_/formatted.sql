@@ -3,5 +3,5 @@
 SELECT
     *
 FROM
-    plato.range("", "InputA", "InputD")
+    plato.range('', 'InputA', 'InputD')
 ;

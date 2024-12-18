@@ -7,7 +7,7 @@ PRAGMA yt.InferSchema;
 SELECT
     key,
     subkey,
-    WeakField(value, "String") AS value
+    WeakField(value, 'String') AS value
 FROM
     Input
 ;

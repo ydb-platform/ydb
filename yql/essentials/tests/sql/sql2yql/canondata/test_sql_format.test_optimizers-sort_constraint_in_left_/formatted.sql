@@ -17,7 +17,7 @@ FROM (
     FROM
         $input_table
     WHERE
-        key != "1"
+        key != '1'
     UNION ALL
     SELECT
         key,
@@ -25,7 +25,7 @@ FROM (
     FROM
         $input_table
     WHERE
-        key != "1"
+        key != '1'
     GROUP BY
         key
 )

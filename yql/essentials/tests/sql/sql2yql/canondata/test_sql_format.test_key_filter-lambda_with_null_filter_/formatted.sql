@@ -10,10 +10,10 @@ INNER JOIN (
     FROM
         plato.Input
     WHERE
-        key == "075"
+        key == '075'
 ) AS b
 ON
     a.subkey == b.subkey
 WHERE
-    b.value != ""
+    b.value != ''
 ;

@@ -17,9 +17,9 @@ FROM
 COMMIT;
 
 SELECT
-    coalesce(key, ""),
-    coalesce(subkey, ""),
-    coalesce(value, "")
+    coalesce(key, ''),
+    coalesce(subkey, ''),
+    coalesce(value, '')
 FROM
     plato.Output
 ;

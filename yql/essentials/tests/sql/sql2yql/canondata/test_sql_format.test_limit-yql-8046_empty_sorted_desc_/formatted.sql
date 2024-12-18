@@ -9,7 +9,7 @@ $visitors = (
     FROM
         Input
     WHERE
-        subkey != ""
+        subkey != ''
 );
 
 $over_threshold = (
@@ -20,7 +20,7 @@ $over_threshold = (
     FROM
         $visitors
     WHERE
-        key > "070"
+        key > '070'
 );
 
 $clean = (

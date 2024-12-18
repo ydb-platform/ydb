@@ -21,10 +21,10 @@ DEFINE ACTION $aaa($z) AS
     END DEFINE;
     $ccc = EvaluateCode(QuoteCode($bbb));
     DO
-        $ccc("1")
+        $ccc('1')
     ;
 END DEFINE;
 
-EVALUATE FOR $z IN AsList(AsTuple("Input", "foo"), AsTuple("Input", "bar")) DO
+EVALUATE FOR $z IN AsList(AsTuple('Input', 'foo'), AsTuple('Input', 'bar')) DO
     $aaa($z)
 ;

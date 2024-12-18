@@ -1,9 +1,9 @@
 USE plato;
 
 $strings = [
-    <|key: Just(Just("foo")), subkey: Just("bar"), value: 1|>,
-    <|key: Just(Nothing(String?)), subkey: Just("two"), value: 2|>,
-    <|key: Nothing(String??), subkey: Just("three"), value: 3|>,
+    <|key: Just(Just('foo')), subkey: Just('bar'), value: 1|>,
+    <|key: Just(Nothing(String?)), subkey: Just('two'), value: 2|>,
+    <|key: Nothing(String??), subkey: Just('three'), value: 3|>,
     <|key: Nothing(String??), subkey: Nothing(String?), value: 4|>,
 ];
 
@@ -33,7 +33,7 @@ COMMIT;
 SELECT
     value,
     key ?? subkey,
-    subkey ?? "xxx",
+    subkey ?? 'xxx',
 FROM
     @strings
 ORDER BY

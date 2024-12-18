@@ -121,7 +121,18 @@
                                                                                                 "PlanNodeType": "Connection",
                                                                                                 "Plans": [
                                                                                                     {
-                                                                                                        "Node Type": "Stage",
+                                                                                                        "Node Type": "Aggregate",
+                                                                                                        "Operators": [
+                                                                                                            {
+                                                                                                                "Inputs": [
+                                                                                                                    {
+                                                                                                                        "ExternalPlanNodeId": 3
+                                                                                                                    }
+                                                                                                                ],
+                                                                                                                "Name": "Aggregate",
+                                                                                                                "Phase": "Final"
+                                                                                                            }
+                                                                                                        ],
                                                                                                         "PlanNodeId": 4,
                                                                                                         "Plans": [
                                                                                                             {
@@ -136,14 +147,15 @@
                                                                                                                         "Node Type": "Aggregate",
                                                                                                                         "Operators": [
                                                                                                                             {
-                                                                                                                                "Aggregation": "{_yql_agg_0: Inc(state._yql_agg_0)}",
+                                                                                                                                "Aggregation": "{Inc(state._yql_agg_0)}",
                                                                                                                                 "GroupBy": "item.a",
                                                                                                                                 "Inputs": [
                                                                                                                                     {
                                                                                                                                         "ExternalPlanNodeId": 1
                                                                                                                                     }
                                                                                                                                 ],
-                                                                                                                                "Name": "Aggregate"
+                                                                                                                                "Name": "Aggregate",
+                                                                                                                                "Phase": "Intermediate"
                                                                                                                             }
                                                                                                                         ],
                                                                                                                         "PlanNodeId": 2,

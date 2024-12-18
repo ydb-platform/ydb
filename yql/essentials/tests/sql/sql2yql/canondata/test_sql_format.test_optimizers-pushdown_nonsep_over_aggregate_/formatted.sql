@@ -1,6 +1,6 @@
 USE plato;
 
-PRAGMA config.flags("OptimizerFlags", "PushdownComplexFiltersOverAggregate");
+PRAGMA config.flags('OptimizerFlags', 'PushdownComplexFiltersOverAggregate');
 
 SELECT
     *
@@ -14,5 +14,5 @@ FROM (
         key
 )
 WHERE
-    AssumeNonStrict(200 > 100) AND (2000 > 1000) AND key != "911" AND (key < "150" AND mv != "ddd" OR key > "200")
+    AssumeNonStrict(200 > 100) AND (2000 > 1000) AND key != '911' AND (key < '150' AND mv != 'ddd' OR key > '200')
 ;

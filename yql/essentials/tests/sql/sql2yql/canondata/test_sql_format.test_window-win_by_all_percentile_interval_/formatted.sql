@@ -5,14 +5,14 @@ USE plato;
 $zero = unwrap(CAST(0 AS Interval));
 
 -- safely cast data to get rid of optionals after cast
-$prepared =
+$prepared = (
     SELECT
         CAST(key AS Interval) ?? $zero AS age,
         CAST(subkey AS uint32) AS region,
         value AS name
     FROM
         Input
-;
+);
 
 -- we want to check both optional<interval> and plain interval
 $data = (

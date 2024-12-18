@@ -749,7 +749,7 @@ namespace {
 
         for (auto setting : srcSettings) {
             auto name = setting.Name().Value();
-            if (name == "consistency_mode" || name == "consistency_level") {
+            if (name == "consistency_level") {
                 auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                 if (to_lower(value) == "global") {
                     dstSettings.EnsureGlobalConsistency();

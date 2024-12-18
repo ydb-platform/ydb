@@ -1,6 +1,6 @@
 USE plato;
 
-$stream =
+$stream = (
     SELECT
         a.k AS k,
         a.sk AS ask,
@@ -10,7 +10,7 @@ $stream =
     INNER JOIN
         /*+ merge() compact() */ InputRight AS b
     USING (k, sk, v)
-;
+);
 
 SELECT
     k,

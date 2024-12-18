@@ -6,10 +6,10 @@ $lambda = ($x) -> {
     RETURN $x;
 };
 
-$result =
+$result = (
     PROCESS Input, Input
     USING $lambda(TableRow())
-;
+);
 
 SELECT
     *

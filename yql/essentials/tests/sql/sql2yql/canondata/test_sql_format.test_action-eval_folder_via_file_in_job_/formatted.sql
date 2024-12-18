@@ -2,7 +2,7 @@
 /* postgres can not */
 USE plato;
 
-PRAGMA yt.FolderInlineItemsLimit = "0";
+PRAGMA yt.FolderInlineItemsLimit = '0';
 
 $script = @@
 def f(s):
@@ -18,9 +18,9 @@ $list = (
         SELECT
             Path
         FROM
-            folder("")
+            folder('')
         WHERE
-            Type == "table" AND $callable(Path)
+            Type == 'table' AND $callable(Path)
         LIMIT 30
     )
 );

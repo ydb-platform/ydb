@@ -286,15 +286,14 @@ message TBlobStorageConfig {
         optional NKikimrBlobStorage.EPDiskType PDiskType = 7;
 
         // some extra settings
-        optional bool AutomaticBoxManagement = 4; // invoke BSC DefineHostConfig/DefineBox automatically
+        optional bool AutomaticBoxManagement = 4; // invoke BSC DefineHostConfig/DefineBox automatically (true when unset)
         optional bool AutomaticBootstrap = 9; // whether bootstrap should be performed automatically; PROHIBITED for production
-
-        // filled in by config parser, not by user; required for automatic static group creation
-        repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 5;
-        optional NKikimrBlobStorage.TDefineBox DefineBox = 6;
 
         // generation of the distconf section; when set, one can automatically apply in-filesystem config
         optional uint64 Generation = 8;
+
+        // internally-used field with initial config.yaml loaded on the start
+        optional bytes InitialConfigYaml = 10;
     }
 
     optional TAutoconfigSettings AutoconfigSettings = 6;
@@ -331,6 +330,10 @@ message TBlobStorageConfig {
     reserved 7;  // TCostMetricsSettings, moved to ICB
     optional TVDiskPerformanceSettings VDiskPerformanceSettings = 8;
     optional TVDiskBalancingConfig VDiskBalancingConfig = 9;
+
+    // filled in by config parser, not by user; required for correct distconf operation
+    repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 10;
+    optional NKikimrBlobStorage.TDefineBox DefineBox = 11;
  }
 
 message TBlobStorageFormatConfig {
@@ -1908,6 +1911,7 @@ message TTracingConfig {
     // field meaning is the same as in TSamplingRule
     message TExternalThrottlingRule {
         optional TSelectors Scope = 1;
+        optional uint32 Level = 4;
         optional uint64 MaxTracesPerMinute = 2;
         optional uint64 MaxTracesBurst = 3;
     }

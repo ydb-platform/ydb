@@ -10,7 +10,7 @@ $l = (
         CONCAT(Input1, Input2) AS t
     WHERE
         key == '023'
-        AND subkey == "3"
+        AND subkey == '3'
 );
 
 $r = (
@@ -21,7 +21,7 @@ $r = (
         CONCAT(Input1, Input2) AS t
     WHERE
         key == '150'
-        AND subkey == "3"
+        AND subkey == '3'
 );
 
 SELECT

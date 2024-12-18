@@ -17,5 +17,5 @@ END DEFINE;
 SELECT
     *
 FROM
-    $select_star("Input")
+    $select_star('Input')
 ;

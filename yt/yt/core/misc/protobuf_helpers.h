@@ -16,6 +16,7 @@
 #include <library/cpp/yt/misc/optional.h>
 #include <library/cpp/yt/misc/preprocessor.h>
 #include <library/cpp/yt/misc/strong_typedef.h>
+#include <library/cpp/yt/misc/static_initializer.h>
 
 #include <google/protobuf/duration.pb.h>
 #include <google/protobuf/message.h>
@@ -373,17 +374,15 @@ struct IProtobufExtensionRegistry
 };
 
 #define REGISTER_PROTO_EXTENSION(type, tag, name) \
-    YT_ATTRIBUTE_USED static const void* PP_ANONYMOUS_VARIABLE(RegisterProtoExtension) = [] { \
+    YT_STATIC_INITIALIZER( \
         NYT::IProtobufExtensionRegistry::Get()->AddAction([] { \
             const auto* descriptor = type::default_instance().GetDescriptor(); \
-            NYT::IProtobufExtensionRegistry::Get()->RegisterDescriptor({ \
+            ::NYT::IProtobufExtensionRegistry::Get()->RegisterDescriptor({ \
                 .MessageDescriptor = descriptor, \
                 .Tag = tag, \
-                .Name = #name \
+                .Name = #name, \
             });\
-        }); \
-        return nullptr; \
-    } ();
+        }));
 
 //! Finds and deserializes an extension of the given type. Fails if no matching
 //! extension is found.

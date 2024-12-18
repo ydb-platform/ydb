@@ -10,13 +10,13 @@ $update = ($row, $state) -> {
     RETURN AsTuple(Unwrap($state.count % 2) == 1, $state);
 };
 
-$src =
+$src = (
     SELECT
         t.*,
         (ts ?? 0, payload) AS sort_col
     FROM
         plato.Input AS t
-;
+);
 
 SELECT
     COUNT(1) AS session_len,

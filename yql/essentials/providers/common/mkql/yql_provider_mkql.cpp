@@ -878,17 +878,17 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto& settings = node.Child(4);
 
         //explore params
-        const auto& measures = params->ChildRef(0);
-        const auto& skipTo = params->ChildRef(2);
-        const auto& pattern = params->ChildRef(3);
-        const auto& defines = params->ChildRef(4);
+        const auto measures = params->Child(0);
+        const auto skipTo = params->Child(2);
+        const auto pattern = params->Child(3);
+        const auto defines = params->Child(4);
 
         //explore measures
-        const auto measureNames = measures->ChildRef(2);
+        const auto measureNames = measures->Child(2);
         constexpr size_t FirstMeasureLambdaIndex = 3;
 
         //explore defines
-        const auto defineNames = defines->ChildRef(2);
+        const auto defineNames = defines->Child(2);
         const size_t FirstDefineLambdaIndex = 3;
 
         TVector<TStringBuf> partitionColumnNames;
@@ -900,25 +900,21 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             return MkqlBuildLambda(*partitionKeySelector, ctx, {inputRowArg});
         };
 
-        TVector<std::pair<TStringBuf, TProgramBuilder::TTernaryLambda>> getDefines(defineNames->ChildrenSize());
+        TVector<TStringBuf> defineVarNames(defineNames->ChildrenSize());
+        TVector<TProgramBuilder::TTernaryLambda> getDefines(defineNames->ChildrenSize());
         for (size_t i = 0; i != defineNames->ChildrenSize(); ++i) {
-            getDefines[i] = std::pair{
-                    defineNames->ChildRef(i)->Content(),
-                    [i, defines, &ctx](TRuntimeNode data, TRuntimeNode matchedVars, TRuntimeNode rowIndex) {
-                        return MkqlBuildLambda(*defines->ChildRef(FirstDefineLambdaIndex + i), ctx,
-                                               {data, matchedVars, rowIndex});
-                    }
+            defineVarNames[i] = defineNames->Child(i)->Content();
+            getDefines[i] = [i, defines, &ctx](TRuntimeNode data, TRuntimeNode matchedVars, TRuntimeNode rowIndex) {
+                return MkqlBuildLambda(*defines->Child(FirstDefineLambdaIndex + i), ctx, {data, matchedVars, rowIndex});
             };
         }
 
-        TVector<std::pair<TStringBuf, TProgramBuilder::TBinaryLambda>> getMeasures(measureNames->ChildrenSize());
+        TVector<TStringBuf> measureColumnNames(measureNames->ChildrenSize());
+        TVector<TProgramBuilder::TBinaryLambda> getMeasures(measureNames->ChildrenSize());
         for (size_t i = 0; i != measureNames->ChildrenSize(); ++i) {
-            getMeasures[i] = std::pair{
-                    measureNames->ChildRef(i)->Content(),
-                    [i, measures, &ctx](TRuntimeNode data, TRuntimeNode matchedVars) {
-                        return MkqlBuildLambda(*measures->ChildRef(FirstMeasureLambdaIndex + i), ctx,
-                                               {data, matchedVars});
-                    }
+            measureColumnNames[i] = measureNames->Child(i)->Content();
+            getMeasures[i] = [i, measures, &ctx](TRuntimeNode data, TRuntimeNode matchedVars) {
+                return MkqlBuildLambda(*measures->Child(FirstMeasureLambdaIndex + i), ctx, {data, matchedVars});
             };
         }
 
@@ -928,18 +924,26 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         NYql::NMatchRecognize::EAfterMatchSkipTo to;
         MKQL_ENSURE(TryFromString<NYql::NMatchRecognize::EAfterMatchSkipTo>(stringTo, to), "MATCH_RECOGNIZE: <row pattern skip to> cannot parse AfterMatchSkipTo mode");
 
+        auto rowsPerMatchString = params->Child(1)->Content();
+        MKQL_ENSURE(rowsPerMatchString.SkipPrefix("RowsPerMatch_"), R"(MATCH_RECOGNIZE: <row pattern rows per match> should start with "RowsPerMatch_")");
+        NYql::NMatchRecognize::ERowsPerMatch rowsPerMatch;
+        MKQL_ENSURE(TryFromString<NYql::NMatchRecognize::ERowsPerMatch>(rowsPerMatchString, rowsPerMatch), "MATCH_RECOGNIZE: cannot parse RowsPerMatch mode");
+
         const auto streamingMode = FromString<bool>(settings->Child(0)->Child(1)->Content());
 
         return ctx.ProgramBuilder.MatchRecognizeCore(
                 MkqlBuildExpr(*inputStream, ctx),
                 getPartitionKeySelector,
                 partitionColumnNames,
+                measureColumnNames,
                 getMeasures,
                 NYql::NMatchRecognize::ConvertPattern(pattern, ctx.ExprCtx),
+                defineVarNames,
                 getDefines,
                 streamingMode,
-                NYql::NMatchRecognize::TAfterMatchSkipTo{to, TString{var}}
-                );
+                NYql::NMatchRecognize::TAfterMatchSkipTo{to, TString{var}},
+                rowsPerMatch
+        );
     });
 
     AddCallable("TimeOrderRecover", [](const TExprNode& node, TMkqlBuildContext& ctx) {

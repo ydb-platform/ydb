@@ -259,7 +259,6 @@
   #endif
 	#if defined(_TRASH_) && TODO
   - gcrypt.h
-  - winmmap.h
   #endif
   #if defined(__TURBOC__) || defined(__BORLANDC__)
   - alloc.h
@@ -319,21 +318,6 @@
   - SIOUX.h
   - sys/siginfo.h
   - lzmalib.h
-  # ICU
-  - uconfig_local.h
-  - ucln_local_hook.c
-  - unistrm.h
-  - udbgutil.h
-  - dll.h
-  - ascii_a.h
-  - qusec.h
-  - qusrjobi.h
-  - qliept.h
-  - mih/testptr.h
-  - sys/neutrino.h
-  - cics.h
-  - tbb/scalable_allocator.h
-  - libmemcached/dtrace_probes.h
   # unknown
   - win_stdint.h
   - probes.h
@@ -434,13 +418,8 @@
   - sys/tree.h
   - tcpd.h
   #endif
-  - net/errno.h
   - sys/mode.h
-  - netware.h
-  - perldtrace.h
   - win32thread.h
-  - bsd/ctypes.h
-  - sfio.h
   - GL/glx.h
   - CL/va_ext.h
   - sys/sysconf.h

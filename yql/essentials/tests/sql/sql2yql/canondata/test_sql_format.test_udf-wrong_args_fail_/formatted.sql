@@ -7,16 +7,16 @@ SELECT
 
 -- too few
 SELECT
-    String::ReplaceAll("abc")
+    String::ReplaceAll('abc')
 ;
 
 -- too few
 SELECT
-    String::ReplaceAll("abc", "b", 2, 4)
+    String::ReplaceAll('abc', 'b', 2, 4)
 ;
 
 -- too many
 SELECT
-    String::ReplaceAll("abc", "b", 2, 4, 44)
+    String::ReplaceAll('abc', 'b', 2, 4, 44)
 ;
 -- too many

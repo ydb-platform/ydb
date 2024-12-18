@@ -5,7 +5,7 @@ USE plato;
 $x = CAST(Unicode::ToLower("foo"u) AS String);
 
 SELECT
-    AsStruct("1" AS foo, 2 AS bar).$x
+    AsStruct('1' AS foo, 2 AS bar).$x
 ;
 
 $x = CAST(Unicode::ToLower("value"u) AS String);
@@ -51,7 +51,7 @@ FROM
 GROUP BY
     t.$x AS x
 HAVING
-    min(t.$y) != ""
+    min(t.$y) != ''
 ORDER BY
     x
 ;

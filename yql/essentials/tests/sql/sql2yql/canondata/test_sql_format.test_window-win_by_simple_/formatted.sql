@@ -4,8 +4,8 @@ SELECT
     row_number() OVER w
 FROM (
     SELECT
-        "a" AS key,
-        "z" AS value
+        'a' AS key,
+        'z' AS value
 )
 WINDOW
     w AS (

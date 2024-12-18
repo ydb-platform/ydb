@@ -1,14 +1,14 @@
 --Test, that YT optimizer can rewrite ShuffleByKeys with PartitionsByKes
 USE plato;
 
-$input =
+$input = (
     PROCESS Input
-;
+);
 
 SELECT
     YQL::ShuffleByKeys(
         $input,
-        ($_) -> ("dsdsa"),
+        ($_) -> ('dsdsa'),
         ($_) -> ([1]) -- list
     )
 ;

@@ -162,7 +162,7 @@ public:
 
 protected:
     TValueStatus<ITopicParser::TPtr> CreateParser() override {
-        return CreateJsonParser(ParserHandler, Config);
+        return CreateJsonParser(ParserHandler, Config, {});
     }
 
 public:
@@ -172,7 +172,7 @@ public:
 class TRawParserFixture : public TBaseParserFixture {
 protected:
     TValueStatus<ITopicParser::TPtr> CreateParser() override {
-        return CreateRawParser(ParserHandler);
+        return CreateRawParser(ParserHandler, {});
     }
 };
 

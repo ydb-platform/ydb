@@ -9,7 +9,7 @@ DEFINE ACTION $a($x) AS
     FROM
         yt: $foo.Input
     WHERE
-        key < "100"
+        key < '100'
     ORDER BY
         key
     ;

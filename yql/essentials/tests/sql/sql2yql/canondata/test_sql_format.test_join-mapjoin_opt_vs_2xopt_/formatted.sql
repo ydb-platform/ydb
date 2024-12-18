@@ -1,6 +1,6 @@
 USE plato;
 
-PRAGMA yt.MapJoinLimit = "1m";
+PRAGMA yt.MapJoinLimit = '1m';
 
 $t1 = AsList(
     AsStruct(Just(1) AS Key),

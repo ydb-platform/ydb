@@ -1598,14 +1598,13 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
     }
 
     TStringStream out;
-    NYson::TYsonWriter writer(&out);
+    NYson::TYsonWriter writer(&out, OutputFormat_);
     // Header
     writer.OnBeginMap();
     writer.OnKeyedItem("ExecutionStatistics");
     writer.OnBeginMap();
 
     // Providers
-    bool hasStatistics = false;
     THashSet<TStringBuf> processed;
     for (auto& datasink : TypeCtx_->DataSinks) {
         TStringStream providerOut;
@@ -1613,7 +1612,6 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
         if (datasink->CollectStatistics(providerWriter, totalOnly)) {
             writer.OnKeyedItem(datasink->GetName());
             writer.OnRaw(providerOut.Str());
-            hasStatistics = true;
             processed.insert(datasink->GetName());
         }
     }
@@ -1624,7 +1622,6 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
             if (datasource->CollectStatistics(providerWriter, totalOnly)) {
                 writer.OnKeyedItem(datasource->GetName());
                 writer.OnRaw(providerOut.Str());
-                hasStatistics = true;
             }
         }
     }
@@ -1655,20 +1652,23 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
 
     writer.OnEndMap(); // system
 
+    if (TypeCtx_->Modules) {
+        writer.OnKeyedItem("moduleResolver");
+        writer.OnBeginMap();
+        TypeCtx_->Modules->WriteStatistics(writer);
+        writer.OnEndMap();
+    }
+
     // extra
     for (const auto &[k, extraYson] : extraYsons) {
         writer.OnKeyedItem(k);
         writer.OnRaw(extraYson);
-        hasStatistics = true;
     }
 
     // Footer
     writer.OnEndMap();
     writer.OnEndMap();
-    if (hasStatistics) {
-        return out.Str();
-    }
-    return Nothing();
+    return out.Str();
 }
 
 TMaybe<TString> TProgram::GetDiscoveredData() {
@@ -1677,7 +1677,7 @@ TMaybe<TString> TProgram::GetDiscoveredData() {
     }
 
     TStringStream out;
-    NYson::TYsonWriter writer(&out);
+    NYson::TYsonWriter writer(&out, OutputFormat_);
     writer.OnBeginMap();
     for (auto& datasource: TypeCtx_->DataSources) {
         TStringStream providerOut;

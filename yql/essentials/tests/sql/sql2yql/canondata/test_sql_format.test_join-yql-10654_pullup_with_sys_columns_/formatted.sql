@@ -4,7 +4,7 @@ USE plato;
 
 PRAGMA DisableSimpleColumns;
 
-$src =
+$src = (
     SELECT
         key,
         subkey || key AS subkey,
@@ -16,7 +16,7 @@ $src =
         *
     FROM
         AS_TABLE(ListCreate(Struct<key: String, subkey: String, value: String>))
-;
+);
 
 SELECT
     a.key,

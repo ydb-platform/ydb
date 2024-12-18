@@ -104,7 +104,7 @@ public:
         , PhysicalOptProposalTransformer_([this]() { return CreateYtPhysicalOptProposalTransformer(State_); })
         , PhysicalFinalizingTransformer_([this]() {
             auto transformer = CreateYtPhysicalFinalizingTransformer(State_);
-            transformer = CreateYtBlockInputFilterTransformer(State_, std::move(transformer));
+            transformer = CreateYtBlockIOFilterTransformer(State_, std::move(transformer));
             if (State_->IsHybridEnabled())
                 transformer = CreateYtDqHybridTransformer(State_, std::move(transformer));
             return transformer;

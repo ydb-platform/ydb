@@ -9,6 +9,7 @@ SRCS(
     query_workload.cpp
     ydb_admin.cpp
     ydb_benchmark.cpp
+    ydb_cluster.cpp
     ydb_debug.cpp
     ydb_dynamic_config.cpp
     ydb_ping.cpp

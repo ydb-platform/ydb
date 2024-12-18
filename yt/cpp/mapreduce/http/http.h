@@ -59,8 +59,9 @@ public:
     void AddTransactionId(const TTransactionId& transactionId, bool overwrite = false);
     void AddPath(const TString& path, bool overwrite = false);
     void AddOperationId(const TOperationId& operationId, bool overwrite = false);
-    void AddMutationId();
+    TMutationId AddMutationId();
     bool HasMutationId() const;
+    void SetMutationId(TMutationId mutationId);
 
     void SetToken(const TString& token);
     void SetProxyAddress(const TString& proxyAddress);

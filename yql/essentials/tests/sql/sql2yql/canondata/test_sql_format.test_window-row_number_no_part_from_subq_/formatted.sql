@@ -10,7 +10,7 @@ FROM (
     FROM
         Input
     WHERE
-        key != "020"
+        key != '020'
 )
 WINDOW
     w AS ()

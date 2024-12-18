@@ -1,6 +1,6 @@
 import pytest
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 from ydb.library.yql.providers.generic.connector.tests.utils.one_time_waiter import OneTimeWaiter
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
 from ydb.library.yql.providers.generic.connector.tests.utils.run.runners import runner_types, configure_runner
@@ -19,11 +19,11 @@ LOGGER = make_logger(__name__)
 
 # Global collection of test cases dependent on environment
 tc_collection = Collection(
-    Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kinds=[EDataSourceKind.MS_SQL_SERVER])
+    Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kinds=[EGenericDataSourceKind.MS_SQL_SERVER])
 )
 
 one_time_waiter = OneTimeWaiter(
-    data_source_kind=EDataSourceKind.MS_SQL_SERVER,
+    data_source_kind=EGenericDataSourceKind.MS_SQL_SERVER,
     docker_compose_file_path=str(docker_compose_dir / 'docker-compose.yml'),
     expected_tables=[
         'column_selection_A_b_C_d_E',

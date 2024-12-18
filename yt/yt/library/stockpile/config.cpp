@@ -2,6 +2,8 @@
 
 namespace NYT {
 
+using namespace NYTree;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TStockpileConfig::Register(TRegistrar registrar)
@@ -34,6 +36,7 @@ TStockpileConfigPtr TStockpileConfig::ApplyDynamic(const TStockpileDynamicConfig
         mergedConfig->Period = *dynamicConfig->Period;
     }
 
+    mergedConfig->Postprocess();
     return mergedConfig;
 }
 

@@ -1,0 +1,24 @@
+# Настройка Docker-контейнера {{ ydb-short-name }}
+
+{{ ydb-short-name }} в Docker-контейнере настраивается через дополнительные переменные окружения, меняющие поведение {{ ydb-short-name }} по умолчанию. [Старт](start.md) Docker-контейнера {{ ydb-short-name }} осуществляется с помощью команды `docker run`, в которой можно указать переменные окружения, используя ключ `-e` для каждой переменной окружения. Ниже приведён список поддерживаемых переменных окружения.
+
+## Переменные окружения
+
+| Имя | Тип | Значение по умолчанию | Описание |
+| -- | -- | -- | -- |
+| [`POSTGRES_USER`](https://GitHub.com/ydb-platform/ydb/blob/c113fcffa7b1a20ad8dcb1b1760ae5bfa25370ca/ydb/public/tools/lib/cmds/__init__.py#L240) | `string` | `postgres`  | Имя пользователя для доступа через [режим совместимости с PostgreSQL](../../postgresql/intro.md). |
+| [`POSTGRES_PASSWORD`](https://GitHub.com/ydb-platform/ydb/blob/c113fcffa7b1a20ad8dcb1b1760ae5bfa25370ca/ydb/public/tools/lib/cmds/__init__.py#L240) | `string` | | Пароль пользователя для доступа через [режим совместимости с PostgreSQL](../../postgresql/intro.md). |
+| [`YDB_GRPC_ENABLE_TLS`](https://GitHub.com/ydb-platform/ydb/blob/c113fcffa7b1a20ad8dcb1b1760ae5bfa25370ca/ydb/public/tools/lib/cmds/__init__.py#L258) | `0` или `1` | `1` | Включает использование TLS для gRPC соединений. |
+| [`YDB_GRPC_TLS_DATA_PATH`](https://GitHub.com/ydb-platform/ydb/blob/8fefc809c83829d8d8b886e82534d009de4c8826/ydb/public/tools/lib/cmds/__init__.py#L291) | `string` | `/ydb_data` | Путь до директории с TLS сертификатами для gRPC соединений. |
+| [`MON_PORT`](https://GitHub.com/ydb-platform/ydb/blob/8dde59cd0af86737d07a1cd8ff19811a2bd2b663/ydb/tests/library/harness/kikimr_port_allocator.py#L170) | `int` | `8765` | HTTP-порт [встроенного веб-интерфейса {{ ydb-short-name }}](../../reference/embedded-ui/index.md). |
+| [`GRPC_PORT`](https://GitHub.com/ydb-platform/ydb/blob/8dde59cd0af86737d07a1cd8ff19811a2bd2b663/ydb/tests/library/harness/kikimr_port_allocator.py#L174) | `int` | `2135` | gRPC порт. |
+| [`IC_PORT`](https://GitHub.com/ydb-platform/ydb/blob/8dde59cd0af86737d07a1cd8ff19811a2bd2b663/ydb/tests/library/harness/kikimr_port_allocator.py#L179) | `int` | `19001` | Порт интерконнекта. |
+| [`GRPC_TLS_PORT`](https://GitHub.com/ydb-platform/ydb/blob/8dde59cd0af86737d07a1cd8ff19811a2bd2b663/ydb/tests/library/harness/kikimr_port_allocator.py#L183) | `int` | `2137` | gRPCS порт защищенного соединения. |
+| [`YDB_KAFKA_PROXY_PORT`](https://github.com/ydb-platform/ydb/blob/be585b61d649a49fd32e91d9ceeee7e893068a60/ydb/public/tools/lib/cmds/__init__.py#L362) | `int` | | Порт для подключения по [Kafka API](../../reference/kafka-api/index.md). Если не заполнено, режим совместимости с Kafka отключен. |
+| [`YDB_ERASURE`](https://GitHub.com/ydb-platform/ydb/blob/8fefc809c83829d8d8b886e82534d009de4c8826/ydb/public/tools/lib/cmds/__init__.py#L50) | `string` | `None` | Режим работы распределённого хранилища, см. [{#T}](../../concepts/topology.md). |
+| [`FQ_CONNECTOR_ENDPOINT`](https://GitHub.com/ydb-platform/ydb/blob/c113fcffa7b1a20ad8dcb1b1760ae5bfa25370ca/ydb/public/tools/lib/cmds/__init__.py#L261) | `string` | `None` | Строка подключения коннектора к внешним источникам `fq-connector-go`. |
+| [`YDB_USE_IN_MEMORY_PDISKS`](https://GitHub.com/ydb-platform/ydb/blob/c113fcffa7b1a20ad8dcb1b1760ae5bfa25370ca/ydb/public/tools/lib/cmds/__init__.py#L230) | `0` или `1` | `0` | Делает все данные волатильными, хранящимися только в оперативной памяти. В настоящее время сохранение данных путём её отключения поддерживается только на процессорах x86_64 или эмулирующих их виртуальных машинах. |
+| [`YDB_DEFAULT_LOG_LEVEL`](https://GitHub.com/ydb-platform/ydb/blob/b1c590828b222c839dedecd8e6e79413ef5b7eec/ydb/tests/library/harness/kikimr_config.py#L73) | `string` | `NOTICE` | | Задаёт уровень логирования по умолчанию. Доступные значения уровней: `CRIT`, `ERROR`, `WARN`, `NOTICE`, `INFO`. |
+| [`YDB_ADDITIONAL_LOG_CONFIGS`](https://GitHub.com/ydb-platform/ydb/blob/b1c590828b222c839dedecd8e6e79413ef5b7eec/ydb/tests/library/harness/kikimr_config.py#L48) | `string` | `None` | Задаёт дополнительные уровни логирования в формате: `компонент:значение уровня`. Если необходимо указать несколько компонентов, их следует вводить через запятую. |
+| [`YDB_FEATURE_FLAGS`](https://GitHub.com/ydb-platform/ydb/blob/69a57074e4c259aea0bbb9a735c5ed821743629c/ydb/public/tools/lib/cmds/__init__.py#L395) | `string` | `None` | Список [экспериментальных возможностей](https://GitHub.com/ydb-platform/ydb/blob/69a57074e4c259aea0bbb9a735c5ed821743629c/ydb/core/protos/feature_flags.proto) {{ ydb-short-name }}, через запятую. |
+| [`YDB_ENABLE_COLUMN_TABLES`](https://GitHub.com/ydb-platform/ydb/blob/69a57074e4c259aea0bbb9a735c5ed821743629c/ydb/tests/library/harness/kikimr_config.py#L86) | `0` или `1` | `0` | Включает поддержку [колоночных таблиц](../../concepts/datamodel/table.md#column-oriented-tables). |

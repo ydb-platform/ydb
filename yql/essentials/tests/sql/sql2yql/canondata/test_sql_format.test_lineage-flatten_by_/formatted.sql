@@ -1,6 +1,6 @@
 USE plato;
 
-$subquery1 =
+$subquery1 = (
     SELECT
         key,
         subkey,
@@ -8,9 +8,9 @@ $subquery1 =
     FROM
         Input
         FLATTEN LIST BY value AS z
-;
+);
 
-$subquery2 =
+$subquery2 = (
     SELECT
         key,
         subkey,
@@ -22,7 +22,7 @@ $subquery2 =
             value,
             value2
         )
-;
+);
 
 INSERT INTO @tmp1 WITH TRUNCATE
 SELECT

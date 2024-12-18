@@ -12,10 +12,10 @@ $test = ($probability, $dependsOn) -> {
 
 SELECT
     ListSample(NULL, 1.0) IS NULL AS mustBeTrue1,
-    ListSample(Nothing(OptionalType(ListType(DataType("Uint64")))), 1.0) IS NULL AS mustBeTrue2,
+    ListSample(Nothing(OptionalType(ListType(DataType('Uint64')))), 1.0) IS NULL AS mustBeTrue2,
     ListSample([], 1.0) == [] AS mustBeTrue3,
     ListSample($list, NULL) == $list AS mustBeTrue4,
-    ListSample($list, Nothing(OptionalType(DataType("Double")))) == $list AS mustBeTrue5,
+    ListSample($list, Nothing(OptionalType(DataType('Double')))) == $list AS mustBeTrue5,
     ListSample($list, 0.5, 123) == ListSample($list, 0.5, 123) AS mustBeTrue6,
     $test(0.2, 1) AS result1,
     $test(0.2, 2) AS result2,

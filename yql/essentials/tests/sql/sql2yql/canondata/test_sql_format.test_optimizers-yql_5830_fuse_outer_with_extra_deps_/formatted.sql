@@ -7,7 +7,7 @@ $data = (
     FROM
         Input
     WHERE
-        value > "a"
+        value > 'a'
 );
 
 SELECT
@@ -22,7 +22,7 @@ LEFT JOIN (
     FROM
         Input
     WHERE
-        key > "050"
+        key > '050'
 ) AS b
 ON
     a.key == b.key

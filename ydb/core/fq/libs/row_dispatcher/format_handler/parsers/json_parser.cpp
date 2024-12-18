@@ -316,8 +316,8 @@ public:
     using TPtr = TIntrusivePtr<TJsonParser>;
 
 public:
-    TJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config)
-        : TBase(std::move(consumer), __LOCATION__)
+    TJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters)
+        : TBase(std::move(consumer), __LOCATION__, counters)
         , Config(config)
         , NumberColumns(Consumer->GetColumns().size())
         , MaxNumberRows((config.BufferCellCount - 1) / NumberColumns + 1)
@@ -483,8 +483,8 @@ private:
 
 }  // anonymous namespace
 
-TValueStatus<ITopicParser::TPtr> CreateJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config) {
-    TJsonParser::TPtr parser = MakeIntrusive<TJsonParser>(consumer, config);
+TValueStatus<ITopicParser::TPtr> CreateJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters) {
+    TJsonParser::TPtr parser = MakeIntrusive<TJsonParser>(consumer, config, counters);
     if (auto status = parser->InitColumnsParsers(); status.IsFail()) {
         return status;
     }

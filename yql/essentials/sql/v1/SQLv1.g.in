@@ -463,7 +463,7 @@ row_pattern_primary:
     | DOLLAR
     | CARET
     | LPAREN row_pattern? RPAREN
-    | LBRACE_CURLY MINUS row_pattern MINUS RBRACE_CURLY //TODO This rule accepts spaces between brace and minus sign, i.e: {   -  S2 - } that is not supposed to. Handle this case in https://st.yandex-team.ru/YQL-16227
+    | LBRACE_CURLY MINUS row_pattern MINUS RBRACE_CURLY
     | row_pattern_permute
 ;
 

@@ -3,7 +3,7 @@
 namespace NKikimr::NOlap::NDataAccessorControl::NInMem {
 
 THashMap<ui64, TPortionDataAccessor> TCollector::DoAskData(
-    const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& /*callback*/) {
+    const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& /*callback*/, const TString& /*consumer*/) {
     THashMap<ui64, TPortionDataAccessor> accessors;
     for (auto&& i : portions) {
         auto it = Accessors.find(i->GetPortionId());

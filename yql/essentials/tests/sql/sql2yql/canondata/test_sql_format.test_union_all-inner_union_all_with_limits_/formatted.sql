@@ -21,7 +21,7 @@ FROM (
     )
 )
 WHERE
-    key < "100"
+    key < '100'
 ;
 
 SELECT
@@ -42,5 +42,5 @@ FROM (
         Input
 )
 WHERE
-    key < "200"
+    key < '200'
 ;

@@ -5,6 +5,7 @@
 #include "transaction_pinger.h"
 
 #include <yt/cpp/mapreduce/interface/client.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 
 #include <yt/cpp/mapreduce/http/context.h>
 #include <yt/cpp/mapreduce/http/requests.h>
@@ -29,6 +30,7 @@ class TClientBase
 {
 public:
     TClientBase(
+        IRawClientPtr rawClient,
         const TClientContext& context,
         const TTransactionId& transactionId,
         IClientRetryPolicyPtr retryPolicy);
@@ -222,6 +224,8 @@ public:
 
     IClientPtr GetParentClient() override;
 
+    IRawClientPtr GetRawClient() const;
+
     const TClientContext& GetContext() const;
 
     const IClientRetryPolicyPtr& GetRetryPolicy() const;
@@ -232,6 +236,7 @@ protected:
     virtual TClientPtr GetParentClientImpl() = 0;
 
 protected:
+    const IRawClientPtr RawClient_;
     const TClientContext Context_;
     TTransactionId TransactionId_;
     IClientRetryPolicyPtr ClientRetryPolicy_;
@@ -287,6 +292,7 @@ public:
     //
     // Start a new transaction.
     TTransaction(
+        const IRawClientPtr& rawClient,
         TClientPtr parentClient,
         const TClientContext& context,
         const TTransactionId& parentTransactionId,
@@ -295,6 +301,7 @@ public:
     //
     // Attach an existing transaction.
     TTransaction(
+        const IRawClientPtr& rawClient,
         TClientPtr parentClient,
         const TClientContext& context,
         const TTransactionId& transactionId,
@@ -338,6 +345,7 @@ class TClient
 {
 public:
     TClient(
+        IRawClientPtr rawClient,
         const TClientContext& context,
         const TTransactionId& globalId,
         IClientRetryPolicyPtr retryPolicy);

@@ -1779,7 +1779,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "user",
             "password",
             "password_secret_name",
-            "consistency_mode",
+            "consistency_level",
             "commit_interval",
         };
 

@@ -14,7 +14,7 @@ SELECT
 FROM
     Input
 ORDER BY
-    "x" || key,
+    'x' || key,
     value
 ;
 
@@ -23,7 +23,7 @@ SELECT
 FROM
     Input
 ORDER BY
-    key || "x"
+    key || 'x'
 LIMIT 3;
 
 SELECT
@@ -31,7 +31,7 @@ SELECT
 FROM
     Input AS a
 ORDER BY
-    "x" || key,
+    'x' || key,
     a.value
 LIMIT 3;
 

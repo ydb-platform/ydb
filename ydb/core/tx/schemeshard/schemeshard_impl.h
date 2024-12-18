@@ -352,7 +352,6 @@ public:
 
     TActorId TabletMigrator;
 
-    TActorId CdcStreamScanFinalizer;
     ui32 MaxCdcInitialScanShardsInFlight = 10;
 
     TDuration StatsMaxExecuteTime;

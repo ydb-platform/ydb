@@ -4,10 +4,6 @@
 
 Released on December 4, 2024. To update to version **2.17.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
 
-### Features
-
-* Added the `{{ ydb-cli }} debug ping` command for performance and connection debugging.
-
 ### Performance
 
 * Improved performance of parallel [importing data from the file system](./reference/ydb-cli/export-import/tools-restore.md) using the `{{ ydb-cli }} tools restore` command.

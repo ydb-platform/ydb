@@ -19,7 +19,8 @@ struct TSamplingThrottlingControl::TSamplingThrottlingImpl {
 
     TSettings<TSampler, TIntrusivePtr<TThrottler>> Setup;
 
-    void HandleTracing(NWilson::TTraceId& traceId, TRequestDiscriminator discriminator);
+    NWilson::TTraceId HandleTracing(TRequestDiscriminator discriminator,
+            const TMaybe<TString>& traceparent);
 };
 
 } // namespace NKikimr::NJaegerTracing

@@ -555,14 +555,16 @@ class ClusterDetailsProvider(object):
             domain_name = domain.get("domain_name")
 
             storage_pool_kinds = {
-                pool_kind.get("kind"): self.__storage_pool_kind(pool_kind) for pool_kind in domain.get("storage_pool_kinds", [])
+                pool_kind.get("kind"): self.__storage_pool_kind(pool_kind)
+                for pool_kind in domain.get("storage_pool_kinds", [])
             }
             assert len(set(storage_pool_kinds.keys())) == len(
                 storage_pool_kinds.keys()
             ), "required unique kind value in storage_pool_kinds items"
 
             storage_pools = [
-                self.__storage_pool(storage_pool_kinds, pool_instance, domain_name) for pool_instance in domain.get("storage_pools", [])
+                self.__storage_pool(storage_pool_kinds, pool_instance, domain_name)
+                for pool_instance in domain.get("storage_pools", [])
             ]
 
             domains.append(

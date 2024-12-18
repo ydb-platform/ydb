@@ -150,10 +150,11 @@ class Configurator(object):
         random.seed(self.RANDOM_SEED)
         all_configs = generator.get_all_configs()
         for cfg_name, cfg_value in all_configs.items():
-            write_to_file(
-                os.path.join(dir, cfg_name),
-                cfg_value
-            )
+            if cfg_name in ("config.yaml", "kikimr.cfg", "dynamic_server.cfg"):
+                write_to_file(
+                    os.path.join(dir, cfg_name),
+                    cfg_value
+                )
 
         write_to_file(
             os.path.join(dir, "key.txt"),

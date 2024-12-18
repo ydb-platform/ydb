@@ -2,7 +2,6 @@ import os
 import sys
 import json
 import signal
-import shutil
 import tempfile
 import logging
 import argparse
@@ -507,6 +506,18 @@ def ssh_args():
     return args
 
 
+def databases_config_path_args():
+    args = argparse.ArgumentParser(add_help=False)
+    args.add_argument(
+        "--databases-config",
+        metavar="DATABASES_CONFIG",
+        default="",
+        required=False,
+        help="Path to file with databases configuration",
+    )
+    return args
+
+
 def cluster_type_args():
     args = argparse.ArgumentParser(add_help=False)
     args.add_argument(
@@ -609,7 +620,7 @@ def dispatch_run(func, args, walle_provider):
 
     if clear_tmp:
         logger.debug("remove temp dirs '%s'", temp_dir)
-        shutil.rmtree(temp_dir)
+        # shutil.rmtree(temp_dir)
 
 
 def add_install_mode(modes, walle_provider):
@@ -619,9 +630,17 @@ def add_install_mode(modes, walle_provider):
     mode = modes.add_parser(
         "install",
         conflict_handler='resolve',
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), log_args(), ssh_args()],
+        parents=[
+            direct_nodes_args(),
+            cluster_description_args(),
+            binaries_args(),
+            component_args(),
+            log_args(),
+            ssh_args(),
+            # databases_config_path_args(),
+        ],
         description="Full installation of the cluster from scratch. "
-                    "You can use --hosts to specify particular hosts. But it is tricky."
+        "You can use --hosts to specify particular hosts. But it is tricky.",
     )
     mode.set_defaults(handler=_run)
 

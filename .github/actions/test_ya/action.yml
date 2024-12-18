@@ -179,9 +179,9 @@ runs:
           fi
           
           git checkout $ORIGINAL_HEAD
-          YA_MAKE_TARGET="ydb/apps/ydbd"
+          YA_MAKE_TARGET=.
         else
-          YA_MAKE_TARGET="ydb/apps/ydbd"
+          YA_MAKE_TARGET=${{ inputs.build_target }}
         fi
 
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
@@ -256,7 +256,6 @@ runs:
     
         if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
           params+=(${{ inputs.additional_ya_make_args }})
-          params+=("--python-coverage" "--coverage-report")
         fi
         
 

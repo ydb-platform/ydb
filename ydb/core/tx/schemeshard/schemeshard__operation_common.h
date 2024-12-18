@@ -490,6 +490,8 @@ protected:
             << " opId# " << OperationId;
     }
 
+    bool Process(TOperationContext& context);
+
 public:
     explicit TDone(const TOperationId& id)
         : OperationId(id)

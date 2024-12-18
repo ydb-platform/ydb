@@ -6,9 +6,9 @@ Release date: August 20, 2024.
 
 ### Functionality
 
-* Added the ability to set [task priorities](./devops/manual/maintenance-without-downtime#priority) for maintenance in the cluster management system.
-* Introduced [stable naming configuration](./reference/configuration/#node-broker-config) for cluster nodes within a tenant.
-* Enabled retrieval of nested groups from the LDAP server, improved host parsing in the LDAP configuration and added an option to disable built-in authentication via login and password.
+* Added the ability to set [maintenance task priorities](./devops/manual/maintenance-without-downtime#priority) in the [cluster management system](./concepts/glossary#cms).
+* Added [stable names setting](./reference/configuration/#node-broker-config) for cluster nodes within a tenant.
+* Enabled retrieval of nested groups from the [LDAP server](./concepts/auth#ldap-auth-provider), improved host parsing in the [LDAP-configuration]((./reference/configuration/#ldap-auth-config)) and added an option to disable built-in authentication via login and password.
 * Added support for authenticating [dynamic nodes](./concepts/glossary#dynamic) using SSL-certificates.
 * Implemented the removal of inactive nodes from [Hive](./concepts/glossary#hive) without requiring a restart.
 * Improved management of inflight pings during Hive restarts in large clusters.
@@ -18,20 +18,18 @@ Release date: August 20, 2024.
 
 * [Added](https://github.com/ydb-platform/ydb/pull/7485) the option to set a TTL for user sessions in the configuration file.
 * [Added](https://github.com/ydb-platform/ydb-embedded-ui/issues/996) sorting by `CPUTime` in the queries list table.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/7779) precision loss when working with double/float data types.
-* [Displayed](https://github.com/ydb-platform/ydb-embedded-ui/pull/889) the current version of YDB UI.
-* [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/944) the ability to save queries from the editor using hotkeys.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/7779) precision loss when working with `double`, `float` data types.
 * [Supported](https://github.com/ydb-platform/ydb-embedded-ui/pull/958) the creation of directories via the UI.
 * [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/976) an auto-refresh control on all pages.
 * [Improved](https://github.com/ydb-platform/ydb-embedded-ui/pull/955) ACL display.
-* Enabled autocomplete by default.
+* Enabled autocomplete in the queries editor by default.
 * Added support for views.
 
 ### Bug fixes
 
-* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/6677) where schema operations failed during the export/backup of large databases by adding a check for local transaction size before committing. Transactions exceeding the limit are now aborted.
+* Added a check on the size of the local transaction before its commit to fix [errors]https://github.com/db-platform/ydb/issues/6677 ) in the work of schematic operations when export/backup large databases. 
 * [Fixed](https://github.com/ydb-platform/ydb/pull/7709) duplicate results in select queries when reducing quotas in [DataShard](./concepts/glossary#data-shard).
-* [Fixed](https://github.com/ydb-platform/ydb/pull/6461) [errors](https://github.com/ydb-platform/ydb/issues/6220) occurring during [coordinator](./concepts/glossary#tablet-types) state changes.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/6461) [errors](https://github.com/ydb-platform/ydb/issues/6220) occurring during [coordinator](./concepts/glossary#coordinator) state changes.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/5992) issues during the initial CDC scan.
 * [Resolved](https://github.com/ydb-platform/ydb/pull/6615) race conditions in asynchronous change delivery (asynchronous indexes, CDC).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/5993) a crash that sometimes occurred during [TTL-based](./concepts/ttl) deletions.
@@ -39,14 +37,14 @@ Release date: August 20, 2024.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/6008) a bug where soft tablet transfer (drain) from a node could hang.
 * [Resolved](https://github.com/ydb-platform/ydb/pull/6445) a problem where the interconnect proxy on a node without restarts would stop when adding another node to the cluster.
 * [Corrected](https://github.com/ydb-platform/ydb/pull/7023) string escaping in error messages.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/6695) free memory accounting in the interconnect.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/6695) free memory accounting in the [interconnect](./concepts/glossary#actor-system-interconnect).
 * [Corrected](https://github.com/ydb-platform/ydb/issues/6405) UnreplicatedPhantoms and UnreplicatedNonPhantoms counters in VDisk.
 * [Fixed](https://github.com/ydb-platform/ydb/issues/6398) handling of empty garbage collection requests on VDisk.
 * [Resolved](https://github.com/ydb-platform/ydb/pull/5894) issues with managing TVDiskControls settings through CMS.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/5883) a bug where data created by newer versions of VDisk failed to load.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/5862) execution of `REPLACE INTO` queries with default values.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/7714) errors in queries with multiple LEFT JOINs to a single string table.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/7740) precision loss for float/double types when using CDC.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/7740) precision loss for `float`,`double` types when using CDC.
 
 ## Version 24.1 {#24-1}
 

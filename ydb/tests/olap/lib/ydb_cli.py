@@ -8,6 +8,7 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
 from enum import StrEnum, Enum
 from types import TracebackType
+from time import time
 
 
 class WorkloadType(StrEnum):
@@ -58,6 +59,7 @@ class YdbCliHelper:
             self.errors_by_iter: dict[int, str] = {}
             self.time_by_iter: dict[int, float] = {}
             self.traceback: Optional[TracebackType] = None
+            self.start_time = time()
 
         @property
         def success(self) -> bool:

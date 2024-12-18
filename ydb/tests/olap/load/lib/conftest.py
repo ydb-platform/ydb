@@ -11,6 +11,10 @@ from time import time
 from typing import Optional
 from allure_commons._core import plugin_manager
 from allure_pytest.listener import AllureListener
+from datetime import datetime
+from pytz import timezone
+import yatest
+import os
 
 
 class LoadSuiteBase:
@@ -75,6 +79,41 @@ class LoadSuiteBase:
         if len(errors) > 0:
             msg = "\n".join(errors)
             pytest.fail(f'Unexpected tables size in `{folder}`:\n {msg}')
+
+    @classmethod
+    def _attach_logs(cls, start_time):
+        hosts = [node.host for node in filter(lambda x: x.role == YdbCluster.Node.Role.STORAGE, YdbCluster.get_cluster_nodes())]
+        tz = timezone('Europe/Moscow')
+        start = datetime.fromtimestamp(start_time, tz).isoformat()
+        end = datetime.fromtimestamp(time(), tz).isoformat()
+        time_cmd = f'-S "{start}" -U "{end}"'
+        cmd = f"ulimit -n 100500;unified_agent select {time_cmd} -s {{}}"
+        exec_kikimr = [];
+        exec_start = [];
+        for host in hosts:
+            exec_kikimr.append(
+                yatest.common.execute(['ssh', host, cmd.format('kikimr')], wait=False)
+            )
+            exec_start.append(
+                yatest.common.execute(['ssh', host, cmd.format('kikimr-start')], wait=False)
+            )
+
+        error_log = ''
+        for e, host in zip(exec_start, hosts):
+            e.wait(check_exit_code=False)
+            error_log += f'{host}:\n'
+            error_log += (e.stdout if e.returncode == 0 else e.stderr).decode('utf-8') + '\n'
+        allure.attach(error_log, 'kikimr_stderr', allure.attachment_type.TEXT)
+
+        dir = os.path.join(yatest.common.tempfile.gettempdir(), 'kikimr_logs')
+        os.makedirs(dir, exist_ok=True)
+        for e, host in zip(exec_kikimr, hosts):
+            e.wait(check_exit_code=False)
+            with open(os.path.join(dir, host), 'w') as f:
+                f.write((e.stdout if e.returncode == 0 else e.stderr).decode('utf-8'))
+        archive = dir + '.tar.gz'
+        yatest.common.execute(['tar', '-C', dir, '-czf', archive, '.'])
+        allure.attach.file(archive, 'kikimr_logs', extension='tar.gz')
 
     @classmethod
     def process_query_result(cls, result: YdbCliHelper.WorkloadRunResult, query_num: int, iterations: int, upload: bool):
@@ -143,6 +182,8 @@ class LoadSuiteBase:
         for p in ['Mean']:
             if p in stats:
                 allure.dynamic.parameter(p, _duration_text(stats[p] / 1000.))
+        if os.getenv('NO_KUBER_LOGS') is None:
+            cls._attach_logs(start_time=result.start_time)
         error_message = ''
         success = True
         if not result.success:
@@ -204,7 +245,6 @@ class LoadSuiteBase:
                     for param in allure_test_result.parameters:
                         if param.name == 'query_num':
                             param.mode = allure.parameter_mode.HIDDEN.value
-        start_time = time()
         result = YdbCliHelper.workload_run(
             path=path,
             query_num=query_num,
@@ -215,5 +255,5 @@ class LoadSuiteBase:
             query_syntax=self.query_syntax,
             scale=self.scale
         )
-        allure_test_description(self.suite(), self._test_name(query_num), refference_set=self.refference, start_time=start_time, end_time=time())
+        allure_test_description(self.suite(), self._test_name(query_num), refference_set=self.refference, start_time=result.start_time, end_time=time())
         self.process_query_result(result, query_num, self._get_iterations(query_num), True)

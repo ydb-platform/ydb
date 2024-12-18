@@ -255,7 +255,6 @@ class KikimrConfigGenerator(object):
         if os.getenv('PGWIRE_LISTENING_PORT', ''):
             self.yaml_config["local_pg_wire_config"] = {}
             self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')
-            
 
         if disable_iterator_reads:
             self.yaml_config["table_service_config"]["enable_kqp_scan_query_source_read"] = False

@@ -342,7 +342,9 @@ private:
             do {
                 auto& [content, msg] = *maybeMsg;
                 NYdb::NTopic::TWriteSessionEvent::TWriteAck ack;
-                ack.SeqNo = *msg.SeqNo_;
+                if (msg.SeqNo_.Defined()) { // FIXME should be auto generated otherwise
+                    ack.SeqNo = *msg.SeqNo_;
+                }
                 ack.State = NYdb::NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN;
                 ack.Details.ConstructInPlace(offset, partitionId);
                 acks.Acks.emplace_back(std::move(ack));

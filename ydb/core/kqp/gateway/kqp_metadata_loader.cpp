@@ -2,6 +2,7 @@
 #include "actors/kqp_ic_gateway_actors.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
@@ -400,21 +401,15 @@ TString GetDebugString(const std::pair<NKikimr::TIndexId, TString>& id) {
     return TStringBuilder() << " Path: " << id.second  << " TableId: " << id.first;
 }
 
-void UpdateMetadataIfSuccess(NYql::TKikimrTableMetadataPtr& implTable, const TTableMetadataResult& value) {
-    if (!value.Success()) {
-        return;
-    }
-    auto nextImplTable = value.Metadata;
+void UpdateMetadataIfSuccess(NYql::TKikimrTableMetadataPtr& implTable, TTableMetadataResult& value) {
+    Y_ASSERT(value.Success());
     if (!implTable) {
-        implTable = std::move(nextImplTable);
+        implTable = std::move(value.Metadata);
         return;
     }
-    YQL_ENSURE(!implTable->Next);
-    YQL_ENSURE(implTable->Name != nextImplTable->Name);
-    if (implTable->Name > value.Metadata->Name) {
-        std::swap(implTable, nextImplTable);
-    }
-    implTable->Next = std::move(nextImplTable);
+    Y_ASSERT(!implTable->Next);
+    Y_ASSERT(implTable->Name < value.Metadata->Name);
+    implTable->Next = std::move(value.Metadata);
 }
 
 void SetError(TTableMetadataResult& externalDataSourceMetadata, const TString& error) {
@@ -628,15 +623,13 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
     const auto& tableName = tableMetadata->Name;
     const size_t indexesCount = tableMetadata->Indexes.size();
 
-    TVector<NThreading::TFuture<TGenericResult>> children;
+    TVector<NThreading::TFuture<TTableMetadataResult>> children;
     children.reserve(indexesCount);
 
-    tableMetadata->ImplTables.resize(indexesCount);
     const ui64 tableOwnerId = tableMetadata->PathId.OwnerId();
 
     for (size_t i = 0; i < indexesCount; i++) {
         const auto& index = tableMetadata->Indexes[i];
-        auto& implTable = tableMetadata->ImplTables[i];
         const auto implTablePaths = NSchemeHelpers::CreateIndexTablePath(tableName, index.Type, index.Name);
         for (const auto& implTablePath : implTablePaths) {
             if (!index.SchemaVersion) {
@@ -644,11 +637,6 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
                 children.push_back(
                     LoadTableMetadata(cluster, implTablePath,
                         TLoadTableMetadataSettings().WithPrivateTables(true), database, userToken)
-                        .Apply([&implTable](const TFuture<TTableMetadataResult>& result) {
-                            auto value = result.GetValue();
-                            UpdateMetadataIfSuccess(implTable, value);
-                            return static_cast<TGenericResult>(value);
-                        })
                 );
             } else {
                 LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load index metadata with schema version check"
@@ -661,11 +649,6 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
                 children.push_back(
                     LoadIndexMetadataByPathId(cluster,
                         NKikimr::TIndexId(ownerId, index.LocalPathId, index.SchemaVersion), implTablePath, database, userToken)
-                        .Apply([&implTable](const TFuture<TTableMetadataResult>& result) {
-                            auto value = result.GetValue();
-                            UpdateMetadataIfSuccess(implTable, value);
-                            return static_cast<TGenericResult>(value);
-                        })
                 );
 
             }
@@ -676,14 +659,25 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
     auto loadIndexMetadataChecker =
         [ptr, result{std::move(loadTableMetadataResult)}, children](const NThreading::TFuture<void>) mutable {
             bool loadOk = true;
-            for (const auto& child : children) {
-                result.AddIssues(child.GetValue().Issues());
-                if (!child.GetValue().Success()) {
-                    loadOk = false;
+
+            const auto indexesCount = result.Metadata->Indexes.size();
+            result.Metadata->ImplTables.resize(indexesCount);
+            auto it = children.begin();
+            for (size_t i = 0; i < indexesCount; i++) {
+                for (const auto& _ : NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(
+                        result.Metadata->Indexes[i].Type))) {
+                    auto value = it++->ExtractValue();
+                    result.AddIssues(value.Issues());
+                    if (loadOk && (loadOk = value.Success())) {
+                        UpdateMetadataIfSuccess(result.Metadata->ImplTables[i], value);
+                    }
                 }
             }
+            Y_ASSERT(it == children.end());
+
             auto locked = ptr.lock();
             if (!loadOk || !locked) {
+                result.Metadata->ImplTables.clear();
                 result.SetStatus(TIssuesIds::KIKIMR_INDEX_METADATA_LOAD_FAILED);
             } else {
                 locked->OnLoadedTableMetadata(result);

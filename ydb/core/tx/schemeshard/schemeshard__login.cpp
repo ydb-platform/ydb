@@ -103,7 +103,8 @@ private:
         const NLogin::TLoginProvider::TLoginUserResponse loginResponse = Self->LoginProvider.LoginUser(loginRequest);
         switch (loginResponse.Status) {
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::SUCCESS: {
-            SetSuccessResult(loginResponse);
+            Result->Record.SetToken(loginResponse.Token);
+            Result->Record.SetSanitizedToken(loginResponse.SanitizedToken);
             break;
         }
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD:
@@ -115,11 +116,6 @@ private:
         }
         }
         return true;
-    }
-
-    void SetSuccessResult(const NLogin::TLoginProvider::TLoginUserResponse& loginResponse) {
-        Result->Record.SetToken(loginResponse.Token);
-        Result->Record.SetSanitizedToken(loginResponse.SanitizedToken);
     }
 
     bool HandleLoginAuth(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, NIceDb::TNiceDb& db, const TActorContext& ctx) {
@@ -147,10 +143,13 @@ private:
         switch (loginResponse.Status) {
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::SUCCESS: {
             HandleLoginAuthSuccess(loginRequest, loginResponse, db);
+            Result->Record.SetToken(loginResponse.Token);
+            Result->Record.SetSanitizedToken(loginResponse.SanitizedToken);
             break;
         }
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD: {
             HandleLoginAuthInvalidPassword(loginRequest, loginResponse, db);
+            Result->Record.SetError(loginResponse.Error);
             break;
         }
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_USER:
@@ -188,13 +187,11 @@ private:
     }
 
     void HandleLoginAuthSuccess(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, const NLogin::TLoginProvider::TLoginUserResponse& loginResponse, NIceDb::TNiceDb& db) {
-        SetSuccessResult(loginResponse);
         db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::LastSuccessfulAttempt, Schema::LoginSids::FailedAttemptCount>(TAppData::TimeProvider->Now().MicroSeconds(), Schema::LoginSids::FailedAttemptCount::Default);
     }
 
     void HandleLoginAuthInvalidPassword(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, const NLogin::TLoginProvider::TLoginUserResponse& loginResponse, NIceDb::TNiceDb& db) {
         db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::LastFailedAttempt, Schema::LoginSids::FailedAttemptCount>(TAppData::TimeProvider->Now().MicroSeconds(), CurrentFailedAttemptCount + 1);
-        Result->Record.SetError(loginResponse.Error);
     }
 };
 

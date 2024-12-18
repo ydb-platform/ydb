@@ -12,7 +12,7 @@ DOCKER_IMAGE_YDBD_PACKAGE_SPEC = 'ydb/deploy/docker/debug/pkg.json'
 DOCKER_IMAGE_REGISTRY = 'cr.yandex'
 DOCKER_IMAGE_REPOSITORY = 'crpbo4q9lbgkn85vr1rm'
 DOCKER_IMAGE_NAME = 'ydb'
-DOCKER_IMAGE_TAR = 'ydb_docker.tar'
+DOCKER_IMAGE_ARCHIVE = 'ydb.docker.tar.gz'
 DOCKER_IMAGE_FULL_NAME = '%s/%s/%s' % (DOCKER_IMAGE_REGISTRY, DOCKER_IMAGE_REPOSITORY, DOCKER_IMAGE_NAME)
 
 
@@ -44,6 +44,19 @@ def get_image_from_args(args):
         return "%s:%s" % (DOCKER_IMAGE_FULL_NAME, tag)
 
 
+def get_image_output_path(args, image):
+    if args.output is not None:
+        return args.output
+    else:
+        if ":" in image:
+            image_name, tag = image.split(":")
+        else:
+            image_name, tag = image, "latest"
+        image_base_name = image_name.split("/")[-1]
+
+        return f"{image_base_name}.{tag}.tar.gz"
+
+
 def docker_tag(old, new):
     proc = subprocess.Popen(['docker', 'tag', old, new], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
@@ -71,11 +84,29 @@ def docker_inspect(obj):
         return json.loads(stdout)
 
 
-def docker_image_save(obj, output_path):
-    proc = subprocess.Popen(['docker', 'image', 'save', obj, '-o', output_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    _, stderr = proc.communicate()
-    if proc.returncode != 0:
-        raise RuntimeError("docker image save: failed with code %d, error: %s" % (proc.returncode, stderr))
+def docker_image_save(image, output_path, overwrite):
+    try:
+        if os.path.exists(output_path) and not overwrite:
+            logger.info(f"Compressed file '{output_path}' already exists, using existing archive")
+
+        with open(output_path, "wb") as gz_file:
+            docker_process = subprocess.Popen(['docker', 'image', 'save', image], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            pigz_process = subprocess.Popen(['pigz', '--fast'], stdin=docker_process.stdout, stdout=gz_file)
+
+            docker_process.stdout.close()
+
+            docker_stderr = docker_process.communicate()[1]
+            pigz_stderr = pigz_process.communicate()[1]
+
+            if docker_process.returncode != 0:
+                raise RuntimeError("docker image save: cmd docker failed with code %d, error: %s" % (docker_process.returncode, docker_stderr.decode().strip()))
+
+            if pigz_process.returncode != 0:
+                raise RuntimeError("docker image save: cmd pigz failed with code %d, error: %s" % (pigz_process.returncode, pigz_stderr.decode().strip()))
+
+            logger.info(f"Docker image '{image}' saved and compressed successfully to '{output_path}'")
+    except Exception as e:
+        raise RuntimeError(f"An error occurred: {e}")
 
 
 def docker_push(image):

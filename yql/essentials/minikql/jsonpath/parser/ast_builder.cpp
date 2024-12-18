@@ -293,7 +293,8 @@ TAstNodePtr TAstBuilder::BuildLikeRegexExpr(const TRule_like_regex_expr& node, T
 
     IRePtr compiledRegex;
     try {
-        compiledRegex = NDispatcher::Compile(regex, parsedFlags, RegexpLibId);
+        compiledRegex = NDispatcher::Compile(regex, parsedFlags,
+            NDispatcher::Has(RegexpLibId) ? RegexpLibId : TSerialization::kRe2);
     } catch (const NReWrapper::TCompileException& e) {
         Error(GetPos(regexToken), e.AsStrBuf());
         return nullptr;

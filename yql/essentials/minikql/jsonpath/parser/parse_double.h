@@ -8,3 +8,4 @@ namespace NYql::NJsonPath {
 double ParseDouble(const TStringBuf literal);
 
 }
+

@@ -251,14 +251,19 @@ Y_UNIT_TEST_SUITE(Viewer) {
     };
 
     void ChangeListNodes(TEvInterconnect::TEvNodesInfo::TPtr* ev, int nodesTotal) {
-        auto& nodes = const_cast<TVector<TEvInterconnect::TNodeInfo>&>((*ev)->Get()->Nodes);
+        auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>((*ev)->Get()->Nodes);
 
-        auto sample = nodes[0];
-        nodes.clear();
+        auto sample = *nodes->begin();
+        nodes->clear();
 
         for (int nodeId = 0; nodeId < nodesTotal; nodeId++) {
-            nodes.emplace_back(sample);
+            nodes->emplace_back(sample);
         }
+
+        auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
+            new IEventHandle((*ev)->Sender, (*ev)->Recipient, new TEvInterconnect::TEvNodesInfo(nodes))
+        );
+        ev->Swap(newEv);
     }
 
     void ChangeTabletStateResponse(TEvWhiteboard::TEvTabletStateResponse::TPtr* ev, int tabletsTotal, int& tabletId, int& nodeId) {

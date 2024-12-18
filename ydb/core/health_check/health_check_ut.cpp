@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     void SetLongHostValue(TEvInterconnect::TEvNodesInfo::TPtr* ev) {
         TString host(1000000, 'a');
-        auto& pbRecord = (*ev)->Get()->Nodes;
+        auto& pbRecord = const_cast<TVector<TEvInterconnect::TNodeInfo>&>((*ev)->Get()->Nodes);
         for (auto itIssue = pbRecord.begin(); itIssue != pbRecord.end(); ++itIssue) {
             itIssue->Host = host;
         }

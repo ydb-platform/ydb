@@ -392,11 +392,14 @@ void TNodeWarden::Bootstrap() {
 
     // fill in a base storage config (from the file)
     NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableBlobStorageConfig()->CopyFrom(Cfg->BlobStorageConfig);
+    appConfig.MutableNameserviceConfig()->CopyFrom(Cfg->NameserviceConfig);
     if (Cfg->DomainsConfig) {
         appConfig.MutableDomainsConfig()->CopyFrom(*Cfg->DomainsConfig);
     }
-    appConfig.MutableBlobStorageConfig()->CopyFrom(Cfg->BlobStorageConfig);
-    appConfig.MutableNameserviceConfig()->CopyFrom(Cfg->NameserviceConfig);
+    if (Cfg->SelfManagementConfig) {
+        appConfig.MutableSelfManagementConfig()->CopyFrom(*Cfg->SelfManagementConfig);
+    }
     TString errorReason;
     const bool success = DeriveStorageConfig(appConfig, &StorageConfig, &errorReason);
     Y_VERIFY_S(success, "failed to generate initial TStorageConfig: " << errorReason);
@@ -992,26 +995,23 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         *errorReason = "original config missing mandatory BlobStorageConfig section";
         return false;
     }
+
+    if (appConfig.HasSelfManagementConfig()) {
+        const auto& smFrom = appConfig.GetSelfManagementConfig();
+        auto *smTo = config->MutableSelfManagementConfig();
+        if (smFrom.HasGeneration() && smTo->HasGeneration() && smFrom.GetGeneration() != smTo->GetGeneration() + 1) {
+            *errorReason = TStringBuilder() << "generation mismatch for SelfManagementConfig section existing Generation# "
+                << smTo->GetGeneration() << " newly provided Generation# " << smFrom.GetGeneration();
+            return false;
+        }
+        smTo->CopyFrom(smFrom);
+        smTo->ClearInitialConfigYaml(); // do not let this section into final StorageConfig
+    } else {
+        config->ClearSelfManagementConfig();
+    }
     
     const auto& bsFrom = appConfig.GetBlobStorageConfig();
     auto *bsTo = config->MutableBlobStorageConfig();
-    if (bsFrom.HasAutoconfigSettings()) {
-        const auto& acFrom = bsFrom.GetAutoconfigSettings();
-        auto *acTo = bsTo->MutableAutoconfigSettings();
-        if (acFrom.HasGeneration() && acTo->HasGeneration() && acTo->GetGeneration() + 1 != acFrom.GetGeneration()) {
-            *errorReason = TStringBuilder() << "generation mismatch for AutoconfigSettings section existing Generation# "
-                << acTo->GetGeneration() << " newly provided Generation# " << acFrom.GetGeneration();
-            return false;
-        } else if (acTo->HasGeneration() && !acFrom.HasGeneration()) {
-            *errorReason = "existing AutoconfigSettings has set generation, but newly provided one doesn't have it";
-            return false;
-        }
-
-        acTo->CopyFrom(acFrom);
-        acTo->ClearInitialConfigYaml();
-    } else {
-        bsTo->ClearAutoconfigSettings();
-    }
 
     if (bsFrom.HasServiceSet()) {
         const auto& ssFrom = bsFrom.GetServiceSet();
@@ -1034,7 +1034,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         };
 
         // update static group information unless distconf is enabled
-        if (!hasStaticGroupInfo(ssFrom) && bsFrom.HasAutoconfigSettings()) {
+        if (!hasStaticGroupInfo(ssFrom) && config->HasSelfManagementConfig() && config->GetSelfManagementConfig().GetEnabled()) {
             // distconf enabled, keep it as is
         } else if (!hasStaticGroupInfo(*ssTo)) {
             ssTo->MutablePDisks()->CopyFrom(ssFrom.GetPDisks());

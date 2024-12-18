@@ -589,9 +589,9 @@ void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConf
 
     const TString yamlConfigString = protoConfigFileProvider.GetProtoFromFile(yamlConfigFile, errorCollector);
 
-    if (appConfig.HasBlobStorageConfig() && appConfig.GetBlobStorageConfig().HasAutoconfigSettings()) {
-        auto *proto = appConfig.MutableBlobStorageConfig()->MutableAutoconfigSettings();
-        proto->SetInitialConfigYaml(yamlConfigString);
+    if (appConfig.HasSelfManagementConfig() && appConfig.GetSelfManagementConfig().GetEnabled()) {
+        // fill in InitialConfigYaml only when self-management through distconf is enabled
+        appConfig.MutableSelfManagementConfig()->SetInitialConfigYaml(yamlConfigString);
     }
 
     /*

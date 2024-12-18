@@ -1127,6 +1127,7 @@
         "7663137240": "https://devtools-registry.s3.yandex.net/7663137240",
         "7495957585": "https://devtools-registry.s3.yandex.net/7495957585",
         "6048579718": "https://devtools-registry.s3.yandex.net/6048579718",
+        "7686710688": "https://devtools-registry.s3.yandex.net/7686710688",
         "2980468199": "https://devtools-registry.s3.yandex.net/2980468199",
         "5562224408": "https://devtools-registry.s3.yandex.net/5562224408",
         "7663495611": "https://devtools-registry.s3.yandex.net/7663495611"
@@ -2258,6 +2259,7 @@
         "7663137240": "ynd-clang-format-18-mingw-w64-x86_64-809bd279d61c38bc40e133d3013ac46e8c4049b7",
         "7495957585": "ynd-clang-format-18-mingw-w64-x86_64-d0b9255e235e80974f9dfd0ebff3850929bed981",
         "6048579718": "yt/go/ytrecipe/cmd/ytexec for linux",
+        "7686710688": "yt/go/ytrecipe/cmd/ytexec for linux",
         "2980468199": "ytexec for linux",
         "5562224408": "ytexec for linux",
         "7663495611": "ytexec for linux"

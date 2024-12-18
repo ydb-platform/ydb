@@ -175,12 +175,17 @@ public:
     }
 
     bool YdbComputeControlPlaneEnabled(const TString& scope) const {
+        return YdbComputeControlPlaneEnabled(scope, FederatedQuery::QueryContent::ANALYTICS) ||  
+                YdbComputeControlPlaneEnabled(scope, FederatedQuery::QueryContent::STREAMING);
+    }
+
+    bool YdbComputeControlPlaneEnabled(const TString& scope, FederatedQuery::QueryContent::QueryType queryType) const {
+        if (queryType == FederatedQuery::QueryContent::QUERY_TYPE_UNSPECIFIED) {
+            return YdbComputeControlPlaneEnabled(scope);
+        }
         return ComputeConfig.GetYdb().GetEnable() &&
                ComputeConfig.GetYdb().GetControlPlane().GetEnable() &&
-               (GetComputeType(FederatedQuery::QueryContent::ANALYTICS, scope) ==
-                    NFq::NConfig::EComputeType::YDB ||
-                GetComputeType(FederatedQuery::QueryContent::STREAMING, scope) ==
-                    NFq::NConfig::EComputeType::YDB);
+               GetComputeType(queryType, scope) == NFq::NConfig::EComputeType::YDB;
     }
 
     bool IsYDBSchemaOperationsEnabled(

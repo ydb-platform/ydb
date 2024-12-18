@@ -390,16 +390,14 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " ProgressState");
+        LOG_I(DebugHint() << "ProgressState");
 
         context.OnComplete.Barrier(OperationId, "DoneBarrier");
         return false;
     }
 
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr&, TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " HandleReply TEvCompleteBarrier");
+        LOG_I(DebugHint() << "HandleReply TEvCompleteBarrier"
 
         if (!TDone::Process(context)) {
             return false;

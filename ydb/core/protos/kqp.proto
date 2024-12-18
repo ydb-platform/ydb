@@ -563,6 +563,8 @@ message TEvStartKqpTasksRequest {
     optional double PoolMaxCpuShare = 12;
     optional double QueryCpuShare = 16;
     optional double ResourceWeight = 18;
+
+    optional NKikimrDataEvents.ELockMode LockMode = 19;
 }
 
 message TEvStartKqpTasksResponse {
@@ -754,6 +756,7 @@ message TKqpStreamLookupSettings {
     optional bool KeepRowsOrder = 11;
     optional bool AllowNullKeys = 12;
     optional uint32 AllowNullKeysPrefixSize = 13;
+    optional NKikimrDataEvents.ELockMode LockMode = 14;
 }
 
 message TKqpSequencerSettings {

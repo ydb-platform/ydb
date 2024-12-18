@@ -1744,10 +1744,14 @@ private:
             dataTransaction.SetPerShardKeysSizeLimitBytes(Request.PerShardKeysSizeLimitBytes);
         }
 
-        auto& lockTxId = TasksGraph.GetMeta().LockTxId;
-        if (lockTxId) {
+        const auto& lockTxId = TasksGraph.GetMeta().LockTxId;
+        if (lockTxId && TasksGraph.GetMeta().LockMode != NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT) {
+            YQL_ENSURE(!ReadOnlyTx);
             dataTransaction.SetLockTxId(*lockTxId);
             dataTransaction.SetLockNodeId(SelfId().NodeId());
+        }
+        if (TasksGraph.GetMeta().LockMode) {
+            dataTransaction.SetLockMode(*TasksGraph.GetMeta().LockMode);
         }
 
         for (auto& task : dataTransaction.GetKqpTransaction().GetTasks()) {
@@ -1780,7 +1784,8 @@ private:
                 (VolatileTx ? NTxDataShard::TTxFlags::VolatilePrepare : 0);
             std::unique_ptr<TEvDataShard::TEvProposeTransaction> evData;
             if (GetSnapshot().IsValid() && (ReadOnlyTx || Request.UseImmediateEffects)) {
-                YQL_ENSURE(!(Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW && ReadOnlyTx));
+                // Don't allow Reads in ProposeTx if snapshot isolation rw is used.
+                // StreamLookup/Source should be used instead.
                 evData.reset(new TEvDataShard::TEvProposeTransaction(
                     NKikimrTxDataShard::TX_KIND_DATA,
                     SelfId(),
@@ -1788,9 +1793,6 @@ private:
                     dataTransaction.SerializeAsString(),
                     GetSnapshot().Step,
                     GetSnapshot().TxId,
-                    Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
-                        ? NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT
-                        : NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE,
                     flags));
             } else {
                 YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW);
@@ -1799,7 +1801,6 @@ private:
                     SelfId(),
                     TxId,
                     dataTransaction.SerializeAsString(),
-                    NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE,
                     flags));
             }
 
@@ -2144,7 +2145,6 @@ private:
             case NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW:
                 if (Request.LocksOp != ELocksOp::Commit) {
                     YQL_ENSURE(!VolatileTx);
-                    TasksGraph.GetMeta().AllowInconsistentReads = true;
                     ImmediateTx = true;
                 }
                 break;
@@ -2681,6 +2681,7 @@ private:
             .TxId = TxId,
             .LockTxId = lockTxId,
             .LockNodeId = SelfId().NodeId(),
+            .LockMode = TasksGraph.GetMeta().LockMode,
             .Executer = SelfId(),
             .Snapshot = GetSnapshot(),
             .Database = Database,

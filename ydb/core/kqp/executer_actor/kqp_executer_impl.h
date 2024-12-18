@@ -505,6 +505,15 @@ protected:
         TasksGraph.GetMeta().SetLockTxId(lockTxId);
         TasksGraph.GetMeta().SetLockNodeId(SelfId().NodeId());
 
+        switch (Request.IsolationLevel) {
+            case NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW:
+                TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT);
+                break;
+            default:
+                TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE);
+                break;
+        }
+
         LWTRACK(KqpBaseExecuterHandleReady, ResponseEv->Orbit, TxId);
         if (IsDebugLogEnabled()) {
             for (auto& tx : Request.Transactions) {
@@ -1220,6 +1229,10 @@ protected:
             if (lockTxId) {
                 settings->SetLockTxId(*lockTxId);
                 settings->SetLockNodeId(self.NodeId());
+            }
+
+            if (TasksGraph.GetMeta().LockMode) {
+                settings->SetLockMode(*TasksGraph.GetMeta().LockMode);
             }
 
             createdTasksIds.push_back(task.Id);

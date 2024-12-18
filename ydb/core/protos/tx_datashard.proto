@@ -261,6 +261,8 @@ message TKqpReadRangesSourceSettings {
     optional bool AllowInconsistentReads = 18 [default = false];
 
     repeated TKqpTransaction.TColumnMeta DuplicateCheckColumns = 19;
+
+    optional NKikimrDataEvents.ELockMode LockMode = 20;
 }
 
 message TKqpTaskInfo {
@@ -298,6 +300,7 @@ message TDataTransaction {
 
     // Datashard will subscribe to lock status when node id is non-zero
     optional uint32 LockNodeId = 17;
+    optional NKikimrDataEvents.ELockMode LockMode = 18;
 }
 
 message TCreateVolatileSnapshot {
@@ -549,7 +552,6 @@ message TEvProposeTransaction {
     optional uint64 SubDomainPathId = 9; // LocalPathId (SchemeShardId is the OwnerId)
     optional NKikimrDataEvents.TMvccSnapshot MvccSnapshot = 10;
     optional bool MvccSnapshotRepeatable = 11 [default = true];
-    optional NKikimrDataEvents.ELockMode LockMode = 12;
 }
 
 message TEvCancelTransactionProposal {

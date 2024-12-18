@@ -462,26 +462,22 @@ namespace TEvDataShard {
             Record.SetExecLevel(0);
             Record.SetTxBody(txBody.data(), txBody.size());
             Record.SetFlags(flags);
-            Record.SetLockMode(NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE);
         }
 
         TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, const TActorId& source, ui64 txId,
             const TStringBuf& txBody, ui64 snapshotStep, ui64 snapshotTxId,
-            NKikimrDataEvents::ELockMode lockMode = NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE,
             ui32 flags = NDataShard::TTxFlags::Default)
             : TEvProposeTransaction(txKind, source, txId, txBody, flags)
         {
             auto &snapshot = *Record.MutableMvccSnapshot();
             snapshot.SetStep(snapshotStep);
             snapshot.SetTxId(snapshotTxId);
-            Record.SetLockMode(lockMode);
         }
 
         TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, const TActorId& source, ui64 txId,
             const TStringBuf& txBody, const TRowVersion& snapshot,
-            NKikimrDataEvents::ELockMode lockMode = NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE,
             ui32 flags = NDataShard::TTxFlags::Default)
-            : TEvProposeTransaction(txKind, source, txId, txBody, snapshot.Step, snapshot.TxId, lockMode, flags)
+            : TEvProposeTransaction(txKind, source, txId, txBody, snapshot.Step, snapshot.TxId, flags)
         {
         }
 

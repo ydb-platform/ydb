@@ -108,6 +108,7 @@ struct TEvColumnShard {
     public:
         std::optional<NOlap::TSnapshot> ReadFromSnapshot;
         std::optional<NOlap::TSnapshot> ReadToSnapshot;
+        TString TaskIdentifier;
         std::shared_ptr<NOlap::TPKRangesFilter> RangesFilter;
     public:
         void AddColumn(const ui32 id, const TString& columnName) {

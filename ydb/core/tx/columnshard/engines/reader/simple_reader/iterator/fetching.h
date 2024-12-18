@@ -464,6 +464,7 @@ public:
         : TBase("LIMIT")
         , Limit(limit)
         , Reverse(reverse) {
+        AFL_VERIFY(Limit);
     }
 };
 

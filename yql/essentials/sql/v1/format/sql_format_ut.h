@@ -199,9 +199,18 @@ Y_UNIT_TEST(Declare) {
 
 Y_UNIT_TEST(NamedNode) {
     TCases cases = {
-        {"$x=1","$x = 1;\n"},
-        {"$x,$y=(2,3)","$x, $y = (2, 3);\n"},
-        {"$a = select 1 union all select 2","$a = (\n\tSELECT\n\t\t1\n\tUNION ALL\n\tSELECT\n\t\t2\n);\n"},
+        {"$x=1",
+            "$x = 1;\n"},
+        {"$x,$y=(2,3)",
+            "$x, $y = (2, 3);\n"},
+        {"$a = select 1 union all select 2",
+            "$a = (\n\tSELECT\n\t\t1\n\tUNION ALL\n\tSELECT\n\t\t2\n);\n"},
+        {"$a = select 1 from $as;",
+            "$a = (\n\tSELECT\n\t\t1\n\tFROM\n\t\t$as\n);\n"},
+        {"$a = select * from $t -- comment",
+            "$a = (\n\tSELECT\n\t\t*\n\tFROM\n\t\t$t -- comment\n);\n"},
+        {"-- comment\r\r\r$a=1;",
+            "-- comment\r\n$a = 1;\n"},
     };
 
     TSetup setup;
@@ -606,6 +615,8 @@ Y_UNIT_TEST(If) {
             "SELECT\n\t\t2\n\t;\n\n\tSELECT\n\t\t3\n\t;\nEND DO;\n"},
         {"evaluate if 1=1 do begin (select 1) end do",
             "EVALUATE IF 1 == 1 DO BEGIN\n\t(\n\t\tSELECT\n\t\t\t1\n\t);\nEND DO;\n"},
+        {"evaluate if 1=1 do begin $a = select * from $begin; $end = 1; end do",
+            "EVALUATE IF 1 == 1 DO BEGIN\n\t$a = (\n\t\tSELECT\n\t\t\t*\n\t\tFROM\n\t\t\t$begin\n\t);\n\t$end = 1;\nEND DO;\n"},
     };
 
     TSetup setup;
@@ -628,6 +639,8 @@ Y_UNIT_TEST(For) {
             "EVALUATE FOR $x IN [] DO BEGIN\n\tSELECT\n\t\t$x\n\t;\n\n\tSELECT\n\t\t$y\n\t;\nEND DO;\n"},
         {"evaluate for $x in [] do begin (select 1) end do",
             "EVALUATE FOR $x IN [] DO BEGIN\n\t(\n\t\tSELECT\n\t\t\t1\n\t);\nEND DO;\n"},
+        {"evaluate for $x in [] do begin $a = select * from $begin; $end = 1; end do",
+            "EVALUATE FOR $x IN [] DO BEGIN\n\t$a = (\n\t\tSELECT\n\t\t\t*\n\t\tFROM\n\t\t\t$begin\n\t);\n\t$end = 1;\nEND DO;\n"},
     };
 
     TSetup setup;

@@ -397,7 +397,7 @@ public:
     }
 
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr&, TOperationContext& context) override {
-        LOG_I(DebugHint() << "HandleReply TEvCompleteBarrier"
+        LOG_I(DebugHint() << "HandleReply TEvCompleteBarrier");
 
         if (!TDone::Process(context)) {
             return false;

@@ -57,7 +57,7 @@ struct THttpResponseData {
     NJson::TJsonValue Body;
     TString ErrorText{"OK"};
     TString YmqStatusCode;
-    ui32 YmqHttpCode;
+    ui32 YmqHttpCode = 500;
     bool YmqIsFifo = false;
 
     TString DumpBody(MimeTypes contentType);

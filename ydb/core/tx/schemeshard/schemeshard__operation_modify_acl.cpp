@@ -51,6 +51,24 @@ public:
             return result;
         }
 
+        if (acl) {
+            NACLib::TDiffACL diffACL(acl);
+            for (const NACLibProto::TDiffACE& diffACE : diffACL.GetDiffACE()) {
+                if (static_cast<NACLib::EDiffType>(diffACE.GetDiffType()) == NACLib::EDiffType::Add) {
+                    if (!context.SS->LoginProvider.Sids.contains(diffACE.GetACE().GetSID())) {
+                        result->SetError(NKikimrScheme::StatusPreconditionFailed, "Sid not found");
+                        return result;
+                    }
+                } // remove diff type is allowed in any case
+            }
+        }
+        if (owner) {
+            if (!context.SS->LoginProvider.Sids.contains(owner)) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Sid not found");
+                return result;
+            }
+        }
+
         THashSet<TPathId> subTree;
         if (acl || (owner && path.Base()->IsTable())) {
             subTree = context.SS->ListSubTree(path.Base()->PathId, context.Ctx);

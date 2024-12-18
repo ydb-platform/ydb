@@ -298,7 +298,8 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    std::string_view centroidName, bool centroidNotNull)
 {
     NKikimrSchemeOp::TTableDescription implTableDesc;
 
@@ -322,10 +323,10 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
     }
     {
         auto centroidColumn = implTableDesc.AddColumns();
-        centroidColumn->SetName(NTableVectorKmeansTreeIndex::CentroidColumn);
+        centroidColumn->SetName(centroidName.data(), centroidName.size());
         centroidColumn->SetType("String");
         centroidColumn->SetTypeId(NScheme::NTypeIds::String);
-        centroidColumn->SetNotNull(true);
+        centroidColumn->SetNotNull(centroidNotNull);
     }
 
     implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::ParentColumn);

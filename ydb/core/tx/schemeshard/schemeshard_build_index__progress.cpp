@@ -89,6 +89,7 @@ class TUploadSampleK: public TActorBootstrapped<TUploadSampleK> {
 protected:
     TString LogPrefix;
     TString TargetTable;
+    TString Centroid;
 
     NDataShard::TUploadRetryLimits Limits;
 
@@ -108,12 +109,14 @@ protected:
 
 public:
     TUploadSampleK(TString targetTable,
+                   TString centroid,
                    const TIndexBuildInfo::TLimits& limits,
                    const TActorId& responseActorId,
                    ui64 buildIndexId,
                    TIndexBuildInfo::TSample::TRows init,
                    ui32 child)
         : TargetTable(std::move(targetTable))
+        , Centroid(std::move(centroid))
         , ResponseActorId(responseActorId)
         , BuildIndexId(buildIndexId)
         , Init(std::move(init))
@@ -164,7 +167,7 @@ public:
         (*Types)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
         (*Types)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
         type.set_type_id(Ydb::Type::STRING);
-        (*Types)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
+        (*Types)[2] = {std::move(Centroid), type};
 
         Become(&TThis::StateWork);
 
@@ -686,8 +689,9 @@ private:
                         .Dive(buildInfo.IndexName)
                         .Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
         Y_ASSERT(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
-        auto actor = new TUploadSampleK(path.PathString(), buildInfo.Limits, Self->SelfId(), ui64(BuildId),
-                                        buildInfo.Sample.Rows, buildInfo.KMeans.ChildBegin);
+        auto actor = new TUploadSampleK(path.PathString(), buildInfo.IndexColumns[0],
+            buildInfo.Limits, Self->SelfId(), ui64(BuildId),
+            buildInfo.Sample.Rows, buildInfo.KMeans.ChildBegin);
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
         buildInfo.Sample.Sent = true;

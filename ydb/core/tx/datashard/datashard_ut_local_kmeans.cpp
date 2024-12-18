@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
         options.Columns({
             {ParentColumn, "Uint32", true, true},
             {IdColumn, "Uint32", true, true},
-            {CentroidColumn, "String", false, true},
+            {"embedding", "String", false, true},
         });
         CreateShardedTable(server, sender, "/Root", "table-level", options);
     }
@@ -350,8 +350,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
             auto [level, posting] = DoLocalKMeans(server, sender, 0, seed, k,
                                                   NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_POSTING,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = mm\3\n"
-                                            "__ydb_parent = 0, __ydb_id = 2, __ydb_centroid = 11\3\n");
+            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, embedding = mm\3\n"
+                                            "__ydb_parent = 0, __ydb_id = 2, embedding = 11\3\n");
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 4, data = four\n"
                                               "__ydb_parent = 1, key = 5, data = five\n"
                                               "__ydb_parent = 2, key = 1, data = one\n"
@@ -365,8 +365,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
             auto [level, posting] = DoLocalKMeans(server, sender, 0, seed, k,
                                                   NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_POSTING,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = 11\3\n"
-                                            "__ydb_parent = 0, __ydb_id = 2, __ydb_centroid = mm\3\n");
+            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, embedding = 11\3\n"
+                                            "__ydb_parent = 0, __ydb_id = 2, embedding = mm\3\n");
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, data = one\n"
                                               "__ydb_parent = 1, key = 2, data = two\n"
                                               "__ydb_parent = 1, key = 3, data = three\n"
@@ -381,7 +381,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
             auto [level, posting] = DoLocalKMeans(server, sender, 0, seed, k,
                                                   NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_POSTING,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
-            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = II\3\n");
+            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, embedding = II\3\n");
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, data = one\n"
                                               "__ydb_parent = 1, key = 2, data = two\n"
                                               "__ydb_parent = 1, key = 3, data = three\n"
@@ -440,8 +440,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
             auto [level, posting] = DoLocalKMeans(server, sender, 0, seed, k,
                                                   NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = mm\3\n"
-                                            "__ydb_parent = 0, __ydb_id = 2, __ydb_centroid = 11\3\n");
+            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, embedding = mm\3\n"
+                                            "__ydb_parent = 0, __ydb_id = 2, embedding = 11\3\n");
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 4, embedding = \x65\x65\3, data = four\n"
                                               "__ydb_parent = 1, key = 5, embedding = \x75\x75\3, data = five\n"
                                               "__ydb_parent = 2, key = 1, embedding = \x30\x30\3, data = one\n"
@@ -455,8 +455,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
             auto [level, posting] = DoLocalKMeans(server, sender, 0, seed, k,
                                                   NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = 11\3\n"
-                                            "__ydb_parent = 0, __ydb_id = 2, __ydb_centroid = mm\3\n");
+            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, embedding = 11\3\n"
+                                            "__ydb_parent = 0, __ydb_id = 2, embedding = mm\3\n");
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, embedding = \x30\x30\3, data = one\n"
                                               "__ydb_parent = 1, key = 2, embedding = \x31\x31\3, data = two\n"
                                               "__ydb_parent = 1, key = 3, embedding = \x32\x32\3, data = three\n"
@@ -471,7 +471,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
             auto [level, posting] = DoLocalKMeans(server, sender, 0, seed, k,
                                                   NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
-            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = II\3\n");
+            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, embedding = II\3\n");
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, embedding = \x30\x30\3, data = one\n"
                                               "__ydb_parent = 1, key = 2, embedding = \x31\x31\3, data = two\n"
                                               "__ydb_parent = 1, key = 3, embedding = \x32\x32\3, data = three\n"
@@ -532,8 +532,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
             auto [level, posting] = DoLocalKMeans(server, sender, 40, seed, k,
                                                   NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = mm\3\n"
-                                            "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = 11\3\n");
+            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, embedding = mm\3\n"
+                                            "__ydb_parent = 40, __ydb_id = 42, embedding = 11\3\n");
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 4, data = four\n"
                                               "__ydb_parent = 41, key = 5, data = five\n"
                                               "__ydb_parent = 42, key = 1, data = one\n"
@@ -547,8 +547,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
             auto [level, posting] = DoLocalKMeans(server, sender, 40, seed, k,
                                                   NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = 11\3\n"
-                                            "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = mm\3\n");
+            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, embedding = 11\3\n"
+                                            "__ydb_parent = 40, __ydb_id = 42, embedding = mm\3\n");
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, data = one\n"
                                               "__ydb_parent = 41, key = 2, data = two\n"
                                               "__ydb_parent = 41, key = 3, data = three\n"
@@ -563,7 +563,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
             auto [level, posting] = DoLocalKMeans(server, sender, 40, seed, k,
                                                   NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
-            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = II\3\n");
+            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, embedding = II\3\n");
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, data = one\n"
                                               "__ydb_parent = 41, key = 2, data = two\n"
                                               "__ydb_parent = 41, key = 3, data = three\n"
@@ -624,8 +624,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
             auto [level, posting] = DoLocalKMeans(server, sender, 40, seed, k,
                                                   NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = mm\3\n"
-                                            "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = 11\3\n");
+            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, embedding = mm\3\n"
+                                            "__ydb_parent = 40, __ydb_id = 42, embedding = 11\3\n");
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 4, embedding = \x65\x65\3, data = four\n"
                                               "__ydb_parent = 41, key = 5, embedding = \x75\x75\3, data = five\n"
                                               "__ydb_parent = 42, key = 1, embedding = \x30\x30\3, data = one\n"
@@ -639,8 +639,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
             auto [level, posting] = DoLocalKMeans(server, sender, 40, seed, k,
                                                   NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = 11\3\n"
-                                            "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = mm\3\n");
+            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, embedding = 11\3\n"
+                                            "__ydb_parent = 40, __ydb_id = 42, embedding = mm\3\n");
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, embedding = \x30\x30\3, data = one\n"
                                               "__ydb_parent = 41, key = 2, embedding = \x31\x31\3, data = two\n"
                                               "__ydb_parent = 41, key = 3, embedding = \x32\x32\3, data = three\n"
@@ -655,7 +655,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
             auto [level, posting] = DoLocalKMeans(server, sender, 40, seed, k,
                                                   NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
-            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = II\3\n");
+            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, embedding = II\3\n");
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, embedding = \x30\x30\3, data = one\n"
                                               "__ydb_parent = 41, key = 2, embedding = \x31\x31\3, data = two\n"
                                               "__ydb_parent = 41, key = 3, embedding = \x32\x32\3, data = three\n"

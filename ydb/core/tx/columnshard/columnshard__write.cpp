@@ -138,7 +138,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
 
     for (auto&& aggr : baseAggregations) {
         const auto& writeMeta = aggr->GetWriteMeta();
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "blobs_write_finished")("writing_size", aggr->GetSize())(
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "blobs_write_finished")("writing_size", aggr->GetSize())(
             "writing_id", writeMeta.GetId())("status", putResult.GetPutStatus());
         Counters.GetWritesMonitor()->OnFinishWrite(aggr->GetSize(), 1);
 
@@ -600,7 +600,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     auto writeOperation = OperationsManager->RegisterOperation(
         pathId, lockId, cookie, granuleShardingVersionId, *mType, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
 
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", arrowData->GetSize())("operation_id", writeOperation->GetIdentifier())(
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", arrowData->GetSize())("operation_id", writeOperation->GetIdentifier())(
         "in_flight", Counters.GetWritesMonitor()->GetWritesInFlight())("size_in_flight", Counters.GetWritesMonitor()->GetWritesSizeInFlight());
     Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize());
 

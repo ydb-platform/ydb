@@ -10,7 +10,7 @@ std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBui
     auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(LocalPathId, WriteData.GetWriteMeta().GetLockIdOptional());
     request->TaskIdentifier = GetTaskId();
     request->ReadToSnapshot = Snapshot;
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "restore_start")("count", IncomingData ? IncomingData->num_rows() : 0)(
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "restore_start")("count", IncomingData ? IncomingData->num_rows() : 0)(
         "task_id", WriteData.GetWriteMeta().GetId());
     auto pkData = NArrow::TColumnOperator().VerifyIfAbsent().Extract(IncomingData, Context.GetActualSchema()->GetPKColumnNames());
     request->RangesFilter = TPKRangesFilter::BuildFromRecordBatchLines(pkData, false);

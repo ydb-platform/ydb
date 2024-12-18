@@ -80,7 +80,8 @@ void TActor::Bootstrap(const TActorContext& /*ctx*/) {
     if (!CheckActivity()) {
         return;
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "start_restore")("tablet_actor_id", RestoreTask->GetTabletActorId())("this", (ui64)this);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "start_restore")("tablet_actor_id", RestoreTask->GetTabletActorId())(
+        "this", (ui64)this);
     auto evStart = RestoreTask->BuildRequestInitiator();
     Send(RestoreTask->GetTabletActorId(), evStart.release(), NActors::IEventHandle::FlagTrackDelivery);
     LastAck = TMonotonic::Now();
@@ -96,11 +97,11 @@ bool TActor::CheckActivity() {
         return true;
     }
     AbortedFlag = true;
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "restoring_cancelled_from_operation");
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "restoring_cancelled_from_operation");
     SwitchStage(std::nullopt, EStage::Finished);
     RestoreTask->OnError("restore task aborted through operation cancelled");
     PassAway();
     return false;
 }
 
-}
+}   // namespace NKikimr::NOlap::NDataReader

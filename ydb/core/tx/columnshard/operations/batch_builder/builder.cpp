@@ -35,7 +35,6 @@ TConclusionStatus TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*t
     }
     Context.GetWritingCounters()->OnIncomingData(NArrow::GetBatchDataSize(*batchConclusion));
 
-    TMemoryProfileGuard mpg8("TBuildBatchesTask(PrepareForModification)");
     auto preparedConclusion =
         Context.GetActualSchema()->PrepareForModification(batchConclusion.DetachResult(), WriteData.GetWriteMeta().GetModificationType());
     if (preparedConclusion.IsFail()) {

@@ -134,7 +134,6 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
         return TConclusionStatus::Fail("not enough pk fields");
     }
     auto batch = NArrow::SortBatch(batchConclusion.DetachResult(), pkColumns, true);
-    batch = NArrow::ReallocateBatch(batch);
     Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, GetIndexInfo().GetPrimaryKey()));
     return batch;
 }

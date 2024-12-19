@@ -309,8 +309,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
 
     void CleanupActors(const TActorContext& ctx);
     void BecomeBroken(const TActorContext& ctx);
-    void SwitchToWork(const TActorContext& ctx);
-    bool TrySwitchToWork(const TActorContext& ctx);
+    void TrySwitchToWork(const TActorContext& ctx);
 
     bool IsAnyChannelYellowStop() const {
         return Executor()->GetStats().IsAnyChannelYellowStop;

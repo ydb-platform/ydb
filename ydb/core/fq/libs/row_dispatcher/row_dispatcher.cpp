@@ -773,7 +773,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(ev->Get()->Record.GetSource().GetReadGroup()));
     topicGroup->GetCounter("StartSession", true)->Inc();
 
-    LWPROBE(StartSession, ev->Sender.ToString(), ev->Get()->Record.GetPartitionId(), ev->Get()->Record.GetQueryId(), ev->Get()->Record.ByteSizeLong());
+    LWPROBE(StartSession, ev->Sender.ToString(), ev->Get()->Record.GetQueryId(), ev->Get()->Record.ByteSizeLong());
 
     NodesTracker.AddNode(ev->Sender.NodeId());
     auto it = Consumers.find(ev->Sender);
@@ -897,7 +897,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
         LOG_ROW_DISPATCHER_WARN("Ignore TEvStopSession from " << ev->Sender);
         return;
     }
-    LWPROBE(StopSession, ev->Sender.ToString(), ev->Get()->Record.GetPartitionId(), it->second->QueryId, ev->Get()->Record.ByteSizeLong());
+    LWPROBE(StopSession, ev->Sender.ToString(), it->second->QueryId, ev->Get()->Record.ByteSizeLong());
     LOG_ROW_DISPATCHER_DEBUG("Received TEvStopSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() << " query id " << it->second->QueryId);
     if (!CheckSession(it->second, ev)) {
         return;
@@ -956,7 +956,7 @@ void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbea
         return;
     }
     auto& sessionInfo = it->second;
-    LWPROBE(PrivateHeartbeat, ev->Sender.ToString(), sessionInfo->PartitionId, sessionInfo->QueryId, sessionInfo->Generation);
+    LWPROBE(PrivateHeartbeat, ev->Sender.ToString(), sessionInfo->QueryId, sessionInfo->Generation);
 
     bool needSend = sessionInfo->EventsQueue.Heartbeat();
     if (needSend) {
@@ -1000,11 +1000,11 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
         LOG_ROW_DISPATCHER_WARN("Ignore (no consumer) TEvSessionError from " << ev->Sender << " to " << ev->Get()->ReadActorId);
         return;
     }
-    LWPROBE(SessionError, ev->Sender.ToString(), ev->Get()->ReadActorId.ToString(), ev->Get()->Record.GetPartitionId(), it->second->QueryId, it->second->Generation, ev->Get()->Record.ByteSizeLong());
+    LWPROBE(SessionError, ev->Sender.ToString(), ev->Get()->ReadActorId.ToString(), it->second->QueryId, it->second->Generation, ev->Get()->Record.ByteSizeLong());
     ++*Metrics.ErrorsCount;
     LOG_ROW_DISPATCHER_TRACE("Forward TEvSessionError from " << ev->Sender << " to " << ev->Get()->ReadActorId << " query id " << it->second->QueryId);
     it->second->EventsQueue.Send(ev->Release().Release(), it->second->Generation);
-    DeleteConsumer(key);
+    DeleteConsumer(ev->Get()->ReadActorId);
 }
 
 void TRowDispatcher::Handle(NFq::TEvPrivate::TEvUpdateMetrics::TPtr&) {
@@ -1089,7 +1089,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev
                 stat.Common.RestartSessionByOffsets,
                 stat.Common.ReadEvents,
                 stat.Common.LastReadedOffset);
-    TopicSessionKey sessionKey{key.ReadGroup, key.Endpoint, key.Database, key.TopicPath, key.PartitionId};
+    TTopicSessionKey sessionKey{key.ReadGroup, key.Endpoint, key.Database, key.TopicPath, key.PartitionId};
 
     auto sessionsIt = TopicSessions.find(sessionKey);
     if (sessionsIt == TopicSessions.end()) {

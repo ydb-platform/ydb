@@ -41,8 +41,8 @@
         NAMES("sender", "coordinatorGeneration", "coordinatorActor")) \
     PROBE(StartSession, \
         GROUPS(), \
-        TYPES(TString, ui32, TString, ui64), \
-        NAMES("sender", "partitionId", "queryId", "size")) \
+        TYPES(TString, TString, ui64), \
+        NAMES("sender", "queryId", "size")) \
     PROBE(GetNextBatch, \
         GROUPS(), \
         TYPES(TString, ui32, TString, ui64), \
@@ -53,16 +53,16 @@
         NAMES("sender", "partitionId", "queryId", "size")) \
     PROBE(StopSession, \
         GROUPS(), \
-        TYPES(TString, ui32, TString, ui64), \
-        NAMES("sender", "partitionId", "queryId", "size")) \
+        TYPES(TString, TString, ui64), \
+        NAMES("sender", "queryId", "size")) \
     PROBE(TryConnect, \
         GROUPS(), \
         TYPES(TString, ui32), \
         NAMES("sender", "nodeId")) \
     PROBE(PrivateHeartbeat, \
         GROUPS(), \
-        TYPES(TString, ui32, TString, ui64), \
-        NAMES("sender", "partitionId", "queryId", "generation")) \
+        TYPES(TString, TString, ui64), \
+        NAMES("sender", "queryId", "generation")) \
     PROBE(NewDataArrived, \
         GROUPS(), \
         TYPES(TString, TString, TString, ui64, ui64), \
@@ -73,8 +73,8 @@
         NAMES("sender", "readActor", "queryId", "generation", "size")) \
     PROBE(SessionError, \
         GROUPS(), \
-        TYPES(TString, TString, ui32, TString, ui64, ui64), \
-        NAMES("sender", "readActor", "partitionId","queryId", "generation", "size")) \
+        TYPES(TString, TString, TString, ui64, ui64), \
+        NAMES("sender", "readActor", "queryId", "generation", "size")) \
     PROBE(Statistics, \
         GROUPS(), \
         TYPES(TString, TString, ui32, TString, ui64, ui64), \

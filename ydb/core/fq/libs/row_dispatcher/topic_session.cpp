@@ -683,7 +683,7 @@ void TTopicSession::StartClientSession(TClientsInfo& info) {
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto offset = GetOffset(ev->Get()->Record);
     const auto& source = ev->Get()->Record.GetSource();
-    LOG_ROW_DISPATCHER_INFO("New client: read actor id " << ev->Sender.ToString() << ", predicate: '" << source.GetPredicate() << "', offset: " << ev->Get()->Record.GetOffset());
+    LOG_ROW_DISPATCHER_INFO("New client: read actor id " << ev->Sender.ToString() << ", predicate: '" << source.GetPredicate());
 
     if (!CheckNewClient(ev)) {
         return;

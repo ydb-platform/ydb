@@ -91,24 +91,6 @@ struct TEvLatencyReport : public TEventLocal<TEvLatencyReport, TEvBlobStorage::E
     {}
 };
 
-struct TNodeLayoutInfo : TThrRefBase {
-    // indexed by NodeId
-    TNodeLocation SelfLocation;
-    TVector<TNodeLocation> LocationPerOrderNumber;
-
-    TNodeLayoutInfo(const TNodeLocation& selfLocation, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
-            std::unordered_map<ui32, TNodeLocation>& map)
-        : SelfLocation(selfLocation)
-        , LocationPerOrderNumber(info->GetTotalVDisksNum())
-    {
-        for (ui32 i = 0; i < LocationPerOrderNumber.size(); ++i) {
-            LocationPerOrderNumber[i] = map[info->GetActorId(i).NodeId()];
-        }
-    }
-};
-
-using TNodeLayoutInfoPtr = TIntrusivePtr<TNodeLayoutInfo>;
-
 inline TStoragePoolCounters::EHandleClass HandleClassToHandleClass(NKikimrBlobStorage::EGetHandleClass handleClass) {
     switch (handleClass) {
         case NKikimrBlobStorage::FastRead:
@@ -545,7 +527,7 @@ struct TBlobStorageProxyParameters {
     TBlobStorageProxyControlWrappers Controls;
 };
 
-IActor* CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>&& info,
+IActor* CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>&& info, TNodeLayoutInfoPtr nodeLayoutInfo,
     bool forceWaitAllDrives, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
     TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters, const TBlobStorageProxyParameters& params);
 

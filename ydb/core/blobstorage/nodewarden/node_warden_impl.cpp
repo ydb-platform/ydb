@@ -82,6 +82,7 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(NIncrHuge::TEvIncrHugeInit, HandleIncrHugeInit);
 
         hFunc(TEvInterconnect::TEvNodeInfo, Handle);
+        hFunc(TEvInterconnect::TEvNodesInfo, Handle);
 
         hFunc(TEvTabletPipe::TEvClientConnected, Handle);
         hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
@@ -417,6 +418,7 @@ void TNodeWarden::Bootstrap() {
     EstablishPipe();
 
     Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(LocalNodeId));
+    Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
 
     if (Cfg->IsCacheEnabled()) {
         TActivationContext::Schedule(TDuration::Seconds(5), new IEventHandle(TEvPrivate::EvReadCache, 0, SelfId(), {}, nullptr, 0));
@@ -481,6 +483,21 @@ void TNodeWarden::HandleReadCache() {
 void TNodeWarden::Handle(TEvInterconnect::TEvNodeInfo::TPtr ev) {
     if (const auto& node = ev->Get()->Node) {
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(node->Location));
+    }
+}
+
+void TNodeWarden::Handle(TEvInterconnect::TEvNodesInfo::TPtr ev) {
+    NodeLocationMap.clear();
+    for (const auto& info : ev->Get()->Nodes) {
+        NodeLocationMap.emplace(info.NodeId, std::move(info.Location));
+    }
+    for (auto& [groupId, group] : Groups) {
+        if (group.Info && group.Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
+            group.NodeLayoutInfo = MakeIntrusive<TNodeLayoutInfo>(NodeLocationMap[LocalNodeId], group.Info, NodeLocationMap);
+            if (group.ProxyId) {
+                Send(group.ProxyId, new TEvBlobStorage::TEvConfigureProxy(group.Info, group.NodeLayoutInfo));
+            }
+        }
     }
 }
 

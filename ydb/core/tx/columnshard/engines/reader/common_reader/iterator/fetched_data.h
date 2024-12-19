@@ -1,7 +1,9 @@
 #pragma once
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
@@ -13,7 +15,6 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
-#include <ydb/core/base/appdata.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
@@ -249,4 +250,4 @@ public:
     }
 };
 
-}   // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap::NReader::NCommon

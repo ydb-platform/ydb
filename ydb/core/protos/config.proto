@@ -12,6 +12,7 @@ import "ydb/core/protos/bootstrap.proto";
 import "ydb/core/protos/cms.proto";
 import "ydb/core/protos/config_units.proto";
 import "ydb/core/protos/counters_schemeshard.proto";
+import "ydb/core/protos/data_integrity_trails.proto";
 import "ydb/core/protos/datashard_config.proto";
 import "ydb/core/protos/drivemodel.proto";
 import "ydb/core/protos/feature_flags.proto";
@@ -2132,6 +2133,7 @@ message TAppConfig {
     optional TShutdownConfig ShutdownConfig = 84;
     optional TPrioritiesQueueConfig CompPrioritiesConfig = 85;
     optional TSelfManagementConfig SelfManagementConfig = 86;
+    optional NKikimrProto.TDataIntegrityTrailsConfig DataIntegrityTrailsConfig = 87;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

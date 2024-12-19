@@ -372,7 +372,7 @@ public:
         LOG_ROW_DISPATCHER_DEBUG("Add client with id " << client->GetClientId());
 
         if (const auto clientOffset = client->GetNextMessageOffset()) {
-            if (CurrentOffset && *CurrentOffset > *clientOffset) {
+            if (Parser && CurrentOffset && *CurrentOffset > *clientOffset) {
                 LOG_ROW_DISPATCHER_DEBUG("Parser was flushed due to new historical offset " << *clientOffset << "(previous parser offset: " << *CurrentOffset << ")");
                 Parser->Refresh(true);
             }

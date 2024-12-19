@@ -90,12 +90,19 @@ class LoadSuiteBase:
         cmd = f"ulimit -n 100500;unified_agent select {time_cmd} -s {{}}"
         exec_kikimr = [];
         exec_start = [];
+        ssh_cmd = ['ssh']
+        ssh_user = os.getenv('SSH_USER')
+        if ssh_user is not None:
+            ssh_cmd += ['-l', ssh_user]
+        ssh_key_file = os.getenv('SSH_KEY_FILE')
+        if ssh_key_file is not None:
+            ssh_cmd += ['-i', ssh_key_file]
         for host in hosts:
             exec_kikimr.append(
-                yatest.common.execute(['ssh', host, cmd.format('kikimr')], wait=False)
+                yatest.common.execute(ssh_cmd + [host, cmd.format('kikimr')], wait=False)
             )
             exec_start.append(
-                yatest.common.execute(['ssh', host, cmd.format('kikimr-start')], wait=False)
+                yatest.common.execute(ssh_cmd + [host, cmd.format('kikimr-start')], wait=False)
             )
 
         error_log = ''

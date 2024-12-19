@@ -1561,13 +1561,15 @@ void TOperation::ReadyToNotifyPart(TSubTxId partId) {
 }
 
 bool TOperation::IsReadyToNotify(const TActorContext& ctx) const {
+    bool result = IsReadyToNotify();
+
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TOperation IsReadyToNotify"
+                "TOperation IsReadyToNotify " << result
                     << ", TxId: " << TxId
                     << ", ready parts: " << ReadyToNotifyParts.size() << "/" << Parts.size()
                     << ", is published: " << (IsPublished() ? "true" : "false"));
 
-    return IsReadyToNotify();
+    return result;
 }
 
 bool TOperation::IsReadyToNotify() const {
@@ -1597,21 +1599,25 @@ void TOperation::DoNotify(TSchemeShard*, TSideEffects& sideEffects, const TActor
 }
 
 bool TOperation::IsReadyToDone(const TActorContext& ctx) const {
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TOperation IsReadyToDone "
-                    << " TxId: " << TxId
-                    << " ready parts: " << DoneParts.size() << "/" << Parts.size());
+    bool result = DoneParts.size() == Parts.size();
 
-    return DoneParts.size() == Parts.size();
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TOperation IsReadyToDone " << result
+                    << ", TxId: " << TxId
+                    << ", ready parts: " << DoneParts.size() << "/" << Parts.size());
+
+    return result;
 }
 
 bool TOperation::IsReadyToPropose(const TActorContext& ctx) const {
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TOperation IsReadyToPropose "
-                    << ", TxId: " << TxId
-                    << " ready parts: " << ReadyToProposeParts.size() << "/" << Parts.size());
+    bool result = IsReadyToPropose();
 
-    return IsReadyToPropose();
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TOperation IsReadyToPropose " << result
+                    << ", TxId: " << TxId
+                    << ", ready parts: " << ReadyToProposeParts.size() << "/" << Parts.size());
+
+    return result;
 }
 
 bool TOperation::IsReadyToPropose() const {

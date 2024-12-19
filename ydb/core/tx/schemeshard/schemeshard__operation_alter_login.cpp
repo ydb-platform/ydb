@@ -8,14 +8,44 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-class TAlterLogin: public TSubOperationBase {
+class TAlterLogin: public TSubOperation {
+    static TTxState::ETxState NextState() {
+        return TTxState::Done;
+    }
+
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+        switch (state) {
+        case TTxState::Waiting:
+            return TTxState::Done;
+        default:
+            return TTxState::Invalid;
+        }
+    }
+
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+        switch (state) {
+        case TTxState::Waiting:
+        case TTxState::Done:
+            return MakeHolder<TDone>(OperationId);
+        default:
+            return nullptr;
+        }
+    }
+
 public:
-    using TSubOperationBase::TSubOperationBase;
+    using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         NIceDb::TNiceDb db(context.GetTxc().DB); // do not track is there are direct writes happen
         TTabletId ssId = context.SS->SelfTabletId();
+
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TAlterLogin Propose"
+            << ", opId: " << OperationId
+            << ", at schemeshard: " << ssId);
+
         auto result = MakeHolder<TProposeResponse>(OperationId.GetTxId(), ssId);
+
         if (!AppData()->AuthConfig.GetEnableLoginAuthentication()) {
             result->SetStatus(NKikimrScheme::StatusPreconditionFailed, "Login authentication is disabled");
         } else if (Transaction.GetWorkingDir() != context.SS->LoginProvider.Audience) {
@@ -169,7 +199,14 @@ public:
             context.OnComplete.PublishToSchemeBoard(OperationId, subDomainPathId);
         }
 
-        context.OnComplete.DoneOperation(OperationId);
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TAlterLogin Propose"
+            << " " << result->Record.GetStatus()
+            << ", opId: " << OperationId
+            << ", at schemeshard: " << ssId);
+
+        SetState(NextState());
+        result->SetStatus(NKikimrScheme::StatusAccepted);
         return result;
     }
 
@@ -177,12 +214,14 @@ public:
         Y_ABORT("no AbortPropose for TAlterLogin");
     }
 
-    bool ProgressState(TOperationContext&) override {
-        Y_ABORT("no progress state for TAlterLogin");
-    }
+    void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TAlterLogin AbortUnsafe"
+                         << ", opId: " << OperationId
+                         << ", forceDropId: " << forceDropTxId
+                         << ", at schemeshard: " << context.SS->TabletID());
 
-    void AbortUnsafe(TTxId, TOperationContext&) override {
-        Y_ABORT("no AbortUnsafe for TAlterLogin");
+        context.OnComplete.DoneOperation(OperationId);
     }
 
     NLogin::TLoginProvider::TBasicResponse RemoveUser(TOperationContext& context, const NKikimrSchemeOp::TLoginRemoveUser& removeUser, NIceDb::TNiceDb& db) {

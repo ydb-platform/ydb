@@ -13,6 +13,7 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
+#include <ydb/core/base/appdata.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 

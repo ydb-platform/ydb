@@ -283,6 +283,7 @@ void TTiersManager::EnablePathId(const ui64 pathId, const THashSet<TString>& use
     auto& tierRefs = UsedTiers[pathId];
     tierRefs.clear();
     for (const TString& tierName : usedTiers) {
+        AFL_VERIFY(tierName == CanonizePath(tierName))("current", tierName)("canonized", CanonizePath(tierName));
         tierRefs.emplace_back(tierName, *this);
         if (!TierConfigs.contains(tierName)) {
             const auto& actorContext = NActors::TActivationContext::AsActorContext();
@@ -307,6 +308,7 @@ void TTiersManager::UpdateSecretsSnapshot(std::shared_ptr<NMetadata::NSecret::TS
 
 void TTiersManager::UpdateTierConfig(const NTiers::TTierConfig& config, const TString& tierName, const bool notifyShard) {
     AFL_INFO(NKikimrServices::TX_TIERING)("event", "update_tier_config")("name", tierName)("tablet", TabletId);
+    AFL_VERIFY(tierName == CanonizePath(tierName))("current", tierName)("canonized", CanonizePath(tierName));
     TierConfigs[tierName] = config;
     OnConfigsUpdated(notifyShard);
 }

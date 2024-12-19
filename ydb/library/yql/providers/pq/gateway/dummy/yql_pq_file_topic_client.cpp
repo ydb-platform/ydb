@@ -229,7 +229,7 @@ std::shared_ptr<NYdb::NTopic::IReadSession> TFileTopicClient::CreateReadSession(
     Y_ENSURE(!settings.Topics_.empty());
     const auto& topic = settings.Topics_.front();
     TString topicPath = topic.Path_;
-    Y_ENSURE(topic.PartitionIds_.size() == 1);
+    Y_ENSURE(topic.PartitionIds_.size() >= 1);
     ui64 partitionId = topic.PartitionIds_.front();
     auto topicsIt = Topics_.find(make_pair("pq", topicPath));
     Y_ENSURE(topicsIt != Topics_.end());

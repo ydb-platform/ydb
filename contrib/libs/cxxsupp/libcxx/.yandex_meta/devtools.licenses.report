@@ -3437,7 +3437,7 @@ BELONGS ya.make
         src/bind.cpp [5:5]
         src/call_once.cpp [5:5]
         src/charconv.cpp [5:5]
-        src/charconv.cpp [41:41]
+        src/charconv.cpp [32:32]
         src/chrono.cpp [5:5]
         src/condition_variable.cpp [5:5]
         src/condition_variable_destructor.cpp [5:5]
@@ -4565,7 +4565,7 @@ BELONGS ya.make
         src/bind.cpp [5:5]
         src/call_once.cpp [5:5]
         src/charconv.cpp [5:5]
-        src/charconv.cpp [41:41]
+        src/charconv.cpp [32:32]
         src/chrono.cpp [5:5]
         src/condition_variable.cpp [5:5]
         src/condition_variable_destructor.cpp [5:5]
@@ -4735,7 +4735,7 @@ BELONGS ya.make
 
 KEEP     BSL-1.0              f045c34c13cd14be1bd7b990f95c366c
 BELONGS ya.make
-FILE_INCLUDE include/any found in files: src/include/ryu/common.h at line 17, src/include/ryu/d2fixed.h at line 17, src/include/ryu/d2fixed_full_table.h at line 17, src/include/ryu/d2s.h at line 17, src/include/ryu/d2s_full_table.h at line 17, src/include/ryu/d2s_intrinsics.h at line 17, src/include/ryu/digit_table.h at line 17, src/include/ryu/f2s.h at line 17, src/include/ryu/ryu.h at line 19, src/ryu/d2fixed.cpp at line 17, src/ryu/d2s.cpp at line 17, src/ryu/f2s.cpp at line 17
+FILE_INCLUDE include/any found in files: src/include/ryu/common.h at line 17, src/include/ryu/d2fixed.h at line 17, src/include/ryu/d2fixed_full_table.h at line 17, src/include/ryu/d2s.h at line 17, src/include/ryu/d2s_full_table.h at line 17, src/include/ryu/d2s_intrinsics.h at line 17, src/include/ryu/digit_table.h at line 17, src/include/ryu/f2s.h at line 17, src/include/ryu/ryu.h at line 18, src/ryu/d2fixed.cpp at line 17, src/ryu/d2s.cpp at line 17, src/ryu/f2s.cpp at line 17
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: BSL-1.0
@@ -4751,7 +4751,7 @@ FILE_INCLUDE include/any found in files: src/include/ryu/common.h at line 17, sr
         src/include/ryu/d2s_intrinsics.h [15:37]
         src/include/ryu/digit_table.h [15:37]
         src/include/ryu/f2s.h [15:37]
-        src/include/ryu/ryu.h [17:39]
+        src/include/ryu/ryu.h [16:38]
         src/ryu/d2fixed.cpp [15:37]
         src/ryu/d2s.cpp [15:37]
         src/ryu/f2s.cpp [15:37]

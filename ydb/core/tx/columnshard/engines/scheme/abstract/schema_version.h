@@ -12,12 +12,6 @@ private:
     YDB_READONLY_DEF(ui64, Version);
 
 public:
-    struct THash {
-        ui64 operator()(const TSchemaVersionId& object) const {
-            return CombineHashes(object.PresetId, object.Version);
-        }
-    };
-
     bool operator==(const TSchemaVersionId& other) const {
         return std::tie(PresetId, Version) == std::tie(other.PresetId, other.Version);
     }

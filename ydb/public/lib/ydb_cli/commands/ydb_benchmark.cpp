@@ -42,7 +42,7 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
         .AppendTo(&QuerySettings).Hidden();
     config.Opts->AddLongOption("query-prefix", "Query prefix.\nEvery prefix is a line that will be added to the beginning of each query. For multiple prefixes lines use this option several times.")
         .DefaultValue("")
-        .AppendTo(&QuerySettings).Hidden();
+        .AppendTo(&QuerySettings);
     config.Opts->MutuallyExclusive("query-prefix", "query-settings");
     auto fillTestCases = [](TStringBuf line, std::function<void(ui32)>&& op) {
         for (const auto& token : StringSplitter(line).Split(',').SkipEmpty()) {

@@ -542,6 +542,19 @@ Y_UNIT_TEST_SUITE(TOlap) {
             NLs::HasColumnTableTtlSettingsVersion(1),
             NLs::HasColumnTableTtlSettingsDisabled()));
 
+        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
+            Name: "Tier1"
+            SourceType: "ObjectStorage"
+            Location: "http://fake.fake/fake"
+            Auth: {
+                Aws: {
+                    AwsAccessKeyIdSecretName: "secret"
+                    AwsSecretAccessKeySecretName: "secret"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
         TString tableSchema3 = R"(
             Name: "Table3"
             ColumnShardCount: 1
@@ -552,7 +565,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Tiers: {
                         ApplyAfterSeconds: 360
                         EvictToExternalStorage {
-                            Storage: "Tier1"
+                            Storage: "/MyRoot/Tier1"
                         }
                     }
                 }
@@ -566,7 +579,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             NLs::HasColumnTableSchemaPreset("default"),
             NLs::HasColumnTableSchemaVersion(1),
             NLs::HasColumnTableTtlSettingsVersion(1),
-            NLs::HasColumnTableTtlSettingsTier("timestamp", TDuration::Seconds(360), "Tier1")));
+            NLs::HasColumnTableTtlSettingsTier("timestamp", TDuration::Seconds(360), "/MyRoot/Tier1")));
 
         TString tableSchema4 = R"(
             Name: "Table4"
@@ -578,7 +591,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Tiers: {
                         ApplyAfterSeconds: 3600000000
                         EvictToExternalStorage {
-                            Storage: "Tier1"
+                            Storage: "/MyRoot/Tier1"
                         }
                     }
                 }
@@ -722,6 +735,19 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
+            Name: "Tier1"
+            SourceType: "ObjectStorage"
+            Location: "http://fake.fake/fake"
+            Auth: {
+                Aws: {
+                    AwsAccessKeyIdSecretName: "secret"
+                    AwsSecretAccessKeySecretName: "secret"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
         TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
             Name: "ColumnTable"
             AlterTtlSettings {
@@ -731,7 +757,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Tiers: {
                         ApplyAfterSeconds: 3600000000
                         EvictToExternalStorage {
-                            Storage: "Tier1"
+                            Storage: "/MyRoot/Tier1"
                         }
                     }
                 }

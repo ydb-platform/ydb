@@ -1,5 +1,8 @@
 #include "validator.h"
+
 #include <ydb/core/tx/schemeshard/common/validation.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/tiering/tier/object.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -15,7 +18,7 @@ static inline NScheme::TTypeInfo GetType(const TOlapColumnsDescription::TColumn&
 
 }
 
-bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& ttl, const TOlapIndexesDescription& indexes, const THashMap<ui32, TOlapColumnsDescription::TColumn>& sourceColumns, const THashMap<ui32, TOlapColumnsDescription::TColumn>& alterColumns, const THashMap<TString, ui32>& colName2Id, IErrorCollector& errors) {
+bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& ttl, const TOlapIndexesDescription& indexes, const THashMap<ui32, TOlapColumnsDescription::TColumn>& sourceColumns, const THashMap<ui32, TOlapColumnsDescription::TColumn>& alterColumns, const THashMap<TString, ui32>& colName2Id, const TOperationContext& context, IErrorCollector& errors) {
     const TString colName = ttl.GetColumnName();
 
     auto it = colName2Id.find(colName);
@@ -41,11 +44,6 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
 
     if (ttl.HasExpireAfterBytes()) {
         errors.AddError("TTL with eviction by size is not supported yet");
-        return false;
-    }
-
-    if (!ttl.HasExpireAfterSeconds() && ttl.GetTiers().empty()) {
-        errors.AddError("TTL without eviction time");
         return false;
     }
 
@@ -94,6 +92,32 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
         if (!correct) {
             errors.AddError("Haven't MAX-index for TTL column and TTL column is not first column in primary key");
             return false;
+        }
+    }
+
+    for (const auto& tier : ttl.GetTiers()) {
+        if (!tier.HasEvictToExternalStorage()) {
+            continue;
+        }
+        const TString& tierPathString = tier.GetEvictToExternalStorage().GetStorage();
+        TPath tierPath = TPath::Resolve(tierPathString, context.SS);
+        if (!tierPath.IsResolved() || tierPath.IsDeleted() || tierPath.IsUnderDeleting()) {
+            errors.AddError("Object not found: " + tierPathString);
+            return false;
+        }
+        if (!tierPath->IsExternalDataSource()) {
+            errors.AddError("Not an external data source: " + tierPathString);
+            return false;
+        }
+        {
+            auto* findExternalDataSource = context.SS->ExternalDataSources.FindPtr(tierPath->PathId);
+            AFL_VERIFY(findExternalDataSource);
+            NKikimrSchemeOp::TExternalDataSourceDescription proto;
+            (*findExternalDataSource)->FillProto(proto);
+            if (auto status = NColumnShard::NTiers::TTierConfig().DeserializeFromProto(proto); status.IsFail()) {
+                errors.AddError("Cannot use external data source \"" + tierPathString + "\" for tiering: " + status.GetErrorMessage());
+                return false;
+            }
         }
     }
 

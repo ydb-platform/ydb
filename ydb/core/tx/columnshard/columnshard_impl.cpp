@@ -46,7 +46,6 @@
 #include <ydb/core/tx/priorities/usage/abstract.h>
 #include <ydb/core/tx/priorities/usage/events.h>
 #include <ydb/core/tx/priorities/usage/service.h>
-#include <ydb/core/tx/tiering/external_data.h>
 #include <ydb/core/tx/tiering/manager.h>
 
 #include <ydb/services/metadata/service.h>
@@ -398,7 +397,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
         tableVerProto.SetSchemaPresetId(preset.GetId());
 
         if (TablesManager.RegisterSchemaPreset(preset, db)) {
-            TablesManager.AddSchemaVersion(tableProto.GetSchemaPreset().GetId(), version, tableProto.GetSchemaPreset().GetSchema(), db, Tiers);
+            TablesManager.AddSchemaVersion(tableProto.GetSchemaPreset().GetId(), version, tableProto.GetSchemaPreset().GetSchema(), db);
         }
     } else {
         Y_ABORT_UNLESS(tableProto.HasSchema(), "Tables has either schema or preset");
@@ -423,7 +422,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     tableVerProto.SetSchemaPresetVersionAdj(tableProto.GetSchemaPresetVersionAdj());
 
-    TablesManager.AddTableVersion(pathId, version, tableVerProto, schema, db, Tiers);
+    TablesManager.AddTableVersion(pathId, version, tableVerProto, schema, db);
     InsertTable->RegisterPathInfo(pathId);
 
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, TablesManager.GetTables().size());
@@ -447,7 +446,7 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     std::optional<NKikimrSchemeOp::TColumnTableSchema> schema;
     if (alterProto.HasSchemaPreset()) {
         tableVerProto.SetSchemaPresetId(alterProto.GetSchemaPreset().GetId());
-        TablesManager.AddSchemaVersion(alterProto.GetSchemaPreset().GetId(), version, alterProto.GetSchemaPreset().GetSchema(), db, Tiers);
+        TablesManager.AddSchemaVersion(alterProto.GetSchemaPreset().GetId(), version, alterProto.GetSchemaPreset().GetSchema(), db);
     } else if (alterProto.HasSchema()) {
         schema = alterProto.GetSchema();
     }
@@ -464,7 +463,7 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     ActivateTiering(pathId, usedTiers);
 
     tableVerProto.SetSchemaPresetVersionAdj(alterProto.GetSchemaPresetVersionAdj());
-    TablesManager.AddTableVersion(pathId, version, tableVerProto, schema, db, Tiers);
+    TablesManager.AddTableVersion(pathId, version, tableVerProto, schema, db);
 }
 
 void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProto, const NOlap::TSnapshot& version,
@@ -501,7 +500,7 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
         if (!TablesManager.HasPreset(presetProto.GetId())) {
             continue; // we don't update presets that we don't use
         }
-        TablesManager.AddSchemaVersion(presetProto.GetId(), version, presetProto.GetSchema(), db, Tiers);
+        TablesManager.AddSchemaVersion(presetProto.GetId(), version, presetProto.GetSchema(), db);
     }
 }
 
@@ -1582,18 +1581,10 @@ void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs:
     Execute(new TTxRemoveSharedBlobs(this, blobs, NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()), ev->Get()->Record.GetStorageId()), ctx);
 }
 
-void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
-    Y_ABORT_UNLESS(Tiers);
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "TEvRefreshSubscriberData")("snapshot", ev->Get()->GetSnapshot()->SerializeToString());
-    Tiers->TakeConfigs(ev->Get()->GetSnapshot(), nullptr);
-}
-
 void TColumnShard::ActivateTiering(const ui64 pathId, const THashSet<TString>& usedTiers) {
     AFL_VERIFY(Tiers);
     if (!usedTiers.empty()) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "activate_tiering")("path_id", pathId)("tiers", JoinStrings(usedTiers.begin(), usedTiers.end(), ","));
-    }
-    if (!usedTiers.empty()) {
         Tiers->EnablePathId(pathId, usedTiers);
     } else {
         Tiers->DisablePathId(pathId);
@@ -1605,7 +1596,7 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
     const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())(
         "self_id", SelfId())("process", "Enqueue")("ev", ev->GetTypeName());
     switch (ev->GetTypeRewrite()) {
-        HFunc(TEvPrivate::TEvTieringModified, Handle);
+        HFunc(TEvPrivate::TEvTieringModified, HandleInit);
         HFunc(TEvPrivate::TEvNormalizerResult, Handle);
         HFunc(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors, Handle);
         default:
@@ -1616,10 +1607,6 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
 
 void TColumnShard::OnTieringModified(const std::optional<ui64> pathId) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified")("path_id", pathId);
-    if (!Tiers->IsReady()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_reload_tiering")("reason", "manager_not_ready")("path_id", pathId);
-        return;
-    }
     StoragesManager->OnTieringModified(Tiers);
     if (TablesManager.HasPrimaryIndex()) {
         if (pathId) {

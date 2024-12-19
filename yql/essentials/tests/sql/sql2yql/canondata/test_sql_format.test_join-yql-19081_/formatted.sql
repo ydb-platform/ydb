@@ -1,8 +1,8 @@
 USE plato;
 
-PRAGMA yt.JoinMergeTablesLimit = "100";
-PRAGMA yt.MapJoinLimit = "10M";
-PRAGMA yt.MaxReplicationFactorToFuseOperations = "1";
+PRAGMA yt.JoinMergeTablesLimit = '100';
+PRAGMA yt.MapJoinLimit = '10M';
+PRAGMA yt.MaxReplicationFactorToFuseOperations = '1';
 
 SELECT
     a.key,

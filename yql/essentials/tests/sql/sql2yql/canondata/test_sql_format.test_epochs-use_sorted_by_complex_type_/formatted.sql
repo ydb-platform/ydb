@@ -22,5 +22,5 @@ SELECT
 FROM
     Output
 WHERE
-    key > "150"
+    key > '150'
 ;

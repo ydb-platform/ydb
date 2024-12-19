@@ -1010,6 +1010,7 @@ message TNodeWardenServiceSet {
 
         optional TSerialManagementStage.E ManagementStage = 12;
         optional TPDiskSpaceColor.E SpaceColorBorder = 13;
+        optional bool ReadOnly = 14;
     }
 
     message TVDisk {

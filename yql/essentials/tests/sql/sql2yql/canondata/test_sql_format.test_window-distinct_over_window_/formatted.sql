@@ -25,7 +25,7 @@ SELECT
         ORDER BY
             key
     ) AS count_by_key,
-    count(DISTINCT value || "force_preagg") OVER (
+    count(DISTINCT value || 'force_preagg') OVER (
         PARTITION BY
             subkey
         ORDER BY

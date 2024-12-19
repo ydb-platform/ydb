@@ -23,8 +23,9 @@ namespace {
 using namespace NKikimr;
 using namespace NYql::NDq;
 
-const ui64 TimeoutBeforeStartSessionSec = 3;
-const ui64 GrabTimeoutSec = 4 * TimeoutBeforeStartSessionSec;
+constexpr ui64 TimeoutBeforeStartSessionSec = 3;
+constexpr ui64 GrabTimeoutSec = 4 * TimeoutBeforeStartSessionSec;
+static_assert(GrabTimeoutSec <= WAIT_TIMEOUT.Seconds());
 
 class TFixture : public NTests::TBaseFixture {
 public:

@@ -2,7 +2,7 @@
 USE plato;
 
 PRAGMA DisableSimpleColumns;
-PRAGMA yt.MapJoinLimit = "1m";
+PRAGMA yt.MapJoinLimit = '1m';
 
 $subq = (
     SELECT

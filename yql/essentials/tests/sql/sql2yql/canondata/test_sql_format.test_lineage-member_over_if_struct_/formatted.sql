@@ -3,7 +3,7 @@ SELECT
     *
 FROM (
     SELECT
-        IF(key == "foo", LAG(data) OVER w, data)
+        IF(key == 'foo', LAG(data) OVER w, data)
     FROM (
         SELECT
             TableRow() AS data,

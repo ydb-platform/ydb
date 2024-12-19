@@ -1,6 +1,7 @@
 #include "datashard_impl.h"
 #include "datashard_txs.h"
 #include "datashard_locks_db.h"
+#include "memory_state_migration.h"
 #include "probes.h"
 
 #include <ydb/core/base/interconnect_channels.h>
@@ -174,6 +175,15 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     RegisterDataShardProbes();
 }
 
+TDataShard::~TDataShard() {
+    if (InMemoryRestoreActor) {
+        InMemoryRestoreActor->OnTabletDestroyed();
+    }
+    if (InMemoryStateActor) {
+        InMemoryStateActor->OnTabletDestroyed();
+    }
+}
+
 void TDataShard::OnDetach(const TActorContext &ctx) {
     Cleanup(ctx);
     LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "OnDetach: " << TabletID());
@@ -265,6 +275,13 @@ void TDataShard::Cleanup(const TActorContext& ctx) {
 }
 
 void TDataShard::Die(const TActorContext& ctx) {
+    if (InMemoryRestoreActor) {
+        InMemoryRestoreActor->OnTabletDead();
+    }
+    if (InMemoryStateActor) {
+        InMemoryStateActor->OnTabletDead();
+    }
+
     NTabletPipe::CloseAndForgetClient(SelfId(), SchemeShardPipe);
     NTabletPipe::CloseAndForgetClient(SelfId(), StateReportPipe);
     NTabletPipe::CloseAndForgetClient(SelfId(), DbStatsReportPipe);
@@ -547,7 +564,7 @@ void TDataShard::SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEven
     delayedAcks.clear();
 }
 
-void TDataShard::GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies) {
+void TDataShard::GetCleanupReplies(TOperation* op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies) {
     if (!op->HasOutputData()) {
         // There are no replies
         return;
@@ -569,6 +586,10 @@ void TDataShard::GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::
         }
     }
     expectedReadSets.clear();
+}
+
+void TDataShard::GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies) {
+    GetCleanupReplies(op.Get(), cleanupReplies);
 }
 
 void TDataShard::SendConfirmedReplies(TMonotonic ts, std::vector<std::unique_ptr<IEventHandle>>&& replies) {
@@ -1620,6 +1641,29 @@ void TDataShard::PersistSys(NIceDb::TNiceDb& db, ui64 key, bool value) const {
     db.Table<Schema::Sys>().Key(key).Update(NIceDb::TUpdate<Schema::Sys::Uint64>(value ? 1 : 0));
 }
 
+void TDataShard::PersistSys(NIceDb::TNiceDb& db, ui64 key, const TActorId& value) const {
+    char buf[sizeof(ui64) * 2];
+    WriteUnaligned<ui64>(buf, value.RawX1());
+    WriteUnaligned<ui64>(buf + sizeof(ui64), value.RawX2());
+    db.Table<Schema::Sys>().Key(key).Update(NIceDb::TUpdate<Schema::Sys::Bytes>(TString(buf, sizeof(ui64) * 2)));
+}
+
+bool TDataShard::SysGetActorId(NIceDb::TNiceDb& db, ui64 key, TActorId& value) {
+    auto rowset = db.Table<Schema::Sys>().Key(key).Select<Schema::Sys::Bytes>();
+    if (!rowset.IsReady()) {
+        return false;
+    }
+    if (rowset.IsValid()) {
+        TString buf = rowset.GetValue<Schema::Sys::Bytes>();
+        Y_ABORT_UNLESS(buf.size() == sizeof(ui64) * 2, "Unexpected TActorId value size %" PRISZT, buf.size());
+        const char* data = buf.data();
+        ui64 x1 = ReadUnaligned<ui64>(data);
+        ui64 x2 = ReadUnaligned<ui64>(data + sizeof(ui64));
+        value = TActorId(x1, x2);
+    }
+    return true;
+}
+
 void TDataShard::PersistUserTable(NIceDb::TNiceDb& db, ui64 tableId, const TUserTable& tableInfo) {
     db.Table<Schema::UserTables>().Key(tableId).Update(
         NIceDb::TUpdate<Schema::UserTables::LocalTid>(tableInfo.LocalTid),
@@ -2484,11 +2528,18 @@ void TDataShard::SendImmediateWriteResult(
     const ui64 step = version.Step;
     const ui64 observedStep = GetMaxObservedStep();
     if (step <= observedStep) {
-        SnapshotManager.PromoteImmediateWriteEdgeReplied(version);
-        if (!sessionId) {
-            Send(target, event, 0, cookie, span.GetTraceId());
+        // We avoid sending replies that would have promoted the replied edge
+        // when it's frozen. This prevents us replying and causing the next
+        // generation to potentially keep reading stale data.
+        if (Y_LIKELY(!InMemoryVarsFrozen) || version <= SnapshotManager.GetImmediateWriteEdgeReplied()) {
+            SnapshotManager.PromoteImmediateWriteEdgeReplied(version);
+            if (!sessionId) {
+                Send(target, event, 0, cookie, span.GetTraceId());
+            } else {
+                SendViaSession(sessionId, target, SelfId(), event, 0, cookie, span.GetTraceId());
+            }
         } else {
-            SendViaSession(sessionId, target, SelfId(), event, 0, cookie, span.GetTraceId());
+            span.EndError("Dropped");
         }
         return;
     }
@@ -2627,13 +2678,20 @@ void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorCo
         }
 
         if (step <= mediatorStep) {
-            if (it->second.Span) {
-                it->second.Span.Attribute("ActivateStep", std::to_string(mediatorStep));
+            // We avoid sending replies that would have promoted the replied edge
+            // when it's frozen. This prevents us replying and causing the next
+            // generation to potentially keep reading stale data.
+            if (Y_LIKELY(!InMemoryVarsFrozen) || it->first <= SnapshotManager.GetImmediateWriteEdgeReplied()) {
+                if (it->second.Span) {
+                    it->second.Span.Attribute("ActivateStep", std::to_string(mediatorStep));
+                }
+                SnapshotManager.PromoteImmediateWriteEdgeReplied(it->first);
+                SendViaSession(it->second.SessionId,
+                    it->second.Target, SelfId(), it->second.Event.Release(),
+                    0, it->second.Cookie, it->second.Span.GetTraceId());
+            } else {
+                it->second.Span.EndError("Dropped");
             }
-            SnapshotManager.PromoteImmediateWriteEdgeReplied(it->first);
-            SendViaSession(it->second.SessionId,
-                it->second.Target, SelfId(), it->second.Event.Release(),
-                0, it->second.Cookie, it->second.Span.GetTraceId());
             it = MediatorDelayedReplies.erase(it);
             continue;
         }
@@ -2690,6 +2748,12 @@ bool TDataShard::NeedMediatorStateRestored() const {
     if (!ProcessingParams) {
         // Without processing params there's nothing to restore
         // This includes the first boot before tables are initialized
+        return false;
+    }
+
+    if (InMemoryVarsRestored) {
+        // We have migrated in-memory vars from previous generations
+        // We don't need mediator state for correctness
         return false;
     }
 

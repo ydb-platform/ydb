@@ -66,9 +66,9 @@ sub-directory1-1
 
 /home/user/dump/my-directory/sub-directory2:
 
-/home/user/dump/seasons:
-data_00.csv  scheme.pb
-
 /home/user/dump/series:
-data_00.csv  scheme.pb
+data_00.csv  scheme.pb  update_feed
+
+/home/user/dump/series/update_feed:
+changefeed_description.pb  topic_description.pb
 ```

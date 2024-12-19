@@ -1,9 +1,9 @@
-PRAGMA warning("disable", "4510");
-PRAGMA CostBasedOptimizer = "Native";
+PRAGMA warning('disable', '4510');
+PRAGMA CostBasedOptimizer = 'Native';
 
 USE plato;
 
-$foo =
+$foo = (
     SELECT
         subkey,
         key,
@@ -14,11 +14,11 @@ $foo =
         subkey ASC,
         key DESC
     LIMIT 10
-;
+);
 
-$x =
+$x = (
     PROCESS $foo
-;
+);
 
 SELECT
     YQL::CostsOf($x) AS costs

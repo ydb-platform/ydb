@@ -2,18 +2,18 @@
 /* dqfile can not */
 /* yt can not */
 /* postgres can not */
-$src =
+$src = (
     SELECT
         <|column0: 1|> AS x
-;
+);
 
-$src =
+$src = (
     SELECT
         *
     FROM
         $src
         FLATTEN COLUMNS
-;
+);
 
 SELECT
     2,

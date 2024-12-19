@@ -1,6 +1,6 @@
 USE plato;
 
-PRAGMA yt.UsePartitionsByKeysForFinalAgg = "false";
+PRAGMA yt.UsePartitionsByKeysForFinalAgg = 'false';
 
 SELECT
     Pg::count(),

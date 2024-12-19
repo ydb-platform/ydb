@@ -1,7 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <yql/essentials/core/ut_common/yql_ut_common.h>
-
 #include "yql_library_compiler.h"
 
 namespace NYql {

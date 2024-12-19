@@ -1,7 +1,9 @@
 #pragma once
-#include <ydb/library/formats/arrow/protos/fields.pb.h>
-#include <ydb/library/conclusion/result.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/conclusion/result.h>
+#include <ydb/library/formats/arrow/protos/fields.pb.h>
+
+#include <arrow/type.h>
 
 namespace NKikimr::NArrow {
 
@@ -24,23 +26,25 @@ public:
         return result;
     }
 
-    template <class T>
-    std::vector<T> Apply(const std::vector<T>& fullSchema) const {
+    template <class TIterator>
+    std::vector<typename std::iterator_traits<TIterator>::value_type> Apply(TIterator begin, TIterator end) const {
+        using TValue = std::iterator_traits<TIterator>::value_type;
         if (FieldIdx.empty()) {
-            return fullSchema;
+            return {std::move(begin), std::move(end)};
         }
-        std::vector<T> fields;
+        std::vector<TValue> fields;
+        const ui64 size = end - begin;
         if (!Exclude) {
             for (auto&& i : FieldIdx) {
-                AFL_VERIFY(i < fullSchema.size());
-                fields.emplace_back(fullSchema[i]);
+                AFL_VERIFY(i < size);
+                fields.emplace_back(*(begin + i));
             }
         } else {
             auto it = FieldIdx.begin();
-            for (ui32 i = 0; i < fullSchema.size(); ++i) {
+            for (ui32 i = 0; i < size; ++i) {
                 if (it == FieldIdx.end() || i < *it) {
-                    AFL_VERIFY(i < fullSchema.size());
-                    fields.emplace_back(fullSchema[i]);
+                    AFL_VERIFY(i < size);
+                    fields.emplace_back(*(begin + i));
                 } else if (i == *it) {
                     ++it;
                 } else {

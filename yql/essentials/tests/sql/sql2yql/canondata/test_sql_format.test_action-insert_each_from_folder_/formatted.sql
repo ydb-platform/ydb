@@ -10,9 +10,9 @@ $list = (
         SELECT
             Path
         FROM
-            folder("")
+            folder('')
         WHERE
-            Type == "table" AND Path LIKE "Input%"
+            Type == 'table' AND Path LIKE 'Input%'
         ORDER BY
             Path DESC
         LIMIT 30

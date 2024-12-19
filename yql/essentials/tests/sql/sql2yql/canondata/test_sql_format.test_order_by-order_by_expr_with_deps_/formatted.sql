@@ -2,12 +2,12 @@
 /* syntax version 1 */
 USE plato;
 
-$list =
+$list = (
     SELECT
         ListSort(aggregate_list(key))
     FROM
         Input
-;
+);
 
 SELECT
     *

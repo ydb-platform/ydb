@@ -2,7 +2,7 @@
 /* postgres can not */
 USE plato;
 
-PRAGMA yt.UseNativeYtTypes = "1";
+PRAGMA yt.UseNativeYtTypes = '1';
 
 INSERT INTO Output
 SELECT
@@ -22,5 +22,5 @@ SELECT
 FROM
     Output
 WHERE
-    ToBytes(j) != ""
+    ToBytes(j) != ''
 ;

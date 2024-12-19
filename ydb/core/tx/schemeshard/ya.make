@@ -26,6 +26,7 @@ RECURSE_FOR_TESTS(
     ut_index_build
     ut_index_build_reboots
     ut_login
+    ut_login_large
     ut_move
     ut_move_reboots
     ut_olap

@@ -527,4 +527,5 @@ enum ETxTypes {
     TXTYPE_PLAN_PREDICTED_TXS = 81                        [(TxTypeOpts) = {Name: "TxPlanPredictedTxs"}];
     TXTYPE_WRITE = 82                                     [(TxTypeOpts) = {Name: "TxWrite"}];
     TXTYPE_REMOVE_SCHEMA_SNAPSHOTS = 83                   [(TxTypeOpts) = {Name: "TxRemoveSchemaSnapshots"}];
+    TXTYPE_INIT_RESTORED = 84                             [(TxTypeOpts) = {Name: "TxInitRestored"}];
 }

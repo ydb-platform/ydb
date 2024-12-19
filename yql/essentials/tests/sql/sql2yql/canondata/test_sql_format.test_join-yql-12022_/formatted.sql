@@ -13,11 +13,11 @@ END DEFINE;
 SELECT
     a.key
 FROM
-    $sub("Input") AS a
+    $sub('Input') AS a
 INNER JOIN
     Input AS b
 ON
     a.key == b.key
 WHERE
-    JoinTableRow().`a.subkey` == "wat"
+    JoinTableRow().`a.subkey` == 'wat'
 ;

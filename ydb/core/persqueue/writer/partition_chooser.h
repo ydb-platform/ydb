@@ -79,6 +79,7 @@ NActors::IActor* CreatePartitionChooserActor(TActorId parentId,
                                              const std::shared_ptr<NPQ::TPartitionGraph>& graph,
                                              NPersQueue::TTopicConverterPtr& fullConverter,
                                              const TString& sourceId,
-                                             std::optional<ui32> preferedPartition);
+                                             std::optional<ui32> preferedPartition,
+                                             NWilson::TTraceId traceId);
 
 } // namespace NKikimr::NPQ

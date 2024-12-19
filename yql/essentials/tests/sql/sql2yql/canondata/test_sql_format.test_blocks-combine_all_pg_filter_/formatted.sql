@@ -1,6 +1,6 @@
 USE plato;
 
-PRAGMA yt.UsePartitionsByKeysForFinalAgg = "false";
+PRAGMA yt.UsePartitionsByKeysForFinalAgg = 'false';
 
 SELECT
     Pg::count(),
@@ -14,5 +14,5 @@ SELECT
 FROM
     Input
 WHERE
-    d == "aaa"
+    d == 'aaa'
 ;

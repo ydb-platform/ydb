@@ -50,7 +50,7 @@ class TPickleListValue final: public TCustomListValue {
 public:
     TPickleListValue(
         TMemoryUsageInfo* memInfo,
-        const TPickleInputSpec& inputSpec,
+        const TPickleInputSpec& /* inputSpec */,
         ui32 index,
         IInputStream* underlying,
         IWorker* worker

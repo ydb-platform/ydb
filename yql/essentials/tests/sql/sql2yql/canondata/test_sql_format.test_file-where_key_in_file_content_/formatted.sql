@@ -4,5 +4,5 @@ SELECT
 FROM
     plato.Input
 WHERE
-    key IN ParseFile('String', "keyid.lst")
+    key IN ParseFile('String', 'keyid.lst')
 ;

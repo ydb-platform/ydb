@@ -88,8 +88,8 @@ bool TLoginProvider::CheckSubjectExists(const TString& name, const ESidType::Sid
     return itSidModify != Sids.end() && itSidModify->second.Type == type;
 }
 
-bool TLoginProvider::CheckUserExists(const TString& name) {
-    return CheckSubjectExists(name, ESidType::USER);
+bool TLoginProvider::CheckUserExists(const TString& user) {
+    return CheckSubjectExists(user, ESidType::USER);
 }
 
 TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserRequest& request) {
@@ -113,24 +113,22 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
     return response;
 }
 
-TLoginProvider::TRemoveUserResponse TLoginProvider::RemoveUser(const TRemoveUserRequest& request) {
+TLoginProvider::TRemoveUserResponse TLoginProvider::RemoveUser(const TString& user) {
     TRemoveUserResponse response;
 
-    auto itUserModify = Sids.find(request.User);
+    auto itUserModify = Sids.find(user);
     if (itUserModify == Sids.end() || itUserModify->second.Type != ESidType::USER) {
-        if (!request.MissingOk) {
-            response.Error = "User not found";
-        }
+        response.Error = "User not found";
         return response;
     }
 
-    auto itChildToParentIndex = ChildToParentIndex.find(request.User);
+    auto itChildToParentIndex = ChildToParentIndex.find(user);
     if (itChildToParentIndex != ChildToParentIndex.end()) {
         for (const TString& parent : itChildToParentIndex->second) {
             auto itGroup = Sids.find(parent);
             if (itGroup != Sids.end()) {
                 response.TouchedGroups.emplace_back(itGroup->first);
-                itGroup->second.Members.erase(request.User);
+                itGroup->second.Members.erase(user);
             }
         }
         ChildToParentIndex.erase(itChildToParentIndex);

@@ -16,6 +16,7 @@ class TProgram
 {
 public:
     TProgram();
+    ~TProgram();
 
     TProgram(const TProgram&) = delete;
     TProgram(TProgram&&) = delete;
@@ -50,7 +51,7 @@ protected:
     bool PrintBuild_ = false;
     bool UseYson_ = false;
 
-    virtual void DoRun(const NLastGetopt::TOptsParseResult& parseResult) = 0;
+    virtual void DoRun() = 0;
 
     virtual void OnError(const TString& message) noexcept;
 
@@ -81,11 +82,14 @@ protected:
     [[noreturn]]
     void Exit(E exitCode) noexcept;
 
-private:
-    bool CrashOnError_ = false;
+    const NLastGetopt::TOptsParseResult& GetOptsParseResult() const;
 
+private:
     // Custom handler for option parsing errors.
     class TOptsParseResult;
+
+    std::unique_ptr<TOptsParseResult> OptsParseResult_;
+    bool CrashOnError_ = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

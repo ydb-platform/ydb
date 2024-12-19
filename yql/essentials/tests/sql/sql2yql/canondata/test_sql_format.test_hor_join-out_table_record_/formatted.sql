@@ -2,7 +2,7 @@
 /* postgres can not */
 USE plato;
 
-PRAGMA yt.DisableOptimizers = "HorizontalJoin,MultiHorizontalJoin";
+PRAGMA yt.DisableOptimizers = 'HorizontalJoin,MultiHorizontalJoin';
 
 SELECT
     *
@@ -17,7 +17,7 @@ FROM (
     SELECT
         key,
         TableRecordIndex() AS record,
-        "d" AS path
+        'd' AS path
     FROM
         Input
 ) AS x

@@ -16,7 +16,7 @@ SELECT
 FROM
     plato.Input
 WHERE
-    key >= $makeOpt("030", TRUE) AND key <= "100"
+    key >= $makeOpt('030', TRUE) AND key <= '100'
 ;
 
 SELECT
@@ -24,5 +24,5 @@ SELECT
 FROM
     plato.Input
 WHERE
-    key >= $makeOpt("030", FALSE) AND key <= "100"
+    key >= $makeOpt('030', FALSE) AND key <= '100'
 ;

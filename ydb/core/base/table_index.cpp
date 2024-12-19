@@ -115,17 +115,17 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
             return false;
         }
 
-        if (Contains(table.Keys, NTableVectorKmeansTreeIndex::PostingTable_ParentColumn)) {
-            explain = TStringBuilder() << "table key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentColumn;
+        if (Contains(table.Keys, NTableVectorKmeansTreeIndex::ParentColumn)) {
+            explain = TStringBuilder() << "table key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::ParentColumn;
             return false;
         }
-        if (Contains(index.KeyColumns, NTableVectorKmeansTreeIndex::PostingTable_ParentColumn)) {
+        if (Contains(index.KeyColumns, NTableVectorKmeansTreeIndex::ParentColumn)) {
             // This isn't really needed, but it will be really strange to have column with such name but different meaning
-            explain = TStringBuilder() << "index key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentColumn;
+            explain = TStringBuilder() << "index key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::ParentColumn;
             return false;
         }
-        if (Contains(index.DataColumns, NTableVectorKmeansTreeIndex::PostingTable_ParentColumn)) {
-            explain = TStringBuilder() << "index data column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentColumn;
+        if (Contains(index.DataColumns, NTableVectorKmeansTreeIndex::ParentColumn)) {
+            explain = TStringBuilder() << "index data column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::ParentColumn;
             return false;
         }
     }

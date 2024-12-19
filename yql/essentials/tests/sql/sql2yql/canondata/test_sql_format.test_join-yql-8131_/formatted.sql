@@ -2,9 +2,9 @@
 USE plato;
 
 PRAGMA DisableSimpleColumns;
-PRAGMA yt.JoinCollectColumnarStatistics = "async";
-PRAGMA yt.MinTempAvgChunkSize = "0";
-PRAGMA yt.MapJoinLimit = "1";
+PRAGMA yt.JoinCollectColumnarStatistics = 'async';
+PRAGMA yt.MinTempAvgChunkSize = '0';
+PRAGMA yt.MapJoinLimit = '1';
 
 SELECT
     *

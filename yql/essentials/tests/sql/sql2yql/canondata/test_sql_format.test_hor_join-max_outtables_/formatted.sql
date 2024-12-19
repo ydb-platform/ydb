@@ -1,7 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 /* kikimr can not */
-PRAGMA yt.MaxOutputTables = "3";
+PRAGMA yt.MaxOutputTables = '3';
 
 $i1 = (
     SELECT

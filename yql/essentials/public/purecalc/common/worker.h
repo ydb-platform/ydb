@@ -104,6 +104,7 @@ namespace NYql {
             const TString& GetLLVMSettings() const override;
             ui64 GetNativeYtTypeFlags() const override;
             ITimeProvider* GetTimeProvider() const override;
+            void Invalidate() override;
         protected:
             void Release() override;
         };

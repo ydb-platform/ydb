@@ -548,6 +548,10 @@ void TMkqlIOSpecs::InitOutput(NCommon::TCodecContext& codecCtx, const NYT::TNode
 }
 
 NYT::TFormat TMkqlIOSpecs::MakeOutputFormat() const {
+    if (UseBlockOutput_) {
+        return NYT::TFormat(NYT::TNode("arrow"));
+    }
+
     if (!UseSkiff_ || Outputs.empty()) {
         return NYT::TFormat::YsonBinary();
     }
@@ -559,6 +563,11 @@ NYT::TFormat TMkqlIOSpecs::MakeOutputFormat() const {
 
 NYT::TFormat TMkqlIOSpecs::MakeOutputFormat(size_t tableIndex) const {
     Y_ENSURE(tableIndex < Outputs.size(), "Invalid output table index: " << tableIndex);
+
+    if (UseBlockOutput_) {
+        YQL_ENSURE(tableIndex == 0);
+        return NYT::TFormat(NYT::TNode("arrow"));
+    }
 
     if (!UseSkiff_) {
         return NYT::TFormat::YsonBinary();

@@ -5,24 +5,24 @@
 /* yt can not */
 PRAGMA FlexibleTypes;
 
-$src =
+$src = (
     SELECT
-        Date("2022-01-01") AS int32,
+        Date('2022-01-01') AS int32,
         2 AS value
     UNION ALL
     SELECT
-        Date("2021-12-31") AS int32,
+        Date('2021-12-31') AS int32,
         1 AS value
-;
+);
 
-$with_bytes =
+$with_bytes = (
     SELECT
         t.*,
         ToBytes(int32) AS date_bytes,
         ToBytes(value) AS int_bytes
     FROM
         $src AS t
-;
+);
 
 SELECT
     int32,

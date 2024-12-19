@@ -4,8 +4,8 @@
 #include <ydb/services/metadata/manager/preparation_controller.h>
 #include <ydb/services/metadata/manager/table_record.h>
 #include <ydb/services/metadata/manager/object.h>
+#include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>
-#include <ydb/services/metadata/secret/secret.h>
 
 #include <library/cpp/json/writer/json_value.h>
 

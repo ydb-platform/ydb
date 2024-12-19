@@ -6,15 +6,15 @@ USE plato;
 
 INSERT INTO @a
 SELECT
-    "1" AS Text,
-    ["a", "b"] AS Attachments
+    '1' AS Text,
+    ['a', 'b'] AS Attachments
 ;
 
 COMMIT;
 
 SELECT
     x.*,
-    "" AS Text,
+    '' AS Text,
     ListCreate(TypeOf(Attachments)) AS Attachments
 WITHOUT
     x.Text,

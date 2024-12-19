@@ -1,4 +1,4 @@
-/* custom error:Unsupported column type: String*/
+/* custom error: Expected numeric type, but got String */
 USE plato;
 
 SELECT
@@ -16,7 +16,7 @@ FROM (
         a.key
 )
 WHERE
-    x > "aaa"
+    x > 'aaa'
 ORDER BY
     x
 ;

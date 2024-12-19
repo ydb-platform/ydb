@@ -15,7 +15,7 @@ FROM
 ;
 
 SELECT
-    YQL::String(EvaluateAtom("foo" || "bar"))
+    YQL::String(EvaluateAtom('foo' || 'bar'))
 ;
 
 SELECT
@@ -23,20 +23,20 @@ SELECT
     CurrentUtcTimestamp()
 ;
 
-$y = Yson("{a=7u;c=[<d=%true>1;#;\"привет\";-3.4]}");
+$y = Yson('{a=7u;c=[<d=%true>1;#;\"привет\";-3.4]}');
 
 SELECT
     Yson::Equals(EvaluateExpr($y), $y)
 ;
 
 SELECT
-    EvaluateExpr(TzDate("2000-01-01,Europe/Moscow"))
+    EvaluateExpr(TzDate('2000-01-01,Europe/Moscow'))
 ;
 
 SELECT
-    EvaluateExpr(TzDatetime("2000-01-01T01:02:03,Europe/Moscow"))
+    EvaluateExpr(TzDatetime('2000-01-01T01:02:03,Europe/Moscow'))
 ;
 
 SELECT
-    EvaluateExpr(TzTimestamp("2000-01-01T01:02:03.456789,Europe/Moscow"))
+    EvaluateExpr(TzTimestamp('2000-01-01T01:02:03.456789,Europe/Moscow'))
 ;

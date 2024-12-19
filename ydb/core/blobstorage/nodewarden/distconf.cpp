@@ -19,10 +19,11 @@ namespace NKikimr::NStorage {
         STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
 
         auto ns = NNodeBroker::BuildNameserverTable(Cfg->NameserviceConfig);
-        auto ev = std::make_unique<TEvInterconnect::TEvNodesInfo>();
+        auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
         for (const auto& [nodeId, item] : ns->StaticNodeTable) {
-            ev->Nodes.emplace_back(nodeId, item.Address, item.Host, item.ResolveHost, item.Port, item.Location);
+            nodes->emplace_back(nodeId, item.Address, item.Host, item.ResolveHost, item.Port, item.Location);
         }
+        auto ev = std::make_unique<TEvInterconnect::TEvNodesInfo>(nodes);
         Send(SelfId(), ev.release());
 
         // and subscribe for the node list too

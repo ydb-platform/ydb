@@ -147,7 +147,7 @@ public:
         ReadOnlyTx = IsReadOnlyTx();
     }
 
-    void CheckExecutionComplete() {
+    bool CheckExecutionComplete() {
         ui32 notFinished = 0;
         for (const auto& x : ShardStates) {
             if (x.second.State != TShardState::EState::Finished) {
@@ -157,7 +157,7 @@ public:
             }
         }
         if (notFinished == 0 && TBase::CheckExecutionComplete()) {
-            return;
+            return true;
         }
 
         if (IsDebugLogEnabled()) {
@@ -176,6 +176,8 @@ public:
             }
             LOG_D(sb);
         }
+
+        return false;
     }
 
     bool ForceAcquireSnapshot() const {
@@ -2145,6 +2147,10 @@ private:
 
         ExecuteTasks();
 
+        if (CheckExecutionComplete()) {
+            return;
+        }
+
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
         if (ImmediateTx) {
             LOG_D("ActorState: " << CurrentStateFuncName() << ", immediate tx, become ExecuteState");
@@ -2255,7 +2261,7 @@ private:
             // Volatile transactions must always use generic readsets
             VolatileTx ||
             // Transactions with topics must always use generic readsets
-            !topicTxs.empty() || 
+            !topicTxs.empty() ||
             // HTAP transactions always use generic readsets
             !evWriteTxs.empty());
 
@@ -2588,8 +2594,6 @@ private:
             }
         }
         PropagateChannelsUpdates(updates);
-
-        CheckExecutionComplete();
     }
 
     void ExecuteTopicTabletTransactions(TTopicTabletTxs& topicTxs) {

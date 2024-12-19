@@ -248,7 +248,7 @@ jobs:
         build_preset: ${{ matrix.build_preset }}
         build_target: ${{ matrix.build_target }}
         increment: true
-        run_tests: ${{ contains(['relwithdebinfo', 'release-asan', 'release-tsan', 'release-msan'], matrix.build_preset) }}
+        run_tests: ${{ contains(fromJSON('["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]'), matrix.build_preset) }}
         test_size: ${{ matrix.test_size }}
         test_threads: ${{ matrix.threads_count }}
         put_build_results_to_cache: true

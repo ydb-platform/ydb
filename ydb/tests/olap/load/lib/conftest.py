@@ -6,6 +6,7 @@ from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonica
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.allure_utils import allure_test_description
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
+from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
 from time import time
 from typing import Optional
@@ -15,9 +16,10 @@ from allure_pytest.listener import AllureListener
 
 class LoadSuiteBase:
     class QuerySettings:
-        def __init__(self, iterations: Optional[int] = None, timeout: Optional[float] = None) -> None:
+        def __init__(self, iterations: Optional[int] = None, timeout: Optional[float] = None, query_prefix: Optional[str] = None) -> None:
             self.iterations = iterations
             self.timeout = timeout
+            self.query_prefix = query_prefix
 
     iterations: int = 5
     workload_type: WorkloadType = None
@@ -27,6 +29,7 @@ class LoadSuiteBase:
     query_syntax: str = ''
     query_settings: dict[int, LoadSuiteBase.QuerySettings] = {}
     scale: Optional[int] = None
+    query_prefix: str = get_external_param('query-prefix', '')
 
     @classmethod
     def suite(cls) -> str:
@@ -36,14 +39,20 @@ class LoadSuiteBase:
         return result
 
     @classmethod
-    def _get_iterations(cls, query_num: int) -> int:
-        q = cls.query_settings.get(query_num, None)
-        return q.iterations if q is not None and q.iterations is not None else cls.iterations
-
-    @classmethod
-    def _get_timeout(cls, query_num: int) -> float:
-        q = cls.query_settings.get(query_num, None)
-        return q.timeout if q is not None and q.timeout is not None else cls.timeout
+    def _get_query_settings(cls, query_num: int) -> QuerySettings:
+        result = LoadSuiteBase.QuerySettings(
+            iterations=cls.iterations,
+            timeout=cls.timeout,
+            query_prefix=cls.query_prefix
+        )
+        q = cls.query_settings.get(query_num, LoadSuiteBase.QuerySettings())
+        if q.iterations is not None:
+            result.iterations = q.iterations
+        if q.timeout is not None:
+            result.timeout = q.timeout
+        if q.query_prefix is not None:
+            result.query_prefix = q.query_prefix
+        return result
 
     @classmethod
     def _test_name(cls, query_num: int) -> str:
@@ -204,16 +213,18 @@ class LoadSuiteBase:
                     for param in allure_test_result.parameters:
                         if param.name == 'query_num':
                             param.mode = allure.parameter_mode.HIDDEN.value
+        qparams = self._get_query_settings(query_num)
         start_time = time()
         result = YdbCliHelper.workload_run(
             path=path,
             query_num=query_num,
-            iterations=self._get_iterations(query_num),
+            iterations=qparams.iterations,
             workload_type=self.workload_type,
-            timeout=self._get_timeout(query_num),
+            timeout=qparams.timeout,
             check_canonical=self.check_canonical,
             query_syntax=self.query_syntax,
-            scale=self.scale
+            scale=self.scale,
+            query_prefix=qparams.query_prefix
         )
         allure_test_description(self.suite(), self._test_name(query_num), refference_set=self.refference, start_time=start_time, end_time=time())
-        self.process_query_result(result, query_num, self._get_iterations(query_num), True)
+        self.process_query_result(result, query_num, qparams.iterations, True)

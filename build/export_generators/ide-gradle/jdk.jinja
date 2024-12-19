@@ -1,13 +1,14 @@
 {%- set jdk_version = false -%}
 {%- if target.required_jdk -%}
 {%-     set jdk_version = target.required_jdk -%}
-{%- elif target.jdk_version -%}
+{#- backward compatibility -#}
+{%- elif target.jdk_version and not('-' in target.jdk_version) -%}
 {%-     set jdk_version = target.jdk_version -%}
 {%- elif not target and extra_targets|length -%}
-{%-     set jdk_version_targets = extra_targets|selectattr('jdk_version') -%}
-{%-     if jdk_version_targets|length -%}
-{%-         set jdk_version_target = jdk_version_targets|first -%}
-{%-         set jdk_version = jdk_version_target.jdk_version -%}
+{%-     set extra_jdk_version = extra_targets|selectattr('jdk_version')|map(attribute='jdk_version')|first -%}
+{#- backward compatibility -#}
+{%-     if extra_jdk_version and not('-' in extra_jdk_version) -%}
+{%-         set jdk_version = extra_jdk_version -%}
 {%-     else -%}
 {%-         set jdk_version = '17' -%}
 {%-     endif -%}

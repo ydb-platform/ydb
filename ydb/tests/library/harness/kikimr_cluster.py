@@ -99,6 +99,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
                     pass
 
     def _deploy_secrets(self):
+        # TODO: del
         self._run_on(
             self.nodes,
             lambda x: x.ssh_command(
@@ -108,6 +109,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
             )
         )
 
+        # TODO: del
         self._run_on(
             self.nodes,
             lambda x: x.ssh_command(
@@ -118,6 +120,8 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
 
     def _initialize(self):
         node = list(self.nodes.values())[0]
+        # настройка, скрипты рожаются с помощью kikime_config
+        # gvit: ydb admin config replace -f config.yaml  
         node.ssh_command(['bash /Berkanavt/kikimr/cfg/init_storage.bash'], raise_on_error=True)
         node.ssh_command(['bash /Berkanavt/kikimr/cfg/init_cms.bash'], raise_on_error=True)
         node.ssh_command(['bash /Berkanavt/kikimr/cfg/init_compute.bash'], raise_on_error=True)
@@ -144,6 +148,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
             )
         )
 
+        # ключи шифрования pdisk, удалять 
         self._run_on(
             self.nodes,
             lambda x: x.ssh_command(
@@ -238,6 +243,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
 
         return self._slots
 
+    # TODO: не используется 
     def _run_discovery_command(self, tenant_name):
         discovery_cmd = [
             self.__kikimr_path, '--server', self.nodes[1].host, 'discovery', 'list', '-d', tenant_name
@@ -254,6 +260,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
                 return node
         logger.error('Cant find node with host {} and grpc_port {}'.format(host, grpc_port))
 
+    # TODO: не используется 
     def get_active_tenant_nodes(self, tenant_name):
         node_to_connect_to = self.nodes[1]
         dc = ydb.DriverConfig('%s:%d' % (node_to_connect_to.host, node_to_connect_to.grpc_port), tenant_name)

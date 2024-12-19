@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"), NLs::HasOwner("root@builtin")});
     }
 
-    Y_UNIT_TEST(AddAccess_External) {
+    Y_UNIT_TEST(AddAccess_NonYdb) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;

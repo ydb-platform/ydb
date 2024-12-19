@@ -23,7 +23,7 @@
 * Поддержано [создание директорий из UI](https://github.com/ydb-platform/ydb-embedded-ui/issues/958).
 * [Добавлена возможность](https://github.com/ydb-platform/ydb-embedded-ui/pull/976) задать интервал фонового обновления данных на всех страницах.
 * [Улучшено](https://github.com/ydb-platform/ydb-embedded-ui/issues/955) отображения ACL.
-* Включен автокомплит в редакторе запросов по умолчанию.
+* Включено автодополнение в редакторе запросов по умолчанию.
 * [Добавлена](https://github.com/ydb-platform/ydb-embedded-ui/pull/834) поддержка View.
 
 **Исправления ошибок:**

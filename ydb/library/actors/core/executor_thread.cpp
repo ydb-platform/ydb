@@ -206,11 +206,20 @@ namespace NActors {
         for (; Ctx.ExecutedEvents < Ctx.EventsPerMailbox; ++Ctx.ExecutedEvents) {
             if (TAutoPtr<IEventHandle> evExt = mailbox->Pop()) {
                 recipient = evExt->GetRecipientRewrite();
+                actor = mailbox->FindActor(recipient.LocalId());
+                if (!actor) {
+                    actor = mailbox->FindAlias(recipient.LocalId());
+                    if (actor) {
+                        // Work as if some alias actor rewrites events and delivers them to the real actor id
+                        evExt->Rewrite(evExt->GetTypeRewrite(), actor->SelfId());
+                        recipient = evExt->GetRecipientRewrite();
+                    }
+                }
                 TActorContext ctx(*mailbox, *this, eventStart, recipient);
                 TlsActivationContext = &ctx; // ensure dtor (if any) is called within actor system
                 // move for destruct before ctx;
                 auto ev = std::move(evExt);
-                if (actor = mailbox->FindActor(recipient.LocalId())) {
+                if (actor) {
                     wasWorking = true;
                     // Since actor is not null there should be no exceptions
                     actorType = &typeid(*actor);

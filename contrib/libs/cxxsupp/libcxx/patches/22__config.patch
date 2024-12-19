@@ -1,5 +1,5 @@
 diff --git a/include/__config b/include/__config
-index ac4a6d8..aac112a 100644
+index 51463fc..c4027b8 100644
 --- a/include/__config
 +++ b/include/__config
 @@ -28,13 +28,35 @@
@@ -78,18 +78,19 @@ index ac4a6d8..aac112a 100644
  // clang-format off
  #  define _LIBCPP_PUSH_MACROS _Pragma("push_macro(\"min\")") _Pragma("push_macro(\"max\")") _Pragma("push_macro(\"refresh()\")") _Pragma("push_macro(\"move(int, int)\")") _Pragma("push_macro(\"erase()\")")
  #  define _LIBCPP_POP_MACROS _Pragma("pop_macro(\"min\")") _Pragma("pop_macro(\"max\")") _Pragma("pop_macro(\"refresh()\")") _Pragma("pop_macro(\"move(int, int)\")") _Pragma("pop_macro(\"erase()\")")
-@@ -1416,6 +1443,10 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
+@@ -1416,6 +1443,11 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
  #    define _LIBCPP_NO_DESTROY
  #  endif
  
-+#  if !__has_builtin(__builtin_is_constant_evaluated) || (defined(_LIBCPP_COMPILER_GCC) && _GNUC_VER < 900) || __CUDACC_VER_MAJOR__ == 10
++#  if !__has_builtin(__builtin_is_constant_evaluated) || (defined(_LIBCPP_COMPILER_GCC) && _GNUC_VER < 900) ||         \
++      __CUDACC_VER_MAJOR__ == 10
 +#    define _LIBCPP_HAS_NO_BUILTIN_IS_CONSTANT_EVALUATED
 +#  endif
 +
  #  if __has_attribute(__diagnose_if__) && !defined(_LIBCPP_DISABLE_ADDITIONAL_DIAGNOSTICS)
  #    define _LIBCPP_DIAGNOSE_WARNING(...) __attribute__((__diagnose_if__(__VA_ARGS__, "warning")))
  #  else
-@@ -1437,6 +1468,12 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
+@@ -1437,6 +1469,12 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
  #    define _LIBCPP_LIFETIMEBOUND
  #  endif
  

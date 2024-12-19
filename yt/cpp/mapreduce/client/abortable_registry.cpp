@@ -11,21 +11,26 @@
 
 #include <util/generic/singleton.h>
 
-namespace NYT {
-namespace NDetail {
-
-using namespace NRawClient;
+namespace NYT::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTransactionAbortable::TTransactionAbortable(const TClientContext& context, const TTransactionId& transactionId)
-    : Context_(context)
+TTransactionAbortable::TTransactionAbortable(
+    const IRawClientPtr& rawClient,
+    const TClientContext& context,
+    const TTransactionId& transactionId)
+    : RawClient_(rawClient)
+    , Context_(context)
     , TransactionId_(transactionId)
 { }
 
 void TTransactionAbortable::Abort()
 {
-    AbortTransaction(nullptr, Context_, TransactionId_);
+    RequestWithRetry<void>(
+        CreateDefaultRequestRetryPolicy(Context_.Config),
+        [this] (TMutationId& mutationId) {
+            RawClient_->AbortTransaction(mutationId, TransactionId_);
+        });
 }
 
 TString TTransactionAbortable::GetType() const
@@ -131,5 +136,4 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NDetail
-} // namespace NYT
+} // namespace NYT::NDetail

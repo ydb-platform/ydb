@@ -272,6 +272,10 @@ class StaticConfigGenerator(object):
         return mbus_config is not None and len(mbus_config) > 0
 
     @property
+    def host_configs(self):
+        return self.__cluster_details.get_service("host_configs")
+
+    @property
     def table_service_config(self):
         return self.__cluster_details.get_service("table_service_config")
 
@@ -387,6 +391,13 @@ class StaticConfigGenerator(object):
         dictionary = json_format.MessageToDict(app_config, preserving_proto_field_name=True)
         normalized_config = self.normalize_dictionary(dictionary)
 
+        if self.host_configs:
+            normalized_config["host_configs"] = copy.deepcopy(self.host_configs)
+            for host_config in normalized_config["host_configs"]:
+                if 'drives' in host_config:
+                    # inside config.yaml we should use field drive in host_configs section
+                    host_config['drive'] = host_config.pop('drives')
+
         if self.table_service_config:
             normalized_config["table_service_config"] = self.table_service_config
 
@@ -471,6 +482,7 @@ class StaticConfigGenerator(object):
         if "hive_config" in normalized_config["domains_config"]:
             del normalized_config["domains_config"]["hive_config"]
 
+        hostname_to_host_config_id = {node.hostname: node.host_config_id for node in self.__cluster_details.hosts}
         normalized_config["hosts"] = []
         for node in normalized_config["nameservice_config"]["node"]:
             if "port" in node and int(node.get("port")) == 19001:
@@ -479,6 +491,9 @@ class StaticConfigGenerator(object):
             if "interconnect_host" in node and node["interconnect_host"] == node["host"]:
                 del node["interconnect_host"]
 
+            host_config_id = hostname_to_host_config_id[node["host"]]
+            if host_config_id is not None:
+                node["host_config_id"] = host_config_id
             normalized_config["hosts"].append(node)
 
         del normalized_config["nameservice_config"]["node"]
@@ -850,8 +865,7 @@ class StaticConfigGenerator(object):
 
             try:
                 output = subprocess.check_output(
-                    cmd_base
-                    + [
+                    cmd_base + [
                         "--ring-level-begin",
                         str(rx_begin),
                         "--ring-level-end",
@@ -864,8 +878,7 @@ class StaticConfigGenerator(object):
                 )
             except subprocess.CalledProcessError:
                 output = subprocess.check_output(
-                    cmd_base
-                    + [
+                    cmd_base + [
                         "--dx",
                         fail_domain_type,
                     ]

@@ -59,6 +59,9 @@ namespace NActors {
         void DropUnregistered();
         const std::vector<THolder<IActor>>& GetUnregistered() const { return DyingActors; }
 
+        TActorId RegisterAlias(TMailbox* mailbox, IActor* actor);
+        void UnregisterAlias(TMailbox* mailbox, const TActorId& actorId);
+
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
         void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);

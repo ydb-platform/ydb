@@ -50,6 +50,26 @@ namespace NActors {
         Y_ABORT();
     }
 
+    IActor* TMailbox::FindAlias(ui64 localActorId) noexcept {
+        switch (ActorPack) {
+            case EActorPack::Empty:
+            case EActorPack::Simple:
+            case EActorPack::Array:
+                return nullptr;
+
+            case EActorPack::Map: {
+                TActorMap* m = ActorsInfo.Map.ActorsMap;
+                auto it = m->Aliases.find(localActorId);
+                if (it != m->Aliases.end()) {
+                    return it->second;
+                }
+                return nullptr;
+            }
+        }
+
+        Y_ABORT();
+    }
+
     void TMailbox::AttachActor(ui64 localActorId, IActor* actor) noexcept {
         switch (ActorPack) {
             case EActorPack::Empty:
@@ -95,6 +115,13 @@ namespace NActors {
         Y_ABORT();
     }
 
+    void TMailbox::AttachAlias(ui64 localActorId, IActor* actor) noexcept {
+        // Note: we assume the specified actor is registered and the alias is correct
+        EnsureActorMap();
+        actor->Aliases.insert(localActorId);
+        ActorsInfo.Map.ActorsMap->Aliases.emplace(localActorId, actor);
+    }
+
     IActor* TMailbox::DetachActor(ui64 localActorId) noexcept {
         switch (ActorPack) {
             case EActorPack::Empty:
@@ -103,6 +130,7 @@ namespace NActors {
             case EActorPack::Simple: {
                 if (ActorsInfo.Simple.ActorId == localActorId) {
                     IActor* actor = ActorsInfo.Simple.Actor;
+                    Y_ABORT_UNLESS(actor->Aliases.empty(), "Unexpected actor aliases for EActorPack::Simple");
                     ActorsInfo.Empty = {};
                     ActorPack = EActorPack::Empty;
                     return actor;
@@ -115,6 +143,7 @@ namespace NActors {
                 for (ui64 i = 0; i < ActorsInfo.Array.ActorsCount; ++i) {
                     if (a->Actors[i].ActorId == localActorId) {
                         IActor* actor = a->Actors[i].Actor;
+                        Y_ABORT_UNLESS(actor->Aliases.empty(), "Unexpected actor aliases for EActorPack::Array");
                         a->Actors[i] = a->Actors[ActorsInfo.Array.ActorsCount - 1];
                         if (0 == --ActorsInfo.Array.ActorsCount) {
                             ActorsInfo.Empty = {};
@@ -132,8 +161,16 @@ namespace NActors {
                 auto it = m->find(localActorId);
                 if (it != m->end()) {
                     IActor* actor = it->second;
+                    if (!actor->Aliases.empty()) {
+                        for (ui64 aliasId : actor->Aliases) {
+                            bool removed = m->Aliases.erase(aliasId);
+                            Y_ABORT_UNLESS(removed, "Unexpected failure to remove a register actor alias");
+                        }
+                        actor->Aliases.clear();
+                    }
                     m->erase(it);
                     if (m->empty()) {
+                        Y_ABORT_UNLESS(m->Aliases.empty(), "Unexpected actor aliases left in an empty EActorPack::Map");
                         ActorsInfo.Empty = {};
                         ActorPack = EActorPack::Empty;
                         delete m;
@@ -147,10 +184,35 @@ namespace NActors {
         Y_ABORT("DetachActor(%" PRIu64 ") called for an unknown actor", localActorId);
     }
 
-    void TMailbox::EnableStats() {
+    IActor* TMailbox::DetachAlias(ui64 localActorId) noexcept {
         switch (ActorPack) {
             case EActorPack::Empty:
-                Y_ABORT("EnableStats() called for an empty mailbox");
+                Y_ABORT("DetachAlias(%" PRIu64 ") called for an empty mailbox", localActorId);
+
+            case EActorPack::Simple:
+            case EActorPack::Array:
+                break;
+
+            case EActorPack::Map: {
+                TActorMap* m = ActorsInfo.Map.ActorsMap;
+                auto it = m->Aliases.find(localActorId);
+                if (it != m->Aliases.end()) {
+                    IActor* actor = it->second;
+                    actor->Aliases.erase(localActorId);
+                    m->Aliases.erase(it);
+                    return actor;
+                }
+                break;
+            }
+        }
+
+        Y_ABORT("DetachAlias(%" PRIu64 ") called for an unknown actor", localActorId);
+    }
+
+    void TMailbox::EnsureActorMap() {
+        switch (ActorPack) {
+            case EActorPack::Empty:
+                Y_ABORT("Expected a non-empty mailbox");
 
             case EActorPack::Simple: {
                 TActorMap* m = new TActorMap();
@@ -178,6 +240,10 @@ namespace NActors {
         }
 
         Y_ABORT();
+    }
+
+    void TMailbox::EnableStats() {
+        EnsureActorMap();
     }
 
     void TMailbox::AddElapsedCycles(ui64 cycles) {
@@ -298,6 +364,8 @@ namespace NActors {
         if (ActorLibCollectUsageStats) {
             for (IEventHandle* ev = head; ev; ev = GetNextPtr(ev)) {
                 if (IActor* actor = FindActor(ev->GetRecipientRewrite().LocalId())) {
+                    actor->OnEnqueueEvent(ev->SendTime);
+                } else if (IActor* alias = FindAlias(ev->GetRecipientRewrite().LocalId())) {
                     actor->OnEnqueueEvent(ev->SendTime);
                 }
             }

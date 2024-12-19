@@ -339,7 +339,7 @@ namespace NKikimr::NStorage {
 
         struct TExConfigError : yexception {};
 
-        void GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID);
+        std::optional<TString> GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID);
 
         void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, ui32 groupId, ui32 groupGeneration,
             TBlobStorageGroupType gtype, const NKikimrBlobStorage::TGroupGeometry& geometry,

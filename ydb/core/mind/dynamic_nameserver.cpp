@@ -67,13 +67,18 @@ void TDynamicNodeResolverBase::Handle(TEvNodeBroker::TEvResolvedNode::TPtr &ev, 
 
     if (rec.GetStatus().GetCode() != NKikimrNodeBroker::TStatus::OK) {
         // Reset proxy if node expired.
-        if (exists)
+        if (exists) {
             ResetInterconnectProxyConfig(NodeId, ctx);
+            ListNodesCache->Invalidate(); // node was erased
+        }
         ReplyWithErrorAndDie(ctx);
         return;
     }
 
     TDynamicConfig::TDynamicNodeInfo node(rec.GetNode());
+    if (!exists || !oldNode.EqualExceptExpire(node)) {
+        ListNodesCache->Invalidate();
+    }
 
     // If ID is re-used by another node then proxy has to be reset.
     if (exists && !oldNode.EqualExceptExpire(node))
@@ -141,10 +146,12 @@ void TDynamicNameserver::Bootstrap(const TActorContext &ctx)
 void TDynamicNameserver::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     Y_ABORT_UNLESS(ev->Get()->Config);
     const auto& config = *ev->Get()->Config;
-    if (config.GetBlobStorageConfig().HasAutoconfigSettings()) {
+    if (config.HasSelfManagementConfig() && config.GetSelfManagementConfig().GetEnabled()) {
+        // self-management through distconf is enabled and we are operating based on their tables, so apply them now
         auto newStaticConfig = BuildNameserverTable(config);
         if (StaticConfig->StaticNodeTable != newStaticConfig->StaticNodeTable) {
             StaticConfig = std::move(newStaticConfig);
+            ListNodesCache->Invalidate();
             for (const auto& subscriber : StaticNodeChangeSubscribers) {
                 TActivationContext::Send(new IEventHandle(SelfId(), subscriber, new TEvInterconnect::TEvListNodes));
             }
@@ -220,31 +227,40 @@ void TDynamicNameserver::ResolveDynamicNode(ui32 nodeId,
         reply->NodeId = nodeId;
         ctx.Send(ev->Sender, reply);
     } else {
-        ctx.RegisterWithSameMailbox(new TDynamicNodeResolver(SelfId(), nodeId, DynamicConfigs[domain], ev, deadline));
+        ctx.RegisterWithSameMailbox(new TDynamicNodeResolver(SelfId(), nodeId, DynamicConfigs[domain],
+            ListNodesCache, ev, deadline));
     }
 }
 
 void TDynamicNameserver::SendNodesList(const TActorContext &ctx)
-{
+{   
     auto now = ctx.Now();
-    for (auto &sender : ListNodesQueue) {
-        THolder<TEvInterconnect::TEvNodesInfo> reply(new TEvInterconnect::TEvNodesInfo);
+    if (ListNodesCache->NeedUpdate(now)) {
+        auto newNodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
+        auto newExpire = now;
+
         for (const auto &pr : StaticConfig->StaticNodeTable) {
-            reply->Nodes.emplace_back(pr.first,
-                                      pr.second.Address, pr.second.Host, pr.second.ResolveHost,
-                                      pr.second.Port, pr.second.Location, true);
+            newNodes->emplace_back(pr.first,
+                                   pr.second.Address, pr.second.Host, pr.second.ResolveHost,
+                                   pr.second.Port, pr.second.Location, true);
         }
 
         for (auto &config : DynamicConfigs) {
             for (auto &pr : config->DynamicNodes) {
-                if (pr.second.Expire > now)
-                    reply->Nodes.emplace_back(pr.first, pr.second.Address,
-                                              pr.second.Host, pr.second.ResolveHost,
-                                              pr.second.Port, pr.second.Location, false);
+                if (pr.second.Expire > now) {
+                    newNodes->emplace_back(pr.first, pr.second.Address,
+                                           pr.second.Host, pr.second.ResolveHost,
+                                           pr.second.Port, pr.second.Location, false);
+                    newExpire = std::min(newExpire, pr.second.Expire);
+                }
             }
         }
 
-        ctx.Send(sender, reply.Release());
+        ListNodesCache->Update(newNodes, newExpire);
+    }
+
+    for (auto &sender : ListNodesQueue) {
+        ctx.Send(sender, new TEvInterconnect::TEvNodesInfo(ListNodesCache->GetNodes()));
     }
     ListNodesQueue.clear();
 }
@@ -300,6 +316,7 @@ void TDynamicNameserver::UpdateState(const NKikimrNodeBroker::TNodesInfo &rec,
             config->ExpiredNodes.emplace(node.GetNodeId(), info);
         }
 
+        ListNodesCache->Invalidate();
         config->Epoch = rec.GetEpoch();
         ctx.Schedule(config->Epoch.End - ctx.Now(),
                      new TEvPrivate::TEvUpdateEpoch(domain, config->Epoch.Id + 1));
@@ -307,8 +324,10 @@ void TDynamicNameserver::UpdateState(const NKikimrNodeBroker::TNodesInfo &rec,
         // Note: this update may be optimized to only include new nodes
         for (auto &node : rec.GetNodes()) {
             auto nodeId = node.GetNodeId();
-            if (!config->DynamicNodes.contains(nodeId))
+            if (!config->DynamicNodes.contains(nodeId)) {
                 config->DynamicNodes.emplace(nodeId, node);
+                ListNodesCache->Invalidate();
+            }                
         }
         config->Epoch = rec.GetEpoch();
     }
@@ -395,8 +414,8 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TAc
             ctx.Send(ev->Sender, reply.Release());
         } else {
             const TInstant deadline = ev->Get()->Deadline;
-            ctx.RegisterWithSameMailbox(new TDynamicNodeSearcher(SelfId(), nodeId, DynamicConfigs[domain], ev.Release(),
-                deadline));
+            ctx.RegisterWithSameMailbox(new TDynamicNodeSearcher(SelfId(), nodeId, DynamicConfigs[domain],
+                ListNodesCache, ev.Release(), deadline));
         }
     }
 }
@@ -455,6 +474,7 @@ void TDynamicNameserver::Handle(NConsole::TEvConsole::TEvConfigNotificationReque
             auto newStaticConfig = BuildNameserverTable(config.GetNameserviceConfig());
             if (StaticConfig->StaticNodeTable != newStaticConfig->StaticNodeTable) {
                 StaticConfig = std::move(newStaticConfig);
+                ListNodesCache->Invalidate();
                 for (const auto& subscriber : StaticNodeChangeSubscribers) {
                     TActivationContext::Send(new IEventHandle(SelfId(), subscriber, new TEvInterconnect::TEvListNodes));
                 }
@@ -504,6 +524,30 @@ TIntrusivePtr<TTableNameserverSetup> BuildNameserverTable(const NKikimrBlobStora
         );
     }
     return table;
+}
+
+TListNodesCache::TListNodesCache()
+    : Nodes(nullptr)
+    , Expire(TInstant::Zero())
+{}
+
+
+void TListNodesCache::Update(TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr newNodes, TInstant newExpire) {
+    Nodes = newNodes;
+    Expire = newExpire;
+}
+
+void TListNodesCache::Invalidate() {
+    Nodes = nullptr;
+    Expire = TInstant::Zero();
+}
+
+bool TListNodesCache::NeedUpdate(TInstant now) const {
+    return Nodes == nullptr || now > Expire;
+}
+
+TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr TListNodesCache::GetNodes() const {
+    return Nodes;
 }
 
 } // NNodeBroker

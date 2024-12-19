@@ -526,6 +526,10 @@ namespace NSchemeShardUT_Private {
     void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
         const TString& user, const TString& password,
         const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
+    
+    void CreateAlterLoginRemoveUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
+        const TString& user,
+        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
 
     void AlterLoginAddGroupMembership(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
         const TString& member, const TString& group, 

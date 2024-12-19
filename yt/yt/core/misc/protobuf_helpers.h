@@ -561,8 +561,9 @@ public:
 
 private:
     IZeroCopyOutput* const Stream_;
+
     std::exception_ptr Error_;
-    int64_t ByteCount_ = 0;
+    i64 ByteCount_ = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

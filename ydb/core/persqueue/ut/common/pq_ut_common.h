@@ -277,7 +277,8 @@ void PQBalancerPrepare(
     ui64 tabletId,
     TActorId edge,
     const bool requireAuth = false,
-    bool kill = true);
+    bool kill = true,
+    const THashSet<TString>& xtraConsumers = {});
 
 void PQTabletRestart(
     TTestActorRuntime& runtime,
@@ -300,7 +301,8 @@ void PQBalancerPrepare(
     const ui64 ssId,
     TTestContext& context,
     const bool requireAuth = false,
-    bool kill = true);
+    bool kill = true,
+    const THashSet<TString>& xtraConsumers = {});
 
 void PQTabletRestart(TTestContext& context);
 

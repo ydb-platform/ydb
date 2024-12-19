@@ -3126,7 +3126,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             using namespace NTableIndex::NTableVectorKmeansTreeIndex;
             TString name = PostingTable;
             if (needsBuildTable || NeedsAnotherLevel()) {
-                name += Level % 2 != 0 ? BuildPostingTableSuffix0 : BuildPostingTableSuffix1;
+                name += Level % 2 != 0 ? BuildSuffix0 : BuildSuffix1;
             }
             return name;
         }
@@ -3134,7 +3134,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Y_ASSERT(Parent != 0);
             using namespace NTableIndex::NTableVectorKmeansTreeIndex;
             TString name = PostingTable;
-            name += Level % 2 != 0 ? BuildPostingTableSuffix1 : BuildPostingTableSuffix0;
+            name += Level % 2 != 0 ? BuildSuffix1 : BuildSuffix0;
             return name;
         }
     };
@@ -3602,6 +3602,15 @@ struct TExternalDataSourceInfo: TSimpleRefCount<TExternalDataSourceInfo> {
     NKikimrSchemeOp::TAuth Auth;
     NKikimrSchemeOp::TExternalTableReferences ExternalTableReferences;
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
+
+    void FillProto(NKikimrSchemeOp::TExternalDataSourceDescription& proto) const {
+        proto.SetVersion(AlterVersion);
+        proto.SetSourceType(SourceType);
+        proto.SetLocation(Location);
+        proto.SetInstallation(Installation);
+        proto.MutableAuth()->CopyFrom(Auth);
+        proto.MutableProperties()->CopyFrom(Properties);
+    }
 };
 
 struct TViewInfo : TSimpleRefCount<TViewInfo> {

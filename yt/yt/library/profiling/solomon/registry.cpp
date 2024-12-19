@@ -281,6 +281,11 @@ void TSolomonRegistry::SetProducerCollectionBatchSize(int batchSize)
     Producers_.SetCollectionBatchSize(batchSize);
 }
 
+void TSolomonRegistry::SetLabelSanitizationPolicy(ELabelSanitizationPolicy LabelSanitizationPolicy)
+{
+    Tags_.SetLabelSanitizationPolicy(LabelSanitizationPolicy);
+}
+
 int TSolomonRegistry::GetWindowSize() const
 {
     if (!WindowSize_) {

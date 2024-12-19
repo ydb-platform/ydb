@@ -1,5 +1,6 @@
 #pragma once
 
+#include "client.h"
 #include "client_method_options.h"
 #include "operation.h"
 
@@ -114,7 +115,20 @@ public:
 
     // Transactions
 
-    virtual void PingTx(const TTransactionId& transactionId) = 0;
+    virtual TTransactionId StartTransaction(
+        TMutationId& mutationId,
+        const TTransactionId& parentId,
+        const TStartTransactionOptions& options = {}) = 0;
+
+    virtual void PingTransaction(const TTransactionId& transactionId) = 0;
+
+    virtual void AbortTransaction(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId) = 0;
+
+    virtual void CommitTransaction(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId) = 0;
 
     // Operations
 
@@ -150,6 +164,152 @@ public:
         const TOperationId& operationId,
         const TUpdateOperationParametersOptions& options = {}) = 0;
 
+    virtual NYson::TYsonString GetJob(
+        const TOperationId& operationId,
+        const TJobId& jobId,
+        const TGetJobOptions& options = {}) = 0;
+
+    virtual TListJobsResult ListJobs(
+        const TOperationId& operationId,
+        const TListJobsOptions& options = {}) = 0;
+
+    virtual IFileReaderPtr GetJobInput(
+        const TJobId& jobId,
+        const TGetJobInputOptions& options = {}) = 0;
+
+    virtual IFileReaderPtr GetJobFailContext(
+        const TOperationId& operationId,
+        const TJobId& jobId,
+        const TGetJobFailContextOptions& options = {}) = 0;
+
+    virtual TString GetJobStderrWithRetries(
+        const TOperationId& operationId,
+        const TJobId& jobId,
+        const TGetJobStderrOptions& options = {}) = 0;
+
+    virtual IFileReaderPtr GetJobStderr(
+        const TOperationId& operationId,
+        const TJobId& jobId,
+        const TGetJobStderrOptions& options = {}) = 0;
+
+    virtual std::vector<TJobTraceEvent> GetJobTrace(
+        const TOperationId& operationId,
+        const TGetJobTraceOptions& options = {}) = 0;
+
+    // File cache
+
+    virtual TMaybe<TYPath> GetFileFromCache(
+        const TTransactionId& transactionId,
+        const TString& md5Signature,
+        const TYPath& cachePath,
+        const TGetFileFromCacheOptions& options = {}) = 0;
+
+    virtual TYPath PutFileToCache(
+        const TTransactionId& transactionId,
+        const TYPath& filePath,
+        const TString& md5Signature,
+        const TYPath& cachePath,
+        const TPutFileToCacheOptions& options = {}) = 0;
+
+    // Tables
+
+    virtual void MountTable(
+        TMutationId& mutationId,
+        const TYPath& path,
+        const TMountTableOptions& options = {}) = 0;
+
+    virtual void UnmountTable(
+        TMutationId& mutationId,
+        const TYPath& path,
+        const TUnmountTableOptions& options = {}) = 0;
+
+    virtual void RemountTable(
+        TMutationId& mutationId,
+        const TYPath& path,
+        const TRemountTableOptions& options = {}) = 0;
+
+    virtual void ReshardTableByPivotKeys(
+        TMutationId& mutationId,
+        const TYPath& path,
+        const TVector<TKey>& keys,
+        const TReshardTableOptions& options = {}) = 0;
+
+    virtual void ReshardTableByTabletCount(
+        TMutationId& mutationId,
+        const TYPath& path,
+        i64 tabletCount,
+        const TReshardTableOptions& options = {}) = 0;
+
+    virtual void InsertRows(
+        const TYPath& path,
+        const TNode::TListType& rows,
+        const TInsertRowsOptions& options = {}) = 0;
+
+    virtual void TrimRows(
+        const TYPath& path,
+        i64 tabletIndex,
+        i64 rowCount,
+        const TTrimRowsOptions& options = {}) = 0;
+
+    virtual TNode::TListType LookupRows(
+        const TYPath& path,
+        const TNode::TListType& keys,
+        const TLookupRowsOptions& options = {}) = 0;
+
+    virtual TNode::TListType SelectRows(
+        const TString& query,
+        const TSelectRowsOptions& options = {}) = 0;
+
+    virtual void AlterTable(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        const TYPath& path,
+        const TAlterTableOptions& options = {}) = 0;
+
+    virtual void AlterTableReplica(
+        TMutationId& mutationId,
+        const TReplicaId& replicaId,
+        const TAlterTableReplicaOptions& options = {}) = 0;
+
+    virtual void DeleteRows(
+        const TYPath& path,
+        const TNode::TListType& keys,
+        const TDeleteRowsOptions& options = {}) = 0;
+
+    virtual void FreezeTable(
+        const TYPath& path,
+        const TFreezeTableOptions& options = {}) = 0;
+
+    virtual void UnfreezeTable(
+        const TYPath& path,
+        const TUnfreezeTableOptions& options = {}) = 0;
+
+    // Misc
+
+    virtual TCheckPermissionResponse CheckPermission(
+        const TString& user,
+        EPermission permission,
+        const TYPath& path,
+        const TCheckPermissionOptions& options = {}) = 0;
+
+    virtual TVector<TTabletInfo> GetTabletInfos(
+        const TYPath& path,
+        const TVector<int>& tabletIndexes,
+        const TGetTabletInfosOptions& options = {}) = 0;
+
+    virtual TVector<TTableColumnarStatistics> GetTableColumnarStatistics(
+        const TTransactionId& transactionId,
+        const TVector<TRichYPath>& paths,
+        const TGetTableColumnarStatisticsOptions& options = {}) = 0;
+
+    virtual TMultiTablePartitions GetTablePartitions(
+        const TTransactionId& transactionId,
+        const TVector<TRichYPath>& paths,
+        const TGetTablePartitionsOptions& options = {}) = 0;
+
+    virtual ui64 GenerateTimestamp() = 0;
+
+    virtual TAuthorizationInfo WhoAmI() = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

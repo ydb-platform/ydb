@@ -1368,6 +1368,7 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
     if (partitionId.IsSupportivePartition()) {
         for (auto& request : partition.PendingRequests) {
             HandleEventForSupportivePartition(request.Cookie,
+                                              std::move(ev->TraceId),
                                               request.Event->Record.GetPartitionRequest(),
                                               request.Sender,
                                               ctx);
@@ -1832,7 +1833,7 @@ void TPersQueue::InitResponseBuilder(const ui64 responseCookie, const ui32 count
     it->second->SetCounterId(counterId);
 }
 
-void TPersQueue::HandleGetMaxSeqNoRequest(const ui64 responseCookie, const TActorId& partActor,
+void TPersQueue::HandleGetMaxSeqNoRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
                                           const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(req.HasCmdGetMaxSeqNo());
@@ -1843,11 +1844,11 @@ void TPersQueue::HandleGetMaxSeqNoRequest(const ui64 responseCookie, const TActo
     for (ui32 i = 0; i < cmd.SourceIdSize(); ++i)
         ids.push_back(cmd.GetSourceId(i));
     THolder<TEvPQ::TEvGetMaxSeqNoRequest> event = MakeHolder<TEvPQ::TEvGetMaxSeqNoRequest>(responseCookie, ids);
-    ctx.Send(partActor, event.Release());
+    ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
 void TPersQueue::HandleDeleteSessionRequest(
-        const ui64 responseCookie, const TActorId& partActor,
+        const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
         const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
         const TActorId& pipeClient, const TActorId&
 )
@@ -1869,7 +1870,7 @@ void TPersQueue::HandleDeleteSessionRequest(
                 responseCookie, cmd.GetClientId(), 0, cmd.GetSessionId(), 0, 0, 0, pipeClient,
                 TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION
         );
-        ctx.Send(partActor, event.Release());
+        ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
     }
     auto pipe = PipesInfo.find(pipeClient);
     if (!pipe.IsEnd()) {
@@ -1877,7 +1878,7 @@ void TPersQueue::HandleDeleteSessionRequest(
     }
 }
 
-void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, const TActorId& partActor,
+void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
                                             const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
                                             const TActorId& pipeClient, const TActorId&
 ) {
@@ -1934,12 +1935,12 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, const TAc
 
 	    Send(SelfId(), fakeResponse.Release());
         } else {
-            ctx.Send(partActor, event.Release());
+            ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
         }
     }
 }
 
-void TPersQueue::HandleSetClientOffsetRequest(const ui64 responseCookie, const TActorId& partActor,
+void TPersQueue::HandleSetClientOffsetRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
                                           const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(req.HasCmdSetClientOffset());
@@ -1960,11 +1961,11 @@ void TPersQueue::HandleSetClientOffsetRequest(const ui64 responseCookie, const T
             responseCookie, cmd.GetClientId(), cmd.GetOffset(), cmd.HasSessionId() ? cmd.GetSessionId() : "", 0, 0, 0,
             TActorId{}, TEvPQ::TEvSetClientInfo::ESCI_OFFSET, 0, cmd.GetStrict()
         );
-        ctx.Send(partActor, event.Release());
+        ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
     }
 }
 
-void TPersQueue::HandleGetClientOffsetRequest(const ui64 responseCookie, const TActorId& partActor,
+void TPersQueue::HandleGetClientOffsetRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
                                           const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(req.HasCmdGetClientOffset());
@@ -1975,21 +1976,21 @@ void TPersQueue::HandleGetClientOffsetRequest(const ui64 responseCookie, const T
     } else {
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OFFSET);
         THolder<TEvPQ::TEvGetClientOffset> event = MakeHolder<TEvPQ::TEvGetClientOffset>(responseCookie, cmd.GetClientId());
-        ctx.Send(partActor, event.Release());
+        ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
     }
 }
 
-void TPersQueue::HandleUpdateWriteTimestampRequest(const ui64 responseCookie, const TActorId& partActor,
+void TPersQueue::HandleUpdateWriteTimestampRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
                                           const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(req.HasCmdUpdateWriteTimestamp());
     const auto& cmd = req.GetCmdUpdateWriteTimestamp();
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OFFSET);
     THolder<TEvPQ::TEvUpdateWriteTimestamp> event = MakeHolder<TEvPQ::TEvUpdateWriteTimestamp>(responseCookie, cmd.GetWriteTimeMS());
-    ctx.Send(partActor, event.Release());
+    ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
-void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& partActor,
+void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
                                     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(req.CmdWriteSize());
@@ -1998,7 +1999,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
         MeteringSink.IncreaseQuantity(EMeteringJson::PutEventsV1, req.HasPutUnitsSize() ? req.GetPutUnitsSize() : 0);
     }
 
-    TVector <TEvPQ::TEvWrite::TMsg> msgs;
+    TVector<TEvPQ::TEvWrite::TMsg> msgs;
 
     bool mirroredPartition = Config.GetPartitionConfig().HasMirrorFrom();
 
@@ -2187,11 +2188,11 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                                     req.HasOwnerCookie() ? req.GetOwnerCookie() : "",
                                     req.HasCmdWriteOffset() ? req.GetCmdWriteOffset() : TMaybe<ui64>(),
                                     std::move(msgs), req.GetIsDirectWrite(), initialSeqNo);
-    ctx.Send(partActor, event.Release());
+    ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
 
-void TPersQueue::HandleReserveBytesRequest(const ui64 responseCookie, const TActorId& partActor,
+void TPersQueue::HandleReserveBytesRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
                                           const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
                                           const TActorId& pipeClient, const TActorId&)
 {
@@ -2223,11 +2224,11 @@ void TPersQueue::HandleReserveBytesRequest(const ui64 responseCookie, const TAct
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_RESERVE_BYTES);
     THolder<TEvPQ::TEvReserveBytes> event = MakeHolder<TEvPQ::TEvReserveBytes>(responseCookie, req.GetCmdReserveBytes().GetSize(),
                                                                         req.GetOwnerCookie(), req.GetMessageNo(), req.GetCmdReserveBytes().GetLastRequest());
-    ctx.Send(partActor, event.Release());
+    ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
 
-void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, const TActorId& partActor,
+void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
                                           const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
                                           const TActorId& pipeClient, const TActorId& sender)
 {
@@ -2252,12 +2253,12 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, const TAct
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OWNERSHIP);
     THolder<TEvPQ::TEvChangeOwner> event = MakeHolder<TEvPQ::TEvChangeOwner>(responseCookie, owner, pipeClient, sender,
             req.GetCmdGetOwnership().GetForce(), req.GetCmdGetOwnership().GetRegisterIfNotExists());
-    ctx.Send(partActor, event.Release());
+    ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
 
 void TPersQueue::HandleReadRequest(
-        const ui64 responseCookie, const TActorId& partActor,
+        const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
         const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
         const TActorId& pipeClient, const TActorId&
 ) {
@@ -2325,7 +2326,7 @@ void TPersQueue::HandleReadRequest(
                                        cmd.GetExternalOperation(),
                                        pipeClient);
 
-        ctx.Send(partActor, event.Release());
+        ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
     }
 }
 
@@ -2356,7 +2357,7 @@ bool ValidateDirectReadRequestBase(
 }
 
 void TPersQueue::HandlePublishReadRequest(
-        const ui64 responseCookie, const TActorId&,
+        const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId&,
         const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
         const TActorId& pipeClient, const TActorId&
 ) {
@@ -2380,13 +2381,14 @@ void TPersQueue::HandlePublishReadRequest(
     PQ_LOG_D("Publish direct read id " << key.ReadId << " for session " << key.SessionId);
     ctx.Send(
             MakePQDReadCacheServiceActorId(),
-            new TEvPQ::TEvPublishDirectRead(key, GetGeneration())
+            new TEvPQ::TEvPublishDirectRead(key, GetGeneration()),
+            0, 0, std::move(traceId)
     );
 
 }
 
 void TPersQueue::HandleForgetReadRequest(
-        const ui64 responseCookie, const TActorId& ,
+        const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& ,
         const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
         const TActorId& pipeClient, const TActorId&
 ) {
@@ -2408,7 +2410,8 @@ void TPersQueue::HandleForgetReadRequest(
     PQ_LOG_D("Forget direct read id " << key.ReadId << " for session " << key.SessionId);
     ctx.Send(
             MakePQDReadCacheServiceActorId(),
-            new TEvPQ::TEvForgetDirectRead(key, GetGeneration())
+            new TEvPQ::TEvForgetDirectRead(key, GetGeneration()),
+            0, 0, std::move(traceId)
     );
 
 }
@@ -2470,7 +2473,7 @@ TMaybe<TEvPQ::TEvDeregisterMessageGroup::TBody> TPersQueue::MakeDeregisterMessag
     return TEvPQ::TEvDeregisterMessageGroup::TBody(cmd.GetId());
 }
 
-void TPersQueue::HandleRegisterMessageGroupRequest(ui64 responseCookie, const TActorId& partActor,
+void TPersQueue::HandleRegisterMessageGroupRequest(ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(req.HasCmdRegisterMessageGroup());
@@ -2484,10 +2487,10 @@ void TPersQueue::HandleRegisterMessageGroupRequest(ui64 responseCookie, const TA
     }
 
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_REGISTER_MESSAGE_GROUP);
-    ctx.Send(partActor, new TEvPQ::TEvRegisterMessageGroup(responseCookie, std::move(body.GetRef())));
+    ctx.Send(partActor, new TEvPQ::TEvRegisterMessageGroup(responseCookie, std::move(body.GetRef())), 0, 0, std::move(traceId));
 }
 
-void TPersQueue::HandleDeregisterMessageGroupRequest(ui64 responseCookie, const TActorId& partActor,
+void TPersQueue::HandleDeregisterMessageGroupRequest(ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(req.HasCmdDeregisterMessageGroup());
@@ -2501,10 +2504,10 @@ void TPersQueue::HandleDeregisterMessageGroupRequest(ui64 responseCookie, const 
     }
 
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_DEREGISTER_MESSAGE_GROUP);
-    ctx.Send(partActor, new TEvPQ::TEvDeregisterMessageGroup(responseCookie, std::move(body.GetRef())));
+    ctx.Send(partActor, new TEvPQ::TEvDeregisterMessageGroup(responseCookie, std::move(body.GetRef())), 0, 0, std::move(traceId));
 }
 
-void TPersQueue::HandleSplitMessageGroupRequest(ui64 responseCookie, const TActorId& partActor,
+void TPersQueue::HandleSplitMessageGroupRequest(ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(req.HasCmdSplitMessageGroup());
@@ -2538,7 +2541,7 @@ void TPersQueue::HandleSplitMessageGroupRequest(ui64 responseCookie, const TActo
     }
 
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_SPLIT_MESSAGE_GROUP);
-    ctx.Send(partActor, new TEvPQ::TEvSplitMessageGroup(responseCookie, std::move(deregistrations), std::move(registrations)));
+    ctx.Send(partActor, new TEvPQ::TEvSplitMessageGroup(responseCookie, std::move(deregistrations), std::move(registrations)), 0, 0, std::move(traceId));
 }
 
 const TPartitionInfo& TPersQueue::GetPartitionInfo(const NKikimrClient::TPersQueuePartitionRequest& req) const
@@ -2561,6 +2564,7 @@ const TPartitionInfo& TPersQueue::GetPartitionInfo(const NKikimrClient::TPersQue
 }
 
 void TPersQueue::HandleGetOwnershipRequestForSupportivePartition(const ui64 responseCookie,
+                                                                 NWilson::TTraceId traceId,
                                                                  const NKikimrClient::TPersQueuePartitionRequest& req,
                                                                  const TActorId& sender,
                                                                  const TActorContext& ctx)
@@ -2569,10 +2573,11 @@ void TPersQueue::HandleGetOwnershipRequestForSupportivePartition(const ui64 resp
     const TActorId& actorId = partition.Actor;
     TActorId pipeClient = ActorIdFromProto(req.GetPipeClient());
 
-    HandleGetOwnershipRequest(responseCookie, actorId, req, ctx, pipeClient, sender);
+    HandleGetOwnershipRequest(responseCookie, std::move(traceId), actorId, req, ctx, pipeClient, sender);
 }
 
 void TPersQueue::HandleReserveBytesRequestForSupportivePartition(const ui64 responseCookie,
+                                                                 NWilson::TTraceId traceId,
                                                                  const NKikimrClient::TPersQueuePartitionRequest& req,
                                                                  const TActorId& sender,
                                                                  const TActorContext& ctx)
@@ -2581,10 +2586,11 @@ void TPersQueue::HandleReserveBytesRequestForSupportivePartition(const ui64 resp
     const TActorId& actorId = partition.Actor;
     TActorId pipeClient = ActorIdFromProto(req.GetPipeClient());
 
-    HandleReserveBytesRequest(responseCookie, actorId, req, ctx, pipeClient, sender);
+    HandleReserveBytesRequest(responseCookie, std::move(traceId), actorId, req, ctx, pipeClient, sender);
 }
 
 void TPersQueue::HandleWriteRequestForSupportivePartition(const ui64 responseCookie,
+                                                          NWilson::TTraceId traceId,
                                                           const NKikimrClient::TPersQueuePartitionRequest& req,
                                                           const TActorContext& ctx)
 {
@@ -2593,20 +2599,21 @@ void TPersQueue::HandleWriteRequestForSupportivePartition(const ui64 responseCoo
     const TPartitionInfo& partition = GetPartitionInfo(req);
     const TActorId& actorId = partition.Actor;
 
-    HandleWriteRequest(responseCookie, actorId, req, ctx);
+    HandleWriteRequest(responseCookie, std::move(traceId), actorId, req, ctx);
 }
 
 void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
+                                                   NWilson::TTraceId traceId,
                                                    const NKikimrClient::TPersQueuePartitionRequest& req,
                                                    const TActorId& sender,
                                                    const TActorContext& ctx)
 {
     if (req.HasCmdGetOwnership()) {
-        HandleGetOwnershipRequestForSupportivePartition(responseCookie, req, sender, ctx);
+        HandleGetOwnershipRequestForSupportivePartition(responseCookie, std::move(traceId), req, sender, ctx);
     } else if (req.HasCmdReserveBytes()) {
-        HandleReserveBytesRequestForSupportivePartition(responseCookie, req, sender, ctx);
+        HandleReserveBytesRequestForSupportivePartition(responseCookie, std::move(traceId), req, sender, ctx);
     } else if (req.CmdWriteSize()) {
-        HandleWriteRequestForSupportivePartition(responseCookie, req, ctx);
+        HandleWriteRequestForSupportivePartition(responseCookie, std::move(traceId), req, ctx);
     } else {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "CmdGetOwnership, CmdReserveBytes or CmdWrite expected");
     }
@@ -2657,7 +2664,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         TPartitionInfo& partition = Partitions.at(partitionId);
 
         if (partition.InitDone) {
-            HandleEventForSupportivePartition(responseCookie, req, sender, ctx);
+            HandleEventForSupportivePartition(responseCookie, std::move(event->TraceId), req, sender, ctx);
         } else {
             partition.PendingRequests.emplace_back(responseCookie,
                                                    std::shared_ptr<TEvPersQueue::TEvRequest>(event->Release().Release()),
@@ -2808,35 +2815,35 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
 
     const TActorId& partActor = it->second.Actor;
     if (req.HasCmdGetMaxSeqNo()) {
-        HandleGetMaxSeqNoRequest(responseCookie, partActor, req, ctx);
+        HandleGetMaxSeqNoRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.HasCmdDeleteSession()) {
-        HandleDeleteSessionRequest(responseCookie, partActor, req, ctx, pipeClient, ev->Sender);
+        HandleDeleteSessionRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx, pipeClient, ev->Sender);
     } else if (req.HasCmdCreateSession()) {
-        HandleCreateSessionRequest(responseCookie, partActor, req, ctx, pipeClient, ev->Sender);
+        HandleCreateSessionRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx, pipeClient, ev->Sender);
     } else if (req.HasCmdSetClientOffset()) {
-        HandleSetClientOffsetRequest(responseCookie, partActor, req, ctx);
+        HandleSetClientOffsetRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.HasCmdGetClientOffset()) {
-        HandleGetClientOffsetRequest(responseCookie, partActor, req, ctx);
+        HandleGetClientOffsetRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.CmdWriteSize()) {
-        HandleWriteRequest(responseCookie, partActor, req, ctx);
+        HandleWriteRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.HasCmdUpdateWriteTimestamp()) {
-        HandleUpdateWriteTimestampRequest(responseCookie, partActor, req, ctx);
+        HandleUpdateWriteTimestampRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.HasCmdRead()) {
-        HandleReadRequest(responseCookie, partActor, req, ctx, pipeClient, ev->Sender);
+        HandleReadRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx, pipeClient, ev->Sender);
     } else if (req.HasCmdPublishRead()) {
-        HandlePublishReadRequest(responseCookie, partActor, req, ctx, pipeClient, ev->Sender);
+        HandlePublishReadRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx, pipeClient, ev->Sender);
     } else if (req.HasCmdForgetRead()) {
-        HandleForgetReadRequest(responseCookie, partActor, req, ctx, pipeClient, ev->Sender);
+        HandleForgetReadRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx, pipeClient, ev->Sender);
     } else if (req.HasCmdGetOwnership()) {
-        HandleGetOwnershipRequest(responseCookie, partActor, req, ctx, pipeClient, ev->Sender);
+        HandleGetOwnershipRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx, pipeClient, ev->Sender);
     } else if (req.HasCmdReserveBytes()) {
-        HandleReserveBytesRequest(responseCookie, partActor, req, ctx, pipeClient, ev->Sender);
+        HandleReserveBytesRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx, pipeClient, ev->Sender);
     } else if (req.HasCmdRegisterMessageGroup()) {
-        HandleRegisterMessageGroupRequest(responseCookie, partActor, req, ctx);
+        HandleRegisterMessageGroupRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.HasCmdDeregisterMessageGroup()) {
-        HandleDeregisterMessageGroupRequest(responseCookie, partActor, req, ctx);
+        HandleDeregisterMessageGroupRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.HasCmdSplitMessageGroup()) {
-        HandleSplitMessageGroupRequest(responseCookie, partActor, req, ctx);
+        HandleSplitMessageGroupRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else {
         PQ_LOG_ERROR_AND_DIE("unknown or empty command");
         return;

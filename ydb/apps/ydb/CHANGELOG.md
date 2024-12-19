@@ -1,3 +1,10 @@
+* Replaced option `--query-settings` by `--query-prefix` one in `ydb workload <workload> run`.
+* Added new options to `ydb workload topic`: --tx-commit-interval and --tx-commit-messages, allowing you to specify commit interval either in milliseconds or in number of messages written. 
+Also now you can load test YDB topics, using wide transactions that span over all partitions in the topic. This works both in write and in end-to-end workload scenarios. 
+
+## 2.18.0 ##
+
+* `ydb import file csv` command now saves import progress. Relaunching import command will continue from the line it was interrupted on
 * Use QueryService by default (`--executer generic`) in `ydb workload kv` and `ydb workload stock` commands
 * Use parquet format instead of CSV to fill tables in `ydb workload` benchmarks
 * Made `--consumer` flag in `ydb topic read` command optional. Now if this flag is not specified, reading is performed in no-consumer mode. In this mode partition IDs should be specified with `--partition-ids` option. 

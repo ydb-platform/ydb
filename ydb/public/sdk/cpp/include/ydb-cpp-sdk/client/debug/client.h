@@ -41,6 +41,13 @@ public:
     {}
 };
 
+class TActorChainPingResult: public TStatus {
+public:
+    TActorChainPingResult(TStatus&& status)
+        : TStatus(std::move(status))
+    {}
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 using TAsyncPlainGrpcPingResult = NThreading::TFuture<TPlainGrpcPingResult>;
@@ -48,6 +55,7 @@ using TAsyncGrpcProxyPingResult = NThreading::TFuture<TGrpcProxyPingResult>;
 using TAsyncKqpProxyPingResult = NThreading::TFuture<TKqpProxyPingResult>;
 using TAsyncSchemeCachePingResult = NThreading::TFuture<TSchemeCachePingResult>;
 using TAsyncTxProxyPingResult = NThreading::TFuture<TTxProxyPingResult>;
+using TAsyncActorChainPingResult = NThreading::TFuture<TActorChainPingResult>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -56,6 +64,12 @@ struct TGrpcProxyPingSettings : public TOperationRequestSettings<TGrpcProxyPingS
 struct TKqpProxyPingSettings : public TOperationRequestSettings<TKqpProxyPingSettings> {};
 struct TSchemeCachePingSettings : public TOperationRequestSettings<TSchemeCachePingSettings> {};
 struct TTxProxyPingSettings : public TOperationRequestSettings<TTxProxyPingSettings> {};
+
+struct TActorChainPingSettings : public TOperationRequestSettings<TActorChainPingSettings> {
+    FLUENT_SETTING_DEFAULT(size_t, ChainLength, 10);
+    FLUENT_SETTING_DEFAULT(size_t, WorkUsec, 5);
+    FLUENT_SETTING_DEFAULT(bool, NoTailChain, false);
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -74,6 +88,8 @@ public:
 
     TAsyncSchemeCachePingResult PingSchemeCache(const TSchemeCachePingSettings& settings);
     TAsyncTxProxyPingResult PingTxProxy(const TTxProxyPingSettings& settings);
+
+    TAsyncActorChainPingResult PingActorChain(const TActorChainPingSettings& settings);
 
 private:
     class TImpl;

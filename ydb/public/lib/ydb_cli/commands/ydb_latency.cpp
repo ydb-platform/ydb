@@ -113,7 +113,10 @@ void Evaluate(
                     } else {
                         ++result.ErrorCount;
                     }
-                } catch (...) {
+                } catch (yexception ex) {
+                    TStringStream ss;
+                    ss << "Failed to perform request: " << ex.what() << Endl;
+                    Cerr << ss.Str();
                     ++result.ErrorCount;
                 }
             }
@@ -143,7 +146,11 @@ TCommandLatency::TCommandLatency()
     , Format(DEFAULT_FORMAT)
     , RunKind(DEFAULT_RUN_KIND)
     , Percentile(DEFAULT_PERCENTILE)
+    , ChainConfig(new NDebug::TActorChainPingSettings())
 {}
+
+TCommandLatency::~TCommandLatency() {
+}
 
 void TCommandLatency::Config(TConfig& config) {
     TYdbCommand::Config(config);
@@ -164,8 +171,19 @@ void TCommandLatency::Config(TConfig& config) {
         'f', "format", TStringBuilder() << "Output format. Available options: " << availableFormats)
             .OptionalArgument("STRING").StoreResult(&Format).DefaultValue(DEFAULT_FORMAT);
     config.Opts->AddLongOption(
-        'k', "kind", TStringBuilder() << "Use only specified ping kind. Available options: "<< availableKinds)
+        'k', "kind", TStringBuilder() << "Use only specified ping kind. Available options: " << availableKinds)
             .OptionalArgument("STRING").StoreResult(&RunKind).DefaultValue(DEFAULT_RUN_KIND);
+
+    // actor chain options
+    config.Opts->AddLongOption(
+        "chain-length", TStringBuilder() << "Chain length (ActorChain kind only)")
+            .OptionalArgument("INT").StoreResult(&ChainConfig->ChainLength_).DefaultValue(ChainConfig->ChainLength_);
+    config.Opts->AddLongOption(
+        "chain-work-duration", TStringBuilder() << "Duration of work in usec for each actor in the chain (ActorChain kind only)")
+            .OptionalArgument("INT").StoreResult(&ChainConfig->WorkUsec_).DefaultValue(ChainConfig->WorkUsec_);
+    config.Opts->AddLongOption(
+        "no-tail-chain", TStringBuilder() << "Don't use Tail sends and registrations (ActorChain kind only)")
+            .NoArgument().SetFlag(&ChainConfig->NoTailChain_).DefaultValue(ChainConfig->NoTailChain_);
 }
 
 void TCommandLatency::Parse(TConfig& config) {
@@ -218,6 +236,13 @@ int TCommandLatency::Run(TConfig& config) {
         };
     };
 
+    auto chainConfig = *ChainConfig;
+    auto txActorChainPingFactory = [debugClient, chainConfig] () {
+        return [debugClient, chainConfig] () {
+            return TCommandPing::PingActorChain(*debugClient, chainConfig);
+        };
+    };
+
     using TTaskPair = std::pair<TCommandPing::EPingKind, TCallableFactory>;
     const std::vector<TTaskPair> allTasks = {
         { TCommandPing::EPingKind::PlainGrpc, plainGrpcPingFactory },
@@ -226,6 +251,7 @@ int TCommandLatency::Run(TConfig& config) {
         { TCommandPing::EPingKind::Select1, select1Factory },
         { TCommandPing::EPingKind::SchemeCache, schemeCachePingFactory },
         { TCommandPing::EPingKind::TxProxy, txProxyPingFactory },
+        { TCommandPing::EPingKind::ActorChain, txActorChainPingFactory },
     };
 
     std::vector<TTaskPair> runTasks;

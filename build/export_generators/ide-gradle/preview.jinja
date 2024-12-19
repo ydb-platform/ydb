@@ -7,11 +7,11 @@ tasks.withType<JavaCompile> {
 }
 
 tasks.withType<JavaExec> {
-     jvmArgs?.add("--enable-preview")
+     jvmArgs = mutableListOf("--enable-preview")
 }
 
 tasks.withType<Test> {
-    jvmArgs?.add("--enable-preview")
+    jvmArgs = mutableListOf("--enable-preview")
     environment["JAVA_TOOL_OPTIONS"] = "--enable-preview"
 }
 

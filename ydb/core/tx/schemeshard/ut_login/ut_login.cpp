@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // check login
         {
             auto resultLogin = Login(runtime, "user1", "password1");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Invalid user");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user: user1");
         }
 
         // another still has access
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // check login
         {
             auto resultLogin = Login(runtime, "user1", "password1");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Invalid user");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user: user1");
         }
 
         // another still has access
@@ -285,7 +285,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
                 {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"), NLs::HasOwner("user2")});
             auto resultLogin = Login(runtime, "user1", "password1");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Invalid user");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user: user1");
         }
     }
 

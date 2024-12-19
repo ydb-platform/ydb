@@ -1019,12 +1019,7 @@ void TPathDescriber::DescribeExternalDataSource(const TActorContext&, TPathId pa
     auto entry = Result->Record.MutablePathDescription()->MutableExternalDataSourceDescription();
     entry->SetName(pathEl->Name);
     PathIdFromPathId(pathId, entry->MutablePathId());
-    entry->SetVersion(externalDataSourceInfo->AlterVersion);
-    entry->SetSourceType(externalDataSourceInfo->SourceType);
-    entry->SetLocation(externalDataSourceInfo->Location);
-    entry->SetInstallation(externalDataSourceInfo->Installation);
-    entry->MutableAuth()->CopyFrom(externalDataSourceInfo->Auth);
-    entry->MutableProperties()->CopyFrom(externalDataSourceInfo->Properties);
+    externalDataSourceInfo->FillProto(*entry);
 }
 
 void TPathDescriber::DescribeView(const TActorContext&, TPathId pathId, TPathElement::TPtr pathEl) {

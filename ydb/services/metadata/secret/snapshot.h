@@ -3,11 +3,12 @@
 #include "access.h"
 
 #include <ydb/services/metadata/abstract/common.h>
+#include <ydb/services/metadata/secret/accessor/snapshot.h>
 #include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NMetadata::NSecret {
 
-class TSnapshot: public NFetcher::ISnapshot {
+class TSnapshot: public NFetcher::ISnapshot, public ISecretAccessor {
 private:
     using TBase = NFetcher::ISnapshot;
     using TSecrets = std::map<TSecretId, TSecret>;
@@ -22,9 +23,9 @@ protected:
     virtual TString DoSerializeToString() const override;
 public:
     using TBase::TBase;
-    bool CheckSecretAccess(const TSecretIdOrValue& sIdOrValue, const NACLib::TUserToken& userToken) const;
-    bool PatchString(TString& stringForPath) const;
-    TConclusion<TString> GetSecretValue(const TSecretIdOrValue& secretId) const;
+    bool CheckSecretAccess(const TSecretIdOrValue& sIdOrValue, const NACLib::TUserToken& userToken) const override;
+    bool PatchString(TString& stringForPath) const override;
+    TConclusion<TString> GetSecretValue(const TSecretIdOrValue& secretId) const override;
 };
 
 }

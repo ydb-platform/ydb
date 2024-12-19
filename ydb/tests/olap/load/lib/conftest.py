@@ -275,4 +275,3 @@ class LoadSuiteBase:
         )
         allure_test_description(self.suite(), self._test_name(query_num), refference_set=self.refference, start_time=result.start_time, end_time=time())
         self.process_query_result(result, query_num, qparams.iterations, True)
-        

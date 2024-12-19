@@ -146,7 +146,8 @@ public:
 
     void AddFilter(const NArrow::TColumnFilter& filter) {
         if (UseFilter && Table) {
-            AFL_VERIFY(filter.Apply(Table, NArrow::TColumnFilter::TApplyContext().SetTrySlices(true)));
+            AFL_VERIFY(filter.Apply(Table, 
+                NArrow::TColumnFilter::TApplyContext().SetTrySlices(!HasAppData() || AppDataVerified().ColumnShardConfig.GetUseSlicesFilter())));
         }
         if (!Filter) {
             Filter = std::make_shared<NArrow::TColumnFilter>(filter);
@@ -176,7 +177,8 @@ public:
         DataAdded = true;
         auto tableLocal = table;
         if (Filter && UseFilter) {
-            AFL_VERIFY(Filter->Apply(tableLocal, NArrow::TColumnFilter::TApplyContext().SetTrySlices(true)));
+            AFL_VERIFY(Filter->Apply(tableLocal, 
+                NArrow::TColumnFilter::TApplyContext().SetTrySlices(!HasAppData() || AppDataVerified().ColumnShardConfig.GetUseSlicesFilter())));
         }
         if (!Table) {
             Table = std::make_shared<NArrow::TGeneralContainer>(tableLocal);

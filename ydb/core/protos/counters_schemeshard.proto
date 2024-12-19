@@ -236,6 +236,8 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxDropTransferCascade = 186  [(CounterOpts) = {Name: "InFlightOps/DropTransferCascade"}];
 
     COUNTER_TRANSFER_COUNT = 187                       [(CounterOpts) = {Name: "Transfers"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxAlterLogin = 188           [(CounterOpts) = {Name: "InFlightOps/AlterLogin"}];
 }
 
 enum ECumulativeCounters {
@@ -380,6 +382,7 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxAlterTransfer = 112          [(CounterOpts) = {Name: "FinishedOps/AlterTransfer"}];
     COUNTER_FINISHED_OPS_TxDropTransfer = 113           [(CounterOpts) = {Name: "FinishedOps/DropTransfer"}];
     COUNTER_FINISHED_OPS_TxDropTransferCascade = 114    [(CounterOpts) = {Name: "FinishedOps/DropTransferCascade"}];
+    COUNTER_FINISHED_OPS_TxAlterLogin = 115             [(CounterOpts) = {Name: "FinishedOps/AlterLogin"}];
 }
 
 enum EPercentileCounters {

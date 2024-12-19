@@ -1161,6 +1161,10 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxDropCdcStreamAtTableDropSnapshot:
         return CreateDropCdcStreamAtTable(NextPartId(), txState, true);
 
+    // Login
+    case TTxState::ETxType::TxAlterLogin:
+        return CreateAlterLogin(NextPartId(), txState);
+
     // Sequences
     case TTxState::ETxType::TxCreateSequence:
         return CreateNewSequence(NextPartId(), txState);

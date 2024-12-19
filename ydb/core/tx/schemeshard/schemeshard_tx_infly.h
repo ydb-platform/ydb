@@ -147,6 +147,7 @@ struct TTxState {
         item(TxAlterTransfer, 100) \
         item(TxDropTransfer, 101) \
         item(TxDropTransferCascade, 102) \
+        item(TxAlterLogin, 103) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -446,6 +447,7 @@ struct TTxState {
         case TxAlterResourcePool:
         case TxRestoreIncrementalBackupAtTable:
         case TxAlterBackupCollection:
+        case TxAlterLogin:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -560,6 +562,7 @@ struct TTxState {
         case TxAlterContinuousBackup:
         case TxAlterResourcePool:
         case TxAlterBackupCollection:
+        case TxAlterLogin:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -678,6 +681,7 @@ struct TTxState {
         case TxAlterContinuousBackup:
         case TxAlterResourcePool:
         case TxAlterBackupCollection:
+        case TxAlterLogin:
             return false;
         case TxInvalid:
         case TxAllocatePQ:
@@ -748,7 +752,7 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpCreateColumnTable: return TxCreateColumnTable;
             case NKikimrSchemeOp::ESchemeOpAlterColumnTable: return TxAlterColumnTable;
             case NKikimrSchemeOp::ESchemeOpDropColumnTable: return TxDropColumnTable;
-            case NKikimrSchemeOp::ESchemeOpAlterLogin: return TxInvalid;
+            case NKikimrSchemeOp::ESchemeOpAlterLogin: return TxAlterLogin;
             case NKikimrSchemeOp::ESchemeOpCreateCdcStream: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpCreateCdcStreamImpl: return TxCreateCdcStream;
             case NKikimrSchemeOp::ESchemeOpCreateCdcStreamAtTable: return TxCreateCdcStreamAtTable;

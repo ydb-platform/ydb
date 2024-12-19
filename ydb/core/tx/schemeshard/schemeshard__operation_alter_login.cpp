@@ -38,9 +38,11 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         NIceDb::TNiceDb db(context.GetTxc().DB); // do not track is there are direct writes happen
         TTabletId ssId = context.SS->SelfTabletId();
+        auto rootPath = TPath::Init(context.SS->RootPathId(), context.SS);
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TAlterLogin Propose"
+            << ", root path " << rootPath.PathString()
             << ", opId: " << OperationId
             << ", at schemeshard: " << ssId);
 
@@ -202,10 +204,20 @@ public:
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TAlterLogin Propose"
             << " " << result->Record.GetStatus()
+            << ", root path " << rootPath.PathString()
             << ", opId: " << OperationId
             << ", at schemeshard: " << ssId);
 
-        SetState(NextState());
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterLogin, rootPath->PathId);
+        txState.State = TTxState::Done;
+
+        rootPath->PathState = NKikimrSchemeOp::EPathStateAlter;
+        rootPath->LastTxId = OperationId.GetTxId();
+
+        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+        context.OnComplete.ActivateTx(OperationId);
+        SetState(TTxState::Done);
+
         result->SetStatus(NKikimrScheme::StatusAccepted);
         return result;
     }

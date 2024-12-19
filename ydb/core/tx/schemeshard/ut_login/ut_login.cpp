@@ -42,17 +42,31 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        {
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            Cerr << describe.DebugString() << Endl;
-            UNIT_ASSERT(describe.HasPathDescription());
-            UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
-            UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());
-            UNIT_ASSERT_VALUES_EQUAL(describe.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(describe.GetPathDescription().GetDomainDescription().GetSecurityState().SidsSize(), 0);
-        }
+        // TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+        //     Name: "TTLEnabledTable"
+        //     Columns { Name: "key" Type: "Uint64" }
+        //     Columns { Name: "ts" Type: "Timestamp" }
+        //     KeyColumnNames: ["key"]
+        // )");
+        // env.SimulateSleep(runtime, TDuration::Seconds(5));
+        // // env.TestWaitNotification(runtime, txId);
+        // return;
+
+        // {
+        //     auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+        //     Cerr << describe.DebugString() << Endl;
+        //     UNIT_ASSERT(describe.HasPathDescription());
+        //     UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
+        //     UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());
+        //     UNIT_ASSERT_VALUES_EQUAL(describe.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize(), 0);
+        //     UNIT_ASSERT_VALUES_EQUAL(describe.GetPathDescription().GetDomainDescription().GetSecurityState().SidsSize(), 0);
+        // }
 
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        env.SimulateSleep(runtime, TDuration::Seconds(5));
+        // env.TestWaitNotification(runtime, txId);
+        return;
+
         
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");

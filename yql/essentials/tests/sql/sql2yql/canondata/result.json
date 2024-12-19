@@ -11222,9 +11222,9 @@
     ],
     "test_sql2yql.test[match_recognize-all_rows_per_match]": [
         {
-            "checksum": "31a940b1bbcea146ae9383e278326c7a",
-            "size": 6729,
-            "uri": "https://{canondata_backend}/1889210/954e2f1656d98697ece5794c59acf75dd1d40612/resource.tar.gz#test_sql2yql.test_match_recognize-all_rows_per_match_/sql.yql"
+            "checksum": "ee193116db0e897c8a3fbb98a75caaac",
+            "size": 6732,
+            "uri": "https://{canondata_backend}/1889210/a0cc9e3113699f51443284ed56291923dfc3735d/resource.tar.gz#test_sql2yql.test_match_recognize-all_rows_per_match_/sql.yql"
         }
     ],
     "test_sql2yql.test[match_recognize-greedy_quantifiers]": [

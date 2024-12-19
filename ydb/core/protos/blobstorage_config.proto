@@ -410,7 +410,9 @@ message TSetPDiskReadOnly {
 }
 
 message TStopPDisk {
-    NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+    THostKey HostKey = 1; // host on which we are looking for the drive
+    string Path = 2; // absolute path to the device as enlisted in PDisk configuration
+    uint32 PDiskId = 3; // may be set instead of path to identify PDisk
 }
 
 message TSetScrubPeriodicity {

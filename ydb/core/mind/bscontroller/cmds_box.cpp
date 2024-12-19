@@ -281,9 +281,25 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TStopPDisk& cmd, TStatus& /*status*/) {
-        auto targetPDiskId = cmd.GetTargetPDiskId();
+        const auto& host = NormalizeHostKey(cmd.GetHostKey());
 
-        TPDiskId pdiskId(targetPDiskId.GetNodeId(), targetPDiskId.GetPDiskId());
+        TPDiskId pdiskId;
+        if (cmd.GetPDiskId()) {
+            if (cmd.GetPath()) {
+                throw TExError() << "TUpdateDriveStatus.Path and PDiskId are mutually exclusive";
+            }
+            pdiskId = TPDiskId(host.GetNodeId(), cmd.GetPDiskId());
+            if (!PDisks.Find(pdiskId) || PDisksToRemove.count(pdiskId)) {
+                throw TExPDiskNotFound(host, cmd.GetPDiskId(), TString());
+            }
+        } else {
+            const std::optional<TPDiskId> found = FindPDiskByLocation(host.GetNodeId(), cmd.GetPath());
+            if (found && !PDisksToRemove.count(*found)) {
+                pdiskId = *found;
+            } else {
+                throw TExPDiskNotFound(host, 0, cmd.GetPath());
+            }
+        }
 
         TPDiskInfo *pdisk = PDisks.FindForUpdate(pdiskId);
 

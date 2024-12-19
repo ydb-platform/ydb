@@ -586,6 +586,32 @@ std::vector<TJobTraceEvent> THttpRawClient::GetJobTrace(
     return result;
 }
 
+TResponseInfo THttpRawClient::SkyShareTable(
+    const std::vector<TYPath>& tablePaths,
+    const TSkyShareTableOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("POST", "api/v1/share", /*IsApi*/ false);
+
+    auto proxyName = Context_.ServerName.substr(0,  Context_.ServerName.find('.'));
+
+    auto host = Context_.Config->SkynetApiHost;
+    if (host == "") {
+        host = "skynet." + proxyName + ".yt.yandex.net";
+    }
+
+    TSkyShareTableOptions patchedOptions = options;
+
+    if (Context_.Config->Pool && !patchedOptions.Pool_) {
+        patchedOptions.Pool(Context_.Config->Pool);
+    }
+
+    header.MergeParameters(NRawClient::SerializeParamsForSkyShareTable(proxyName, Context_.Config->Prefix, tablePaths, patchedOptions));
+    TClientContext skyApiHost({.ServerName = host, .HttpClient = NHttpClient::CreateDefaultHttpClient()});
+
+    return RequestWithoutRetry(skyApiHost, mutationId, header);
+}
+
 TMaybe<TYPath> THttpRawClient::GetFileFromCache(
     const TTransactionId& transactionId,
     const TString& md5Signature,

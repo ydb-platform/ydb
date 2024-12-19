@@ -202,6 +202,12 @@ public:
         const TOperationId& operationId,
         const TGetJobTraceOptions& options = {}) override;
 
+    // SkyShare
+
+    TResponseInfo SkyShareTable(
+        const std::vector<TYPath>& tablePaths,
+        const TSkyShareTableOptions& options = {}) override;
+
     // File cache
 
     TMaybe<TYPath> GetFileFromCache(

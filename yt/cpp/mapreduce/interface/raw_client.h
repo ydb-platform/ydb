@@ -8,6 +8,12 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NDetail {
+    struct TResponseInfo;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class IRawClient
     : public virtual TThrRefBase
 {
@@ -195,6 +201,12 @@ public:
     virtual std::vector<TJobTraceEvent> GetJobTrace(
         const TOperationId& operationId,
         const TGetJobTraceOptions& options = {}) = 0;
+
+    // SkyShare
+
+    virtual NDetail::TResponseInfo SkyShareTable(
+        const std::vector<TYPath>& tablePaths,
+        const TSkyShareTableOptions& options = {}) = 0;
 
     // File cache
 

@@ -36,8 +36,8 @@ public:
         Y_UNUSED(maxByteSize);
 
         TVector<NYdb::NTopic::TReadSessionEvent::TEvent> res;
-        for (auto event = EventsQ_.Pop(block); !event.Empty() &&  res.size() <= maxEventsCount.GetOrElse(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
-            res.push_back(*event);
+        for (auto event = EventsQ_.Pop(block); !event.Empty() &&  res.size() < maxEventsCount.GetOrElse(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
+            res.push_back(std::move(*event));
         }
         return res;
     }
@@ -59,7 +59,6 @@ public:
 
     bool Close(TDuration timeout = TDuration::Max()) override {
         Y_UNUSED(timeout);
-        // TOOD send TSessionClosedEvent
         EventsQ_.Stop();
         Pool_.Stop();
 
@@ -133,7 +132,7 @@ private:
             Sleep(FILE_POLL_PERIOD);
         }
     }
-    
+
     TFile File_;
     TBlockingEQueue<NYdb::NTopic::TReadSessionEvent::TEvent> EventsQ_ {4_MB};
     NYdb::NTopic::TPartitionSession::TPtr Session_;
@@ -143,6 +142,172 @@ private:
 
     TThreadPool Pool_;
     size_t MsgOffset_ = 0;
+    ui64 SeqNo_ = 0;
+};
+
+class TFileTopicWriteSession : public NYdb::NTopic::IWriteSession, private  NYdb::NTopic::TContinuationTokenIssuer {
+public:
+    TFileTopicWriteSession(TFile file): 
+        File_(std::move(file)), FileWriter_([this] () {
+            PushToFile();
+        }), Counters_()
+    {
+        Pool_.Start(1);
+        EventsQ_.Push(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
+    }
+
+    NThreading::TFuture<void> WaitEvent() override {
+        return NThreading::Async([this] () {
+            EventsQ_.BlockUntilEvent();
+            return NThreading::MakeFuture();
+        }, Pool_);
+    }
+
+    TMaybe<NYdb::NTopic::TWriteSessionEvent::TEvent> GetEvent(bool block) override {
+        return EventsQ_.Pop(block);
+    }
+
+    TVector<NYdb::NTopic::TWriteSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount) override {
+        TVector<NYdb::NTopic::TWriteSessionEvent::TEvent> res;
+        for (auto event = EventsQ_.Pop(block); !event.Empty() &&  res.size() < maxEventsCount.GetOrElse(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
+            res.push_back(std::move(*event));
+        }
+        return res;
+    }
+
+    NThreading::TFuture<ui64> GetInitSeqNo() override {
+        return NThreading::MakeFuture(SeqNo_);
+    }
+
+    void Write(NYdb::NTopic::TContinuationToken&&, NYdb::NTopic::TWriteMessage&& message, 
+               NYdb::NTable::TTransaction* tx) override {
+        Y_UNUSED(tx);
+        
+        auto size = message.Data.size();
+        EventsMsgQ_.Push(TOwningWriteMessage(std::move(message)), size);
+    }
+
+    void Write(NYdb::NTopic::TContinuationToken&& token, TStringBuf data, TMaybe<ui64> seqNo,
+                       TMaybe<TInstant> createTimestamp) override {
+        NYdb::NTopic::TWriteMessage message(data);
+        if (seqNo.Defined()) {
+            message.SeqNo(*seqNo);
+        }
+        if (createTimestamp.Defined()) {
+            message.CreateTimestamp(*createTimestamp);
+        }
+
+        Write(std::move(token), std::move(message), nullptr);
+    }
+
+    // Ignores codec in message and always writes raw for debugging purposes
+    void WriteEncoded(NYdb::NTopic::TContinuationToken&& token, NYdb::NTopic::TWriteMessage&& params,
+                              NYdb::NTable::TTransaction* tx) override {
+        Y_UNUSED(tx);
+
+        NYdb::NTopic::TWriteMessage message(params.Data);
+
+        if (params.CreateTimestamp_.Defined()) {
+            message.CreateTimestamp(*params.CreateTimestamp_);
+        }
+        if (params.SeqNo_) {
+            message.SeqNo(*params.SeqNo_);
+        }
+        message.MessageMeta(params.MessageMeta_);
+
+        Write(std::move(token), std::move(message), nullptr);
+    }
+
+    // Ignores codec in message and always writes raw for debugging purposes
+    void WriteEncoded(NYdb::NTopic::TContinuationToken&& token, TStringBuf data, NYdb::NTopic::ECodec codec, ui32 originalSize,
+                              TMaybe<ui64> seqNo, TMaybe<TInstant> createTimestamp) override {
+        Y_UNUSED(codec);
+        Y_UNUSED(originalSize);
+
+        NYdb::NTopic::TWriteMessage message(data);
+        if (seqNo.Defined()) {
+            message.SeqNo(*seqNo);
+        }
+        if (createTimestamp.Defined()) {
+            message.CreateTimestamp(*createTimestamp);
+        }
+
+        Write(std::move(token), std::move(message), nullptr);
+    }
+
+    bool Close(TDuration timeout = TDuration::Max()) override {
+        Y_UNUSED(timeout);
+        EventsQ_.Stop();
+        EventsMsgQ_.Stop();
+        Pool_.Stop();
+
+        if (FileWriter_.joinable()) {
+            FileWriter_.join();
+        }
+        return true;
+    }
+
+    NYdb::NTopic::TWriterCounters::TPtr GetCounters() override {
+        return Counters_;
+    }
+
+    ~TFileTopicWriteSession() override {
+        EventsQ_.Stop();
+        EventsMsgQ_.Stop();
+        Pool_.Stop();
+        if (FileWriter_.joinable()) {
+            FileWriter_.join();
+        }
+    }
+
+private:
+    void PushToFile() {
+        TFileOutput fo(File_);
+        ui64 offset = 0; // FIXME dummy
+        ui64 partitionId = 0; // FIXME dummy
+        while (auto maybeMsg = EventsMsgQ_.Pop(true)) {
+            NYdb::NTopic::TWriteSessionEvent::TAcksEvent acks;
+            do {
+                auto& [content, msg] = *maybeMsg;
+                NYdb::NTopic::TWriteSessionEvent::TWriteAck ack;
+                if (msg.SeqNo_.Defined()) { // FIXME should be auto generated otherwise
+                    ack.SeqNo = *msg.SeqNo_;
+                }
+                ack.State = NYdb::NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN;
+                ack.Details.ConstructInPlace(offset, partitionId);
+                acks.Acks.emplace_back(std::move(ack));
+                offset += content.size() + 1;
+                fo.Write(content);
+                fo.Write('\n');
+            } while ((maybeMsg = EventsMsgQ_.Pop(false)));
+            fo.Flush();
+            EventsQ_.Push(std::move(acks), 1 + acks.Acks.size());
+            EventsQ_.Push(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()}, 1);
+            if (EventsQ_.IsStopped()) {
+                break;
+            }
+        }
+    }
+    
+    TFile File_;
+    
+    // We acquire ownership of messages immediately
+    // TODO: remove extra message copying to and from queue
+    struct TOwningWriteMessage {
+        TString content;
+        NYdb::NTopic::TWriteMessage msg;
+        
+        TOwningWriteMessage(NYdb::NTopic::TWriteMessage&& msg): content(msg.Data), msg(std::move(msg)) {
+            msg.Data = content;
+        }
+    };
+    TBlockingEQueue<TOwningWriteMessage> EventsMsgQ_ {4_MB};
+
+    TBlockingEQueue<NYdb::NTopic::TWriteSessionEvent::TEvent> EventsQ_ {128_KB};
+    std::thread FileWriter_;
+
+    TThreadPool Pool_;
+    NYdb::NTopic::TWriterCounters::TPtr Counters_;
     ui64 SeqNo_ = 0;
 };
 
@@ -231,8 +396,13 @@ std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession> TFileTopicClient::Cre
 }
 
 std::shared_ptr<NYdb::NTopic::IWriteSession> TFileTopicClient::CreateWriteSession(const NYdb::NTopic::TWriteSessionSettings& settings) {
-    Y_UNUSED(settings);
-    return nullptr;
+    TString topicPath = settings.Path_;
+    auto topicsIt = Topics_.find(make_pair("pq", topicPath));
+    Y_ENSURE(topicsIt != Topics_.end());
+    auto filePath = topicsIt->second.FilePath;
+    Y_ENSURE(filePath);
+
+    return std::make_shared<TFileTopicWriteSession>(TFile(*filePath, EOpenMode::TEnum::RdWr));
 }
 
 NYdb::TAsyncStatus TFileTopicClient::CommitOffset(const TString& path, ui64 partitionId, const TString& consumerName, ui64 offset,

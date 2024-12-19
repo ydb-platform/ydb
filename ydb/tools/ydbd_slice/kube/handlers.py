@@ -203,7 +203,7 @@ def slice_docker_load(api_client, project_path, manifests, image, use_prebuilt_i
     node_list = nodes.Nodes(node_list)
     node_list.copy(built_image_path, remote_path)
 
-    cmd = 'remote_digest=$(sudo crictl inspecti -o json {_image} | jq -r ".status.id"); if ["{_local_digest}" != "$remote_digest" ]; then sudo ctr import {_remote_path}; fi'.format(_image=image, _local_digest=local_digest, _remote_path=remote_path)
+    cmd = 'remote_digest=$(sudo crictl inspecti -o json {_image} | jq -r ".status.id"); if [[ "{_local_digest}" != "$remote_digest" ]]; then sudo ctr image import {_remote_path}; fi'.format(_image=image, _local_digest=local_digest, _remote_path=remote_path)
     node_list.execute_async(cmd)
 
 #

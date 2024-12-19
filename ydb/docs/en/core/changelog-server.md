@@ -131,7 +131,7 @@ Release date: July 31, 2024.
 
 * The [Knn UDF](./yql/reference/udf/list/knn.md) function for precise nearest vector search has been implemented.
 * The gRPC Query service has been developed, enabling the execution of all types of queries (DML, DDL) and retrieval of unlimited amounts of data.
-* [Integration with the LDAP protocol](./concepts/auth.md) has been implemented, allowing the retrieval of a list of groups from external LDAP directories.
+* [Integration with the LDAP protocol](./security/authentication.md) has been implemented, allowing the retrieval of a list of groups from external LDAP directories.
 
 ### Embedded UI
 

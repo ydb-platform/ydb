@@ -62,9 +62,9 @@ The provider will be installed in the Terraform plugins folder - `~/.terraform.d
 
 Where:
 
-* `token` - specifies the access token to the database if authentication is used, for example, using a third-party [IAM](../concepts/auth.md#iam) provider.
-* `user` - the username for accessing the database in case of using authentication by [username and password](../concepts/auth.md#static-credentials)
-* `password` - the password for accessing the database in case of using authentication by [username and password](../concepts/auth.md#static-credentials)
+* `token` - specifies the access token to the database if authentication is used, for example, using a third-party [IAM](../security/authentication.md#iam) provider.
+* `user` - the username for accessing the database in case of using authentication by [username and password](../security/authentication.md#static-credentials)
+* `password` - the password for accessing the database in case of using authentication by [username and password](../security/authentication.md#static-credentials)
 
 ## Using the Terraform provider {{ ydb-short-name }} {#work-with-tf}
 

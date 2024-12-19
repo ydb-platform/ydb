@@ -555,4 +555,4 @@ List of different authentication options through URL parameters:
 
 Also, if your cluster is configured using username and password, authentication is done through Liquibase parameters.
 
-For more info about different authentication settings, refer to the [section](../../concepts/auth.md).
+For more info about different authentication settings, refer to the [section](../../security/authentication.md).

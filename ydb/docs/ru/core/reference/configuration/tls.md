@@ -77,7 +77,7 @@ monitoring_config:
 
 ### LDAP
 
-{{ ydb-short-name }} поддерживает [LDAP](../../concepts/auth.md#ldap) для аутентификации пользователей. Протокол LDAP имеет два варианта включения TLS.
+{{ ydb-short-name }} поддерживает [LDAP](../../security/authentication.md#ldap) для аутентификации пользователей. Протокол LDAP имеет два варианта включения TLS.
 
 Пример включения TLS для LDAP через расширение протокола `StartTls`:
 

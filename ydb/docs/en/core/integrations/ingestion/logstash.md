@@ -34,7 +34,7 @@ The command will return a list of all installed plugins, which contain the plugi
 
 ## Configure {{ ydb-short-name }} connection
 
-All plugins use the same set of parameters to configure the connection to {{ ydb-short-name }}. This set contains only one required parameter, `connection_string`. Other parameters are optional and allow configuring [an authentication mode](../../concepts/auth.md). An anonymous mode will be used if the configuration doesn't contain any of these parameters.
+All plugins use the same set of parameters to configure the connection to {{ ydb-short-name }}. This set contains only one required parameter, `connection_string`. Other parameters are optional and allow configuring [an authentication mode](../../security/authentication.md). An anonymous mode will be used if the configuration doesn't contain any of these parameters.
 
 ```ruby
 # This example demonstrates configuration for ydb_storage plugin.

@@ -17,5 +17,4 @@
 - [{#T}](short-access-control-notation.md)
 - Концепции:
 
-  - [{#T}](../concepts/auth.md)
   - [{#T}](../concepts/connect.md)

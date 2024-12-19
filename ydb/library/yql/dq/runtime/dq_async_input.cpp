@@ -24,10 +24,6 @@ public:
         return PushStats.InputIndex;
     }
 
-    i64 GetFreeSpace() const override {
-        return (i64) (MaxBufferBytes/sizeof(NUdf::TUnboxedValuePod)) - StoredRows; // XXX
-    }
-
     const TDqAsyncInputBufferStats& GetPushStats() const override {
         return PushStats;
     }

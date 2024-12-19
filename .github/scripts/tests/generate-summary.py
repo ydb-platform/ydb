@@ -289,6 +289,7 @@ def render_testlist_html(rows, fn, build_preset):
         tests=status_test,
         has_any_log=has_any_log,
         history=history,
+        build_preset=build_preset
     )
 
     with open(fn, "w") as fp:

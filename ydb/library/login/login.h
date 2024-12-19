@@ -171,6 +171,7 @@ public:
     TBasicResponse ModifyUser(const TModifyUserRequest& request);
     TRemoveUserResponse RemoveUser(const TString& user);
     bool CheckUserExists(const TString& user);
+    bool CheckSidExistsOrIsExternal(const TString& sid);
 
     TBasicResponse CreateGroup(const TCreateGroupRequest& request);
     TBasicResponse AddGroupMembership(const TAddGroupMembershipRequest& request);

@@ -338,6 +338,27 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"), NLs::HasOwner("root@builtin")});
     }
 
+    Y_UNIT_TEST(AddAccess_External) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+
+        {
+            NACLib::TDiffACL diffACL;
+            diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1@staff");
+            AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
+            TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        }
+
+        {
+            AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", NACLib::TDiffACL{}.SerializeAsString(), "user1@staff");
+            TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        }
+    }
+
     Y_UNIT_TEST(DisableBuiltinAuthMechanism) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

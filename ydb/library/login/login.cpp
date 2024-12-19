@@ -92,6 +92,10 @@ bool TLoginProvider::CheckUserExists(const TString& user) {
     return CheckSubjectExists(user, ESidType::USER);
 }
 
+bool TLoginProvider::CheckSidExistsOrIsExternal(const TString& sid) {
+    return sid.Contains('@') || Sids.contains(sid);
+}
+
 TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserRequest& request) {
     TBasicResponse response;
 

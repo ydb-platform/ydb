@@ -9,7 +9,7 @@
 namespace NKikimr::NOlap {
 
 template <typename TKey, typename TObject>
-class TObjectCache {
+class TObjectCache : std::enable_shared_from_this<TObjectCache<TKey, TObject>> {
 private:
     THashMap<TKey, std::weak_ptr<const TObject>> Objects;
     mutable TMutex Mutex;
@@ -19,13 +19,13 @@ public:
     private:
         TKey Key;
         std::shared_ptr<const TObject> Object;
-        TObjectCache& Cache;
+        std::weak_ptr<TObjectCache> Cache;
 
     public:
-        TEntryGuard(TKey key, const std::shared_ptr<const TObject> object, TObjectCache& cache)
+        TEntryGuard(TKey key, const std::shared_ptr<const TObject> object, TObjectCache* cache)
             : Key(key)
             , Object(object)
-            , Cache(cache) {
+            , Cache(cache->weak_from_this()) {
         }
 
         const TObject* operator->() const {
@@ -37,7 +37,9 @@ public:
 
         ~TEntryGuard() {
             Object.reset();
-            Cache.TryFree(Key);
+            if (auto cache = Cache.lock()) {
+                cache->TryFree(Key);
+            }
         }
     };
 
@@ -53,7 +55,7 @@ public:
             cachedObject = std::make_shared<const TObject>(std::move(object));
             Objects[key] = cachedObject;
         }
-        return TEntryGuard(std::move(key), cachedObject, *this);
+        return TEntryGuard(std::move(key), cachedObject, this);
     }
 
     void TryFree(const TKey& key) {

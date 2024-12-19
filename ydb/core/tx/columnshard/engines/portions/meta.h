@@ -41,6 +41,9 @@ private:
     TSnapshot RecordSnapshotMax;
 
     void FullValidation() const {
+        for (auto&& i : BlobIds) {
+            AFL_VERIFY(i.BlobSize());
+        }
         AFL_VERIFY(BlobIds.size());
         AFL_VERIFY(RecordsCount);
         AFL_VERIFY(ColumnRawBytes);

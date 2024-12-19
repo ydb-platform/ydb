@@ -7,6 +7,7 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
+#include <ydb/core/base/appdata.h>
 
 namespace NKikimr::NConsole {
 
@@ -25,6 +26,7 @@ class TConfigsManager::TTxReplaceYamlConfig : public TTransactionBase<TConfigsMa
         , Force(force)
         , AllowUnknownFields(ev->Get()->Record.GetRequest().allow_unknown_fields())
         , DryRun(ev->Get()->Record.GetRequest().dry_run())
+        , Database(ev->Get()->Record.HasDatabase() ? TMaybe<TString>{ev->Get()->Record.GetDatabase()} : TMaybe<TString>{})
     {
     }
 
@@ -66,6 +68,95 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         try {
+            TMap<TString, std::pair<TString, TString>> deprecatedFields;
+            TMap<TString, std::pair<TString, TString>> unknownFields;
+
+            auto fillResponse = [&](auto& ev, auto errorLevel){
+                for (auto& [path, info] : unknownFields) {
+                    auto *issue = ev->Record.AddIssues();
+                    issue->set_severity(errorLevel);
+                    issue->set_message(TStringBuilder{} << "Unknown key# " << info.first << " in proto# " << info.second << " found in path# " << path);
+                }
+
+                for (auto& [path, info] : deprecatedFields) {
+                    auto *issue = ev->Record.AddIssues();
+                    issue->set_severity(NYql::TSeverityIds::S_WARNING);
+                    issue->set_message(TStringBuilder{} << "Deprecated key# " << info.first << " in proto# " << info.second << " found in path# " << path);
+                }
+
+                if (WarnDatabaseByPass) {
+                    auto *issue = ev->Record.AddIssues();
+                    issue->set_severity(NYql::TSeverityIds::S_WARNING);
+                    issue->set_message(TStringBuilder{} << "Detected config kind# \"MainConfig\" database# " << *Database << " passed. Ignoring database parameter.");
+                }
+
+                Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
+            };
+
+            bool isMainConfig = NYamlConfig::IsMainConfig(Config);
+            bool isDatabaseConfig = NYamlConfig::IsDatabaseConfig(Config);
+
+            if (!isMainConfig && !isDatabaseConfig) {
+                Error = true;
+                auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+
+                auto *issue = ev->Record.AddIssues();
+                ErrorReason = "Unknown config kind";
+                issue->set_severity(NYql::TSeverityIds::S_ERROR);
+                issue->set_message(ErrorReason);
+                ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+                Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
+                return true;
+            }
+
+            if (Database && isMainConfig) {
+                WarnDatabaseByPass = true;
+            }
+
+            if (Database && isDatabaseConfig && !AppData(ctx)->FeatureFlags.GetPerDatabaseConfigAllowed()) {
+                Error = true;
+                auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+
+                auto *issue = ev->Record.AddIssues();
+                ErrorReason = "Per database config is disabled";
+                issue->set_severity(NYql::TSeverityIds::S_ERROR);
+                issue->set_message(ErrorReason);
+                ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+                Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
+                return true;
+            }
+
+            if (Database && isDatabaseConfig) {
+                Self->YamlConfigPerDatabase[*Database] = Config;
+                // FIXME
+                Modify = true;
+                UpdatedConfig = Self->YamlConfig;
+                // TODO
+                // 1) send
+                // 1) persist
+                // 2) validate
+                // 3) support force
+                // 4) support dry-run
+                // 5) support audit
+                auto ev = MakeHolder<TEvConsole::TEvReplaceYamlConfigResponse>();
+                fillResponse(ev, NYql::TSeverityIds::S_WARNING);
+
+                return true;
+            }
+
+            if (!isMainConfig) {
+                Error = true;
+                auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+
+                auto *issue = ev->Record.AddIssues();
+                ErrorReason = "Invalid config kind";
+                issue->set_severity(NYql::TSeverityIds::S_ERROR);
+                issue->set_message(ErrorReason);
+                ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+                Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
+                return true;
+            }
+
             if (!Force) {
                 auto metadata = NYamlConfig::GetMetadata(Config);
                 Cluster = metadata.Cluster.value_or(TString("unknown"));
@@ -81,9 +172,6 @@ public:
                 });
 
             bool hasForbiddenUnknown = false;
-
-            TMap<TString, std::pair<TString, TString>> deprecatedFields;
-            TMap<TString, std::pair<TString, TString>> unknownFields;
 
             if (UpdatedConfig != Self->YamlConfig || Self->YamlDropped) {
                 Modify = true;
@@ -142,23 +230,6 @@ public:
                 }
             }
 
-            auto fillResponse = [&](auto& ev, auto errorLevel){
-                for (auto& [path, info] : unknownFields) {
-                    auto *issue = ev->Record.AddIssues();
-                        issue->set_severity(errorLevel);
-                        issue->set_message(TStringBuilder{} << "Unknown key# " << info.first << " in proto# " << info.second << " found in path# " << path);
-                }
-
-                for (auto& [path, info] : deprecatedFields) {
-                    auto *issue = ev->Record.AddIssues();
-                        issue->set_severity(NYql::TSeverityIds::S_WARNING);
-                        issue->set_message(TStringBuilder{} << "Deprecated key# " << info.first << " in proto# " << info.second << " found in path# " << path);
-                }
-
-                Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
-            };
-
-
             if (hasForbiddenUnknown) {
                 Error = true;
                 auto ev = MakeHolder<TEvConsole::TEvGenericError>();
@@ -209,7 +280,7 @@ public:
 
             Self->VolatileYamlConfigs.clear();
 
-            auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(Self->YamlConfig);
+            auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(Self->YamlConfig, Self->YamlConfigPerDatabase);
             ctx.Send(Self->ConfigsProvider, resp.Release());
         } else if (Error && !DryRun) {
             AuditLogReplaceConfigTransaction(
@@ -241,6 +312,8 @@ private:
     ui32 Version;
     TString Cluster;
     TString UpdatedConfig;
+    TMaybe<TString> Database;
+    bool WarnDatabaseByPass = false;
 };
 
 ITransaction *TConfigsManager::CreateTxReplaceYamlConfig(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev)

@@ -12,12 +12,21 @@ public:
                      TEvConsole::TEvGetAllConfigsRequest::TPtr &ev)
         : TBase(self)
         , Request(std::move(ev))
+        , Database(Request->Get()->Record.HasDatabase() ? TMaybe<TString>{Request->Get()->Record.GetDatabase()} : TMaybe<TString>{})
     {
     }
 
     bool Execute(TTransactionContext &, const TActorContext &) override
     {
         Response = MakeHolder<TEvConsole::TEvGetAllConfigsResponse>();
+
+        if (Database) {
+            if (Self->YamlConfigPerDatabase.contains(*Database)) {
+                Response->Record.MutableResponse()->set_config(Self->YamlConfigPerDatabase[*Database]);
+            }
+
+            return true;
+        }
 
         Response->Record.MutableResponse()->mutable_identity()->set_cluster(Self->ClusterName);
         Response->Record.MutableResponse()->mutable_identity()->set_version(Self->YamlVersion);
@@ -44,6 +53,7 @@ public:
 private:
     TEvConsole::TEvGetAllConfigsRequest::TPtr Request;
     THolder<TEvConsole::TEvGetAllConfigsResponse> Response;
+    TMaybe<TString> Database;
 };
 
 ITransaction *TConfigsManager::CreateTxGetYamlConfig(TEvConsole::TEvGetAllConfigsRequest::TPtr &ev)

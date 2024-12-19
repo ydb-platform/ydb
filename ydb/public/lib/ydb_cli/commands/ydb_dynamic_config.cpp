@@ -45,6 +45,7 @@ void TCommandConfigFetch::Config(TConfig& config) {
         .NoArgument().SetFlag(&StripMetadata);
     config.SetFreeArgsNum(0);
 
+    config.AllowEmptyDatabase = true;
     config.Opts->MutuallyExclusive("all", "strip-metadata");
     config.Opts->MutuallyExclusive("output-directory", "strip-metadata");
 }
@@ -123,6 +124,7 @@ void TCommandConfigReplace::Config(TConfig& config) {
         .NoArgument().SetFlag(&AllowUnknownFields);
     config.Opts->AddLongOption("force", "Ignore metadata on config replacement")
         .NoArgument().SetFlag(&Force);
+    config.AllowEmptyDatabase = true;
     config.SetFreeArgsNum(0);
 }
 
@@ -613,7 +615,6 @@ void TCommandConfigVolatileFetch::Config(TConfig& config) {
     config.Opts->AddLongOption("strip-metadata", "Strip metadata from config(s)")
         .NoArgument().SetFlag(&StripMetadata);
     config.SetFreeArgsNum(0);
-
     config.Opts->MutuallyExclusive("output-directory", "strip-metadata");
 }
 

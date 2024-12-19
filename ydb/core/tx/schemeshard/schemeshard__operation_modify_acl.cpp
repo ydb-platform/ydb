@@ -55,7 +55,7 @@ public:
             NACLib::TDiffACL diffACL(acl);
             for (const NACLibProto::TDiffACE& diffACE : diffACL.GetDiffACE()) {
                 if (static_cast<NACLib::EDiffType>(diffACE.GetDiffType()) == NACLib::EDiffType::Add) {
-                    if (!context.SS->LoginProvider.CheckSidExistsOrIsExternal(diffACE.GetACE().GetSID())) {
+                    if (!context.SS->LoginProvider.CheckSidExistsOrIsNonYdb(diffACE.GetACE().GetSID())) {
                         result->SetError(NKikimrScheme::StatusPreconditionFailed, "SID not found");
                         return result;
                     }
@@ -63,7 +63,7 @@ public:
             }
         }
         if (owner) {
-            if (!context.SS->LoginProvider.CheckSidExistsOrIsExternal(owner)) {
+            if (!context.SS->LoginProvider.CheckSidExistsOrIsNonYdb(owner)) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed, "Owner SID not found");
                 return result;
             }

@@ -92,7 +92,8 @@ bool TLoginProvider::CheckUserExists(const TString& user) {
     return CheckSubjectExists(user, ESidType::USER);
 }
 
-bool TLoginProvider::CheckSidExistsOrIsExternal(const TString& sid) {
+bool TLoginProvider::CheckSidExistsOrIsNonYdb(const TString& sid) {
+    // non-YDB user's sid format is <login>@<subsystem>
     return sid.Contains('@') || Sids.contains(sid);
 }
 

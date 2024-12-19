@@ -185,6 +185,8 @@ In most cases, working with {{ ydb-short-name }} column-oriented tables is simil
   + Available in both the primary key and other columns: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
   + Available only in columns not included in the primary key: `Bool`, `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `Interval`, `JsonDocument`, `Json`, `Uuid`, `Yson`.
 
+* Column-oriented tables support column groups, but only for compression settings.
+
 Let's recreate the "article" table, this time in column-oriented format, using the following YQL command:
 
 ```yql

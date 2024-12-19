@@ -49,6 +49,12 @@ ALTER TABLE series_with_families
 ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
 ```
 
+{% note info %}
+
+Доступные типы устройств хранения зависят от конфигурации кластера {{ ydb-short-name }}.
+
+{% endnote %}
+
 ### Изменение кодека сжатия
 
 {% if oss == true and backend_name == "YDB" %}
@@ -76,11 +82,5 @@ ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION "lz4";
 ```yql
 ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION_LEVEL 5;
 ```
-
-{% note info %}
-
-Доступные типы устройств хранения зависят от конфигурации кластера {{ ydb-short-name }}.
-
-{% endnote %}
 
 Могут быть указаны все параметры группы колонок, описанные в команде [`CREATE TABLE`](../create_table/secondary_index.md)

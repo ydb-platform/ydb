@@ -234,6 +234,9 @@ When creating row-oriented tables, it is possible to specify:
 * [Column groups](family.md).
 * [Additional parameters](with.md).
 
-For column-oriented tables, only [additional parameters](with.md) can be specified during creation.
+When creating column-oriented tables, it is possible to specify:
+
+* [Column groups](family.md).
+* [Additional parameters](with.md).
 
 {% endif %}

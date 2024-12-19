@@ -65,9 +65,6 @@ public:
             context.SS->PersistACL(db, path.Base());
 
             for (const auto& pathId : subTree) {
-                if (context.SS->PathsById.at(pathId)->IsMigrated()) {
-                    continue;
-                }
                 context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
             }
 

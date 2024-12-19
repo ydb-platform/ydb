@@ -276,7 +276,7 @@ Y_UNIT_TEST_SUITE(Login) {
             UNIT_ASSERT(Count(groups, "group5") == 1);
         }
         {
-            auto response1 = provider.RemoveUser({.User = "user1"});
+            auto response1 = provider.RemoveUser("user1");
             UNIT_ASSERT(!response1.Error);
         }
         {

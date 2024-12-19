@@ -58,8 +58,6 @@ TYqlRunTool::TYqlRunTool()
                 TablesMapping_[name] = path;
             }, '@');
 
-    });
-    GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
         opts.AddLongOption("tables-dir", "Table dirs mapping").RequiredArgument("cluster@dir")
             .KVHandler([&](TString cluster, TString dir) {
                 if (cluster.empty() || dir.empty()) {
@@ -75,8 +73,6 @@ TYqlRunTool::TYqlRunTool()
                 }
             }, '@');
 
-    });
-    GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
         opts.AddLongOption('C', "cluster", "Cluster to service mapping").RequiredArgument("name@service")
             .KVHandler([&](TString cluster, TString provider) {
                 if (cluster.empty() || provider.empty()) {
@@ -85,29 +81,16 @@ TYqlRunTool::TYqlRunTool()
                 AddClusterMapping(std::move(cluster), std::move(provider));
             }, '@');
 
-    });
-    GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
         opts.AddLongOption("ndebug", "Do not show debug info in error output").NoArgument().SetFlag(&GetRunOptions().NoDebug);
-    });
-    GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
         opts.AddLongOption("keep-temp", "Keep temporary tables").NoArgument().SetFlag(&KeepTemp_);
-    });
-    GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
         opts.AddLongOption("show-progress", "Report operation progress").NoArgument()
             .Handler0([&]() {
                 SetOperationProgressWriter([](const TOperationProgress& progress) {
                     Cerr << "Operation: [" << progress.Category << "] " << progress.Id << ", state: " << progress.State << "\n";
                 });
             });
-    });
-    GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
         opts.AddLongOption("tmp-dir", "Directory for temporary tables").RequiredArgument("DIR").StoreResult(&TmpDir_);
-    });
-
-    GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
         opts.AddLongOption("test-format", "Compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported)").NoArgument().SetFlag(&GetRunOptions().TestSqlFormat);
-    });
-    GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
         opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument().SetFlag(&GetRunOptions().ValidateResultFormat);
     });
 

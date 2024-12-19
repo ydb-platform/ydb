@@ -146,7 +146,6 @@ class TestPqRowDispatcher(TestYdsBase):
 
         query_id = start_yds_query(kikimr, client, sql)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
-        time.sleep(10)
 
         data = [
             '{"time": 101, "data": "hello1", "event": "event1"}',
@@ -166,6 +165,35 @@ class TestPqRowDispatcher(TestYdsBase):
         read_rules = list_read_rules(self.input_topic)
         assert len(read_rules) == 0, read_rules
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
+
+    @yq_v1
+    def test_metadatafields(self, kikimr, client):
+        client.create_yds_connection(
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
+        )
+        self.init_topics("test_metadatafields")
+
+        # Its not completely clear why metadatafields appear in this request(
+        sql = Rf'''
+            PRAGMA FeatureR010="prototype";
+            PRAGMA config.flags("TimeOrderRecoverDelay", "-10");
+            PRAGMA config.flags("TimeOrderRecoverAhead", "10");
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL))
+                MATCH_RECOGNIZE(
+                    ORDER BY CAST(time as Timestamp)
+                    MEASURES LAST(A.time) as b_key
+                    PATTERN (A )
+                    DEFINE A as A.time > 4
+                );'''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        self.write_stream(['{"time": 100}', '{"time": 120}'])
+        assert len(self.read_stream(1, topic_path=self.output_topic)) == 1
+        stop_yds_query(client, query_id)
 
     @yq_v1
     def test_simple_optional(self, kikimr, client):

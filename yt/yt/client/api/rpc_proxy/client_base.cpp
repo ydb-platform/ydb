@@ -1021,6 +1021,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
 
     auto req = proxy.SelectRows();
     req->SetResponseHeavy(true);
+    req->SetMultiplexingBand(NRpc::EMultiplexingBand::Interactive);
     req->set_query(query);
 
     const auto& config = GetRpcProxyConnection()->GetConfig();

@@ -495,14 +495,9 @@ protected:
     TClientPtr GetParentClientImpl() override;
 
 private:
-    template <class TOptions>
-    void SetTabletParams(
-        THttpHeader& header,
-        const TYPath& path,
-        const TOptions& options);
-
     void CheckShutdown() const;
 
+private:
     ITransactionPingerPtr TransactionPinger_;
 
     std::atomic<bool> Shutdown_ = false;

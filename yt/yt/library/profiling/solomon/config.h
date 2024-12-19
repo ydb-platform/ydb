@@ -74,6 +74,8 @@ struct TSolomonExporterConfig
 
     int ProducerCollectionBatchSize;
 
+    ELabelSanitizationPolicy LabelSanitizationPolicy;
+
     TShardConfigPtr MatchShard(const std::string& sensorName);
 
     ESummaryPolicy GetSummaryPolicy() const;

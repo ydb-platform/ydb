@@ -56,7 +56,7 @@ public:
             for (const NACLibProto::TDiffACE& diffACE : diffACL.GetDiffACE()) {
                 if (static_cast<NACLib::EDiffType>(diffACE.GetDiffType()) == NACLib::EDiffType::Add) {
                     if (!context.SS->LoginProvider.Sids.contains(diffACE.GetACE().GetSID())) {
-                        result->SetError(NKikimrScheme::StatusPreconditionFailed, "Sid not found");
+                        result->SetError(NKikimrScheme::StatusPreconditionFailed, "SID not found");
                         return result;
                     }
                 } // remove diff type is allowed in any case
@@ -64,7 +64,7 @@ public:
         }
         if (owner) {
             if (!context.SS->LoginProvider.Sids.contains(owner)) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Sid not found");
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Owner SID not found");
                 return result;
             }
         }

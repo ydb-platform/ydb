@@ -548,8 +548,8 @@ private:
                                                                           {"cloud_id", "cloud4"},
                                                                           {"database_id", "database4"}}));
  
-        client.CreateGroup("/Root", "Service1_id@as");
-        client.CreateGroup("/Root", "proxy_sa@as");
+        client.CreateUser("/Root", "Service1_id@as", "password1");
+        client.CreateUser("/Root", "proxy_sa@as", "password2");
 
         NACLib::TDiffACL acl;
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull, "Service1_id@as");

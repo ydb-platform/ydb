@@ -324,12 +324,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             NACLib::TDiffACL diffACL;
             diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
             AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
-            TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "Sid not found"}});
+            TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "SID not found"}});
         }
 
         {
             AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", NACLib::TDiffACL{}.SerializeAsString(), "user1");
-            TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "Sid not found"}});
+            TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "Owner SID not found"}});
         }
         
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");

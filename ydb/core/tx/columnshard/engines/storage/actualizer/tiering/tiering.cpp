@@ -59,7 +59,7 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         if (d) {
             if (targetTierName != NTiering::NCommon::DeleteTierName) {
                 if (const auto op = StoragesManager->GetOperatorOptional(targetTierName); !op || !op->IsReady()) {
-                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_eviction")("reason", "storage_not_ready")("tier", targetTierName)(
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_eviction")("reason", "storage_not_ready")("tier", targetTierName)(
                         "portion", portion.GetPortionId());
                     return std::nullopt;
                 }

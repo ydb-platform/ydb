@@ -34,6 +34,10 @@ struct TTxSettings {
         return TTxSettings(TS_SNAPSHOT_RO);
     }
 
+    static TTxSettings SnapshotRW() {
+        return TTxSettings(TS_SNAPSHOT_RW);
+    }
+
     void Out(IOutputStream& out) const {
         switch (Mode_) {
         case TS_SERIALIZABLE_RW:

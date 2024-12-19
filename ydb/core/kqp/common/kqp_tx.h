@@ -266,7 +266,7 @@ public:
 
             case Ydb::Table::TransactionSettings::kSnapshotReadWrite:
                 EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW;
-                Readonly = true;
+                Readonly = false;
                 break;
 
             case Ydb::Table::TransactionSettings::TX_MODE_NOT_SET:

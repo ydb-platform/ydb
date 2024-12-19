@@ -840,7 +840,7 @@ public:
             switch (LockMode) {
                 case NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE:
                     break;
-                case NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT:
+                case NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT_ISOLATION:
                     YQL_ENSURE(MvccSnapshot);
                     *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
                     break;

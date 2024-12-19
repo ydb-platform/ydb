@@ -1745,7 +1745,7 @@ private:
         }
 
         const auto& lockTxId = TasksGraph.GetMeta().LockTxId;
-        if (lockTxId && TasksGraph.GetMeta().LockMode != NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT) {
+        if (lockTxId && TasksGraph.GetMeta().LockMode != NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT_ISOLATION) {
             YQL_ENSURE(!ReadOnlyTx);
             dataTransaction.SetLockTxId(*lockTxId);
             dataTransaction.SetLockNodeId(SelfId().NodeId());
@@ -1795,7 +1795,6 @@ private:
                     GetSnapshot().TxId,
                     flags));
             } else {
-                YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW);
                 evData.reset(new TEvDataShard::TEvProposeTransaction(
                     NKikimrTxDataShard::TX_KIND_DATA,
                     SelfId(),

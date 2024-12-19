@@ -507,7 +507,7 @@ protected:
 
         switch (Request.IsolationLevel) {
             case NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW:
-                TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT);
+                TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT_ISOLATION);
                 break;
             default:
                 TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE);
@@ -966,7 +966,7 @@ protected:
                 YQL_ENSURE(GetSnapshot().IsValid());
                 settings.MutableMvccSnapshot()->SetStep(GetSnapshot().Step);
                 settings.MutableMvccSnapshot()->SetTxId(GetSnapshot().TxId);
-                settings.SetLockMode(NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT);
+                settings.SetLockMode(NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT_ISOLATION);
             } else if (!settings.GetInconsistentTx()) {
                 settings.SetLockMode(NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE);
             }

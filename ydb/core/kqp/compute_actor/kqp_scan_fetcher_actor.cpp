@@ -449,7 +449,7 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
     ev->Record.SetStatsMode(RuntimeSettings.StatsMode);
     ev->Record.SetScanId(scanId);
     ev->Record.SetTxId(std::get<ui64>(TxId));
-    if (LockTxId && LockMode != NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT) {
+    if (LockTxId && LockMode != NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT_ISOLATION) {
         ev->Record.SetLockTxId(*LockTxId);
     }
     ev->Record.SetLockNodeId(LockNodeId);
@@ -501,8 +501,11 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
     state->LastKey = std::move(msg.LastKey);
     state->LastCursorProto = std::move(msg.LastCursorProto);
     const ui64 rowsCount = msg.GetRowsCount();
-    AFL_ENSURE(!LockTxId || !msg.LocksInfo.Locks.empty() || !msg.LocksInfo.BrokenLocks.empty());
-    AFL_ENSURE(LockTxId || (msg.LocksInfo.Locks.empty() && msg.LocksInfo.BrokenLocks.empty()));
+    AFL_ENSURE(!(LockTxId && LockMode != NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT_ISOLATION)
+        || !msg.LocksInfo.Locks.empty()
+        || !msg.LocksInfo.BrokenLocks.empty());
+    AFL_ENSURE((LockTxId && LockMode != NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT_ISOLATION)
+        || (msg.LocksInfo.Locks.empty() && msg.LocksInfo.BrokenLocks.empty()));
     AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("action", "got EvScanData")("rows", rowsCount)("finished", msg.Finished)("exceeded", msg.RequestedBytesLimitReached)
         ("scan", ScanId)("packs_to_send", InFlightComputes.GetPacksToSendCount())
         ("from", ev->Sender)("shards remain", PendingShards.size())

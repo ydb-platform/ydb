@@ -20,7 +20,7 @@ public:
         : TBase(viewer, ev)
     {
         AllowedMethods = {HTTP_METHOD_GET};
-    }
+    } a
 
     static YAML::Node GetSwagger() {
         YAML::Node node = YAML::Load(R"___(

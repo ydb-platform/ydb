@@ -81,8 +81,8 @@ GRANT "ydb.granular.create_directory" ON `/Root/db1` TO testuser
 
 Для управления правами служат следующие CLI-команды:
 
-* [{#T}]().
-* [{#T}]().
+* [{#T}]((../reference/ydb-cli/commands/scheme-permissions.md#grant)).
+* [{#T}]((../reference/ydb-cli/commands/scheme-permissions.md#revoke)).
 
 Через CLI используется только стиль из столбца "{{ ydb-short-name }} право".
 Например:

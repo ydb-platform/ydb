@@ -87,7 +87,7 @@ enum class EYtSettingType: ui64 {
     ReduceBy                 /* "reduceBy" */,                 // hybrid supported
     ReduceFilterBy           /* "reduceFilterBy" */,
     ForceTransform           /* "forceTransform" */,           // hybrid supported
-    TransformColGroups       /* "transformColGroups" */,       // hybrid supported
+    SoftTransform            /* "softTransform" */,            // hybrid supported
     WeakFields               /* "weakFields" */,
     Sharded                  /* "sharded" */,
     CombineChunks            /* "combineChunks" */,
@@ -99,6 +99,8 @@ enum class EYtSettingType: ui64 {
     KeySwitch                /* "keySwitch" */,                // hybrid supported
     BlockInputReady          /* "blockInputReady" */,          // hybrid supported
     BlockInputApplied        /* "blockInputApplied" */,        // hybrid supported
+    BlockOutputReady         /* "blockOutputReady" */,         // hybrid supported
+    BlockOutputApplied       /* "blockOutputApplied" */,       // hybrid supported
     // Out tables
     UniqueBy                 /* "uniqueBy" */,
     OpHash                   /* "opHash" */,
@@ -168,8 +170,8 @@ EYtSettingTypes operator|(EYtSettingType left, EYtSettingType right);
 const auto DqReadSupportedSettings = EYtSettingType::SysColumns | EYtSettingType::Sample | EYtSettingType::Unordered | EYtSettingType::NonUnique | EYtSettingType::KeyFilter2;
 const auto DqOpSupportedSettings = EYtSettingType::Ordered | EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::SortBy |
                                        EYtSettingType::ReduceBy | EYtSettingType::ForceTransform | EYtSettingType::JobCount | EYtSettingType::JoinReduce |
-                                       EYtSettingType::FirstAsPrimary | EYtSettingType::Flow | EYtSettingType::BlockInputReady | EYtSettingType::BlockInputApplied | EYtSettingType::KeepSorted | EYtSettingType::KeySwitch |
-                                       EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType | EYtSettingType::Sharded | EYtSettingType::TransformColGroups;
+                                       EYtSettingType::FirstAsPrimary | EYtSettingType::Flow | EYtSettingType::BlockInputReady | EYtSettingType::BlockInputApplied | EYtSettingType::BlockOutputReady | EYtSettingType::BlockOutputApplied |
+                                       EYtSettingType::KeepSorted | EYtSettingType::KeySwitch | EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType | EYtSettingType::Sharded | EYtSettingType::SoftTransform;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 

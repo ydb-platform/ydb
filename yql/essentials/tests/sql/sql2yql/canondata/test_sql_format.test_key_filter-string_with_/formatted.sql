@@ -5,5 +5,5 @@ SELECT
 FROM
     plato.Input
 WHERE
-    StartsWith(key, "0") AND EndsWith(key, "5")
+    StartsWith(key, '0') AND EndsWith(key, '5')
 ;

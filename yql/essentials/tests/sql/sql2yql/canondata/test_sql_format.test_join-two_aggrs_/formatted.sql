@@ -1,9 +1,9 @@
 USE plato;
 
-PRAGMA yt.JoinMergeForce = "1";
-PRAGMA yt.JoinMergeTablesLimit = "10";
+PRAGMA yt.JoinMergeForce = '1';
+PRAGMA yt.JoinMergeTablesLimit = '10';
 
-$join =
+$join = (
     SELECT
         a.key AS key1,
         a.subkey AS subkey1
@@ -13,7 +13,7 @@ $join =
         FROM
             Input8
         WHERE
-            subkey != "bar"
+            subkey != 'bar'
     ) AS a
     JOIN (
         SELECT
@@ -21,11 +21,11 @@ $join =
         FROM
             Input8
         WHERE
-            subkey != "foo"
+            subkey != 'foo'
     ) AS b
     ON
         a.key == b.key AND a.subkey == b.subkey
-;
+);
 
 SELECT
     key1,

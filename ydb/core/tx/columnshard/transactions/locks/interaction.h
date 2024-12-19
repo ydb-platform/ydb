@@ -350,7 +350,7 @@ public:
         AFL_VERIFY(writtenPrimaryKeys);
         auto it = IntervalsInfo.begin();
         THashSet<ui64> affectedTxIds;
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("batch", writtenPrimaryKeys->ToString())("info", DebugJson().GetStringRobust());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("batch", writtenPrimaryKeys->ToString())("info", DebugJson().GetStringRobust());
         for (ui32 i = 0; i < writtenPrimaryKeys->num_rows();) {
             if (it == IntervalsInfo.end()) {
                 return affectedTxIds;

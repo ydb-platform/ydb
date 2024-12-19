@@ -57,6 +57,13 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
             targetTierName = tieringInfo.GetNextTierNameVerified();
         }
         if (d) {
+            if (targetTierName != NTiering::NCommon::DeleteTierName) {
+                if (const auto op = StoragesManager->GetOperatorOptional(targetTierName); !op || !op->IsReady()) {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_eviction")("reason", "storage_not_ready")("tier", targetTierName)(
+                        "portion", portion.GetPortionId());
+                    return std::nullopt;
+                }
+            }
             //            if (currentTierName == "deploy_logs_s3" && targetTierName == IStoragesManager::DefaultStorageId) {
             //                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("tiering_info", tieringInfo.DebugString())("max", max->ToString())("now", now.ToString())("d", *d)("tiering", Tiering->GetDebugString())("pathId", PathId);
             //                AFL_VERIFY(false)("tiering_info", tieringInfo.DebugString())("max", max->ToString())("now", now.ToString())("d", *d)("tiering", Tiering->GetDebugString())("pathId", PathId);
@@ -269,7 +276,7 @@ std::vector<TCSMetadataRequest> TTieringActualizer::BuildMetadataRequests(
     std::shared_ptr<TDataAccessorsRequest> currentRequest;
     for (auto&& i : NewPortionIds) {
         if (!currentRequest) {
-            currentRequest = std::make_shared<TDataAccessorsRequest>();
+            currentRequest = std::make_shared<TDataAccessorsRequest>("TIERING_ACTUALIZER");
         }
         auto it = portions.find(i);
         AFL_VERIFY(it != portions.end());

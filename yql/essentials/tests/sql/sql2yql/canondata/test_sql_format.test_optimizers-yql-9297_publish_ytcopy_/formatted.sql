@@ -9,7 +9,7 @@ SELECT
 FROM
     Input
 WHERE
-    key < "100"
+    key < '100'
 ORDER BY
     key DESC
 ;

@@ -30,13 +30,13 @@ $data = (
         plato.Input0
 );
 
-$prefix = ">>";
+$prefix = '>>';
 
 $p1 = (
     PROCESS $data
-    USING $udf($prefix, TableRows(), "=")
+    USING $udf($prefix, TableRows(), '=')
     WHERE
-        Name != "foo"
+        Name != 'foo'
 );
 
 $p2 = (
@@ -48,7 +48,7 @@ $p2 = (
 
 $p3 = (
     PROCESS $p2
-    USING Streaming::Process(TableRows(), "grep", AsList("180"))
+    USING Streaming::Process(TableRows(), 'grep', AsList('180'))
 );
 
 $p4 = (

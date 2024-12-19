@@ -14,7 +14,7 @@ SELECT
     user,
     ts,
     payload,
-    AGGREGATE_LIST(CAST(ts AS string) ?? "null") OVER w AS ts_session,
+    AGGREGATE_LIST(CAST(ts AS string) ?? 'null') OVER w AS ts_session,
     COUNT(1) OVER w AS session_len,
     SessionStart() OVER w AS session_start,
     SessionState() OVER w AS session_state,

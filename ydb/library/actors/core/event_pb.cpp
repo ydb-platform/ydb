@@ -1,6 +1,15 @@
 #include "event_pb.h"
 
 namespace NActors {
+    TString EventPBBaseToString(const TString& header, const TString& dbgStr) {
+        TString res;
+        res.reserve(header.size() + 1 + dbgStr.size());
+        res.append(header);
+        res.append(' ');
+        res.append(dbgStr);
+        return res;
+    }
+
     bool TRopeStream::Next(const void** data, int* size) {
         *data = Iter.ContiguousData();
         *size = Iter.ContiguousSize();

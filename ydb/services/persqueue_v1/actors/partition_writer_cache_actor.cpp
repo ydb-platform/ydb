@@ -76,7 +76,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvTxWriteReque
         }
 
         writer->LastActivity = ctx.Now();
-        writer->OnWriteRequest(std::move(event.Request), ctx);
+        writer->OnWriteRequest(std::move(event.Request), std::move(ev->TraceId), ctx);
     } else {
         ReplyError(event.SessionId, event.TxId,
                    EErrorCode::OverloadError, "limit of active transactions has been exceeded",

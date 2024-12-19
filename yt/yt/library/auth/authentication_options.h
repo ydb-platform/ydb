@@ -40,7 +40,7 @@ struct TAuthenticationOptions
     std::optional<TString> UserTicket;
 
     //! Controls whether authentication commands (SetUserPassword, IssueToken, ListUserTokens, etc.) require a correct password to be used.
-    bool RequirePasswordInAuthenticationCommands;
+    bool RequirePasswordInAuthenticationCommands = true;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

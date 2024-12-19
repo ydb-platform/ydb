@@ -6,23 +6,23 @@ PRAGMA SimpleColumns;
 -- fails with CoalesceJoinKeysOnQualifiedAll
 PRAGMA DisableCoalesceJoinKeysOnQualifiedAll;
 
-$foo =
+$foo = (
     SELECT
         1 AS key,
         1 AS value1
-;
+);
 
-$bar =
+$bar = (
     SELECT
         1l AS key,
         2 AS value2
-;
+);
 
-$baz =
+$baz = (
     SELECT
         1l AS key,
         2 AS value3
-;
+);
 
 SELECT
     foo.*

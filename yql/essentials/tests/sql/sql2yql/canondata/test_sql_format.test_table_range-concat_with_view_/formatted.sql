@@ -3,5 +3,5 @@
 SELECT
     *
 FROM
-    plato.concat("InputA", "InputD")
+    plato.concat('InputA', 'InputD')
 ;

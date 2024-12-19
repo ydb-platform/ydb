@@ -2,9 +2,9 @@
 /* syntax version 1 */
 USE plato;
 
-PRAGMA TablePathPrefix = "//";
+PRAGMA TablePathPrefix = '//';
 
-$input = "In" || "put";
+$input = 'In' || 'put';
 
 SELECT
     *

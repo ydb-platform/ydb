@@ -1,7 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 $t = AsList(AsStruct(1 AS a), AsStruct(2 AS a), AsStruct(1 AS a));
-$f = AGGREGATION_FACTORY("avg");
+$f = AGGREGATION_FACTORY('avg');
 
 USE plato;
 

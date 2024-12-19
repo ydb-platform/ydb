@@ -4,7 +4,7 @@ USE plato;
 
 DEFINE SUBQUERY $get_tables_list($dir) AS
     SELECT
-        Unwrap($dir || "/" || CAST(TableName(Path, "yt") AS String)) AS Path,
+        Unwrap($dir || '/' || CAST(TableName(Path, 'yt') AS String)) AS Path,
     FROM
         FOLDER($dir)
     ;
@@ -20,4 +20,4 @@ DEFINE SUBQUERY $get_all_tables_list($dirs) AS
     ;
 END DEFINE;
 
-PROCESS $get_all_tables_list([""]);
+PROCESS $get_all_tables_list(['']);

@@ -23,7 +23,7 @@ $src = (
     FROM
         plato.Input
     WHERE
-        key > "200"
+        key > '200'
 );
 
 $i, $j, $k = (
@@ -33,7 +33,7 @@ $i, $j, $k = (
         FROM
             plato.Input
         WHERE
-            key > "100"
+            key > '100'
     ), $src
     USING $udf(TableRows())
 );

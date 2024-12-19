@@ -2,11 +2,11 @@
 /* postgres can not */
 USE plato;
 
-$arg1 = "" || "";
-$arg2 = CAST(Unicode::ToUpper("i"u) AS String) || "nput";
-$arg3 = CAST(Unicode::ToUpper("i"u) AS String) || "nput";
-$arg4 = "" || "";
-$arg5 = "" || "raw";
+$arg1 = '' || '';
+$arg2 = CAST(Unicode::ToUpper("i"u) AS String) || 'nput';
+$arg3 = CAST(Unicode::ToUpper("i"u) AS String) || 'nput';
+$arg4 = '' || '';
+$arg5 = '' || 'raw';
 
 SELECT
     count(*)

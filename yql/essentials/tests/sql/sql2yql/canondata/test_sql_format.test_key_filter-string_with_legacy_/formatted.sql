@@ -1,13 +1,13 @@
 /* syntax version 1 */
 /* postgres can not */
-PRAGMA yt.UseNewPredicateExtraction = "false";
+PRAGMA yt.UseNewPredicateExtraction = 'false';
 
 SELECT
     key
 FROM
     plato.Input
 WHERE
-    StartsWith(key, String("150"))
+    StartsWith(key, String('150'))
 ORDER BY
     key
 ;
@@ -17,7 +17,7 @@ SELECT
 FROM
     plato.Input
 WHERE
-    StartsWith(key, Utf8("15")) OR StartsWith(key, Utf8("150"))
+    StartsWith(key, Utf8('15')) OR StartsWith(key, Utf8('150'))
 ORDER BY
     key
 ;
@@ -27,7 +27,7 @@ SELECT
 FROM
     plato.Input
 WHERE
-    StartsWith(key, Utf8("тест")) OR StartsWith(key, String("тест\xff"))
+    StartsWith(key, Utf8('тест')) OR StartsWith(key, String('тест\xff'))
 ORDER BY
     key
 ;
@@ -37,7 +37,7 @@ SELECT
 FROM
     plato.Input
 WHERE
-    StartsWith(key, String("\xff"))
+    StartsWith(key, String('\xff'))
 ORDER BY
     key
 ;

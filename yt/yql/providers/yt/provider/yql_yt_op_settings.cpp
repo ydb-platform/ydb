@@ -2,6 +2,7 @@
 
 #include <yt/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
 #include <yt/yql/providers/yt/common/yql_yt_settings.h>
+#include <yt/yql/providers/yt/provider/yql_yt_block_io_utils.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -422,7 +423,7 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
         case EYtSettingType::IgnoreNonExisting:
         case EYtSettingType::WarnNonExisting:
         case EYtSettingType::ForceTransform:
-        case EYtSettingType::TransformColGroups:
+        case EYtSettingType::SoftTransform:
         case EYtSettingType::CombineChunks:
         case EYtSettingType::WithQB:
         case EYtSettingType::Inline:
@@ -441,6 +442,7 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
         case EYtSettingType::MonotonicKeys:
         case EYtSettingType::BlockInputReady:
         case EYtSettingType::BlockInputApplied:
+        case EYtSettingType::BlockOutputApplied:
         case EYtSettingType::Small:
             if (!EnsureTupleSize(*setting, 1, ctx)) {
                 return false;
@@ -899,6 +901,19 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
                         << "Expected YSON list of strings"));
                     return false;
                 }
+            }
+            return true;
+        }
+        case EYtSettingType::BlockOutputReady: {
+            if (!EnsureTupleSize(*setting, 2, ctx)) {
+                return false;
+            }
+
+            EBlockOutputMode mode;
+            if (!TryFromString(setting->Child(1)->Content(), mode)) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                    << "Unsupported block output mode value " << TString{setting->Child(1)->Content()}.Quote()));
+                return false;
             }
             return true;
         }

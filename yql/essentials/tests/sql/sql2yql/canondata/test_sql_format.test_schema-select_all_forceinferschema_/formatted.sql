@@ -7,11 +7,11 @@ FROM
 SELECT
     *
 FROM
-    plato.Input2 WITH forceinferschema = "2"
+    plato.Input2 WITH forceinferschema = '2'
 ;
 
 SELECT
     *
 FROM
-    plato.Input3 WITH forceinferschema = "3"
+    plato.Input3 WITH forceinferschema = '3'
 ;

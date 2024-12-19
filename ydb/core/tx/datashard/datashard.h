@@ -342,6 +342,10 @@ namespace TEvDataShard {
         EvReadScanStarted,
         EvReadScanFinished,
 
+        // Used to transfer in-memory state between generations
+        EvInMemoryStateRequest,
+        EvInMemoryStateResponse,
+
         EvEnd
     };
 
@@ -1768,6 +1772,29 @@ namespace TEvDataShard {
             Record.SetStatus(status);
             Record.SetErrorDescription(error);
         }
+    };
+
+    struct TEvInMemoryStateRequest
+        : public TEventPB<TEvInMemoryStateRequest,
+                          NKikimrTxDataShard::TEvInMemoryStateRequest,
+                          EvInMemoryStateRequest>
+    {
+        TEvInMemoryStateRequest() = default;
+
+        explicit TEvInMemoryStateRequest(ui32 generation, const TString& continuationToken = {}) {
+            Record.SetGeneration(generation);
+            if (!continuationToken.empty()) {
+                Record.SetContinuationToken(continuationToken);
+            }
+        }
+    };
+
+    struct TEvInMemoryStateResponse
+        : public TEventPB<TEvInMemoryStateResponse,
+                          NKikimrTxDataShard::TEvInMemoryStateResponse,
+                          EvInMemoryStateResponse>
+    {
+        TEvInMemoryStateResponse() = default;
     };
 };
 

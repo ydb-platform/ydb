@@ -207,6 +207,13 @@ class TTopicFormatHandler : public NActors::TActor<TTopicFormatHandler>, public 
             Client->StartClientSession();
         }
 
+        void OnFilteredBatch(ui64 firstRow, ui64 lastRow) override {
+            LOG_ROW_DISPATCHER_TRACE("OnFilteredBatch, rows [" << firstRow << ", " << lastRow << "]");
+            for (ui64 rowId = firstRow; rowId <= lastRow; ++rowId) {
+                OnFilteredData(rowId);
+            }
+        }
+
         void OnFilteredData(ui64 rowId) override {
             const ui64 offset = Self.Offsets->at(rowId);
             if (const auto nextOffset = Client->GetNextMessageOffset(); nextOffset && offset < *nextOffset) {

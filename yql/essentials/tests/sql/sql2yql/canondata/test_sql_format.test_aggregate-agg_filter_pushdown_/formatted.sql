@@ -14,10 +14,10 @@ FROM (
         key,
         subkey
     HAVING
-        count(*) < 100 AND subkey > "0"
+        count(*) < 100 AND subkey > '0'
 )
 WHERE
-    key > "1" AND Likely(subkey < "4")
+    key > '1' AND Likely(subkey < '4')
 ORDER BY
     key,
     subkey

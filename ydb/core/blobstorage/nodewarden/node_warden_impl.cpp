@@ -394,6 +394,12 @@ void TNodeWarden::Bootstrap() {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableBlobStorageConfig()->CopyFrom(Cfg->BlobStorageConfig);
     appConfig.MutableNameserviceConfig()->CopyFrom(Cfg->NameserviceConfig);
+    if (Cfg->DomainsConfig) {
+        appConfig.MutableDomainsConfig()->CopyFrom(*Cfg->DomainsConfig);
+    }
+    if (Cfg->SelfManagementConfig) {
+        appConfig.MutableSelfManagementConfig()->CopyFrom(*Cfg->SelfManagementConfig);
+    }
     TString errorReason;
     const bool success = DeriveStorageConfig(appConfig, &StorageConfig, &errorReason);
     Y_VERIFY_S(success, "failed to generate initial TStorageConfig: " << errorReason);
@@ -989,36 +995,48 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         *errorReason = "original config missing mandatory BlobStorageConfig section";
         return false;
     }
+
+    if (appConfig.HasSelfManagementConfig()) {
+        const auto& smFrom = appConfig.GetSelfManagementConfig();
+        auto *smTo = config->MutableSelfManagementConfig();
+        if (smFrom.HasGeneration() && smTo->HasGeneration() && smFrom.GetGeneration() != smTo->GetGeneration() + 1) {
+            *errorReason = TStringBuilder() << "generation mismatch for SelfManagementConfig section existing Generation# "
+                << smTo->GetGeneration() << " newly provided Generation# " << smFrom.GetGeneration();
+            return false;
+        }
+        smTo->CopyFrom(smFrom);
+        smTo->ClearInitialConfigYaml(); // do not let this section into final StorageConfig
+    } else {
+        config->ClearSelfManagementConfig();
+    }
     
     const auto& bsFrom = appConfig.GetBlobStorageConfig();
     auto *bsTo = config->MutableBlobStorageConfig();
-    if (bsFrom.HasAutoconfigSettings()) {
-        const auto& acFrom = bsFrom.GetAutoconfigSettings();
-        auto *acTo = bsTo->MutableAutoconfigSettings();
-        if (acFrom.HasGeneration() && acTo->HasGeneration() && acTo->GetGeneration() + 1 != acFrom.GetGeneration()) {
-            *errorReason = TStringBuilder() << "generation mismatch for AutoconfigSettings section existing Generation# "
-                << acTo->GetGeneration() << " newly provided Generation# " << acFrom.GetGeneration();
-            return false;
-        } else if (acTo->HasGeneration() && !acFrom.HasGeneration()) {
-            *errorReason = "existing AutoconfigSettings has set generation, but newly provided one doesn't have it";
-            return false;
-        }
-
-        acTo->CopyFrom(acFrom);
-        acTo->ClearInitialConfigYaml();
-    } else {
-        bsTo->ClearAutoconfigSettings();
-    }
 
     if (bsFrom.HasServiceSet()) {
         const auto& ssFrom = bsFrom.GetServiceSet();
         auto *ssTo = bsTo->MutableServiceSet();
 
-        ssTo->MutableAvailabilityDomains()->CopyFrom(ssFrom.GetAvailabilityDomains());
+        // update availability domains if set
+        if (ssFrom.AvailabilityDomainsSize()) {
+            ssTo->MutableAvailabilityDomains()->CopyFrom(ssFrom.GetAvailabilityDomains());
+        }
+
+        // replace replication broker configuration
         if (ssFrom.HasReplBrokerConfig()) {
             ssTo->MutableReplBrokerConfig()->CopyFrom(ssFrom.GetReplBrokerConfig());
+        } else {
+            ssTo->ClearReplBrokerConfig();
         }
-        if (!ssTo->PDisksSize() && !ssTo->VDisksSize() && !ssTo->GroupsSize()) {
+
+        const auto hasStaticGroupInfo = [](const NKikimrBlobStorage::TNodeWardenServiceSet& ss) {
+            return ss.PDisksSize() && ss.VDisksSize() && ss.GroupsSize();
+        };
+
+        // update static group information unless distconf is enabled
+        if (!hasStaticGroupInfo(ssFrom) && config->HasSelfManagementConfig() && config->GetSelfManagementConfig().GetEnabled()) {
+            // distconf enabled, keep it as is
+        } else if (!hasStaticGroupInfo(*ssTo)) {
             ssTo->MutablePDisks()->CopyFrom(ssFrom.GetPDisks());
             ssTo->MutableVDisks()->CopyFrom(ssFrom.GetVDisks());
             ssTo->MutableGroups()->CopyFrom(ssFrom.GetGroups());
@@ -1031,16 +1049,16 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
             };
 
             auto pdiskKey = [](const auto *item) {
-                return TStringBuilder() << "PDisk NodeId# " << item->GetNodeID() << " PDiskId# " << item->GetPDiskID();
+                return TStringBuilder() << "PDisk [" << item->GetNodeID() << ':' << item->GetPDiskID() << ']';
             };
 
             auto vdiskKey = [](const auto *item) {
-                return TStringBuilder() << "VDisk NodeId# " << item->GetNodeID() << " PDiskId# " << item->GetPDiskID()
-                    << " VDiskSlotId# " << item->GetVDiskSlotID();
+                return TStringBuilder() << "VSlot [" << item->GetNodeID() << ':' << item->GetPDiskID() << ':'
+                    << item->GetVDiskSlotID() << ']';
             };
 
             auto groupKey = [](const auto *item) {
-                return TStringBuilder() << "group GroupId# " << item->GetGroupID();
+                return TStringBuilder() << "group " << item->GetGroupID();
             };
 
             auto duplicateKey = [&](auto&& key) { return error(std::move(key), "duplicate key in existing StorageConfig"); };
@@ -1064,7 +1082,13 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                 }
             }
             if (!pdiskMap.empty()) {
-                *errorReason = "some PDisks were added in newly provided configuration";
+                TStringStream err;
+                err << "some static PDisks were removed in newly provided configuration:";
+                for (const auto& [id, _] : pdiskMap) {
+                    const auto& [nodeId, pdiskId] = id;
+                    err << " [" << nodeId << ':' << pdiskId << ']';
+                }
+                *errorReason = std::move(err.Str());
                 return false;
             }
 
@@ -1096,7 +1120,13 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                 }
             }
             if (!vdiskMap.empty()) {
-                *errorReason = "some VDisks were added in newly provided configuration";
+                TStringStream err;
+                err << "some static VDisks were removed in newly provided configuration:";
+                for (const auto& [id, _] : vdiskMap) {
+                    const auto& [nodeId, pdiskId, vdiskSlotId] = id;
+                    err << " [" << nodeId << ':' << pdiskId << ':' << vdiskSlotId << ']';
+                }
+                *errorReason = std::move(err.Str());
                 return false;
             }
 
@@ -1116,11 +1146,19 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                 }
             }
             if (!groupMap.empty()) {
-                *errorReason = "some groups were added in newly provided configuration";
+                *errorReason = "some static groups were removed in newly provided configuration";
                 return false;
             }
         }
     }
+
+    // copy define box
+    if (bsFrom.HasDefineBox()) {
+        bsTo->MutableDefineBox()->CopyFrom(bsFrom.GetDefineBox());
+    } else {
+        bsTo->ClearDefineBox();
+    }
+    bsTo->MutableDefineHostConfig()->CopyFrom(bsFrom.GetDefineHostConfig());
 
     // copy nameservice-related things
     if (!appConfig.HasNameserviceConfig()) {
@@ -1148,7 +1186,47 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
     // and copy ClusterUUID from there too
     config->SetClusterUUID(nsFrom.GetClusterUUID());
 
-    // TODO(alexvru): apply SS, SSB, SB configs from there too
+    if (appConfig.HasDomainsConfig()) {
+        const auto& domains = appConfig.GetDomainsConfig();
+
+        // we expect strictly one domain
+        if (domains.DomainSize() == 1) {
+            const auto& domain = domains.GetDomain(0);
+
+            auto updateConfig = [&](bool needMerge, auto *to, const auto& from) {
+                if (needMerge) {
+                    char prefix[TActorId::MaxServiceIDLength] = {0};
+                    auto toInfo = BuildStateStorageInfo(prefix, *to);
+                    auto fromInfo = BuildStateStorageInfo(prefix, from);
+                    if (toInfo->NToSelect != fromInfo->NToSelect) {
+                        *errorReason = "NToSelect differs";
+                        return false;
+                    } else if (toInfo->SelectAllReplicas() != fromInfo->SelectAllReplicas()) {
+                        *errorReason = "StateStorage rings differ";
+                        return false;
+                    }
+                }
+
+                to->CopyFrom(from);
+                return true;
+            };
+
+            // find state storage setup for that domain
+            for (const auto& ss : domains.GetStateStorage()) {
+                if (domain.SSIdSize() == 1 && ss.GetSSId() == domain.GetSSId(0)) {
+                    const bool hadStateStorageConfig = config->HasStateStorageConfig();
+                    const bool hadStateStorageBoardConfig = config->HasStateStorageBoardConfig();
+                    const bool hadSchemeBoardConfig = config->HasSchemeBoardConfig();
+                    if (!updateConfig(hadStateStorageConfig, config->MutableStateStorageConfig(), ss) ||
+                            !updateConfig(hadStateStorageBoardConfig, config->MutableStateStorageBoardConfig(), ss) ||
+                            !updateConfig(hadSchemeBoardConfig, config->MutableSchemeBoardConfig(), ss)) {
+                        return false;
+                    }
+                    break;
+                }
+            }
+        }
+    }
 
     return true;
 }

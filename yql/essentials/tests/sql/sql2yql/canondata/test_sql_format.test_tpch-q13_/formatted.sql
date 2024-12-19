@@ -8,7 +8,7 @@ $orders = (
     FROM
         plato.orders
     WHERE
-        o_comment NOT LIKE "%unusual%requests%"
+        o_comment NOT LIKE '%unusual%requests%'
 );
 
 SELECT

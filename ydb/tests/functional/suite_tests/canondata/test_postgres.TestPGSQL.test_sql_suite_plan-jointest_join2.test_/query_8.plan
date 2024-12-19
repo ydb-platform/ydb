@@ -48,7 +48,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[row.x1,row.x2,row.y1,row.y2]"
                                             },
                                             {
                                                 "Inputs": [

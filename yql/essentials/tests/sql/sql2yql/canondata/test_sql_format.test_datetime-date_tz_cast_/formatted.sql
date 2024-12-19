@@ -1,62 +1,62 @@
 /* postgres can not */
 SELECT
-    CAST(Yql::TzDate(AsAtom("1,UTC")) AS Uint8)
+    CAST(Yql::TzDate(AsAtom('1,UTC')) AS Uint8)
 ;
 
 SELECT
-    CAST(Yql::TzDate(AsAtom("1,UTC")) AS Uint32)
+    CAST(Yql::TzDate(AsAtom('1,UTC')) AS Uint32)
 ;
 
 SELECT
-    CAST(Yql::TzDate(AsAtom("1,UTC")) AS Int32)
+    CAST(Yql::TzDate(AsAtom('1,UTC')) AS Int32)
 ;
 
 SELECT
-    CAST(Yql::TzDate(AsAtom("1,UTC")) AS Uint64)
+    CAST(Yql::TzDate(AsAtom('1,UTC')) AS Uint64)
 ;
 
 SELECT
-    CAST(Yql::TzDate(AsAtom("1,UTC")) AS Int64)
+    CAST(Yql::TzDate(AsAtom('1,UTC')) AS Int64)
 ;
 
 SELECT
-    CAST(Yql::TzDatetime(AsAtom("1,UTC")) AS Uint8)
+    CAST(Yql::TzDatetime(AsAtom('1,UTC')) AS Uint8)
 ;
 
 SELECT
-    CAST(Yql::TzDatetime(AsAtom("1,UTC")) AS Uint32)
+    CAST(Yql::TzDatetime(AsAtom('1,UTC')) AS Uint32)
 ;
 
 SELECT
-    CAST(Yql::TzDatetime(AsAtom("1,UTC")) AS Int32)
+    CAST(Yql::TzDatetime(AsAtom('1,UTC')) AS Int32)
 ;
 
 SELECT
-    CAST(Yql::TzDatetime(AsAtom("1,UTC")) AS Uint64)
+    CAST(Yql::TzDatetime(AsAtom('1,UTC')) AS Uint64)
 ;
 
 SELECT
-    CAST(Yql::TzDatetime(AsAtom("1,UTC")) AS Int64)
+    CAST(Yql::TzDatetime(AsAtom('1,UTC')) AS Int64)
 ;
 
 SELECT
-    CAST(Yql::TzTimestamp(AsAtom("1,UTC")) AS Uint8)
+    CAST(Yql::TzTimestamp(AsAtom('1,UTC')) AS Uint8)
 ;
 
 SELECT
-    CAST(Yql::TzTimestamp(AsAtom("1,UTC")) AS Uint32)
+    CAST(Yql::TzTimestamp(AsAtom('1,UTC')) AS Uint32)
 ;
 
 SELECT
-    CAST(Yql::TzTimestamp(AsAtom("1,UTC")) AS Int32)
+    CAST(Yql::TzTimestamp(AsAtom('1,UTC')) AS Int32)
 ;
 
 SELECT
-    CAST(Yql::TzTimestamp(AsAtom("1,UTC")) AS Uint64)
+    CAST(Yql::TzTimestamp(AsAtom('1,UTC')) AS Uint64)
 ;
 
 SELECT
-    CAST(Yql::TzTimestamp(AsAtom("1,UTC")) AS Int64)
+    CAST(Yql::TzTimestamp(AsAtom('1,UTC')) AS Int64)
 ;
 
 SELECT

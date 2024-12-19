@@ -1,7 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 PRAGMA sampleselect;
-PRAGMA config.flags("OptimizerFlags", "FieldSubsetEnableMultiusage");
+PRAGMA config.flags('OptimizerFlags', 'FieldSubsetEnableMultiusage');
 
 SELECT
     kk,

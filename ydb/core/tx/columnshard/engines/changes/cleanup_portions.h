@@ -9,6 +9,7 @@ private:
     using TBase = TColumnEngineChanges;
     THashMap<TString, std::vector<std::shared_ptr<TPortionInfo>>> StoragePortions;
     std::vector<TPortionInfo::TConstPtr> PortionsToDrop;
+    std::vector<TPortionInfo::TConstPtr> PortionsToRemove;
     THashSet<ui64> TablesToDrop;
 
 protected:
@@ -37,16 +38,13 @@ protected:
         return NDataLocks::ELockCategory::Cleanup;
     }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override {
-        auto portionsLock = std::make_shared<NDataLocks::TListPortionsLock>(
-            TypeString() + "::PORTIONS::" + GetTaskIdentifier(), PortionsToDrop, NDataLocks::ELockCategory::Cleanup);
-        if (TablesToDrop.size()) {
-            auto tablesLock = std::make_shared<NDataLocks::TListTablesLock>(
-                TypeString() + "::TABLES::" + GetTaskIdentifier(), TablesToDrop, NDataLocks::ELockCategory::Tables);
-            return std::shared_ptr<NDataLocks::TCompositeLock>(
-                new NDataLocks::TCompositeLock(TypeString() + "::COMPOSITE::" + GetTaskIdentifier(), { portionsLock, tablesLock }));
-        } else {
-            return portionsLock;
-        }
+        auto portionsDropLock = std::make_shared<NDataLocks::TListPortionsLock>(
+            TypeString() + "::PORTIONS_DROP::" + GetTaskIdentifier(), PortionsToDrop, NDataLocks::ELockCategory::Cleanup);
+        auto portionsRemoveLock = std::make_shared<NDataLocks::TListPortionsLock>(
+            TypeString() + "::PORTIONS_REMOVE::" + GetTaskIdentifier(), PortionsToRemove, NDataLocks::ELockCategory::Compaction);
+        auto tablesLock = std::make_shared<NDataLocks::TListTablesLock>(
+            TypeString() + "::TABLES::" + GetTaskIdentifier(), TablesToDrop, NDataLocks::ELockCategory::Tables);
+        return NDataLocks::TCompositeLock::Build(TypeString() + "::COMPOSITE::" + GetTaskIdentifier(), {portionsDropLock, portionsRemoveLock, tablesLock});
     }
 
 public:
@@ -65,6 +63,11 @@ public:
 
     void AddPortionToDrop(const TPortionInfo::TConstPtr& portion) {
         PortionsToDrop.emplace_back(portion);
+        PortionsToAccess->AddPortion(portion);
+    }
+
+    void AddPortionToRemove(const TPortionInfo::TConstPtr& portion) {
+        PortionsToRemove.emplace_back(portion);
         PortionsToAccess->AddPortion(portion);
     }
 

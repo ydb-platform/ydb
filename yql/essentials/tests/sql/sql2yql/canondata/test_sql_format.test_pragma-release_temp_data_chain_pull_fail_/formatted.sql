@@ -1,12 +1,12 @@
 USE plato;
 
-PRAGMA yt.ReleaseTempData = "finish";
-PRAGMA yt.InflightTempTablesLimit = "6";
+PRAGMA yt.ReleaseTempData = 'finish';
+PRAGMA yt.InflightTempTablesLimit = '6';
 
 /* custom error:Too many temporary tables registered - limit is 6*/
 DEFINE ACTION $action($param) AS
     $key = CAST($param AS String);
-    $a = "Input";
+    $a = 'Input';
 
     $b = (
         SELECT
@@ -15,7 +15,7 @@ DEFINE ACTION $action($param) AS
         FROM
             $a
         WHERE
-            key != ($key || ".1")
+            key != ($key || '.1')
         GROUP BY
             key,
             value
@@ -31,7 +31,7 @@ DEFINE ACTION $action($param) AS
         FROM
             $b
         WHERE
-            key != ($key || ".2")
+            key != ($key || '.2')
         GROUP BY
             key,
             value
@@ -47,7 +47,7 @@ DEFINE ACTION $action($param) AS
         FROM
             $c
         WHERE
-            key != ($key || ".3")
+            key != ($key || '.3')
         GROUP BY
             key,
             value
@@ -63,7 +63,7 @@ DEFINE ACTION $action($param) AS
         FROM
             $d
         WHERE
-            key != ($key || ".4")
+            key != ($key || '.4')
         GROUP BY
             key,
             value
@@ -79,7 +79,7 @@ DEFINE ACTION $action($param) AS
         FROM
             $e
         WHERE
-            key != ($key || ".5")
+            key != ($key || '.5')
         GROUP BY
             key,
             value
@@ -95,7 +95,7 @@ DEFINE ACTION $action($param) AS
         FROM
             $f
         WHERE
-            key != ($key || ".6")
+            key != ($key || '.6')
         GROUP BY
             key,
             value

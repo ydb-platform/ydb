@@ -132,7 +132,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[row.col1,row.col2,row.col3]"
                                             }
                                         ],
                                         "PlanNodeId": 2,

@@ -1129,6 +1129,10 @@ void TLogReader::ReplyOk() {
     Result->Status = NKikimrProto::OK;
     Result->NextPosition = IsInitial ? LastGoodToWriteLogPosition : TLogPosition::Invalid();
     Result->IsEndOfLog = true;
+    if (IsInitial) {
+        Result->LastGoodChunkIdx = ChunkIdx; 
+        Result->LastGoodSectorIdx = SectorIdx; 
+    }
     Reply();
 }
 

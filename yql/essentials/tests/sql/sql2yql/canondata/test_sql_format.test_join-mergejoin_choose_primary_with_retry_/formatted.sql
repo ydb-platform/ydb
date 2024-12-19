@@ -2,11 +2,11 @@ PRAGMA DisableSimpleColumns;
 
 USE plato;
 
-PRAGMA yt.JoinMergeTablesLimit = "10";
-PRAGMA yt.JoinAllowColumnRenames = "true";
+PRAGMA yt.JoinMergeTablesLimit = '10';
+PRAGMA yt.JoinAllowColumnRenames = 'true';
 
 -- emulate monsters in big table
-PRAGMA yt.JoinMergeReduceJobMaxSize = "1";
+PRAGMA yt.JoinMergeReduceJobMaxSize = '1';
 
 -- Input2 is smaller than Input1
 SELECT

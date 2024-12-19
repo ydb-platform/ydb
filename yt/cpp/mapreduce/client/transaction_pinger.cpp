@@ -261,8 +261,7 @@ private:
         while (Running_) {
             TDuration waitTime = minPingInterval + (maxPingInterval - minPingInterval) * RandomNumber<float>();
             try {
-                auto noRetryPolicy = MakeIntrusive<TAttemptLimitedRetryPolicy>(1u, PingableTx_->GetContext().Config);
-                NDetail::NRawClient::PingTx(noRetryPolicy, PingableTx_->GetContext(), PingableTx_->GetId());
+                PingableTx_->Ping();
             } catch (const std::exception& e) {
                 if (auto* errorResponse = dynamic_cast<const TErrorResponse*>(&e)) {
                     if (errorResponse->GetError().ContainsErrorCode(NYT::NClusterErrorCodes::NTransactionClient::NoSuchTransaction)) {

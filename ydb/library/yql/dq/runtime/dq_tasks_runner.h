@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dq_tasks_counters.h"
+
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/dq/runtime/dq_async_output.h>
@@ -66,6 +68,7 @@ struct TTaskRunnerStatsBase {
     THashMap<ui32, THashMap<ui64, IDqOutputChannel::TPtr>> OutputChannels; // DstStageId => {ChannelId => Channel}
 
     TVector<TMkqlStat> MkqlStats;
+    TVector<TOperatorStat> OperatorStat;
 
     TTaskRunnerStatsBase() = default;
     TTaskRunnerStatsBase(TTaskRunnerStatsBase&&) = default;
@@ -301,6 +304,10 @@ public:
             auto guard = typeEnv.BindAllocator();
             TDqDataSerializer::DeserializeParam(it->second, type, holderFactory, value);
         }
+    }
+
+    bool EnableMetering() const {
+        return Task_->GetEnableMetering();
     }
 
     ui64 GetStageId() const {

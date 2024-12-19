@@ -3,8 +3,8 @@
 /* dq can not */
 /* dqfile can not */
 /* yt can not */
-PRAGMA warning("disable", "4510");
-PRAGMA warning("disable", "1108");
+PRAGMA warning('disable', '4510');
+PRAGMA warning('disable', '1108');
 
 $Input = [(4, 100), (5, 100)];
 
@@ -26,10 +26,10 @@ SELECT
             ) ?? FALSE
         ),
         AsTuple(
-            AsAtom("a"),
-            AsAtom("b"),
-            AsAtom("c"),
-            AsAtom("d"),
+            AsAtom('a'),
+            AsAtom('b'),
+            AsAtom('c'),
+            AsAtom('d'),
         )
     )
 ;
@@ -57,11 +57,11 @@ SELECT
             ) ?? FALSE
         ),
         AsTuple(
-            AsAtom("a"),
-            AsAtom("b"),
-            AsAtom("c"),
-            AsAtom("d"),
-            AsAtom("e"),
+            AsAtom('a'),
+            AsAtom('b'),
+            AsAtom('c'),
+            AsAtom('d'),
+            AsAtom('e'),
         )
     )
 ;
@@ -90,11 +90,11 @@ SELECT
             ) ?? FALSE
         ),
         AsTuple(
-            AsAtom("a"),
-            AsAtom("b"),
-            AsAtom("c"),
-            AsAtom("d"),
-            AsAtom("e"),
+            AsAtom('a'),
+            AsAtom('b'),
+            AsAtom('c'),
+            AsAtom('d'),
+            AsAtom('e'),
         )
     )
 ;

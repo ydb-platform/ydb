@@ -8,7 +8,7 @@ SELECT
 FROM (
     SELECT
         AsStruct(key AS key, subkey AS subkey),
-        AsStruct("value1: " || value AS value)
+        AsStruct('value1: ' || value AS value)
     FROM
         Input1
 ) AS a
@@ -16,7 +16,7 @@ FROM (
 JOIN (
     SELECT
         AsStruct(key AS key, subkey AS subkey),
-        AsStruct("value2: " || value AS value)
+        AsStruct('value2: ' || value AS value)
     FROM
         Input2
 ) AS b

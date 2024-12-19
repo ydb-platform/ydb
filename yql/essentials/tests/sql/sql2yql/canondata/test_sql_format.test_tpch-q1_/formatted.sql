@@ -15,7 +15,7 @@ SELECT
 FROM
     plato.lineitem
 WHERE
-    CAST(l_shipdate AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D"))
+    CAST(l_shipdate AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval('P100D'))
 GROUP BY
     l_returnflag,
     l_linestatus

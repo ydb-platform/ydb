@@ -9,7 +9,7 @@ FROM (
     FROM
         plato.Input1
     WHERE
-        key > "010"
+        key > '010'
     UNION ALL
     SELECT
         key,
@@ -17,7 +17,7 @@ FROM (
     FROM
         plato.Input2
     WHERE
-        key > "020"
+        key > '020'
 ) AS x
 ORDER BY
     key,

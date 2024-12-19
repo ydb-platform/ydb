@@ -251,14 +251,19 @@ Y_UNIT_TEST_SUITE(Viewer) {
     };
 
     void ChangeListNodes(TEvInterconnect::TEvNodesInfo::TPtr* ev, int nodesTotal) {
-        auto& nodes = (*ev)->Get()->Nodes;
+        auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>((*ev)->Get()->Nodes);
 
-        auto sample = nodes[0];
-        nodes.clear();
+        auto sample = *nodes->begin();
+        nodes->clear();
 
         for (int nodeId = 0; nodeId < nodesTotal; nodeId++) {
-            nodes.emplace_back(sample);
+            nodes->emplace_back(sample);
         }
+
+        auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
+            new IEventHandle((*ev)->Recipient, (*ev)->Sender, new TEvInterconnect::TEvNodesInfo(nodes))
+        );
+        ev->Swap(newEv);
     }
 
     void ChangeTabletStateResponse(TEvWhiteboard::TEvTabletStateResponse::TPtr* ev, int tabletsTotal, int& tabletId, int& nodeId) {
@@ -722,7 +727,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 }
                 case TEvInterconnect::EvNodesInfo: {
                     auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
+                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
                     UNIT_ASSERT_EQUAL(nodes.size(), 2);
                     staticNodeId = nodes[0];
                     sharedDynNodeId = nodes[1];
@@ -801,7 +806,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 }
                 case TEvInterconnect::EvNodesInfo: {
                     auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
+                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
                     UNIT_ASSERT_EQUAL(nodes.size(), 3);
                     staticNodeId = nodes[0];
                     sharedDynNodeId = nodes[1];
@@ -884,7 +889,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 }
                 case TEvInterconnect::EvNodesInfo: {
                     auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
+                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
                     UNIT_ASSERT_EQUAL(nodes.size(), 3);
                     staticNodeId = nodes[0];
                     sharedDynNodeId = nodes[1];
@@ -970,7 +975,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 }
                 case TEvInterconnect::EvNodesInfo: {
                     auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
+                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
                     UNIT_ASSERT_EQUAL(nodes.size(), 4);
                     staticNodeId = nodes[0];
                     sharedDynNodeId = nodes[1];
@@ -1606,6 +1611,20 @@ Y_UNIT_TEST_SUITE(Viewer) {
         size_t AuthorizeTicketFails = 0;
     };
 
+    IActor* CreateFakeTicketParser(const TTicketParserSettings&) {
+        return new TFakeTicketParserActor();
+    }
+
+    void GrantConnect(TClient& client) {
+        client.GrantConnect("user_name");
+
+        const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
+            { "folder_id", "test_folder_id" },
+            { "database_id", "test_database_id" },
+        });
+        UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);        
+    }
+
     TString PostQuery(TKeepAliveHttpClient& httpClient, TString query, TString action = "", TString transactionMode = "") {
         TStringStream requestBody;
         requestBody
@@ -1637,12 +1656,15 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetDomainName("Root")
                 .SetUseSectorMap(true)
                 .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
 
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         client.InitRootScheme();
-
+        
+        GrantConnect(client);
+        
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
 
@@ -1670,12 +1692,15 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetDomainName("Root")
                 .SetUseSectorMap(true)
                 .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
 
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         client.InitRootScheme();
-
+        
+        GrantConnect(client);
+        
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
 
@@ -1705,10 +1730,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetDomainName("Root")
                 .SetUseSectorMap(true)
                 .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
 
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
+
+        GrantConnect(client);
 
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
@@ -1769,12 +1797,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
-
-        const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
-            { "folder_id", "test_folder_id" },
-            { "database_id", "test_database_id" },
-        });
-        UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
+        
+        GrantConnect(client);
 
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
@@ -1914,11 +1938,15 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetDomainName("Root")
                 .SetUseSectorMap(true)
                 .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
 
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         client.InitRootScheme();
+
+        GrantConnect(client);
+
 
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);

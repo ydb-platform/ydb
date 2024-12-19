@@ -2,8 +2,8 @@ PRAGMA DisableSimpleColumns;
 
 USE plato;
 
-PRAGMA yt.JoinMergeTablesLimit = "10";
-PRAGMA yt.JoinMergeUnsortedFactor = "3.0";
+PRAGMA yt.JoinMergeTablesLimit = '10';
+PRAGMA yt.JoinMergeUnsortedFactor = '3.0';
 
 SELECT
     pd.Text

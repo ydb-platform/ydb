@@ -1,13 +1,13 @@
 /* syntax version 1 */
 /* postgres can not */
-PRAGMA yt.UseNewPredicateExtraction = "false";
+PRAGMA yt.UseNewPredicateExtraction = 'false';
 
 SELECT
     key
 FROM
     plato.Input
 WHERE
-    StartsWith(key, String("150"))
+    StartsWith(key, String('150'))
 ORDER BY
     key
 ;
@@ -17,7 +17,7 @@ SELECT
 FROM
     plato.Input
 WHERE
-    StartsWith(key, String("15")) OR StartsWith(key, String("150"))
+    StartsWith(key, String('15')) OR StartsWith(key, String('150'))
 ORDER BY
     key
 ;
@@ -27,7 +27,7 @@ SELECT
 FROM
     plato.Input
 WHERE
-    StartsWith(key, String("\xf5"))
+    StartsWith(key, String('\xf5'))
 ORDER BY
     key
 ;
@@ -37,7 +37,7 @@ SELECT
 FROM
     plato.Input
 WHERE
-    StartsWith(key, Utf8("тест\xf4\x8f\xbf\xbf"))
+    StartsWith(key, Utf8('тест\xf4\x8f\xbf\xbf'))
 ORDER BY
     key
 ;
@@ -47,7 +47,7 @@ SELECT
 FROM
     plato.Input
 WHERE
-    StartsWith(key, Utf8("тест")) OR StartsWith(key, Utf8("тест\xf4\x8f\xbf\xbf"))
+    StartsWith(key, Utf8('тест')) OR StartsWith(key, Utf8('тест\xf4\x8f\xbf\xbf'))
 ORDER BY
     key
 ;
@@ -57,7 +57,7 @@ SELECT
 FROM
     plato.Input
 WHERE
-    StartsWith(key, Utf8("\xf4\x8f\xbf\xbf"))
+    StartsWith(key, Utf8('\xf4\x8f\xbf\xbf'))
 ORDER BY
     key
 ;

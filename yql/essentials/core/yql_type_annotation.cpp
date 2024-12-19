@@ -372,6 +372,11 @@ const TExportTable* TModuleResolver::GetModule(const TString& module) const {
     return Modules.FindPtr(normalizedModuleName);
 }
 
+void TModuleResolver::WriteStatistics(NYson::TYsonWriter& writer) {
+    writer.OnKeyedItem("UsedSuffixes");
+    writer.OnStringScalar(JoinRange(",", UsedSuffixes.begin(), UsedSuffixes.end()));
+}
+
 bool TModuleResolver::AddFromUrl(const std::string_view& file, const std::string_view& url, const std::string_view& tokenName, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos) {
     if (!UserData) {
         ctx.AddError(TIssue(pos, "Loading libraries is prohibited"));
@@ -415,6 +420,7 @@ bool TModuleResolver::AddFromFile(const std::string_view& file, TExprContext& ct
         return false;
     }
 
+    UsedSuffixes.insert(TString(file.substr(1 + file.rfind('.'))));
     const TUserDataBlock* block = UserData->FindUserDataBlock(fullName);
 
     if (!block) {
@@ -473,6 +479,7 @@ bool TModuleResolver::AddFromMemory(const std::string_view& file, const TString&
         return false;
     }
 
+    UsedSuffixes.insert(TString(file.substr(1 + file.rfind('.'))));
     moduleName = TModuleResolver::NormalizeModuleName(TString(file));
     if (GetModule(moduleName) || Libs.contains(moduleName)) {
         auto it = Libs.find(moduleName);

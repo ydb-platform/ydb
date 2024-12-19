@@ -654,7 +654,7 @@ private:
         LOG_E("Shard " << tabletId << " transaction lost during reconnect: " << record.GetStatus());
 
         CancelProposal(tabletId);
-        ReplyTxStateUnknown(tabletId);
+        ReplyUnavailable(TStringBuilder() << "Disconnected from shard " << tabletId);
     }
 
     void HandlePrepare(TEvDqCompute::TEvState::TPtr& ev) {
@@ -696,7 +696,7 @@ private:
                     return ReplyUnavailable(TStringBuilder() << "Could not prepare program on shard " << msg->TabletId);
                 }
 
-                return ReplyTxStateUnknown(msg->TabletId);
+                return ReplyUnavailable(TStringBuilder() << "Disconnected from shard " << msg->TabletId);
             }
 
             case TShardState::EState::Prepared: {
@@ -717,7 +717,7 @@ private:
                     << (msg->NotDelivered ? ", last message not delivered" : ""));
 
                 CancelProposal(0);
-                return ReplyTxStateUnknown(msg->TabletId);
+                return ReplyUnavailable(TStringBuilder() << "Disconnected from shard " << msg->TabletId);
             }
 
             case TShardState::EState::Initial:
@@ -1542,7 +1542,12 @@ private:
 
 private:
     bool IsReadOnlyTx() const {
-        if (Request.TopicOperations.HasOperations()) {
+        if (BufferActorId && TxManager->GetTopicOperations().HasOperations()) {
+            YQL_ENSURE(!Request.UseImmediateEffects);
+            return false;
+        }
+
+        if (!BufferActorId && Request.TopicOperations.HasOperations()) {
             YQL_ENSURE(!Request.UseImmediateEffects);
             return false;
         }
@@ -2112,7 +2117,8 @@ private:
         }
 
         // Single-shard datashard transactions are always immediate
-        ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount) <= 1
+        auto topicSize = (BufferActorId) ? TxManager->GetTopicOperations().GetSize() : Request.TopicOperations.GetSize();
+        ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + topicSize + sourceScanPartitionsCount) <= 1
                     && !UnknownAffectedShardCount
                     && evWriteTxs.empty()
                     && !HasOlapTable;
@@ -2392,6 +2398,7 @@ private:
             }
         }
 
+        YQL_ENSURE(!TxManager);
         Request.TopicOperations.BuildTopicTxs(topicTxs);
 
         const bool needRollback = Request.LocksOp == ELocksOp::Rollback;
@@ -2428,8 +2435,8 @@ private:
             // HTAP transactions always use generic readsets
             !evWriteTxs.empty());
 
-        if (!locksMap.empty() || VolatileTx ||
-            Request.TopicOperations.HasReadOperations() || Request.TopicOperations.HasWriteOperations())
+        if (!locksMap.empty() || VolatileTx || Request.TopicOperations.HasReadOperations()
+            || Request.TopicOperations.HasWriteOperations())
         {
             YQL_ENSURE(Request.LocksOp == ELocksOp::Commit || Request.LocksOp == ELocksOp::Rollback || VolatileTx);
 
@@ -2776,6 +2783,7 @@ private:
     void ExecuteTopicTabletTransactions(TTopicTabletTxs& topicTxs) {
         YQL_ENSURE(!TxManager);
         TMaybe<ui64> writeId;
+
         if (Request.TopicOperations.HasWriteId()) {
             writeId = Request.TopicOperations.GetWriteId();
         }

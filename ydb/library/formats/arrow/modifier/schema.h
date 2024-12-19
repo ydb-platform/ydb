@@ -1,7 +1,9 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/accessor/validator.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/conclusion/status.h>
+#include <ydb/library/formats/arrow/common/iterator.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <util/generic/hash.h>
@@ -14,9 +16,16 @@ private:
 
 public:
     TSchemaLite() = default;
-    TSchemaLite(const std::shared_ptr<arrow::Schema>& schema) {
-        AFL_VERIFY(schema);
-        Fields = schema->fields();
+    TSchemaLite(const std::shared_ptr<arrow::Schema>& schema)
+        : Fields(TValidator::CheckNotNull(schema)->fields()) {
+    }
+
+    TSchemaLite(std::vector<std::shared_ptr<arrow::Field>>&& fields)
+        : Fields(std::move(fields)) {
+    }
+
+    TSchemaLite(const std::vector<std::shared_ptr<arrow::Field>>& fields)
+        : Fields(fields) {
     }
 
     const std::shared_ptr<arrow::Field>& field(const ui32 index) const {
@@ -78,13 +87,79 @@ public:
         }
         return Default<std::shared_ptr<arrow::Field>>();
     }
+};
 
-    TSchemaLite(std::vector<std::shared_ptr<arrow::Field>>&& fields)
-        : Fields(std::move(fields)) {
+class TSchemaLiteView: private TNonCopyable {
+private:
+    using TFields = std::span<const std::shared_ptr<arrow::Field>>;
+    TFields Fields;
+
+    class TIterator: public NUtil::TRandomAccessIteratorClone<TFields::iterator, TIterator> {
+    using TBase = NUtil::TRandomAccessIteratorClone<TFields::iterator, TIterator>;
+    public:
+        using TBase::TRandomAccessIteratorClone;
+    };
+
+public:
+    TSchemaLiteView() = default;
+    TSchemaLiteView(const TSchemaLite& schema)
+        : Fields(schema.fields()) {
     }
 
-    TSchemaLite(const std::vector<std::shared_ptr<arrow::Field>>& fields)
+    TSchemaLiteView(const std::span<const std::shared_ptr<arrow::Field>>& fields)
         : Fields(fields) {
+    }
+
+    std::shared_ptr<arrow::Field> field(const ui32 index) const {
+        return GetFieldByIndexVerified(index);
+    }
+
+    TIterator begin() const {
+        return Fields.begin();
+    }
+
+    TIterator end() const {
+        return Fields.end();
+    }
+
+    int num_fields() const {
+        return Fields.size();
+    }
+
+    std::vector<std::string> field_names() const {
+        std::vector<std::string> result;
+        result.reserve(Fields.size());
+        for (auto&& f : Fields) {
+            result.emplace_back(f->name());
+        }
+        return result;
+    }
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "[";
+        for (auto&& f : Fields) {
+            sb << f->ToString() << ";";
+        }
+        sb << "]";
+
+        return sb;
+    }
+
+    TString ToString() const {
+        return DebugString();
+    }
+
+    const std::shared_ptr<arrow::Field>& GetFieldByIndexVerified(const ui32 index) const {
+        AFL_VERIFY(index < Fields.size());
+        return Fields[index];
+    }
+
+    const std::shared_ptr<arrow::Field>& GetFieldByIndexOptional(const ui32 index) const {
+        if (index < Fields.size()) {
+            return Fields[index];
+        }
+        return Default<std::shared_ptr<arrow::Field>>();
     }
 };
 

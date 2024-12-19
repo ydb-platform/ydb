@@ -1,13 +1,13 @@
 /* syntax version 1 */
 /* postgres can not */
 $t = AsList(AsStruct(1 AS a), AsStruct(2 AS a));
-$f = AGGREGATION_FACTORY("mode");
+$f = AGGREGATION_FACTORY('mode');
 
 SELECT
     Yql::Aggregate(
         $t, AsTuple(), AsTuple(
             AsTuple(
-                AsAtom("res"), $f(
+                AsAtom('res'), $f(
                     ListItemType(TypeOf($t)), ($z) -> {
                         RETURN $z.a;
                     }
@@ -17,13 +17,13 @@ SELECT
     )
 ;
 
-$f = AGGREGATION_FACTORY("topfreq", 10, 20);
+$f = AGGREGATION_FACTORY('topfreq', 10, 20);
 
 SELECT
     Yql::Aggregate(
         $t, AsTuple(), AsTuple(
             AsTuple(
-                AsAtom("res"), $f(
+                AsAtom('res'), $f(
                     ListItemType(TypeOf($t)), ($z) -> {
                         RETURN $z.a;
                     }

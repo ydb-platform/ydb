@@ -2,7 +2,7 @@ from __future__ import annotations
 import pytest
 import allure
 import json
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType
+from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonicalPolicy
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.allure_utils import allure_test_description
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
@@ -23,7 +23,7 @@ class LoadSuiteBase:
     workload_type: WorkloadType = None
     timeout: float = 1800.
     refference: str = ''
-    check_canonical: bool = False
+    check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.NO
     query_syntax: str = ''
     query_settings: dict[int, LoadSuiteBase.QuerySettings] = {}
     scale: Optional[int] = None
@@ -165,10 +165,12 @@ class LoadSuiteBase:
                 statistics=stats,
             )
         if not success:
-            exc = pytest.fail.Exception(error_message)
+            exc = pytest.fail.Exception('\n'.join([error_message, result.warning_message]))
             if result.traceback is not None:
                 exc = exc.with_traceback(result.traceback)
             raise exc
+        if result.warning_message:
+            raise Exception(result.warning_message)
 
     @classmethod
     def setup_class(cls) -> None:

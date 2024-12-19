@@ -3,8 +3,8 @@ PRAGMA DisablePullUpFlatMapOverJoin;
 
 USE plato;
 
-PRAGMA yt.JoinMergeTablesLimit = "10";
-PRAGMA yt.JoinMergeUnsortedFactor = "3.0";
+PRAGMA yt.JoinMergeTablesLimit = '10';
+PRAGMA yt.JoinMergeUnsortedFactor = '3.0';
 
 INSERT INTO @inp2
 SELECT

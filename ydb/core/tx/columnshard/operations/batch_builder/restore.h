@@ -8,7 +8,7 @@
 
 namespace NKikimr::NOlap {
 
-class TModificationRestoreTask: public NDataReader::IRestoreTask {
+class TModificationRestoreTask: public NDataReader::IRestoreTask, public NColumnShard::TMonitoringObjectsCounter<TModificationRestoreTask> {
 private:
     using TBase = NDataReader::IRestoreTask;
     NEvWrite::TWriteData WriteData;
@@ -26,6 +26,12 @@ private:
     void SendErrorMessage(const TString& errorMessage, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass);
 
 public:
+    virtual bool IsActive() const override {
+        return Context.IsActive();
+    }
+
+    virtual TDuration GetTimeout() const override;
+
     TModificationRestoreTask(const NActors::TActorId bufferActorId, NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger,
         const TSnapshot actualSnapshot, const std::shared_ptr<arrow::RecordBatch>& incomingData, const TWritingContext& context);
 };

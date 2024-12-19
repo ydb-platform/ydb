@@ -7,7 +7,7 @@ $data = (
     FROM
         Input1
     WHERE
-        key < "700"
+        key < '700'
     LIMIT 10
 );
 

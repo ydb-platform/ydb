@@ -1,9 +1,9 @@
 PRAGMA CompactNamedExprs;
 
-$src =
+$src = (
     SELECT
         1
-;
+);
 
 DEFINE SUBQUERY $sub1() AS
     SELECT
@@ -40,14 +40,14 @@ FROM
 SELECT
     *
 FROM
-    $sub2($sub1, "aaa")
+    $sub2($sub1, 'aaa')
 ;
 
 DEFINE ACTION $hello_world($sub, $name, $suffix?) AS
-    $name = $name ?? ($suffix ?? "world");
+    $name = $name ?? ($suffix ?? 'world');
 
     SELECT
-        "Hello, " || $name || "!"
+        'Hello, ' || $name || '!'
     FROM
         $sub()
     ;
@@ -62,9 +62,9 @@ DO
 ;
 
 DO
-    $hello_world($sub1, NULL, "John")
+    $hello_world($sub1, NULL, 'John')
 ;
 
 DO
-    $hello_world($sub1, NULL, "Earth")
+    $hello_world($sub1, NULL, 'Earth')
 ;

@@ -1,4 +1,4 @@
-PRAGMA DqEngine = "auto";
+PRAGMA DqEngine = 'auto';
 
 SELECT
     *

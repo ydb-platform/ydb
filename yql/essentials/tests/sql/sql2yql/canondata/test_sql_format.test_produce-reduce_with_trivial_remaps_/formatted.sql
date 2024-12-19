@@ -1,6 +1,6 @@
 USE plato;
 
-PRAGMA warning("disable", "4510");
+PRAGMA warning('disable', '4510');
 
 $udf = ($_key, $stream) -> {
     $init = ($item) -> (AsStruct(1u AS cnt, $item AS row));

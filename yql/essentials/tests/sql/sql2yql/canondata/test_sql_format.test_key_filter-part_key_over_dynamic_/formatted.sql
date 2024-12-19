@@ -9,5 +9,5 @@ FROM (
         Input
 ) AS a
 WHERE
-    key >= "030" AND key <= "200"
+    key >= '030' AND key <= '200'
 ;

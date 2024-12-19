@@ -6,9 +6,16 @@
 
 using namespace NYql;
 
+TString ToLower(TString s) {
+    for (char& c: s) {
+        c = std::tolower(c);
+    }
+    return s;
+}
+
 class TOptimizerHintsParser {
 public:
-    TOptimizerHintsParser(const TString& text) 
+    TOptimizerHintsParser(const TString& text)
         : Pos(-1)
         , Size(static_cast<i32>(text.size()) - 1)
         , Text(text)
@@ -45,9 +52,9 @@ private:
         return labels;
     }
 
-    void JoinType() {        
+    void JoinType() {
         i32 beginPos = Pos + 1;
-        
+
         Keyword({"("});
 
         i32 labelsBeginPos = Pos + 1;
@@ -59,17 +66,17 @@ private:
         labels.pop_back();
 
         Keyword({")"});
-        
+
         TVector<EJoinAlgoType> joinAlgos = {EJoinAlgoType::GraceJoin, EJoinAlgoType::LookupJoin, EJoinAlgoType::MapJoin};
-        TVector<TString> joinAlgosStr = {"Shuffle", "Lookup", "Broadcast"};
+        TVector<TString> joinAlgosStr = {"shuffle", "lookup", "broadcast"};
 
         for (const auto& [JoinType, joinAlgoStr]: Zip(joinAlgos, joinAlgosStr)) {
-            if (reqJoinAlgoStr == joinAlgoStr) {
+            if (ToLower(reqJoinAlgoStr) == joinAlgoStr) {
                 Hints.JoinAlgoHints->PushBack(std::move(labels), JoinType, "JoinType" + Text.substr(beginPos, Pos - beginPos + 1));
                 return;
             }
         }
-       
+
         ParseError(Sprintf("Unknown JoinType: '%s', supported algos: [%s]", reqJoinAlgoStr.c_str(), JoinSeq(", ", joinAlgosStr).c_str()), Pos - reqJoinAlgoStr.size());
         Y_UNREACHABLE();
     }
@@ -82,7 +89,7 @@ private:
         Keyword({")"});
 
         Hints.JoinOrderHints->PushBack(
-            std::move(joinOrderHintTree), 
+            std::move(joinOrderHintTree),
             leading? "Leading" : "JoinOrder" + Text.substr(beginPos, Pos - beginPos + 1)
         );
     }
@@ -100,7 +107,7 @@ private:
             auto join = JoinOrderLabels();
             Keyword({")"});
             return join;
-        } 
+        }
 
         ParseError(Sprintf("JoinOrder args must be either a relation, either a join, example of the format: JoinOrder(t1 (t2 t3))"), Pos);
         Y_UNREACHABLE();
@@ -116,7 +123,7 @@ private:
         char sign = signStr[0];
         auto value = Number();
         Keyword({")"});
-        
+
         TCardinalityHints::ECardOperation op;
         switch (sign) {
             case '+': { op = TCardinalityHints::ECardOperation::Add; break; }
@@ -138,7 +145,7 @@ private:
     }
 
     TString Label() {
-        return Term(Letters() | Digits());
+        return Term(LabelAllowedSymbols());
     }
 
     std::optional<TString> MaybeLabel() {
@@ -170,7 +177,7 @@ private:
 
     char Char(unsigned char c) {
         std::bitset<256> allowed;
-        allowed[c] = 1; 
+        allowed[c] = 1;
         return Char(allowed);
     }
 
@@ -181,7 +188,7 @@ private:
         }
         return Char(allowed);
     }
- 
+
     char Char(const std::bitset<256>& allowedSymbols = {}) {
         Y_ENSURE(Pos < Size, Sprintf("Expected [%s], but got end of the string.", ""));
 
@@ -279,6 +286,12 @@ private:
         }
 
         return res;
+    }
+
+    constexpr std::bitset<256> LabelAllowedSymbols() {
+        auto labelSymbols = Digits() | Letters();
+        labelSymbols['_'] = 1;
+        return labelSymbols;
     }
 
     void SkipWhiteSpaces() {

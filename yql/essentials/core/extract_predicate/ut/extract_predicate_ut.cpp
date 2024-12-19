@@ -1,9 +1,7 @@
 #include "extract_predicate_impl.h"
 
-#include <yt/yql/providers/yt/provider/yql_yt_provider.h>
-#include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
-#include <yt/yql/providers/yt/gateway/file/yql_yt_file_services.h>
 #include <yql/essentials/providers/config/yql_config_provider.h>
+#include <yql/essentials/providers/pure/yql_pure_provider.h>
 #include <yql/essentials/providers/result/provider/yql_result_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
@@ -13,7 +11,6 @@
 #include <yql/essentials/core/cbo/simple/cbo_simple.h>
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
-#include <yql/essentials/core/ut_common/yql_ut_common.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/facade/yql_facade.h>
@@ -27,11 +24,33 @@
 
 namespace NYql {
 
+TString DumpNode(const TExprNode& node, TExprContext& exprCtx) {
+    auto ast = ConvertToAst(node, exprCtx, TExprAnnotationFlags::None, true);
+    return ast.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote | TAstPrintFlags::AdaptArbitraryContent);
+}
+
+void ParseAst(const TString& sexpr, TExprNode::TPtr& root, TExprContext& ctx) {
+    auto ast = ParseAst(sexpr);
+    UNIT_ASSERT(ast.IsOk());
+    UNIT_ASSERT(CompileExpr(*ast.Root, root, ctx, nullptr, nullptr));
+}
+
+void CompareAst(const TString& sexpr1, const TString& sexpr2) {
+    TExprContext ctx;
+    TExprNode::TPtr root1, root2;
+    ParseAst(sexpr1, root1, ctx);
+    ParseAst(sexpr2, root2, ctx);
+    const TExprNode* ptr1 = root1.Get();
+    const TExprNode* ptr2 = root2.Get();
+    if (CompareExprTrees(ptr1, ptr2)) {
+        UNIT_ASSERT_NO_DIFF(DumpNode(*root1, ctx), DumpNode(*root2, ctx));
+    }
+}
+
 Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     TExprNode::TPtr ParseAndOptimize(const TString& program, TExprContext& exprCtx, TTypeAnnotationContextPtr& typesCtx) {
         NSQLTranslation::TTranslationSettings settings;
-        settings.ClusterMapping["plato"] = YtProviderName;
         settings.SyntaxVersion = 1;
 
         TAstParseResult astRes = SqlToYql(program, settings);
@@ -40,19 +59,22 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
         UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
 
         auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
-        TTestTablesMapping testTables;
-        auto yqlNativeServices = NFile::TYtFileServices::Make(functionRegistry.Get(), testTables);
-        auto ytGateway = CreateYtFileGateway(yqlNativeServices);
         typesCtx = MakeIntrusive<TTypeAnnotationContext>();
         typesCtx->RandomProvider = CreateDeterministicRandomProvider(1);
-        auto ytState = MakeIntrusive<TYtState>(typesCtx.Get());
-        ytState->Gateway = ytGateway;
-
-        InitializeYtGateway(ytGateway, ytState);
-        typesCtx->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
-        typesCtx->AddDataSource(YtProviderName, CreateYtDataSource(ytState));
 
         typesCtx->AddDataSource(ConfigProviderName, CreateConfigProvider(*typesCtx, nullptr, ""));
+        auto pureState = MakeIntrusive<TPureState>();
+        pureState->Types = typesCtx.Get();
+        pureState->FunctionRegistry = functionRegistry.Get();
+        typesCtx->AddDataSource(PureProviderName, CreatePureProvider(pureState));
+
+        auto writerFactory = [](){ return CreateYsonResultWriter(NYson::EYsonFormat::Binary); };
+        auto resultProviderConfig = MakeIntrusive<TResultProviderConfig>(*typesCtx,
+            *functionRegistry, IDataProvider::EResultFormat::Yson, ToString((ui32)NYson::EYsonFormat::Binary), writerFactory);
+        resultProviderConfig->SupportsResultPosition = true;
+        auto resultProvider = CreateResultProvider(resultProviderConfig);
+        typesCtx->AddDataSink(ResultProviderName, resultProvider);
+        typesCtx->AvailablePureResultDataSources.push_back(TString(PureProviderName));
 
         auto transformer = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
@@ -72,11 +94,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
         UNIT_ASSERT(status == IGraphTransformer::TStatus::Ok);
 
         return exprRoot;
-    }
-
-    TString DumpNode(const TExprNode& node, TExprContext& exprCtx) {
-        auto ast = ConvertToAst(node, exprCtx, TExprAnnotationFlags::None, true);
-        return ast.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote);
     }
 
     TExprNode::TPtr LocateFilterLambda(const TExprNode::TPtr& root) {
@@ -127,20 +144,17 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
             Cerr << "ComputeRanges: " << computeRangeDump << "\n";
         }
 
-        UNIT_ASSERT_NO_DIFF(expectedRanges, rangeDump);
+        CompareAst(expectedRanges, rangeDump);
         UNIT_ASSERT(expectedColumns == usedColumns);
         if (expectedComputeRanges) {
-            UNIT_ASSERT_NO_DIFF(expectedComputeRanges, computeRangeDump);
+            CompareAst(expectedComputeRanges, computeRangeDump);
         }
     }
 
     struct TRunSingleProgram {
         TString Src;
-        TString TmpDir;
-        TString Parameters;
         IOutputStream& Err;
         TVector<TString> Res;
-        THashMap<TString, TString> Tables;
 
         TRunSingleProgram(const TString& src, IOutputStream& err)
             : Src(src)
@@ -151,18 +165,13 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
         bool Run(
             const NKikimr::NMiniKQL::IFunctionRegistry* funcReg
         ) {
-            auto yqlNativeServices = NFile::TYtFileServices::Make(funcReg, Tables, {}, TmpDir);
-            auto ytGateway = CreateYtFileGateway(yqlNativeServices);
-
             TVector<TDataProviderInitializer> dataProvidersInit;
-            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytGateway, MakeSimpleCBOOptimizerFactory(), {}));
+            dataProvidersInit.push_back(GetPureDataProviderInitializer());
+
             TProgramFactory factory(true, funcReg, 0ULL, dataProvidersInit, "ut");
 
             TProgramPtr program = factory.Create("-stdin-", Src);
             program->ConfigureYsonResultFormat(NYson::EYsonFormat::Text);
-            if (!Parameters.empty()) {
-                program->SetParametersYson(Parameters);
-            }
 
             if (!program->ParseYql() || !program->Compile(GetUsername())) {
                 program->PrintErrorsTo(Err);
@@ -200,11 +209,8 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
         return res;
     }
 
-    TVector<TString> RunProgram(const TString& programSrc, const THashMap<TString, TString>& tables, const TString& tmpDir = TString(), const TString& params = TString()) {
+    TVector<TString> RunProgram(const TString& programSrc) {
         TRunSingleProgram driver(programSrc, Cerr);
-        driver.Tables = tables;
-        driver.TmpDir = tmpDir;
-        driver.Parameters = params;
         return Run(driver);
     }
 
@@ -218,7 +224,7 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
                  "(return world)\n"
                  ")\n";
         //Cerr << "PROG: " << s << "\n";
-        auto res = RunProgram(s, THashMap<TString, TString>());
+        auto res = RunProgram(s);
         UNIT_ASSERT_VALUES_EQUAL(res.size(), 1);
         //Cerr << "RES: " << res[0] << "\n";
         UNIT_ASSERT_NO_DIFF(expectedExecuteResult, res[0]);
@@ -248,8 +254,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     TString GetOptionalSrc() {
         return
-            "use plato;\n"
-            "\n"
             "$src = [\n"
             "    <|x:1/0, y:2/0|>,\n"
             "    <|x:1/0, y:1|>,\n"
@@ -260,8 +264,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     TString GetNonOptionsSrc() {
         return
-            "use plato;\n"
-            "\n"
             "$src = [\n"
             "    <|x:1, y:2|>,\n"
             "    <|x:3, y:4|>,\n"
@@ -271,8 +273,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     TString GetNonOptionsSrc4() {
         return
-            "use plato;\n"
-            "\n"
             "$src = [\n"
             "    <|x:1, y:2, z:3, t:4|>,\n"
             "    <|x:3, y:4, z:5, t:6|>,\n"
@@ -282,7 +282,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(PropagateNot) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where not (3 > x or not(y > 3));";
 
         TString expectedRanges =
@@ -301,7 +300,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(RangeRestInOr) {
         TString prog = GetNonOptionsSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where (3 > x or (x + y) > 3);";
 
         TString expectedRanges =
@@ -322,7 +320,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(RangeRestDueToDisjointColumnSet) {
         TString prog = GetNonOptionsSrc4() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where (x = 1 and y = 2) or (z = 3 and t = 4);";
 
         TString expectedRanges =
@@ -340,7 +337,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(Exists) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x is null;";
 
         TString expectedRanges =
@@ -358,7 +354,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 #if 0
     Y_UNIT_TEST(SqlNotIn) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where y not in (1, 2, 3);";
 
         TString expectedRanges =
@@ -380,7 +375,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(SqlIn) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x in (4294967295u, 2u,  1u) AND y != 100;";
 
         TString expectedRanges =
@@ -421,7 +415,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(AndWithOr) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x > 2 or (x < 1 and y > 0);";
 
         TString expectedRanges =
@@ -441,7 +434,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(OrWithConst) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where 1 > 2 or x > 2;";
 
         TString expectedRanges =
@@ -459,7 +451,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(AndWithAllConst) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where 3 > 0 and 1 > 2;";
 
         TString expectedRanges =
@@ -475,7 +466,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(OrWithDifferentColumns) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x > 0 or 1 < y;";
 
         TString expectedRanges =
@@ -495,7 +485,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(TupleEquals) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x < y and (x, y) == (1, 2);";
 
         TString expectedRanges =
@@ -514,7 +503,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(TupleLessOrEquals) {
         TString prog = GetNonOptionsSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where (x, y) <= (1, 2);";
 
         TString expectedRanges =
@@ -534,7 +522,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(BasicRange) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x < 1 + 1;";
 
         TString expectedRanges =
@@ -563,7 +550,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(BasicRange2) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x < 1 + 1 and x >= 0 or x < -10";
 
         TString expectedRanges =
@@ -599,7 +585,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(BasicIntRounding) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x < 4294967295u;";
 
         TString expectedRanges =
@@ -624,7 +609,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(RangeWithFalseConst) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x < 1 and 1+1 > 2;";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[]}]})__";
@@ -633,7 +617,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(RangeWithTrueConst) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x < 1 and 1+1 >= 2;";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[[#];#;"0"];[[["1"]];#;"0"]]]}]})__";
@@ -642,7 +625,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(RangeSinglePoint) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x == 10;";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[[["10"]];#;"1"];[[["10"]];#;"1"]]]}]})__";
@@ -651,7 +633,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(RangeWithoutSinglePoint) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x != 10;";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[[#];#;"0"];[[["10"]];#;"0"]];[[[["10"]];#;"0"];[#;#;"0"]]]}]})__";
@@ -661,7 +642,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
     Y_UNIT_TEST(RangeUnionOverlapping) {
         // (1, 3) union (2, 4]
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where (x > 1 and x < 3) or (x <= 4 and x > 2);";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[[["1"]];#;"0"];[[["4"]];#;"1"]]]}]})__";
@@ -671,7 +651,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
     Y_UNIT_TEST(RangeUnionAdjacent) {
         // (1, 3) union [3, 4)
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where (x > 1 and x < 3) or (x < 4 and x >= 3);";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[[["1"]];#;"0"];[[["4"]];#;"0"]]]}]})__";
@@ -681,7 +660,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
     Y_UNIT_TEST(RangeUnionDisjoint) {
         // (-inf, 2) union [3, 4)
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x < 2 or (x < 4 and x >= 3);";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[[#];#;"0"];[[["2"]];#;"0"]];[[[["3"]];#;"1"];[[["3"]];#;"1"]]]}]})__";
@@ -691,7 +669,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
     Y_UNIT_TEST(RangeIntersect3) {
         // ((-inf, 3) or [5, +inf)) intersect [2, 6)
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where (x < 3 or x >= 5) and (x >= 2 and x < 6);";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[[["2"]];#;"1"];[[["2"]];#;"1"]];[[[["5"]];#;"1"];[[["5"]];#;"1"]]]}]})__";
@@ -700,7 +677,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(TupleLess) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where (x, y) < (5, 1 + 3);";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[[#];#;"0"];[[["5"]];#;"0"]];[[[["5"]];[#];"0"];[[["5"]];[["4"]];"0"]]]}]})__";
@@ -709,7 +685,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(TupleLessOrEquals2) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where (x, y) <= (5, 1 + 3);";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[[#];#;"0"];[[["5"]];#;"0"]];[[[["5"]];[#];"0"];[[["5"]];[["5"]];"0"]]]}]})__";
@@ -718,9 +693,7 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(DateRounding) {
         TString prefixDt =
-            "use plato;\n"
-            "$src = [<|x:CurrentUtcDatetime(), y:1|>, <|x:CurrentUtcDatetime(), y:2|>];\n"
-            "insert into Output with truncate\n";
+            "$src = [<|x:CurrentUtcDatetime(), y:1|>, <|x:CurrentUtcDatetime(), y:2|>];\n";
 
         ExtractAndExecuteRanges(prefixDt + "select * from as_table($src) where x > Timestamp('2105-12-31T23:59:59.123456Z');",
             R"__({"Write"=[{"Data"=[]}]})__");
@@ -730,9 +703,7 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
             R"__({"Write"=[{"Data"=[[[#;#;"0"];[["4291747199"];#;"1"]]]}]})__");
 
         TString prefixDate =
-            "use plato;\n"
-            "$src = [<|x:Just(CurrentUtcDate()), y:1|>, <|x:CurrentUtcDate(), y:2|>];\n"
-            "insert into Output with truncate\n";
+            "$src = [<|x:Just(CurrentUtcDate()), y:1|>, <|x:CurrentUtcDate(), y:2|>];\n";
 
         ExtractAndExecuteRanges(prefixDate + "select * from as_table($src) where x > Datetime('2105-12-31T01:00:00Z');",
                             R"__({"Write"=[{"Data"=[]}]})__");
@@ -744,9 +715,7 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(RangeRestInAnd) {
         TString prog =
-            "use plato;\n"
             "$src = [<|x:1, y:2, z:3|>, <|x:1/0, y:1/0, z:3|>];\n"
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x < 10 and z in (1, 2);";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[[#];#;"0"];[[["10"]];#;"0"]]]}]})__";
@@ -755,9 +724,7 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(RangeRestInAnd2) {
         TString prog =
-            "use plato;\n"
             "$src = [<|x:1, y:2, z:3|>, <|x:1/0, y:1/0, z:3|>];\n"
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x == 10 and y > 123 and z in (1, 2);";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[[["10"]];[["123"]];"0"];[[["10"]];#;"1"]]]}]})__";
@@ -766,7 +733,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(SecondIndexAndTuple) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where y > 2 and (x, y) <= (5, 1 + 3);";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[[#];#;"0"];[[["5"]];#;"0"]];[[[["5"]];[#];"0"];[[["5"]];[["5"]];"0"]]]}]})__";
@@ -775,7 +741,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(IsNotNull) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x is not null;";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[[#];#;"0"];[#;#;"0"]]]}]})__";
@@ -784,7 +749,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(IsNull) {
         TString prog = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x is null;";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[[#];#;"1"];[[#];#;"1"]]]}]})__";
@@ -793,9 +757,7 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(NaNComparison) {
         TString prog =
-            "use plato;\n"
             "$src = [<|x:Double('nan'), y:1|>, <|x:Double('inf'), y:2|>];\n"
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x > Double('nan');";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[]}]})__";
@@ -804,9 +766,7 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(NaNEquals) {
         TString prog =
-            "use plato;\n"
             "$src = [<|x:Decimal('nan', 15, 10), y:1|>, <|x:Decimal('inf', 15, 10), y:2|>];\n"
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x = Decimal('nan', 15, 10);";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[]}]})__";
@@ -815,9 +775,7 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(NaNNotEquals) {
         TString prog =
-            "use plato;\n"
             "$src = [<|x:Float('nan'), y:1|>, <|x:Float('inf'), y:2|>];\n"
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x != 0.0f/0.0f;";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[#;#;"0"];[#;#;"0"]]]}]})__";
@@ -827,9 +785,7 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(PointPrefixLen) {
         TString prog =
-            "use plato;\n"
             "$src = [<|x:1, y:1, z:1|>, <|x:2, y:2, z:2|>];\n"
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x = 1 and y in (1, 2, 3) and z > 0;";
 
         TExprContext exprCtx;
@@ -854,10 +810,8 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(UnlimitedRangesResidual) {
         TString prog =
-            "use plato;\n"
             "declare $param as List<Int32>;\n"
             "$src = [<|x:1, y:1, z:1|>, <|x:2, y:2, z:2|>];\n"
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x = 1 and y in $param and z = 0;";
 
         TExprContext exprCtx;
@@ -887,10 +841,8 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(BoolPredicate) {
         TString prog =
-            "use plato;\n"
             "declare $param as List<Int32>;\n"
             "$src = [<|x:true, y:1|>, <|x:false, y:2|>];\n"
-            "insert into Output with truncate\n"
             "select * from as_table($src) where not x;";
 
         TExprContext exprCtx;
@@ -927,10 +879,8 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(BoolPredicateLiteralRange) {
         TString prog =
-            "use plato;\n"
             "declare $param as List<Int32>;\n"
             "$src = [<|x:true, y:1|>, <|x:false, y:2|>];\n"
-            "insert into Output with truncate\n"
             "select * from as_table($src) where not x and y = 1;";
 
         TExprContext exprCtx;
@@ -972,7 +922,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(LookupAnd) {
         TString prog = GetNonOptionsSrc4() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where (x, y) > (1, 2) and x in [0, 1, 2, 3];";
 
         TExprContext exprCtx;
@@ -1023,8 +972,8 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
         auto lambda = DumpNode(*buildResult.PrunedLambda, exprCtx);
         Cerr << lambda;
 
-        UNIT_ASSERT_EQUAL(ranges, canonicalRanges);
-        UNIT_ASSERT_EQUAL(lambda, canonicalLambda);
+        CompareAst(ranges, canonicalRanges);
+        CompareAst(lambda, canonicalLambda);
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[["1"];["2"];"0"];[["1"];#;"1"]];[[["2"];#;"1"];[["2"];#;"1"]];[[["3"];#;"1"];[["3"];#;"1"]]]}]})__";
         ExecuteAndCheckRanges(ranges, expectedExecuteResult);
@@ -1032,7 +981,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(MixedAnd) {
         TString prog = GetNonOptionsSrc4() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where (x in [1, 2]) and (x, y) in [(2, 3), (3, 4)] and (z, t) < (4, 5) and (y, z, t) > (0,0,0);";
 
         TExprContext exprCtx;
@@ -1067,15 +1015,12 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(OverflowRanges) {
         TString prog1 = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x = 1 and y in [1, 2, 3];";
 
         TString prog2 = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x = 1 and y in [1, 2, 3] and (x, y) < (4, 4);";
 
         TString prog3 = GetOptionalSrc() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x = 1;";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[[["1"]];#;"1"];[[["1"]];#;"1"]]]}]})__";
@@ -1086,7 +1031,6 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
 
     Y_UNIT_TEST(OverflowRanges2) {
         TString prog = GetNonOptionsSrc4() +
-            "insert into Output with truncate\n"
             "select * from as_table($src) where x = 1 and ((y = 2 and z in [1, 2, 3]) or ((y, z) = (2, 2))) and t = 3;";
 
         TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[["1"];["2"];#;#;"1"];[["1"];["2"];#;#;"1"]]]}]})__";

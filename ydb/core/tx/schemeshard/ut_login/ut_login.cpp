@@ -1,5 +1,6 @@
 #include <util/string/join.h>
 
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/library/login/login.h>
 #include <ydb/library/login/password_checker/password_checker.h>
 #include <ydb/library/actors/http/http_proxy.h>
@@ -85,12 +86,194 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
     }
 
+    Y_UNIT_TEST(RemoveLogin) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        auto resultLogin = Login(runtime, "user1", "password1");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir2");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+        AsyncMkDir(runtime, ++txId, "/MyRoot/Dir1", "DirSub1");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+        AsyncMkDir(runtime, ++txId, "/MyRoot/Dir1", "DirSub2");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+
+        NACLib::TDiffACL diffACL;
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user2");
+        AsyncModifyACL(runtime, ++txId, "", "MyRoot", diffACL.SerializeAsString(), "");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        AsyncModifyACL(runtime, ++txId, "/MyRoot/Dir1", "DirSub2", diffACL.SerializeAsString(), "");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+            {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
+            {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir2"),
+            {NLs::HasNoRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
+            {NLs::HasNoRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub2"),
+            {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
+
+        CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1");
+
+        // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1/DirSub2").DebugString() << Endl;
+        // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
+
+        for (auto path : {"/MyRoot", "/MyRoot/Dir1", "/MyRoot/Dir2", "/MyRoot/Dir1/DirSub1", "/MyRoot/Dir1/DirSub2"}) {
+            TestDescribeResult(DescribePath(runtime, path),
+                {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1")});
+        }
+
+        // check login
+        {
+            auto resultLogin = Login(runtime, "user1", "password1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Invalid user");
+        }
+
+        // another still has access
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
+            {NLs::HasRight("+U:user2"), NLs::HasEffectiveRight("+U:user2")});
+    }
+
+    Y_UNIT_TEST(RemoveLogin_SubTree) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        auto resultLogin = Login(runtime, "user1", "password1");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir2");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+        AsyncMkDir(runtime, ++txId, "/MyRoot/Dir1", "DirSub1");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+        AsyncMkDir(runtime, ++txId, "/MyRoot/Dir1", "DirSub2");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+
+        NACLib::TDiffACL diffACL;
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user2");
+        AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+            {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1")});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
+            {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir2"),
+            {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1")});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
+            {NLs::HasNoRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub2"),
+            {NLs::HasNoRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
+
+        CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1");
+
+        // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1/DirSub2").DebugString() << Endl;
+        // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
+
+        for (auto path : {"/MyRoot", "/MyRoot/Dir1", "/MyRoot/Dir2", "/MyRoot/Dir1/DirSub1", "/MyRoot/Dir1/DirSub2"}) {
+            TestDescribeResult(DescribePath(runtime, path),
+                {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1")});
+        }
+
+        // check login
+        {
+            auto resultLogin = Login(runtime, "user1", "password1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Invalid user");
+        }
+
+        // another still has access
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
+            {NLs::HasRight("+U:user2"), NLs::HasEffectiveRight("+U:user2")});
+    }
+
+    Y_UNIT_TEST(RemoveLogin_NonExisting) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        
+        for (bool missingOk : { false, true}) {
+            auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
+            auto transaction = modifyTx->Record.AddTransaction();
+            transaction->SetWorkingDir("/MyRoot");
+            transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
+
+            auto removeUser = transaction->MutableAlterLogin()->MutableRemoveUser();
+            removeUser->SetUser("user1");
+            removeUser->SetMissingOk(missingOk);
+
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
+            TestModificationResults(runtime, txId, TVector<TExpectedResult>{{
+                missingOk ? NKikimrScheme::StatusSuccess : NKikimrScheme::StatusPreconditionFailed,
+                missingOk ? "" : "User not found"
+            }});
+        }
+    }
+
+    Y_UNIT_TEST(RemoveLogin_Owner) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        auto resultLogin = Login(runtime, "user1", "password1");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1/DirSub1");
+
+        NACLib::TDiffACL diffACL;
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
+        AsyncModifyACL(runtime, ++txId, "/MyRoot/Dir1", "DirSub1", diffACL.SerializeAsString(), "user1");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
+            {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1"), NLs::HasOwner("user1")});
+
+        // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
+        // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
+
+        CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1",
+            TVector<TExpectedResult>{{NKikimrScheme::StatusPreconditionFailed, "User user1 owns /MyRoot/Dir1/DirSub1 and can't be removed"}});
+        
+        // check user still exists and has their rights:
+        {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
+                {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1"), NLs::HasOwner("user1")});
+            auto resultLogin = Login(runtime, "user1", "password1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "");
+        }
+
+        AsyncModifyACL(runtime, ++txId, "/MyRoot/Dir1", "DirSub1", NACLib::TDiffACL().SerializeAsString(), "user2");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1");
+
+        // check user has been removed:
+        {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
+                {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"), NLs::HasOwner("user2")});
+            auto resultLogin = Login(runtime, "user1", "password1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Invalid user");
+        }
+    }
+
     Y_UNIT_TEST(DisableBuiltinAuthMechanism) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().AuthConfig.SetEnableLoginAuthentication(false);
         ui64 txId = 100;
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusPreconditionFailed}});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusPreconditionFailed, "Login authentication is disabled"}});
         auto resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Login authentication is disabled");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");

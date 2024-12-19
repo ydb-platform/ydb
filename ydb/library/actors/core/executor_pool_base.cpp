@@ -268,6 +268,25 @@ namespace NActors {
         return actorId;
     }
 
+    TActorId TExecutorPoolBaseMailboxed::RegisterAlias(TMailbox* mailbox, IActor* actor) {
+        Y_ABORT_UNLESS(!mailbox->IsEmpty(),
+            "RegisterAlias called on an empty mailbox");
+
+        Y_DEBUG_ABORT_UNLESS(mailbox->FindActor(actor->SelfId().LocalId()) == actor,
+            "RegisterAlias called for an actor that is not register in the mailbox");
+
+        const ui64 localActorId = AllocateID();
+        mailbox->AttachAlias(localActorId, actor);
+        return TActorId(ActorSystem->NodeId, PoolId, localActorId, mailbox->Hint);
+    }
+
+    void TExecutorPoolBaseMailboxed::UnregisterAlias(TMailbox* mailbox, const TActorId& actorId) {
+        Y_DEBUG_ABORT_UNLESS(actorId.Hint() == mailbox->Hint);
+        Y_DEBUG_ABORT_UNLESS(actorId.PoolID() == PoolId);
+        Y_DEBUG_ABORT_UNLESS(actorId.NodeId() == ActorSystem->NodeId);
+        mailbox->DetachAlias(actorId.LocalId());
+    }
+
     TAffinity* TExecutorPoolBase::Affinity() const {
         return ThreadsAffinity.Get();
     }

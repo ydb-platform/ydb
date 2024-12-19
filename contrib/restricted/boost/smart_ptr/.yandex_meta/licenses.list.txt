@@ -72,11 +72,6 @@
 Distributed under the Boost Software License, Version 1.0.
 
 
-====================BSL-1.0====================
-Distributed under the Boost Software License, Version 1.0.
-(http://www.boost.org/LICENSE_1_0.txt)
-
-
 ====================COPYRIGHT====================
  *          Copyright Andrey Semashev 2007 - 2013.
  * Distributed under the Boost Software License, Version 1.0.
@@ -105,10 +100,6 @@ Distributed under the Boost Software License, Version 1.0.
 
 ====================COPYRIGHT====================
 //  Copyright (c) 2001, 2002 Peter Dimov
-
-
-====================COPYRIGHT====================
-//  Copyright (c) 2001, 2002 Peter Dimov and Multi Media Ltd.
 
 
 ====================COPYRIGHT====================
@@ -164,29 +155,11 @@ Distributed under the Boost Software License, Version 1.0.
 
 
 ====================COPYRIGHT====================
-//  Copyright (c) 2001-2009, 2012 Peter Dimov
-
-
-====================COPYRIGHT====================
 //  Copyright (c) 2002 Peter Dimov
 
 
 ====================COPYRIGHT====================
-//  Copyright (c) 2002 Peter Dimov and Multi Media Ltd.
-//  Copyright (c) 2008, 2018 Peter Dimov
-
-
-====================COPYRIGHT====================
 //  Copyright (c) 2002, 2003 Peter Dimov
-
-
-====================COPYRIGHT====================
-//  Copyright (c) 2002, 2003 Peter Dimov and Multi Media Ltd.
-
-
-====================COPYRIGHT====================
-//  Copyright (c) 2003 David Abrahams
-//  Copyright (c) 2003 Peter Dimov
 
 
 ====================COPYRIGHT====================
@@ -284,10 +257,6 @@ Distributed under the Boost Software License, Version 1.0.
 
 
 ====================COPYRIGHT====================
-//  Copyright 2008,2012 Peter Dimov
-
-
-====================COPYRIGHT====================
 //  Copyright 2013 Peter Dimov
 
 
@@ -314,6 +283,32 @@ Distributed under the Boost Software License, Version 1.0.
 
 
 ====================COPYRIGHT====================
+// Copyright (c) 2001, 2002 Peter Dimov and Multi Media Ltd.
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// Copyright (c) 2002 Peter Dimov and Multi Media Ltd.
+// Copyright (c) 2008, 2018 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// Copyright (c) 2002, 2003 Peter Dimov and Multi Media Ltd.
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// Copyright (c) 2003 David Abrahams
+// Copyright (c) 2003 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
 // Copyright 2007, 2020 Peter Dimov
 
 
@@ -331,6 +326,12 @@ Distributed under the Boost Software License, Version 1.0.
 
 ====================COPYRIGHT====================
 // Copyright 2023 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// Copyright 2024 Peter Dimov
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
 

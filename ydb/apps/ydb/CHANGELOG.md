@@ -1,4 +1,4 @@
-
+* Replaced option `--query-settings` by `--query-prefix` one in `ydb workload <workload> run`.
 * Added new options to `ydb workload topic`: --tx-commit-interval and --tx-commit-messages, allowing you to specify commit interval either in milliseconds or in number of messages written. 
 Also now you can load test YDB topics, using wide transactions that span over all partitions in the topic. This works both in write and in end-to-end workload scenarios. 
 

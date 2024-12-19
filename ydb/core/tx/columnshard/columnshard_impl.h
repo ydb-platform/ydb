@@ -261,7 +261,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx);
-    void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
     void Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvWriteDraft::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, const TActorContext& ctx);
@@ -290,6 +289,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
 
     void Handle(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& ctx);
 
+    void HandleInit(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
+
     ITransaction* CreateTxInitSchema();
 
     void OnActivateExecutor(const TActorContext& ctx) override;
@@ -308,7 +309,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
 
     void CleanupActors(const TActorContext& ctx);
     void BecomeBroken(const TActorContext& ctx);
-    void SwitchToWork(const TActorContext& ctx);
+    void TrySwitchToWork(const TActorContext& ctx);
 
     bool IsAnyChannelYellowStop() const {
         return Executor()->GetStats().IsAnyChannelYellowStop;
@@ -383,7 +384,7 @@ protected:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
             default:
-                LOG_S_WARN("TColumnShard.StateBroken at " << TabletID() << " unhandled event type: " << ev->GetTypeRewrite()
+                LOG_S_WARN("TColumnShard.StateBroken at " << TabletID() << " unhandled event type: " << ev->GetTypeName()
                                                           << " event: " << ev->ToString());
                 Send(IEventHandle::ForwardOnNondelivery(std::move(ev), NActors::TEvents::TEvUndelivered::ReasonActorUnknown));
                 break;
@@ -395,8 +396,6 @@ protected:
             "self_id", SelfId())("ev", ev->GetTypeName());
         TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
         switch (ev->GetTypeRewrite()) {
-            hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
-
             HFunc(TEvTxProcessing::TEvReadSet, Handle);
             HFunc(TEvTxProcessing::TEvReadSetAck, Handle);
 
@@ -453,7 +452,7 @@ protected:
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
-                    LOG_S_WARN("TColumnShard.StateWork at " << TabletID() << " unhandled event type: " << ev->GetTypeRewrite()
+                    LOG_S_WARN("TColumnShard.StateWork at " << TabletID() << " unhandled event type: " << ev->GetTypeName()
                                                             << " event: " << ev->ToString());
                 }
                 break;
@@ -478,6 +477,7 @@ private:
 
     const TMonotonic CreateInstant = TMonotonic::Now();
     std::optional<TMonotonic> StartInstant;
+    bool IsTxInitFinished = false;
 
     struct TLongTxWriteInfo {
         TInsertWriteId InsertWriteId;
@@ -600,8 +600,6 @@ private:
     void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
 
 public:
-    std::shared_ptr<ITxReader> StartReader;
-
     ui64 TabletTxCounter = 0;
 
     const TTablesManager& GetTablesManager() const {

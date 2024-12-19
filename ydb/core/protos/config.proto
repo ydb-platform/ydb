@@ -276,27 +276,7 @@ message TBlobStorageConfig {
     optional bool CachePDisks = 4 [default = true];
     optional bool CacheVDisks = 5 [default = true];
 
-    // Automatic configuration: when not filled in, then the autoconfig feature is disabled. When multiple nodes are
-    // negotiating about this feature, the disabled one overrides others.
-    message TAutoconfigSettings {
-        // subset of DefineStoragePool command
-        optional string ErasureSpecies = 1;
-        optional NKikimrBlobStorage.TGroupGeometry Geometry = 2;
-        repeated NKikimrBlobStorage.TPDiskFilter PDiskFilter = 3;
-        optional NKikimrBlobStorage.EPDiskType PDiskType = 7;
-
-        // some extra settings
-        optional bool AutomaticBoxManagement = 4; // invoke BSC DefineHostConfig/DefineBox automatically (true when unset)
-        optional bool AutomaticBootstrap = 9; // whether bootstrap should be performed automatically; PROHIBITED for production
-
-        // generation of the distconf section; when set, one can automatically apply in-filesystem config
-        optional uint64 Generation = 8;
-
-        // internally-used field with initial config.yaml loaded on the start
-        optional bytes InitialConfigYaml = 10;
-    }
-
-    optional TAutoconfigSettings AutoconfigSettings = 6;
+    reserved 6; // AutoconfigSettings previously here
 
     message TVDiskPerformanceConfig {
         optional NKikimrBlobStorage.EPDiskType PDiskType = 1;
@@ -335,6 +315,27 @@ message TBlobStorageConfig {
     repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 10;
     optional NKikimrBlobStorage.TDefineBox DefineBox = 11;
  }
+
+message TSelfManagementConfig {
+    // whether the self management is enabled (through distconf)? (mandatory field)
+    optional bool Enabled = 1;
+
+    // generation of the config; when set, one can automatically apply in-filesystem config
+    optional uint64 Generation = 2;
+
+    // internally-used field with initial config.yaml loaded on the start (for the bootstrap process); not filled by the user
+    optional bytes InitialConfigYaml = 3;
+
+    // subset of DefineStoragePool command
+    optional string ErasureSpecies = 11;
+    optional NKikimrBlobStorage.TGroupGeometry Geometry = 12;
+    repeated NKikimrBlobStorage.TPDiskFilter PDiskFilter = 13;
+    optional NKikimrBlobStorage.EPDiskType PDiskType = 14;
+
+    // some extra settings
+    optional bool AutomaticBoxManagement = 21 [default = true]; // invoke BSC DefineHostConfig/DefineBox automatically
+    optional bool AutomaticBootstrap = 22; // whether bootstrap should be performed automatically; PROHIBITED for production
+}
 
 message TBlobStorageFormatConfig {
     message TDrive {
@@ -1734,6 +1735,7 @@ message TColumnShardConfig {
     optional uint64 MemoryLimitScanPortion = 27 [default = 100000000];
     optional string ReaderClassName = 28;
     optional bool AllowNullableColumnsInPK = 29 [default = false];
+    optional uint32 RestoreDataOnWriteTimeoutSeconds = 30;
 }
 
 message TSchemeShardConfig {
@@ -2129,6 +2131,7 @@ message TAppConfig {
     optional NKikimrReplication.TReplicationDefaults ReplicationConfig = 83;
     optional TShutdownConfig ShutdownConfig = 84;
     optional TPrioritiesQueueConfig CompPrioritiesConfig = 85;
+    optional TSelfManagementConfig SelfManagementConfig = 86;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

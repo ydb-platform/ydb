@@ -9,7 +9,6 @@ namespace NKikimr::NSchemeShard {
 class TTablesStorage {
 private:
     THashMap<TPathId, TColumnTableInfo::TPtr> Tables;
-    THashMap<TString, THashSet<TPathId>> PathsByTier;
     THashMap<ui64, TColumnTablesLayout::TTableIdsGroup> TablesByShard;
 
     void OnAddObject(const TPathId& pathId, TColumnTableInfo::TPtr object);

@@ -231,8 +231,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
                 break;
             }
         }
-        if (GetReadMetadata()->Limit) {
-            result->AddStep(std::make_shared<TFilterCutLimit>(GetReadMetadata()->Limit, GetReadMetadata()->IsDescSorted()));
+        if (GetReadMetadata()->HasLimit()) {
+            result->AddStep(std::make_shared<TFilterCutLimit>(GetReadMetadata()->GetLimitRobust(), GetReadMetadata()->IsDescSorted()));
         }
         acc.AddFetchingStep(*result, *GetFFColumns(), EStageFeaturesIndexes::Fetching);
         acc.AddAssembleStep(*result, *GetFFColumns(), "LAST", EStageFeaturesIndexes::Fetching, !exclusiveSource);

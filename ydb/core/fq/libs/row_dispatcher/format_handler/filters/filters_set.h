@@ -17,6 +17,8 @@ public:
     virtual const TVector<ui64>& GetColumnIds() const = 0;
     virtual TMaybe<ui64> GetNextMessageOffset() const = 0;
 
+    virtual void OnFilteredBatch(ui64 firstRow, ui64 lastRow) = 0;  // inclusive interval [firstRow, lastRow]
+
     virtual void OnFilterStarted() = 0;
     virtual void OnFilteringError(TStatus status) = 0;
 };

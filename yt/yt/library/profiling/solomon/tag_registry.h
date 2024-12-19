@@ -1,5 +1,7 @@
 #pragma once
 
+#include "public.h"
+
 #include <yt/yt/core/profiling/public.h>
 
 #include <yt/yt/library/profiling/tag.h>
@@ -16,6 +18,8 @@ namespace NYT::NProfiling {
 class TTagRegistry
 {
 public:
+    void SetLabelSanitizationPolicy(ELabelSanitizationPolicy labelSanitizationPolicy);
+
     TTagIdList Encode(const TTagSet& tags);
     TTagIdList Encode(const TTagList& tags);
     TTagId Encode(const TTag& tag);
@@ -30,6 +34,24 @@ public:
     void DumpTags(NProto::TSensorDump* dump);
 
 private:
+    struct TSanitizeParameters
+    {
+        int ForbiddenCharCount;
+        int ResultingLength;
+
+        bool IsSanitizationRequired() const;
+    };
+
+    bool IsAllowedMonitoringTagValueChar(unsigned char c) const;
+    TSanitizeParameters ScanForSanitize(const std::string& value) const;
+    std::string SanitizeMonitoringTagValue(const std::string& value, int resultingLength) const;
+    TTag SanitizeMonitoringTag(const TTag& tag, int resultingLength) const;
+
+    template <class TTagPerfect>
+    TTagId EncodeSanitized(TTagPerfect&& tag);
+    std::optional<TTagId> TryEncodeSanitized(const TTag& tag) const;
+
+    ELabelSanitizationPolicy LabelSanitizationPolicy_ = ELabelSanitizationPolicy::None;
     // TODO(prime@): maybe do something about the fact that tags are never freed.
     THashMap<TTag, TTagId> TagByName_;
     std::deque<TTag> TagById_;
@@ -60,3 +82,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NProfiling
+
+#define TAG_REGISTRY_INL_H
+#include "tag_registry-inl.h"
+#undef TAG_REGISTRY_INL_H

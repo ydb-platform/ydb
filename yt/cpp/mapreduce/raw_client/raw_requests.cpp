@@ -269,266 +269,6 @@ TJobAttributes ParseJobAttributes(const TNode& node)
     return result;
 }
 
-TJobAttributes GetJob(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TOperationId& operationId,
-    const TJobId& jobId,
-    const TGetJobOptions& options)
-{
-    THttpHeader header("GET", "get_job");
-    header.MergeParameters(SerializeParamsForGetJob(operationId, jobId, options));
-    auto responseInfo = RetryRequestWithPolicy(retryPolicy, context, header);
-    auto resultNode = NodeFromYsonString(responseInfo.Response);
-    return ParseJobAttributes(resultNode);
-}
-
-TListJobsResult ListJobs(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TOperationId& operationId,
-    const TListJobsOptions& options)
-{
-    THttpHeader header("GET", "list_jobs");
-    header.MergeParameters(SerializeParamsForListJobs(operationId, options));
-    auto responseInfo = RetryRequestWithPolicy(retryPolicy, context, header);
-    auto resultNode = NodeFromYsonString(responseInfo.Response);
-
-    TListJobsResult result;
-
-    const auto& jobNodesList = resultNode["jobs"].AsList();
-    result.Jobs.reserve(jobNodesList.size());
-    for (const auto& jobNode : jobNodesList) {
-        result.Jobs.push_back(ParseJobAttributes(jobNode));
-    }
-
-    if (resultNode.HasKey("cypress_job_count") && !resultNode["cypress_job_count"].IsNull()) {
-        result.CypressJobCount = resultNode["cypress_job_count"].AsInt64();
-    }
-    if (resultNode.HasKey("controller_agent_job_count") && !resultNode["controller_agent_job_count"].IsNull()) {
-        result.ControllerAgentJobCount = resultNode["scheduler_job_count"].AsInt64();
-    }
-    if (resultNode.HasKey("archive_job_count") && !resultNode["archive_job_count"].IsNull()) {
-        result.ArchiveJobCount = resultNode["archive_job_count"].AsInt64();
-    }
-
-    return result;
-}
-
-class TResponseReader
-    : public IFileReader
-{
-public:
-    TResponseReader(const TClientContext& context, THttpHeader header)
-    {
-        if (context.ServiceTicketAuth) {
-            header.SetServiceTicket(context.ServiceTicketAuth->Ptr->IssueServiceTicket());
-        } else {
-            header.SetToken(context.Token);
-        }
-
-        if (context.ImpersonationUser) {
-            header.SetImpersonationUser(*context.ImpersonationUser);
-        }
-
-        auto hostName = GetProxyForHeavyRequest(context);
-        auto requestId = CreateGuidAsString();
-
-        UpdateHeaderForProxyIfNeed(hostName, context, header);
-
-        Response_ = context.HttpClient->Request(GetFullUrl(hostName, context, header), requestId, header);
-        ResponseStream_ = Response_->GetResponseStream();
-    }
-
-private:
-    size_t DoRead(void* buf, size_t len) override
-    {
-        return ResponseStream_->Read(buf, len);
-    }
-
-    size_t DoSkip(size_t len) override
-    {
-        return ResponseStream_->Skip(len);
-    }
-
-private:
-    NHttpClient::IHttpResponsePtr Response_;
-    IInputStream* ResponseStream_;
-};
-
-IFileReaderPtr GetJobInput(
-    const TClientContext& context,
-    const TJobId& jobId,
-    const TGetJobInputOptions& /* options */)
-{
-    THttpHeader header("GET", "get_job_input");
-    header.AddParameter("job_id", GetGuidAsString(jobId));
-    return new TResponseReader(context, std::move(header));
-}
-
-IFileReaderPtr GetJobFailContext(
-    const TClientContext& context,
-    const TOperationId& operationId,
-    const TJobId& jobId,
-    const TGetJobFailContextOptions& /* options */)
-{
-    THttpHeader header("GET", "get_job_fail_context");
-    header.AddOperationId(operationId);
-    header.AddParameter("job_id", GetGuidAsString(jobId));
-    return new TResponseReader(context, std::move(header));
-}
-
-TString GetJobStderrWithRetries(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TOperationId& operationId,
-    const TJobId& jobId,
-    const TGetJobStderrOptions& /* options */)
-{
-    THttpHeader header("GET", "get_job_stderr");
-    header.AddOperationId(operationId);
-    header.AddParameter("job_id", GetGuidAsString(jobId));
-    TRequestConfig config;
-    config.IsHeavy = true;
-    auto responseInfo = RetryRequestWithPolicy(retryPolicy, context, header, {}, config);
-    return responseInfo.Response;
-}
-
-IFileReaderPtr GetJobStderr(
-    const TClientContext& context,
-    const TOperationId& operationId,
-    const TJobId& jobId,
-    const TGetJobStderrOptions& /* options */)
-{
-    THttpHeader header("GET", "get_job_stderr");
-    header.AddOperationId(operationId);
-    header.AddParameter("job_id", GetGuidAsString(jobId));
-    return new TResponseReader(context, std::move(header));
-}
-
-TJobTraceEvent ParseJobTraceEvent(const TNode& node)
-{
-    const auto& mapNode = node.AsMap();
-    TJobTraceEvent result;
-
-    if (auto idNode = mapNode.FindPtr("operation_id")) {
-        result.OperationId = GetGuid(idNode->AsString());
-    }
-    if (auto idNode = mapNode.FindPtr("job_id")) {
-        result.JobId = GetGuid(idNode->AsString());
-    }
-    if (auto idNode = mapNode.FindPtr("trace_id")) {
-        result.TraceId = GetGuid(idNode->AsString());
-    }
-    if (auto eventIndexNode = mapNode.FindPtr("event_index")) {
-        result.EventIndex = eventIndexNode->AsInt64();
-    }
-    if (auto eventNode = mapNode.FindPtr("event")) {
-        result.Event = eventNode->AsString();
-    }
-    if (auto eventTimeNode = mapNode.FindPtr("event_time")) {
-        result.EventTime = TInstant::ParseIso8601(eventTimeNode->AsString());;
-    }
-
-    return result;
-}
-
-std::vector<TJobTraceEvent> GetJobTrace(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TOperationId& operationId,
-    const TGetJobTraceOptions& options)
-{
-    THttpHeader header("GET", "get_job_trace");
-    header.MergeParameters(SerializeParamsForGetJobTrace(operationId, options));
-    auto responseInfo = RetryRequestWithPolicy(retryPolicy, context, header);
-    auto resultNode = NodeFromYsonString(responseInfo.Response);
-
-    std::vector<TJobTraceEvent> result;
-
-    const auto& traceEventNodesList = resultNode.AsList();
-    result.reserve(traceEventNodesList.size());
-    for (const auto& traceEventNode : traceEventNodesList) {
-        result.push_back(ParseJobTraceEvent(traceEventNode));
-    }
-
-    return result;
-}
-
-TMaybe<TYPath> GetFileFromCache(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TString& md5Signature,
-    const TYPath& cachePath,
-    const TGetFileFromCacheOptions& options)
-{
-    THttpHeader header("GET", "get_file_from_cache");
-    header.MergeParameters(SerializeParamsForGetFileFromCache(transactionId, md5Signature, cachePath, options));
-    auto responseInfo = RetryRequestWithPolicy(retryPolicy, context, header);
-    auto path = NodeFromYsonString(responseInfo.Response).AsString();
-    return path.empty() ? Nothing() : TMaybe<TYPath>(path);
-}
-
-TYPath PutFileToCache(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& filePath,
-    const TString& md5Signature,
-    const TYPath& cachePath,
-    const TPutFileToCacheOptions& options)
-{
-    THttpHeader header("POST", "put_file_to_cache");
-    header.MergeParameters(SerializeParamsForPutFileToCache(transactionId, context.Config->Prefix, filePath, md5Signature, cachePath, options));
-    auto result = RetryRequestWithPolicy(retryPolicy, context, header);
-    return NodeFromYsonString(result.Response).AsString();
-}
-
-TNode::TListType SkyShareTable(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const std::vector<TYPath>& tablePaths,
-    const TSkyShareTableOptions& options)
-{
-    THttpHeader header("POST", "api/v1/share", /*IsApi*/ false);
-
-    auto proxyName = context.ServerName.substr(0,  context.ServerName.find('.'));
-
-    auto host = context.Config->SkynetApiHost;
-    if (host == "") {
-        host = "skynet." + proxyName + ".yt.yandex.net";
-    }
-
-    TSkyShareTableOptions patchedOptions = options;
-
-    if (context.Config->Pool && !patchedOptions.Pool_) {
-        patchedOptions.Pool(context.Config->Pool);
-    }
-
-    header.MergeParameters(SerializeParamsForSkyShareTable(proxyName, context.Config->Prefix, tablePaths, patchedOptions));
-    TClientContext skyApiHost({ .ServerName = host, .HttpClient = NHttpClient::CreateDefaultHttpClient() });
-    TResponseInfo response = {};
-
-    // As documented at https://wiki.yandex-team.ru/yt/userdoc/blob_tables/#shag3.sozdajomrazdachu
-    // first request returns HTTP status code 202 (Accepted). And we need retrying until we have 200 (OK).
-    while (response.HttpCode != 200) {
-        response = RetryRequestWithPolicy(retryPolicy, skyApiHost, header, "");
-        TWaitProxy::Get()->Sleep(TDuration::Seconds(5));
-    }
-
-    if (options.KeyColumns_) {
-        return NodeFromJsonString(response.Response)["torrents"].AsList();
-    } else {
-        TNode torrent;
-
-        torrent["key"] = TNode::CreateList();
-        torrent["rbtorrent"] = response.Response;
-
-        return TNode::TListType{ torrent };
-    }
-}
-
 TCheckPermissionResponse ParseCheckPermissionResponse(const TNode& node)
 {
     auto parseSingleResult = [] (const TNode::TMapType& node) {
@@ -561,69 +301,48 @@ TCheckPermissionResponse ParseCheckPermissionResponse(const TNode& node)
     return result;
 }
 
-TCheckPermissionResponse CheckPermission(
+TNode::TListType SkyShareTable(
     const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,
-    const TString& user,
-    EPermission permission,
-    const TYPath& path,
-    const TCheckPermissionOptions& options)
+    const std::vector<TYPath>& tablePaths,
+    const TSkyShareTableOptions& options)
 {
-    THttpHeader header("GET", "check_permission");
-    header.MergeParameters(SerializeParamsForCheckPermission(user, permission, context.Config->Prefix, path, options));
-    auto response = RetryRequestWithPolicy(retryPolicy, context, header);
-    return ParseCheckPermissionResponse(NodeFromYsonString(response.Response));
-}
+    THttpHeader header("POST", "api/v1/share", /*IsApi*/ false);
 
-TVector<TTabletInfo> GetTabletInfos(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TYPath& path,
-    const TVector<int>& tabletIndexes,
-    const TGetTabletInfosOptions& options)
-{
-    THttpHeader header("POST", "api/v4/get_tablet_infos", false);
-    header.MergeParameters(SerializeParamsForGetTabletInfos(context.Config->Prefix, path, tabletIndexes, options));
-    auto response = RetryRequestWithPolicy(retryPolicy, context, header);
-    TVector<TTabletInfo> result;
-    Deserialize(result, *NodeFromYsonString(response.Response).AsMap().FindPtr("tablets"));
-    return result;
-}
+    auto proxyName = context.ServerName.substr(0,  context.ServerName.find('.'));
 
-TVector<TTableColumnarStatistics> GetTableColumnarStatistics(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TVector<TRichYPath>& paths,
-    const TGetTableColumnarStatisticsOptions& options)
-{
-    THttpHeader header("GET", "get_table_columnar_statistics");
-    header.MergeParameters(SerializeParamsForGetTableColumnarStatistics(transactionId, paths, options));
-    TRequestConfig config;
-    config.IsHeavy = true;
-    auto requestResult = RetryRequestWithPolicy(retryPolicy, context, header, {}, config);
-    auto response = NodeFromYsonString(requestResult.Response);
-    TVector<TTableColumnarStatistics> result;
-    Deserialize(result, response);
-    return result;
-}
+    auto host = context.Config->SkynetApiHost;
+    if (host == "") {
+        host = "skynet." + proxyName + ".yt.yandex.net";
+    }
 
-TMultiTablePartitions GetTablePartitions(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TVector<TRichYPath>& paths,
-    const TGetTablePartitionsOptions& options)
-{
-    THttpHeader header("GET", "partition_tables");
-    header.MergeParameters(SerializeParamsForGetTablePartitions(transactionId, paths, options));
-    TRequestConfig config;
-    config.IsHeavy = true;
-    auto requestResult = RetryRequestWithPolicy(retryPolicy, context, header, {}, config);
-    auto response = NodeFromYsonString(requestResult.Response);
-    TMultiTablePartitions result;
-    Deserialize(result, response);
-    return result;
+    TSkyShareTableOptions patchedOptions = options;
+
+    if (context.Config->Pool && !patchedOptions.Pool_) {
+        patchedOptions.Pool(context.Config->Pool);
+    }
+
+    header.MergeParameters(NRawClient::SerializeParamsForSkyShareTable(proxyName, context.Config->Prefix, tablePaths, patchedOptions));
+    TClientContext skyApiHost({ .ServerName = host, .HttpClient = NHttpClient::CreateDefaultHttpClient() });
+    TResponseInfo response = {};
+
+    // As documented at https://wiki.yandex-team.ru/yt/userdoc/blob_tables/#shag3.sozdajomrazdachu
+    // first request returns HTTP status code 202 (Accepted). And we need retrying until we have 200 (OK).
+    while (response.HttpCode != 200) {
+        response = RetryRequestWithPolicy(retryPolicy, skyApiHost, header, "");
+        TWaitProxy::Get()->Sleep(TDuration::Seconds(5));
+    }
+
+    if (options.KeyColumns_) {
+        return NodeFromJsonString(response.Response)["torrents"].AsList();
+    } else {
+        TNode torrent;
+
+        torrent["key"] = TNode::CreateList();
+        torrent["rbtorrent"] = response.Response;
+
+        return TNode::TListType{ torrent };
+    }
 }
 
 TRichYPath CanonizeYPath(
@@ -652,104 +371,6 @@ TVector<TRichYPath> CanonizeYPaths(
         result.push_back(future.ExtractValueSync());
     }
     return result;
-}
-
-void AlterTable(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& path,
-    const TAlterTableOptions& options)
-{
-    THttpHeader header("POST", "alter_table");
-    header.AddMutationId();
-    header.MergeParameters(SerializeParamsForAlterTable(transactionId, context.Config->Prefix, path, options));
-    RetryRequestWithPolicy(retryPolicy, context, header);
-}
-
-void AlterTableReplica(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TReplicaId& replicaId,
-    const TAlterTableReplicaOptions& options)
-{
-    THttpHeader header("POST", "alter_table_replica");
-    header.AddMutationId();
-    header.MergeParameters(NRawClient::SerializeParamsForAlterTableReplica(replicaId, options));
-    RetryRequestWithPolicy(retryPolicy, context, header);
-}
-
-void DeleteRows(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TYPath& path,
-    const TNode::TListType& keys,
-    const TDeleteRowsOptions& options)
-{
-    THttpHeader header("PUT", "delete_rows");
-    header.SetInputFormat(TFormat::YsonBinary());
-    header.MergeParameters(NRawClient::SerializeParametersForDeleteRows(context.Config->Prefix, path, options));
-
-    auto body = NodeListToYsonString(keys);
-    TRequestConfig requestConfig;
-    requestConfig.IsHeavy = true;
-    RetryRequestWithPolicy(retryPolicy, context, header, body, requestConfig);
-}
-
-void FreezeTable(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TYPath& path,
-    const TFreezeTableOptions& options)
-{
-    THttpHeader header("POST", "freeze_table");
-    header.MergeParameters(SerializeParamsForFreezeTable(context.Config->Prefix, path, options));
-    RetryRequestWithPolicy(retryPolicy, context, header);
-}
-
-void UnfreezeTable(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TYPath& path,
-    const TUnfreezeTableOptions& options)
-{
-    THttpHeader header("POST", "unfreeze_table");
-    header.MergeParameters(SerializeParamsForUnfreezeTable(context.Config->Prefix, path, options));
-    RetryRequestWithPolicy(retryPolicy, context, header);
-}
-
-void AbortTransaction(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId)
-{
-    THttpHeader header("POST", "abort_tx");
-    header.AddMutationId();
-    header.MergeParameters(NRawClient::SerializeParamsForAbortTransaction(transactionId));
-    RetryRequestWithPolicy(retryPolicy, context, header);
-}
-
-void CommitTransaction(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId)
-{
-    THttpHeader header("POST", "commit_tx");
-    header.AddMutationId();
-    header.MergeParameters(NRawClient::SerializeParamsForCommitTransaction(transactionId));
-    RetryRequestWithPolicy(retryPolicy, context, header);
-}
-
-TTransactionId StartTransaction(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& parentTransactionId,
-    const TStartTransactionOptions& options)
-{
-    THttpHeader header("POST", "start_tx");
-    header.AddMutationId();
-    header.MergeParameters(NRawClient::SerializeParamsForStartTransaction(parentTransactionId, context.Config->TxTimeout, options));
-    return ParseGuidFromResponse(RetryRequestWithPolicy(retryPolicy, context, header).Response);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

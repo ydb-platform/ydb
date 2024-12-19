@@ -75,11 +75,6 @@ public:
         TString Password;
     };
 
-    struct TRemoveUserRequest : TBasicRequest {
-        TString User;
-        bool MissingOk;
-    };
-
     struct TRemoveUserResponse : TBasicResponse {
         std::vector<TString> TouchedGroups;
     };
@@ -165,8 +160,8 @@ public:
 
     TBasicResponse CreateUser(const TCreateUserRequest& request);
     TBasicResponse ModifyUser(const TModifyUserRequest& request);
-    TRemoveUserResponse RemoveUser(const TRemoveUserRequest& request);
-    bool CheckUserExists(const TString& name);
+    TRemoveUserResponse RemoveUser(const TString& user);
+    bool CheckUserExists(const TString& user);
 
     TBasicResponse CreateGroup(const TCreateGroupRequest& request);
     TBasicResponse AddGroupMembership(const TAddGroupMembershipRequest& request);

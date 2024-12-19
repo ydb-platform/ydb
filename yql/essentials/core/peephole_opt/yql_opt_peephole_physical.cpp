@@ -2469,7 +2469,10 @@ TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
         }
     }
 
-    if (ETypeAnnotationKind::Optional == node->GetTypeAnn()->GetKind()) {
+    if (ETypeAnnotationKind::Optional == node->GetTypeAnn()->GetKind() ||
+        ETypeAnnotationKind::Pg == node->GetTypeAnn()->GetKind())
+    {
+        YQL_ENSURE(node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional);
         YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over Optional";
         return ctx.Builder(node->Pos())
             .Callable("IfPresent")

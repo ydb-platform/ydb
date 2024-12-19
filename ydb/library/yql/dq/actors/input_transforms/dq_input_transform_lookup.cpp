@@ -70,6 +70,7 @@ public:
         , LruCache(std::make_unique<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl>(cacheLimit, lookupKeyType))
         , MaxDelayedRows(maxDelayedRows)
         , CacheTtl(cacheTtl)
+        , EstimatedRowSize(OutputRowColumnOrder.size()*sizeof(NUdf::TUnboxedValuePod))
         , ReadyQueue(OutputRowType)
         , LastLruSize(0)
     {
@@ -295,7 +296,7 @@ private: //IDqComputeActorAsyncInput
             CpuTimeUs->Add(deltaTime.MicroSeconds());
         }
         finished = IsFinished();
-        return AwaitingQueue.size();
+        return batch.empty() ? AwaitingQueue.size() : batch.RowCount() * EstimatedRowSize;
     }
 
     void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
@@ -371,6 +372,7 @@ protected:
     using TInputKeyOtherPair = std::pair<NUdf::TUnboxedValue, NUdf::TUnboxedValue>;
     using TAwaitingQueue = std::deque<TInputKeyOtherPair, NKikimr::NMiniKQL::TMKQLAllocator<TInputKeyOtherPair>>; //input row split in two parts: key columns and other columns
     TAwaitingQueue AwaitingQueue;
+    size_t EstimatedRowSize;
     NKikimr::NMiniKQL::TUnboxedValueBatch ReadyQueue;
     NYql::NDq::TDqAsyncStats IngressStats;
     std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> KeysForLookup;

@@ -64,11 +64,7 @@ private:
 
     using TBase = NAbstract::TStatsIterator<NKikimr::NSysView::Schema::PrimaryIndexStats>;
 
-    virtual bool IsReadyForBatch() const override {
-        return IndexGranules.size() && IndexGranules.front().GetPortions().size() &&
-               FetchedAccessors.contains(IndexGranules.front().GetPortions().front()->GetPortionId());
-    }
-
+    virtual bool IsReadyForBatch() const override;
     virtual bool AppendStats(
         const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const override;
     virtual ui32 PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const override;

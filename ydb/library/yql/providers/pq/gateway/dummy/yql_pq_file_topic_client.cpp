@@ -483,7 +483,7 @@ std::shared_ptr<NYdb::NTopic::IWriteSession> TFileTopicClient::CreateWriteSessio
     TString topicPath = settings.Path_;
     auto topicsIt = Topics_.find(make_pair("pq", topicPath));
     Y_ENSURE(topicsIt != Topics_.end());
-    auto filePath = topicsIt->second.FilePath;
+    auto filePath = topicsIt->second.Path;
     Y_ENSURE(filePath);
 
     return std::make_shared<TFileTopicWriteSession>(TFile(*filePath, EOpenMode::TEnum::RdWr));

@@ -1,5 +1,3 @@
-IF (NOT OPENSOURCE)
-
 LIBRARY()
 
 SRCS(
@@ -14,11 +12,7 @@ PEERDIR(
     contrib/ydb/library/yql/dq/expr_nodes
 )
 
-
 YQL_LAST_ABI_VERSION()
 
-
 END()
-
-ENDIF()
 

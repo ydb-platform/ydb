@@ -274,7 +274,7 @@ private: //IDqComputeActorAsyncInput
                 for (size_t i = 0; i != OtherInputIndexes.size(); ++i) {
                     otherItems[i] = inputRowItems[OtherInputIndexes[i]];
                     if (otherItems[i].IsString()) {
-                        rowExtraSize += keyItems[i].AsStringRef().size();
+                        rowExtraSize += otherItems[i].AsStringRef().size();
                     }
                 }
                 if (nullsInKey) {

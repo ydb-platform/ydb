@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     index_info.cpp
     column_ids.cpp
+    schema_version.cpp
 )
 
 PEERDIR(

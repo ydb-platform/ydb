@@ -4,11 +4,13 @@
 
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema_version.h>
+
 namespace NKikimr::NOlap {
 
 class TSnapshotSchema: public ISnapshotSchema {
 private:
-    std::shared_ptr<const TIndexInfo> IndexInfo;
+    TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard IndexInfo;
     std::shared_ptr<NArrow::TSchemaLite> Schema;
     TSnapshot Snapshot;
 protected:
@@ -21,7 +23,7 @@ protected:
             ;
     }
 public:
-    TSnapshotSchema(const std::shared_ptr<const TIndexInfo>& indexInfo, const TSnapshot& snapshot);
+    TSnapshotSchema(TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo, const TSnapshot& snapshot);
 
     virtual TColumnIdsView GetColumnIds() const override {
         return IndexInfo->GetColumnIds();

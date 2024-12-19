@@ -1,6 +1,9 @@
 #pragma once
 #include "column_features.h"
 
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema_version.h>
+#include <ydb/core/tx/columnshard/engines/scheme/common/cache.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/string_utils/quote/quote.h>
 #include <util/generic/hash.h>
@@ -8,29 +11,6 @@
 namespace NKikimr::NOlap {
 
 class TSchemaObjectsCache {
-public:
-    class TSchemaVersionId {
-    private:
-        YDB_READONLY_DEF(ui64, PresetId);
-        YDB_READONLY_DEF(ui64, Version);
-
-    public:
-        struct THash {
-            ui64 operator()(const TSchemaVersionId& object) const {
-                return CombineHashes(object.PresetId, object.Version);
-            }
-        };
-
-        bool operator==(const TSchemaVersionId& other) const {
-            return std::tie(PresetId, Version) == std::tie(other.PresetId, other.Version);
-        }
-
-        TSchemaVersionId(const ui64 presetId, const ui64 version)
-            : PresetId(presetId)
-            , Version(version) {
-        }
-    };
-
 private:
     THashMap<TString, std::shared_ptr<arrow::Field>> Fields;
     mutable ui64 AcceptionFieldsCount = 0;
@@ -40,8 +20,8 @@ private:
     mutable ui64 AcceptionFeaturesCount = 0;
     mutable TMutex FeaturesMutex;
 
-    THashMap<TSchemaVersionId, std::weak_ptr<const TIndexInfo>, TSchemaVersionId::THash> SchemasByVersion;
-    mutable TMutex SchemasMutex;
+    using TSchemasCache = TObjectCache<TSchemaVersionId, TIndexInfo>;
+    TSchemasCache SchemasByVersion;
 
     THashSet<TString> StringsCache;
     mutable TMutex StringsMutex;
@@ -102,7 +82,7 @@ public:
         return it->second;
     }
 
-    std::shared_ptr<const TIndexInfo> UpsertIndexInfo(const ui64 presetId, TIndexInfo&& indexInfo);
+    TSchemasCache::TEntryGuard UpsertIndexInfo(const ui64 presetId, TIndexInfo&& indexInfo);
 };
 
 class TSchemaCachesManager {

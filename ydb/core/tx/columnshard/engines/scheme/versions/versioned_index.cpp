@@ -6,7 +6,7 @@
 
 namespace NKikimr::NOlap {
 
-const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, const std::shared_ptr<const TIndexInfo>& indexInfo) {
+const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo) {
     if (Snapshots.empty()) {
         PrimaryKey = indexInfo->GetPrimaryKey();
     } else {
@@ -15,7 +15,7 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, const std
 
     const bool needActualization = indexInfo->GetSchemeNeedActualization();
     auto newVersion = indexInfo->GetVersion();
-    auto itVersion = SnapshotByVersion.emplace(newVersion, std::make_shared<TSnapshotSchema>(indexInfo, snapshot));
+    auto itVersion = SnapshotByVersion.emplace(newVersion, std::make_shared<TSnapshotSchema>(std::move(indexInfo), snapshot));
     if (!itVersion.second) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("message", "Skip registered version")("version", LastSchemaVersion);
     } else if (needActualization) {

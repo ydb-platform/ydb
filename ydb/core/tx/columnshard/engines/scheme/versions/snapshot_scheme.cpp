@@ -1,12 +1,12 @@
 #include "snapshot_scheme.h"
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema_version.h>
 
 namespace NKikimr::NOlap {
 
-TSnapshotSchema::TSnapshotSchema(const std::shared_ptr<const TIndexInfo>& indexInfo, const TSnapshot& snapshot)
+TSnapshotSchema::TSnapshotSchema(TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo, const TSnapshot& snapshot)
     : IndexInfo(std::move(indexInfo))
     , Schema(IndexInfo->ArrowSchemaWithSpecials())
-    , Snapshot(snapshot)
-{
+    , Snapshot(snapshot) {
 }
 
 TColumnSaver TSnapshotSchema::GetColumnSaver(const ui32 columnId) const {

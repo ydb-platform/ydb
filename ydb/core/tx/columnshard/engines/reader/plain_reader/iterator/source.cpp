@@ -178,7 +178,7 @@ void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& in
             constructor.Add(false, p.GetRecordsCount());
         }
     }
-    AFL_VERIFY(constructor.GetRecordsCountVerified() == Portion->GetRecordsCount());
+    AFL_VERIFY(constructor.Size() == Portion->GetRecordsCount());
     if (constructor.IsTotalDenyFilter()) {
         StageData->AddFilter(NArrow::TColumnFilter::BuildDenyFilter());
     } else if (constructor.IsTotalAllowFilter()) {

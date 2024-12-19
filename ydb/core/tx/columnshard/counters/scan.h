@@ -185,23 +185,7 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr BlobsReceivedCount;
     NMonitoring::TDynamicCounters::TCounterPtr BlobsReceivedBytes;
 
-    NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceCount;
-    NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceRawBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceRecords;
-    NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceEmptyCount;
-    NMonitoring::THistogramPtr HistogramFilteredResultCount;
-
     TScanCounters(const TString& module = "Scan");
-
-    void OnSourceFinished(const ui32 recordsCount, const ui64 rawBytes, const ui32 filteredRecordsCount) const {
-        ProcessedSourceCount->Add(1);
-        ProcessedSourceRawBytes->Add(rawBytes);
-        ProcessedSourceRecords->Add(recordsCount);
-        HistogramFilteredResultCount->Collect(filteredRecordsCount);
-        if (!filteredRecordsCount) {
-            ProcessedSourceEmptyCount->Add(1);
-        }
-    }
 
     void OnOptimizedIntervalMemoryFailed(const ui64 memoryRequired) const {
         HistogramIntervalMemoryRequiredOnFail->Collect(memoryRequired / (1024.0 * 1024.0 * 1024.0));

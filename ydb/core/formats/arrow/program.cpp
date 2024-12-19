@@ -554,6 +554,9 @@ arrow::Status TDatumBatch::AddColumn(const std::string& name, arrow::Datum&& col
     }
 
     auto field = arrow::field(name, column.type());
+    if (!field || !field->type()->Equals(column.type())) {
+        return arrow::Status::Invalid("Cannot create field " + name + ". type:" + field->type()->ToString() + " vs " + column.type()->ToString());
+    }
     if (!column.is_scalar() && column.length() != Rows) {
         return arrow::Status::Invalid("Wrong column length.");
     }
@@ -962,20 +965,9 @@ arrow::Result<std::shared_ptr<NArrow::TColumnFilter>> TProgramStep::BuildFilter(
     if (Filters.empty()) {
         return nullptr;
     }
-    auto table = t->BuildTableVerified(GetColumnsInUsage(true));
-    arrow::TableBatchReader reader(*table);
+    std::vector<std::shared_ptr<arrow::RecordBatch>> batches = NArrow::SliceToRecordBatches(t->BuildTableVerified(GetColumnsInUsage(true)));
     NArrow::TColumnFilter fullLocal = NArrow::TColumnFilter::BuildAllowFilter();
-    std::shared_ptr<arrow::RecordBatch> rb;
-    while (true) {
-        {
-            auto statusRead = reader.ReadNext(&rb);
-            if (!statusRead.ok()) {
-                return statusRead;
-            }
-        }
-        if (!rb) {
-            break;
-        }
+    for (auto&& rb : batches) {
         auto datumBatch = TDatumBatch::FromRecordBatch(rb);
         {
             auto statusAssign = ApplyAssignes(*datumBatch, NArrow::GetCustomExecContext());
@@ -985,11 +977,10 @@ arrow::Result<std::shared_ptr<NArrow::TColumnFilter>> TProgramStep::BuildFilter(
         }
         NArrow::TColumnFilter local = NArrow::TColumnFilter::BuildAllowFilter();
         NArrow::TStatusValidator::Validate(MakeCombinedFilter(*datumBatch, local));
-        AFL_VERIFY(local.GetRecordsCountVerified() == datumBatch->GetRecordsCount())("local", local.GetRecordsCount())(
-                                                                                        "datum", datumBatch->GetRecordsCount());
+        AFL_VERIFY(local.Size() == datumBatch->GetRecordsCount())("local", local.Size())("datum", datumBatch->GetRecordsCount());
         fullLocal.Append(local);
     }
-    AFL_VERIFY(fullLocal.GetRecordsCountVerified() == t->num_rows())("filter", fullLocal.GetRecordsCountVerified())("t", t->num_rows());
+    AFL_VERIFY(fullLocal.Size() == t->num_rows())("filter", fullLocal.Size())("t", t->num_rows());
     return std::make_shared<NArrow::TColumnFilter>(std::move(fullLocal));
 }
 

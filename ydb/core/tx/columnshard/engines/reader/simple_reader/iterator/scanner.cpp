@@ -8,20 +8,13 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::shared_ptr<arrow::Table>&& tableExt, const ui32 startIndex,
+void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::shared_ptr<arrow::Table>&& table, const ui32 startIndex,
     const ui32 recordsCount, TPlainReadData& reader) {
-
-    source->MutableResultRecordsCount() += tableExt ? tableExt->num_rows() : 0;
-    if (!tableExt || !tableExt->num_rows()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("empty_source", source->DebugJson().GetStringRobust());
-    }
-    Context->GetCommonContext()->GetCounters().OnSourceFinished(
-        source->GetRecordsCount(), source->GetUsedRawBytes(), tableExt ? tableExt->num_rows() : 0);
-
-    if ((!tableExt || !tableExt->num_rows()) && Context->GetCommonContext()->GetReadMetadata()->HasLimit() && InFlightLimit < MaxInFlight) {
+    source->MutableResultRecordsCount() += table ? table->num_rows() : 0;
+    source->MutableStageResult().SetResultChunk(std::move(table), startIndex, recordsCount);
+    if ((!table || !table->num_rows()) && Context->GetCommonContext()->GetReadMetadata()->HasLimit() && InFlightLimit < MaxInFlight) {
         InFlightLimit = 2 * InFlightLimit;
     }
-    source->MutableStageResult().SetResultChunk(std::move(tableExt), startIndex, recordsCount);
     while (FetchingSources.size()) {
         auto frontSource = FetchingSources.front();
         if (!frontSource->HasStageResult()) {

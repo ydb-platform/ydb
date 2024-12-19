@@ -7,7 +7,7 @@ from collections import defaultdict
 from kubernetes.client import Configuration
 
 from ydb.tools.ydbd_slice import nodes
-from ydb.tools.ydbd_slice.kube import api, kubectl, yaml, generate, cms, dynconfig
+from ydb.tools.ydbd_slice.kube import api, kubectl, yaml, generate, cms, dynconfig, docker
 
 
 logger = logging.getLogger(__name__)
@@ -184,18 +184,26 @@ def manifests_ydb_filter_components(project_path, manifests, update_components):
     return result
 
 
-def slice_docker_load(api_client, project_path, manifests, built_image_path):
-    if built_image_path is None:
-        logger.info('no built_image found, nothing to load.')
+def slice_docker_load(api_client, project_path, manifests, image, use_prebuilt_image):
+    if use_prebuilt_image:
+        logger.info('arg use_prebuilt_image found, nothing to load.')
         return
+
     node_list = get_nodes(api_client, project_path, manifests)
     if len(node_list) == 0:
         logger.info('no nodes found, nothing to load.')
         return
+
+    built_image_path = docker.get_image_output_path(image)
     remote_path = f"/Berkanavt/kikimr/{os.path.basename(built_image_path)}"
+
+    image_details = docker.docker_inspect(image)
+    local_digest = image_details[0]['Id']
+
     node_list = nodes.Nodes(node_list)
     node_list.copy(built_image_path, remote_path)
-    cmd = f"pigz -dc {remote_path} | sudo ctr image import -"
+
+    cmd = 'remote_digest=$(sudo crictl inspecti -o json {_image} | jq -r ".status.id"); if ["{_local_digest}" != "$remote_digest" ]; then sudo ctr import {_remote_path}; fi'.format(_image=image, _local_digest=local_digest, _remote_path=remote_path)
     node_list.execute_async(cmd)
 
 #
@@ -480,7 +488,7 @@ def slice_generate(project_path, user, slice_name, template, template_vars):
         sys.exit(f'Slice template {template} not implemented.')
 
 
-def slice_install(project_path, manifests, wait_ready, dynamic_config_type, built_image_path):
+def slice_install(project_path, manifests, wait_ready, dynamic_config_type, image, use_prebuilt_image):
     with api.ApiClient() as api_client:
         slice_namespace_apply(api_client, project_path, manifests)
         slice_nodeclaim_apply(api_client, project_path, manifests)
@@ -488,16 +496,16 @@ def slice_install(project_path, manifests, wait_ready, dynamic_config_type, buil
         slice_ydb_delete(api_client, project_path, manifests)
         slice_ydb_storage_wait_pods_deleted(api_client, project_path, manifests)
         slice_nodeclaim_format(api_client, project_path, manifests)
-        slice_docker_load(api_client, project_path, manifests, built_image_path)
+        slice_docker_load(api_client, project_path, manifests, image, use_prebuilt_image)
         slice_ydb_apply(api_client, project_path, manifests, dynamic_config_type)
         slice_ydb_wait_ready(api_client, project_path, manifests, wait_ready)
 
 
-def slice_update(project_path, manifests, wait_ready, dynamic_config_type, built_image_path):
+def slice_update(project_path, manifests, wait_ready, dynamic_config_type, image, use_prebuilt_image):
     with api.ApiClient() as api_client:
         slice_nodeclaim_apply(api_client, project_path, manifests)
         slice_nodeclaim_wait_ready(api_client, project_path, manifests)
-        slice_docker_load(api_client, project_path, manifests, built_image_path)
+        slice_docker_load(api_client, project_path, manifests, image, use_prebuilt_image)
         slice_ydb_apply(api_client, project_path, manifests, dynamic_config_type)
         slice_ydb_restart(api_client, project_path, manifests)
         slice_ydb_wait_ready(api_client, project_path, manifests, wait_ready)

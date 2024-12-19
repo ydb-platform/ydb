@@ -1412,9 +1412,9 @@ public:
         TNodeId NodeId;
         TNodeLocation Location;
 
-        THostRecord(TEvInterconnect::TNodeInfo&& nodeInfo)
+        THostRecord(const TEvInterconnect::TNodeInfo& nodeInfo)
             : NodeId(nodeInfo.NodeId)
-            , Location(std::move(nodeInfo.Location))
+            , Location(nodeInfo.Location)
         {}
     };
 
@@ -1423,11 +1423,13 @@ public:
         THashMap<TNodeId, THostId> NodeIdToHostId;
 
     public:
+        THostRecordMapImpl() = default;
+
         THostRecordMapImpl(TEvInterconnect::TEvNodesInfo *msg) {
-            for (TEvInterconnect::TNodeInfo& nodeInfo : msg->Nodes) {
+            for (const TEvInterconnect::TNodeInfo& nodeInfo : msg->Nodes) {
                 const THostId hostId(nodeInfo.Host, nodeInfo.Port);
                 NodeIdToHostId.emplace(nodeInfo.NodeId, hostId);
-                HostIdToRecord.emplace(hostId, std::move(nodeInfo));
+                HostIdToRecord.emplace(hostId, nodeInfo);
             }
         }
 
@@ -1805,8 +1807,7 @@ public:
 
     // For test purposes, required for self heal actor
     void CreateEmptyHostRecordsMap() {
-        TEvInterconnect::TEvNodesInfo nodes;
-        HostRecords = std::make_shared<THostRecordMapImpl>(&nodes);
+        HostRecords = std::make_shared<THostRecordMapImpl>();
     }
 
     ui64 NextConfigTxSeqNo = 1;

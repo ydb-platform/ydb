@@ -166,10 +166,8 @@ namespace NYql::NDqs {
 
         void ReplyListNodes(const NActors::TActorId sender, const TActorContext& ctx)
         {
-            THolder<TEvInterconnect::TEvNodesInfo>
-                reply(new TEvInterconnect::TEvNodesInfo());
-            reply->Nodes = GetNodesInfo();
-            ctx.Send(sender, reply.Release());
+            auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>(GetNodesInfo());
+            ctx.Send(sender, new TEvInterconnect::TEvNodesInfo(nodes));
         }
 
         void Handle(TEvInterconnect::TEvListNodes::TPtr& ev,

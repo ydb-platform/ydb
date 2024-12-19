@@ -88,8 +88,8 @@ class LoadSuiteBase:
         end = datetime.fromtimestamp(time(), tz).isoformat()
         time_cmd = f'-S "{start}" -U "{end}"'
         cmd = f"ulimit -n 100500;unified_agent select {time_cmd} -s {{}}"
-        exec_kikimr = [];
-        exec_start = [];
+        exec_kikimr = []
+        exec_start = []
         ssh_cmd = ['ssh']
         ssh_user = os.getenv('SSH_USER')
         if ssh_user is not None:

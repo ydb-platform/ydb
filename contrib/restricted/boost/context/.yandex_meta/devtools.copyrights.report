@@ -47,12 +47,15 @@ BELONGS ya.make
         src/asm/jump_arm64_aapcs_elf_gas.S [2:4]
         src/asm/jump_arm64_aapcs_macho_gas.S [2:4]
         src/asm/jump_arm64_aapcs_pe_armasm.masm [1:3]
+        src/asm/jump_arm64_aapcs_pe_armclang.S [2:4]
         src/asm/make_arm64_aapcs_elf_gas.S [2:4]
         src/asm/make_arm64_aapcs_macho_gas.S [2:4]
         src/asm/make_arm64_aapcs_pe_armasm.masm [1:3]
+        src/asm/make_arm64_aapcs_pe_armclang.S [2:4]
         src/asm/ontop_arm64_aapcs_elf_gas.S [2:4]
         src/asm/ontop_arm64_aapcs_macho_gas.S [2:4]
         src/asm/ontop_arm64_aapcs_pe_armasm.masm [1:3]
+        src/asm/ontop_arm64_aapcs_pe_armclang.S [2:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 48ce97ba62fc10cee11a213ab0560d6d
 BELONGS ya.make
@@ -143,6 +146,16 @@ BELONGS ya.make
         src/asm/ontop_x86_64_sysv_macho_gas.S [2:4]
         src/asm/tail_ontop_ppc32_sysv.cpp [2:4]
         src/untested.cpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9ed7b7468c684d33492a4176e9cf31b1
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/fcontext.cpp [1:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL b56e68f168b25ead2610488b3af94842
 BELONGS ya.make

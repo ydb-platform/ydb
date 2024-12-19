@@ -68,6 +68,7 @@
 
 .text
 .align 2
+.private_extern _ontop_fcontext
 .globl _ontop_fcontext
 
 _ontop_fcontext:

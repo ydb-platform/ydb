@@ -68,6 +68,22 @@ BELONGS ya.make
         src/asm/make_arm_aapcs_pe_armasm.masm [3:5]
         src/asm/ontop_arm_aapcs_pe_armasm.masm [3:5]
 
+KEEP     BSL-1.0              321a164a9126e96f909fc36bc3ae6dda
+BELONGS ya.make
+    License text:
+          Distributed under the Boost Software License, Version 1.0.
+             (See accompanying file LICENSE_1_0.txt or copy at
+                 http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        src/asm/jump_arm64_aapcs_pe_armclang.S [3:5]
+        src/asm/make_arm64_aapcs_pe_armclang.S [3:5]
+        src/asm/ontop_arm64_aapcs_pe_armclang.S [3:5]
+
 KEEP     BSL-1.0              45dafc5af311668ee8f059b952891651
 BELONGS ya.make
     License text:
@@ -127,6 +143,7 @@ BELONGS ya.make
         include/boost/context/stack_traits.hpp [3:5]
         include/boost/context/windows/protected_fixedsize_stack.hpp [3:5]
         src/continuation.cpp [3:5]
+        src/fcontext.cpp [2:4]
         src/fiber.cpp [3:5]
         src/posix/stack_traits.cpp [3:5]
         src/untested.cpp [3:5]

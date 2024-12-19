@@ -18,6 +18,7 @@
 using namespace NActors;
 using namespace NActors::NTests;
 
+
 Y_UNIT_TEST_SUITE(ActorBenchmark) {
 
     using TActorBenchmark = ::NActors::NTests::TActorBenchmark<>;

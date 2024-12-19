@@ -1737,6 +1737,7 @@ message TColumnShardConfig {
     optional string ReaderClassName = 28;
     optional bool AllowNullableColumnsInPK = 29 [default = false];
     optional uint32 RestoreDataOnWriteTimeoutSeconds = 30;
+    optional bool UseSlicesFilter = 31 [default = true];
 }
 
 message TSchemeShardConfig {

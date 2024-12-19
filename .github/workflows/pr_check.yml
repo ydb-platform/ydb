@@ -242,7 +242,7 @@ jobs:
       with:
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
     - name: Build and test
-      if: contains(github.event.pull_request.labels.*.name, 'run-sanitise-tests') || matrix.build_preset == 'relwithdebinfo' || matrix.build_preset == 'release-asan'
+      if: contains(github.event.pull_request.labels.*.name, 'run-sanitizer-tests') || matrix.build_preset == 'relwithdebinfo' || matrix.build_preset == 'release-asan'
       uses: ./.github/actions/build_and_test_ya
       with:
         build_preset: ${{ matrix.build_preset }}
@@ -261,7 +261,7 @@ jobs:
       uses: actions/github-script@v7
       with:
         script: |
-          let labelsToRemove = ['run-sanitise-tests'];
+          let labelsToRemove = ['run-sanitizer-tests'];
           const prNumber = context.payload.pull_request.number;
           const prLabels = new Set(context.payload.pull_request.labels.map(l => l.name));
           for await (const label of labelsToRemove.filter(l => prLabels.has(l))) {

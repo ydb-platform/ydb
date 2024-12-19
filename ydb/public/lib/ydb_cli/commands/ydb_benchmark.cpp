@@ -37,7 +37,8 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
     config.Opts->AddLongOption("plan", "Query plans report file name")
         .DefaultValue("")
         .StoreResult(&PlanFileName);
-    config.Opts->AddLongOption("query-settings", "Query settings.\nEvery setting is a line that will be added to the beginning of each query. For multiple settings lines use this option several times.")
+    config.Opts->AddLongOption("query-prefix", "Query prefix.\nEvery prefix is a line that will be added to the beginning of each query. For multiple prefixes lines use this option several times.")
+        .AddLongName("query-settings")
         .DefaultValue("")
         .AppendTo(&QuerySettings);
     auto fillTestCases = [](TStringBuf line, std::function<void(ui32)>&& op) {

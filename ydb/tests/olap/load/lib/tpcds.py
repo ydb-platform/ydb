@@ -74,6 +74,7 @@ class TestTpcds10(TpcdsSuiteBase):
     check_canonical: bool = CheckCanonicalPolicy.WARNING
     timeout = max(TpcdsSuiteBase.timeout, 300.)
     query_settings = {
+        # temporary, https://github.com/ydb-platform/ydb/issues/11767#issuecomment-2553353146
         72: LoadSuiteBase.QuerySettings(query_prefix='pragma ydb.UseGraceJoinCoreForMap = "false";'),
     }
     tables_size: dict[str, int] = {

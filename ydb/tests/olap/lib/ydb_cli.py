@@ -213,7 +213,7 @@ class YdbCliHelper:
                 '--verbose'
             ]
             if self.query_prefix:
-                cmd += ['--query-settings', self.query_prefix]
+                cmd += ['--query-prefix', self.query_prefix]
             if self.check_canonical != CheckCanonicalPolicy.NO:
                 cmd.append('--check-canonical')
             if self.query_syntax:

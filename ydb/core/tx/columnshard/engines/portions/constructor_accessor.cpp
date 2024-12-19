@@ -14,10 +14,12 @@ void TPortionAccessorConstructor::ChunksValidation() const {
     } else {
         std::set<ui32> blobIdxs;
         for (auto&& i : Records) {
+            TBlobRange::Validate(PortionInfo.MetaConstructor.BlobIds, i.GetBlobRange()).Validate();
             blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
         }
         for (auto&& i : Indexes) {
             if (i.HasBlobRange()) {
+                TBlobRange::Validate(PortionInfo.MetaConstructor.BlobIds, i.GetBlobRangeVerified()).Validate();
                 blobIdxs.emplace(i.GetBlobRangeVerified().GetBlobIdxVerified());
             }
         }

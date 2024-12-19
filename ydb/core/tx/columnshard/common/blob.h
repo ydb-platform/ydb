@@ -289,7 +289,7 @@ struct TBlobRange {
         if (blobId.BlobSize() <= range.GetOffset()) {
             return TConclusionStatus::Fail("too big offset for blob: " + ::ToString(range.GetOffset()) + " in " + ::ToString(blobId.BlobSize()));
         }
-        if (blobId.BlobSize() <= range.GetOffset() + range.GetSize()) {
+        if (blobId.BlobSize() < range.GetOffset() + range.GetSize()) {
             return TConclusionStatus::Fail("too big right border for blob: " + ::ToString(range.GetOffset()) + " + " +
                                            ::ToString(range.GetSize()) + " in " + ::ToString(blobId.BlobSize()));
         }

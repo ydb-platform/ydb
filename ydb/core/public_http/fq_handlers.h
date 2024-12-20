@@ -402,11 +402,11 @@ DECLARE_YQ_GRPC_ACTOR(GetQueryStatus, GetQueryStatus);
 DECLARE_YQ_GRPC_ACTOR_WIHT_EMPTY_RESULT(StopQuery, ControlQuery);
 DECLARE_YQ_GRPC_ACTOR(GetResultData, GetResultData);
 
-#define TGrpcCallWrapperBase TGrpcCallWrapper<FederatedQuery::DescribeQueryRequest, FQHttp::GetQueryRequest, FederatedQuery::ModifyQueryResult, google::protobuf::Empty, FederatedQuery::ModifyQueryResponse>
-
-class TStartQueryRequest : public TGrpcCallWrapperBase {
+class TJsonStartQuery : public TGrpcCallWrapper<FederatedQuery::DescribeQueryRequest, FQHttp::GetQueryRequest, FederatedQuery::ModifyQueryResult, google::protobuf::Empty, FederatedQuery::ModifyQueryResponse> {
 public:
-    TStartQueryRequest(const THttpRequestContext& ctx)
+    typedef TGrpcCallWrapper<FederatedQuery::DescribeQueryRequest, FQHttp::GetQueryRequest, FederatedQuery::ModifyQueryResult, google::protobuf::Empty, FederatedQuery::ModifyQueryResponse> TGrpcCallWrapperBase;
+    
+    TJsonStartQuery(const THttpRequestContext& ctx)
     : TGrpcCallWrapperBase(ctx, &NGRpcService::CreateFederatedQueryDescribeQueryRequestOperationCall)
     {}
 
@@ -418,11 +418,11 @@ public:
             return;
         }
 
-        TProtoStringType query_id =  describeRequest->Getquery_id();
+        TProtoStringType queryId =  describeRequest->Getquery_id();
         TIntrusivePtr<TGrpcRequestContextWrapper> requestContext = MakeIntrusive<TGrpcRequestContextWrapper>(
             RequestContext,
             std::move(describeRequest),
-            [query_id = std::move(query_id), actorSystem = TActivationContext::ActorSystem()](const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 status) {
+            [query_id = std::move(queryId), actorSystem = TActivationContext::ActorSystem()](const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 status) {
 
             Y_ABORT_UNLESS(resp);
             Y_ABORT_UNLESS(resp->GetArena());
@@ -438,7 +438,7 @@ public:
             }
 
             std::unique_ptr<FederatedQuery::DescribeQueryResult> describeResult = std::unique_ptr<FederatedQuery::DescribeQueryResult>(new FederatedQuery::DescribeQueryResult());
-            if(!typedResponse->operation().result().UnpackTo(&*describeResult)) {
+            if (!typedResponse->operation().result().UnpackTo(&*describeResult)) {
                 requestContext.ResponseBadRequest(Ydb::StatusIds::INTERNAL_ERROR, "Error in response unpack");
                 return;
             }
@@ -460,8 +460,7 @@ public:
             );
 
             // new event -> new EventFactory
-            auto factory = &NGRpcService::CreateFederatedQueryModifyQueryRequestOperationCall;
-            actorSystem->Send(NGRpcService::CreateGRpcRequestProxyId(), std::move(factory)(std::move(requestContextModify)).release());
+            actorSystem->Send(NGRpcService::CreateGRpcRequestProxyId(), NGRpcService::CreateFederatedQueryModifyQueryRequestOperationCall(std::move(requestContextModify)).release());
         });
 
         ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(std::move(requestContext)).release());

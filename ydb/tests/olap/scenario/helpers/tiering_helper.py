@@ -60,13 +60,13 @@ class CreateExternalDataSource(ScenarioTestHelper.IYqlble):
 
     @override
     def to_yql(self, ctx: TestContext) -> str:
-        verb = "CREATE IF NOT EXISTS" if self._allow_existing else "CREATE"
-        return f'{verb} EXTERNAL DATA SOURCE `{ScenarioTestHelper(ctx).get_full_path(self._path)}` WITH (' \
+        return f'CREATE EXTERNAL DATA SOURCE{' IF NOT EXISTS' if self._allow_existing else ''}' \
+               f'`{ScenarioTestHelper(ctx).get_full_path(self._path)}` WITH (' \
                 '    SOURCE_TYPE="ObjectStorage",' \
-               f'    LOCATION="http://{self._config.endpoint}/{self._config.bucket}",' \
+               f'    LOCATION="{self._config.endpoint}/{self._config.bucket}",' \
                 '    AUTH_METHOD="AWS",' \
-               f'    AWS_SECRET_ACCESS_KEY_SECRET_NAME="{self._config.access_key_secret}",' \
-               f'    AWS_ACCESS_KEY_ID_SECRET_NAME="{self._config.secret_key_secret}",' \
+               f'    AWS_ACCESS_KEY_ID_SECRET_NAME="{self._config.access_key_secret}",' \
+               f'    AWS_SECRET_ACCESS_KEY_SECRET_NAME="{self._config.secret_key_secret}",' \
                 '    AWS_REGION="ru-central1"' \
                 ')'
 
@@ -126,8 +126,7 @@ class DropSecret(ScenarioTestHelper.IYqlble):
 
     @override
     def to_yql(self, ctx: TestContext) -> str:
-        verb = "DROP IF EXISTS" if self._allow_existing else "DROP"
-        return f'DROP OBJECT {self.name} (TYPE SECRET)'
+        return f'DROP OBJECT {self._name}{' IF EXISTS' if self._missing_ok else ''} (TYPE SECRET)'
 
     @override
     def params(self) -> Dict[str, str]:

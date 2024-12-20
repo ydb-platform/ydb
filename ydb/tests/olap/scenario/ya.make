@@ -14,7 +14,6 @@ PY3TEST()
 
     ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
     DEPENDS(
-        contrib/python/moto/bin
         ydb/apps/ydbd
     )
 
@@ -24,6 +23,9 @@ PY3TEST()
         contrib/python/boto3
         contrib/python/pandas
         contrib/python/requests
+        contrib/python/moto
+        contrib/python/Flask
+        contrib/python/Flask-Cors
         ydb/public/sdk/python
         ydb/public/sdk/python/enable_v3_new_behavior
         ydb/tests/olap/lib

@@ -58,20 +58,6 @@ class YdbClusterInstance():
 
 
 class BaseTestSet:
-    class TestThread(threading.Thread):
-        def run(self) -> None:
-            self.exc = None
-            try:
-                self.ret = self._target(*self._args, **self._kwargs)
-            except BaseException as e:
-                self.exc = e
-
-        def join(self, timeout=None):
-            super().join(timeout)
-            if self.exc:
-                raise self.exc
-            return self.ret
-
     @classmethod
     def get_suite_name(cls):
         return cls.__name__
@@ -84,11 +70,9 @@ class BaseTestSet:
         YdbCluster.reset(cls._ydb_instance.endpoint(), cls._ydb_instance.database(), cls._ydb_instance.mon_port())
         if not external_param_is_true('reuse-tables'):
             ScenarioTestHelper(None).remove_path(cls.get_suite_name())
-        cls._do_setup()
 
     @classmethod
     def teardown_class(cls):
-        cls._do_teardown()
         if not external_param_is_true('keep-tables'):
             ScenarioTestHelper(None).remove_path(cls.get_suite_name())
         cls._ydb_instance.stop()
@@ -123,16 +107,6 @@ class BaseTestSet:
             raise
         allure_test_description(ctx.suite, ctx.test, start_time=start_time, end_time=time.time())
         ScenarioTestHelper(None).remove_path(test_path, ctx.suite)
-
-    @classmethod
-    @abc.abstractmethod
-    def _do_setup(cls):
-        pass
-
-    @classmethod
-    @abc.abstractmethod
-    def _do_teardown(cls):
-        pass
 
     @classmethod
     @abc.abstractmethod

@@ -23,6 +23,7 @@ class CreateTableLikeObject(ScenarioTestHelper.IYqlble):
         super().__init__(name)
         self._schema = None
         self._partitions = 64
+        self._existing_ok = False
 
     def with_schema(self, schema: ScenarioTestHelper.Schema) -> CreateTableLikeObject:
         """Specify the schema of the created object.
@@ -48,6 +49,18 @@ class CreateTableLikeObject(ScenarioTestHelper.IYqlble):
         self._partitions = partitions
         return self
 
+    def existing_ok(self, value: bool = True) -> CreateTableLikeObject:
+        """Set existing_ok value.
+
+         Args:
+            value: existing_ok.
+
+        Returns:
+            self."""
+
+        self._existing_ok = value
+        return self
+
     @override
     def params(self) -> Dict[str, str]:
         return {self._type(): self._name}
@@ -61,7 +74,7 @@ class CreateTableLikeObject(ScenarioTestHelper.IYqlble):
         schema_str = ',\n    '.join([c.to_yql() for c in self._schema.columns])
         column_families_str = ',\n'.join([c.to_yql() for c in self._schema.column_families])
         keys = ', '.join(self._schema.key_columns)
-        return f'''CREATE {self._type().upper()} `{ScenarioTestHelper(ctx).get_full_path(self._name)}` (
+        return f'''CREATE {self._type().upper()}{' IF NOT EXISTS' if self.existing_ok else ''} `{ScenarioTestHelper(ctx).get_full_path(self._name)}` (
     {schema_str},
     PRIMARY KEY({keys})
     {"" if not column_families_str else f", {column_families_str}"}
@@ -552,7 +565,7 @@ class AlterTableLikeObject(ScenarioTestHelper.IYqlble):
         def make_tier_literal(delay: timedelta, storage_path: Optional[str]):
             delay_literal = f'Interval("PT{delay.total_seconds()}S")'
             if storage_path:
-                return delay_literal + ' TO EXTERNAL DATA SOURCE ' + storage_path
+                return delay_literal + ' TO EXTERNAL DATA SOURCE `' + storage_path + '`'
             else:
                 return delay_literal + ' DELETE'
 

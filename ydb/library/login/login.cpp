@@ -92,11 +92,6 @@ bool TLoginProvider::CheckUserExists(const TString& user) {
     return CheckSubjectExists(user, ESidType::USER);
 }
 
-bool TLoginProvider::CheckSidExistsOrIsNonYdb(const TString& sid) {
-    // non-YDB user's sid format is <login>@<subsystem>
-    return sid.Contains('@') || Sids.contains(sid);
-}
-
 TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserRequest& request) {
     TBasicResponse response;
 

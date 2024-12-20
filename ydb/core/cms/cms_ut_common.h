@@ -411,6 +411,7 @@ public:
     Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskCreate(
             const TString &taskUid,
             Ydb::StatusIds::StatusCode code,
+            Ydb::Maintenance::AvailabilityMode availabilityMode,
             const Ts&... actionGroups) 
     {
         auto ev = std::make_unique<NCms::TEvCms::TEvCreateMaintenanceTaskRequest>();
@@ -418,7 +419,7 @@ public:
 
         auto *req = ev->Record.MutableRequest();
         req->mutable_task_options()->set_task_uid(taskUid);
-        req->mutable_task_options()->set_availability_mode(Ydb::Maintenance::AVAILABILITY_MODE_STRONG);
+        req->mutable_task_options()->set_availability_mode(availabilityMode);
         AddActionGroups(*req, actionGroups...);
 
         SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
@@ -428,6 +429,15 @@ public:
         const auto &rec = reply->Record;
         UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), code);
         return rec.GetResult();
+    }
+
+    template <typename... Ts>
+    Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskCreate(
+            const TString &taskUid,
+            Ydb::StatusIds::StatusCode code,
+            const Ts&... actionGroups) 
+    {   
+        return CheckMaintenanceTaskCreate(taskUid, code, Ydb::Maintenance::AVAILABILITY_MODE_STRONG, actionGroups...);
     }
 
     void EnableBSBaseConfig();

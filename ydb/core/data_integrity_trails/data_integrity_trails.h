@@ -2,6 +2,8 @@
 
 #include <util/stream/str.h>
 
+#include <ydb/core/protos/data_integrity_trails.pb.h>
+
 namespace NKikimr {
 namespace NDataIntegrity {
 

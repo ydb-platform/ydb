@@ -1,0 +1,7 @@
+requirements:
+  - library/python/resource
+  - contrib/python/coverage/plugins
+keep:
+  - plugins/*
+exclude_from_macros:
+  - plugins/*

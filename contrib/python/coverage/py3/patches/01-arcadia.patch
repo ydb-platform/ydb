@@ -1,0 +1,445 @@
+--- contrib/python/coverage/py3/coverage/collector.py	(index)
++++ contrib/python/coverage/py3/coverage/collector.py	(working tree)
+@@ -419,6 +419,10 @@ class Collector(object):
+         else:
+             raise runtime_err
+ 
++        if getattr(sys, 'is_standalone_binary', False):
++            # filenames should stay relative to the arcadia root, because files may not exist
++            return dict((k, v) for k, v in items if v)
++
+         return dict((self.cached_mapped_file(k), v) for k, v in items if v)
+ 
+     def plugin_was_disabled(self, plugin):
+--- contrib/python/coverage/py3/coverage/config.py	(index)
++++ contrib/python/coverage/py3/coverage/config.py	(working tree)
+@@ -8,6 +8,7 @@ import copy
+ import os
+ import os.path
+ import re
++import sys
+ 
+ from coverage import env
+ from coverage.backward import configparser, iitems, string_class
+@@ -236,6 +236,7 @@ class CoverageConfig(object):
+ 
+         # Options for plugins
+         self.plugin_options = {}
++        self.suppress_plugin_errors = True
+ 
+     MUST_BE_LIST = [
+         "debug", "concurrency", "plugins",
+@@ -251,6 +252,11 @@ class CoverageConfig(object):
+                     v = [v]
+                 setattr(self, k, v)
+ 
++    def from_resource(self, resource_name):
++        assert getattr(sys, 'is_standalone_binary', False), 'You have used method by mistake in script, not binary'
++        cp, self._config_contents = _load_config_from_resource(resource_name)
++        return self._parse_config(cp, resource_name, True)
++
+     @contract(filename=str)
+     def from_file(self, filename, our_file):
+         """Read configuration from a .rc file.
+@@ -282,6 +287,9 @@ class CoverageConfig(object):
+ 
+         self.config_files_read.extend(map(os.path.abspath, files_read))
+ 
++        return self._parse_config(cp, filename, our_file)
++
++    def _parse_config(self, cp, filename, our_file):
+         any_set = False
+         try:
+             for option_spec in self.CONFIG_FILE_OPTIONS:
+@@ -329,8 +339,9 @@ class CoverageConfig(object):
+ 
+         if used:
+             self.config_file = os.path.abspath(filename)
+-            with open(filename, "rb") as f:
+-                self._config_contents = f.read()
++            if not getattr(sys, 'is_standalone_binary', False):
++                with open(filename, "rb") as f:
++                    self._config_contents = f.read()
+ 
+         return used
+ 
+@@ -367,6 +373,7 @@ class CoverageConfig(object):
+         ('source_pkgs', 'run:source_pkgs', 'list'),
+         ('timid', 'run:timid', 'boolean'),
+         ('_crash', 'run:_crash'),
++        ('suppress_plugin_errors', 'run:suppress_plugin_errors', 'boolean'),
+ 
+         # [report]
+         ('exclude_list', 'report:exclude_lines', 'regexlist'),
+@@ -540,6 +547,10 @@ def read_coverage_config(config_file, **kwargs):
+     # 1) defaults:
+     config = CoverageConfig()
+ 
++    # 1.1 built-in config
++    if getattr(sys, 'is_standalone_binary', False):
++        config.from_resource("/coverage_plugins/coveragerc.txt")
++
+     # 2) from a file:
+     if config_file:
+         files_to_try = config_files_to_try(config_file)
+@@ -545,6 +545,8 @@ def read_coverage_config(config_file, **kwargs):
+         files_to_try = config_files_to_try(config_file)
+ 
+         for fname, our_file, specified_file in files_to_try:
++            if getattr(sys, 'is_standalone_binary', False) and fname == "/coverage_plugins/coveragerc.txt":
++                continue
+             config_read = config.from_file(fname, our_file=our_file)
+             if config_read:
+                 break
+@@ -568,3 +579,20 @@ def read_coverage_config(config_file, **kwargs):
+     config.post_process()
+ 
+     return config
++
++
++def _load_config_from_resource(resource_name):
++    from io import StringIO
++    from library.python import resource
++
++    config_data = resource.find(resource_name)
++    if config_data is None:
++        raise IOError("No such resource: " + resource_name)
++
++    config_data = config_data.decode('utf-8')
++    cp = HandyConfigParser(True)
++    try:
++        cp.read_file(StringIO(config_data))
++    except configparser.Error as err:
++        raise CoverageException("Couldn't read config %s: %s" % (resource_name, err))
++    return cp, config_data
+--- contrib/python/coverage/py3/coverage/control.py	(index)
++++ contrib/python/coverage/py3/coverage/control.py	(working tree)
+@@ -11,6 +11,7 @@ import re
+ import platform
+ import sys
+ import time
++import json
+ 
+ from coverage import env
+ from coverage.annotate import AnnotateReporter
+@@ -21,7 +21,7 @@ import re
+ from coverage.data import CoverageData, combine_parallel_data
+ from coverage.debug import DebugControl, short_stack, write_formatted_info
+ from coverage.disposition import disposition_debug_msg
+-from coverage.files import PathAliases, abs_file, relative_filename, set_relative_directory
++from coverage.files import PathAliases, abs_file, canonical_filename, relative_filename, set_relative_directory
+ from coverage.html import HtmlReporter
+ from coverage.inorout import InOrOut
+ from coverage.jsonreport import JsonReporter
+@@ -242,6 +243,14 @@ class Coverage(object):
+         if not env.METACOV:
+             _prevent_sub_process_measurement()
+ 
++        # Store constructor args to reproduce Coverage object in a subprocess created via multiprocessing.Process
++        self._dumped_args = json.dumps(dict(
++            data_file=data_file, data_suffix=data_suffix, cover_pylib=cover_pylib,
++            auto_data=auto_data, timid=timid, branch=branch, config_file=config_file,
++            source=source, omit=omit, include=include, debug=debug,
++            concurrency=concurrency
++        ))
++
+     def _init(self):
+         """Set all the initial state.
+ 
+@@ -269,7 +269,11 @@ class Coverage(object):
+         self._exclude_re = {}
+ 
+         set_relative_directory()
+-        self._file_mapper = relative_filename if self.config.relative_files else abs_file
++
++        if getattr(sys, 'is_standalone_binary', False):
++            self._file_mapper = canonical_filename
++        else:
++            self._file_mapper = relative_filename if self.config.relative_files else abs_file
+ 
+         # Load plugins
+         self._plugins = Plugins.load_plugins(self.config.plugins, self.config, self._debug)
+@@ -434,7 +443,7 @@ class Coverage(object):
+                 raise CoverageException(                    # pragma: only jython
+                     "multiprocessing is not supported on this Python"
+                 )
+-            patch_multiprocessing(rcfile=self.config.config_file)
++            patch_multiprocessing(rcfile=self.config.config_file, coverage_args=self._dumped_args)
+ 
+         dycon = self.config.dynamic_context
+         if not dycon or dycon == "none":
+@@ -813,7 +812,11 @@ class Coverage(object):
+         file_reporter = "python"
+ 
+         if isinstance(morf, string_class):
+-            mapped_morf = self._file_mapper(morf)
++            if getattr(sys, 'is_standalone_binary', False):
++                # Leave morf in canonical format - relative to the arcadia root
++                mapped_morf = morf
++            else:
++                mapped_morf = self._file_mapper(morf)
+             plugin_name = self._data.file_tracer(mapped_morf)
+             if plugin_name:
+                 plugin = self._plugins.get(plugin_name)
+--- contrib/python/coverage/py3/coverage/inorout.py	(index)
++++ contrib/python/coverage/py3/coverage/inorout.py	(working tree)
+@@ -132,6 +132,7 @@ class InOrOut(object):
+ 
+     def configure(self, config):
+         """Apply the configuration to get ready for decision-time."""
++        self.config = config
+         self.source_pkgs.extend(config.source_pkgs)
+         for src in config.source or []:
+             if os.path.isdir(src):
+@@ -141,11 +142,19 @@ class InOrOut(object):
+         self.source_pkgs_unmatched = self.source_pkgs[:]
+ 
+         self.omit = prep_patterns(config.run_omit)
++        if getattr(sys, 'is_standalone_binary', False):
++            # don't trace contrib
++            self.omit.append('contrib/python/*')
++            self.omit.append('contrib/libs/protobuf/*')
++            self.omit.append('library/python/pytest/*')
+         self.include = prep_patterns(config.run_include)
+ 
+         # The directories for files considered "installed with the interpreter".
+         self.pylib_paths = set()
+-        if not config.cover_pylib:
++        if getattr(sys, 'is_standalone_binary', False):
++            self.pylib_paths.add('contrib/tools/python')
++            self.pylib_paths.add('contrib/tools/python3')
++        if not self.pylib_paths and not config.cover_pylib:
+             # Look at where some standard modules are located. That's the
+             # indication for "installed with the interpreter". In some
+             # environments (virtualenv, for example), these modules may be
+@@ -166,7 +178,10 @@ class InOrOut(object):
+ 
+         # To avoid tracing the coverage.py code itself, we skip anything
+         # located where we are.
+-        self.cover_paths = [canonical_path(__file__, directory=True)]
++        if getattr(sys, 'is_standalone_binary', False):
++            self.cover_paths = ["contrib/python/coverage"]
++        else:
++            self.cover_paths = [canonical_path(__file__, directory=True)]
+         if env.TESTING:
+             # Don't include our own test code.
+             self.cover_paths.append(os.path.join(self.cover_paths[0], "tests"))
+@@ -266,6 +281,11 @@ class InOrOut(object):
+         if filename.endswith("$py.class"):
+             filename = filename[:-9] + ".py"
+ 
++        # XXX maybe we need to support both at the same time?
++        # Don't trace modules imported from environment in standalone mode
++        if getattr(sys, 'is_standalone_binary', False) and filename.startswith("/"):
++            return nope(disp, "skip modules from environment")
++
+         canonical = canonical_filename(filename)
+         disp.canonical_filename = canonical
+ 
+@@ -289,6 +309,8 @@ class InOrOut(object):
+                         )
+                     break
+             except Exception:
++                if not self.config.suppress_plugin_errors:
++                    raise
+                 self.warn(
+                     "Disabling plug-in %r due to an exception:" % (plugin._coverage_plugin_name)
+                 )
+--- contrib/python/coverage/py3/coverage/files.py	(index)
++++ contrib/python/coverage/py3/coverage/files.py	(working tree)
+@@ -76,6 +76,13 @@ def canonical_filename(filename):
+         CANONICAL_FILENAME_CACHE[filename] = cf
+     return CANONICAL_FILENAME_CACHE[filename]
+ 
++if getattr(sys, 'is_standalone_binary', False):
++    # filename for py files in binary is already canonical,
++    # it's relative to the arcadia root
++    def canonical_filename(filename):
++        # next assert does not needed in case when we load coverage from not arcadia source in arcadia binary
++        # assert not filename.startswith("/"), filename
++        return filename
+ 
+ MAX_FLAT = 200
+ 
+--- contrib/python/coverage/py3/coverage/html.py	(index)
++++ contrib/python/coverage/py3/coverage/html.py	(working tree)
+@@ -8,6 +8,7 @@ import datetime
+ import os
+ import re
+ import shutil
++import sys
+ 
+ import coverage
+ from coverage import env
+@@ -60,8 +61,18 @@ def data_filename(fname, pkgdir=""):
+     )
+ 
+ 
++def get_htmlfiles_resource(name):
++    import pkgutil
++    return pkgutil.get_data(__package__, 'htmlfiles/' + name)
++
++
+ def read_data(fname):
+     """Return the contents of a data file of ours."""
++    if getattr(sys, 'is_standalone_binary', False):
++        res_buf = get_htmlfiles_resource(fname).decode()
++        if res_buf is not None:
++            return res_buf
++
+     with open(data_filename(fname)) as data_file:
+         return data_file.read()
+ 
+@@ -256,10 +267,18 @@ class HtmlReporter(Reporter):
+         """Make local instances of static files for HTML report."""
+         # The files we provide must always be copied.
+         for static, pkgdir in self.STATIC_FILES:
+-            shutil.copyfile(
+-                data_filename(static, pkgdir),
+-                os.path.join(self.directory, static)
+-            )
++            if getattr(sys, 'is_standalone_binary', False):
++                data = get_htmlfiles_resource(static)
++                if data is None:
++                    raise IOError("No such resource: " + static)
++
++                with open(os.path.join(self.directory, static), "wb") as afile:
++                    afile.write(data)
++            else:
++                shutil.copyfile(
++                    data_filename(static, pkgdir),
++                    os.path.join(self.directory, static)
++                )
+ 
+         # The user may have extra CSS they want copied.
+         if self.extra_css:
+--- contrib/python/coverage/py3/coverage/multiproc.py	(index)
++++ contrib/python/coverage/py3/coverage/multiproc.py	(working tree)
+@@ -17,6 +17,8 @@ PATCHED_MARKER = "_coverage$patched"
+ # monkey-patched.
+ PATCHED_MARKER = "_coverage$patched"
+ 
++COVERAGE_CONFIGURATION_ENV = "_COVERAGE_CONFIGURATION_ENV"
++
+ 
+ if env.PYVERSION >= (3, 4):
+     OriginalProcess = multiprocessing.process.BaseProcess
+@@ -32,7 +34,9 @@ original_bootstrap = OriginalProcess._bootstrap
+         """Wrapper around _bootstrap to start coverage."""
+         try:
+             from coverage import Coverage       # avoid circular import
++            import json
++            kwconf = json.loads(os.environ[COVERAGE_CONFIGURATION_ENV])
+-            cov = Coverage(data_suffix=True)
++            cov = Coverage(**kwconf)
+             cov._warn_preimported_source = False
+             cov.start()
+             debug = cov._debug
+@@ -66,7 +68,7 @@ class Stowaway(object):
+ 
+ 
+ @contract(rcfile=str)
+-def patch_multiprocessing(rcfile):
++def patch_multiprocessing(rcfile, coverage_args):
+     """Monkey-patch the multiprocessing module.
+ 
+     This enables coverage measurement of processes started by multiprocessing.
+@@ -88,6 +92,8 @@ def patch_multiprocessing(rcfile):
+     # process.
+     os.environ["COVERAGE_RCFILE"] = os.path.abspath(rcfile)
+ 
++    os.environ[COVERAGE_CONFIGURATION_ENV] = coverage_args
++
+     # When spawning processes rather than forking them, we have no state in the
+     # new process.  We sneak in there with a Stowaway: we stuff one of our own
+     # objects into the data that gets pickled and sent to the sub-process. When
+--- contrib/python/coverage/py3/coverage/parser.py	(index)
++++ contrib/python/coverage/py3/coverage/parser.py	(working tree)
+@@ -71,9 +71,12 @@ class PythonParser(object):
+         # The raw line numbers of excluded lines of code, as marked by pragmas.
+         self.raw_excluded = set()
+ 
+-        # The line numbers of class and function definitions.
++        # The line numbers of class definitions.
+         self.raw_classdefs = set()
+ 
++        # Function definitions (start, end, name)
++        self._raw_funcdefs = set()
++
+         # The line numbers of docstring lines.
+         self.raw_docstrings = set()
+ 
+@@ -96,6 +99,10 @@ class PythonParser(object):
+             self._byte_parser = ByteParser(self.text, filename=self.filename)
+         return self._byte_parser
+ 
++    @property
++    def raw_funcdefs(self):
++        return self._raw_funcdefs
++
+     def lines_matching(self, *regexes):
+         """Find the lines matching one of a list of regexes.
+ 
+@@ -290,6 +297,7 @@ class PythonParser(object):
+                 self._all_arcs.add((fl1, fl2))
+ 
+         self._missing_arc_fragments = aaa.missing_arc_fragments
++        self._raw_funcdefs = aaa.funcdefs
+ 
+     def exit_counts(self):
+         """Get a count of exits from that each line.
+@@ -543,6 +551,7 @@ class AstArcAnalyzer(object):
+         #    "Line 17 {endmsg}, because {startmsg}"
+         self.missing_arc_fragments = collections.defaultdict(list)
+         self.block_stack = []
++        self.funcdefs = set()
+ 
+         # $set_env.py: COVERAGE_TRACK_ARCS - Trace every arc added while parsing code.
+         self.debug = bool(int(os.environ.get("COVERAGE_TRACK_ARCS", 0)))
+@@ -1162,11 +1171,15 @@ class AstArcAnalyzer(object):
+             self.add_arc(-start, start)
+             self.add_arc(start, -start)
+ 
++    def _process_function_def(self, start, node):
++        self.funcdefs.add((start, node.body[-1].lineno, node.name))
++
+     def _code_object__FunctionDef(self, node):
+         start = self.line_for_node(node)
+         self.block_stack.append(FunctionBlock(start=start, name=node.name))
+         exits = self.add_body_arcs(node.body, from_start=ArcStart(-start))
+         self.process_return_exits(exits)
++        self._process_function_def(start, node)
+         self.block_stack.pop()
+ 
+     _code_object__AsyncFunctionDef = _code_object__FunctionDef
+--- contrib/python/coverage/py3/coverage/python.py	(index)
++++ contrib/python/coverage/py3/coverage/python.py	(working tree)
+@@ -3,6 +3,7 @@
+ 
+ """Python source expertise for coverage.py"""
+ 
++import sys
+ import os.path
+ import types
+ import zipimport
+@@ -35,8 +36,19 @@ def read_python_source(filename):
+ 
+ 
+ @contract(returns='unicode')
+-def get_python_source(filename):
++def get_python_source(filename, force_fs=False):
+     """Return the source code, as unicode."""
++    if getattr(sys, 'is_standalone_binary', False) and not force_fs:
++        import __res
++
++        modname = __res.importer.file_source(filename)
++        if modname:
++            source = __res.find(modname)
++            source = source.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
++            return source.decode('utf-8')
++        else:
++            # it's fake generated package
++            return u''
+     base, ext = os.path.splitext(filename)
+     if ext == ".py" and env.WINDOWS:
+         exts = [".py", ".pyw"]

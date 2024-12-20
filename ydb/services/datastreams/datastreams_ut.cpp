@@ -122,13 +122,13 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
                                     alterClient.AlterUserAttributes("/", "Root", {{"folder_id", DEFAULT_FOLDER_ID},
                                                                             {"cloud_id", DEFAULT_CLOUD_ID},
-                                                                            {"database_id", "root"}}));        
+                                                                            {"database_id", "root"}}));
         }
 
         DataStreamsClient = std::make_unique<NYDS_V1::TDataStreamsClient>(*Driver,
              TCommonClientSettings()
                  .AuthToken("user@builtin"));
-                                                               
+
     }
 
 public:
@@ -1477,6 +1477,9 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
+        GrantConnect(*driver, "user2@builtin");
+
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::EPriority::PRI_DEBUG);
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
 
@@ -2054,6 +2057,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
 
         const ui32 recordsCount = 30;
         std::vector<NYDS_V1::TDataRecord> records;

@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
     class TTestCSEmulator: public NActors::TActorBootstrapped<TTestCSEmulator> {
     private:
         using TBase = NActors::TActorBootstrapped<TTestCSEmulator>;
-        THashSet<TString> ExpectedTiers;
+        THashSet<NTiers::TExternalStorageId> ExpectedTiers;
         TInstant Start;
         std::shared_ptr<TTiersManager> Manager;
 
@@ -180,7 +180,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             return notFoundTiers.empty();
         }
 
-        const THashMap<TString, NTiers::TTierConfig>& GetTierConfigs() {
+        const THashMap<NTiers::TExternalStorageId, NTiers::TTierConfig>& GetTierConfigs() {
             return Manager->GetTierConfigs();
         }
 
@@ -193,8 +193,14 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             Manager->EnablePathId(0, ExpectedTiers);
         }
 
-        TTestCSEmulator(THashSet<TString> expectedTiers)
+        TTestCSEmulator(THashSet<NTiers::TExternalStorageId> expectedTiers)
             : ExpectedTiers(std::move(expectedTiers)) {
+        }
+
+        TTestCSEmulator(const std::initializer_list<TString>& expectedTiers) {
+            for (const auto& tier : expectedTiers) {
+                ExpectedTiers.emplace(tier);
+            }
         }
     };
 

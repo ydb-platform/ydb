@@ -409,7 +409,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
     }
 
     {
-        THashSet<TString> usedTiers;
+        THashSet<NTiers::TExternalStorageId> usedTiers;
         TTableInfo table(pathId);
         if (tableProto.HasTtlSettings()) {
             const auto& ttlSettings = tableProto.GetTtlSettings();
@@ -455,7 +455,7 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
         schema = alterProto.GetSchema();
     }
 
-    THashSet<TString> usedTiers;
+    THashSet<NTiers::TExternalStorageId> usedTiers;
     if (alterProto.HasTtlSettings()) {
         const auto& ttlSettings = alterProto.GetTtlSettings();
         *tableVerProto.MutableTtlSettings() = ttlSettings;
@@ -1592,10 +1592,10 @@ void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs:
     Execute(new TTxRemoveSharedBlobs(this, blobs, NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()), ev->Get()->Record.GetStorageId()), ctx);
 }
 
-void TColumnShard::ActivateTiering(const ui64 pathId, const THashSet<TString>& usedTiers) {
+void TColumnShard::ActivateTiering(const ui64 pathId, const THashSet<NTiers::TExternalStorageId>& usedTiers) {
     AFL_VERIFY(Tiers);
     if (!usedTiers.empty()) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "activate_tiering")("path_id", pathId)("tiers", JoinStrings(usedTiers.begin(), usedTiers.end(), ","));
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "activate_tiering")("path_id", pathId)("tier_count", usedTiers.size());
         Tiers->EnablePathId(pathId, usedTiers);
     } else {
         Tiers->DisablePathId(pathId);

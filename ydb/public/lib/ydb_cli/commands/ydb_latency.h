@@ -9,8 +9,10 @@
 
 namespace NYdb::NConsoleClient {
 
-class TCommandLatency : public TYdbCommand, public TCommandWithFormat,
-    public TInterruptibleCommand
+class TCommandLatency
+    : public TYdbCommand
+    , public TCommandWithFormat
+    , public TInterruptibleCommand
 {
 public:
     enum class EFormat {

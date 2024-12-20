@@ -47,11 +47,17 @@ class TestLoop:
 
 
 class S3:
+    def __init__(self):
+        self._server = None
+
     def start_server(self) -> str:
         port = yatest.common.network.PortManager().get_port()
-        self.server = ThreadedMotoServer(port=port)
-        self.server.start()
+        self._server = ThreadedMotoServer(port=port)
+        self._server.start()
         return f'http://localhost:{port}'
+
+    def is_server_started(self) -> str:
+        pass
 
     def _make_s3_resource(self, access_key, secret_key, endpoint) -> boto3.Session:
         session = boto3.Session(
@@ -261,7 +267,7 @@ class TestAlterTiering(BaseTestSet):
             for bucket in s3_buckets
         ]
 
-        if s3:
+        if s3.is_server_started():
             for config in s3_configs:
                 s3.create_bucket(config)
 

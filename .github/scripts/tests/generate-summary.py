@@ -291,8 +291,6 @@ def render_testlist_html(rows, fn, build_preset):
         buid_preset_params = '--build "release" --sanitize="memory" -DDEBUGINFO_LINES_ONLY'
     elif build_preset == 'release-tsan':   
         buid_preset_params = '--build "release" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'
-    elif build_preset == 'release-clang14': 
-        buid_preset_params = '--build "release" --target-platform="CLANG14-LINUX-X86_64" -DLLD_VERSION=16 -DSTRIP -DDEBUGINFO_LINES_ONLY'
         
     content = env.get_template("summary.html").render(
         status_order=status_order,

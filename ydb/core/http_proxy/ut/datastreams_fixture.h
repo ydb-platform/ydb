@@ -75,6 +75,7 @@ public:
     ~THttpProxyTestMock() = default;
 
     void TearDown(NUnitTest::TTestContext&) override {
+        Monitoring->Stop();
         GRpcServer->Stop();
     }
 

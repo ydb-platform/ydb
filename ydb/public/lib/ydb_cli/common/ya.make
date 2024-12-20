@@ -43,6 +43,7 @@ PEERDIR(
     ydb/public/lib/operation_id
     ydb/public/lib/yson_value
     ydb/public/sdk/cpp/client/draft
+    ydb/public/sdk/cpp/client/ydb_query
     ydb/public/sdk/cpp/client/ydb_result
     ydb/public/sdk/cpp/client/ydb_scheme
     ydb/public/sdk/cpp/client/ydb_table

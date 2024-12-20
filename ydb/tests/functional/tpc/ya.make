@@ -17,6 +17,7 @@ REQUIREMENTS(ram:16)
 
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+ENV(NO_KUBER_LOGS="yes")
 
 PEERDIR(
     ydb/tests/library

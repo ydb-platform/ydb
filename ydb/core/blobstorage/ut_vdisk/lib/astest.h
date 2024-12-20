@@ -131,6 +131,8 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
     //////////////////////////////////////////////////////////////////////////////
 
     DoneEvent.Wait();
+
+    Monitoring->Stop();
     ActorSystem1->Stop();
     ActorSystem1.reset();
 }

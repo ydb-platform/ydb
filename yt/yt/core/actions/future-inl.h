@@ -52,13 +52,13 @@ inline TError TryExtractCancelationError()
 {
     const auto& currentToken = GetCurrentCancelationToken();
 
-    if (currentToken.IsCancelationRequested()) {
+    if (IsCancelationRequested(currentToken)) {
         // NB(arkady-e1ppa): This clown fiesta is present because some external
         // users managed to both hardcode "Promise abandoned" error message
         // as the retriable one (or expected in tests) and
         // rely on their cancelation error to never be wrapped
         // into anything with a different error code.
-        const auto& tokenError = currentToken.GetCancelationError();
+        const auto& tokenError = GetCancelationError(currentToken);
         return TError(tokenError.GetCode(), "Promise abandoned") << tokenError;
     }
 

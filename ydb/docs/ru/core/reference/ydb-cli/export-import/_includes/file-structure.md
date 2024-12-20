@@ -13,6 +13,9 @@
 - Файл `scheme.pb`, содержащий информацию о структуре таблицы и её параметрах в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 - Файл `permissions.pb`, содержащий информацию об ACL таблицы и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 - Один или несколько файлов `data_XX.csv`, содержащих данные таблицы в формате `csv`, где `XX` - порядковый номер файла. Выгрузка начинается с файла `data_00.csv`, каждый следующий файл создается при превышении размера текущего файла в 100MB.
+- Директории для описания [потоков изменений](https://ydb.tech/docs/ru/concepts/cdc). Имя директории соответствует названию потока изменений. В директории находятся:
+  - Файл `changefeed_description.pb`, содержащий информацию о потоке изменений в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format).
+  - Файл `topic_description.pb`, содержащий информацию о нижележащем топике в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format).
 
 ## Файлы с данными {#datafiles}
 
@@ -41,6 +44,9 @@
     ├── data_00.csv
     ├── permissions.pb
     └── scheme.pb
+    └── updates_feed
+        └── changefeed_description.pb
+        └── topic_description.pb
 ```
 
 Содержимое файла `series/scheme.pb`:
@@ -93,6 +99,38 @@ storage_settings {
 column_families {
   name: "default"
   compression: COMPRESSION_NONE
+}
+```
+
+Содержимое файла `series/update_feed/changefeed_description.pb`:
+
+```proto
+name: "update_feed"
+mode: MODE_UPDATES
+format: FORMAT_JSON
+state: STATE_ENABLED
+```
+
+Содержимое файла `series/update_feed/topic_description.pb`:
+
+```proto
+self {
+  name: "update_feed"
+  owner: "Alice"
+  type: TOPIC
+  created_at {
+    plan_step: 1734362034420
+    tx_id: 281474982949619
+  }
+}
+consumers {
+  name: "my_consumer"
+  read_from {
+  }
+  attributes {
+    key: "_service_type"
+    value: "data-streams"
+  }
 }
 ```
 

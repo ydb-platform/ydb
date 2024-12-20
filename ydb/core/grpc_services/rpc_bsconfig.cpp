@@ -109,11 +109,7 @@ public:
         } catch (const std::exception&) {
             return false; // assuming no distconf enabled in this config
         }
-        if (!newConfig.HasBlobStorageConfig()) {
-            return false;
-        }
-        const NKikimrConfig::TBlobStorageConfig& bsConfig = newConfig.GetBlobStorageConfig();
-        return bsConfig.HasAutoconfigSettings();
+        return newConfig.HasSelfManagementConfig() && newConfig.GetSelfManagementConfig().GetEnabled();
     }
 };
 

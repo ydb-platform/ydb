@@ -955,22 +955,23 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::PushStaticGroupsToSelfHeal() {
-        if (!SelfHealId || !StorageConfigObtained || !StorageConfig.HasBlobStorageConfig()) {
+        if (!SelfHealId || !StorageConfigObtained || !StorageConfig.HasBlobStorageConfig() ||
+                !StorageConfig.HasSelfManagementConfig() || !StorageConfig.GetSelfManagementConfig().GetEnabled()) {
             return;
         }
 
         auto sh = std::make_unique<TEvControllerUpdateSelfHealInfo>();
 
-        if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasAutoconfigSettings() && bsConfig.HasServiceSet()) {
-            const auto& settings = bsConfig.GetAutoconfigSettings();
+        if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
             const auto& ss = bsConfig.GetServiceSet();
+            const auto& smConfig = StorageConfig.GetSelfManagementConfig();
             for (const auto& group : ss.GetGroups()) {
                 auto& content = sh->GroupsToUpdate[TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID)];
                 const TBlobStorageGroupType gtype(static_cast<TBlobStorageGroupType::EErasureSpecies>(group.GetErasureSpecies()));
                 content = TEvControllerUpdateSelfHealInfo::TGroupContent{
                     .Generation = group.GetGroupGeneration(),
                     .Type = gtype,
-                    .Geometry = std::make_shared<TGroupGeometryInfo>(gtype, settings.GetGeometry()),
+                    .Geometry = std::make_shared<TGroupGeometryInfo>(gtype, smConfig.GetGeometry()),
                 };
 
                 const TVDiskID vdiskId(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID), group.GetGroupGeneration(), 0, 0, 0);

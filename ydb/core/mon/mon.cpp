@@ -965,18 +965,19 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     NLwTraceMonPage::RegisterPages(IndexMonPage.Get());
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(ACTORLIB_PROVIDER));
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(MONITORING_PROVIDER));
+    ui32 executorPool = ActorSystem->AppData<NKikimr::TAppData>() ? ActorSystem->AppData<NKikimr::TAppData>()->UserPoolId : 0;
     HttpProxyActorId = ActorSystem->Register(
         NHttp::CreateHttpProxy(),
         TMailboxType::ReadAsFilled,
-        ActorSystem->AppData<NKikimr::TAppData>()->UserPoolId);
+        executorPool);
     HttpMonServiceActorId = ActorSystem->Register(
         new THttpMonServiceLegacyIndex(IndexMonPage, Config.RedirectMainPageTo),
         TMailboxType::ReadAsFilled,
-        ActorSystem->AppData<NKikimr::TAppData>()->UserPoolId);
+        executorPool);
     auto nodeProxyActorId = ActorSystem->Register(
         new THttpMonServiceNodeProxy(HttpProxyActorId),
         TMailboxType::ReadAsFilled,
-        ActorSystem->AppData<NKikimr::TAppData>()->UserPoolId);
+        executorPool);
     NodeProxyServiceActorId = MakeNodeProxyId(ActorSystem->NodeId);
     ActorSystem->RegisterLocalService(NodeProxyServiceActorId, nodeProxyActorId);
 

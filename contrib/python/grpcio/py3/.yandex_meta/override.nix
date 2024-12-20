@@ -1,10 +1,10 @@
 pkgs: attrs: with pkgs; with python310.pkgs; with attrs; rec {
   pname = "grpcio";
-  version = "1.54.2";
+  version = "1.54.3";
 
   src = fetchPypi {
     inherit pname version;
-    hash = "sha256-UKnwde7aUJeqmhgrs4d/4ScodeRTcDaKwO4Wq54i0Bk=";
+    hash = "sha256-ipuc8BEDeVBy9IdLSwZMXjeFhx1it3Txql+brKu8rCA=";
   };
 
   prePatch = "";

@@ -239,8 +239,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         }
     }
 
-    // ReadOnly transaction
-    YQL_ENSURE(!hasEffects && !hasStreamLookup && readPhases >= 1);
+    YQL_ENSURE(!hasEffects && !hasStreamLookup);
 
     // We need snapshot when there are multiple table read phases, most
     // likely it involves multiple tables and we would have to use a

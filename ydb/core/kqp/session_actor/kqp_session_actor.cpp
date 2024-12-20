@@ -821,7 +821,7 @@ public:
         if (QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
                 && !Settings.TableService.GetEnableSnapshotIsolationRW()) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
-                << "Snapshot Isolation writes aren't supported";
+                << "Writes aren't supported for Snapshot Isolation";
         }
 
         if (!Transactions.CreateNew(QueryState->TxId.GetValue(), QueryState->TxCtx)) {

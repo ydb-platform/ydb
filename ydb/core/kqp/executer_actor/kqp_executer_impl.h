@@ -962,13 +962,14 @@ protected:
             if (!settings.GetInconsistentTx() && !settings.GetIsOlap()) {
                 ActorIdToProto(BufferActorId, settings.MutableBufferActorId());
             }
-            if (Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
+            if (!settings.GetInconsistentTx()
+                    && TasksGraph.GetMeta().LockMode == NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT_ISOLATION) {
                 YQL_ENSURE(GetSnapshot().IsValid());
                 settings.MutableMvccSnapshot()->SetStep(GetSnapshot().Step);
                 settings.MutableMvccSnapshot()->SetTxId(GetSnapshot().TxId);
-                settings.SetLockMode(NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT_ISOLATION);
-            } else if (!settings.GetInconsistentTx()) {
-                settings.SetLockMode(NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE);
+            }
+            if (!settings.GetInconsistentTx() && TasksGraph.GetMeta().LockMode) {
+                settings.SetLockMode(*TasksGraph.GetMeta().LockMode);   
             }
 
             output.SinkSettings.ConstructInPlace();

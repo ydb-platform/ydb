@@ -1118,12 +1118,10 @@ void TDataReq::ContinueFlatMKQLResolve(const TActorContext &ctx) {
         TEvDataShard::TEvProposeTransaction* ev;
         if (FlatMKQLRequest->Snapshot && FlatMKQLRequest->ReadOnlyProgram) {
             ev = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_DATA,
-                ctx.SelfID, TxId, transactionBuffer, FlatMKQLRequest->Snapshot,
-                TxFlags | NTxDataShard::TTxFlags::Immediate);
+                ctx.SelfID, TxId, transactionBuffer, FlatMKQLRequest->Snapshot, TxFlags | NTxDataShard::TTxFlags::Immediate);
         } else {
             ev = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_DATA,
-                ctx.SelfID, TxId, transactionBuffer,
-                TxFlags | (shardData.Immediate ? NTxDataShard::TTxFlags::Immediate : 0));
+                ctx.SelfID, TxId, transactionBuffer, TxFlags | (shardData.Immediate ? NTxDataShard::TTxFlags::Immediate : 0));
         }
 
         Send(pipeCache, new TEvPipeCache::TEvForward(ev, shardData.ShardId, true));

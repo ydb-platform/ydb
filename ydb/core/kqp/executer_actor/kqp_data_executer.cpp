@@ -1746,6 +1746,8 @@ private:
 
         const auto& lockTxId = TasksGraph.GetMeta().LockTxId;
         if (lockTxId && TasksGraph.GetMeta().LockMode != NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT_ISOLATION) {
+            // There aren't reads in ProposeTx if snapshot isolation rw is used.
+            // StreamLookups and Sources are used instead.
             YQL_ENSURE(!ReadOnlyTx);
             dataTransaction.SetLockTxId(*lockTxId);
             dataTransaction.SetLockNodeId(SelfId().NodeId());
@@ -1784,8 +1786,6 @@ private:
                 (VolatileTx ? NTxDataShard::TTxFlags::VolatilePrepare : 0);
             std::unique_ptr<TEvDataShard::TEvProposeTransaction> evData;
             if (GetSnapshot().IsValid() && (ReadOnlyTx || Request.UseImmediateEffects)) {
-                // Don't allow Reads in ProposeTx if snapshot isolation rw is used.
-                // StreamLookup/Source should be used instead.
                 evData.reset(new TEvDataShard::TEvProposeTransaction(
                     NKikimrTxDataShard::TX_KIND_DATA,
                     SelfId(),
@@ -2140,12 +2140,6 @@ private:
                 YQL_ENSURE(!VolatileTx);
                 TasksGraph.GetMeta().AllowInconsistentReads = true;
                 ImmediateTx = true;
-                break;
-            case NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW:
-                if (Request.LocksOp != ELocksOp::Commit) {
-                    YQL_ENSURE(!VolatileTx);
-                    ImmediateTx = true;
-                }
                 break;
 
             default:

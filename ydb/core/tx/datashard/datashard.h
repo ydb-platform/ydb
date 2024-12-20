@@ -465,8 +465,7 @@ namespace TEvDataShard {
         }
 
         TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, const TActorId& source, ui64 txId,
-            const TStringBuf& txBody, ui64 snapshotStep, ui64 snapshotTxId,
-            ui32 flags = NDataShard::TTxFlags::Default)
+            const TStringBuf& txBody, ui64 snapshotStep, ui64 snapshotTxId, ui32 flags = NDataShard::TTxFlags::Default)
             : TEvProposeTransaction(txKind, source, txId, txBody, flags)
         {
             auto &snapshot = *Record.MutableMvccSnapshot();
@@ -475,15 +474,13 @@ namespace TEvDataShard {
         }
 
         TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, const TActorId& source, ui64 txId,
-            const TStringBuf& txBody, const TRowVersion& snapshot,
-            ui32 flags = NDataShard::TTxFlags::Default)
+            const TStringBuf& txBody, const TRowVersion& snapshot, ui32 flags = NDataShard::TTxFlags::Default)
             : TEvProposeTransaction(txKind, source, txId, txBody, snapshot.Step, snapshot.TxId, flags)
         {
         }
 
         TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, ui64 ssId, const TActorId& source, ui64 txId,
-            const TStringBuf& txBody, const NKikimrSubDomains::TProcessingParams &processingParams,
-            ui32 flags = NDataShard::TTxFlags::Default)
+            const TStringBuf& txBody, const NKikimrSubDomains::TProcessingParams &processingParams, ui32 flags = NDataShard::TTxFlags::Default)
             : TEvProposeTransaction(txKind, source, txId, txBody, flags)
         {
             Y_ABORT_UNLESS(txKind == NKikimrTxDataShard::TX_KIND_SCHEME);
@@ -492,8 +489,7 @@ namespace TEvDataShard {
         }
 
         TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, ui64 ssId, ui64 subDomainPathId, const TActorId& source, ui64 txId,
-            const TStringBuf& txBody, const NKikimrSubDomains::TProcessingParams &processingParams,
-            ui32 flags = NDataShard::TTxFlags::Default)
+            const TStringBuf& txBody, const NKikimrSubDomains::TProcessingParams &processingParams, ui32 flags = NDataShard::TTxFlags::Default)
             : TEvProposeTransaction(txKind, ssId, source, txId, txBody, processingParams, flags)
         {
             if (subDomainPathId) {

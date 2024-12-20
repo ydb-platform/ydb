@@ -34,6 +34,8 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             }
 
+            UNIT_ASSERT(false);
+
             {
                 auto result = session1.ExecuteQuery(Q_(R"(
                     SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;

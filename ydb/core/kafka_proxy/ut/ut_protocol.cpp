@@ -320,6 +320,22 @@ void AssertMessageAvaialbleThroughLogbrokerApiAndCommit(std::shared_ptr<NTopic::
     responseFromLogbrokerApi[0].GetMessages()[0].Commit();
 }
 
+void CreateTopic(NYdb::NTopic::TTopicClient& pqClient, TString& topicName, ui32 minActivePartitions, std::vector<TString> consumers) {
+    auto topicSettings = NYdb::NTopic::TCreateTopicSettings()
+                            .PartitioningSettings(minActivePartitions, 100);
+
+    for (auto& consumer : consumers) {
+        topicSettings.BeginAddConsumer(consumer).EndAddConsumer();
+    }
+
+    auto result = pqClient
+                                .CreateTopic(topicName, topicSettings)
+                                .ExtractValueSync();
+
+    UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+}
+
 struct TTopicConfig {
     inline static const std::map<TString, TString> DummyMap;
 
@@ -813,17 +829,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         ui64 minActivePartitions = 10;
 
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
-        {
-            auto result =
-                pqClient
-                    .CreateTopic(topicName,
-                                 NYdb::NTopic::TCreateTopicSettings()
-                                    .PartitioningSettings(minActivePartitions, 100)
-                                    .BeginAddConsumer("consumer-0").EndAddConsumer())
-                    .ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
+        CreateTopic(pqClient, topicName, minActivePartitions, {"consumer-0"});
 
         auto settings = NTopic::TReadSessionSettings()
                             .AppendTopics(NTopic::TTopicReadSettings(topicName))
@@ -1039,16 +1045,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TString headerValue = "header-value";
 
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
-        {
-            auto result =
-                pqClient
-                    .CreateTopic(topicName,
-                                 NYdb::NTopic::TCreateTopicSettings()
-                                    .PartitioningSettings(minActivePartitions, 100))
-                    .ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
+        CreateTopic(pqClient, topicName, minActivePartitions, {});
 
         TTestClient client(testServer.Port);
 
@@ -1293,31 +1290,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TString notExistsGroup = "consumer-not-exists";
 
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
-        {
-            auto result =
-                pqClient
-                    .CreateTopic(topicName,
-                                 NYdb::NTopic::TCreateTopicSettings()
-                                    .PartitioningSettings(minActivePartitions, 100)
-                                    .BeginAddConsumer(group).EndAddConsumer())
-                    .ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-
-        }
-
-        {
-            auto result =
-                pqClient
-                    .CreateTopic(secondTopicName,
-                                 NYdb::NTopic::TCreateTopicSettings()
-                                    .PartitioningSettings(minActivePartitions, 100)
-                                    .BeginAddConsumer(group).EndAddConsumer())
-                    .ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-
-        }
+        CreateTopic(pqClient, topicName, minActivePartitions, {group});
+        CreateTopic(pqClient, secondTopicName, minActivePartitions, {group});
 
         TTestClient clientA(testServer.Port);
         TTestClient clientB(testServer.Port);
@@ -1533,31 +1507,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TString headerValue = "header-value";
 
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
-        {
-            auto result =
-                pqClient
-                    .CreateTopic(firstTopicName,
-                                 NYdb::NTopic::TCreateTopicSettings()
-                                    .BeginAddConsumer(firstConsumerName).EndAddConsumer()
-                                    .BeginAddConsumer(secondConsumerName).EndAddConsumer()
-                                    .PartitioningSettings(minActivePartitions, 100))
-                    .ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
-
-        {
-            auto result =
-                pqClient
-                    .CreateTopic(secondTopicName,
-                                 NYdb::NTopic::TCreateTopicSettings()
-                                    .BeginAddConsumer(firstConsumerName).EndAddConsumer()
-                                    .BeginAddConsumer(secondConsumerName).EndAddConsumer()
-                                    .PartitioningSettings(minActivePartitions, 100))
-                    .ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
+        CreateTopic(pqClient, firstTopicName, minActivePartitions, {firstConsumerName, secondConsumerName});
+        CreateTopic(pqClient, secondTopicName, minActivePartitions, {firstConsumerName, secondConsumerName});
 
         TTestClient client(testServer.Port);
 
@@ -1966,27 +1917,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TString headerValue = "header-value";
 
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
-        // create two topics
-        {
-            auto result =
-                pqClient
-                    .CreateTopic(topic1Name,
-                                 NYdb::NTopic::TCreateTopicSettings()
-                                 .PartitioningSettings(10, 100))
-                    .ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
-        {
-            auto result =
-                pqClient
-                    .CreateTopic(topic2Name,
-                                 NYdb::NTopic::TCreateTopicSettings()
-                                 .PartitioningSettings(20, 100))
-                    .ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
+        CreateTopic(pqClient, topic1Name, 10, {});
+        CreateTopic(pqClient, topic2Name, 20, {});
 
         TTestClient client(testServer.Port);
 
@@ -2249,17 +2181,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TString topicName = "/Root/topic-0-test";
 
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
-        {
-            auto result =
-                pqClient
-                    .CreateTopic(topicName,
-                                 NYdb::NTopic::TCreateTopicSettings()
-                                    .PartitioningSettings(10, 100)
-                                    .BeginAddConsumer("consumer-0").EndAddConsumer())
-                    .ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
+        CreateTopic(pqClient, topicName, 10, {"consumer-0"});
 
         auto settings = NTopic::TReadSessionSettings()
                             .AppendTopics(NTopic::TTopicReadSettings(topicName))
@@ -2298,17 +2220,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TString topicName = "/Root/topic-0-test";
 
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
-        {
-            auto result =
-                pqClient
-                    .CreateTopic(topicName,
-                                 NYdb::NTopic::TCreateTopicSettings()
-                                    .PartitioningSettings(10, 100)
-                                    .BeginAddConsumer("consumer-0").EndAddConsumer())
-                    .ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
+        CreateTopic(pqClient, topicName, 10, {"consumer-0"});
 
         auto settings = NTopic::TReadSessionSettings()
                             .AppendTopics(NTopic::TTopicReadSettings(topicName))

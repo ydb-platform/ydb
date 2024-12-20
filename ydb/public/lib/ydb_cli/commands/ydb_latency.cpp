@@ -164,7 +164,7 @@ void TCommandLatency::Config(TConfig& config) {
         'f', "format", TStringBuilder() << "Output format (" << availableFormats << ")")
             .OptionalArgument("STRING").StoreResult(&Format).DefaultValue(DEFAULT_FORMAT);
     config.Opts->AddLongOption(
-        'k', "kind", TStringBuilder() << "Only only specified ping kind ("<< availableKinds << ")")
+        'k', "kind", TStringBuilder() << "Use only specified ping kind. Available options: "<< availableKinds)
             .OptionalArgument("STRING").StoreResult(&RunKind).DefaultValue(DEFAULT_RUN_KIND);
 }
 

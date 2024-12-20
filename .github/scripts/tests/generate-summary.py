@@ -284,12 +284,22 @@ def render_testlist_html(rows, fn, build_preset):
     for current_status in status_for_history:
         status_test.get(current_status,[]).sort(key=lambda val: (-val.count_of_passed, val.full_name))
 
+    buid_preset_params = '--build "relwithdebinfo"'
+    if build_preset == 'release-asan' :
+        buid_preset_params = '--build "release" --sanitize="address" -DDEBUGINFO_LINES_ONLY'
+    elif  build_preset == 'release-msan':
+        buid_preset_params = '--build "release" --sanitize="memory" -DDEBUGINFO_LINES_ONLY'
+    elif build_preset == 'release-tsan':   
+        buid_preset_params = '--build "release" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'
+    elif build_preset == 'release-clang14': 
+        buid_preset_params = '--build "release" --target-platform="CLANG14-LINUX-X86_64" -DLLD_VERSION=16 -DSTRIP -DDEBUGINFO_LINES_ONLY'
+        
     content = env.get_template("summary.html").render(
         status_order=status_order,
         tests=status_test,
         has_any_log=has_any_log,
         history=history,
-        build_preset=build_preset
+        build_preset=buid_preset_params
     )
 
     with open(fn, "w") as fp:

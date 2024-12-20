@@ -306,7 +306,7 @@
             testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
         }
 
-        const cmdArg = `./ya make -ttt --build "{{ build_preset }}" -k -F '${testName}' ${path}`;
+        const cmdArg = `./ya make -ttt {{ build_preset }} -k -F '${testName}' ${path}`;
 
         console.log(cmdArg);
 

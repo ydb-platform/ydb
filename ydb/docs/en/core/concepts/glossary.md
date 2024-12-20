@@ -173,7 +173,7 @@ There are user-defined and system-defined views.
 
 #### User-defined view {#user-view}
 
-A **user-defined view** is created by a user using [{#T}](../yql/reference/syntax/create-view.md) statement.  It is explained in a separate article [{#T}](../concepts/datamodel/view.md).
+A **user-defined view** is created by a user with the [{#T}](../yql/reference/syntax/create-view.md) statement.  For more information, see [{#T}](../concepts/datamodel/view.md).
 
 #### System view {#system-view}
 

@@ -3,6 +3,7 @@ import sys
 
 description = 'Stop PDisk'
 
+
 def add_options(p):
     common.add_pdisk_select_options(p)
     common.add_ignore_degraded_group_check_option(p)

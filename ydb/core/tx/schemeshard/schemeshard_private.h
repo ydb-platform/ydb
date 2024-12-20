@@ -31,6 +31,7 @@ namespace TEvPrivate {
         EvSendBaseStatsToSA,
         EvRunBackgroundCleaning,
         EvRetryNodeSubscribe,
+        EvRemoveUserAccess,
         EvEnd
     };
 
@@ -190,6 +191,14 @@ namespace TEvPrivate {
 
         explicit TEvRetryNodeSubscribe(ui32 nodeId)
             : NodeId(nodeId)
+        { }
+    };
+
+    struct TEvRemoveUserAccess : public TEventLocal<TEvRemoveUserAccess, EvRemoveUserAccess> {
+        THashSet<TPathId> Paths;
+
+        explicit TEvRemoveUserAccess(THashSet<TPathId>&& paths)
+            : Paths(paths)
         { }
     };
 }; // TEvPrivate

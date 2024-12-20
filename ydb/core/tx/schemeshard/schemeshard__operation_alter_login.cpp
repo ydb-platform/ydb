@@ -8,14 +8,46 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-class TAlterLogin: public TSubOperation {
-    static TTxState::ETxState NextState() {
-        return TTxState::Done;
+class TRemoveUserAccess: public TSubOperationState {
+private:
+    TOperationId OperationId;
+
+    TString DebugHint() const override {
+        return TStringBuilder()
+            << "TAlterLogin::TRemoveUserAccess"
+            << " operationId# " << OperationId;
     }
 
+public:
+    TRemoveUserAccess(TOperationId id)
+        : OperationId(id)
+    {}
+
+    static constexpr TTxState::ETxState GetTxState() {
+        // seems useless to extend TTxState with a dedicated value
+        return TTxState::DeleteParts;
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        auto ssId = context.SS->SelfTabletId();
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", at schemeshard: " << ssId);
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterLogin);
+
+        return false;
+    }
+};
+
+class TAlterLogin: public TSubOperation {
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
         case TTxState::Waiting:
+        case TRemoveUserAccess::GetTxState():
             return TTxState::Done;
         default:
             return TTxState::Invalid;
@@ -25,6 +57,8 @@ class TAlterLogin: public TSubOperation {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Waiting:
+        case TRemoveUserAccess::GetTxState():
+            return MakeHolder<TRemoveUserAccess>(OperationId);
         case TTxState::Done:
             return MakeHolder<TDone>(OperationId);
         default:
@@ -209,14 +243,14 @@ public:
             << ", at schemeshard: " << ssId);
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterLogin, rootPath->PathId);
-        txState.State = TTxState::Done;
+        txState.State = TRemoveUserAccess::GetTxState();
 
         rootPath->PathState = NKikimrSchemeOp::EPathStateAlter;
         rootPath->LastTxId = OperationId.GetTxId();
 
-        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+        context.SS->ChangeTxState(db, OperationId, TRemoveUserAccess::GetTxState());
         context.OnComplete.ActivateTx(OperationId);
-        SetState(TTxState::Done);
+        SetState(TRemoveUserAccess::GetTxState());
 
         result->SetStatus(NKikimrScheme::StatusAccepted);
         return result;

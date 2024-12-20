@@ -4,7 +4,7 @@
 
 Основные материалы:
 
-- [{#T}](authentification.md)
+- [{#T}](authentication.md)
 - [{#T}](authorization.md)
 - [{#T}](group.md)
 - [{#T}](right.md)

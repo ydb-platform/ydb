@@ -3,11 +3,12 @@
 ## Общий перечень команд
 
 Получить список доступных команд можно через интерактивную справку:
-```
+
+```bash
 {{ ydb-cli }} scheme permissions  --help
 ```
 
-```
+```bash
 Usage: ydb [global options...] scheme permissions [options...] <subcommand>
 
 Description: Modify permissions
@@ -60,7 +61,7 @@ permissions                 Modify permissions
 
 Значения всех параметров полностью идентично командам [`grant`, `revoke`](#grant-revoke). Но ключевое отличие команды `set` от `grant` и `revoke` заключается в установке на указанный объект ровно тех прав доступа, что перечислены в параметрах `-p (--permission)`. Другие права для указанного пользователя или группы будут отозваны.
 
-Например, ранее пользователю testuser на объект `'/Root/db1'` были выданы права `"ydb.granular.select_row"`, `"ydb.granular.update_row"`, `"ydb.granular.erase_row"`, `"ydb.granular.read_attributes"`, `"ydb.granular.write_attributes"`, `"ydb.granular.create_directory"`. 
+Например, ранее пользователю testuser на объект `'/Root/db1'` были выданы права `"ydb.granular.select_row"`, `"ydb.granular.update_row"`, `"ydb.granular.erase_row"`, `"ydb.granular.read_attributes"`, `"ydb.granular.write_attributes"`, `"ydb.granular.create_directory"`.
 Тогда в результате выполнения команды все права на указанный объект будут отозваны (как будто для каждого из прав вызывали `revoke`) и останется только право `"ydb.granular.select_row"`- непосредственно указанное в команде `set`:
 
 ```bash
@@ -110,7 +111,7 @@ user1:ydb.generic.read
 
 * `Owner` - показывает владельца объекта схемы.
 * `Permissions` – отображает список прав, выданных непосредственно на схемный объект.
-* `Effective permissions` – отображает список прав, фактически действующих на данный схемный объект с учетом правил наследования прав. 
+* `Effective permissions` – отображает список прав, фактически действующих на данный схемный объект с учетом правил наследования прав.
 Данный список также включает все права, отображаемые в секции Permissions.
 
 ## clear
@@ -173,4 +174,5 @@ DATABASE-ADMINS:ydb.generic.manage
 {% note info %}
 
 В текущей версии {{ ydb }} есть ограничение, что только непосредственно текущий владелец схемного объекта может сменить владельца
+
 {% endnote %}

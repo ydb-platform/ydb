@@ -53,10 +53,10 @@ SID является уникальным в рамках кластера.
 Для создания, изменения и удаления групп есть команды:
 
 * [{#T}](../yql/reference/syntax/create-group.md).
-* [{#T}](../yql/reference/syntax/alter-grop.md).
+* [{#T}](../yql/reference/syntax/alter-group.md).
 * [{#T}](../yql/reference/syntax/drop-group.md).
 
-Подробнее о группах пользователей: [{#T}](../../security/group.md).
+Подробнее о группах пользователей: [{#T}](group.md).
 
 ## Право {#right}
 
@@ -75,7 +75,7 @@ SID является уникальным в рамках кластера.
 GRANT CREATE DIRECTORY ON `/Root/db1` TO testuser
 ```
 
-Подробнее о правах и их полный перечень: [{#T}](../../security/right.md).
+Подробнее о правах и их полный перечень: [{#T}](right.md).
 
 ## Владелец объекта {#owner}
 

@@ -1,4 +1,4 @@
-GTEST(unittester-signature-service)
+GTEST(unittester-client-signature)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 

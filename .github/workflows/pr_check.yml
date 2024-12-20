@@ -247,7 +247,6 @@ jobs:
         (matrix.build_preset == 'release-asan' && contains(steps.set_labels.outputs.labels, 'run_asan_tests')) ||
         (matrix.build_preset == 'release-msan' && contains(steps.set_labels.outputs.labels, 'run_msan_tests')) ||
         (matrix.build_preset == 'release-tsan' && contains(steps.set_labels.outputs.labels, 'run_tsan_tests'))
-
       uses: ./.github/actions/build_and_test_ya
       with:
         build_preset: ${{ matrix.build_preset }}

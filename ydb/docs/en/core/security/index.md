@@ -14,4 +14,5 @@ Main resources:
 - [{#T}](short-access-control-notation.md)
 - Concepts:
 
+  - [{#T}](../concepts/auth.md)
   - [{#T}](../concepts/connect.md)

@@ -26,6 +26,7 @@ SRCS(
     rpc_dynamic_config.cpp
     rpc_copy_table.cpp
     rpc_copy_tables.cpp
+    rpc_etcd.cpp
     rpc_export.cpp
     rpc_create_coordination_node.cpp
     rpc_create_table.cpp
@@ -144,6 +145,7 @@ PEERDIR(
     ydb/library/services
     ydb/public/api/grpc/draft
     ydb/public/api/protos
+    ydb/public/api/protos/etcd
     ydb/public/lib/fq
     ydb/public/lib/operation_id
     ydb/public/sdk/cpp/client/resources

@@ -1,392 +1,13 @@
 syntax = "proto3";
-package etcdserverpb;
+package Ydb.Etcd;
 
 //import "gogoproto/gogo.proto";
 
 import "ydb/public/api/protos/etcd/kv.proto";
 import "ydb/public/api/protos/etcd/auth.proto";
 
-// for grpc-gateway
-import "google/api/annotations.proto";
-
 //option (gogoproto.marshaler_all) = true;
 //option (gogoproto.unmarshaler_all) = true;
-
-service KV {
-  // Range gets the keys in the range from the key-value store.
-  rpc Range(RangeRequest) returns (RangeResponse) {
-      option (google.api.http) = {
-        post: "/v3/kv/range"
-        body: "*"
-    };
-  }
-
-  // Put puts the given key into the key-value store.
-  // A put request increments the revision of the key-value store
-  // and generates one event in the event history.
-  rpc Put(PutRequest) returns (PutResponse) {
-      option (google.api.http) = {
-        post: "/v3/kv/put"
-        body: "*"
-    };
-  }
-
-  // DeleteRange deletes the given range from the key-value store.
-  // A delete request increments the revision of the key-value store
-  // and generates a delete event in the event history for every deleted key.
-  rpc DeleteRange(DeleteRangeRequest) returns (DeleteRangeResponse) {
-      option (google.api.http) = {
-        post: "/v3/kv/deleterange"
-        body: "*"
-    };
-  }
-
-  // Txn processes multiple requests in a single transaction.
-  // A txn request increments the revision of the key-value store
-  // and generates events with the same revision for every completed request.
-  // It is not allowed to modify the same key several times within one txn.
-  rpc Txn(TxnRequest) returns (TxnResponse) {
-      option (google.api.http) = {
-        post: "/v3/kv/txn"
-        body: "*"
-    };
-  }
-
-  // Compact compacts the event history in the etcd key-value store. The key-value
-  // store should be periodically compacted or the event history will continue to grow
-  // indefinitely.
-  rpc Compact(CompactionRequest) returns (CompactionResponse) {
-      option (google.api.http) = {
-        post: "/v3/kv/compaction"
-        body: "*"
-    };
-  }
-}
-
-service Watch {
-  // Watch watches for events happening or that have happened. Both input and output
-  // are streams; the input stream is for creating and canceling watchers and the output
-  // stream sends events. One watch RPC can watch on multiple key ranges, streaming events
-  // for several watches at once. The entire event history can be watched starting from the
-  // last compaction revision.
-  rpc Watch(stream WatchRequest) returns (stream WatchResponse) {
-      option (google.api.http) = {
-        post: "/v3/watch"
-        body: "*"
-    };
-  }
-}
-
-service Lease {
-  // LeaseGrant creates a lease which expires if the server does not receive a keepAlive
-  // within a given time to live period. All keys attached to the lease will be expired and
-  // deleted if the lease expires. Each expired key generates a delete event in the event history.
-  rpc LeaseGrant(LeaseGrantRequest) returns (LeaseGrantResponse) {
-      option (google.api.http) = {
-        post: "/v3/lease/grant"
-        body: "*"
-    };
-  }
-
-  // LeaseRevoke revokes a lease. All keys attached to the lease will expire and be deleted.
-  rpc LeaseRevoke(LeaseRevokeRequest) returns (LeaseRevokeResponse) {
-      option (google.api.http) = {
-        post: "/v3/lease/revoke"
-        body: "*"
-        additional_bindings {
-            post: "/v3/kv/lease/revoke"
-            body: "*"
-        }
-    };
-  }
-
-  // LeaseKeepAlive keeps the lease alive by streaming keep alive requests from the client
-  // to the server and streaming keep alive responses from the server to the client.
-  rpc LeaseKeepAlive(stream LeaseKeepAliveRequest) returns (stream LeaseKeepAliveResponse) {
-      option (google.api.http) = {
-        post: "/v3/lease/keepalive"
-        body: "*"
-    };
-  }
-
-  // LeaseTimeToLive retrieves lease information.
-  rpc LeaseTimeToLive(LeaseTimeToLiveRequest) returns (LeaseTimeToLiveResponse) {
-      option (google.api.http) = {
-        post: "/v3/lease/timetolive"
-        body: "*"
-        additional_bindings {
-            post: "/v3/kv/lease/timetolive"
-            body: "*"
-        }
-    };
-  }
-
-  // LeaseLeases lists all existing leases.
-  rpc LeaseLeases(LeaseLeasesRequest) returns (LeaseLeasesResponse) {
-      option (google.api.http) = {
-        post: "/v3/lease/leases"
-        body: "*"
-        additional_bindings {
-            post: "/v3/kv/lease/leases"
-            body: "*"
-        }
-    };
-  }
-}
-
-service Cluster {
-  // MemberAdd adds a member into the cluster.
-  rpc MemberAdd(MemberAddRequest) returns (MemberAddResponse) {
-      option (google.api.http) = {
-        post: "/v3/cluster/member/add"
-        body: "*"
-    };
-  }
-
-  // MemberRemove removes an existing member from the cluster.
-  rpc MemberRemove(MemberRemoveRequest) returns (MemberRemoveResponse) {
-      option (google.api.http) = {
-        post: "/v3/cluster/member/remove"
-        body: "*"
-    };
-  }
-
-  // MemberUpdate updates the member configuration.
-  rpc MemberUpdate(MemberUpdateRequest) returns (MemberUpdateResponse) {
-      option (google.api.http) = {
-        post: "/v3/cluster/member/update"
-        body: "*"
-    };
-  }
-
-  // MemberList lists all the members in the cluster.
-  rpc MemberList(MemberListRequest) returns (MemberListResponse) {
-      option (google.api.http) = {
-        post: "/v3/cluster/member/list"
-        body: "*"
-    };
-  }
-
-  // MemberPromote promotes a member from raft learner (non-voting) to raft voting member.
-  rpc MemberPromote(MemberPromoteRequest) returns (MemberPromoteResponse) {
-      option (google.api.http) = {
-        post: "/v3/cluster/member/promote"
-        body: "*"
-    };
-  }
-}
-
-service Maintenance {
-  // Alarm activates, deactivates, and queries alarms regarding cluster health.
-  rpc Alarm(AlarmRequest) returns (AlarmResponse) {
-      option (google.api.http) = {
-        post: "/v3/maintenance/alarm"
-        body: "*"
-    };
-  }
-
-  // Status gets the status of the member.
-  rpc Status(StatusRequest) returns (StatusResponse) {
-      option (google.api.http) = {
-        post: "/v3/maintenance/status"
-        body: "*"
-    };
-  }
-
-  // Defragment defragments a member's backend database to recover storage space.
-  rpc Defragment(DefragmentRequest) returns (DefragmentResponse) {
-      option (google.api.http) = {
-        post: "/v3/maintenance/defragment"
-        body: "*"
-    };
-  }
-
-  // Hash computes the hash of whole backend keyspace,
-  // including key, lease, and other buckets in storage.
-  // This is designed for testing ONLY!
-  // Do not rely on this in production with ongoing transactions,
-  // since Hash operation does not hold MVCC locks.
-  // Use "HashKV" API instead for "key" bucket consistency checks.
-  rpc Hash(HashRequest) returns (HashResponse) {
-      option (google.api.http) = {
-        post: "/v3/maintenance/hash"
-        body: "*"
-    };
-  }
-
-  // HashKV computes the hash of all MVCC keys up to a given revision.
-  // It only iterates "key" bucket in backend storage.
-  rpc HashKV(HashKVRequest) returns (HashKVResponse) {
-      option (google.api.http) = {
-        post: "/v3/maintenance/hashkv"
-        body: "*"
-    };
-  }
-
-  // Snapshot sends a snapshot of the entire backend from a member over a stream to a client.
-  rpc Snapshot(SnapshotRequest) returns (stream SnapshotResponse) {
-      option (google.api.http) = {
-        post: "/v3/maintenance/snapshot"
-        body: "*"
-    };
-  }
-
-  // MoveLeader requests current leader node to transfer its leadership to transferee.
-  rpc MoveLeader(MoveLeaderRequest) returns (MoveLeaderResponse) {
-      option (google.api.http) = {
-        post: "/v3/maintenance/transfer-leadership"
-        body: "*"
-    };
-  }
-
-  // Downgrade requests downgrades, verifies feasibility or cancels downgrade
-  // on the cluster version.
-  // Supported since etcd 3.5.
-  rpc Downgrade(DowngradeRequest) returns (DowngradeResponse) {
-    option (google.api.http) = {
-      post: "/v3/maintenance/downgrade"
-      body: "*"
-    };
-  }
-}
-
-service Auth {
-  // AuthEnable enables authentication.
-  rpc AuthEnable(AuthEnableRequest) returns (AuthEnableResponse) {
-      option (google.api.http) = {
-        post: "/v3/auth/enable"
-        body: "*"
-    };
-  }
-
-  // AuthDisable disables authentication.
-  rpc AuthDisable(AuthDisableRequest) returns (AuthDisableResponse) {
-      option (google.api.http) = {
-        post: "/v3/auth/disable"
-        body: "*"
-    };
-  }
-
-  // AuthStatus displays authentication status.
-  rpc AuthStatus(AuthStatusRequest) returns (AuthStatusResponse) {
-      option (google.api.http) = {
-        post: "/v3/auth/status"
-        body: "*"
-    };
-  }
-
-  // Authenticate processes an authenticate request.
-  rpc Authenticate(AuthenticateRequest) returns (AuthenticateResponse) {
-      option (google.api.http) = {
-        post: "/v3/auth/authenticate"
-        body: "*"
-    };
-  }
-
-  // UserAdd adds a new user. User name cannot be empty.
-  rpc UserAdd(AuthUserAddRequest) returns (AuthUserAddResponse) {
-      option (google.api.http) = {
-        post: "/v3/auth/user/add"
-        body: "*"
-    };
-  }
-
-  // UserGet gets detailed user information.
-  rpc UserGet(AuthUserGetRequest) returns (AuthUserGetResponse) {
-      option (google.api.http) = {
-        post: "/v3/auth/user/get"
-        body: "*"
-    };
-  }
-
-  // UserList gets a list of all users.
-  rpc UserList(AuthUserListRequest) returns (AuthUserListResponse) {
-      option (google.api.http) = {
-        post: "/v3/auth/user/list"
-        body: "*"
-    };
-  }
-
-  // UserDelete deletes a specified user.
-  rpc UserDelete(AuthUserDeleteRequest) returns (AuthUserDeleteResponse) {
-      option (google.api.http) = {
-        post: "/v3/auth/user/delete"
-        body: "*"
-    };
-  }
-
-  // UserChangePassword changes the password of a specified user.
-  rpc UserChangePassword(AuthUserChangePasswordRequest) returns (AuthUserChangePasswordResponse) {
-      option (google.api.http) = {
-        post: "/v3/auth/user/changepw"
-        body: "*"
-    };
-  }
-
-  // UserGrant grants a role to a specified user.
-  rpc UserGrantRole(AuthUserGrantRoleRequest) returns (AuthUserGrantRoleResponse) {
-      option (google.api.http) = {
-        post: "/v3/auth/user/grant"
-        body: "*"
-    };
-  }
-
-  // UserRevokeRole revokes a role of specified user.
-  rpc UserRevokeRole(AuthUserRevokeRoleRequest) returns (AuthUserRevokeRoleResponse) {
-      option (google.api.http) = {
-        post: "/v3/auth/user/revoke"
-        body: "*"
-    };
-  }
-
-  // RoleAdd adds a new role. Role name cannot be empty.
-  rpc RoleAdd(AuthRoleAddRequest) returns (AuthRoleAddResponse) {
-      option (google.api.http) = {
-        post: "/v3/auth/role/add"
-        body: "*"
-    };
-  }
-
-  // RoleGet gets detailed role information.
-  rpc RoleGet(AuthRoleGetRequest) returns (AuthRoleGetResponse) {
-      option (google.api.http) = {
-        post: "/v3/auth/role/get"
-        body: "*"
-    };
-  }
-
-  // RoleList gets lists of all roles.
-  rpc RoleList(AuthRoleListRequest) returns (AuthRoleListResponse) {
-      option (google.api.http) = {
-        post: "/v3/auth/role/list"
-        body: "*"
-    };
-  }
-
-  // RoleDelete deletes a specified role.
-  rpc RoleDelete(AuthRoleDeleteRequest) returns (AuthRoleDeleteResponse) {
-      option (google.api.http) = {
-        post: "/v3/auth/role/delete"
-        body: "*"
-    };
-  }
-
-  // RoleGrantPermission grants a permission of a specified key or range to a specified role.
-  rpc RoleGrantPermission(AuthRoleGrantPermissionRequest) returns (AuthRoleGrantPermissionResponse) {
-      option (google.api.http) = {
-        post: "/v3/auth/role/grant"
-        body: "*"
-    };
-  }
-
-  // RoleRevokePermission revokes a key or range permission of a specified role.
-  rpc RoleRevokePermission(AuthRoleRevokePermissionRequest) returns (AuthRoleRevokePermissionResponse) {
-      option (google.api.http) = {
-        post: "/v3/auth/role/revoke"
-        body: "*"
-    };
-  }
-}
 
 message ResponseHeader {
   // cluster_id is the ID of the cluster which sent the response.
@@ -473,7 +94,7 @@ message RangeResponse {
   ResponseHeader header = 1;
   // kvs is the list of key-value pairs matched by the range request.
   // kvs is empty when count is requested.
-  repeated mvccpb.KeyValue kvs = 2;
+  repeated KeyValue kvs = 2;
   // more indicates if there are more keys to return in the requested range.
   bool more = 3;
   // count is set to the number of keys within the range when requested.
@@ -505,7 +126,7 @@ message PutRequest {
 message PutResponse {
   ResponseHeader header = 1;
   // if prev_kv is set in the request, the previous key-value pair will be returned.
-  mvccpb.KeyValue prev_kv = 2;
+  KeyValue prev_kv = 2;
 }
 
 message DeleteRangeRequest {
@@ -528,7 +149,7 @@ message DeleteRangeResponse {
   // deleted is the number of keys deleted by the delete range request.
   int64 deleted = 2;
   // if prev_kv is set in the request, the previous key-value pairs will be returned.
-  repeated mvccpb.KeyValue prev_kvs = 3;
+  repeated KeyValue prev_kvs = 3;
 }
 
 message RequestOp {
@@ -775,7 +396,7 @@ message WatchResponse {
   // framgment is true if large watch response was split over multiple responses.
   bool fragment = 7;
 
-  repeated mvccpb.Event events = 11;
+  repeated Event events = 11;
 }
 
 message LeaseGrantRequest {
@@ -1052,7 +673,7 @@ message AuthenticateRequest {
 message AuthUserAddRequest {
   string name = 1;
   string password = 2;
-  authpb.UserAddOptions options = 3;
+  UserAddOptions options = 3;
   string hashedPassword = 4;
 }
 
@@ -1109,7 +730,7 @@ message AuthRoleGrantPermissionRequest {
   // name is the name of the role which will be granted the permission.
   string name = 1;
   // perm is the permission to grant to the role.
-  authpb.Permission perm = 2;
+  Permission perm = 2;
 }
 
 message AuthRoleRevokePermissionRequest {
@@ -1172,7 +793,7 @@ message AuthRoleAddResponse {
 message AuthRoleGetResponse {
   ResponseHeader header = 1;
 
-  repeated authpb.Permission perm = 2;
+  repeated Permission perm = 2;
 }
 
 message AuthRoleListResponse {

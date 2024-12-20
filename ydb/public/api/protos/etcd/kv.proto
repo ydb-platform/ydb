@@ -1,5 +1,5 @@
 syntax = "proto3";
-package mvccpb;
+package Ydb.Etcd;
 
 //import "gogoproto/gogo.proto";
 

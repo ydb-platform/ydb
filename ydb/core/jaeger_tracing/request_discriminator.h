@@ -108,6 +108,10 @@ enum class ERequestType: size_t {
     TOPIC_DESCRIBECONSUMER,
     TOPIC_ALTERTOPIC,
     TOPIC_DROPTOPIC,
+    // Etcd requests
+    ETCD_RANGE,
+    ETCD_PUT,
+    ETCD_DELETE_RANGE,
 
     REQUEST_TYPES_CNT, // Add new types above this line
 };

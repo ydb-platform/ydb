@@ -137,7 +137,7 @@ IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId,
     TIntrusivePtr<NActors::TProtoArenaHolder> arena, TComputeActorSchedulingOptions schedulingOptions,
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode)
 {
-    return new NScanPrivate::TKqpScanComputeActor(std::move(schedulingOptions), executerId, txId, /*lockTxId, lockNodeId, lockMode,*/ task, std::move(asyncIoFactory),
+    return new NScanPrivate::TKqpScanComputeActor(std::move(schedulingOptions), executerId, txId, task, std::move(asyncIoFactory),
         settings, memoryLimits, std::move(traceId), std::move(arena), mode);
 }
 

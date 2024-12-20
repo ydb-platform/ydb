@@ -95,7 +95,6 @@ class LoadSuiteBase:
         hosts = [node.host for node in filter(lambda x: x.role == YdbCluster.Node.Role.STORAGE, YdbCluster.get_cluster_nodes())]
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).isoformat()
-        time_cmd = f''
         cmd = f"ulimit -n 100500;unified_agent select -S '{start}' -s {{storage}} -m k8s_container:{{container}}"
         exec_kikimr = {
             'ydb-dynamic': {},

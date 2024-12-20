@@ -213,7 +213,6 @@ jobs:
             timeout: 240
             build_target: "ydb/"
             test_size: small,medium
-            test_type: unittest,py3test,py2test,pytest
           - build_preset: release-asan
             threads_count: 20
             timeout: 240

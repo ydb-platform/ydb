@@ -152,8 +152,8 @@ void TCommandLatency::Config(TConfig& config) {
     const TString& availableFormats = GetEnumAllNames<TCommandLatency::EFormat>();
 
     config.Opts->AddLongOption(
-        'i', "interval", TStringBuilder() << "seconds for each latency kind, default " << DEFAULT_INTERVAL_SECONDS)
-            .RequiredArgument("INT").StoreResult(&IntervalSeconds);
+        'i', "interval", TStringBuilder() << "seconds for each latency kind)
+            .RequiredArgument("INT").StoreResult(&IntervalSeconds).DefaultValue(DEFAULT_INTERVAL_SECONDS);
     config.Opts->AddLongOption(
         'm', "max-inflight", TStringBuilder() << "max inflight, default " << DEFAULT_MAX_INFLIGHT)
             .RequiredArgument("INT").StoreResult(&MaxInflight);

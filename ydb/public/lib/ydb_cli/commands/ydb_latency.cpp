@@ -148,15 +148,7 @@ TCommandLatency::TCommandLatency()
 void TCommandLatency::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
-    TStringStream ss;
-
-    for (int i = 0; i < int(TCommandPing::EPingKind::MaxPingKind); ++i) {
-        ss << TCommandPing::EPingKind(i);
-        if (i != int(TCommandPing::EPingKind::MaxPingKind) - 1) {
-            ss << ", ";
-        }
-    }
-    TString availableKinds = ss.Str();
+    const TString& availableKinds = GetEnumAllNames<TCommandPing::EPingKind>();
 
     ss.Clear();
     for (int i = 0; i < int(TCommandLatency::EFormat::MaxFormat); ++i) {

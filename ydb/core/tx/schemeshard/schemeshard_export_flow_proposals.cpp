@@ -163,8 +163,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
                 }
             }
         }
-        
-        Cerr << "tsz: " << task.GetPersQueue().size() << Endl;
         task.MutableTable()->CopyFrom(sourceDescription);
     }
 

@@ -680,7 +680,7 @@ public:
             const TActorId& dataShard, ui64 txId,
             const NKikimrSchemeOp::TBackupTask& task,
             TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
-            ::google::protobuf::RepeatedPtrField<::NKikimrSchemeOp::TPersQueueGroupDescription> persQueues,
+            TVector<NKikimrSchemeOp::TPersQueueGroupDescription> persQueues,
             TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
             TString&& metadata)
         : ExternalStorageConfig(new TS3ExternalStorageConfig(task.GetS3Settings()))
@@ -796,7 +796,7 @@ private:
     const TActorId DataShard;
     const ui64 TxId;
     const TMaybe<Ydb::Table::CreateTableRequest> Scheme;
-    const ::google::protobuf::RepeatedPtrField<::NKikimrSchemeOp::TPersQueueGroupDescription> PersQueues;
+    const TVector<NKikimrSchemeOp::TPersQueueGroupDescription> PersQueues;
     const TString Metadata;
     const TMaybe<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
 
@@ -835,12 +835,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         ? GenYdbScheme(Columns, Task.GetTable())
         : Nothing();
 
-    const auto& persQueuesTPathDesc = Task.GetPersQueue();
-    ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TPersQueueGroupDescription> persQueues;
-
-    std::transform(persQueuesTPathDesc.begin(), persQueuesTPathDesc.end(), persQueues.begin(), [](const auto& x) {
-        return x.GetPersQueueGroup();
-    });
+    auto persQueues = Task.GetPersQueues();
 
     auto permissions = (Task.GetShardNum() == 0)
         ? GenYdbPermissions(Task.GetTable())

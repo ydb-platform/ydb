@@ -244,8 +244,8 @@ jobs:
     - name: Build and test
       if: |
         ((matrix.build_preset == 'relwithdebinfo') || (matrix.build_preset == 'release-asan') || contains(steps.set_labels.outputs.labels, 'run-sanitizer-tests')) ||
-        (matrix.build_preset == 'relwithdebinfo') || (matrix.build_preset == 'release-asan') ||(matrix.build_preset == 'release-msan' && contains(steps.set_labels.outputs.labels, 'run-msan-tests')) ||
-        ((matrix.build_preset == 'relwithdebinfo') || (matrix.build_preset == 'release-asan') || matrix.build_preset == 'release-tsan' && contains(steps.set_labels.outputs.labels, 'run-tsan-tests'))
+        ((matrix.build_preset == 'relwithdebinfo') || (matrix.build_preset == 'release-asan') || (matrix.build_preset == 'release-msan' && contains(steps.set_labels.outputs.labels, 'run-msan-tests'))) ||
+        ((matrix.build_preset == 'relwithdebinfo') || (matrix.build_preset == 'release-asan') || (matrix.build_preset == 'release-tsan' && contains(steps.set_labels.outputs.labels, 'run-tsan-tests')))
 
       uses: ./.github/actions/build_and_test_ya
       with:

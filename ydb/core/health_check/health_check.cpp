@@ -2170,6 +2170,7 @@ public:
         if (pDiskInfo.HasState()) {
             switch (pDiskInfo.GetState()) {
                 case NKikimrBlobStorage::TPDiskState::Normal:
+                case NKikimrBlobStorage::TPDiskState::Stopped:
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                     break;
                 case NKikimrBlobStorage::TPDiskState::Initial:
@@ -2192,7 +2193,6 @@ public:
                 case NKikimrBlobStorage::TPDiskState::Missing:
                 case NKikimrBlobStorage::TPDiskState::Timeout:
                 case NKikimrBlobStorage::TPDiskState::NodeDisconnected:
-                case NKikimrBlobStorage::TPDiskState::Stopped:
                 case NKikimrBlobStorage::TPDiskState::Unknown:
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
                                          TStringBuilder() << "PDisk state is " << NKikimrBlobStorage::TPDiskState::E_Name(pDiskInfo.GetState()),

@@ -770,7 +770,6 @@ protected:
                     pDiskFlag = std::max(pDiskFlag, NKikimrWhiteboard::EFlag::Red);
                     break;
                 case NKikimrBlobStorage::TPDiskState::OpenFileError:
-                case NKikimrBlobStorage::TPDiskState::Stopped:
                     pDiskFlag = std::max(pDiskFlag, NKikimrWhiteboard::EFlag::Yellow);
                     ++yellowFlags;
                     break;

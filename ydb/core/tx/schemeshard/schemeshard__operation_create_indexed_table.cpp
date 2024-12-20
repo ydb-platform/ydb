@@ -285,19 +285,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 userPostingDesc = indexDescription.GetIndexImplTableDescriptions(1);
             }
             // TODO(mbkkt) It's dirty hack to allow us to don't rewrite KeySelectorLambda
-            //  Because I don't really understand how to do this :(
-            //  I think it should be possible, but I didn't find any example and code doesn't have docs.
-            //  I also don't think read this code is productive because it has a lot of templates and generated parts.
-            // Also, changing nullability of index column will break vector index search
             std::string_view embeddingName = indexDescription.GetKeyColumnNames()[0];
-            bool embeddingNotNull = false;
-            for (const auto& column : baseTableDescription.GetColumns()) {
-                if (embeddingName == column.GetName()) {
-                    embeddingNotNull = column.GetNotNull();
-                    break;
-                }
-            }
-            result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc, embeddingName, embeddingNotNull)));
+            result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc, embeddingName)));
             result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), implTableColumns, userPostingDesc)));
         } else {
             NKikimrSchemeOp::TTableDescription userIndexDesc;

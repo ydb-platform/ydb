@@ -473,9 +473,26 @@ TExprBase DoRewriteTopSortOverKMeansTree(
             YQL_ENSURE(replaces.emplace(arg.Get(), newArg).second);
             newArgNodes.emplace_back(std::move(newArg));
         }
-        return ctx.NewLambda(pos,
+        auto newLambda = TExprBase{ctx.NewLambda(pos,
             ctx.NewArguments(pos, std::move(newArgNodes)),
-            ctx.ReplaceNodes(TExprNode::TListType{lambdaBody.Ptr()}, replaces));
+            ctx.ReplaceNodes(TExprNode::TListType{lambdaBody.Ptr()}, replaces))}
+        .Cast<TCoLambda>();
+
+        auto flatMap = newLambda.Body().Maybe<TCoFlatMap>();
+        if (!flatMap) {
+            return newLambda.Ptr();
+        }
+        auto apply = flatMap.Cast().Lambda().Body().Cast<TCoApply>();
+        replaces.clear();
+        for (auto arg : apply.Args()) {
+            if (arg.Ref().Type() == NYql::TExprNode::Argument) {
+                replaces.emplace(arg.Raw(), flatMap.Cast().Input().Ptr());
+                break;
+            }
+        }
+        return ctx.NewLambda(pos,
+            newLambda.Args().Ptr(),
+            ctx.ReplaceNodes(TExprNode::TListType{apply.Ptr()}, replaces));
     }();
 
     auto topLevel0 = Build<TCoTop>(ctx, pos)

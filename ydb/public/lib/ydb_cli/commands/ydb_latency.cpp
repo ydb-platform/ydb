@@ -161,7 +161,7 @@ void TCommandLatency::Config(TConfig& config) {
         'p', "percentile", TStringBuilder() << "Latency percentile")
             .RequiredArgument("DOUBLE").StoreResult(&Percentile).DefaultValue(DEFAULT_PERCENTILE);
     config.Opts->AddLongOption(
-        'f', "format", TStringBuilder() << "Output format (" << availableFormats << ")")
+        'f', "format", TStringBuilder() << "Output format. Available options: " << availableFormats)
             .OptionalArgument("STRING").StoreResult(&Format).DefaultValue(DEFAULT_FORMAT);
     config.Opts->AddLongOption(
         'k', "kind", TStringBuilder() << "Use only specified ping kind. Available options: "<< availableKinds)

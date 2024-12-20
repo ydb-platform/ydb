@@ -257,7 +257,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 TTestCSEmulator* emulator = new TTestCSEmulator({ "/Root/tier1", "/Root/tier2" });
                 runtime.Register(emulator);
                 emulator->CheckRuntime(runtime);
-                UNIT_ASSERT_EQUAL(emulator->GetTierConfigs().at("/Root/tier1").GetProtoConfig().GetBucket(), "abc");
+                UNIT_ASSERT_EQUAL(emulator->GetTierConfigs().at(NTiers::TExternalStorageId("/Root/tier1")).GetProtoConfig().GetBucket(), "abc");
             }
             Cerr << "Initialization finished" << Endl;
             {
@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             TTestCSEmulator* emulator = new TTestCSEmulator({ "/Root/tier1" });
             runtime.Register(emulator);
             emulator->CheckRuntime(runtime);
-            UNIT_ASSERT_EQUAL(emulator->GetTierConfigs().at("/Root/tier1").GetProtoConfig().GetBucket(), "abc1");
+            UNIT_ASSERT_EQUAL(emulator->GetTierConfigs().at(NTiers::TExternalStorageId("/Root/tier1")).GetProtoConfig().GetBucket(), "abc1");
         }
 
         lHelper.CreateExternalDataSource("/Root/tier2", "http://fake.fake/abc2");
@@ -321,8 +321,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             TTestCSEmulator* emulator = new TTestCSEmulator({ "/Root/tier1", "/Root/tier2" });
             runtime.Register(emulator);
             emulator->CheckRuntime(runtime);
-            UNIT_ASSERT_EQUAL(emulator->GetTierConfigs().at("/Root/tier1").GetProtoConfig().GetBucket(), "abc1");
-            UNIT_ASSERT_EQUAL(emulator->GetTierConfigs().at("/Root/tier2").GetProtoConfig().GetBucket(), "abc2");
+            UNIT_ASSERT_EQUAL(emulator->GetTierConfigs().at(NTiers::TExternalStorageId("/Root/tier1")).GetProtoConfig().GetBucket(), "abc1");
+            UNIT_ASSERT_EQUAL(emulator->GetTierConfigs().at(NTiers::TExternalStorageId("/Root/tier2")).GetProtoConfig().GetBucket(), "abc2");
         }
 
         lHelper.CreateTestOlapTable("olapTable");
@@ -438,7 +438,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             TTestCSEmulator* emulator = new TTestCSEmulator({ "/Root/tier1", "/Root/tier2" });
             runtime.Register(emulator);
             emulator->CheckRuntime(runtime);
-            UNIT_ASSERT_VALUES_EQUAL(emulator->GetTierConfigs().at("/Root/tier1").GetProtoConfig().GetEndpoint(), TierEndpoint);
+            UNIT_ASSERT_VALUES_EQUAL(emulator->GetTierConfigs().at(NTiers::TExternalStorageId("/Root/tier1")).GetProtoConfig().GetEndpoint(), TierEndpoint);
         }
 
         lHelper.CreateTestOlapTable("olapTable", 2);

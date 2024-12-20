@@ -178,13 +178,13 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
                 "version", info.GetSchema().GetVersion());
             NOlap::IColumnEngine::TSchemaInitializationData schemaInitializationData(info);
             if (!PrimaryIndex) {
-                PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, DataAccessorsManager, StoragesManager,
-                    version, schemaInitializationData);
+                PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(
+                    TabletId, SchemaObjectsCache, DataAccessorsManager, StoragesManager, version, preset->Id, schemaInitializationData);
             } else if (PrimaryIndex->GetVersionedIndex().IsEmpty() ||
                        info.GetSchema().GetVersion() > PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion()) {
-                PrimaryIndex->RegisterSchemaVersion(version, schemaInitializationData);
+                PrimaryIndex->RegisterSchemaVersion(version, preset->Id, schemaInitializationData);
             } else {
-                PrimaryIndex->RegisterOldSchemaVersion(version, schemaInitializationData);
+                PrimaryIndex->RegisterOldSchemaVersion(version, preset->Id, schemaInitializationData);
             }
 
             if (!rowset.Next()) {
@@ -290,14 +290,14 @@ void TTablesManager::AddSchemaVersion(
 
     Schema::SaveSchemaPresetVersionInfo(db, presetId, version, versionInfo);
     if (!PrimaryIndex) {
-        PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(
-            TabletId, DataAccessorsManager, StoragesManager, version, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo));
+        PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache, DataAccessorsManager, StoragesManager,
+            version, presetId, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo));
         for (auto&& i : Tables) {
             PrimaryIndex->RegisterTable(i.first);
         }
         PrimaryIndex->OnTieringModified(Ttl);
     } else {
-        PrimaryIndex->RegisterSchemaVersion(version, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo));
+        PrimaryIndex->RegisterSchemaVersion(version, presetId, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo));
     }
 }
 
@@ -352,11 +352,14 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
 }
 
 TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
-    const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager, const ui64 tabletId)
+    const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+        const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const ui64 tabletId)
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
     , LoadTimeCounters(std::make_unique<TTableLoadTimeCounters>())
+    , SchemaObjectsCache(schemaCache)
     , TabletId(tabletId) {
+    AFL_VERIFY(SchemaObjectsCache);
 }
 
 bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const ui64 pathId) const {

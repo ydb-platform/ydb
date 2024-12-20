@@ -37,7 +37,7 @@ SID является уникальным в рамках кластера.
 * [{#T}](../yql/reference/syntax/alter-user.md).
 * [{#T}](../yql/reference/syntax/drop-user.md).
 
-{% include [!](_includes/do-not-create-users-in-ldap.md) %}
+{% include [!](../_includes/do-not-create-users-in-ldap.md) %}
 
 ### Группа {#group}
 

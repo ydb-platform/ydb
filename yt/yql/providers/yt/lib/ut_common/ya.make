@@ -8,8 +8,6 @@ SRCS(
 PEERDIR(
     yql/essentials/core
     yql/essentials/core/expr_nodes
-    contrib/ydb/library/yql/dq/proto
-    contrib/ydb/library/yql/dq/expr_nodes
 )
 
 YQL_LAST_ABI_VERSION()

@@ -39,6 +39,8 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterLogin);
 
+        context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvRemoveUserAccess(THashSet<TPathId>{}));
+
         return false;
     }
 };
@@ -340,6 +342,12 @@ ISubOperation::TPtr CreateAlterLogin(TOperationId id, const TTxTransaction& tx) 
 ISubOperation::TPtr CreateAlterLogin(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state == TTxState::Invalid || state == TTxState::Propose);
     return MakeSubOperation<TAlterLogin>(id);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvRemoveUserAccess::TPtr& ev, const TActorContext& ctx) {
+    Cerr << "Handle TEvRemoveUserAccess" << Endl;
+    // Execute(CreateTxCleanDroppedSubDomains(), ctx);
+    Send(ev->Sender, new TEvPrivate::TEvRemoveUserAccessResult);
 }
 
 }

@@ -32,6 +32,7 @@ namespace TEvPrivate {
         EvRunBackgroundCleaning,
         EvRetryNodeSubscribe,
         EvRemoveUserAccess,
+        EvRemoveUserAccessResult,
         EvEnd
     };
 
@@ -201,6 +202,10 @@ namespace TEvPrivate {
             : Paths(paths)
         { }
     };
+
+    struct TEvRemoveUserAccessResult : public TEventLocal<TEvRemoveUserAccessResult, EvRemoveUserAccess> {
+    };
+
 }; // TEvPrivate
 
 } // NSchemeShard

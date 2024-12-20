@@ -66,7 +66,9 @@
     action(NSchemeShard::TEvPrivate, TEvCompletePublication, NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_PUBLICATION) \
     action(NSchemeShard::TEvPrivate, TEvCompleteBarrier,     NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_BARRIER)     \
 \
-    action(TEvDataShard, TEvProposeTransactionAttachResult, NSchemeShard::TXTYPE_PERSQUEUE_PROPOSE_ATTACH_RESULT)
+    action(TEvDataShard, TEvProposeTransactionAttachResult, NSchemeShard::TXTYPE_PERSQUEUE_PROPOSE_ATTACH_RESULT) \
+\
+    action(NSchemeShard::TEvPrivate, TEvRemoveUserAccessResult,   NSchemeShard::TXTYPE_ALTER_LOGIN_REMOVE_USER_ACCESS_RESULT)
 
 
 //NOTE: Forward declare all events that schemeshard should be able to receive

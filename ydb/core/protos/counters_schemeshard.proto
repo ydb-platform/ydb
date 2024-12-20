@@ -610,4 +610,6 @@ enum ETxTypes {
     TXTYPE_CREATE_BACKUP_COLLECTION_RESULT = 87                 [(TxTypeOpts) = {Name: "TxCreateBackupCollectionResult"}];
     TXTYPE_ALTER_BACKUP_COLLECTION_RESULT = 88                  [(TxTypeOpts) = {Name: "TxAlterBackupCollectionResult"}];
     TXTYPE_DROP_BACKUP_COLLECTION_RESULT = 89                   [(TxTypeOpts) = {Name: "TxDropBackupCollectionResult"}];
+
+    TXTYPE_ALTER_LOGIN_REMOVE_USER_ACCESS_RESULT = 90                   [(TxTypeOpts) = {Name: "TxAlterLoginRemoveUserAccessResult"}];
 }

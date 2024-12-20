@@ -952,6 +952,8 @@ public:
     void ScheduleCleanDroppedSubDomains();
     void Handle(TEvPrivate::TEvCleanDroppedSubDomains::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvPrivate::TEvRemoveUserAccess::TPtr& ev, const TActorContext& ctx);
+
     struct TTxFixBadPaths;
     NTabletFlatExecutor::ITransaction* CreateTxFixBadPaths();
 

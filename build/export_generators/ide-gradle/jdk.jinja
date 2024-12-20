@@ -1,19 +1,14 @@
-{%- set jdk_version = false -%}
+{#- default JDK version -#}
+{%- set jdk_version = '17' -%}
 {%- if target.required_jdk -%}
 {%-     set jdk_version = target.required_jdk -%}
-{#- backward compatibility -#}
-{%- elif target.jdk_version and not('-' in target.jdk_version) -%}
+{%- elif target.jdk_version -%}
 {%-     set jdk_version = target.jdk_version -%}
 {%- elif not target and extra_targets|length -%}
 {%-     set extra_jdk_version = extra_targets|selectattr('jdk_version')|map(attribute='jdk_version')|first -%}
-{#- backward compatibility -#}
-{%-     if extra_jdk_version and not('-' in extra_jdk_version) -%}
+{%-     if extra_jdk_version -%}
 {%-         set jdk_version = extra_jdk_version -%}
-{%-     else -%}
-{%-         set jdk_version = '17' -%}
 {%-     endif -%}
-{%- else -%}
-{%-     set jdk_version = '17' -%}
 {%- endif -%}
 
 {%- set jdk_path = false -%}

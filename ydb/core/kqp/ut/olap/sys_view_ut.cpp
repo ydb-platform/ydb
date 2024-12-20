@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         NKikimrConfig::TAppConfig appConfig;
         auto* CSConfig = appConfig.MutableColumnShardConfig();
-        CSConfig->SetDefaultCompression(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+        CSConfig->SetDefaultCompression(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();

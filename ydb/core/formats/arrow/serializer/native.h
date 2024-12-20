@@ -54,14 +54,23 @@ protected:
     virtual TConclusionStatus DoDeserializeFromRequest(NYql::TFeaturesExtractor& features) override;
 
     static arrow::Compression::type GetDefaultCompressionType() {
-        return CompressionFromProto(AppData()->ColumnShardConfig.GetDefaultCompression()).value();
+        if (!HasAppData() && !AppDataVerified().ColumnShardConfig.HasDefaultCompression()) {
+            return arrow::Compression::ZSTD;
+        }
+        return CompressionFromProto(AppDataVerified().ColumnShardConfig.GetDefaultCompression()).value();
     }
 
     static std::shared_ptr<arrow::util::Codec> GetDefaultCodec() {
+        if (!HasAppData() || (!AppDataVerified().ColumnShardConfig.HasDefaultCompression() &&
+                                 !AppDataVerified().ColumnShardConfig.HasDefaultCompressionLevel())) {
+            return NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(arrow::Compression::type::ZSTD, 1));
+        }
         arrow::Compression::type codec = GetDefaultCompressionType();
-        if (codec == arrow::Compression::type::ZSTD) {
-            i32 codecLevel = AppData()->ColumnShardConfig.GetDefaultCompressionLevel();
-            return NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(codec, codecLevel));
+        if (AppDataVerified().ColumnShardConfig.HasDefaultCompressionLevel()) {
+            return NArrow::TStatusValidator::GetValid(
+                arrow::util::Codec::Create(codec, AppDataVerified().ColumnShardConfig.GetDefaultCompressionLevel()));
+        } else if (codec == arrow::Compression::ZSTD) {
+            return NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(codec, 1));
         }
         return NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(codec));
     }
@@ -99,7 +108,7 @@ public:
     }
 
     static arrow::ipc::IpcOptions GetDefaultOptions() {
-        static arrow::ipc::IpcWriteOptions options = BuildDefaultOptions();
+        arrow::ipc::IpcWriteOptions options = BuildDefaultOptions();
         return options;
     }
 

@@ -170,7 +170,8 @@ void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo::T
             NIceDb::TUpdate<Schema::ExportItems::SourcePathName>(item.SourcePathName),
             NIceDb::TUpdate<Schema::ExportItems::SourceOwnerPathId>(item.SourcePathId.OwnerId),
             NIceDb::TUpdate<Schema::ExportItems::SourcePathId>(item.SourcePathId.LocalPathId),
-            NIceDb::TUpdate<Schema::ExportItems::State>(static_cast<ui8>(item.State))
+            NIceDb::TUpdate<Schema::ExportItems::State>(static_cast<ui8>(item.State)),
+            NIceDb::TUpdate<Schema::ExportItems::SourcePathType>(item.SourcePathType)
         );
     }
 }

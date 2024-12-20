@@ -11,6 +11,8 @@
 #include <util/folder/pathsplit.h>
 #include <util/string/builder.h>
 
+#include <format>
+
 using namespace NSQLv1Generated;
 
 namespace {
@@ -103,15 +105,6 @@ void VisitAllFields(const NProtoBuf::Message& msg, TTokenCollector& callback) {
     }
 }
 
-bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues) {
-    google::protobuf::Arena arena;
-    NSQLTranslation::TTranslationSettings settings;
-    settings.Arena = &arena;
-
-    auto formatter = NSQLFormat::MakeSqlFormatter(settings);
-    return formatter->Format(query, formattedQuery, issues);
-}
-
 struct TTableRefValidator {
 
     // returns true if the message is not a table ref and we need to dive deeper to find it
@@ -184,10 +177,6 @@ bool SqlToProtoAst(const TString& query, TRule_sql_query& queryProto, NYql::TIss
     return true;
 }
 
-}
-
-namespace NYdb::NDump {
-
 bool ValidateViewQuery(const TString& query, NYql::TIssues& issues) {
     TRule_sql_query queryProto;
     if (!SqlToProtoAst(query, queryProto, issues)) {
@@ -195,6 +184,10 @@ bool ValidateViewQuery(const TString& query, NYql::TIssues& issues) {
     }
     return ValidateTableRefs(queryProto, issues);
 }
+
+}
+
+namespace NYdb::NDump {
 
 TString RewriteAbsolutePath(TStringBuf path, TStringBuf backupRoot, TStringBuf restoreRoot) {
     if (backupRoot == restoreRoot) {
@@ -229,6 +222,73 @@ bool RewriteTableRefs(TString& query, TStringBuf backupRoot, TStringBuf restoreR
         return false;
     }
     return true;
+}
+
+TViewQuerySplit SplitViewQuery(TStringInput query) {
+    // to do: make the implementation more versatile
+    TViewQuerySplit split;
+
+    TString line;
+    while (query.ReadLine(line)) {
+        (line.StartsWith("--") || line.StartsWith("PRAGMA ")
+            ? split.ContextRecreation
+            : split.Select
+        ) += line;
+    }
+
+    return split;
+}
+
+void ValidateViewQuery(const TString& query, const TString& dbPath, NYql::TIssues& issues) {
+    NYql::TIssues subIssues;
+    if (!::ValidateViewQuery(query, subIssues)) {
+        NYql::TIssue restorabilityIssue(
+            TStringBuilder() << "Restorability of the view: " << dbPath.Quote()
+            << " storing the following query:\n"
+            << query
+            << "\ncannot be guaranteed. For more information, please refer to the 'ydb tools dump' documentation."
+        );
+        restorabilityIssue.Severity = NYql::TSeverityIds::S_WARNING;
+        for (const auto& subIssue : subIssues) {
+            restorabilityIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
+        }
+        issues.AddIssue(std::move(restorabilityIssue));
+    }
+}
+
+bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues) {
+    google::protobuf::Arena arena;
+    NSQLTranslation::TTranslationSettings settings;
+    settings.Arena = &arena;
+
+    auto formatter = NSQLFormat::MakeSqlFormatter(settings);
+    return formatter->Format(query, formattedQuery, issues);
+}
+
+TString BuildCreateViewQuery(
+    const TString& name, const TString& dbPath, const TString& viewQuery, const TString& backupRoot,
+    NYql::TIssues& issues
+) {
+    auto [contextRecreation, select] = NDump::SplitViewQuery(viewQuery);
+
+    const TString creationQuery = std::format(
+        "-- backup root: \"{}\"\n"
+        "{}\n"
+        "CREATE VIEW IF NOT EXISTS `{}` WITH (security_invoker = TRUE) AS\n"
+        "    {};\n",
+        backupRoot.data(),
+        contextRecreation.data(),
+        name.data(),
+        select.data()
+    );
+
+    NYdb::NDump::ValidateViewQuery(creationQuery, dbPath, issues);
+
+    TString formattedQuery;
+    if (!NYdb::NDump::Format(creationQuery, formattedQuery, issues)) {
+        return "";
+    }
+    return formattedQuery;
 }
 
 }

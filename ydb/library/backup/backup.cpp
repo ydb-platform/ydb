@@ -546,67 +546,6 @@ NView::TViewDescription DescribeView(NView::TViewClient& client, const TString& 
     return status.GetViewDescription();
 }
 
-struct TViewQuerySplit {
-    TString ContextRecreation;
-    TString Select;
-};
-
-TViewQuerySplit SplitViewQuery(TStringInput query) {
-    // to do: make the implementation more versatile
-    TViewQuerySplit split;
-
-    TString line;
-    while (query.ReadLine(line)) {
-        (line.StartsWith("--") || line.StartsWith("PRAGMA ")
-            ? split.ContextRecreation
-            : split.Select
-        ) += line;
-    }
-
-    return split;
-}
-
-void ValidateViewQuery(const TString& query, const TString& dbPath, NYql::TIssues& accumulatedIssues) {
-    NYql::TIssues subIssues;
-    if (!NDump::ValidateViewQuery(query, subIssues)) {
-        NYql::TIssue restorabilityIssue(
-            TStringBuilder() << "Restorability of the view: " << dbPath.Quote()
-            << " storing the following query:\n"
-            << query
-            << "\ncannot be guaranteed. For more information, please consult the 'ydb tools dump' documentation."
-        );
-        restorabilityIssue.Severity = NYql::TSeverityIds::S_WARNING;
-        for (const auto& subIssue : subIssues) {
-            restorabilityIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
-        }
-        accumulatedIssues.AddIssue(std::move(restorabilityIssue));
-    }
-}
-
-TString BuildCreateViewQuery(TStringBuf name, const NView::TViewDescription& description, TStringBuf backupRoot) {
-    auto [contextRecreation, select] = SplitViewQuery(description.GetQueryText());
-
-    const TString query = std::format(
-        "-- backup root: \"{}\"\n"
-        "{}\n"
-        "CREATE VIEW IF NOT EXISTS `{}` WITH (security_invoker = TRUE) AS\n"
-        "    {};\n",
-        backupRoot.data(),
-        contextRecreation.data(),
-        name.data(),
-        select.data()
-    );
-
-    TString formattedQuery;
-    TString errors;
-    Y_ENSURE(NSQLFormat::SqlFormatSimple(
-        query,
-        formattedQuery,
-        errors
-    ), errors);
-    return formattedQuery;
-}
-
 }
 
 /*!
@@ -630,17 +569,20 @@ void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPa
     NView::TViewClient client(driver);
     auto viewDescription = DescribeView(client, dbPath);
 
-    ValidateViewQuery(viewDescription.GetQueryText(), dbPath, issues);
-
     const auto fsPath = fsBackupDir.Child(NDump::NFiles::CreateView().FileName);
     LOG_D("Write view creation query to " << fsPath.GetPath().Quote());
 
-    TFileOutput output(fsPath);
-    output << BuildCreateViewQuery(
+    const auto creationQuery = NDump::BuildCreateViewQuery(
         TFsPath(dbPathRelativeToBackupRoot).GetName(),
-        viewDescription,
-        dbBackupRoot
+        dbPath,
+        viewDescription.GetQueryText(),
+        dbBackupRoot,
+        issues
     );
+    Y_ENSURE(creationQuery, issues.ToString());
+
+    TFileOutput output(fsPath);
+    output << creationQuery;
 
     BackupPermissions(driver, dbBackupRoot, dbPathRelativeToBackupRoot, fsBackupDir);
 }

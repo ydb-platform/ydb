@@ -1,8 +1,9 @@
 #include "schemeshard_xxport__tx_base.h"
 #include "schemeshard_xxport__helpers.h"
+#include "schemeshard_export.h"
 #include "schemeshard_export_flow_proposals.h"
 #include "schemeshard_export_helpers.h"
-#include "schemeshard_export.h"
+#include "schemeshard_export_scheme_uploader.h"
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 
@@ -203,7 +204,7 @@ private:
                     .IsResolved()
                     .NotDeleted()
                     .NotUnderDeleting()
-                    .IsTable()
+                    .IsSupportedInExports()
                     .FailOnRestrictedCreateInTempZone();
 
                 if (!checks) {
@@ -212,7 +213,7 @@ private:
                 }
             }
 
-            exportInfo->Items.emplace_back(item.source_path(), path.Base()->PathId);
+            exportInfo->Items.emplace_back(item.source_path(), path.Base()->PathId, path->PathType);
             exportInfo->PendingItems.push_back(itemIdx);
         }
 
@@ -296,10 +297,19 @@ private:
             << ", txId# " << txId);
 
         Y_ABORT_UNLESS(exportInfo->WaitTxId == InvalidTxId);
-        Send(Self->SelfId(), CopyTablesPropose(Self, txId, exportInfo));
+        if (AnyOf(exportInfo->Items, [](const TExportInfo::TItem& item) {
+            return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable;
+        })) {
+            Send(Self->SelfId(), CopyTablesPropose(Self, txId, exportInfo));
+        } else {
+            Send(Self->SelfId(), new TEvSchemeShard::TEvModifySchemeTransactionResult(
+                TEvSchemeShard::EStatus::StatusAccepted, ui64(txId), ui64(Self->SelfTabletId())
+            ));
+            Send(Self->SelfId(), new TEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId)));
+        }
     }
 
-    void TransferData(TExportInfo::TPtr exportInfo, ui32 itemIdx, TTxId txId) {
+    void TransferData(TExportInfo::TPtr exportInfo, ui32 itemIdx, TTxId txId, const TActorContext& ctx) {
         Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
         auto& item = exportInfo->Items.at(itemIdx);
 
@@ -311,7 +321,14 @@ private:
             << ", txId# " << txId);
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-        Send(Self->SelfId(), BackupPropose(Self, txId, exportInfo, itemIdx));
+        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable) {
+            Send(Self->SelfId(), BackupPropose(Self, txId, exportInfo, itemIdx));
+        } else if (item.SourcePathType == NKikimrSchemeOp::EPathTypeView) {
+            const TPath sourcePath = TPath::Init(item.SourcePathId, Self);
+            ctx.RegisterWithSameMailbox(CreateSchemeUploader(Self, exportInfo, itemIdx, txId,
+                BuildBackupTask(Self, exportInfo, itemIdx, sourcePath.Parent(), sourcePath.Base()->Name)
+            ));
+        }
     }
 
     bool CancelTransferring(TExportInfo::TPtr exportInfo, ui32 itemIdx) {
@@ -620,7 +637,7 @@ private:
         }
     }
 
-    void OnAllocateResult(TTransactionContext&, const TActorContext&) {
+    void OnAllocateResult(TTransactionContext&, const TActorContext& ctx) {
         Y_ABORT_UNLESS(AllocateResult);
 
         const auto txId = TTxId(AllocateResult->Get()->TxIds.front());
@@ -657,7 +674,7 @@ private:
         case EState::Transferring:
             if (exportInfo->PendingItems) {
                 itemIdx = popPendingItemIdx(exportInfo->PendingItems);
-                TransferData(exportInfo, itemIdx, txId);
+                TransferData(exportInfo, itemIdx, txId, ctx);
             } else {
                 return;
             }
@@ -948,7 +965,10 @@ private:
             item.State = EState::Done;
             item.WaitTxId = InvalidTxId;
 
-            if (const auto issue = GetIssues(ItemPathId(Self, exportInfo, itemIdx), txId)) {
+            if (const auto issue = GetIssues(ItemPathId(Self, exportInfo, itemIdx), txId);
+                item.SourcePathType == NKikimrSchemeOp::EPathTypeTable
+                && issue
+            ) {
                 item.Issue = *issue;
                 Cancel(exportInfo, itemIdx, "issues during backing up");
             } else {

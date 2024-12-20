@@ -36,6 +36,7 @@
 #include <ydb/core/protos/counters_schemeshard.pb.h>
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet/pipe_tracker.h>
@@ -497,6 +498,10 @@ public:
         const TActorContext &ctx);
 
     void ConfigureLoginProvider(
+        const ::NKikimrProto::TAuthConfig& config,
+        const TActorContext &ctx);
+
+    void ConfigureAccountLockout(
         const ::NKikimrProto::TAuthConfig& config,
         const TActorContext &ctx);
 
@@ -1462,6 +1467,15 @@ public:
     void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) override;
 
     NLogin::TLoginProvider LoginProvider;
+
+    struct TAccountLockout {
+        size_t AttemptThreshold = 4;
+        TDuration AttemptResetDuration = TDuration::Hours(1);
+
+        TAccountLockout(const ::NKikimrProto::TAccountLockout& accountLockout);
+    };
+
+    TAccountLockout AccountLockout;
 
 private:
     void OnDetach(const TActorContext &ctx) override;

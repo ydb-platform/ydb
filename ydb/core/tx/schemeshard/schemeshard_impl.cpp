@@ -4438,6 +4438,20 @@ TActorId TSchemeShard::TPipeClientFactory::CreateClient(const TActorContext& ctx
     return clientId;
 }
 
+TSchemeShard::TAccountLockout::TAccountLockout(const ::NKikimrProto::TAccountLockout& accountLockout)
+    : AttemptThreshold(accountLockout.GetAttemptThreshold())
+{
+    AttemptResetDuration = TDuration::Zero();
+    if (accountLockout.GetAttemptResetDuration().empty()) {
+        return;
+    }
+    if (TDuration::TryParse(accountLockout.GetAttemptResetDuration(), AttemptResetDuration)) {
+        if (AttemptResetDuration.Seconds() == 0) {
+            AttemptResetDuration = TDuration::Zero();
+        }
+    }
+}
+
 TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
@@ -4476,6 +4490,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
         .SpecialChars = AppData()->AuthConfig.GetPasswordComplexity().GetSpecialChars(),
         .CanContainUsername = AppData()->AuthConfig.GetPasswordComplexity().GetCanContainUsername()
     }))
+    , AccountLockout(AppData()->AuthConfig.GetAccountLockout())
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
                             ESimpleCounters_descriptor,
@@ -7162,6 +7177,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
 
     if (appConfig.HasAuthConfig()) {
         ConfigureLoginProvider(appConfig.GetAuthConfig(), ctx);
+        ConfigureAccountLockout(appConfig.GetAuthConfig(), ctx);
     }
 
     if (IsSchemeShardConfigured()) {
@@ -7381,6 +7397,17 @@ void TSchemeShard::ConfigureLoginProvider(
                  << ", MinSpecialCharsCount# " << passwordComplexity.MinSpecialCharsCount
                  << ", SpecialChars# " << (passwordComplexityConfig.GetSpecialChars().empty() ? NLogin::TPasswordComplexity::VALID_SPECIAL_CHARS : passwordComplexityConfig.GetSpecialChars())
                  << ", CanContainUsername# " << (passwordComplexity.CanContainUsername ? "true" : "false"));
+}
+
+void TSchemeShard::ConfigureAccountLockout(
+        const ::NKikimrProto::TAuthConfig& config,
+        const TActorContext &ctx)
+{
+    AccountLockout = TAccountLockout(config.GetAccountLockout());
+
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                 "AccountLockout configured: AttemptThreshold# " << AccountLockout.AttemptThreshold
+                 << ", AttemptResetDuration# " << AccountLockout.AttemptResetDuration.ToString());
 }
 
 void TSchemeShard::StartStopCompactionQueues() {

@@ -149,15 +149,7 @@ void TCommandLatency::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
     const TString& availableKinds = GetEnumAllNames<TCommandPing::EPingKind>();
-
-    ss.Clear();
-    for (int i = 0; i < int(TCommandLatency::EFormat::MaxFormat); ++i) {
-        ss << TCommandLatency::EFormat(i);
-        if (i != int(TCommandLatency::EFormat::MaxFormat) - 1) {
-            ss << ", ";
-        }
-    }
-    TString availableFormats = ss.Str();
+    const TString& availableFormats = GetEnumAllNames<TCommandLatency::EFormat>();
 
     config.Opts->AddLongOption(
         'i', "interval", TStringBuilder() << "seconds for each latency kind, default " << DEFAULT_INTERVAL_SECONDS)

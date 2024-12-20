@@ -8042,6 +8042,13 @@
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_insert-fail_read_view_after_modify_/sql.yql"
         }
     ],
+    "test_sql2yql.test[insert-from_erasure_to_none]": [
+        {
+            "checksum": "124c99a11a96bfb2da3f97a3d7ce782f",
+            "size": 1296,
+            "uri": "https://{canondata_backend}/1937424/fccb5c0ff69cf69d6e37662f3d3d4a9967eea7ca/resource.tar.gz#test_sql2yql.test_insert-from_erasure_to_none_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[insert-from_two_sorted_by_calc]": [
         {
             "checksum": "5ab9900c33a9489a6b4fe7754106d398",
@@ -25741,6 +25748,11 @@
     "test_sql_format.test[insert-fail_read_view_after_modify]": [
         {
             "uri": "file://test_sql_format.test_insert-fail_read_view_after_modify_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[insert-from_erasure_to_none]": [
+        {
+            "uri": "file://test_sql_format.test_insert-from_erasure_to_none_/formatted.sql"
         }
     ],
     "test_sql_format.test[insert-from_two_sorted_by_calc]": [

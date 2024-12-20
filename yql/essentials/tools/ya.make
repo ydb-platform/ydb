@@ -1,6 +1,7 @@
 RECURSE(
     arrow_kernels_dump
     astdiff
+    minirun
     pg_catalog_dump
     pg-make-test
     pgrun

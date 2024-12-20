@@ -41,14 +41,13 @@ TPingableTransaction::TPingableTransaction(
     , AutoPingable_(options.AutoPingable_)
     , Pinger_(std::move(transactionPinger))
 {
-    auto transactionId = NDetail::NRawClient::StartTransaction(
+    auto transactionId = NDetail::RequestWithRetry<TTransactionId>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        context,
-        parentId,
-        options);
-
+        [this, &parentId, &options] (TMutationId& mutationId) {
+            return RawClient_->StartTransaction(mutationId, parentId, options);
+        });
     auto actualTimeout = options.Timeout_.GetOrElse(Context_.Config->TxTimeout);
-    Init(context, transactionId, actualTimeout);
+    Init(rawClient, context, transactionId, actualTimeout);
 }
 
 TPingableTransaction::TPingableTransaction(
@@ -78,10 +77,11 @@ TPingableTransaction::TPingableTransaction(
         throw yexception() << "Transaction " << GetGuidAsString(transactionId) << " does not exist";
     }
     auto timeout = TDuration::MilliSeconds(timeoutNode.AsInt64());
-    Init(context, transactionId, timeout);
+    Init(rawClient, context, transactionId, timeout);
 }
 
 void TPingableTransaction::Init(
+    const IRawClientPtr& rawClient,
     const TClientContext& context,
     const TTransactionId& transactionId,
     TDuration timeout)
@@ -91,12 +91,12 @@ void TPingableTransaction::Init(
     if (AbortOnTermination_) {
         AbortableRegistry_->Add(
             TransactionId_,
-            ::MakeIntrusive<NDetail::TTransactionAbortable>(context, TransactionId_));
+            ::MakeIntrusive<NDetail::TTransactionAbortable>(rawClient, context, TransactionId_));
     }
 
     if (AutoPingable_) {
         // Compute 'MaxPingInterval_' and 'MinPingInterval_' such that 'pingInterval == (max + min) / 2'.
-        auto pingInterval = Context_.Config->PingInterval;
+        auto pingInterval = context.Config->PingInterval;
         auto safeTimeout = timeout - TDuration::Seconds(5);
         MaxPingInterval_ = Max(pingInterval, Min(safeTimeout, pingInterval * 1.5));
         MinPingInterval_ = pingInterval - (MaxPingInterval_ - pingInterval);
@@ -130,7 +130,7 @@ const TClientContext TPingableTransaction::GetContext() const
 
 void TPingableTransaction::Ping() const
 {
-    RawClient_->PingTx(TransactionId_);
+    RawClient_->PingTransaction(TransactionId_);
 }
 
 void TPingableTransaction::Commit()
@@ -163,16 +163,18 @@ void TPingableTransaction::Stop(EStopAction action)
 
     switch (action) {
         case EStopAction::Commit:
-            NDetail::NRawClient::CommitTransaction(
+            NDetail::RequestWithRetry<void>(
                 ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-                Context_,
-                TransactionId_);
+                [this] (TMutationId& mutationId) {
+                    RawClient_->CommitTransaction(mutationId, TransactionId_);
+                });
             break;
         case EStopAction::Abort:
-            NDetail::NRawClient::AbortTransaction(
+        NDetail::RequestWithRetry<void>(
                 ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-                Context_,
-                TransactionId_);
+                [this] (TMutationId& mutationId) {
+                    RawClient_->AbortTransaction(mutationId, TransactionId_);
+                });
             break;
         case EStopAction::Detach:
             // Do nothing.

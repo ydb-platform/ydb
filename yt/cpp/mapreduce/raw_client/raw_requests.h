@@ -35,71 +35,17 @@ void ExecuteBatch(
     IRequestRetryPolicyPtr retryPolicy,
     const TClientContext& context,
     TRawBatchRequest& batchRequest,
-    const TExecuteBatchOptions& options = TExecuteBatchOptions());
+    const TExecuteBatchOptions& options = {});
 
-//
-// File cache
-//
-
-TMaybe<TYPath> GetFileFromCache(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TString& md5Signature,
-    const TYPath& cachePath,
-    const TGetFileFromCacheOptions& options = TGetFileFromCacheOptions());
-
-TYPath PutFileToCache(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& filePath,
-    const TString& md5Signature,
-    const TYPath& cachePath,
-    const TPutFileToCacheOptions& options = TPutFileToCacheOptions());
-
-//
 // SkyShare
-//
 
 TNode::TListType SkyShareTable(
     const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,
     const std::vector<TYPath>& tablePaths,
-    const TSkyShareTableOptions& options);
+    const TSkyShareTableOptions& options = {});
 
-//
 // Misc
-//
-
-TCheckPermissionResponse CheckPermission(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TString& user,
-    EPermission permission,
-    const TYPath& path,
-    const TCheckPermissionOptions& options = TCheckPermissionOptions());
-
-TVector<TTabletInfo> GetTabletInfos(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TYPath& path,
-    const TVector<int>& tabletIndexes,
-    const TGetTabletInfosOptions& options);
-
-TVector<TTableColumnarStatistics> GetTableColumnarStatistics(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TVector<TRichYPath>& paths,
-    const TGetTableColumnarStatisticsOptions& options);
-
-TMultiTablePartitions GetTablePartitions(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TVector<TRichYPath>& paths,
-    const TGetTablePartitionsOptions& options);
 
 TRichYPath CanonizeYPath(
     const IRequestRetryPolicyPtr& retryPolicy,
@@ -110,60 +56,6 @@ TVector<TRichYPath> CanonizeYPaths(
     const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,
     const TVector<TRichYPath>& paths);
-
-//
-// Tables
-//
-
-void AlterTable(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& path,
-    const TAlterTableOptions& options);
-
-void AlterTableReplica(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TReplicaId& replicaId,
-    const TAlterTableReplicaOptions& options);
-
-void DeleteRows(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TYPath& path,
-    const TNode::TListType& keys,
-    const TDeleteRowsOptions& options);
-
-void FreezeTable(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TYPath& path,
-    const TFreezeTableOptions& options);
-
-void UnfreezeTable(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TYPath& path,
-    const TUnfreezeTableOptions& options);
-
-
-// Transactions
-void AbortTransaction(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId);
-
-void CommitTransaction(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId);
-
-TTransactionId StartTransaction(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& parentId,
-    const TStartTransactionOptions& options);
 
 ////////////////////////////////////////////////////////////////////////////////
 

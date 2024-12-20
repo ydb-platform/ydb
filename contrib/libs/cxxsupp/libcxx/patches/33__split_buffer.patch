@@ -1,8 +1,8 @@
 diff --git a/include/__split_buffer b/include/__split_buffer
-index 07dedba..3a0057e 100644
+index aaf9556..2fe8b1e 100644
 --- a/include/__split_buffer
 +++ b/include/__split_buffer
-@@ -156,7 +156,7 @@ public:
+@@ -154,7 +154,7 @@ public:
  
    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void pop_front() { __destruct_at_begin(__begin_ + 1); }
    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void pop_back() { __destruct_at_end(__end_ - 1); }
@@ -11,15 +11,13 @@ index 07dedba..3a0057e 100644
    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void __construct_at_end(size_type __n);
    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void __construct_at_end(size_type __n, const_reference __x);
  
-@@ -246,6 +246,13 @@ __split_buffer<_Tp, _Allocator>::__invariants() const
-     return true;
+@@ -237,6 +237,11 @@ _LIBCPP_CONSTEXPR_SINCE_CXX20 bool __split_buffer<_Tp, _Allocator>::__invariants
+   return true;
  }
  
 +template <class _Tp, class _Allocator>
-+void
-+__split_buffer<_Tp, _Allocator>::__uninitialized_at_end(size_type __n)
-+{
-+    this->__end_ += __n;
++void __split_buffer<_Tp, _Allocator>::__uninitialized_at_end(size_type __n) {
++  this->__end_ += __n;
 +}
 +
  //  Default constructs __n objects starting at __end_

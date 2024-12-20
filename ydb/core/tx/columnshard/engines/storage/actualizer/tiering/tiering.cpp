@@ -178,7 +178,9 @@ void TTieringActualizer::DoExtractTasks(
             for (auto&& p : portions) {
                 const auto& portion = externalContext.GetPortionVerified(p);
                 auto info = BuildActualizationInfo(*portion, tasksContext.GetActualInstant());
-                AFL_VERIFY(info);
+                if (!info) {
+                    continue;
+                }
                 auto portionScheme = portion->GetSchema(VersionedIndex);
                 TPortionEvictionFeatures features(
                     portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));

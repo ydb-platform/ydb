@@ -61,14 +61,14 @@ protected:
     }
 
     static std::shared_ptr<arrow::util::Codec> GetDefaultCodec() {
-        if (!HasAppData() || (!AppDataVerified().ColumnShardConfig.HasDefaultCompression() &&
-                                 !AppDataVerified().ColumnShardConfig.HasDefaultCompressionLevel())) {
+        if (!HasAppData() ||
+            (!AppData()->ColumnShardConfig.HasDefaultCompression() && !AppData()->ColumnShardConfig.HasDefaultCompressionLevel())) {
             return NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(arrow::Compression::type::ZSTD, 1));
         }
         arrow::Compression::type codec = GetDefaultCompressionType();
-        if (AppDataVerified().ColumnShardConfig.HasDefaultCompressionLevel()) {
+        if (AppData()->ColumnShardConfig.HasDefaultCompressionLevel()) {
             return NArrow::TStatusValidator::GetValid(
-                arrow::util::Codec::Create(codec, AppDataVerified().ColumnShardConfig.GetDefaultCompressionLevel()));
+                arrow::util::Codec::Create(codec, AppData()->ColumnShardConfig.GetDefaultCompressionLevel()));
         } else if (codec == arrow::Compression::ZSTD) {
             return NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(codec, 1));
         }

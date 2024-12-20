@@ -81,15 +81,16 @@ GRANT "ydb.granular.create_directory" ON `/Root/db1` TO testuser
 
 Для управления правами служат следующие CLI-команды:
 
-* [GRANT](../reference/ydb-cli/commands/scheme-permissions.md#grant-revoke).
-* [REVOKE](../reference/ydb-cli/commands/scheme-permissions.md#grant-revoke).
-* [{#T}](../reference/ydb-cli/commands/scheme-permissions.md#set).
-* [{#T}](../reference/ydb-cli/commands/scheme-permissions.md#clear).
-* [{#T}](../reference/ydb-cli/commands/scheme-permissions.md#list).
+* [chown](../reference/ydb-cli/commands/scheme-permissions.md#chown)
+* [grant](../reference/ydb-cli/commands/scheme-permissions.md#grant-revoke)
+* [revoke](../reference/ydb-cli/commands/scheme-permissions.md#grant-revoke)
+* [set](../reference/ydb-cli/commands/scheme-permissions.md#set)
+* [clear](../reference/ydb-cli/commands/scheme-permissions.md#clear)
+* [list](../reference/ydb-cli/commands/scheme-permissions.md#list)
 
-Через CLI используется только стиль из столбца "{{ ydb-short-name }} право".
+В CLI используется только стиль из столбца "{{ ydb-short-name }} право".
 Например:
 
 ```bash
-ydb scheme permissions grant -p "ydb.granular.create_directory" `/Root/db1` testuser
+{{ ydb-short-name }} scheme permissions grant -p "ydb.granular.create_directory" `/Root/db1` testuser
 ```

@@ -13,9 +13,9 @@
 
 Для создания, изменения и удаления групп есть команды:
 
-* [{#T}](../yql/reference/syntax/create-group.md).
-* [{#T}](../yql/reference/syntax/alter-group.md).
-* [{#T}](../yql/reference/syntax/drop-group.md).
+* [{#T}](../yql/reference/syntax/create-group.md)
+* [{#T}](../yql/reference/syntax/alter-group.md)
+* [{#T}](../yql/reference/syntax/drop-group.md)
 
 ## Встроенные группы {#builtin}
 

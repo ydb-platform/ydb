@@ -95,6 +95,27 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         UNIT_ASSERT_VALUES_EQUAL(a2.reason(), ActionState::ACTION_REASON_TOO_MANY_UNAVAILABLE_VDISKS);
         UNIT_ASSERT(a2.reason_details().Contains("too many unavailable vdisks"));
     }
+
+    Y_UNIT_TEST(SimplifiedMirror3DC) {
+        TTestEnvOpts options(3);
+        options.UseMirror3dcErasure = true;
+        options.DataCenterCount = 3;
+        TCmsTestEnv env(options);
+
+        auto response = env.CheckMaintenanceTaskCreate(
+            "task-1",
+            Ydb::StatusIds::SUCCESS,
+            Ydb::Maintenance::AVAILABILITY_MODE_WEAK,
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))
+            )
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(response.action_group_states().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response.action_group_states(0).action_states().size(), 1);
+        const auto &a = response.action_group_states(0).action_states(0);
+        UNIT_ASSERT_VALUES_EQUAL(a.status(), ActionState::ACTION_STATUS_PERFORMED);
+    }
 }
 
 } // namespace NKikimr::NCmsTest 

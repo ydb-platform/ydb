@@ -402,13 +402,13 @@ TString GetDebugString(const std::pair<NKikimr::TIndexId, TString>& id) {
 }
 
 void UpdateMetadataIfSuccess(NYql::TKikimrTableMetadataPtr& implTable, TTableMetadataResult& value) {
-    Y_ASSERT(value.Success());
+    YQL_ENSURE(value.Success());
     if (!implTable) {
         implTable = std::move(value.Metadata);
         return;
     }
-    Y_ASSERT(!implTable->Next);
-    Y_ASSERT(implTable->Name < value.Metadata->Name);
+    YQL_ENSURE(!implTable->Next);
+    YQL_ENSURE(implTable->Name < value.Metadata->Name);
     implTable->Next = std::move(value.Metadata);
 }
 
@@ -666,6 +666,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
             for (size_t i = 0; i < indexesCount; i++) {
                 for (const auto& _ : NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(
                         result.Metadata->Indexes[i].Type))) {
+                    YQL_ENSURE(it != children.end());
                     auto value = it++->ExtractValue();
                     result.AddIssues(value.Issues());
                     if (loadOk && (loadOk = value.Success())) {
@@ -673,7 +674,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
                     }
                 }
             }
-            Y_ASSERT(it == children.end());
+            YQL_ENSURE(it == children.end());
 
             auto locked = ptr.lock();
             if (!loadOk || !locked) {

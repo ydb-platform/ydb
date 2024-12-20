@@ -407,7 +407,7 @@ TExprBase DoRewriteTopSortOverKMeansTree(
     Y_ASSERT(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
     const auto* levelTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Name);
     const auto* postingTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Next->Name);
-    Y_ASSERT(!implTable.Next->Next);
+    YQL_ENSURE(!implTable.Next->Next);
     YQL_ENSURE(levelTableDesc->Metadata->Name.EndsWith(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable));
     YQL_ENSURE(postingTableDesc->Metadata->Name.EndsWith(NTableIndex::NTableVectorKmeansTreeIndex::PostingTable));
 
@@ -914,7 +914,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
                                               ctx, kqpCtx, tableDesc, *indexDesc, *implTable);
     }
     const auto& implTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable->Name);
-    Y_ASSERT(implTableDesc.Metadata->Name.EndsWith(NTableIndex::ImplTable));
+    YQL_ENSURE(implTableDesc.Metadata->Name.EndsWith(NTableIndex::ImplTable));
 
     TVector<TString> extraColumns;
 

@@ -2,16 +2,21 @@ from __future__ import annotations
 import pytest
 import allure
 import json
+import yatest
+import os
+from allure_commons._core import plugin_manager
+from allure_pytest.listener import AllureListener
+from copy import deepcopy
+from datetime import datetime
+from pytz import timezone
+from time import time
+from typing import Optional
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonicalPolicy
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.allure_utils import allure_test_description
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
-from time import time
-from typing import Optional
-from allure_commons._core import plugin_manager
-from allure_pytest.listener import AllureListener
 
 
 class LoadSuiteBase:
@@ -86,6 +91,49 @@ class LoadSuiteBase:
             pytest.fail(f'Unexpected tables size in `{folder}`:\n {msg}')
 
     @classmethod
+    def _attach_logs(cls, start_time, attach_name):
+        hosts = [node.host for node in filter(lambda x: x.role == YdbCluster.Node.Role.STORAGE, YdbCluster.get_cluster_nodes())]
+        tz = timezone('Europe/Moscow')
+        start = datetime.fromtimestamp(start_time, tz).isoformat()
+        cmd = f"ulimit -n 100500;unified_agent select -S '{start}' -s {{storage}} -m k8s_container:{{container}}"
+        exec_kikimr = {
+            'ydb-dynamic': {},
+            'ydb-storage': {},
+        }
+        exec_start = deepcopy(exec_kikimr)
+        ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+        ssh_user = os.getenv('SSH_USER')
+        if ssh_user is not None:
+            ssh_cmd += ['-l', ssh_user]
+        ssh_key_file = os.getenv('SSH_KEY_FILE')
+        if ssh_key_file is not None:
+            ssh_cmd += ['-i', ssh_key_file]
+        for host in hosts:
+            for c in exec_kikimr.keys():
+                exec_kikimr[c][host] = yatest.common.execute(ssh_cmd + [host, cmd.format(storage='kikimr', container=c)], wait=False)
+            for c in exec_start.keys():
+                exec_start[c][host] = yatest.common.execute(ssh_cmd + [host, cmd.format(storage='kikimr-start', container=c)], wait=False)
+
+        error_log = ''
+        for c, execs in exec_start.items():
+            for host, e in sorted(execs.items()):
+                e.wait(check_exit_code=False)
+                error_log += f'{host}:\n'
+                error_log += (e.stdout if e.returncode == 0 else e.stderr).decode('utf-8') + '\n'
+            allure.attach(error_log, f'{attach_name}_{c}_stderr', allure.attachment_type.TEXT)
+
+        for c, execs in exec_kikimr.items():
+            dir = os.path.join(yatest.common.tempfile.gettempdir(), f'{attach_name}_{c}_logs')
+            os.makedirs(dir, exist_ok=True)
+            for host, e in execs.items():
+                e.wait(check_exit_code=False)
+                with open(os.path.join(dir, host), 'w') as f:
+                    f.write((e.stdout if e.returncode == 0 else e.stderr).decode('utf-8'))
+            archive = dir + '.tar.gz'
+            yatest.common.execute(['tar', '-C', dir, '-czf', archive, '.'])
+            allure.attach.file(archive, f'{attach_name}_{c}_logs', extension='tar.gz')
+
+    @classmethod
     def process_query_result(cls, result: YdbCliHelper.WorkloadRunResult, query_num: int, iterations: int, upload: bool):
         def _get_duraton(stats, field):
             if stats is None:
@@ -152,6 +200,8 @@ class LoadSuiteBase:
         for p in ['Mean']:
             if p in stats:
                 allure.dynamic.parameter(p, _duration_text(stats[p] / 1000.))
+        if os.getenv('NO_KUBER_LOGS') is None:
+            cls._attach_logs(start_time=result.start_time, attach_name='kikimr')
         error_message = ''
         success = True
         if not result.success:
@@ -183,16 +233,16 @@ class LoadSuiteBase:
 
     @classmethod
     def setup_class(cls) -> None:
-        if not hasattr(cls, 'do_setup_class'):
-            return
-        error = None
-        tb = None
         start_time = time()
-        try:
-            cls.do_setup_class()
-        except BaseException as e:
-            error = str(e)
-            tb = e.__traceback__
+        error = YdbCluster.wait_ydb_alive(20 * 60)
+        tb = None
+        if not error and hasattr(cls, 'do_setup_class'):
+            try:
+                cls.do_setup_class()
+            except BaseException as e:
+                error = str(e)
+                tb = e.__traceback__
+        first_node_start_time = min([n.start_time for n in YdbCluster.get_cluster_nodes(db_only=False)])
         ResultsProcessor.upload_results(
             kind='Load',
             suite=cls.suite(),
@@ -200,6 +250,8 @@ class LoadSuiteBase:
             timestamp=start_time,
             is_successful=(error is None)
         )
+        if os.getenv('NO_KUBER_LOGS') is None:
+            cls._attach_logs(start_time=max(start_time - 600, first_node_start_time), attach_name='kikimr_start')
         if error is not None:
             exc = pytest.fail.Exception(error)
             exc.with_traceback(tb)
@@ -214,7 +266,6 @@ class LoadSuiteBase:
                         if param.name == 'query_num':
                             param.mode = allure.parameter_mode.HIDDEN.value
         qparams = self._get_query_settings(query_num)
-        start_time = time()
         result = YdbCliHelper.workload_run(
             path=path,
             query_num=query_num,
@@ -226,5 +277,5 @@ class LoadSuiteBase:
             scale=self.scale,
             query_prefix=qparams.query_prefix
         )
-        allure_test_description(self.suite(), self._test_name(query_num), refference_set=self.refference, start_time=start_time, end_time=time())
+        allure_test_description(self.suite(), self._test_name(query_num), refference_set=self.refference, start_time=result.start_time, end_time=time())
         self.process_query_result(result, query_num, qparams.iterations, True)

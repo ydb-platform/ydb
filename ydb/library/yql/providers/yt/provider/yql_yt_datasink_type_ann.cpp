@@ -221,7 +221,7 @@ private:
         return TStatus::Ok;
     }
 
-    static bool ValidateOutputType(const TTypeAnnotationNode* itemType, TPositionHandle positionHandle, TYtOutSection outTables,
+    static bool ValidateOutputType(const TTypeAnnotationNode* itemType, TPositionHandle positionHandle, const TYtOutSection& outTables,
         size_t beginIdx, size_t endIdx, bool useExtendedType, TExprContext& ctx)
     {
         YQL_ENSURE(beginIdx <= endIdx);
@@ -323,13 +323,13 @@ private:
         return true;
     }
 
-    static bool ValidateOutputType(const TTypeAnnotationNode* itemType, TPositionHandle positionHandle, TYtOutSection outTables,
+    static bool ValidateOutputType(const TTypeAnnotationNode* itemType, TPositionHandle positionHandle, const TYtOutSection& outTables,
         TExprContext& ctx, bool useExtendedType = false)
     {
         return ValidateOutputType(itemType, positionHandle, outTables, 0, outTables.Ref().ChildrenSize(), useExtendedType, ctx);
     }
 
-    static bool ValidateOutputType(const TExprNode& list, TYtOutSection outTables, TExprContext& ctx, bool useExtendedType = false) {
+    static bool ValidateOutputType(const TExprNode& list, const TYtOutSection& outTables, TExprContext& ctx, bool useExtendedType = false) {
         const TTypeAnnotationNode* itemType = GetSequenceItemType(list.Pos(), list.GetTypeAnn(), true, ctx);
         if (nullptr == itemType) {
             return false;
@@ -1096,7 +1096,7 @@ private:
             return TStatus::Error;
         }
 
-        if (!ValidateOutputType(*lambda, map.Output(), ctx, true)) {
+        if (!ValidateOutputType(*lambda, map.Output(), ctx, /*useExtendedType*/true)) {
             lambda->SetTypeAnn(nullptr);
             lambda->SetState(TExprNode::EState::Initial);
             return TStatus::Error;
@@ -1212,7 +1212,7 @@ private:
             return TStatus::Error;
         }
 
-        if (!ValidateOutputType(*lambda, reduce.Output(), ctx)) {
+        if (!ValidateOutputType(*lambda, reduce.Output(), ctx, /*useExtendedType*/true)) {
             lambda->SetTypeAnn(nullptr);
             lambda->SetState(TExprNode::EState::Initial);
             return TStatus::Error;
@@ -1590,7 +1590,7 @@ private:
             return TStatus::Error;
         }
 
-        if (!ValidateOutputType(lambda.Ref(), fill.Output(), ctx, true)) {
+        if (!ValidateOutputType(lambda.Ref(), fill.Output(), ctx, /*useExtendedType*/true)) {
             return TStatus::Error;
         }
 

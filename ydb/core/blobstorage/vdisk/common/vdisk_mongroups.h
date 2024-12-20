@@ -710,43 +710,51 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(THandleClassGroup)
             {
-                COUNTER_INIT(VGetDiscover, true);
-                COUNTER_INIT(VGetFast, true);
-                COUNTER_INIT(VGetAsync, true);
-                COUNTER_INIT(VGetLow, true);
-                COUNTER_INIT(VPutTabletLog, true);
-                COUNTER_INIT(VPutUserData, true);
-                COUNTER_INIT(VPutAsyncBlob, true);
+                COUNTER_INIT(Undefined, true);
+                COUNTER_INIT(GetDiscover, true);
+                COUNTER_INIT(GetFast, true);
+                COUNTER_INIT(GetAsync, true);
+                COUNTER_INIT(GetLow, true);
+                COUNTER_INIT(PutTabletLog, true);
+                COUNTER_INIT(PutUserData, true);
+                COUNTER_INIT(PutAsyncBlob, true);
             }
 
-            COUNTER_DEF(VGetDiscover);
-            COUNTER_DEF(VGetFast);
-            COUNTER_DEF(VGetAsync);
-            COUNTER_DEF(VGetLow);
-            COUNTER_DEF(VPutTabletLog);
-            COUNTER_DEF(VPutUserData);
-            COUNTER_DEF(VPutAsyncBlob);
+            COUNTER_DEF(Undefined);
+            COUNTER_DEF(GetDiscover);
+            COUNTER_DEF(GetFast);
+            COUNTER_DEF(GetAsync);
+            COUNTER_DEF(GetLow);
+            COUNTER_DEF(PutTabletLog);
+            COUNTER_DEF(PutUserData);
+            COUNTER_DEF(PutAsyncBlob);
             
-            const ::NMonitoring::TDeprecatedCounter &GetCounter(NKikimrBlobStorage::EGetHandleClass handleClass) const {
-                switch (handleClass) {
+            ::NMonitoring::TDeprecatedCounter &GetCounter(const std::optional<NKikimrBlobStorage::EGetHandleClass>& handleClass = std::nullopt) {
+                if (!handleClass) {
+                    return Undefined();
+                }
+                switch (*handleClass) {
                     case NKikimrBlobStorage::AsyncRead:
-                        return VGetAsync();
+                        return GetAsync();
                     case NKikimrBlobStorage::FastRead:
-                        return VGetFast();
+                        return GetFast();
                     case NKikimrBlobStorage::Discover:
-                        return VGetDiscover();
+                        return GetDiscover();
                     case NKikimrBlobStorage::LowRead:
-                        return VGetLow();
+                        return GetLow();
                 }
             }
-            const ::NMonitoring::TDeprecatedCounter &GetCounter(NKikimrBlobStorage::EPutHandleClass handleClass) const {
-                switch (handleClass) {
+            ::NMonitoring::TDeprecatedCounter &GetCounter(const std::optional<NKikimrBlobStorage::EPutHandleClass>& handleClass = std::nullopt) {
+                if (!handleClass) {
+                    return Undefined();
+                }
+                switch (*handleClass) {
                     case NKikimrBlobStorage::TabletLog:
-                        return VPutTabletLog();
+                        return PutTabletLog();
                     case NKikimrBlobStorage::AsyncBlob:
-                        return VPutAsyncBlob();
+                        return PutAsyncBlob();
                     case NKikimrBlobStorage::UserData:
-                        return VPutUserData();
+                        return PutUserData();
                 }
             }
         };
@@ -758,6 +766,7 @@ public:                                                                         
         public:
             TIntrusivePtr<::NMonitoring::TDynamicCounters> Group;
 
+            THandleClassGroup Undefined;
             THandleClassGroup ResponsesWithStatusError;
             THandleClassGroup ResponsesWithStatusRace;
             THandleClassGroup ResponsesWithStatusBlocked;
@@ -768,6 +777,7 @@ public:                                                                         
 
             TResponseStatusGroup(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
                 : Group(counters->GetSubgroup("subsystem", "statuses"))
+                , Undefined(Group, "status", "UNDEFINED")
                 , ResponsesWithStatusError(Group, "status", "ERROR")
                 , ResponsesWithStatusRace(Group, "status", "RACE")
                 , ResponsesWithStatusBlocked(Group, "status", "BLOCKED")
@@ -778,7 +788,7 @@ public:                                                                         
             {}
 
             template <typename THandleClassType>
-            const ::NMonitoring::TDeprecatedCounter &GetCounter(NKikimrProto::EReplyStatus status, THandleClassType handleClass) const {
+            ::NMonitoring::TDeprecatedCounter &GetCounter(NKikimrProto::EReplyStatus status, const std::optional<THandleClassType>& handleClass = std::nullopt) {
                 switch (status) {
                     case NKikimrProto::ERROR:
                         return ResponsesWithStatusError.GetCounter(handleClass);
@@ -794,8 +804,12 @@ public:                                                                         
                         return ResponsesWithStatusNotReady.GetCounter(handleClass);
                     case NKikimrProto::VDISK_ERROR_STATE:
                         return ResponsesWithStatusVdiskErrorState.GetCounter(handleClass);
-                    default: break;
+                    default: return Undefined.GetCounter(handleClass);
                 }
+            }
+
+            ::NMonitoring::TDeprecatedCounter &GetCounter(NKikimrProto::EReplyStatus status) {
+                return GetCounter(status, std::optional<NKikimrBlobStorage::EPutHandleClass>{});
             }
         };
 

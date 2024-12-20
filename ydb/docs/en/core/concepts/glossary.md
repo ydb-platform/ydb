@@ -177,7 +177,7 @@ A **user-defined view** is created by a user with the [{#T}](../yql/reference/sy
 
 #### System view {#system-view}
 
-A **system view** is for monitoring the DB status. These views are accessible from the root of the database tree and use the `.sys` system path prefix. It is explained in a separate article [{#T}](../dev/system-views.md).
+A **system view** is for monitoring the DB status. System views are located in the .sys directory in the root of the database tree. It is explained in a separate article [{#T}](../dev/system-views.md).
 
 ### Topic {#topic}
 

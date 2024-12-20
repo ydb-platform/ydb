@@ -421,7 +421,7 @@ public:
         auto tx = PreparedQuery->GetPhyTxOrEmpty(CurrentTx);
 
         if (TxCtx->CanDeferEffects()) {
-            // At current time sinks require separate tnx with commit.
+            // Olap sinks require separate tnx with commit.
             while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable) {
                 QueryData->CreateKqpValueMap(tx);
                 bool success = TxCtx->AddDeferredEffect(tx, QueryData);

@@ -1136,17 +1136,21 @@ public:
             return;
         }
 
-        if (QueryState->TxCtx->ShouldExecuteDeferredEffects()) {
-            ExecuteDeferredEffectsImmediately();
+        Cerr << "TEST:: ExecuteOrDefer" << Endl;
+        if (QueryState->TxCtx->ShouldExecuteDeferredEffects(tx)) {
+            Cerr << "TEST:: EXEC DEF" << Endl;
+            ExecuteDeferredEffectsImmediately(tx);
         } else if (auto commit = QueryState->ShouldCommitWithCurrentTx(tx); commit || tx) {
+            Cerr << "TEST:: COMMIT SHOULD = " << commit << Endl;
             ExecutePhyTx(tx, commit);
         } else {
+            Cerr << "TEST:: SKIP" << Endl;
             ReplySuccess();
         }
     }
 
-    void ExecuteDeferredEffectsImmediately() {
-        YQL_ENSURE(QueryState->TxCtx->ShouldExecuteDeferredEffects());
+    void ExecuteDeferredEffectsImmediately(const TKqpPhyTxHolder::TConstPtr& tx) {
+        YQL_ENSURE(QueryState->TxCtx->ShouldExecuteDeferredEffects(tx));
 
         auto& txCtx = *QueryState->TxCtx;
         auto request = PrepareRequest(/* tx */ nullptr, /* literal */ false, QueryState.get());

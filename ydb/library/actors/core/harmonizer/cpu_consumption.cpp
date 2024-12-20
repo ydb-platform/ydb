@@ -38,7 +38,7 @@ namespace {
             poolConsumption->LastSecondCpu += threadLastSecondCpu;
             LWPROBE_WITH_DEBUG(HarmonizeCheckPoolByThread, pool.Pool->PoolId, pool.Pool->GetName(), threadIdx, threadElapsed, threadCpu, threadLastSecondElapsed, threadLastSecondCpu);
         }
-        for (ui32 sharedIdx = 0; sharedIdx < pool.SharedInfo.size(); ++sharedIdx) {
+        for (i16 sharedIdx = 0; sharedIdx < static_cast<i16>(pool.SharedInfo.size()); ++sharedIdx) {
             float sharedElapsed = Rescale(pool.GetSharedElapsed(sharedIdx));
             float sharedLastSecondElapsed = Rescale(pool.GetLastSecondSharedElapsed(sharedIdx));
             float sharedCpu = Rescale(pool.GetSharedCpu(sharedIdx));

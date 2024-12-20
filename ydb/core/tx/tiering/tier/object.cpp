@@ -37,9 +37,14 @@ TConclusionStatus TTierConfig::DeserializeFromProto(const NKikimrSchemeOp::TExte
         return TConclusionStatus::Fail("AWS auth is not defined for storage tier");
     }
 
-    ProtoConfig.SetAccessKey(NMetadata::NSecret::TSecretName(proto.GetAuth().GetAws().GetAwsAccessKeyIdSecretName()).SerializeToString());
-    ProtoConfig.SetSecretKey(
-        NMetadata::NSecret::TSecretName(proto.GetAuth().GetAws().GetAwsSecretAccessKeySecretName()).SerializeToString());
+    {
+        const auto aws = proto.GetAuth().GetAws();
+        ProtoConfig.SetAccessKey(NMetadata::NSecret::TSecretName(aws.GetAwsAccessKeyIdSecretName()).SerializeToString());
+        ProtoConfig.SetSecretKey(NMetadata::NSecret::TSecretName(aws.GetAwsSecretAccessKeySecretName()).SerializeToString());
+        if (aws.HasAwsRegion()) {
+            ProtoConfig.SetRegion(aws.GetAwsRegion());
+        }
+    }
 
     NUri::TUri url;
     if (url.Parse(proto.GetLocation(), NUri::TFeature::FeaturesAll) != NUri::TState::EParsed::ParsedOK) {
@@ -78,7 +83,11 @@ TConclusionStatus TTierConfig::DeserializeFromProto(const NKikimrSchemeOp::TExte
             }
         }
 
-        ProtoConfig.SetEndpoint(TString(endpoint));
+        if (ui16 port = url.GetPort()) {
+            ProtoConfig.SetEndpoint(TStringBuilder() << endpoint << ":" << port);
+        } else {
+            ProtoConfig.SetEndpoint(TString(endpoint));
+        }
         ProtoConfig.SetBucket(TString(bucket));
     }
 

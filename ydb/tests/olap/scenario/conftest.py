@@ -1,7 +1,6 @@
 import logging
 import inspect
 import pytest
-import threading
 import time
 import abc
 from ydb.tests.olap.lib.results_processor import ResultsProcessor

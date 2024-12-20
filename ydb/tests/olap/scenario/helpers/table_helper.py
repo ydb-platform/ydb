@@ -561,7 +561,7 @@ class AlterTableLikeObject(ScenarioTestHelper.IYqlble):
 
         Returns:
             self."""
-        
+
         def make_tier_literal(delay: timedelta, storage_path: Optional[str]):
             delay_literal = f'Interval("PT{delay.total_seconds()}S")'
             if storage_path:

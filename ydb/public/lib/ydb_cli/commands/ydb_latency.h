@@ -18,7 +18,6 @@ public:
     enum class EFormat {
         Plain = 0,
         CSV,
-        MaxFormat,
     };
 
 public:

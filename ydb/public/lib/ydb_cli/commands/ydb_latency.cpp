@@ -5,9 +5,9 @@
 
 #include <library/cpp/histogram/hdr/histogram.h>
 
+#include <util/generic/serialized_enum.h>
 #include <util/system/hp_timer.h>
 
-#include <algorithm>
 #include <atomic>
 #include <functional>
 #include <thread>
@@ -23,7 +23,7 @@ constexpr int DEFAULT_MAX_INFLIGHT = 128;
 constexpr int DEFAULT_PERCENTILE = 99.0;
 
 constexpr TCommandLatency::EFormat DEFAULT_FORMAT = TCommandLatency::EFormat::Plain;
-constexpr TCommandPing::EPingKind DEFAULT_RUN_KIND = TCommandPing::EPingKind::MaxPingKind;
+constexpr TCommandPing::EPingKind DEFAULT_RUN_KIND = TCommandPing::EPingKind::AllKinds;
 
 // 1-16, 32, 64, ...
 constexpr int INCREMENT_UNTIL_THREAD_COUNT = 16;
@@ -152,20 +152,20 @@ void TCommandLatency::Config(TConfig& config) {
     const TString& availableFormats = GetEnumAllNames<TCommandLatency::EFormat>();
 
     config.Opts->AddLongOption(
-        'i', "interval", TStringBuilder() << "seconds for each latency kind)
+        'i', "interval", TStringBuilder() << "seconds for each latency kind")
             .RequiredArgument("INT").StoreResult(&IntervalSeconds).DefaultValue(DEFAULT_INTERVAL_SECONDS);
     config.Opts->AddLongOption(
-        'm', "max-inflight", TStringBuilder() << "max inflight, default " << DEFAULT_MAX_INFLIGHT)
-            .RequiredArgument("INT").StoreResult(&MaxInflight);
+        'm', "max-inflight", TStringBuilder() << "max inflight")
+            .RequiredArgument("INT").StoreResult(&MaxInflight).DefaultValue(DEFAULT_MAX_INFLIGHT);
     config.Opts->AddLongOption(
-        'p', "percentile", TStringBuilder() << "latency percentile, default " << DEFAULT_PERCENTILE)
-            .RequiredArgument("DOUBLE").StoreResult(&Percentile);
+        'p', "percentile", TStringBuilder() << "latency percentile")
+            .RequiredArgument("DOUBLE").StoreResult(&Percentile).DefaultValue(DEFAULT_PERCENTILE);
     config.Opts->AddLongOption(
-        'f', "format", TStringBuilder() << "output format (" << availableFormats << "), default " << DEFAULT_FORMAT)
-            .OptionalArgument("STRING").StoreResult(&Format);
+        'f', "format", TStringBuilder() << "output format (" << availableFormats << ")")
+            .OptionalArgument("STRING").StoreResult(&Format).DefaultValue(DEFAULT_FORMAT);
     config.Opts->AddLongOption(
-        'k', "kind", TStringBuilder() << "Only only specified ping kind ("<< availableKinds << "), otherwise all")
-            .OptionalArgument("STRING").StoreResult(&RunKind);
+        'k', "kind", TStringBuilder() << "Only only specified ping kind ("<< availableKinds << ")")
+            .OptionalArgument("STRING").StoreResult(&RunKind).DefaultValue(DEFAULT_RUN_KIND);
 }
 
 void TCommandLatency::Parse(TConfig& config) {
@@ -220,16 +220,16 @@ int TCommandLatency::Run(TConfig& config) {
 
     using TTaskPair = std::pair<TCommandPing::EPingKind, TCallableFactory>;
     const std::vector<TTaskPair> allTasks = {
-        { TCommandPing::EPingKind::PlainGrpc, plainGrpcPingFactory},
-        { TCommandPing::EPingKind::GrpcProxy, grpcPingFactory},
-        { TCommandPing::EPingKind::PlainKqp, plainKqpPingFactory},
-        { TCommandPing::EPingKind::Select1, select1Factory},
-        { TCommandPing::EPingKind::SchemeCache, schemeCachePingFactory},
-        { TCommandPing::EPingKind::TxProxy, txProxyPingFactory},
+        { TCommandPing::EPingKind::PlainGrpc, plainGrpcPingFactory },
+        { TCommandPing::EPingKind::GrpcProxy, grpcPingFactory },
+        { TCommandPing::EPingKind::PlainKqp, plainKqpPingFactory },
+        { TCommandPing::EPingKind::Select1, select1Factory },
+        { TCommandPing::EPingKind::SchemeCache, schemeCachePingFactory },
+        { TCommandPing::EPingKind::TxProxy, txProxyPingFactory },
     };
 
     std::vector<TTaskPair> runTasks;
-    if (RunKind == TCommandPing::EPingKind::MaxPingKind) {
+    if (RunKind == TCommandPing::EPingKind::AllKinds) {
         runTasks = allTasks;
     } else {
         for (size_t i = 0; i < allTasks.size(); ++i) {

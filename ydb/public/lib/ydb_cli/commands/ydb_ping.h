@@ -29,7 +29,7 @@ public:
         Select1,
         SchemeCache,
         TxProxy,
-        MaxPingKind,
+        AllKinds,
     };
 
 public:

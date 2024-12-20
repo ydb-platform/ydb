@@ -76,7 +76,7 @@ std::vector<TString> TIndexInfo::GetColumnNames(const std::vector<ui32>& ids) co
 }
 
 std::vector<std::string> TIndexInfo::GetColumnSTLNames(const bool withSpecial) const {
-    const auto ids = GetColumnIds(withSpecial);
+    const TColumnIdsView ids = GetColumnIds(withSpecial);
     std::vector<std::string> out;
     out.reserve(ids.size());
     for (ui32 id : ids) {
@@ -457,7 +457,7 @@ std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> TIndexInfo::GetIndexMetaC
 }
 
 std::vector<ui32> TIndexInfo::GetEntityIds() const {
-    const auto columnIds = GetColumnIds(true);
+    const TColumnIdsView columnIds = GetColumnIds(true);
     std::vector<ui32> result(columnIds.begin(), columnIds.end());
     for (auto&& i : Indexes) {
         result.emplace_back(i.first);

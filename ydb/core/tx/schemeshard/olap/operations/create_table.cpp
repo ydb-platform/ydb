@@ -571,7 +571,6 @@ public:
         auto defaultFamily = mutableSchema->AddColumnFamilies();
         defaultFamily->SetName("default");
         defaultFamily->SetId(0);
-        defaultFamily->SetColumnCodec(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
 
         for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
             if (!schema.GetColumns(i).HasColumnFamilyName() || !schema.GetColumns(i).HasColumnFamilyId()) {

@@ -23,7 +23,7 @@ public:
 class TOlapColumnFamlilyAdd {
 private:
     YDB_READONLY_DEF(TString, Name);
-    YDB_READONLY_DEF(NArrow::NSerialization::TSerializerContainer, SerializerContainer);
+    YDB_READONLY_DEF(std::optional<NArrow::NSerialization::TSerializerContainer>, SerializerContainer);
 
 public:
     bool ParseFromRequest(const NKikimrSchemeOp::TFamilyDescription& columnFamily, IErrorCollector& errors);

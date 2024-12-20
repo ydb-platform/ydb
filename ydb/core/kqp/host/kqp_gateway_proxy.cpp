@@ -416,12 +416,19 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
             }
             familyDescription->SetColumnCodec(codec);
         } else {
-            code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Compression is not set for column family'" << family.Name << "'";
-            return false;
+            if (family.Name != "default") {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Compression is not set for non `default` column family '" << family.Name << "'";
+                return false;
+            }
         }
 
         if (family.CompressionLevel.Defined()) {
+            if (!family.Compression.Defined()) {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Compression is not set for column family '" << family.Name << "', but compression level is set";
+                return false;
+            }
             familyDescription->SetColumnCodecLevel(family.CompressionLevel.GetRef());
         }
     }

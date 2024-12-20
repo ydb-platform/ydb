@@ -10,4 +10,4 @@ bool SupportsCompressionLevel(const arrow::Compression::type compression, const 
 
 std::optional<int> MinimumCompressionLevel(const arrow::Compression::type compression);
 std::optional<int> MaximumCompressionLevel(const arrow::Compression::type compression);
-}
+}  // namespace NKikimr::NArrow

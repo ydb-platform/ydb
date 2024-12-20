@@ -20,6 +20,10 @@ bool SupportsCompressionLevel(const arrow::Compression::type compression, const 
     return true;
 }
 
+bool SupportsCompressionLevel(const NKikimrSchemeOp::EColumnCodec compression, const i32 compressionLevel) {
+    return SupportsCompressionLevel(CompressionFromProto(compression).value(), compressionLevel);
+}
+
 std::optional<int> MinimumCompressionLevel(const arrow::Compression::type compression) {
     if (!SupportsCompressionLevel(compression)) {
         return {};
@@ -32,4 +36,4 @@ std::optional<int> MaximumCompressionLevel(const arrow::Compression::type compre
     }
     return NArrow::TStatusValidator::GetValid(arrow::util::Codec::MaximumCompressionLevel(compression));
 }
-}
+}  // namespace NKikimr::NArrow

@@ -1,7 +1,10 @@
 #pragma once
 
 #include "abstract.h"
+#include "parsing.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -50,10 +53,23 @@ protected:
 
     virtual TConclusionStatus DoDeserializeFromRequest(NYql::TFeaturesExtractor& features) override;
 
+    static arrow::Compression::type GetDefaultCompressionType() {
+        return CompressionFromProto(AppData()->ColumnShardConfig.GetDefaultCompression()).value();
+    }
+
+    static std::shared_ptr<arrow::util::Codec> GetDefaultCodec() {
+        arrow::Compression::type codec = GetDefaultCompressionType();
+        if (codec == arrow::Compression::type::ZSTD) {
+            i32 codecLevel = AppData()->ColumnShardConfig.GetDefaultCompressionLevel();
+            return NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(codec, codecLevel));
+        }
+        return NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(codec));
+    }
+
     static arrow::ipc::IpcOptions BuildDefaultOptions() {
         arrow::ipc::IpcWriteOptions options;
         options.use_threads = false;
-        options.codec = *arrow::util::Codec::Create(arrow::Compression::LZ4_FRAME);
+        options.codec = GetDefaultCodec();
         return options;
     }
 

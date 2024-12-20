@@ -1,6 +1,7 @@
 * Replaced option `--query-settings` by `--query-prefix` one in `ydb workload <workload> run`.
 * Added new options to `ydb workload topic`: --tx-commit-interval and --tx-commit-messages, allowing you to specify commit interval either in milliseconds or in number of messages written. 
 Also now you can load test YDB topics, using wide transactions that span over all partitions in the topic. This works both in write and in end-to-end workload scenarios. 
+* Backup/restore of changefeeds has been added to `ydb tools dump`/`ydb tools restore`. As a result, there are changes in the backup file structure: for tables with changefeeds, a subdirectory is created for each changefeed, named after the changefeed. This subdirectory contains two files: `changefeed_description.pb`, which contains the changefeed description, and `topic_description.pb`, which contains information about the underlying topic.
 
 ## 2.18.0 ##
 

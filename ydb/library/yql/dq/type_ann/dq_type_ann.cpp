@@ -520,6 +520,11 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
                    if (!EnsureTupleSize(joinAlgoOption, 2, ctx)) {
                        return nullptr;
                    }
+                   auto& value = *joinAlgoOption.Child(TCoNameValueTuple::idx_Value);
+                   if (!TryFromString<ui64>(value.Content())) {
+                       ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder() << "DqJoin: Expected integer, but got: " << value.Content()));
+                       return nullptr;
+                   }
                    continue;
                 }
             }

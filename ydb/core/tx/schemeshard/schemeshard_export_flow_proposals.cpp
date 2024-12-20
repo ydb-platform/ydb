@@ -71,7 +71,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
     return propose;
 }
 
-static NKikimrSchemeOp::TPathDescription GetTableDescription(TSchemeShard* ss, const TPathId& pathId) {
+static NKikimrSchemeOp::TPathDescription GetDescription(TSchemeShard* ss, const TPathId& pathId) {
     NKikimrSchemeOp::TDescribeOptions opts;
     opts.SetReturnPartitioningInfo(false);
     opts.SetReturnPartitionConfig(true);
@@ -145,11 +145,24 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     const TPath sourcePath = TPath::Init(exportInfo->Items[itemIdx].SourcePathId, ss);
     const TPath exportItemPath = exportPath.Child(ToString(itemIdx));
     if (sourcePath.IsResolved() && exportItemPath.IsResolved()) {
-        auto sourceDescription = GetTableDescription(ss, sourcePath.Base()->PathId);
+        auto sourceDescription = GetDescription(ss, sourcePath.Base()->PathId);
         if (sourceDescription.HasTable()) {
             FillSetValForSequences(
                 ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
             FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
+        }
+        for (const auto& child : sourceDescription.GetChildren()) {
+            if (child.GetPathType() == NKikimrSchemeOp::EPathTypeCdcStream) {
+                TPathId pathId = {child.GetSchemeshardId(), child.GetPathId()};
+                auto cdcStreamSourceDescription = GetDescription(ss, pathId);
+                for (const auto& childCdcStream : cdcStreamSourceDescription.GetChildren()) {
+                    if (childCdcStream.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
+                        TPathId pathId = {childCdcStream.GetSchemeshardId(), childCdcStream.GetPathId()};
+                        auto persQueueGroupDescription = GetDescription(ss, pathId);
+                        task.MutablePersQueue()->add_pers_queue(persQueueGroupDescription);
+                    }
+                }
+            }
         }
         task.MutableTable()->CopyFrom(sourceDescription);
     }

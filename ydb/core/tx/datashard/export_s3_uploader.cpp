@@ -661,6 +661,7 @@ public:
             const TActorId& dataShard, ui64 txId,
             const NKikimrSchemeOp::TBackupTask& task,
             TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
+            TVector<NKikimrSchemeOp::TPersQueueGroupDescription> persQueues,
             TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
             TString&& metadata)
         : ExternalStorageConfig(new TS3ExternalStorageConfig(task.GetS3Settings()))
@@ -672,6 +673,7 @@ public:
         , DataShard(dataShard)
         , TxId(txId)
         , Scheme(std::move(scheme))
+        , PersQueues(std::move(persQueues))
         , Metadata(std::move(metadata))
         , Permissions(std::move(permissions))
         , Retries(task.GetNumberOfRetries())
@@ -775,6 +777,7 @@ private:
     const TActorId DataShard;
     const ui64 TxId;
     const TMaybe<Ydb::Table::CreateTableRequest> Scheme;
+    const TVector<NKikimrSchemeOp::TPersQueueGroupDescription> PersQueues;
     const TString Metadata;
     const TMaybe<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
 
@@ -812,6 +815,8 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         ? GenYdbScheme(Columns, Task.GetTable())
         : Nothing();
 
+    auto persQueues = Task.GetPersQueues();
+
     auto permissions = (Task.GetShardNum() == 0)
         ? GenYdbPermissions(Task.GetTable())
         : Nothing();
@@ -827,7 +832,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     metadata.AddFullBackup(backup);
 
     return new TS3Uploader(
-        dataShard, txId, Task, std::move(scheme), std::move(permissions), metadata.Serialize());
+        dataShard, txId, Task, std::move(scheme), std::move(persQueues), std::move(permissions), metadata.Serialize());
 }
 
 } // NDataShard

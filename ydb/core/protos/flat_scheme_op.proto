@@ -1250,6 +1250,8 @@ message TBackupTask {
     optional uint64 SnapshotStep = 14;
     optional uint64 SnapshotTxId = 15;
     optional bool EnableChecksums = 16; // currently available for s3
+
+    repeated TPathDescription ChangefeedUnderlyingTopics = 17; // for further restore
 }
 
 message TRestoreTask {

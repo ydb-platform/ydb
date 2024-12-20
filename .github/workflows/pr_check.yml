@@ -246,7 +246,10 @@ jobs:
           (
             (matrix.build_preset == 'relwithdebinfo') || 
             (matrix.build_preset == 'release-asan') || 
-            contains(steps.set_labels.outputs.labels, 'run-sanitizer-tests')
+            (contains(steps.set_labels.outputs.labels, 'run-sanitizer-tests') &&
+            !contains(steps.set_labels.outputs.labels, 'run-tsan-tests')
+            && !contains(steps.set_labels.outputs.labels, 'run-msan-tests')
+            )
           ) || 
           (
             (matrix.build_preset == 'release-asan') || 

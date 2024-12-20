@@ -129,8 +129,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             indexLevelTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
             indexPostingTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
         }
-        std::string_view embeddingName = indexDesc.GetKeyColumnNames()[0];
-        result.push_back(createImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc, embeddingName)));
+        result.push_back(createImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
         result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc)));
         // TODO Maybe better to use partition from main table
         // This tables are temporary and handled differently in apply_build_index

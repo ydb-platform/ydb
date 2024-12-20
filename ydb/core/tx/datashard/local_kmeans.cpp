@@ -148,7 +148,7 @@ public:
             (*TargetTypes)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
             (*TargetTypes)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
             type.set_type_id(Ydb::Type::STRING);
-            (*TargetTypes)[2] = {embedding, type};
+            (*TargetTypes)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
         }
         NextTypes = MakeUploadTypes(table, UploadState, embedding, data);
     }

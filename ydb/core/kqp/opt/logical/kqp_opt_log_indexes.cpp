@@ -419,7 +419,7 @@ TExprBase DoRewriteTopSortOverKMeansTree(
     auto mainTable = BuildTableMeta(*tableDesc.Metadata, pos, ctx);
 
     auto levelColumns = BuildKeyColumnsList(*levelTableDesc, pos, ctx,
-            std::initializer_list<std::string_view>{NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, indexDesc.KeyColumns[0]});
+            std::initializer_list<std::string_view>{NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn});
     auto postingColumns = BuildKeyColumnsList(*postingTableDesc, pos, ctx, tableDesc.Metadata->KeyColumnNames);
     const auto& mainColumns = read.Columns();
 
@@ -477,21 +477,40 @@ TExprBase DoRewriteTopSortOverKMeansTree(
             ctx.NewArguments(pos, std::move(newArgNodes)),
             ctx.ReplaceNodes(TExprNode::TListType{lambdaBody.Ptr()}, replaces))}
         .Cast<TCoLambda>();
-
+        auto args = newLambda.Args().Ptr();
+        replaces.clear();
         auto flatMap = newLambda.Body().Maybe<TCoFlatMap>();
         if (!flatMap) {
-            return newLambda.Ptr();
+            auto apply = newLambda.Body().Cast<TCoApply>();
+            for (auto arg : apply.Args()) {
+                auto oldMember = arg.Maybe<TCoMember>();
+                if (oldMember && oldMember.Cast().Name().Value() == indexDesc.KeyColumns[0]) {
+                    auto newMember = Build<TCoMember>(ctx, pos)
+                        .Name().Build(NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn)
+                        .Struct(oldMember.Cast().Struct())
+                    .Done();
+                    replaces.emplace(oldMember.Raw(), newMember.Ptr());
+                    break;
+                }
+            }
+            return ctx.NewLambda(pos,
+                std::move(args),
+                ctx.ReplaceNodes(TExprNode::TListType{apply.Ptr()}, replaces));
         }
         auto apply = flatMap.Cast().Lambda().Body().Cast<TCoApply>();
-        replaces.clear();
         for (auto arg : apply.Args()) {
             if (arg.Ref().Type() == NYql::TExprNode::Argument) {
-                replaces.emplace(arg.Raw(), flatMap.Cast().Input().Ptr());
+                auto oldMember = flatMap.Cast().Input().Cast<TCoMember>();
+                auto newMember = Build<TCoMember>(ctx, pos)
+                    .Name().Build(NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn)
+                    .Struct(oldMember.Struct())
+                .Done();
+                replaces.emplace(arg.Raw(), newMember.Ptr());
                 break;
             }
         }
         return ctx.NewLambda(pos,
-            newLambda.Args().Ptr(),
+            std::move(args),
             ctx.ReplaceNodes(TExprNode::TListType{apply.Ptr()}, replaces));
     }();
 

@@ -285,8 +285,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 userPostingDesc = indexDescription.GetIndexImplTableDescriptions(1);
             }
             // TODO(mbkkt) It's dirty hack to allow us to don't rewrite KeySelectorLambda
-            std::string_view embeddingName = indexDescription.GetKeyColumnNames()[0];
-            result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc, embeddingName)));
+            result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc)));
             result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), implTableColumns, userPostingDesc)));
         } else {
             NKikimrSchemeOp::TTableDescription userIndexDesc;

@@ -106,9 +106,9 @@ private:
             }
             Y_UNUSED(TDuration::TryParse(Settings.GetSource().GetReconnectPeriod(), ReconnectPeriod));
             auto queryGroup = Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
-            auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
-            FilteredDataRate = topicGroup->GetCounter("FilteredDataRate", true);
-            RestartSessionByOffsetsByQuery = counters->GetCounter("RestartSessionByOffsetsByQuery", true);
+            auto readSubGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
+            FilteredDataRate = readSubGroup->GetCounter("FilteredDataRate", true);
+            RestartSessionByOffsetsByQuery = readSubGroup->GetCounter("RestartSessionByOffsetsByQuery", true);
         }
 
         ~TClientsInfo() {

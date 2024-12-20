@@ -54,7 +54,7 @@ class TFixture : public NUnitTest::TBaseFixture {
 
 public:
     TFixture()
-    : Runtime(1) {}
+    : Runtime(2) {}
 
     void SetUp(NUnitTest::TTestContext&) override {
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
@@ -78,6 +78,7 @@ public:
         EdgeActor = Runtime.AllocateEdgeActor();
         ReadActorId1 = Runtime.AllocateEdgeActor();
         ReadActorId2 = Runtime.AllocateEdgeActor();
+        ReadActorId3 = Runtime.AllocateEdgeActor(1);
         TestActorFactory = MakeIntrusive<TTestActorFactory>(Runtime);
         
         NYql::TPqGatewayServices pqServices(
@@ -133,13 +134,18 @@ public:
             Nothing(),  // readOffset,
             0,          // StartingMessageTimestamp;
             "QueryId");
+        event->Record.MutableTransportMeta()->SetSeqNo(1);
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event, 0, generation));
     }
 
-    void MockStopSession(const NYql::NPq::NProto::TDqPqTopicSource& source, ui64 partitionId, TActorId readActorId) {
+    void MockStopSession(const NYql::NPq::NProto::TDqPqTopicSource& source, ui64 partitionId, TActorId readActorId,
+        NFq::NRowDispatcherProto::TEvStopSession::StopReason reason = NFq::NRowDispatcherProto::TEvStopSession::COMMON) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
         event->Record.MutableSource()->CopyFrom(source);
         event->Record.SetPartitionId(partitionId);
+        event->Record.SetReason(reason);
+        event->Record.MutableTransportMeta()->SetSeqNo(1);
+        //meta->SetSeqNo(1);
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, 1));
     }
 
@@ -239,6 +245,7 @@ public:
     NActors::TActorId EdgeActor;
     NActors::TActorId ReadActorId1;
     NActors::TActorId ReadActorId2;
+    NActors::TActorId ReadActorId3;
     TIntrusivePtr<TTestActorFactory> TestActorFactory;
 
     NYql::NPq::NProto::TDqPqTopicSource Source1 = BuildPqTopicSourceSettings("Endpoint1", "Database1", "topic", "connection_id1");
@@ -421,6 +428,19 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         MockStopSession(Source1Connection2, PartitionId0, ReadActorId2);
         ExpectStopSession(session2, PartitionId0);
     }
+
+    // TODO: not working GrabEdgeEvent()
+    // Y_UNIT_TEST_F(StopSessionWithWrongSessionFlag, TFixture) {
+    //     MockAddSession(Source1, PartitionId0, ReadActorId3);
+    //     auto topicSessionId = ExpectRegisterTopicSession();
+    //     ExpectStartSessionAck(ReadActorId3);
+    //     ExpectStartSession(topicSessionId);
+
+    //     ProcessData(ReadActorId3, PartitionId0, topicSessionId);
+
+    //     MockStopSession(Source1, PartitionId0, ReadActorId3, NFq::NRowDispatcherProto::TEvStopSession::WRONG_SESSION);
+    //     ExpectStopSession(topicSessionId, PartitionId0);
+    // }
 }
 
 }

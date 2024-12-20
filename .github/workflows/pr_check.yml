@@ -225,7 +225,7 @@ jobs:
             build_target: "ydb/"
             test_size: small,medium
           - build_preset: release-tsan
-            threads_count: 10
+            threads_count: 20
             timeout: 600
             build_target: "ydb/"
             test_size: small,medium
@@ -242,7 +242,11 @@ jobs:
       with:
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
     - name: Build and test
-      if: contains(github.event.pull_request.labels.*.name, 'run-sanitizer-tests') || matrix.build_preset == 'relwithdebinfo' || matrix.build_preset == 'release-asan'
+      if: |
+        ((matrix.build_preset == 'relwithdebinfo') || (matrix.build_preset == 'release-asan') || contains(steps.set_labels.outputs.labels, 'run-sanitizer-tests')) ||
+        (matrix.build_preset == 'release-asan' && contains(steps.set_labels.outputs.labels, 'run_asan_tests')) ||
+        (matrix.build_preset == 'release-msan' && contains(steps.set_labels.outputs.labels, 'run_msan_tests')) ||
+        (matrix.build_preset == 'release-tsan' && contains(steps.set_labels.outputs.labels, 'run_tsan_tests'))
       uses: ./.github/actions/build_and_test_ya
       with:
         build_preset: ${{ matrix.build_preset }}
@@ -257,30 +261,6 @@ jobs:
           secrets.TESTMO_TOKEN2, secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD ) }}
         vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","TESTMO_URL":"{3}","TESTMO_PROJECT_ID":"{4}"}}',
           vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.TESTMO_URL, vars.TESTMO_PROJECT_ID ) }}
-    - name: cleanup-test-label
-      uses: actions/github-script@v7
-      with:
-        script: |
-          let labelsToRemove = ['run-sanitizer-tests'];
-          const prNumber = context.payload.pull_request.number;
-          const prLabels = new Set(context.payload.pull_request.labels.map(l => l.name));
-          for await (const label of labelsToRemove.filter(l => prLabels.has(l))) {
-            core.info(`remove label=${label} for pr=${prNumber}`);
-            try {
-              const result = await github.rest.issues.removeLabel({
-                ...context.repo,
-                issue_number: prNumber,
-                name: label
-              });
-            } catch(error) {
-              // ignore the 404 error that arises
-              // when the label did not exist for the
-              // organization member
-              if (error.status && error.status != 404) {
-                throw error;
-              }
-            }
-          }
   update_integrated_status:
     runs-on: ubuntu-latest
     needs: build_and_test

@@ -72,7 +72,8 @@ class YdbCliHelper:
                      timeout: float,
                      check_canonical: CheckCanonicalPolicy,
                      query_syntax: str,
-                     scale: Optional[int]):
+                     scale: Optional[int],
+                     query_prefix: Optional[str]):
             def _get_output_path(ext: str) -> str:
                 return yatest.common.test_output_path(f'q{query_num}.{ext}')
 
@@ -85,6 +86,7 @@ class YdbCliHelper:
             self.check_canonical = check_canonical
             self.query_syntax = query_syntax
             self.scale = scale
+            self.query_prefix = query_prefix
             self._nodes_info: dict[str, dict[str, int]] = {}
             self._plan_path = _get_output_path('plan')
             self._query_output_path = _get_output_path('out')
@@ -210,9 +212,8 @@ class YdbCliHelper:
                 '--global-timeout', f'{self.timeout}s',
                 '--verbose'
             ]
-            query_preffix = get_external_param('query-prefix', '')
-            if query_preffix:
-                cmd += ['--query-settings', query_preffix]
+            if self.query_prefix:
+                cmd += ['--query-prefix', self.query_prefix]
             if self.check_canonical != CheckCanonicalPolicy.NO:
                 cmd.append('--check-canonical')
             if self.query_syntax:
@@ -248,7 +249,7 @@ class YdbCliHelper:
     @staticmethod
     def workload_run(workload_type: WorkloadType, path: str, query_num: int, iterations: int = 5,
                      timeout: float = 100., check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.NO, query_syntax: str = '',
-                     scale: Optional[int] = None) -> YdbCliHelper.WorkloadRunResult:
+                     scale: Optional[int] = None, query_prefix=None) -> YdbCliHelper.WorkloadRunResult:
         return YdbCliHelper.WorkloadProcessor(
             workload_type,
             path,
@@ -257,5 +258,6 @@ class YdbCliHelper:
             timeout,
             check_canonical,
             query_syntax,
-            scale
+            scale,
+            query_prefix=query_prefix
         ).process()

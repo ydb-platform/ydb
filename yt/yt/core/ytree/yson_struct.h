@@ -109,7 +109,7 @@ public:
 
     void WriteSchema(NYson::IYsonConsumer* consumer) const;
 
-    // always returns |true| for itself
+    // Always returns |true| for itself
     // else always returns |false| if one of the fields
     // is not equality comparable.
     // See templated operator== for explanation why it was not

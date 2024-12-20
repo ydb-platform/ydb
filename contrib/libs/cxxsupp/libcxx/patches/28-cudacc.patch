@@ -1,15 +1,15 @@
 diff --git a/include/__config b/include/__config
-index aac112a..a067add 100644
+index c4027b8..e9c86c8 100644
 --- a/include/__config
 +++ b/include/__config
 @@ -1204,12 +1204,21 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
  #    define _LIBCPP_CONSTINIT
  #  endif
  
-+#if defined(__CUDACC__) && defined(__noinline__)
-+#  pragma push_macro("__noinline__")
-+#  define __noinline__ __noinline__
-+#endif
++#  if defined(__CUDACC__) && defined(__noinline__)
++#    pragma push_macro("__noinline__")
++#    define __noinline__ __noinline__
++#  endif
 +
  #  if __has_attribute(__noinline__)
  #    define _LIBCPP_NOINLINE __attribute__((__noinline__))
@@ -17,26 +17,26 @@ index aac112a..a067add 100644
  #    define _LIBCPP_NOINLINE
  #  endif
  
-+#if defined(__CUDACC__) && defined(__noinline__)
-+#  pragma pop_macro("__noinline__")
-+#endif
++#  if defined(__CUDACC__) && defined(__noinline__)
++#    pragma pop_macro("__noinline__")
++#  endif
 +
  // We often repeat things just for handling wide characters in the library.
  // When wide characters are disabled, it can be useful to have a quick way of
  // disabling it without having to resort to #if-#endif, which has a larger
 diff --git a/include/__iterator/reverse_iterator.h b/include/__iterator/reverse_iterator.h
-index 552699b..05f3e74 100644
+index 79b48bc..b7fe25e 100644
 --- a/include/__iterator/reverse_iterator.h
 +++ b/include/__iterator/reverse_iterator.h
-@@ -144,7 +144,7 @@ public:
-     _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX17
-     reference operator*() const {_Iter __tmp = current; return *--__tmp;}
+@@ -132,7 +132,7 @@ public:
+     return *--__tmp;
+   }
  
 -#if _LIBCPP_STD_VER >= 20
 +#if _LIBCPP_STD_VER >= 20 && !defined(__CUDACC__)
-     _LIBCPP_HIDE_FROM_ABI
-     constexpr pointer operator->() const
-       requires is_pointer_v<_Iter> || requires(const _Iter __i) { __i.operator->(); }
+   _LIBCPP_HIDE_FROM_ABI constexpr pointer operator->() const
+     requires is_pointer_v<_Iter> || requires(const _Iter __i) { __i.operator->(); }
+   {
 diff --git a/include/__iterator/segmented_iterator.h b/include/__iterator/segmented_iterator.h
 index f3cd1e5..c0a77ef 100644
 --- a/include/__iterator/segmented_iterator.h
@@ -53,7 +53,7 @@ index f3cd1e5..c0a77ef 100644
  template <class _Iterator>
  using __is_segmented_iterator = __has_specialization<__segmented_iterator_traits<_Iterator> >;
 diff --git a/include/__math/traits.h b/include/__math/traits.h
-index da585af..bc68e78 100644
+index da585af..b271b8f 100644
 --- a/include/__math/traits.h
 +++ b/include/__math/traits.h
 @@ -67,7 +67,7 @@ _LIBCPP_NODISCARD_EXT _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool i
@@ -61,7 +61,7 @@ index da585af..bc68e78 100644
  }
  
 -#ifdef _LIBCPP_PREFERRED_OVERLOAD
-+#ifdef _LIBCPP_PREFERRED_OVERLOAD  && !defined(__CUDACC__)
++#ifdef _LIBCPP_PREFERRED_OVERLOAD && !defined(__CUDACC__)
  _LIBCPP_NODISCARD_EXT inline _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool isinf(float __x) _NOEXCEPT {
    return __builtin_isinf(__x);
  }
@@ -75,49 +75,54 @@ index da585af..bc68e78 100644
    return __builtin_isnan(__x);
  }
 diff --git a/include/complex b/include/complex
-index 44579b1..6012025 100644
+index 02b9db8..5f62c04 100644
 --- a/include/complex
 +++ b/include/complex
-@@ -1524,7 +1524,7 @@ inline namespace literals
-         return { 0.0, static_cast<double>(__im) };
-     }
+@@ -1370,6 +1370,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<double> operator""i(unsigned long
+   return {0.0, static_cast<double>(__im)};
+ }
  
--
-+#if !defined(__CUDACC__)
-     _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double __im)
-     {
-         return { 0.0f, static_cast<float>(__im) };
-@@ -1534,6 +1534,7 @@ inline namespace literals
-     {
-         return { 0.0f, static_cast<float>(__im) };
-     }
-+#endif
-   } // namespace complex_literals
++#  if !defined(__CUDACC__)
+ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double __im) {
+   return {0.0f, static_cast<float>(__im)};
+ }
+@@ -1377,6 +1378,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double _
+ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(unsigned long long __im) {
+   return {0.0f, static_cast<float>(__im)};
+ }
++#  endif
+ } // namespace complex_literals
  } // namespace literals
  #endif
 diff --git a/include/tuple b/include/tuple
-index 194138f..9d0e079 100644
+index 8c954fc..3126b88 100644
 --- a/include/tuple
 +++ b/include/tuple
-@@ -312,7 +312,7 @@ class __tuple_leaf
+@@ -307,7 +307,7 @@ class __tuple_leaf {
  
-     template <class _Tp>
-     static _LIBCPP_HIDE_FROM_ABI constexpr bool __can_bind_reference() {
--#if __has_keyword(__reference_binds_to_temporary)
-+#if __has_keyword(__reference_binds_to_temporary) && !defined(__CUDACC__)
-       return !__reference_binds_to_temporary(_Hp, _Tp);
- #else
-       return true;
-@@ -674,6 +674,12 @@ _LIBCPP_GCC_DIAGNOSTIC_IGNORED("-Wc++20-extensions")
-         _And<
-             _BoolConstant<sizeof...(_Up) == sizeof...(_Tp)>,
-             _EnableUTypesCtor<_Up...>
+   template <class _Tp>
+   static _LIBCPP_HIDE_FROM_ABI constexpr bool __can_bind_reference() {
+-#  if __has_keyword(__reference_binds_to_temporary)
++#  if __has_keyword(__reference_binds_to_temporary) && !defined(__CUDACC__)
+     return !__reference_binds_to_temporary(_Hp, _Tp);
+ #  else
+     return true;
+@@ -613,8 +613,16 @@ public:
+               is_constructible<_Tp, _Up>... > {};
+ 
+   template <class... _Up,
+-            __enable_if_t< _And< _BoolConstant<sizeof...(_Up) == sizeof...(_Tp)>, _EnableUTypesCtor<_Up...> >::value,
+-                           int> = 0>
++      __enable_if_t< _And< _BoolConstant<sizeof...(_Up) == sizeof...(_Tp)>,
++                           _EnableUTypesCtor<_Up...>
 +// nvcc 12.2 cannot choose between tuple(const T& ... t) and tuple(U&&... u)
 +// so we have to added an explicit requires in enable_if
-+#ifdef __CUDACC__
-+            ,
-+            _Not<_And<is_copy_constructible<_Tp>..., _Lazy<_And, is_convertible<_Up, const _Tp&>...>> >
-+#endif
-         >::value
-     , int> = 0>
-     _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14
++#  ifdef __CUDACC__
++                           ,
++                           _Not<_And<is_copy_constructible<_Tp>..., _Lazy<_And, is_convertible<_Up, const _Tp&>...>> >
++#  endif
++                           >::value,
++                     int> = 0>
+   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 explicit(_Not<_Lazy<_And, is_convertible<_Up, _Tp>...> >::value)
+       tuple(_Up&&... __u) _NOEXCEPT_((_And<is_nothrow_constructible<_Tp, _Up>...>::value))
+       : __base_(typename __make_tuple_indices<sizeof...(_Up)>::type(),

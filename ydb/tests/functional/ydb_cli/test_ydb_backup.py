@@ -65,6 +65,7 @@ def sort_permissions(permissions):
         permission.permission_names = sorted(permission.permission_names)
     return sorted(permissions, key=lambda p: p.subject)
 
+
 def create_table_with_data(session, path, not_null=False):
     path = "/Root/" + path
     session.create_table(
@@ -270,8 +271,8 @@ class BaseTestBackupInFiles(object):
             for child in self.driver.scheme_client.list_directory(path).children
             if not is_system_object(child)
         ]
-    
-    def create_user(self, user, password = "password"):
+
+    def create_user(self, user, password="password"):
         yatest.common.execute(
             [
                 backup_bin(),

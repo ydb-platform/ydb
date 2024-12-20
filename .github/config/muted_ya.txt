@@ -81,9 +81,6 @@ ydb/public/sdk/cpp/client/ydb_topic/ut [*/*]+chunk+chunk
 ydb/services/datastreams/ut DataStreams.TestPutRecordsCornerCases
 ydb/services/keyvalue/ut sole chunk chunk
 ydb/services/keyvalue/ut sole+chunk+chunk
-ydb/services/persqueue_v1/ut TPersQueueTest.DirectReadNotCached
-ydb/services/persqueue_v1/ut [*/*] chunk chunk
-ydb/services/persqueue_v1/ut [*/*]+chunk+chunk
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync1
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync10
 ydb/services/ydb/sdk_sessions_ut [*/*] chunk chunk

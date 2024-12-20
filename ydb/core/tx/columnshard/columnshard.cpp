@@ -254,7 +254,6 @@ void TColumnShard::Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorCon
     }
 }
 
-
 void TColumnShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext&) {
     const auto* msg = ev->Get();
     Y_ABORT_UNLESS(msg->TabletId == TabletID());

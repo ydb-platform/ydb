@@ -83,8 +83,8 @@ TConclusionStatus TTierConfig::DeserializeFromProto(const NKikimrSchemeOp::TExte
             }
         }
 
-        if (ui16 port = url.GetPort()) {
-            ProtoConfig.SetEndpoint(TStringBuilder() << endpoint << ":" << port);
+        if (url.GetField(NUri::TField::FieldPort)) {
+            ProtoConfig.SetEndpoint(TStringBuilder() << endpoint << ":" << url.GetPort());
         } else {
             ProtoConfig.SetEndpoint(TString(endpoint));
         }

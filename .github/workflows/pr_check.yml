@@ -242,22 +242,16 @@ jobs:
       with:
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
     - name: Build and test
+      # 1-st block - release-tsan if exist label run-tsan-tests or run-sanitizer-tests
+      # 2-st block - release-msan if exist label run-msan-tests or run-sanitizer-tests
       if: |
-          (
-            (matrix.build_preset == 'relwithdebinfo') || 
-            (matrix.build_preset == 'release-asan') || 
-            (contains(steps.set_labels.outputs.labels, 'run-sanitizer-tests') &&
-            !contains(steps.set_labels.outputs.labels, 'run-tsan-tests')
-            && !contains(steps.set_labels.outputs.labels, 'run-msan-tests')
-            )
-          ) || 
           (
             (matrix.build_preset == 'release-asan') || 
             (matrix.build_preset == 'relwithdebinfo') || 
             (
               (matrix.build_preset == 'release-tsan' && 
-              contains(steps.set_labels.outputs.labels, 'run-tsan-tests')) || 
-              contains(steps.set_labels.outputs.labels, 'run-sanitizer-tests')
+              contains(github.event.pull_request.labels.*.name, 'run-tsan-tests')) || 
+              contains(github.event.pull_request.labels.*.name, 'run-sanitizer-tests')
             )
           ) || 
           (
@@ -265,8 +259,8 @@ jobs:
             (matrix.build_preset == 'relwithdebinfo') || 
             (
               (matrix.build_preset == 'release-msan' && 
-              contains(steps.set_labels.outputs.labels, 'run-msan-tests')) || 
-              contains(steps.set_labels.outputs.labels, 'run-sanitizer-tests')
+              contains(github.event.pull_request.labels.*.name, 'run-msan-tests')) || 
+              contains(github.event.pull_request.labels.*.name, 'run-sanitizer-tests')
             )
           )
       uses: ./.github/actions/build_and_test_ya

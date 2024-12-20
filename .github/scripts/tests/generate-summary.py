@@ -292,7 +292,7 @@ def render_testlist_html(rows, fn, build_preset):
     elif build_preset == 'release-tsan':   
         buid_preset_params = '--build "release" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'
     elif build_preset == 'relwithdebinfo':
-       buid_preset_params = '--build "relwithdebinfo"'
+        buid_preset_params = '--build "relwithdebinfo"'
         
     content = env.get_template("summary.html").render(
         status_order=status_order,

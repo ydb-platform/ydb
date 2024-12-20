@@ -131,13 +131,13 @@ namespace NKikimr::NKqp {
 using namespace NYql::NDq;
 using namespace NYql::NDqProto;
 
-IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId,
-    TMaybe<NKikimrDataEvents::ELockMode> lockMode, TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
+IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId,
+    TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NYql::NDq::TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
     TIntrusivePtr<NActors::TProtoArenaHolder> arena, TComputeActorSchedulingOptions schedulingOptions,
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode)
 {
-    return new NScanPrivate::TKqpScanComputeActor(std::move(schedulingOptions), executerId, txId, lockTxId, lockNodeId, lockMode, task, std::move(asyncIoFactory),
+    return new NScanPrivate::TKqpScanComputeActor(std::move(schedulingOptions), executerId, txId, /*lockTxId, lockNodeId, lockMode,*/ task, std::move(asyncIoFactory),
         settings, memoryLimits, std::move(traceId), std::move(arena), mode);
 }
 

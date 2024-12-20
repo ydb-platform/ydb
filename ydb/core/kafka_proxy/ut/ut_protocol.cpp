@@ -312,6 +312,14 @@ std::vector<NTopic::TReadSessionEvent::TDataReceivedEvent> Read(std::shared_ptr<
     return result;
 }
 
+void AssertMessageAvaialbleThroughLogbrokerApiAndCommit(std::shared_ptr<NTopic::IReadSession> topicReader) {
+    auto responseFromLogbrokerApi = Read(topicReader);
+    UNIT_ASSERT_EQUAL(responseFromLogbrokerApi.size(), 1);
+
+    UNIT_ASSERT_EQUAL(responseFromLogbrokerApi[0].GetMessages().size(), 1);
+    responseFromLogbrokerApi[0].GetMessages()[0].Commit();
+}
+
 struct TTopicConfig {
     inline static const std::map<TString, TString> DummyMap;
 
@@ -740,6 +748,28 @@ public:
         Write(So, &header, &request);
     }
 
+    void AuthenticateToKafka() {
+    {
+            auto msg = ApiVersions();
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
+        }
+
+        {
+            auto msg = SaslHandshake();
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->Mechanisms.size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[0], "PLAIN");
+        }
+
+        {
+            auto msg = SaslAuthenticate("ouruser@/Root", "ourUserPassword");
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+    }
+
 protected:
     ui32 NextCorrelation() {
         return Correlation++;
@@ -771,6 +801,11 @@ private:
 };
 
 Y_UNIT_TEST_SUITE(KafkaProtocol) {
+    // this test imitates kafka producer behaviour: 
+    // 1. get api version, 
+    // 2. authenticate via sasl, 
+    // 3. acquire producer id, 
+    // 4. produce to topic several messages, read them and assert correct contents and metadata
     Y_UNIT_TEST(ProduceScenario) {
         TInsecureTestServer testServer("2");
 
@@ -804,6 +839,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
         }
 
+        // authenticate
         {
             auto msg = client.SaslHandshake();
 
@@ -818,12 +854,14 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         }
 
+        // acquire producer id and epoch
         {
             auto msg = client.InitProducerId();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         }
 
+        // send test message
         {
             TString key = "record-key";
             TString value = "record-value";
@@ -848,6 +886,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].ErrorCode,
                                      static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
+            // read message from topic to assert delivery
             {
                 std::vector<std::pair<TString, std::vector<i32>>> topics {{topicName, {0}}};
                 auto msg = client.Fetch(topics);
@@ -855,30 +894,35 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
                 auto record = msg->Responses[0].Partitions[0].Records->Records[0];
 
-                auto data = record.Value.value();
-                auto dataStr = TString(data.data(), data.size());
-                UNIT_ASSERT_VALUES_EQUAL(dataStr, value);
+                auto recordValue = record.Value.value();
+                auto recordValuesAsStr = TString(recordValue.data(), recordValue.size());
+                UNIT_ASSERT_VALUES_EQUAL(recordValuesAsStr, value);
 
-                auto headerKey = record.Headers[0].Key.value();
-                auto headerKeyStr = TString(headerKey.data(), headerKey.size());
-                UNIT_ASSERT_VALUES_EQUAL(dataStr, value);
+                auto readRecordKey = record.Key.value();
+                auto readRecordKeysAsStr = TString(readRecordKey.data(), readRecordKey.size());
+                UNIT_ASSERT_VALUES_EQUAL(readRecordKeysAsStr, key);
 
-                auto headerValue = record.Headers[0].Value.value();
-                auto headerValueStr = TString(headerValue.data(), headerValue.size());
-                UNIT_ASSERT_VALUES_EQUAL(dataStr, value);
+                auto readHeaderKey = record.Headers[0].Key.value();
+                auto readHeaderKeyStr = TString(readHeaderKey.data(), readHeaderKey.size());
+                UNIT_ASSERT_VALUES_EQUAL(readHeaderKeyStr, headerKey);
+
+                auto readHeaderValue = record.Headers[0].Value.value();
+                auto readHeaderValueStr = TString(readHeaderValue.data(), readHeaderValue.size());
+                UNIT_ASSERT_VALUES_EQUAL(readHeaderValueStr, headerValue);
 
             }
 
-            auto m = Read(topicReader);
-            UNIT_ASSERT_EQUAL(m.size(), 1);
+            // read by logbroker protocol
+            auto readMessages = Read(topicReader);
+            UNIT_ASSERT_EQUAL(readMessages.size(), 1);
 
-            UNIT_ASSERT_EQUAL(m[0].GetMessages().size(), 1);
-            auto& m0 = m[0].GetMessages()[0];
-            m0.Commit();
+            UNIT_ASSERT_EQUAL(readMessages[0].GetMessages().size(), 1);
+            auto& readMessage = readMessages[0].GetMessages()[0];
+            readMessage.Commit();
 
-            UNIT_ASSERT_STRINGS_EQUAL(m0.GetData(), value);
-            AssertMessageMeta(m0, "__key", key);
-            AssertMessageMeta(m0, headerKey, headerValue);
+            UNIT_ASSERT_STRINGS_EQUAL(readMessage.GetData(), value);
+            AssertMessageMeta(readMessage, "__key", key);
+            AssertMessageMeta(readMessage, headerKey, headerValue);
         }
 
         {
@@ -899,12 +943,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].ErrorCode,
                                      static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
-            auto m = Read(topicReader);
-            UNIT_ASSERT_EQUAL(m.size(), 1);
-
-            UNIT_ASSERT_EQUAL(m[0].GetMessages().size(), 1);
-            auto& m0 = m[0].GetMessages()[0];
-            m0.Commit();
+            AssertMessageAvaialbleThroughLogbrokerApiAndCommit(topicReader);
         }
 
         {
@@ -932,21 +971,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[1].ErrorCode,
                                      static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
-            {
-                auto m = Read(topicReader);
-                UNIT_ASSERT_EQUAL(m.size(), 1);
-
-                UNIT_ASSERT_EQUAL(m[0].GetMessages().size(), 1);
-                m[0].GetMessages()[0].Commit();
-            }
-
-            {
-                auto m = Read(topicReader);
-                UNIT_ASSERT_EQUAL(m.size(), 1);
-
-                UNIT_ASSERT_EQUAL(m[0].GetMessages().size(), 1);
-                m[0].GetMessages()[0].Commit();
-            }
+            AssertMessageAvaialbleThroughLogbrokerApiAndCommit(topicReader);
+            AssertMessageAvaialbleThroughLogbrokerApiAndCommit(topicReader);
         }
 
         {
@@ -1026,25 +1052,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         TTestClient client(testServer.Port);
 
-        {
-            auto msg = client.ApiVersions();
-
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
-        }
-
-        {
-            auto msg = client.SaslHandshake();
-
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->Mechanisms.size(), 1u);
-            UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[0], "PLAIN");
-        }
-
-        {
-            auto msg = client.SaslAuthenticate("ouruser@/Root", "ourUserPassword");
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-        }
+        client.AuthenticateToKafka();
 
         {
             // Check list offsets for empty topic
@@ -1211,7 +1219,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(dataStr, value);
             }
         }
-
+        
+        // create table and init cdc for it
         {
             NYdb::NTable::TTableClient tableClient(*testServer.Driver);
             tableClient.RetryOperationSync([&](TSession session)
@@ -1552,25 +1561,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         TTestClient client(testServer.Port);
 
-        {
-            auto msg = client.ApiVersions();
-
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
-        }
-
-        {
-            auto msg = client.SaslHandshake();
-
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->Mechanisms.size(), 1u);
-            UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[0], "PLAIN");
-        }
-
-        {
-            auto msg = client.SaslAuthenticate("ouruser@/Root", "ourUserPassword");
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-        }
+        client.AuthenticateToKafka();
 
         auto recordsCount = 5;
         {
@@ -1757,34 +1748,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
     Y_UNIT_TEST(CreateTopicsScenario) {
         TInsecureTestServer testServer("2");
 
-        // TString key = "record-key";
-        // TString value = "record-value";
-        // TString headerKey = "header-key";
-        // TString headerValue = "header-value";
-
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
 
         TTestClient client(testServer.Port);
 
-        {
-            auto msg = client.ApiVersions();
-
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
-        }
-
-        {
-            auto msg = client.SaslHandshake();
-
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->Mechanisms.size(), 1u);
-            UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[0], "PLAIN");
-        }
-
-        {
-            auto msg = client.SaslAuthenticate("ouruser@/Root", "ourUserPassword");
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-        }
+        client.AuthenticateToKafka();
 
         auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
         {
@@ -1998,6 +1966,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TString headerValue = "header-value";
 
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        // create two topics
         {
             auto result =
                 pqClient
@@ -2008,7 +1977,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
-
         {
             auto result =
                 pqClient
@@ -2022,25 +1990,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         TTestClient client(testServer.Port);
 
-        {
-            auto msg = client.ApiVersions();
-
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
-        }
-
-        {
-            auto msg = client.SaslHandshake();
-
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->Mechanisms.size(), 1u);
-            UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[0], "PLAIN");
-        }
-
-        {
-            auto msg = client.SaslAuthenticate("ouruser@/Root", "ourUserPassword");
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-        }
+        client.AuthenticateToKafka();
 
         auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
 
@@ -2158,25 +2108,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         TTestClient client(testServer.Port);
 
-        {
-            auto msg = client.ApiVersions();
-
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
-        }
-
-        {
-            auto msg = client.SaslHandshake();
-
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->Mechanisms.size(), 1u);
-            UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[0], "PLAIN");
-        }
-
-        {
-            auto msg = client.SaslAuthenticate("ouruser@/Root", "ourUserPassword");
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-        }
+        client.AuthenticateToKafka();
 
         auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
 

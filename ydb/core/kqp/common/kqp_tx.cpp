@@ -170,11 +170,6 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     if (!commitTx)
         return true;
 
-    // TODO: single shard signle read optimization + WO optimization
-    if (*txCtx.EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
-        return true;
-    }
-
     size_t readPhases = 0;
     bool hasEffects = false;
     bool hasStreamLookup = false;
@@ -217,26 +212,41 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 
     YQL_ENSURE(!hasSinkWrite || hasEffects);
 
-    // We don't want snapshot when there are effects at the moment,
-    // because it hurts performance when there are multiple single-shard
-    // reads and a single distributed commit. Taking snapshot costs
-    // similar to an additional distributed transaction, and it's very
-    // hard to predict when that happens, causing performance
-    // degradation.
-    if (hasEffects) {
-        return false;
-    }
-
     // We need snapshot for stream lookup, besause it's used for dependent reads
     if (hasStreamLookup) {
         return true;
     }
+
+    if (*txCtx.EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
+        if (hasEffects && readPhases == 0) {
+            // Don't need snapshot for WriteOnly transaction.
+            return false;
+        } else if (hasEffects) {
+            // Has reads & writes => need snapshot
+            return true;
+        }
+    } else {
+        YQL_ENSURE(txCtx.EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE);
+
+        // We don't want snapshot when there are effects at the moment,
+        // because it hurts performance when there are multiple single-shard
+        // reads and a single distributed commit. Taking snapshot costs
+        // similar to an additional distributed transaction, and it's very
+        // hard to predict when that happens, causing performance
+        // degradation.
+        if (hasEffects) {
+            return false;
+        }
+    }
+
+    YQL_ENSURE(!hasEffects && !hasStreamLookup && readPhases >= 1);
 
     // We need snapshot when there are multiple table read phases, most
     // likely it involves multiple tables and we would have to use a
     // distributed commit otherwise. Taking snapshot helps as avoid TLI
     // for read-only transactions, and costs less than a final distributed
     // commit.
+    // NOTE: In case of read from single shard, we won't take snapshot.
     return readPhases > 1;
 }
 

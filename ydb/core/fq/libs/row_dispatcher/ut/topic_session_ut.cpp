@@ -26,6 +26,105 @@ using namespace NYql::NDq;
 const ui64 TimeoutBeforeStartSessionSec = 3;
 const ui64 GrabTimeoutSec = 4 * TimeoutBeforeStartSessionSec;
 
+class TMockTopicReadSession : public NYdb::NTopic::IReadSession {
+
+    NThreading::TFuture<void> WaitEvent() override {
+        auto promise = NThreading::NewPromise<void>();
+        return promise.GetFuture();
+    }
+
+    TVector<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount, size_t maxByteSize) override {
+        return TVector<NYdb::NTopic::TReadSessionEvent::TEvent>{};
+    }
+
+    TVector<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvents(const NYdb::NTopic::TReadSessionGetEventSettings& settings) override {
+        return GetEvents(settings.Block_, settings.MaxEventsCount_, settings.MaxByteSize_);
+    }
+
+    TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvent(bool block, size_t maxByteSize) override {
+        return Nothing();
+    }
+
+    TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvent(const NYdb::NTopic::TReadSessionGetEventSettings& settings) override {
+        return Nothing();
+    }
+
+    bool Close(TDuration timeout = TDuration::Max()) override {return true;}
+    NYdb::NTopic::TReaderCounters::TPtr GetCounters() const override {return nullptr;}
+    TString GetSessionId() const override {return "fake";}
+};
+
+struct TMockTopicClient : public NYql::ITopicClient {
+
+    NYdb::TAsyncStatus CreateTopic(const TString& path, const NYdb::NTopic::TCreateTopicSettings& settings = {}) override {return NYdb::TAsyncStatus{};}
+    NYdb::TAsyncStatus AlterTopic(const TString& path, const NYdb::NTopic::TAlterTopicSettings& settings = {}) override {return NYdb::TAsyncStatus{};}
+    NYdb::TAsyncStatus DropTopic(const TString& path, const NYdb::NTopic::TDropTopicSettings& settings = {}) override {return NYdb::TAsyncStatus{};}
+    NYdb::NTopic::TAsyncDescribeTopicResult DescribeTopic(const TString& path, 
+        const NYdb::NTopic::TDescribeTopicSettings& settings = {}) override {return NYdb::NTopic::TAsyncDescribeTopicResult{};}
+
+    NYdb::NTopic::TAsyncDescribeConsumerResult DescribeConsumer(const TString& path, const TString& consumer, 
+        const NYdb::NTopic::TDescribeConsumerSettings& settings = {}) override {return NYdb::NTopic::TAsyncDescribeConsumerResult{};}
+
+    NYdb::NTopic::TAsyncDescribePartitionResult DescribePartition(const TString& path, i64 partitionId, 
+        const NYdb::NTopic::TDescribePartitionSettings& settings = {}) override {return NYdb::NTopic::TAsyncDescribePartitionResult{};}
+
+    std::shared_ptr<NYdb::NTopic::IReadSession> CreateReadSession(const NYdb::NTopic::TReadSessionSettings& settings) override {
+        return std::make_shared<TMockTopicReadSession>();
+    }
+
+    std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(
+        const NYdb::NTopic::TWriteSessionSettings& settings) override {
+            return nullptr;
+    }
+    std::shared_ptr<NYdb::NTopic::IWriteSession> CreateWriteSession(const NYdb::NTopic::TWriteSessionSettings& settings) override {
+        return nullptr;
+    }
+
+    NYdb::TAsyncStatus CommitOffset(const TString& path, ui64 partitionId, const TString& consumerName, ui64 offset,
+        const NYdb::NTopic::TCommitOffsetSettings& settings = {}) override {return NYdb::TAsyncStatus{};}
+};
+
+class TMockPqGateway : public NYql::IPqGateway {
+public:
+    ~TMockPqGateway() {}
+
+    NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override {
+        return NThreading::MakeFuture();
+    }
+    NThreading::TFuture<void> CloseSession(const TString& sessionId) override {
+        return NThreading::MakeFuture();
+    }
+
+    ::NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(
+        const TString& sessionId,
+        const TString& cluster,
+        const TString& database,
+        const TString& path,
+        const TString& token) override {
+            return NPq::NConfigurationManager::TAsyncDescribePathResult{};
+        }
+
+    NThreading::TFuture<TListStreams> ListStreams(
+        const TString& sessionId,
+        const TString& cluster,
+        const TString& database,
+        const TString& token,
+        ui32 limit,
+        const TString& exclusiveStartStreamName = {}) override {
+             return NThreading::TFuture<TListStreams>{};
+        }
+
+    void UpdateClusterConfigs(
+        const TString& clusterName,
+        const TString& endpoint,
+        const TString& database,
+        bool secure) override {}
+    
+    NYql::ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) override {
+        return MakeIntrusive<TMockTopicClient>();
+    }
+};
+
 class TFixture : public NTests::TBaseFixture {
 public:
     using TBase = NTests::TBaseFixture;
@@ -40,7 +139,7 @@ public:
         RowDispatcherActorId = Runtime.AllocateEdgeActor();
     }
 
-    void Init(const TString& topicPath, ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max()) {
+    void Init(const TString& topicPath, ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max(), bool mockTopicSession = false) {
         Config.SetTimeoutBeforeStartSessionSec(TimeoutBeforeStartSessionSec);
         Config.SetMaxSessionUsedMemory(maxSessionUsedMemory);
         Config.SetSendStatusPeriodSec(2);
@@ -72,7 +171,7 @@ public:
             CredentialsProviderFactory,
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            CreatePqNativeGateway(pqServices),
+            !mockTopicSession ? CreatePqNativeGateway(pqServices) : MakeIntrusive<TMockPqGateway>(),
             16000000
             ).release());
         Runtime.EnableScheduleForActor(TopicSession);
@@ -209,6 +308,14 @@ public:
 }  // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TopicSessionTests) {
+
+    Y_UNIT_TEST_F(Two222, TFixture) {
+        const TString topicName = "fake_topic";
+        Init(topicName, 1000, true);
+        auto source = BuildSource(topicName);
+        StartSession(ReadActorId1, source);
+        ExpectMessageBatch(ReadActorId1, { JsonMessage(1) });
+    }
     Y_UNIT_TEST_F(TwoSessionsWithoutOffsets, TFixture) {
         const TString topicName = "topic1";
         PQCreateStream(topicName);

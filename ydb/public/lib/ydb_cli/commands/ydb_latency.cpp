@@ -137,7 +137,7 @@ void Evaluate(
 } // anonymous
 
 TCommandLatency::TCommandLatency()
-    : TYdbCommand("latency", {}, "check basic latency with variable inflight")
+    : TYdbCommand("latency", {}, "Check basic latency with variable inflight")
     , IntervalSeconds(DEFAULT_INTERVAL_SECONDS)
     , MaxInflight(DEFAULT_MAX_INFLIGHT)
     , Format(DEFAULT_FORMAT)
@@ -152,16 +152,16 @@ void TCommandLatency::Config(TConfig& config) {
     const TString& availableFormats = GetEnumAllNames<TCommandLatency::EFormat>();
 
     config.Opts->AddLongOption(
-        'i', "interval", TStringBuilder() << "seconds for each latency kind")
+        'i', "interval", TStringBuilder() << "Seconds for each latency kind")
             .RequiredArgument("INT").StoreResult(&IntervalSeconds).DefaultValue(DEFAULT_INTERVAL_SECONDS);
     config.Opts->AddLongOption(
-        'm', "max-inflight", TStringBuilder() << "max inflight")
+        'm', "max-inflight", TStringBuilder() << "Max inflight")
             .RequiredArgument("INT").StoreResult(&MaxInflight).DefaultValue(DEFAULT_MAX_INFLIGHT);
     config.Opts->AddLongOption(
-        'p', "percentile", TStringBuilder() << "latency percentile")
+        'p', "percentile", TStringBuilder() << "Latency percentile")
             .RequiredArgument("DOUBLE").StoreResult(&Percentile).DefaultValue(DEFAULT_PERCENTILE);
     config.Opts->AddLongOption(
-        'f', "format", TStringBuilder() << "output format (" << availableFormats << ")")
+        'f', "format", TStringBuilder() << "Output format (" << availableFormats << ")")
             .OptionalArgument("STRING").StoreResult(&Format).DefaultValue(DEFAULT_FORMAT);
     config.Opts->AddLongOption(
         'k', "kind", TStringBuilder() << "Only only specified ping kind ("<< availableKinds << ")")

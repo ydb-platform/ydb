@@ -7,7 +7,7 @@ namespace NKikimr::NOlap::NReader::NPlain {
 void TBlobsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
     Source->MutableStageData().AddBlobs(Source->DecodeBlobAddresses(ExtractBlobsData()));
     AFL_VERIFY(Step.Next());
-    auto task = std::make_shared<TStepAction>(Source, std::move(Step), Context->GetCommonContext()->GetScanActorId());
+    auto task = std::make_shared<NCommon::TStepAction>(Source, std::move(Step), Context->GetCommonContext()->GetScanActorId());
     NConveyor::TScanServiceOperator::SendTaskToExecute(task);
 }
 

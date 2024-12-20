@@ -45,7 +45,7 @@ protected:
     }
 
 public:
-    const TReadMetadata::TConstPtr& GetReadMetadata() const {
+    const NCommon::TReadMetadata::TConstPtr& GetReadMetadata() const {
         return SpecialReadContext->GetReadMetadata();
     }
 

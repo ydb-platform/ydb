@@ -2,12 +2,12 @@
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 
-namespace NKikimr::NOlap::NReader::NPlain {
+namespace NKikimr::NOlap::NReader::NCommon {
 
 void TBlobsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
     Source->MutableStageData().AddBlobs(Source->DecodeBlobAddresses(ExtractBlobsData()));
     AFL_VERIFY(Step.Next());
-    auto task = std::make_shared<NCommon::TStepAction>(Source, std::move(Step), Context->GetCommonContext()->GetScanActorId());
+    auto task = std::make_shared<TStepAction>(Source, std::move(Step), Context->GetCommonContext()->GetScanActorId());
     NConveyor::TScanServiceOperator::SendTaskToExecute(task);
 }
 
@@ -17,6 +17,17 @@ bool TBlobsFetcherTask::DoOnError(const TString& storageId, const TBlobRange& ra
     NActors::TActorContext::AsActorContext().Send(Context->GetCommonContext()->GetScanActorId(), 
         std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(TConclusionStatus::Fail("cannot read blob range " + range.ToString())));
     return false;
+}
+
+TBlobsFetcherTask::TBlobsFetcherTask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions,
+    const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step,
+    const std::shared_ptr<NCommon::TSpecialReadContext>& context,
+    const TString& taskCustomer, const TString& externalTaskId)
+    : TBase(readActions, taskCustomer, externalTaskId)
+    , Source(sourcePtr)
+    , Step(step)
+    , Context(context)
+    , Guard(Context->GetCommonContext()->GetCounters().GetFetchBlobsGuard()) {
 }
 
 }

@@ -3,8 +3,6 @@
 #include "common.h"
 #include "error_code.h"
 
-#include <library/cpp/yt/misc/concepts.h>
-
 // Google Protobuf forward declarations.
 namespace google::protobuf {
 

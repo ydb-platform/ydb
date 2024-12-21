@@ -95,67 +95,17 @@ private:
     THashMap<ui64, std::vector<std::shared_ptr<TDataAccessorsRequest>>> RequestsByPortion;
     const std::shared_ptr<IAccessorCallback> AccessorCallback;
 
-    virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) override {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ask_data")("request", request->DebugString());
-        for (auto&& i : request->GetPathIds()) {
-            auto it = Managers.find(i);
-            if (it == Managers.end()) {
-                request->AddError(i, "incorrect path id");
-            } else {
-                auto portions = request->StartFetching(i);
-                std::vector<TPortionInfo::TConstPtr> portionsAsk;
-                for (auto&& [_, i] : portions) {
-                    auto itRequest = RequestsByPortion.find(i->GetPortionId());
-                    if (itRequest == RequestsByPortion.end()) {
-                        portionsAsk.emplace_back(i);
-                    } else {
-                        itRequest->second.emplace_back(request);
-                    }
-                }
-                if (portionsAsk.empty()) {
-                    continue;
-                }
-                auto accessors = it->second->AskData(portionsAsk, AccessorCallback, request->GetConsumer());
-                for (auto&& p : portionsAsk) {
-                    auto itAccessor = accessors.find(p->GetPortionId());
-                    if (itAccessor == accessors.end()) {
-                        AFL_VERIFY(RequestsByPortion.emplace(p->GetPortionId(), std::vector<std::shared_ptr<TDataAccessorsRequest>>({request})).second);
-                    } else {
-                        request->AddAccessor(itAccessor->second);
-                    }
-                }
-            }
-        }
-    }
-    virtual void DoRegisterController(std::unique_ptr<IGranuleDataAccessor>&& controller, const bool update) override {
-        if (update) {
-            auto it = Managers.find(controller->GetPathId());
-            if (it != Managers.end()) {
-                it->second = std::move(controller);
-            }
-        } else {
-            AFL_VERIFY(Managers.emplace(controller->GetPathId(), std::move(controller)).second);
-        }
-    }
+    std::deque<TPortionInfo::TConstPtr> PortionsAsk;
+    ui64 PortionsAskInFlight = 0;
+
+    void DrainQueue();
+
+    virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) override;
+    virtual void DoRegisterController(std::unique_ptr<IGranuleDataAccessor>&& controller, const bool update) override;
     virtual void DoUnregisterController(const ui64 pathId) override {
         AFL_VERIFY(Managers.erase(pathId));
     }
-    virtual void DoAddPortion(const TPortionDataAccessor& accessor) override {
-        {
-            auto it = Managers.find(accessor.GetPortionInfo().GetPathId());
-            AFL_VERIFY(it != Managers.end());
-            it->second->ModifyPortions({ accessor }, {});
-        }
-        {
-            auto it = RequestsByPortion.find(accessor.GetPortionInfo().GetPortionId());
-            if (it != RequestsByPortion.end()) {
-                for (auto&& i : it->second) {
-                    i->AddAccessor(accessor);
-                }
-            }
-            RequestsByPortion.erase(it);
-        }
-    }
+    virtual void DoAddPortion(const TPortionDataAccessor& accessor) override;
     virtual void DoRemovePortion(const TPortionInfo::TConstPtr& portionInfo) override {
         auto it = Managers.find(portionInfo->GetPathId());
         AFL_VERIFY(it != Managers.end());

@@ -50,7 +50,7 @@ public:
     }
 
     void AddError(const ui64 pathId, const TString& errorMessage) {
-        AFL_VERIFY(ErrorsByPathId.emplace(pathId, errorMessage).second);
+        ErrorsByPathId.emplace(pathId, errorMessage);
     }
 
     bool HasErrors() const {

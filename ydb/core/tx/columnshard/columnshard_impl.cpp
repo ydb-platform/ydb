@@ -1422,13 +1422,13 @@ private:
 
 public:
     TTxAskPortionChunks(TColumnShard* self, const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& fetchCallback,
-        THashMap<ui64, NOlap::TPortionInfo::TConstPtr>&& portions, const TString& consumer)
+        std::vector<NOlap::TPortionInfo::TConstPtr>&& portions, const TString& consumer)
         : TBase(self)
         , FetchCallback(fetchCallback)
         , Consumer(consumer)
     {
         for (auto&& i : portions) {
-            PortionsByPath[i.second->GetPathId()].emplace_back(i.second);
+            PortionsByPath[i->GetPathId()].emplace_back(i);
         }
     }
 

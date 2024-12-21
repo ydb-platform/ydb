@@ -1,4 +1,5 @@
 #pragma once
+#include "fetching.h"
 #include "source.h"
 
 #include <ydb/core/tx/columnshard/blob.h>

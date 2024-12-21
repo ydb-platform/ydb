@@ -45,10 +45,6 @@ private:
     using TBase = NColumnShard::TCommonCountersOwner;
     TMutex Mutex;
     THashMap<TString, TFetchingStepSignals> Collection;
-    TFetchingStepsSignalsCollection()
-        : TBase("scan_steps") {
-    }
-
     TFetchingStepSignals GetSignalsImpl(const TString& name) {
         TGuard<TMutex> g(Mutex);
         auto it = Collection.find(name);
@@ -59,6 +55,10 @@ private:
     }
 
 public:
+    TFetchingStepsSignalsCollection()
+        : TBase("scan_steps") {
+    }
+
     static TFetchingStepSignals GetSignals(const TString& name) {
         return Singleton<TFetchingStepsSignalsCollection>()->GetSignalsImpl(name);
     }

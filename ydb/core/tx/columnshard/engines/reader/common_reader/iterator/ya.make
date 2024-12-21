@@ -5,6 +5,9 @@ SRCS(
     columns_set.cpp
     iterator.cpp
     context.cpp
+    source.cpp
+    fetching.cpp
+    fetch_steps.cpp
 )
 
 PEERDIR(

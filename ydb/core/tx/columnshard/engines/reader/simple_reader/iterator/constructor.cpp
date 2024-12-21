@@ -20,7 +20,8 @@ bool TBlobsFetcherTask::DoOnError(const TString& storageId, const TBlobRange& ra
 }
 
 TBlobsFetcherTask::TBlobsFetcherTask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions,
-    const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TSpecialReadContext>& context,
+    const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step,
+    const std::shared_ptr<NCommon::TSpecialReadContext>& context,
     const TString& taskCustomer, const TString& externalTaskId)
     : TBase(readActions, taskCustomer, externalTaskId)
     , Source(sourcePtr)

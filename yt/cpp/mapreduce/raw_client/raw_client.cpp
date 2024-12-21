@@ -609,7 +609,7 @@ TResponseInfo THttpRawClient::SkyShareTable(
     header.MergeParameters(NRawClient::SerializeParamsForSkyShareTable(proxyName, Context_.Config->Prefix, tablePaths, patchedOptions));
     TClientContext skyApiHost({.ServerName = host, .HttpClient = NHttpClient::CreateDefaultHttpClient()});
 
-    return RequestWithoutRetry(skyApiHost, mutationId, header);
+    return RequestWithoutRetry(skyApiHost, mutationId, header, "");
 }
 
 TMaybe<TYPath> THttpRawClient::GetFileFromCache(

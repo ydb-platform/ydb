@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yt/yt/core/misc/configurable_singleton_decl.h>
+
 #include <yt/yt/core/actions/callback.h>
 
 #include <yt/yt/core/concurrency/public.h>
@@ -196,6 +198,8 @@ DEFINE_ENUM(EMessageFormat,
     ((Json)        (1))
     ((Yson)        (2))
 );
+
+YT_DECLARE_RECONFIGURABLE_SINGLETON(TDispatcherConfig, TDispatcherDynamicConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

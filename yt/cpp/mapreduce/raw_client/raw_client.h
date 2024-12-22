@@ -204,7 +204,7 @@ public:
 
     // SkyShare
 
-    TResponseInfo SkyShareTable(
+    NHttpClient::IHttpResponsePtr SkyShareTable(
         const std::vector<TYPath>& tablePaths,
         const TSkyShareTableOptions& options = {}) override;
 

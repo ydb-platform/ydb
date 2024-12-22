@@ -8,8 +8,9 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NDetail {
-    struct TResponseInfo;
+namespace NHttpClient {
+    class IHttpResponse;
+    using IHttpResponsePtr = std::unique_ptr<IHttpResponse>;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -204,7 +205,7 @@ public:
 
     // SkyShare
 
-    virtual NDetail::TResponseInfo SkyShareTable(
+    virtual NHttpClient::IHttpResponsePtr SkyShareTable(
         const std::vector<TYPath>& tablePaths,
         const TSkyShareTableOptions& options = {}) = 0;
 

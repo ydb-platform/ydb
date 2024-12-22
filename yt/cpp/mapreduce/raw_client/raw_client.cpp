@@ -32,7 +32,7 @@ TNode THttpRawClient::Get(
     TMutationId mutationId;
     THttpHeader header("GET", "get");
     header.MergeParameters(NRawClient::SerializeParamsForGet(transactionId, Context_.Config->Prefix, path, options));
-    return NodeFromYsonString(RequestWithoutRetry(Context_, mutationId, header).Response);
+    return NodeFromYsonString(RequestWithoutRetry(Context_, mutationId, header)->GetResponse());
 }
 
 TNode THttpRawClient::TryGet(
@@ -61,7 +61,7 @@ void THttpRawClient::Set(
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForSet(transactionId, Context_.Config->Prefix, path, options));
     auto body = NodeToYsonString(value);
-    RequestWithoutRetry(Context_, mutationId, header, body);
+    RequestWithoutRetry(Context_, mutationId, header, body)->GetResponse();
 }
 
 bool THttpRawClient::Exists(
@@ -72,7 +72,7 @@ bool THttpRawClient::Exists(
     TMutationId mutationId;
     THttpHeader header("GET", "exists");
     header.MergeParameters(NRawClient::SerializeParamsForExists(transactionId, Context_.Config->Prefix, path, options));
-    return ParseBoolFromResponse(RequestWithoutRetry(Context_, mutationId, header).Response);
+    return ParseBoolFromResponse(RequestWithoutRetry(Context_, mutationId, header)->GetResponse());
 }
 
 void THttpRawClient::MultisetAttributes(
@@ -86,7 +86,7 @@ void THttpRawClient::MultisetAttributes(
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForMultisetAttributes(transactionId, Context_.Config->Prefix, path, options));
     auto body = NodeToYsonString(value);
-    RequestWithoutRetry(Context_, mutationId, header, body);
+    RequestWithoutRetry(Context_, mutationId, header, body)->GetResponse();
 }
 
 TNodeId THttpRawClient::Create(
@@ -99,7 +99,7 @@ TNodeId THttpRawClient::Create(
     THttpHeader header("POST", "create");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForCreate(transactionId, Context_.Config->Prefix, path, type, options));
-    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header).Response);
+    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header)->GetResponse());
 }
 
 TNodeId THttpRawClient::CopyWithoutRetries(
@@ -112,7 +112,7 @@ TNodeId THttpRawClient::CopyWithoutRetries(
     THttpHeader header("POST", "copy");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForCopy(transactionId, Context_.Config->Prefix, sourcePath, destinationPath, options));
-    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header).Response);
+    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header)->GetResponse());
 }
 
 TNodeId THttpRawClient::CopyInsideMasterCell(
@@ -129,7 +129,7 @@ TNodeId THttpRawClient::CopyInsideMasterCell(
     // Make cross cell copying disable.
     params["enable_cross_cell_copying"] = false;
     header.MergeParameters(params);
-    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header).Response);
+    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header)->GetResponse());
 }
 
 TNodeId THttpRawClient::MoveWithoutRetries(
@@ -142,7 +142,7 @@ TNodeId THttpRawClient::MoveWithoutRetries(
     THttpHeader header("POST", "move");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForMove(transactionId, Context_.Config->Prefix, sourcePath, destinationPath, options));
-    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header).Response);
+    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header)->GetResponse());
 }
 
 TNodeId THttpRawClient::MoveInsideMasterCell(
@@ -159,7 +159,7 @@ TNodeId THttpRawClient::MoveInsideMasterCell(
     // Make cross cell copying disable.
     params["enable_cross_cell_copying"] = false;
     header.MergeParameters(params);
-    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header).Response);
+    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header)->GetResponse());
 }
 
 void THttpRawClient::Remove(
@@ -171,7 +171,7 @@ void THttpRawClient::Remove(
     THttpHeader header("POST", "remove");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForRemove(transactionId, Context_.Config->Prefix, path, options));
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 TNode::TListType THttpRawClient::List(
@@ -190,7 +190,7 @@ TNode::TListType THttpRawClient::List(
     }
     header.MergeParameters(NRawClient::SerializeParamsForList(transactionId, Context_.Config->Prefix, updatedPath, options));
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header);
-    return NodeFromYsonString(responseInfo.Response).AsList();
+    return NodeFromYsonString(responseInfo->GetResponse()).AsList();
 }
 
 TNodeId THttpRawClient::Link(
@@ -203,7 +203,7 @@ TNodeId THttpRawClient::Link(
     THttpHeader header("POST", "link");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForLink(transactionId, Context_.Config->Prefix, targetPath, linkPath, options));
-    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header).Response);
+    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header)->GetResponse());
 }
 
 TLockId THttpRawClient::Lock(
@@ -216,7 +216,7 @@ TLockId THttpRawClient::Lock(
     THttpHeader header("POST", "lock");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForLock(transactionId, Context_.Config->Prefix, path, mode, options));
-    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header).Response);
+    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header)->GetResponse());
 }
 
 void THttpRawClient::Unlock(
@@ -228,7 +228,7 @@ void THttpRawClient::Unlock(
     THttpHeader header("POST", "unlock");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForUnlock(transactionId, Context_.Config->Prefix, path, options));
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 void THttpRawClient::Concatenate(
@@ -241,7 +241,7 @@ void THttpRawClient::Concatenate(
     THttpHeader header("POST", "concatenate");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForConcatenate(transactionId, Context_.Config->Prefix, sourcePaths, destinationPath, options));
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 TTransactionId THttpRawClient::StartTransaction(
@@ -252,7 +252,7 @@ TTransactionId THttpRawClient::StartTransaction(
     THttpHeader header("POST", "start_tx");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForStartTransaction(parentTransactionId, Context_.Config->TxTimeout, options));
-    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header).Response);
+    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header)->GetResponse());
 }
 
 void THttpRawClient::PingTransaction(const TTransactionId& transactionId)
@@ -264,7 +264,7 @@ void THttpRawClient::PingTransaction(const TTransactionId& transactionId)
     requestConfig.HttpConfig = NHttpClient::THttpConfig{
         .SocketTimeout = Context_.Config->PingTimeout
     };
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 void THttpRawClient::AbortTransaction(
@@ -274,7 +274,7 @@ void THttpRawClient::AbortTransaction(
     THttpHeader header("POST", "abort_tx");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForAbortTransaction(transactionId));
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 void THttpRawClient::CommitTransaction(
@@ -284,7 +284,7 @@ void THttpRawClient::CommitTransaction(
     THttpHeader header("POST", "commit_tx");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForCommitTransaction(transactionId));
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 TOperationAttributes THttpRawClient::GetOperation(
@@ -295,7 +295,7 @@ TOperationAttributes THttpRawClient::GetOperation(
     THttpHeader header("GET", "get_operation");
     header.MergeParameters(NRawClient::SerializeParamsForGetOperation(operationId, options));
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header);
-    return NRawClient::ParseOperationAttributes(NodeFromYsonString(responseInfo.Response));
+    return NRawClient::ParseOperationAttributes(NodeFromYsonString(responseInfo->GetResponse()));
 }
 
 TOperationAttributes THttpRawClient::GetOperation(
@@ -306,7 +306,7 @@ TOperationAttributes THttpRawClient::GetOperation(
     THttpHeader header("GET", "get_operation");
     header.MergeParameters(NRawClient::SerializeParamsForGetOperation(alias, options));
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header);
-    return NRawClient::ParseOperationAttributes(NodeFromYsonString(responseInfo.Response));
+    return NRawClient::ParseOperationAttributes(NodeFromYsonString(responseInfo->GetResponse()));
 }
 
 void THttpRawClient::AbortOperation(
@@ -316,7 +316,7 @@ void THttpRawClient::AbortOperation(
     THttpHeader header("POST", "abort_op");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForAbortOperation(operationId));
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 void THttpRawClient::CompleteOperation(
@@ -326,7 +326,7 @@ void THttpRawClient::CompleteOperation(
     THttpHeader header("POST", "complete_op");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForCompleteOperation(operationId));
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 void THttpRawClient::SuspendOperation(
@@ -337,7 +337,7 @@ void THttpRawClient::SuspendOperation(
     THttpHeader header("POST", "suspend_op");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForSuspendOperation(operationId, options));
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 void THttpRawClient::ResumeOperation(
@@ -348,7 +348,7 @@ void THttpRawClient::ResumeOperation(
     THttpHeader header("POST", "resume_op");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForResumeOperation(operationId, options));
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 template <typename TKey>
@@ -367,7 +367,7 @@ TListOperationsResult THttpRawClient::ListOperations(const TListOperationsOption
     THttpHeader header("GET", "list_operations");
     header.MergeParameters(NRawClient::SerializeParamsForListOperations(options));
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header);
-    auto resultNode = NodeFromYsonString(responseInfo.Response);
+    auto resultNode = NodeFromYsonString(responseInfo->GetResponse());
 
     const auto& operationNodesList = resultNode["operations"].AsList();
 
@@ -417,7 +417,7 @@ NYson::TYsonString THttpRawClient::GetJob(
     THttpHeader header("GET", "get_job");
     header.MergeParameters(NRawClient::SerializeParamsForGetJob(operationId, jobId, options));
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header);
-    return NYson::TYsonString(responseInfo.Response);
+    return NYson::TYsonString(responseInfo->GetResponse());
 }
 
 TListJobsResult THttpRawClient::ListJobs(
@@ -428,7 +428,7 @@ TListJobsResult THttpRawClient::ListJobs(
     THttpHeader header("GET", "list_jobs");
     header.MergeParameters(NRawClient::SerializeParamsForListJobs(operationId, options));
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header);
-    auto resultNode = NodeFromYsonString(responseInfo.Response);
+    auto resultNode = NodeFromYsonString(responseInfo->GetResponse());
 
     const auto& jobNodesList = resultNode["jobs"].AsList();
 
@@ -524,7 +524,7 @@ TString THttpRawClient::GetJobStderrWithRetries(
     TRequestConfig config;
     config.IsHeavy = true;
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, {}, config);
-    return responseInfo.Response;
+    return responseInfo->GetResponse();
 }
 
 IFileReaderPtr THttpRawClient::GetJobStderr(
@@ -573,7 +573,7 @@ std::vector<TJobTraceEvent> THttpRawClient::GetJobTrace(
     THttpHeader header("GET", "get_job_trace");
     header.MergeParameters(NRawClient::SerializeParamsForGetJobTrace(operationId, options));
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header);
-    auto resultNode = NodeFromYsonString(responseInfo.Response);
+    auto resultNode = NodeFromYsonString(responseInfo->GetResponse());
 
     const auto& traceEventNodesList = resultNode.AsList();
 
@@ -586,7 +586,7 @@ std::vector<TJobTraceEvent> THttpRawClient::GetJobTrace(
     return result;
 }
 
-TResponseInfo THttpRawClient::SkyShareTable(
+NHttpClient::IHttpResponsePtr THttpRawClient::SkyShareTable(
     const std::vector<TYPath>& tablePaths,
     const TSkyShareTableOptions& options)
 {
@@ -622,7 +622,7 @@ TMaybe<TYPath> THttpRawClient::GetFileFromCache(
     THttpHeader header("GET", "get_file_from_cache");
     header.MergeParameters(NRawClient::SerializeParamsForGetFileFromCache(transactionId, md5Signature, cachePath, options));
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header);
-    auto resultNode = NodeFromYsonString(responseInfo.Response).AsString();
+    auto resultNode = NodeFromYsonString(responseInfo->GetResponse()).AsString();
     return resultNode.empty() ? Nothing() : TMaybe<TYPath>(resultNode);
 }
 
@@ -637,7 +637,7 @@ TYPath THttpRawClient::PutFileToCache(
     THttpHeader header("POST", "put_file_to_cache");
     header.MergeParameters(NRawClient::SerializeParamsForPutFileToCache(transactionId, Context_.Config->Prefix, filePath, md5Signature, cachePath, options));
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header);
-    return NodeFromYsonString(responseInfo.Response).AsString();
+    return NodeFromYsonString(responseInfo->GetResponse()).AsString();
 }
 
 void THttpRawClient::MountTable(
@@ -652,7 +652,7 @@ void THttpRawClient::MountTable(
         header.AddParameter("cell_id", GetGuidAsString(*options.CellId_));
     }
     header.AddParameter("freeze", options.Freeze_);
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 void THttpRawClient::UnmountTable(
@@ -664,7 +664,7 @@ void THttpRawClient::UnmountTable(
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeTabletParams(Context_.Config->Prefix, path, options));
     header.AddParameter("force", options.Force_);
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 void THttpRawClient::RemountTable(
@@ -675,7 +675,7 @@ void THttpRawClient::RemountTable(
     THttpHeader header("POST", "remount_table");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeTabletParams(Context_.Config->Prefix, path, options));
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 void THttpRawClient::ReshardTableByPivotKeys(
@@ -688,7 +688,7 @@ void THttpRawClient::ReshardTableByPivotKeys(
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeTabletParams(Context_.Config->Prefix, path, options));
     header.AddParameter("pivot_keys", BuildYsonNodeFluently().List(keys));
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 void THttpRawClient::ReshardTableByTabletCount(
@@ -701,7 +701,7 @@ void THttpRawClient::ReshardTableByTabletCount(
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeTabletParams(Context_.Config->Prefix, path, options));
     header.AddParameter("tablet_count", tabletCount);
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 void THttpRawClient::InsertRows(
@@ -716,7 +716,7 @@ void THttpRawClient::InsertRows(
     auto body = NodeListToYsonString(rows);
     TRequestConfig config;
     config.IsHeavy = true;
-    RequestWithoutRetry(Context_, mutationId, header, body, config);
+    RequestWithoutRetry(Context_, mutationId, header, body, config)->GetResponse();
 }
 
 void THttpRawClient::TrimRows(
@@ -732,7 +732,7 @@ void THttpRawClient::TrimRows(
     header.MergeParameters(NRawClient::SerializeParametersForTrimRows(Context_.Config->Prefix, path, options));
     TRequestConfig config;
     config.IsHeavy = true;
-    RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config)->GetResponse();
 }
 
 TNode::TListType THttpRawClient::LookupRows(
@@ -763,7 +763,7 @@ TNode::TListType THttpRawClient::LookupRows(
     TRequestConfig config;
     config.IsHeavy = true;
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, body, config);
-    return NodeFromYsonString(responseInfo.Response, ::NYson::EYsonType::ListFragment).AsList();
+    return NodeFromYsonString(responseInfo->GetResponse(), ::NYson::EYsonType::ListFragment).AsList();
 }
 
 TNode::TListType THttpRawClient::SelectRows(
@@ -795,7 +795,7 @@ TNode::TListType THttpRawClient::SelectRows(
     TRequestConfig config;
     config.IsHeavy = true;
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
-    return NodeFromYsonString(responseInfo.Response, ::NYson::EYsonType::ListFragment).AsList();
+    return NodeFromYsonString(responseInfo->GetResponse(), ::NYson::EYsonType::ListFragment).AsList();
 }
 
 void THttpRawClient::AlterTable(
@@ -807,7 +807,7 @@ void THttpRawClient::AlterTable(
     THttpHeader header("POST", "alter_table");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForAlterTable(transactionId, Context_.Config->Prefix, path, options));
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 void THttpRawClient::AlterTableReplica(
@@ -818,7 +818,7 @@ void THttpRawClient::AlterTableReplica(
     THttpHeader header("POST", "alter_table_replica");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForAlterTableReplica(replicaId, options));
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 void THttpRawClient::DeleteRows(
@@ -834,7 +834,7 @@ void THttpRawClient::DeleteRows(
     auto body = NodeListToYsonString(keys);
     TRequestConfig config;
     config.IsHeavy = true;
-    RequestWithoutRetry(Context_, mutationId, header, body, config);
+    RequestWithoutRetry(Context_, mutationId, header, body, config)->GetResponse();
 }
 
 void THttpRawClient::FreezeTable(
@@ -844,7 +844,7 @@ void THttpRawClient::FreezeTable(
     TMutationId mutationId;
     THttpHeader header("POST", "freeze_table");
     header.MergeParameters(NRawClient::SerializeParamsForFreezeTable(Context_.Config->Prefix, path, options));
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 void THttpRawClient::UnfreezeTable(
@@ -854,7 +854,7 @@ void THttpRawClient::UnfreezeTable(
     TMutationId mutationId;
     THttpHeader header("POST", "unfreeze_table");
     header.MergeParameters(NRawClient::SerializeParamsForUnfreezeTable(Context_.Config->Prefix, path, options));
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 TCheckPermissionResponse THttpRawClient::CheckPermission(
@@ -867,7 +867,7 @@ TCheckPermissionResponse THttpRawClient::CheckPermission(
     THttpHeader header("GET", "check_permission");
     header.MergeParameters(NRawClient::SerializeParamsForCheckPermission(user, permission, Context_.Config->Prefix, path, options));
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header);
-    return NRawClient::ParseCheckPermissionResponse(NodeFromYsonString(responseInfo.Response));
+    return NRawClient::ParseCheckPermissionResponse(NodeFromYsonString(responseInfo->GetResponse()));
 }
 
 TVector<TTabletInfo> THttpRawClient::GetTabletInfos(
@@ -880,7 +880,7 @@ TVector<TTabletInfo> THttpRawClient::GetTabletInfos(
     header.MergeParameters(NRawClient::SerializeParamsForGetTabletInfos(Context_.Config->Prefix, path, tabletIndexes, options));
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header);
     TVector<TTabletInfo> result;
-    Deserialize(result, *NodeFromYsonString(responseInfo.Response).AsMap().FindPtr("tablets"));
+    Deserialize(result, *NodeFromYsonString(responseInfo->GetResponse()).AsMap().FindPtr("tablets"));
     return result;
 }
 
@@ -896,7 +896,7 @@ TVector<TTableColumnarStatistics> THttpRawClient::GetTableColumnarStatistics(
     config.IsHeavy = true;
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
     TVector<TTableColumnarStatistics> result;
-    Deserialize(result, NodeFromYsonString(responseInfo.Response));
+    Deserialize(result, NodeFromYsonString(responseInfo->GetResponse()));
     return result;
 }
 
@@ -912,7 +912,7 @@ TMultiTablePartitions THttpRawClient::GetTablePartitions(
     config.IsHeavy = true;
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
     TMultiTablePartitions result;
-    Deserialize(result, NodeFromYsonString(responseInfo.Response));
+    Deserialize(result, NodeFromYsonString(responseInfo->GetResponse()));
     return result;
 }
 
@@ -923,7 +923,7 @@ ui64 THttpRawClient::GenerateTimestamp()
     TRequestConfig config;
     config.IsHeavy = true;
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
-    return NodeFromYsonString(responseInfo.Response).AsUint64();
+    return NodeFromYsonString(responseInfo->GetResponse()).AsUint64();
 }
 
 TAuthorizationInfo THttpRawClient::WhoAmI()
@@ -934,7 +934,7 @@ TAuthorizationInfo THttpRawClient::WhoAmI()
     TAuthorizationInfo result;
 
     NJson::TJsonValue jsonValue;
-    bool ok = NJson::ReadJsonTree(requestResult.Response, &jsonValue, /*throwOnError*/ true);
+    bool ok = NJson::ReadJsonTree(requestResult->GetResponse(), &jsonValue, /*throwOnError*/ true);
     Y_ABORT_UNLESS(ok);
     result.Login = jsonValue["login"].GetString();
     result.Realm = jsonValue["realm"].GetString();

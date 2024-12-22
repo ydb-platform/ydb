@@ -1355,9 +1355,9 @@ TNode::TListType TClient::SkyShareTable(
 
     // As documented at https://wiki.yandex-team.ru/yt/userdoc/blob_tables/#shag3.sozdajomrazdachu
     // first request returns HTTP status code 202 (Accepted). And we need retrying until we have 200 (OK).
-    TResponseInfo response;
-    while (response.HttpCode != 200) {
-        response = RequestWithRetry<TResponseInfo>(
+    NHttpClient::IHttpResponsePtr response;
+    while (response->GetStatusCode() != 200) {
+        response = RequestWithRetry<NHttpClient::IHttpResponsePtr>(
             ClientRetryPolicy_->CreatePolicyForGenericRequest(),
             [this, &tablePaths, &options] (TMutationId /*mutationId*/) {
                 return RawClient_->SkyShareTable(tablePaths, options);
@@ -1366,11 +1366,11 @@ TNode::TListType TClient::SkyShareTable(
     }
 
     if (options.KeyColumns_) {
-        return NodeFromJsonString(response.Response)["torrents"].AsList();
+        return NodeFromJsonString(response->GetResponse())["torrents"].AsList();
     } else {
         TNode torrent;
         torrent["key"] = TNode::CreateList();
-        torrent["rbtorrent"] = response.Response;
+        torrent["rbtorrent"] = response->GetResponse();
         return TNode::TListType{torrent};
     }
 }

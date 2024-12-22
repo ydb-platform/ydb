@@ -2,7 +2,6 @@ import logging
 import inspect
 import pytest
 import time
-import abc
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import TestContext, ScenarioTestHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
@@ -108,7 +107,6 @@ class BaseTestSet:
         ScenarioTestHelper(None).remove_path(test_path, ctx.suite)
 
     @classmethod
-    @abc.abstractmethod
     def _get_cluster_config(cls):
         return KikimrConfigGenerator()
 

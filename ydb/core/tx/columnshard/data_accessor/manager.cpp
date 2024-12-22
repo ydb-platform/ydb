@@ -9,7 +9,7 @@ void TLocalManager::DrainQueue() {
     ui32 countToFlight = 0;
     while (PortionsAskInFlight + countToFlight < 1000 && PortionsAsk.size()) {
         while (PortionsAskInFlight + countToFlight < 1000 && PortionsAsk.size()) {
-            if (PortionsAsk.front().GetActivityFlag() && !PortionsAsk.front().GetActivityFlag()->Val()) {
+            if (PortionsAsk.front().GetAbortionFlag() && PortionsAsk.front().GetAbortionFlag()->Val()) {
                 PortionsAsk.pop_front();
                 continue;
             }

@@ -63,7 +63,7 @@ private:
     THashSet<ui64> RequestIds;
 
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) = 0;
-    virtual const std::shared_ptr<const TAtomic>& DoGetActivityFlag() const = 0;
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const = 0;
 
     void OnRequestsFinished(TDataAccessorsResult&& result) {
         DoOnRequestsFinished(std::move(result));
@@ -86,8 +86,8 @@ public:
             OnRequestsFinished(std::move(*Result));
         }
     }
-    const std::shared_ptr<const TAtomic>& GetActivityFlag() const {
-        return DoGetActivityFlag();
+    const std::shared_ptr<const TAtomicCounter>& GetAbortionFlag() const {
+        return DoGetAbortionFlag();
     }
 
     virtual ~IDataAccessorRequestsSubscriber() = default;
@@ -95,8 +95,8 @@ public:
 
 class TFakeDataAccessorsSubscriber: public IDataAccessorRequestsSubscriber {
 private:
-    virtual const std::shared_ptr<const TAtomic>& DoGetActivityFlag() const override {
-        return Default<std::shared_ptr<TAtomic>>();
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Default<std::shared_ptr<const TAtomicCounter>>();
     }
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& /*result*/) override {
     }
@@ -232,9 +232,9 @@ public:
         return result;
     }
 
-    const std::shared_ptr<const TAtomic>& GetActivityFlag() const {
+    const std::shared_ptr<const TAtomicCounter>& GetAbortionFlag() const {
         AFL_VERIFY(HasSubscriber());
-        return Subscriber->GetActivityFlag();
+        return Subscriber->GetAbortionFlag();
     }
 
     bool HasSubscriber() const {

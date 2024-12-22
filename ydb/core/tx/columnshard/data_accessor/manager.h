@@ -98,12 +98,12 @@ private:
     class TPortionToAsk {
     private:
         TPortionInfo::TConstPtr Portion;
-        YDB_READONLY_DEF(std::shared_ptr<const TAtomic>, ActivityFlag);
+        YDB_READONLY_DEF(std::shared_ptr<const TAtomicCounter>, AbortionFlag);
 
     public:
-        TPortionToAsk(const TPortionInfo::TConstPtr& portion, const std::shared_ptr<TAtomicCounter>& activityFlag)
+        TPortionToAsk(const TPortionInfo::TConstPtr& portion, const std::shared_ptr<const TAtomicCounter>& abortionFlag)
             : Portion(portion)
-            , ActivityFlag(activityFlag) {
+            , AbortionFlag(abortionFlag) {
         }
 
         TPortionInfo::TConstPtr ExtractPortion() {

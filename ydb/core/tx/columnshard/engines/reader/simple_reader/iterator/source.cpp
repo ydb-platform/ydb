@@ -234,8 +234,8 @@ private:
     TFetchingScriptCursor Step;
     std::shared_ptr<IDataSource> Source;
     const NColumnShard::TCounterGuard Guard;
-    virtual const std::shared_ptr<const TAtomic>& DoGetActivityFlag() const override {
-        return Source->GetContext()->GetCommonContext()->GetActivityFlag();
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Source->GetContext()->GetCommonContext()->GetAbortionFlag();
     }
 
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {

@@ -116,7 +116,7 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
 }
 
 TConclusion<bool> TScanHead::BuildNextInterval() {
-    if (Context->IsAborted()) {
+    if (!Context->IsActive()) {
         return false;
     }
     bool changed = false;
@@ -139,7 +139,7 @@ bool TScanHead::IsReverse() const {
 }
 
 void TScanHead::Abort() {
-    AFL_VERIFY(Context->IsAborted());
+    AFL_VERIFY(!Context->IsActive());
     for (auto&& i : FetchingSources) {
         i->Abort();
     }

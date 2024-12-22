@@ -53,7 +53,7 @@ private:
     const TActorId ResourceSubscribeActorId;
     const TActorId ReadCoordinatorActorId;
     const TComputeShardingPolicy ComputeShardingPolicy;
-    std::shared_ptr<TAtomic> ActivityFlag = std::make_shared<TAtomic>(1);
+    std::shared_ptr<TAtomicCounter> AbortionFlag = std::make_shared<TAtomicCounter>(0);
 
 public:
     template <class T>
@@ -67,23 +67,23 @@ public:
         return ReadMetadata->GetScanCursor();
     }
 
-    const std::shared_ptr<TAtomic>& GetActivityFlag() const {
-        return ActivityFlag;
+    const std::shared_ptr<const TAtomicCounter>& GetAbortionFlag() const {
+        return AbortionFlag;
     }
 
     void AbortWithError(const TString& errorMessage) {
-        if (AtomicCas(&*ActivityFlag, 0, 1)) {
+        if (AbortionFlag->Inc() == 1)) {
             NActors::TActivationContext::Send(
                 ScanActorId, std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(TConclusionStatus::Fail(errorMessage)));
         }
     }
 
     void Stop() {
-        AtomicCas(ActivityFlag.get(), 0, 1);
+        AbortionFlag->Inc();
     }
 
     bool IsActive() const {
-        return AtomicGet(*ActivityFlag);
+        return AbortionFlag->Val() == 0;
     }
 
     bool IsReverse() const {
@@ -140,7 +140,8 @@ public:
         , ScanActorId(scanActorId)
         , ResourceSubscribeActorId(resourceSubscribeActorId)
         , ReadCoordinatorActorId(readCoordinatorActorId)
-        , ComputeShardingPolicy(computeShardingPolicy) {
+        , ComputeShardingPolicy(computeShardingPolicy)
+    {
         Y_ABORT_UNLESS(ReadMetadata);
     }
 };

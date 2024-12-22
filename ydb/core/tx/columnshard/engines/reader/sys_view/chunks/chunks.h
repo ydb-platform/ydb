@@ -107,8 +107,8 @@ private:
         const NActors::TActorId OwnerId;
         const std::shared_ptr<NReader::TReadContext> Context;
 
-        virtual const std::shared_ptr<const TAtomic>& DoGetActivityFlag() const override {
-            return Context->GetActivityFlag();
+        virtual const std::shared_ptr<TAtomicCounter>& DoGetAbortionFlag() const override {
+            return Context->GetAbortionFlag();
         }
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*selfPtr*/) override {

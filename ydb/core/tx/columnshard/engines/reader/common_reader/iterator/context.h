@@ -67,7 +67,7 @@ public:
     }
 
     bool IsActive() const {
-        return CommonContext->IsActive();
+        return !CommonContext->IsAborted();
     }
 
     void Abort() {

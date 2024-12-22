@@ -695,6 +695,11 @@ void TQueryExecutionStats::AddComputeActorFullStatsByTask(
         }
 
     }
+    for (auto& tableStat : task.GetTables()) {
+        auto& tableStats = *GetOrCreateTableAggrStats(stageStats, tableStat.GetTablePath());
+        UpdateAggr(tableStats.MutableReadRows(), tableStat.GetReadRows());
+        UpdateAggr(tableStats.MutableReadBytes(), tableStat.GetReadBytes());
+    }
 }
 
 void TQueryExecutionStats::AddComputeActorProfileStatsByTask(

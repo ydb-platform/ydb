@@ -70,6 +70,10 @@ public:
         return !CommonContext->IsAborted();
     }
 
+    bool IsAborted() const {
+        return CommonContext->IsAborted();
+    }
+
     void Abort() {
         CommonContext->Stop();
     }

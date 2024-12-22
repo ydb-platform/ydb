@@ -619,8 +619,8 @@ public:
 class TDataAccessorsSubscriberBase: public NOlap::IDataAccessorRequestsSubscriber {
 private:
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
-    virtual const std::shared_ptr<TAtomicCounter>& DoGetAbortionFlag() const override {
-        return nullptr;
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Default<std::shared_ptr<const TAtomicCounter>>();
     }
 
     virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result) override final {

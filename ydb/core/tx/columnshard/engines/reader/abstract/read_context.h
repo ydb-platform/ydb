@@ -54,6 +54,7 @@ private:
     const TActorId ReadCoordinatorActorId;
     const TComputeShardingPolicy ComputeShardingPolicy;
     std::shared_ptr<TAtomicCounter> AbortionFlag = std::make_shared<TAtomicCounter>(0);
+    std::shared_ptr<const TAtomicCounter> ConstAbortionFlag = AbortionFlag;
 
 public:
     template <class T>
@@ -68,11 +69,11 @@ public:
     }
 
     const std::shared_ptr<const TAtomicCounter>& GetAbortionFlag() const {
-        return AbortionFlag;
+        return ConstAbortionFlag;
     }
 
     void AbortWithError(const TString& errorMessage) {
-        if (AbortionFlag->Inc() == 1)) {
+        if (AbortionFlag->Inc() == 1) {
             NActors::TActivationContext::Send(
                 ScanActorId, std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(TConclusionStatus::Fail(errorMessage)));
         }
@@ -84,6 +85,10 @@ public:
 
     bool IsActive() const {
         return AbortionFlag->Val() == 0;
+    }
+
+    bool IsAborted() const {
+        return AbortionFlag->Val();
     }
 
     bool IsReverse() const {

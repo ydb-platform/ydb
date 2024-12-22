@@ -70,7 +70,7 @@ void TLocalManager::DoAskData(const std::shared_ptr<TDataAccessorsRequest>& requ
             auto itRequest = RequestsByPortion.find(i->GetPortionId());
             if (itRequest == RequestsByPortion.end()) {
                 AFL_VERIFY(RequestsByPortion.emplace(i->GetPortionId(), std::vector<std::shared_ptr<TDataAccessorsRequest>>({request})).second);
-                PortionsAsk.emplace_back(i, request->GetActivityFlag());
+                PortionsAsk.emplace_back(i, request->GetAbortionFlag());
             } else {
                 itRequest->second.emplace_back(request);
             }

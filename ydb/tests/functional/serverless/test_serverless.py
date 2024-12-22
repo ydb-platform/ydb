@@ -107,7 +107,11 @@ def test_create_table(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
             );
             """
 
-            session.execute_with_retries(create_table_query)
+            with session.transaction().execute(
+                create_table_query,
+                commit_tx=True,
+            ) as _:
+                pass
 
             # session.create_table(
             #     path,
@@ -135,7 +139,12 @@ def test_create_table(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
 
         def drop_table(session, path):
             drop_table_query = f"DROP TABLE `{path}`;"
-            session.execute_with_retries(drop_table_query)
+            with session.transaction().execute(
+                drop_table_query,
+                commit_tx=True,
+            ) as _:
+                pass
+            
             # session.drop_table(
             #     path
             # )
@@ -176,7 +185,13 @@ def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, yd
             PRIMARY KEY (id)
             );
             """
-            session.execute_with_retries(create_table_query)
+
+            with session.transaction().execute(
+                create_table_query,
+                commit_tx=True,
+            ) as _:
+                pass
+
             # session.create_table(
             #     path,
             #     ydb.TableDescription()
@@ -213,7 +228,12 @@ def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, yd
 
         def drop_table(session, path):
             drop_table_query = f"DROP TABLE `{path}`;"
-            session.execute_with_retries(drop_table_query)
+            with session.transaction().execute(
+                drop_table_query,
+                commit_tx=True,
+            ) as _:
+                pass
+
             # session.drop_table(
             #     path
             # )
@@ -250,7 +270,14 @@ def test_create_table_with_quotas(ydb_hostel_db, ydb_quoted_serverless_db, ydb_e
             PRIMARY KEY (id)
             );
             """
-        session.execute_with_retries(create_table_query)
+
+        with session.transaction().execute(
+            create_table_query,
+            commit_tx=True,
+        ) as _:
+            pass
+
+
         # session.create_table(
         #     path,
         #     ydb.TableDescription()
@@ -312,7 +339,11 @@ def test_create_table_with_alter_quotas(ydb_hostel_db, ydb_serverless_db, ydb_en
             """
 
 
-        session.execute_with_retries(create_table_query)
+        with session.transaction().execute(
+            create_table_query,
+            commit_tx=True,
+        ) as _:
+            pass
 
 
         # session.create_table(
@@ -363,7 +394,14 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
             PRIMARY KEY (id)
             );
             """
-        session.execute_with_retries(create_table_query)
+        
+        with session.transaction().execute(
+            create_table_query,
+            commit_tx=True,
+        ) as _:
+            pass
+
+
         # session.create_table(
         #     path,
         #     ydb.TableDescription()
@@ -637,7 +675,13 @@ def test_create_table_using_exclusive_nodes(ydb_serverless_db_with_exclusive_nod
             PRIMARY KEY (id)
             );
             """
-            session.execute_with_retries(create_table_query)
+            with session.transaction().execute(
+                create_table_query,
+                commit_tx=True,
+            ) as _:
+                pass
+
+
             # session.create_table(
             #     path,
             #     ydb.TableDescription()
@@ -652,7 +696,11 @@ def test_create_table_using_exclusive_nodes(ydb_serverless_db_with_exclusive_nod
 
         def drop_table(session, path):
             drop_table_query = f"DROP TABLE `{path}`;"
-            session.execute_with_retries(drop_table_query)
+            with session.transaction().execute(
+                drop_table_query,
+                commit_tx=True,
+            ) as _:
+                pass
             # session.drop_table(
             #     path
             # )
@@ -684,7 +732,13 @@ def test_seamless_migration_to_exclusive_nodes(ydb_serverless_db_with_exclusive_
     PRIMARY KEY (id)
     );
     """
-    session.execute_with_retries(create_table_query)
+    with session.transaction().execute(
+        create_table_query,
+        commit_tx=True,
+    ) as _:
+        pass
+
+    
     # session.create_table(
     #     path,
     #     ydb.TableDescription()

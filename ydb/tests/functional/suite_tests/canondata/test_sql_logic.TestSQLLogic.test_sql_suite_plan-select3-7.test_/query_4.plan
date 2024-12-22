@@ -65,6 +65,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/sqllogictest_select3-7.test_plan/t1",
                                                         "ReadColumns": [
                                                             "a",
                                                             "b",

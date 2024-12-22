@@ -235,6 +235,7 @@ public:
         HasOlapTable = false;
         HasOltpTable = false;
         HasTableWrite = false;
+        HasTableRead = false;
         NeedUncommittedChangesFlush = false;
     }
 
@@ -280,8 +281,6 @@ public:
             return !DeferredEffects.Empty();
         }
         if (EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW && !tx && HasTableRead) {
-            // RW transaction
-            YQL_ENSURE(HasTableWrite);
             return !DeferredEffects.Empty();
         }
 

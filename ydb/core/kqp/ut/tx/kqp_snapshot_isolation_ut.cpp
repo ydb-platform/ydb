@@ -74,7 +74,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
                 SELECT * FROM `/Root/KV`;
             )"), TTxControl::BeginTx(TTxSettings::SnapshotRW())).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            //CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
 
             auto tx1 = result.GetTransaction();
             UNIT_ASSERT(tx1);

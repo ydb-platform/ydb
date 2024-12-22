@@ -218,10 +218,12 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     }
 
     if (*txCtx.EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
-        if (hasEffects && readPhases == 0) {
+        if (hasEffects && !txCtx.HasTableRead) {
+            YQL_ENSURE(txCtx.HasTableWrite);
             // Don't need snapshot for WriteOnly transaction.
             return false;
         } else if (hasEffects) {
+            YQL_ENSURE(txCtx.HasTableWrite);
             // ReadWrite transaction => need snapshot
             return true;
         }

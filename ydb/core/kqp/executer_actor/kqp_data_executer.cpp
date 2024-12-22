@@ -163,9 +163,6 @@ public:
         YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
             || tableServiceConfig.GetEnableKqpDataQueryStreamLookup());
 
-        Cerr << "TEST:: >> ISOLATION SNAPSHOT RW=" << (Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) << Endl;
-        Cerr << "TEST:: >> COMMIT=" << (Request.LocksOp == ELocksOp::Commit) << Endl;
-
         ReadOnlyTx = IsReadOnlyTx();
     }
 
@@ -1748,10 +1745,7 @@ private:
         }
 
         const auto& lockTxId = TasksGraph.GetMeta().LockTxId;
-        if (lockTxId && TasksGraph.GetMeta().LockMode != NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT_ISOLATION) {
-            // There aren't reads in ProposeTx if snapshot isolation rw is used.
-            // StreamLookups and Sources are used instead.
-            YQL_ENSURE(!ReadOnlyTx);
+        if (lockTxId) {
             dataTransaction.SetLockTxId(*lockTxId);
             dataTransaction.SetLockNodeId(SelfId().NodeId());
         }
@@ -1788,7 +1782,11 @@ private:
                 (ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0) |
                 (VolatileTx ? NTxDataShard::TTxFlags::VolatilePrepare : 0);
             std::unique_ptr<TEvDataShard::TEvProposeTransaction> evData;
-            if (GetSnapshot().IsValid() && (ReadOnlyTx || Request.UseImmediateEffects)) {
+            if (GetSnapshot().IsValid()
+                    && (ReadOnlyTx
+                        || Request.UseImmediateEffects
+                        || (Request.LocksOp == ELocksOp::Unspecified
+                            && TasksGraph.GetMeta().LockMode == NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT_ISOLATION))) {
                 evData.reset(new TEvDataShard::TEvProposeTransaction(
                     NKikimrTxDataShard::TX_KIND_DATA,
                     SelfId(),

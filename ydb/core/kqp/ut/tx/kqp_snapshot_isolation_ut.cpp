@@ -30,11 +30,9 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
                 auto result = session1.ExecuteQuery(Q_(R"(
                     UPSERT INTO `/Root/Test` (Group, Name, Comment)
                     VALUES (1U, "Paul", "Changed");
-                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             }
-
-            UNIT_ASSERT(false);
 
             {
                 auto result = session1.ExecuteQuery(Q_(R"(

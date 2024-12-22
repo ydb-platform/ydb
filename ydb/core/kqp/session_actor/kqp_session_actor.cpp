@@ -1170,6 +1170,9 @@ public:
         txCtx.ClearDeferredEffects();
 
         SendToExecuter(QueryState->TxCtx.Get(), std::move(request));
+        if (!tx) {
+            ++QueryState->CurrentTx;
+        }
     }
 
     bool ExecutePhyTx(const TKqpPhyTxHolder::TConstPtr& tx, bool commit) {

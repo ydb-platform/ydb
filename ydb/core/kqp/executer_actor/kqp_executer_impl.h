@@ -963,8 +963,8 @@ protected:
                 ActorIdToProto(BufferActorId, settings.MutableBufferActorId());
             }
             if (!settings.GetInconsistentTx()
-                    && TasksGraph.GetMeta().LockMode == NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT_ISOLATION) {
-                YQL_ENSURE(GetSnapshot().IsValid());
+                    && TasksGraph.GetMeta().LockMode == NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT_ISOLATION
+                    && GetSnapshot().IsValid()) {
                 settings.MutableMvccSnapshot()->SetStep(GetSnapshot().Step);
                 settings.MutableMvccSnapshot()->SetTxId(GetSnapshot().TxId);
             }

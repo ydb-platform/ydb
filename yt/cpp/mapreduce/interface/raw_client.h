@@ -279,6 +279,12 @@ public:
         const TYPath& path,
         const TAlterTableOptions& options = {}) = 0;
 
+    virtual std::unique_ptr<IInputStream> ReadTable(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TMaybe<TFormat>& format,
+        const TTableReaderOptions& options = {}) = 0;
+
     virtual void AlterTableReplica(
         TMutationId& mutationId,
         const TReplicaId& replicaId,

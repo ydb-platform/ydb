@@ -14,6 +14,8 @@
 #include <yt/cpp/mapreduce/interface/operation.h>
 #include <yt/cpp/mapreduce/interface/tvm.h>
 
+#include <yt/cpp/mapreduce/io/helpers.h>
+
 #include <library/cpp/yson/node/node_io.h>
 
 namespace NYT::NDetail {
@@ -796,6 +798,25 @@ TNode::TListType THttpRawClient::SelectRows(
     config.IsHeavy = true;
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
     return NodeFromYsonString(responseInfo->GetResponse(), ::NYson::EYsonType::ListFragment).AsList();
+}
+
+std::unique_ptr<IInputStream> THttpRawClient::ReadTable(
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TMaybe<TFormat>& format,
+    const TTableReaderOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", GetReadTableCommand(Context_.Config->ApiVersion));
+    header.SetOutputFormat(format);
+    header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
+    header.MergeParameters(NRawClient::SerializeParamsForReadTable(transactionId, Context_.Config->Prefix, path, options));
+    header.MergeParameters(FormIORequestParameters(path, options));
+
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    return std::make_unique<NHttpClient::THttpResponseStream>(std::move(responseInfo));
 }
 
 void THttpRawClient::AlterTable(

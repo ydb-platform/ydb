@@ -4,6 +4,7 @@
 
 #include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/interface/client_method_options.h>
+#include <yt/cpp/mapreduce/interface/fluent.h>
 #include <yt/cpp/mapreduce/interface/operation.h>
 #include <yt/cpp/mapreduce/interface/serialize.h>
 
@@ -639,10 +640,26 @@ TNode SerializeParametersForDeleteRows(
 TNode SerializeParametersForTrimRows(
     const TString& pathPrefix,
     const TYPath& path,
-    const TTrimRowsOptions& /* options*/)
+    const TTrimRowsOptions& /*options*/)
 {
     TNode result;
     SetPathParam(&result, pathPrefix, path);
+    return result;
+}
+
+TNode SerializeParamsForReadTable(
+    const TTransactionId& transactionId,
+    const TString& pathPrefix,
+    const TRichYPath& path,
+    const TTableReaderOptions& options)
+{
+    TNode result;
+    SetTransactionIdParam(&result, transactionId);
+    result["control_attributes"] = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("enable_row_index").Value(options.ControlAttributes_.EnableRowIndex_)
+            .Item("enable_range_index").Value(options.ControlAttributes_.EnableRangeIndex_)
+        .EndMap();
     return result;
 }
 

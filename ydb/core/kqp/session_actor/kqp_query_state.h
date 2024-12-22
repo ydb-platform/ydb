@@ -355,8 +355,9 @@ public:
         }
 
         if (TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
-            // Snapshot isolation can use only uncommitted data.
-            return false;
+            // ReadWrite snapshot isolation transaction with can only use uncommitted data.
+            // WriteOnly snapshot isolation transaction is executed like serializable transaction.
+            return !TxCtx->HasTableRead;
         }
 
         if (TxCtx->NeedUncommittedChangesFlush || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {

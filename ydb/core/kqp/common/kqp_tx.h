@@ -279,7 +279,9 @@ public:
         if (NeedUncommittedChangesFlush || HasOlapTable) {
             return !DeferredEffects.Empty();
         }
-        if (EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW && !tx) {
+        if (EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW && !tx && HasTableRead) {
+            // RW transaction
+            YQL_ENSURE(HasTableWrite);
             return !DeferredEffects.Empty();
         }
 
@@ -351,6 +353,7 @@ public:
     bool HasOlapTable = false;
     bool HasOltpTable = false;
     bool HasTableWrite = false;
+    bool HasTableRead = false;
 
     bool NeedUncommittedChangesFlush = false;
     THashSet<NKikimr::TTableId> ModifiedTablesSinceLastFlush;

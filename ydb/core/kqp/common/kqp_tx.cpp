@@ -222,9 +222,10 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
             // Don't need snapshot for WriteOnly transaction.
             return false;
         } else if (hasEffects) {
-            // Has reads & writes => need snapshot
+            // ReadWrite transaction => need snapshot
             return true;
         }
+        // ReadOnly transaction here
     } else {
         YQL_ENSURE(txCtx.EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE);
 

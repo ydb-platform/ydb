@@ -25,10 +25,10 @@ TTiering::TTieringContext TTiering::GetTierToMove(const std::shared_ptr<arrow::S
     std::optional<TDuration> nextTierDuration;
     for (auto& tierRef : GetOrderedTiers()) {
         auto& tierInfo = tierRef.Get();
-        if (skipEviction && tierInfo.GetStorageId()) {
+        if (skipEviction && tierInfo.GetExternalStorageId()) {
             continue;
         }
-        TString tierName = tierInfo.GetStorageId() ? tierInfo.GetStorageId()->GetPath() : NTiering::NCommon::DeleteTierName;
+        TString tierName = tierInfo.GetExternalStorageId() ? tierInfo.GetExternalStorageId()->GetPath() : NTiering::NCommon::DeleteTierName;
         auto mpiOpt = tierInfo.ScalarToInstant(max);
         Y_ABORT_UNLESS(mpiOpt);
         const TInstant maxTieringPortionInstant = *mpiOpt;

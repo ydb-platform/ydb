@@ -17,7 +17,7 @@ namespace NKikimr::NOlap {
 
 class TTierInfo {
 private:
-    YDB_READONLY_DEF(std::optional<NColumnShard::NTiers::TExternalStorageId>, StorageId);
+    YDB_READONLY_DEF(std::optional<NColumnShard::NTiers::TExternalStorageId>, ExternalStorageId);
     YDB_READONLY_DEF(TString, EvictColumnName);
     YDB_READONLY_DEF(TDuration, EvictDuration);
 
@@ -30,7 +30,7 @@ public:
 
     TTierInfo(const std::optional<NColumnShard::NTiers::TExternalStorageId>& storage, TDuration evictDuration, const TString& column,
         ui32 unitsInSecond = 0)
-        : StorageId(storage)
+        : ExternalStorageId(storage)
         , EvictColumnName(column)
         , EvictDuration(evictDuration)
         , TtlUnitsInSecond(unitsInSecond) {
@@ -53,7 +53,7 @@ public:
     std::optional<TInstant> ScalarToInstant(const std::shared_ptr<arrow::Scalar>& scalar) const;
 
     static std::shared_ptr<TTierInfo> MakeTtl(const TDuration evictDuration, const TString& ttlColumn, ui32 unitsInSecond = 0) {
-        return std::make_shared<TTierInfo>(NTiering::NCommon::DeleteTierName, evictDuration, ttlColumn, unitsInSecond);
+        return std::make_shared<TTierInfo>(std::nullopt, evictDuration, ttlColumn, unitsInSecond);
     }
 
     static ui32 GetUnitsInSecond(const NKikimrSchemeOp::TTTLSettings::EUnit timeUnit) {
@@ -73,7 +73,7 @@ public:
 
     TString GetDebugString() const {
         TStringBuilder sb;
-        sb << "storage=" << (StorageId ? StorageId->GetPath() : "") << ";duration=" << EvictDuration << ";column=" << EvictColumnName
+        sb << "storage=" << (ExternalStorageId ? ExternalStorageId->GetPath() : "") << ";duration=" << EvictDuration << ";column=" << EvictColumnName
            << ";serializer=";
         if (Serializer) {
             sb << Serializer->DebugString();
@@ -97,19 +97,19 @@ public:
         if (Info->GetEvictDuration() > b.Info->GetEvictDuration()) {
             return true;
         } else if (Info->GetEvictDuration() == b.Info->GetEvictDuration()) {
-            if (!Info->GetStorageId()) {
+            if (!Info->GetExternalStorageId()) {
                 return true;
-            } else if (!b.Info->GetStorageId()) {
+            } else if (!b.Info->GetExternalStorageId()) {
                 return false;
             }
-            return *Info->GetStorageId() > *b.Info->GetStorageId();   // add stability: smaller name is hotter
+            return *Info->GetExternalStorageId() > *b.Info->GetExternalStorageId();   // add stability: smaller name is hotter
         }
         return false;
     }
 
     bool operator == (const TTierRef& b) const {
         return Info->GetEvictDuration() == b.Info->GetEvictDuration()
-            && Info->GetStorageId() == b.Info->GetStorageId();
+            && Info->GetExternalStorageId() == b.Info->GetExternalStorageId();
     }
 
     const TTierInfo& Get() const {
@@ -254,7 +254,7 @@ public:
     THashSet<NColumnShard::NTiers::TExternalStorageId> GetUsedTiers() const {
         THashSet<NColumnShard::NTiers::TExternalStorageId> tiers;
         for (const auto& tier : OrderedTiers) {
-            if (const auto& storageId = tier.Get().GetStorageId()) {
+            if (const auto& storageId = tier.Get().GetExternalStorageId()) {
                 tiers.emplace(*storageId);
             }
         }

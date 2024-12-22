@@ -95,7 +95,23 @@ private:
     THashMap<ui64, std::vector<std::shared_ptr<TDataAccessorsRequest>>> RequestsByPortion;
     const std::shared_ptr<IAccessorCallback> AccessorCallback;
 
-    std::deque<TPortionInfo::TConstPtr> PortionsAsk;
+    class TPortionToAsk {
+    private:
+        TPortionInfo::TConstPtr Portion;
+        YDB_READONLY_DEF(std::shared_ptr<const TAtomic>, ActivityFlag);
+
+    public:
+        TPortionToAsk(const TPortionInfo::TConstPtr& portion, const std::shared_ptr<TAtomicCounter>& activityFlag)
+            : Portion(portion)
+            , ActivityFlag(activityFlag) {
+        }
+
+        TPortionInfo::TConstPtr ExtractPortion() {
+            return std::move(Portion);
+        }
+    };
+
+    std::deque<TPortionToAsk> PortionsAsk;
     ui64 PortionsAskInFlight = 0;
 
     void DrainQueue();

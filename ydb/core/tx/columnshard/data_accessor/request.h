@@ -63,6 +63,7 @@ private:
     THashSet<ui64> RequestIds;
 
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) = 0;
+    virtual const std::shared_ptr<const TAtomic>& DoGetActivityFlag() const = 0;
 
     void OnRequestsFinished(TDataAccessorsResult&& result) {
         DoOnRequestsFinished(std::move(result));
@@ -85,12 +86,18 @@ public:
             OnRequestsFinished(std::move(*Result));
         }
     }
+    const std::shared_ptr<const TAtomic>& GetActivityFlag() const {
+        return DoGetActivityFlag();
+    }
 
     virtual ~IDataAccessorRequestsSubscriber() = default;
 };
 
 class TFakeDataAccessorsSubscriber: public IDataAccessorRequestsSubscriber {
 private:
+    virtual const std::shared_ptr<const TAtomic>& DoGetActivityFlag() const override {
+        return Default<std::shared_ptr<TAtomic>>();
+    }
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& /*result*/) override {
     }
 };
@@ -223,6 +230,11 @@ public:
             }
         }
         return result;
+    }
+
+    const std::shared_ptr<const TAtomic>& GetActivityFlag() const {
+        AFL_VERIFY(HasSubscriber());
+        return Subscriber->GetActivityFlag();
     }
 
     bool HasSubscriber() const {

@@ -234,6 +234,10 @@ private:
     TFetchingScriptCursor Step;
     std::shared_ptr<IDataSource> Source;
     const NColumnShard::TCounterGuard Guard;
+    virtual const std::shared_ptr<const TAtomic>& DoGetActivityFlag() const override {
+        return Source->GetContext()->GetCommonContext()->GetActivityFlag();
+    }
+
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         AFL_VERIFY(!result.HasErrors());
         AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
@@ -243,7 +247,6 @@ private:
         auto task = std::make_shared<TStepAction>(Source, std::move(Step), Source->GetContext()->GetCommonContext()->GetScanActorId());
         NConveyor::TScanServiceOperator::SendTaskToExecute(task);
     }
-
 public:
     TPortionAccessorFetchingSubscriber(const TFetchingScriptCursor& step, const std::shared_ptr<IDataSource>& source)
         : Step(step)

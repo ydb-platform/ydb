@@ -33,7 +33,6 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TStageFeatures>, FetchingStageMemory);
 
     TReadMetadata::TConstPtr ReadMetadata;
-    TAtomic AbortFlag = 0;
 
     virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source) = 0;
 
@@ -67,12 +66,12 @@ public:
         return ProcessMemoryGuard->GetProcessId();
     }
 
-    bool IsAborted() const {
-        return AtomicGet(AbortFlag);
+    bool IsActive() const {
+        return CommonContext->IsActive();
     }
 
     void Abort() {
-        AtomicSet(AbortFlag, 1);
+        CommonContext->Stop();
     }
 
     virtual ~TSpecialReadContext() {

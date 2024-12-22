@@ -149,8 +149,7 @@ class Workload(object):
             if c.name != "id":
                 self.drop_column(table_name, c.name)
 
-    def queries_while_alter(self):
-        table_name = "queries_while_alter"
+    def queries_while_alter(self, table_name):
 
         schema = self.list_columns(table_name)
 
@@ -174,14 +173,11 @@ class Workload(object):
 
         while time.time() - started_at < self.duration:
             try:
-                self.create_table("queries_while_alter")
-
+                # TODO: drop only created tables by current workload
                 self.drop_all_tables()
-
-                self.queries_while_alter()
-
                 table_name = table_name_with_timestamp()
                 self.create_table(table_name)
+                self.queries_while_alter(table_name)
             except Exception as e:
                 print(type(e), e)
 
@@ -192,7 +188,7 @@ if __name__ == '__main__':
     )
     parser.add_argument('--endpoint', default='localhost:2135', help="An endpoint to be used")
     parser.add_argument('--database', default=None, required=True, help='A database to connect')
-    parser.add_argument('--duration', default=120, type=lambda x: int(x), help='A duration of workload in seconds.')
+    parser.add_argument('--duration', default=10 ** 9, type=lambda x: int(x), help='A duration of workload in seconds.')
     parser.add_argument('--batch_size', default=1000, help='Batch size for bulk insert')
     args = parser.parse_args()
     with Workload(args.endpoint, args.database, args.duration, args.batch_size) as workload:

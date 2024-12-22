@@ -33,16 +33,25 @@ bool TTxWrite::CommitOneBlob(TTransactionContext& txc, const NOlap::TWideSeriali
     return true;
 }
 
-bool TTxWrite::DoExecute(TTransactionContext& txc, const TActorContext&) {
+bool TTxWrite::DoExecute(TTransactionContext& txc, const TActorContext& ctx) {
     CommitSnapshot = Self->GetCurrentSnapshotForInternalModification();
     TMemoryProfileGuard mpg("TTxWrite::Execute");
     NActors::TLogContextGuard logGuard =
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "execute");
     ACFL_DEBUG("event", "start_execute");
-    const NOlap::TWritingBuffer& buffer = PutBlobResult->Get()->MutableWritesBuffer();
+    NOlap::TWritingBuffer& buffer = PutBlobResult->Get()->MutableWritesBuffer();
     for (auto&& aggr : buffer.GetAggregations()) {
         const auto& writeMeta = aggr->GetWriteMeta();
-        Y_ABORT_UNLESS(Self->TablesManager.IsReadyForWrite(writeMeta.GetTableId()));
+        if (!Self->TablesManager.IsReadyForWrite(writeMeta.GetTableId())) {
+            ACFL_ERROR("event", "absent_pathId")("path_id", writeMeta.GetTableId())("has_index", Self->TablesManager.HasPrimaryIndex());
+            Self->Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
+
+            auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(Self->TabletID(), writeMeta, NKikimrTxColumnShard::EResultStatus::ERROR);
+            ctx.Send(writeMeta.GetSource(), result.release());
+            Self->Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::NoTable);
+            buffer.RemoveData(aggr, Self->StoragesManager->GetInsertOperator());
+            continue;
+        }
         txc.DB.NoMoreReadsForTx();
         TWriteOperation::TPtr operation;
         if (writeMeta.HasLongTxId()) {

@@ -28,7 +28,7 @@ TTiering::TTieringContext TTiering::GetTierToMove(const std::shared_ptr<arrow::S
         if (skipEviction && tierInfo.GetExternalStorageId()) {
             continue;
         }
-        TString tierName = tierInfo.GetExternalStorageId() ? tierInfo.GetExternalStorageId()->GetPath() : NTiering::NCommon::DeleteTierName;
+        const TString tierName = tierInfo.GetExternalStorageId() ? tierInfo.GetExternalStorageId()->GetPath() : NTiering::NCommon::DeleteTierName;
         auto mpiOpt = tierInfo.ScalarToInstant(max);
         Y_ABORT_UNLESS(mpiOpt);
         const TInstant maxTieringPortionInstant = *mpiOpt;

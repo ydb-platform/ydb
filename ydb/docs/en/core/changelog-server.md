@@ -1,5 +1,15 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 24.3 {#24-3}
+
+Release date:
+
+### Functionality
+
+### YDB UI
+
+### Bug fixes
+
 ## Version 24.2 {#24-2}
 
 Release date: August 20, 2024.

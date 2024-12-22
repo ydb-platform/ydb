@@ -18,8 +18,11 @@ namespace {
     const char slashC = '/';
     const TStringBuf slash(&slashC, 1);
 
-    bool FilterTables(const NScheme::TSchemeEntry& entry) {
-        return entry.Type == NScheme::ESchemeEntryType::Table;
+    bool FilterSupportedSchemeObjects(const NScheme::TSchemeEntry& entry) {
+        return IsIn({
+            NScheme::ESchemeEntryType::Table,
+            NScheme::ESchemeEntryType::View
+        }, entry.Type);
     }
 
     TVector<std::pair<TString, TString>> ExpandItem(NScheme::TSchemeClient& client, TStringBuf srcPath, TStringBuf dstPath) {
@@ -27,7 +30,7 @@ namespace {
         srcPath.ChopSuffix(slash);
         dstPath.ChopSuffix(slash);
 
-        const auto ret = RecursiveList(client, TString{srcPath}, TRecursiveListSettings().Filter(&FilterTables));
+        const auto ret = RecursiveList(client, TString{srcPath}, TRecursiveListSettings().Filter(&FilterSupportedSchemeObjects));
         ThrowOnError(ret.Status);
 
         if (ret.Entries.size() == 1 && srcPath == ret.Entries[0].Name) {
@@ -282,7 +285,7 @@ void TCommandExportToS3::Config(TConfig& config) {
             << "    - zstd-N (N is compression level in range [1, 22], e.g. zstd-3)" << Endl)
         .RequiredArgument("STRING").StoreResult(&Compression);
 
-    config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder() 
+    config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
             << "Sets bucket URL style. Value "
             << colors.BoldColor() << "true" << colors.OldColor()
             << " means use Virtual-Hosted-Style URL, "

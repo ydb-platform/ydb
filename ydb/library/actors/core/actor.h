@@ -537,6 +537,11 @@ namespace NActors {
         }
 
         void Receive(TAutoPtr<IEventHandle>& ev) {
+#ifndef NDEBUG
+            if (ev->Flags & IEventHandle::FlagDebugTrackReceive) {
+                YaDebugBreak();
+            }
+#endif
             ++HandledEvents;
             LastReceiveTimestamp = TActivationContext::Monotonic();
             if (CImpl.Initialized()) {

@@ -622,20 +622,25 @@ void CheckResolveUnknownNode(TTestActorRuntime &runtime,
     UNIT_ASSERT(reply->Addresses.empty());
 }
 
+THolder<TEvInterconnect::TEvNodesInfo> GetNameserverNodesListEv(TTestActorRuntime &runtime, TActorId sender) {
+    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, new TEvInterconnect::TEvListNodes));
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handle);
+    UNIT_ASSERT(reply);
+    
+    return IEventHandle::Release<TEvInterconnect::TEvNodesInfo>(handle);
+}
+
 void GetNameserverNodesList(TTestActorRuntime &runtime,
                             TActorId sender,
                             THashMap<ui32, TEvInterconnect::TNodeInfo> &nodes,
                             bool includeStatic)
 {
     ui32 maxStaticNodeId = runtime.GetAppData().DynamicNameserviceConfig->MaxStaticNodeId;
-    TAutoPtr<TEvInterconnect::TEvListNodes> event = new TEvInterconnect::TEvListNodes;
-    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release()));
+    auto ev = GetNameserverNodesListEv(runtime, sender);
 
-    TAutoPtr<IEventHandle> handle;
-    auto reply = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handle);
-    UNIT_ASSERT(reply);
-
-    for (auto &node : reply->Nodes)
+    for (auto &node : ev->Nodes)
         if (includeStatic || node.NodeId > maxStaticNodeId)
             nodes.emplace(node.NodeId, node);
 }
@@ -1721,6 +1726,37 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         CheckResolveUnknownNode(runtime, sender, NODE1);
         CheckResolveNode(runtime, sender, NODE2, "1.2.3.5");
         UNIT_ASSERT_VALUES_EQUAL(resolveRequests.size(), 3);
+    }
+
+    Y_UNIT_TEST(ListNodesCacheWhenNoChanges) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime);
+        TActorId sender = runtime.AllocateEdgeActor();
+        
+        // Add one dynamic node in addition to one static node
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.host1.host1", "1.2.3.4",
+                    1, 2, 3, 4, TStatus::OK, NODE1);
+
+        // Make ListNodes requests that are not batched
+        auto ev1 = GetNameserverNodesListEv(runtime, sender);
+        UNIT_ASSERT_VALUES_EQUAL(ev1->Nodes.size(), 2);
+
+        auto ev2 = GetNameserverNodesListEv(runtime, sender);
+        UNIT_ASSERT_VALUES_EQUAL(ev2->Nodes.size(), 2);
+
+        // No changes, so ListNodesCache must be the same
+        UNIT_ASSERT_VALUES_EQUAL(ev1->NodesPtr.Get(), ev2->NodesPtr.Get());
+
+        // Add new dynamic node
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.host2.host2", "1.2.3.5",
+                    1, 2, 3, 5, TStatus::OK, NODE2);
+
+        // Make one more ListNodes request
+        auto ev3 = GetNameserverNodesListEv(runtime, sender);
+        UNIT_ASSERT_VALUES_EQUAL(ev3->Nodes.size(), 3);
+
+        // When changes are made, a new ListNodesCache is allocated
+        UNIT_ASSERT_VALUES_UNEQUAL(ev2->NodesPtr.Get(), ev3->NodesPtr.Get());
     }
 }
 

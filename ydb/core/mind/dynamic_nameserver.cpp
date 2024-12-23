@@ -237,7 +237,7 @@ void TDynamicNameserver::SendNodesList(const TActorContext &ctx)
     auto now = ctx.Now();
     if (ListNodesCache->NeedUpdate(now)) {
         auto newNodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
-        auto newExpire = now;
+        auto newExpire = TInstant::Max();
 
         for (const auto &pr : StaticConfig->StaticNodeTable) {
             newNodes->emplace_back(pr.first,

@@ -16,7 +16,7 @@ class CalledProcessError(subprocess.CalledProcessError):
         return "Command '%s' returned non-zero exit status %d and output was '%s'" % (
             self.cmd,
             self.returncode,
-            self.output
+            self.output,
         )
 
 

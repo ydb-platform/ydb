@@ -92,7 +92,7 @@ public:
     virtual void SetUp(NUnitTest::TTestContext& ctx) override {
         TBase::SetUp(ctx);
 
-        CompileServiceActorId = Runtime.Register(CreatePurecalcCompileService());
+        CompileServiceActorId = Runtime.Register(CreatePurecalcCompileService({}, MakeIntrusive<NMonitoring::TDynamicCounters>()));
     }
 
     virtual void TearDown(NUnitTest::TTestContext& ctx) override {

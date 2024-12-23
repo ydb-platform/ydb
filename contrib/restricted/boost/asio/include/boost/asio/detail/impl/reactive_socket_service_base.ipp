@@ -235,21 +235,19 @@ boost::system::error_code reactive_socket_service_base::do_assign(
 }
 
 void reactive_socket_service_base::do_start_op(
-    reactive_socket_service_base::base_implementation_type& impl,
-    int op_type, reactor_op* op, bool is_continuation,
-    bool allow_speculative, bool noop, bool needs_non_blocking,
+    reactive_socket_service_base::base_implementation_type& impl, int op_type,
+    reactor_op* op, bool is_continuation, bool is_non_blocking, bool noop,
     void (*on_immediate)(operation* op, bool, const void*),
     const void* immediate_arg)
 {
   if (!noop)
   {
     if ((impl.state_ & socket_ops::non_blocking)
-        || !needs_non_blocking
         || socket_ops::set_internal_non_blocking(
           impl.socket_, impl.state_, true, op->ec_))
     {
       reactor_.start_op(op_type, impl.socket_, impl.reactor_data_, op,
-          is_continuation, allow_speculative, on_immediate, immediate_arg);
+          is_continuation, is_non_blocking, on_immediate, immediate_arg);
       return;
     }
   }
@@ -266,7 +264,7 @@ void reactive_socket_service_base::do_start_accept_op(
   if (!peer_is_open)
   {
     do_start_op(impl, reactor::read_op, op, is_continuation,
-        true, false, true, on_immediate, immediate_arg);
+        true, false, on_immediate, immediate_arg);
   }
   else
   {

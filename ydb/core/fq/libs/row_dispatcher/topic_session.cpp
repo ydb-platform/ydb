@@ -1,8 +1,7 @@
 #include "topic_session.h"
 
-#include "common.h"
-
 #include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/core/fq/libs/metrics/sanitize_label.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/format_handler.h>
 
@@ -25,7 +24,7 @@ namespace {
 
 struct TTopicSessionMetrics {
     void Init(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& topicPath, ui32 partitionId) {
-        TopicGroup = counters->GetSubgroup("topic", CleanupCounterValueString(topicPath));
+        TopicGroup = counters->GetSubgroup("topic", SanitizeLabel(topicPath));
         AllSessionsDataRate = counters->GetCounter("AllSessionsDataRate", true);
 
         PartitionGroup = TopicGroup->GetSubgroup("partition", ToString(partitionId));
@@ -107,7 +106,7 @@ private:
             }
             Y_UNUSED(TDuration::TryParse(Settings.GetSource().GetReconnectPeriod(), ReconnectPeriod));
             auto queryGroup = Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
-            auto topicGroup = queryGroup->GetSubgroup("read_group", CleanupCounterValueString(readGroup));
+            auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
             FilteredDataRate = topicGroup->GetCounter("FilteredDataRate", true);
             RestartSessionByOffsetsByQuery = counters->GetCounter("RestartSessionByOffsetsByQuery", true);
         }
@@ -710,7 +709,7 @@ void TTopicSession::StartClientSession(TClientsInfo& info) {
 
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     const auto& source = ev->Get()->Record.GetSource();
-    LOG_ROW_DISPATCHER_INFO("New client: read actor id " << ev->Sender.ToString() << ", predicate: " << source.GetPredicate() << ", offset: " << ev->Get()->Record.GetOffset());
+    LOG_ROW_DISPATCHER_INFO("New client: read actor id " << ev->Sender.ToString() << ", predicate: '" << source.GetPredicate() << "', offset: " << ev->Get()->Record.GetOffset());
 
     if (!CheckNewClient(ev)) {
         return;

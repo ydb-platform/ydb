@@ -1,93 +1,96 @@
 diff --git a/src/memory.cpp b/src/memory.cpp
-index 4b2a369..e318eee 100644
+index 7a1c283..b1e91e8 100644
 --- a/src/memory.cpp
 +++ b/src/memory.cpp
 @@ -21,7 +21,11 @@
  #  endif
  #endif
  
+-#include "include/atomic_support.h"
 +#if !defined(_LIBCPP_HAS_NO_THREADS)
-+#include <atomic>
++#  include <atomic>
 +#else
- #include "include/atomic_support.h"
++#  include "include/atomic_support.h"
 +#endif
  
  _LIBCPP_BEGIN_NAMESPACE_STD
  
-@@ -45,13 +49,21 @@ __shared_weak_count::~__shared_weak_count()
- void
- __shared_count::__add_shared() noexcept
- {
+@@ -34,10 +38,21 @@ __shared_count::~__shared_count() {}
+ __shared_weak_count::~__shared_weak_count() {}
+ 
+ #if defined(_LIBCPP_SHARED_PTR_DEFINE_LEGACY_INLINE_FUNCTIONS)
+-void __shared_count::__add_shared() noexcept { __libcpp_atomic_refcount_increment(__shared_owners_); }
++void __shared_count::__add_shared() noexcept {
++#  ifdef _LIBCPP_HAS_NO_THREADS
++  __libcpp_atomic_refcount_increment(__shared_owners_);
++#  else
++  ++__shared_owners_;
++#  endif
++}
+ 
+ bool __shared_count::__release_shared() noexcept {
+-  if (__libcpp_atomic_refcount_decrement(__shared_owners_) == -1) {
++#  ifdef _LIBCPP_HAS_NO_THREADS
++  if (__libcpp_atomic_refcount_decrement(__shared_owners_) == -1)
++#  else
++  if (--__shared_owners_ == -1)
++#  endif
++  {
+     __on_zero_shared();
+     return true;
+   }
+@@ -46,7 +61,13 @@ bool __shared_count::__release_shared() noexcept {
+ 
+ void __shared_weak_count::__add_shared() noexcept { __shared_count::__add_shared(); }
+ 
+-void __shared_weak_count::__add_weak() noexcept { __libcpp_atomic_refcount_increment(__shared_weak_owners_); }
++void __shared_weak_count::__add_weak() noexcept {
++#  ifdef _LIBCPP_HAS_NO_THREADS
++  __libcpp_atomic_refcount_increment(__shared_weak_owners_);
++#  else
++  ++__shared_weak_owners_;
++#  endif
++}
+ 
+ void __shared_weak_count::__release_shared() noexcept {
+   if (__shared_count::__release_shared())
+@@ -76,19 +97,37 @@ void __shared_weak_count::__release_weak() noexcept {
+   // threads, and have them all get copied at once.  The argument
+   // also doesn't apply for __release_shared, because an outstanding
+   // weak_ptr::lock() could read / modify the shared count.
+-  if (__libcpp_atomic_load(&__shared_weak_owners_, _AO_Acquire) == 0) {
 +#ifdef _LIBCPP_HAS_NO_THREADS
-     __libcpp_atomic_refcount_increment(__shared_owners_);
++  if (__libcpp_atomic_load(&__shared_weak_owners_, _AO_Acquire) == 0)
 +#else
-+    ++__shared_owners_;
++  if (__shared_weak_owners_.load(memory_order_acquire) == 0)
 +#endif
++  {
+     // no need to do this store, because we are about
+     // to destroy everything.
+     //__libcpp_atomic_store(&__shared_weak_owners_, -1, _AO_Release);
+     __on_zero_shared_weak();
+-  } else if (__libcpp_atomic_refcount_decrement(__shared_weak_owners_) == -1)
++  }
++#ifdef _LIBCPP_HAS_NO_THREADS
++  else if (__libcpp_atomic_refcount_decrement(__shared_weak_owners_) == -1)
++#else
++  else if (--__shared_weak_owners_ == -1)
++#endif
+     __on_zero_shared_weak();
  }
  
- bool
- __shared_count::__release_shared() noexcept
- {
+ __shared_weak_count* __shared_weak_count::lock() noexcept {
 +#ifdef _LIBCPP_HAS_NO_THREADS
-     if (__libcpp_atomic_refcount_decrement(__shared_owners_) == -1)
+   long object_owners = __libcpp_atomic_load(&__shared_owners_);
 +#else
-+    if (--__shared_owners_ == -1)
++  long object_owners = __shared_owners_.load();
 +#endif
-     {
-         __on_zero_shared();
-         return true;
-@@ -68,7 +80,11 @@ __shared_weak_count::__add_shared() noexcept
- void
- __shared_weak_count::__add_weak() noexcept
- {
+   while (object_owners != -1) {
 +#ifdef _LIBCPP_HAS_NO_THREADS
-     __libcpp_atomic_refcount_increment(__shared_weak_owners_);
+     if (__libcpp_atomic_compare_exchange(&__shared_owners_, &object_owners, object_owners + 1))
 +#else
-+    ++__shared_weak_owners_;
++    if (__shared_owners_.compare_exchange_weak(object_owners, object_owners + 1))
 +#endif
- }
- 
- void
-@@ -103,26 +119,42 @@ __shared_weak_count::__release_weak() noexcept
-     // threads, and have them all get copied at once.  The argument
-     // also doesn't apply for __release_shared, because an outstanding
-     // weak_ptr::lock() could read / modify the shared count.
-+#ifdef _LIBCPP_HAS_NO_THREADS
-     if (__libcpp_atomic_load(&__shared_weak_owners_, _AO_Acquire) == 0)
-+#else
-+    if (__shared_weak_owners_.load(memory_order_acquire) == 0)
-+#endif
-     {
-         // no need to do this store, because we are about
-         // to destroy everything.
-         //__libcpp_atomic_store(&__shared_weak_owners_, -1, _AO_Release);
-         __on_zero_shared_weak();
-     }
-+#ifdef _LIBCPP_HAS_NO_THREADS
-     else if (__libcpp_atomic_refcount_decrement(__shared_weak_owners_) == -1)
-+#else
-+    else if (--__shared_weak_owners_ == -1)
-+#endif
-         __on_zero_shared_weak();
- }
- 
- __shared_weak_count*
- __shared_weak_count::lock() noexcept
- {
-+#ifdef _LIBCPP_HAS_NO_THREADS
-     long object_owners = __libcpp_atomic_load(&__shared_owners_);
-+#else
-+    long object_owners = __shared_owners_.load();
-+#endif
-     while (object_owners != -1)
-     {
-+#ifdef _LIBCPP_HAS_NO_THREADS
-         if (__libcpp_atomic_compare_exchange(&__shared_owners_,
-                                              &object_owners,
-                                              object_owners+1))
-+#else
-+        if (__shared_owners_.compare_exchange_weak(object_owners, object_owners+1))
-+#endif
-             return this;
-     }
-     return nullptr;
+       return this;
+   }
+   return nullptr;

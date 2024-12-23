@@ -16,6 +16,8 @@
 
 #include <util/string/printf.h>
 
+#include <format>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -2138,6 +2140,255 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[1002];[2]];[[1003];[3]]]");
             }
         }
+    }
+
+    void DoPositiveQueriesVectorIndex(TSession& session, const TString& query) {
+        {
+            auto result = session.ExplainDataQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(),
+                "Failed to explain: `" << query << "` with " << result.GetIssues().ToString());
+        }
+        {
+            auto result = session.ExecuteDataQuery(query,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(),
+                "Failed to execute: `" << query << "` with " << result.GetIssues().ToString());
+        }
+    }
+
+    void DoPositiveQueriesVectorIndex(TSession& session, const TString& mainQuery, const TString& indexQuery) {
+        DoPositiveQueriesVectorIndex(session, mainQuery);
+        DoPositiveQueriesVectorIndex(session, indexQuery);
+    }
+
+    void DoPositiveQueriesVectorIndexOrderBy(
+        TSession& session,
+        std::string_view function,
+        std::string_view direction,
+        std::string_view left,
+        std::string_view right) {
+        constexpr std::string_view target = "$target = \"\x67\x73\x03\";";
+        std::string metric = std::format("Knn::{}({}, {})", function, left, right);
+        // no metric in result
+        {
+            const TString plainQuery(Q1_(std::format(R"({}
+                SELECT * FROM `/Root/TestTable`
+                ORDER BY {} {}
+                LIMIT 3;
+            )", target, metric, direction)));
+            const TString indexQuery(Q1_(std::format(R"({}
+                SELECT * FROM `/Root/TestTable` VIEW index
+                ORDER BY {} {}
+                LIMIT 3;
+            )", target, metric, direction)));
+            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery);
+        }
+        // metric in result
+        {
+            const TString plainQuery(Q1_(std::format(R"({}
+                SELECT {}, `/Root/TestTable`.* FROM `/Root/TestTable`
+                ORDER BY {} {}
+                LIMIT 3;
+            )", target, metric, metric, direction)));
+            const TString indexQuery(Q1_(std::format(R"({}
+                SELECT {}, `/Root/TestTable`.* FROM `/Root/TestTable` VIEW index
+                ORDER BY {} {}
+                LIMIT 3;
+            )", target, metric, metric, direction)));
+            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery);
+        }
+        // metric as result
+        {
+            const TString plainQuery(Q1_(std::format(R"({}
+                SELECT {} AS m, `/Root/TestTable`.* FROM `/Root/TestTable`
+                ORDER BY m {}
+                LIMIT 3;
+            )", target, metric, direction)));
+            const TString indexQuery(Q1_(std::format(R"({}
+                SELECT {} AS m, `/Root/TestTable`.* FROM `/Root/TestTable` VIEW index
+                ORDER BY m {}
+                LIMIT 3;
+            )", target, metric, direction)));
+            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery);
+        }
+    }
+
+    void DoPositiveQueriesVectorIndexOrderBy(
+        TSession& session,
+        std::string_view function,
+        std::string_view direction) {
+        // target is left, member is right
+        DoPositiveQueriesVectorIndexOrderBy(session, function, direction, "$target", "emb");
+        // target is right, member is left
+        DoPositiveQueriesVectorIndexOrderBy(session, function, direction, "emb", "$target");
+    }
+
+    void DoPositiveQueriesVectorIndexOrderByCosine(TSession& session) {
+        // distance, default direction
+        DoPositiveQueriesVectorIndexOrderBy(session, "CosineDistance", "");
+        // distance, asc direction
+        DoPositiveQueriesVectorIndexOrderBy(session, "CosineDistance", "ASC");
+        // similarity, desc direction
+        DoPositiveQueriesVectorIndexOrderBy(session, "CosineSimilarity", "DESC");
+    }
+
+    TSession DoCreateTableForVectorIndex(TTableClient& db, bool nullable) {
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto tableBuilder = db.GetTableBuilder();
+            if (nullable) {
+                tableBuilder
+                    .AddNullableColumn("pk", EPrimitiveType::Int64)
+                    .AddNullableColumn("emb", EPrimitiveType::String)
+                    .AddNullableColumn("data", EPrimitiveType::String);
+            } else {
+                tableBuilder
+                    .AddNonNullableColumn("pk", EPrimitiveType::Int64)
+                    .AddNonNullableColumn("emb", EPrimitiveType::String)
+                    .AddNonNullableColumn("data", EPrimitiveType::String);
+            }
+            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"pk"});
+            auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query1(Q_(R"(
+                UPSERT INTO `/Root/TestTable` (pk, emb, data) VALUES)"
+                "(0, \"\x03\x30\x03\", \"0\"),"
+                "(1, \"\x13\x31\x03\", \"1\"),"
+                "(2, \"\x23\x32\x03\", \"2\"),"
+                "(3, \"\x33\x33\x03\", \"3\"),"
+                "(4, \"\x43\x34\x03\", \"4\"),"
+                "(5, \"\x60\x60\x03\", \"5\"),"
+                "(6, \"\x61\x61\x03\", \"6\"),"
+                "(7, \"\x62\x62\x03\", \"7\"),"
+                "(8, \"\x75\x76\x03\", \"8\"),"
+                "(9, \"\x76\x76\x03\", \"9\");"
+            ));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        return session;
+    }
+
+    Y_UNIT_TEST(VectorIndexOrderByCosineDistance) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, false);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        DoPositiveQueriesVectorIndexOrderByCosine(session);
+    }
+
+    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarity) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, false);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        DoPositiveQueriesVectorIndexOrderByCosine(session);
+    }
+
+    Y_UNIT_TEST(VectorIndexOrderByCosineDistanceNullable) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, true);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        DoPositiveQueriesVectorIndexOrderByCosine(session);
+    }
+
+    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarityNullable) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, true);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        DoPositiveQueriesVectorIndexOrderByCosine(session);
     }
 
     Y_UNIT_TEST(ExplainCollectFullDiagnostics) {

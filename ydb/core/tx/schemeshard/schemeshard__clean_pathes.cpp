@@ -23,7 +23,6 @@ struct TSchemeShard::TTxCleanTables : public TTransactionBase<TSchemeShard> {
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         NIceDb::TNiceDb db(txc.DB);
 
-        ui32 RemovedCount = 0;
         while (RemovedCount < BucketSize && TablesToClean) {
             TPathId tableId = TablesToClean.back();
             Self->PersistRemoveTable(db, tableId, ctx);
@@ -71,7 +70,6 @@ struct TSchemeShard::TTxCleanBlockStoreVolumes : public TTransactionBase<TScheme
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
 
-        RemovedCount = 0;
         while (RemovedCount < BucketSize && BlockStoreVolumesToClean) {
             TPathId pathId = BlockStoreVolumesToClean.front();
             BlockStoreVolumesToClean.pop_front();

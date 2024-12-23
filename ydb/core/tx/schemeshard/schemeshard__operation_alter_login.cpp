@@ -8,8 +8,64 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
+class TTxRemoveUserAccess : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
+    TOperationId OperationId;
+    // static const ui32 BucketSize = 1; // TODO
+    // TVector<TPathId> TablesToClean;
+    ui32 RemovedCount;
+
+    TString DebugHint() const {
+        return TStringBuilder()
+            << "TAlterLogin::TRemoveUserAccess::TTxRemoveUserAccess"
+            << " operationId# " << OperationId;
+    }
+
+public:
+    TTxRemoveUserAccess(TSelf* self, const TOperationId& operationId) //TVector<TPathId> tablesToClean)
+        : TTransactionBase<TSchemeShard>(self)
+        , OperationId(operationId)
+        // , TablesToClean(std::move(tablesToClean))
+        , RemovedCount(0)
+    {}
+
+    TTxType GetTxType() const override {
+        return TXTYPE_ALTER_LOGIN_REMOVE_USER_ACCESS_PROGRESS;
+    }
+
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            DebugHint() << "Execute"
+            << ", at schemeshard: " << Self->TabletID());
+
+        // NIceDb::TNiceDb db(txc.DB);
+
+        // ui32 RemovedCount = 0;
+        // while (RemovedCount < BucketSize && TablesToClean) {
+        //     TPathId tableId = TablesToClean.back();
+        //     Self->PersistRemoveTable(db, tableId, ctx);
+
+        //     ++RemovedCount;
+        //     TablesToClean.pop_back();
+        // }
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            DebugHint() << "Complete"
+                << ", done ??? for " << RemovedCount << " paths" // TODO
+            //    << ", left " << TablesToClean.size()
+                << ", at schemeshard: "<< Self->TabletID());
+
+        // if (TablesToClean) {
+        //     Self->Execute(Self->CreateTxCleanTables(std::move(TablesToClean)), ctx);
+        // } else
+        ctx.Send(Self->SelfId(), new TEvPrivate::TEvRemoveUserAccessResult(OperationId));
+    }
+};
+
 class TRemoveUserAccess: public TSubOperationState {
-private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
@@ -19,8 +75,8 @@ private:
     }
 
 public:
-    TRemoveUserAccess(TOperationId id)
-        : OperationId(id)
+    TRemoveUserAccess(const TOperationId& operationId)
+        : OperationId(operationId)
     {}
 
     static constexpr TTxState::ETxState GetTxState() {
@@ -48,7 +104,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
         auto ssId = context.SS->SelfTabletId();
         
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             DebugHint() << "HandleReply TEvRemoveUserAccessResult"
             << ", at schemeshard: " << ssId);
 
@@ -360,8 +416,7 @@ void TSchemeShard::Handle(TEvPrivate::TEvRemoveUserAccess::TPtr& ev, const TActo
     const auto* msg = ev->Get();
 
     Cerr << "Handle " << msg->ToString() << Endl;
-    // Execute(CreateTxCleanDroppedSubDomains(), ctx);
-    Send(ev->Sender, new TEvPrivate::TEvRemoveUserAccessResult(ev->Get()->OpId));
+    Execute(new TTxRemoveUserAccess(this, msg->OpId), ctx);
 }
 
 }

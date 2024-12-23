@@ -2347,7 +2347,8 @@ public:
             for (auto target : createTransfer.Targets()) {
                 settings.Targets.emplace_back(
                     target.RemotePath().Cast<TCoAtom>().StringValue(),
-                    target.LocalPath().Cast<TCoAtom>().StringValue()
+                    target.LocalPath().Cast<TCoAtom>().StringValue(),
+                    target.Lambda().Cast<TCoAtom>().StringValue()
                 );
             }
 

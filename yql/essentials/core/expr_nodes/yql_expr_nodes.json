@@ -2592,7 +2592,8 @@
             "Match": {"Type": "Tuple"},
             "Children": [
                 {"Index": 0, "Name": "RemotePath", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "LocalPath", "Type": "TCoAtom"}
+                {"Index": 1, "Name": "LocalPath", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Lambda", "Type": "TCoAtom"}
             ]
         },
         {

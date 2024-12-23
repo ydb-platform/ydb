@@ -6,6 +6,7 @@
 #include "node.h"
 #include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
 #include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
+#include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/v1/object_processing.h>
 #include <yql/essentials/utils/yql_paths.h>
 #include <util/generic/scope.h>
@@ -197,12 +198,21 @@ static bool TransferSettings(std::map<TString, TNodePtr>& out,
     return true;
 }
 
-static bool TransferTarget(std::vector<std::pair<TString, TString>>& out, TStringBuf prefixPath,
+static bool TransferTarget(std::vector<std::tuple<TString, TString, TString>>& out, TStringBuf prefixPath,
         const TRule_transfer_target& in, TTranslation& ctx)
 {
     const TString remote = Id(in.GetRule_object_ref1().GetRule_id_or_at2(), ctx).second;
     const TString local = Id(in.GetRule_object_ref3().GetRule_id_or_at2(), ctx).second;
-    out.emplace_back(remote, BuildTablePath(prefixPath, local));
+    TString lambda;
+    if (in.GetBlock4().HasRule_lambda2()) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.Antlr4Parser = true;
+        settings.AnsiLexer = true;
+        auto formatter = NSQLFormat::MakeSqlFormatter(settings);
+
+        lambda = formatter->Format(&in.GetBlock4().GetRule_lambda2());
+    }
+    out.emplace_back(remote, BuildTablePath(prefixPath, local), lambda);
     return true;
 }
 
@@ -1836,7 +1846,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             auto prefixPath = Ctx.GetPrefixPath(context.ServiceId, context.Cluster);
 
-            std::vector<std::pair<TString, TString>> targets;
+            std::vector<std::tuple<TString, TString, TString>> targets;
             if (!TransferTarget(targets, prefixPath, node.GetRule_transfer_target5(), *this)) {
                 return false;
             }

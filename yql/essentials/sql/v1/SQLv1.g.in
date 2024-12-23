@@ -912,7 +912,7 @@ create_transfer_stmt: CREATE TRANSFER object_ref
     WITH LPAREN transfer_settings RPAREN
 ;
 
-transfer_target: object_ref TO object_ref;
+transfer_target: object_ref TO object_ref (USING lambda)?;
 transfer_settings: transfer_settings_entry (COMMA transfer_settings_entry)*;
 transfer_settings_entry: an_id EQUALS expr;
 

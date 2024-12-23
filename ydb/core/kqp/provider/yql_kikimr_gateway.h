@@ -883,7 +883,7 @@ struct TTransferSettings : public TReplicationSettingsBase {
 
 struct TCreateTransferSettings {
     TString Name;
-    TVector<std::pair<TString, TString>> Targets;
+    TVector<std::tuple<TString, TString, TString>> Targets;
     TTransferSettings Settings;
 };
 

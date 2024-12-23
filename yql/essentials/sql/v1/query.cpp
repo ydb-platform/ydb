@@ -2658,7 +2658,7 @@ private:
 class TCreateTransfer final: public TTransfer {
 public:
     explicit TCreateTransfer(TPosition pos, const TString& id,
-            std::vector<std::pair<TString, TString>>&& targets,
+            std::vector<std::tuple<TString, TString, TString>>&& targets,
             std::map<TString, TNodePtr>&& settings,
             const TObjectOperatorContext& context)
         : TTransfer(pos, id, "create", context)
@@ -2671,10 +2671,11 @@ protected:
     INode::TPtr FillOptions(INode::TPtr options) const override {
         if (!Targets.empty()) {
             auto targets = Y();
-            for (auto&& [remote, local] : Targets) {
+            for (auto&& [remote, local, lambda] : Targets) {
                 auto target = Y();
                 target = L(target, Q(Y(Q("remote"), Q(remote))));
                 target = L(target, Q(Y(Q("local"), Q(local))));
+                target = L(target, Q(Y(Q("lambda"), Q(lambda))));
                 targets = L(targets, Q(target));
             }
             options = L(options, Q(Y(Q("targets"), Q(targets))));
@@ -2696,13 +2697,13 @@ protected:
     }
 
 private:
-    std::vector<std::pair<TString, TString>> Targets; // (remote, local)
+    std::vector<std::tuple<TString, TString, TString>> Targets; // (remote, local, lambda)
     std::map<TString, TNodePtr> Settings;
 
 }; // TCreateTransfer
 
 TNodePtr BuildCreateTransfer(TPosition pos, const TString& id,
-        std::vector<std::pair<TString, TString>>&& targets,
+        std::vector<std::tuple<TString, TString, TString>>&& targets,
         std::map<TString, TNodePtr>&& settings,
         const TObjectOperatorContext& context)
 {

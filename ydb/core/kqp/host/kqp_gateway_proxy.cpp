@@ -2621,10 +2621,11 @@ public:
             }
 
             auto& targets = *config.MutableTransferSpecific();
-            for (const auto& [src, dst] : settings.Targets) {
+            for (const auto& [src, dst, lambda] : settings.Targets) {
                 auto& target = *targets.AddTargets();
                 target.SetSrcPath(AdjustPath(src, params.GetDatabase()));
                 target.SetDstPath(AdjustPath(dst, GetDatabase()));
+                target.SetTransformLambda(lambda);
             }
 
             if (IsPrepare()) {

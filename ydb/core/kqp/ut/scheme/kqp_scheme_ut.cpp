@@ -6979,7 +6979,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-            while (true) {
+            for (size_t i = 10; i--;) {
                 const auto result = repl.DescribeReplication("/Root/replication").ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -6988,6 +6988,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     break;
                 }
 
+                UNIT_ASSERT_C(i, "Alter timeout");
                 Sleep(TDuration::Seconds(1));
             }
         }
@@ -7561,6 +7562,24 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer1`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> {
+                    $y = CAST($x as String);
+                    RETURN $y || $y || SUBSTRING($y, 1, 2) || FIND($y, "abc")  ;
+                  }
+                WITH (
+                    ENDPOINT = "%s",
+                    DATABASE = "/Root"
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
     }
 
     Y_UNIT_TEST(AlterTransfer) {
@@ -7692,7 +7711,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-            for (size_t i = 0; i < 10; ++i) {
+            for (size_t i = 10; i--;) {
                 const auto result = repl.DescribeReplication("/Root/transfer").ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -7701,6 +7720,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     break;
                 }
 
+                UNIT_ASSERT_C(i, "Alter timeout");
                 Sleep(TDuration::Seconds(1));
             }
         }
@@ -7710,7 +7730,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 ALTER TRANSFER `/Root/transfer`
-                SET (
+                SET (++
                     DATABASE = "/local"
                 );
             )";

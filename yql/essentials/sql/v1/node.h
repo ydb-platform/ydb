@@ -1541,7 +1541,7 @@ namespace NSQLTranslationV1 {
         const TObjectOperatorContext& context);
     TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context);
     TNodePtr BuildCreateTransfer(TPosition pos, const TString& id,
-        std::vector<std::pair<TString, TString>>&& targets,
+        std::vector<std::tuple<TString, TString, TString>>&& targets,
         std::map<TString, TNodePtr>&& settings,
         const TObjectOperatorContext& context);
     TNodePtr BuildAlterTransfer(TPosition pos, const TString& id,

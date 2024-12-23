@@ -627,7 +627,7 @@ TWriteTransferSettings ParseWriteTransferSettings(TExprList node, TExprContext& 
                         } else if (itemName == "local") {
                             builtTarget.LocalPath(item.Value().Cast<TCoAtom>());
                         } else if (itemName == "lambda") {
-                            //builtTarget.Lambda(item.Value().Cast<TCoLambda>());
+                            builtTarget.Lambda(item.Value().Cast<TCoAtom>());
                         } else {
                             YQL_ENSURE(false, "unknown target item");
                         }

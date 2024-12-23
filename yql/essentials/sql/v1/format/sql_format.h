@@ -20,6 +20,9 @@ public:
 
     virtual bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues,
         EFormatMode mode = EFormatMode::Pretty) = 0;
+
+    virtual TString Format(const google::protobuf::Message*) = 0;
+
     virtual ~ISqlFormatter() = default;
 };
 

@@ -199,6 +199,20 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         }
     }
 
+    void UploadPersQueueGroups() {
+        Y_ABORT_UNLESS(!CdcStremsUploaded);
+
+        for (const auto& message : PersQueues) {
+            google::protobuf::TextFormat::PrintToString(message, &Buffer);
+        }
+        
+        auto request = Aws::S3::Model::PutObjectRequest()
+            .WithKey(Settings.GetSchemeKey());
+        this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
+
+        this->Become(&TThis::StateUploadScheme);
+    }
+
     void UploadPermissions() {
         Y_ABORT_UNLESS(!PermissionsUploaded);
 
@@ -680,7 +694,7 @@ public:
             const TActorId& dataShard, ui64 txId,
             const NKikimrSchemeOp::TBackupTask& task,
             TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
-            TVector<NKikimrSchemeOp::TPersQueueGroupDescription> persQueues,
+            ::google::protobuf::RepeatedPtrField<::NKikimrSchemeOp::TPersQueueGroupDescription> persQueues,
             TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
             TString&& metadata)
         : ExternalStorageConfig(new TS3ExternalStorageConfig(task.GetS3Settings()))
@@ -796,7 +810,7 @@ private:
     const TActorId DataShard;
     const ui64 TxId;
     const TMaybe<Ydb::Table::CreateTableRequest> Scheme;
-    const TVector<NKikimrSchemeOp::TPersQueueGroupDescription> PersQueues;
+    const ::google::protobuf::RepeatedPtrField<::NKikimrSchemeOp::TPersQueueGroupDescription> PersQueues;
     const TString Metadata;
     const TMaybe<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
 
@@ -835,7 +849,12 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         ? GenYdbScheme(Columns, Task.GetTable())
         : Nothing();
 
-    auto persQueues = Task.GetPersQueues();
+    const auto& persQueuesTPathDesc = Task.GetPersQueue();
+    ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TPersQueueGroupDescription> persQueues;
+
+    std::transform(persQueuesTPathDesc.begin(), persQueuesTPathDesc.end(), persQueues.begin(), [](const auto& x) {
+        return x.GetPersQueueGroup();
+    });
 
     auto permissions = (Task.GetShardNum() == 0)
         ? GenYdbPermissions(Task.GetTable())

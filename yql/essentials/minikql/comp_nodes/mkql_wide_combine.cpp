@@ -17,6 +17,8 @@
 
 #include <util/string/cast.h>
 
+#include <format>
+
 
 #include <contrib/libs/xxhash/xxhash.h>
 
@@ -244,11 +246,12 @@ private:
         return KeyWidth + StateWidth;
     }
 public:
-    TState(TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal, bool allowOutOfMemory = false)
+    TState(TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal, bool allowOutOfMemory = true)
         : TBase(memInfo), KeyWidth(keyWidth), StateWidth(stateWidth), AllowOutOfMemory(allowOutOfMemory), States(hash, equal, CountRowsOnPage) {
         CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
         CurrentPosition = 0;
         Tongue = CurrentPage->data();
+        std::cerr << std::format("[{}] - CreateTState. AllowOutOfMemory = {}\n", (const void*)this, allowOutOfMemory);
     }
 
     ~TState() {
@@ -288,11 +291,14 @@ public:
     void GrowStates() {
         try {
             States.CheckGrow();
-        } catch (TMemoryLimitExceededException) {
+        } catch (...) {
+            std::cerr << std::format("[{}] - Exception. IsOutOfMemory = {}, AllowOutOfMemory = {}\n", (const void*)this, IsOutOfMemory, AllowOutOfMemory);
             YQL_LOG(INFO) << "State failed to grow";
             if (IsOutOfMemory || !AllowOutOfMemory) {
+                std::cerr << std::format("[{}] - Rethrowing.\n", (const void*)this);
                 throw;
             } else {
+                std::cerr << std::format("[{}] - Handle.\n", (const void*)this);
                 IsOutOfMemory = true;
             }
         }
@@ -435,6 +441,9 @@ public:
             TString id = TString(Operator_Aggregation) + "0";
             CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
         }
+        std::cerr << std::format("[{}] SpillingSupportState created. AllowSpilling: {}. InMemoryProcessingState: {}\n",
+                (const void*)this, (allowSpilling && ctx.SpillerFactory), (const void*)&InMemoryProcessingState);
+
     }
 
     EUpdateResult Update() {
@@ -850,23 +859,26 @@ private:
         switch(mode) {
             case EOperatingMode::InMemory: {
                 YQL_LOG(INFO) << "switching Memory mode to InMemory";
+                YQL_LOG(INFO) << "switching Memory mode to InMemory";
                 MKQL_ENSURE(false, "Internal logic error");
                 break;
             }
             case EOperatingMode::SplittingState: {
                 YQL_LOG(INFO) << "switching Memory mode to SplittingState";
+                std::cerr << std::format("[{}]: switching Memory mode to SplittingState\n", (const void*)this);
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 SpilledBuckets.resize(SpilledBucketCount);
                 auto spiller = Ctx.SpillerFactory->CreateSpiller();
                 for (auto &b: SpilledBuckets) {
                     b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 5_MB);
                     b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 5_MB);
-                    b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal);
+                    b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal, false);
                 }
                 break;
             }
             case EOperatingMode::Spilling: {
                 YQL_LOG(INFO) << "switching Memory mode to Spilling";
+                std::cerr << std::format("[{}]: switching Memory mode to Spilling\n", (const void*)this);
                 MKQL_ENSURE(EOperatingMode::SplittingState == Mode || EOperatingMode::InMemory == Mode, "Internal logic error");
 
                 Tongue = ViewForKeyAndState.data();
@@ -874,6 +886,7 @@ private:
             }
             case EOperatingMode::ProcessSpilled: {
                 YQL_LOG(INFO) << "switching Memory mode to ProcessSpilled";
+                std::cerr << std::format("[{}]: switching Memory mode to ProcessSpilled\n", (const void*)this);
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
 
@@ -1048,7 +1061,7 @@ public:
 
                     Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
                     Nodes.ProcessItem(ctx, ptr->TasteIt() ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
-                } while (!ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage - ptr->StoredDataSize));
+                } while (!ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage - ptr->StoredDataSize) && !ptr->CheckIsOutOfMemory());
 
                 ptr->PushStat(ctx.Stats);
             }
@@ -1396,6 +1409,7 @@ private:
             TString id = TString(Operator_Aggregation) + "0";
             ptr->CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
         }
+        std::cerr << std::format("[{}] MakeState. No spilling\n", (const void*)this);
     }
 
     void RegisterDependencies() const final {
@@ -1825,6 +1839,7 @@ private:
             AllowSpilling,
             ctx
         );
+        std::cerr << std::format("[{}] MakeState. AllowSpilling = {}, SpillerFactory = {}\n", (const void*)this, AllowSpilling, (bool)ctx.SpillerFactory);
     }
 
     void RegisterDependencies() const final {
@@ -1980,15 +1995,19 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
 }
 
 IComputationNode* WrapWideCombiner(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    std::cerr << "Create WideCombiner\n";
     return WrapWideCombinerT<false>(callable, ctx, false);
 }
 
 IComputationNode* WrapWideLastCombiner(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    std::cerr << "Create WideLastCombiner. No spilling\n";
     YQL_LOG(INFO) << "Found non-serializable type, spilling is disabled";
     return WrapWideCombinerT<true>(callable, ctx, false);
 }
 
 IComputationNode* WrapWideLastCombinerWithSpilling(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    std::cerr << "Create WideLastCombiner. With spilling\n";
+    YQL_LOG(INFO) << "MISHA WID COMBINER";
     return WrapWideCombinerT<true>(callable, ctx, true);
 }
 

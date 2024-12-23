@@ -49,7 +49,8 @@ public:
         const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
 
         TLogFunc logger;
-        if (IsDebugLogEnabled(actorSystem)) {
+        std::cerr << "MISHA is logger enabled? " << IsDebugLogEnabled(actorSystem) << std::endl;
+        if (IsDebugLogEnabled(actorSystem) || true) {
             logger = [actorSystem, txId = this->GetTxId(), taskId = GetTask().GetId()] (const TString& message) {
                 LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_COMPUTE, "TxId: " << txId
                     << ", task: " << taskId << ": " << message);

@@ -36,7 +36,7 @@ void TKqpComputeActor::DoBootstrap() {
     const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
 
     TLogFunc logger;
-    if (IsDebugLogEnabled(actorSystem)) {
+    if (IsDebugLogEnabled(actorSystem) || true) {
         logger = [actorSystem, txId = this->GetTxId(), taskId = GetTask().GetId()] (const TString& message) {
             LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER, "TxId: " << txId
                 << ", task: " << taskId << ": " << message);

@@ -8,15 +8,17 @@
 ## Список функций
 
 * `Digest::Crc32c(String{Flags::AutoMap}) -> Uint32`
-* `Digest::Crc64(String{Flags::AutoMap}) -> Uint64`
-* `Digest::Fnv32(String{Flags::AutoMap}) -> Uint32`
-* `Digest::Fnv64(String{Flags::AutoMap}) -> Uint64`
-* `Digest::MurMurHash(String{Flags:AutoMap}) -> Uint64`
-* `Digest::MurMurHash32(String{Flags:AutoMap}) -> Uint32`
-* `Digest::MurMurHash2A(String{Flags:AutoMap}) -> Uint64`
-* `Digest::MurMurHash2A32(String{Flags:AutoMap}) -> Uint32`
-* `Digest::CityHash(String{Flags:AutoMap}, [Uint64?]) -> Uint64`: Второй опциональный аргумент задает seed
+* `Digest::Crc64(String{Flags::AutoMap}, [Init:Uint64]) -> Uint64`
+* `Digest::Fnv32(String{Flags::AutoMap}, [Init:Uint32]) -> Uint32`
+* `Digest::Fnv64(String{Flags::AutoMap}, [Init:Uint64]) -> Uint64`
+* `Digest::MurMurHash(String{Flags:AutoMap}, [Init:Uint64]) -> Uint64`
+* `Digest::MurMurHash32(String{Flags:AutoMap}, [Init:Uint32]) -> Uint32`
+* `Digest::MurMurHash2A(String{Flags:AutoMap}, [Init:Uint64]) -> Uint64`
+* `Digest::MurMurHash2A32(String{Flags:AutoMap}, [Init:Uint32]) -> Uint32`
+* `Digest::CityHash(String{Flags:AutoMap}, [Init:Uint64?]) -> Uint64`
 * `Digest::CityHash128(String{Flags:AutoMap}) -> Tuple<Uint64,Uint64>`
+
+Функции для видов хешей, которые поддерживают значение-параметр seed/init, принимают его опциональным именованным аргументом `Init`.
 
 CityHash функция для байтовой строки с результатом типа uint128. Результат представлен как пара из двух uint64 чисел `<low, high>`
 

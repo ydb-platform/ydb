@@ -38,6 +38,7 @@ SRCS(
     monitoring.cpp
     multiget.cpp
     patch.cpp
+    put.cpp
     recovery.cpp
     sanitize_groups.cpp
     scrub_fast.cpp

@@ -514,6 +514,13 @@ namespace NKikimr {
                 return {NKikimrProto::ERROR, "buffer size mismatch"};
             }
 
+            if (blobPartSize == 0) {
+                LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << evPrefix << ": part size cannot be 0;"
+                        << " id# " << id
+                        << " Marker# BSVS44");
+                return {NKikimrProto::ERROR, "part size is 0"};
+            }
+
             if (bufSize > Config->MaxLogoBlobDataSize) {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << evPrefix << ": data is too large;"
                         << " id# " << id

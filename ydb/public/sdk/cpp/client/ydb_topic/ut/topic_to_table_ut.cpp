@@ -2594,8 +2594,9 @@ Y_UNIT_TEST_F(OltpSink_WriteToTopic_5, TFixtureOltpSink)
     NTable::TSession tableSession = CreateTableSession();
     NTable::TTransaction tx = BeginTx(tableSession);
 
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #1", &tx);
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #2", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", &tx);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
 
     Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 0);
 
@@ -2748,7 +2749,9 @@ Y_UNIT_TEST_F(OltpSink_WriteToTopicAndTable_5, TFixtureOltpSink)
 
     auto records = MakeTableRecords();
     WriteToTable("table_A", records, &tx);
+
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
 
     RollbackTx(tx, EStatus::SUCCESS);
 

@@ -287,7 +287,7 @@ def render_testlist_html(rows, fn, build_preset):
     buid_preset_params = '--build unknown_build_type'
     if build_preset == 'release-asan' :
         buid_preset_params = '--build "release" --sanitize="address" -DDEBUGINFO_LINES_ONLY'
-    elif  build_preset == 'release-msan':
+    elif build_preset == 'release-msan':
         buid_preset_params = '--build "release" --sanitize="memory" -DDEBUGINFO_LINES_ONLY'
     elif build_preset == 'release-tsan':   
         buid_preset_params = '--build "release" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'

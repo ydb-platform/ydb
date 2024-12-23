@@ -174,6 +174,7 @@ SRCS(
     local_kmeans.cpp
     make_scan_snapshot_unit.cpp
     make_snapshot_unit.cpp
+    memory_state_migration.cpp
     move_index_unit.cpp
     move_table_unit.cpp
     operation.cpp

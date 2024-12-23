@@ -92,7 +92,7 @@ pdisk_key_config:
     }
 
     Y_UNIT_TEST(AllowDefaultHostConfigId) {
-        TString config = "{blob_storage_config: {autoconfig_settings: {erasure_species: block-4-2, pdisk_type: NVME}}, "
+        TString config = "{self_management_config: {enabled: true, erasure_species: block-4-2, pdisk_type: NVME}, "
             "host_configs: [{nvme: [disk1, disk2]}], hosts: [{host: fqdn1}, {host: fqdn2}]}";
         NKikimrConfig::TAppConfig cfg = Parse(config, true);
         UNIT_ASSERT(cfg.HasBlobStorageConfig());
@@ -106,9 +106,9 @@ pdisk_key_config:
     }
 
     Y_UNIT_TEST(IncorrectHostConfigIdFails) {
-        TString config1 = "{blob_storage_config: {autoconfig_settings: {erasure_species: block-4-2, pdisk_type: NVME}}, "
+        TString config1 = "{self_management_config: {enabled: true, erasure_species: block-4-2, pdisk_type: NVME}, "
             "host_configs: [{nvme: [disk1, disk2]}], hosts: [{host: fqdn1, host_config_id: 2}, {host: fqdn2}]}";
-        TString config2 = "{blob_storage_config: {autoconfig_settings: {erasure_species: block-4-2, pdisk_type: NVME}}, "
+        TString config2 = "{self_management_config: {enabled: true, erasure_species: block-4-2, pdisk_type: NVME}, "
             "host_configs: [{host_config_id: 1, nvme: [disk1, disk2]}], hosts: [{host: fqdn1, host_config_id: 2}, "
             "{host: fqdn2}]}";
         UNIT_CHECK_GENERATED_EXCEPTION(Parse(config1, false), yexception);
@@ -116,7 +116,7 @@ pdisk_key_config:
     }
 
     Y_UNIT_TEST(NoMixedHostConfigIds) {
-        TString config = "{blob_storage_config: {autoconfig_settings: {erasure_species: block-4-2, pdisk_type: NVME}}, "
+        TString config = "{self_management_config: {enabled: true, erasure_species: block-4-2, pdisk_type: NVME}, "
             "host_configs: [{nvme: [disk1, disk2]}, {host_config_id: 2}], hosts: [{host: fqdn1, host_config_id: 2}, "
             "{host: fqdn2, host_config_id: 2}]}";
         UNIT_CHECK_GENERATED_EXCEPTION(Parse(config, false), yexception);

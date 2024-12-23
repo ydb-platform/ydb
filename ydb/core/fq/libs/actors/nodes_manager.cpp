@@ -318,14 +318,13 @@ private:
     void HandleResponse(NFq::TEvInternalService::TEvHealthCheckResponse::TPtr& ev) {
         try {
             const auto& status = ev->Get()->Status.GetStatus();
-            THolder<TEvInterconnect::TEvNodesInfo> nameServiceUpdateReq(new TEvInterconnect::TEvNodesInfo());
             if (!ev->Get()->Status.IsSuccess()) {
                 ythrow yexception() <<  status << '\n' << ev->Get()->Status.GetIssues().ToString();
             }
             const auto& res = ev->Get()->Result;
 
-            auto& nodesInfo = nameServiceUpdateReq->Nodes;
-            nodesInfo.reserve(res.nodes().size());
+            auto nodesInfo = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
+            nodesInfo->reserve(res.nodes().size());
 
             Peers.clear();
             std::set<ui32> nodeIds; // may be not unique
@@ -340,7 +339,7 @@ private:
                   node.active_workers(), node.memory_limit(), node.memory_allocated(), node.data_center()});
 
                 if (node.interconnect_port()) {
-                    nodesInfo.emplace_back(TEvInterconnect::TNodeInfo{
+                    nodesInfo->emplace_back(TEvInterconnect::TNodeInfo{
                         node.node_id(),
                         node.node_address(),
                         node.hostname(), // host
@@ -356,8 +355,9 @@ private:
             ServiceCounters.Counters->GetCounter("PeerCount", false)->Set(Peers.size());
             ServiceCounters.Counters->GetCounter("NodesHealthCheckOk", true)->Inc();
 
-            LOG_T("Send NodeInfo with size: " << nodesInfo.size() << " to DynamicNameserver");
-            if (!nodesInfo.empty()) {
+            LOG_T("Send NodeInfo with size: " << nodesInfo->size() << " to DynamicNameserver");
+            if (!nodesInfo->empty()) {
+                THolder<TEvInterconnect::TEvNodesInfo> nameServiceUpdateReq(new TEvInterconnect::TEvNodesInfo(nodesInfo));
                 Send(GetNameserviceActorId(), nameServiceUpdateReq.Release());
             }
         } catch (yexception &e) {

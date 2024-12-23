@@ -152,9 +152,9 @@ TVector<TString> X509CertificateReader::ReadSubjectDns(const X509Ptr& x509, cons
 }
 
 TString X509CertificateReader::GetFingerprint(const X509Ptr& x509) {
-    static constexpr size_t FINGERPRINT_LENGTH = SHA_DIGEST_LENGTH;
+    static constexpr size_t FINGERPRINT_LENGTH = SHA256_DIGEST_LENGTH;
     unsigned char fingerprint[FINGERPRINT_LENGTH];
-    if (X509_digest(x509.get(), EVP_sha1(), fingerprint, nullptr) <= 0) {
+    if (X509_digest(x509.get(), EVP_sha256(), fingerprint, nullptr) <= 0) {
         return "";
     }
     return HexEncode(fingerprint, FINGERPRINT_LENGTH);

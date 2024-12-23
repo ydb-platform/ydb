@@ -6,14 +6,21 @@ import os
 import re
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
-from enum import StrEnum
+from enum import StrEnum, Enum
 from types import TracebackType
+from time import time
 
 
 class WorkloadType(StrEnum):
     Clickbench = 'clickbench'
     TPC_H = 'tpch'
     TPC_DS = 'tpcds'
+
+
+class CheckCanonicalPolicy(Enum):
+    NO = 0
+    WARNING = 1
+    ERROR = 2
 
 
 class YdbCliHelper:
@@ -46,11 +53,13 @@ class YdbCliHelper:
             self.stdout: str = ''
             self.stderr: str = ''
             self.error_message: str = ''
+            self.warning_message: str = ''
             self.plans: Optional[list[YdbCliHelper.QueryPlan]] = None
             self.explain_plan: Optional[YdbCliHelper.QueryPlan] = None
             self.errors_by_iter: dict[int, str] = {}
             self.time_by_iter: dict[int, float] = {}
             self.traceback: Optional[TracebackType] = None
+            self.start_time = time()
 
         @property
         def success(self) -> bool:
@@ -63,9 +72,10 @@ class YdbCliHelper:
                      query_num: int,
                      iterations: int,
                      timeout: float,
-                     check_canonical: bool,
+                     check_canonical: CheckCanonicalPolicy,
                      query_syntax: str,
-                     scale: Optional[int]):
+                     scale: Optional[int],
+                     query_prefix: Optional[str]):
             def _get_output_path(ext: str) -> str:
                 return yatest.common.test_output_path(f'q{query_num}.{ext}')
 
@@ -78,6 +88,7 @@ class YdbCliHelper:
             self.check_canonical = check_canonical
             self.query_syntax = query_syntax
             self.scale = scale
+            self.query_prefix = query_prefix
             self._nodes_info: dict[str, dict[str, int]] = {}
             self._plan_path = _get_output_path('plan')
             self._query_output_path = _get_output_path('out')
@@ -89,6 +100,13 @@ class YdbCliHelper:
                     self.result.error_message += f'\n\n{msg}'
                 else:
                     self.result.error_message = msg
+
+        def _add_warning(self, msg: Optional[str]):
+            if msg is not None and len(msg) > 0:
+                if len(self.result.warning_message) > 0:
+                    self.result.warning_message += f'\n\n{msg}'
+                else:
+                    self.result.warning_message = msg
 
         def _process_returncode(self, returncode) -> None:
             begin_str = f'{self.query_num}:'
@@ -147,7 +165,10 @@ class YdbCliHelper:
                     self.result.stats[q] = {}
                 self.result.stats[q][signal['sensor']] = signal['value']
             if self.result.stats.get(f'Query{self.query_num:02d}', {}).get("DiffsCount", 0) > 0:
-                self._add_error('There is diff in query results')
+                if self.check_canonical == CheckCanonicalPolicy.WARNING:
+                    self._add_warning('There is diff in query results')
+                else:
+                    self._add_error('There is diff in query results')
 
         def _load_query_out(self) -> None:
             if (os.path.exists(self._query_output_path)):
@@ -193,10 +214,9 @@ class YdbCliHelper:
                 '--global-timeout', f'{self.timeout}s',
                 '--verbose'
             ]
-            query_preffix = get_external_param('query-prefix', '')
-            if query_preffix:
-                cmd += ['--query-settings', query_preffix]
-            if self.check_canonical:
+            if self.query_prefix:
+                cmd += ['--query-prefix', self.query_prefix]
+            if self.check_canonical != CheckCanonicalPolicy.NO:
                 cmd.append('--check-canonical')
             if self.query_syntax:
                 cmd += ['--syntax', self.query_syntax]
@@ -230,8 +250,8 @@ class YdbCliHelper:
 
     @staticmethod
     def workload_run(workload_type: WorkloadType, path: str, query_num: int, iterations: int = 5,
-                     timeout: float = 100., check_canonical: bool = False, query_syntax: str = '',
-                     scale: Optional[int] = None) -> YdbCliHelper.WorkloadRunResult:
+                     timeout: float = 100., check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.NO, query_syntax: str = '',
+                     scale: Optional[int] = None, query_prefix=None) -> YdbCliHelper.WorkloadRunResult:
         return YdbCliHelper.WorkloadProcessor(
             workload_type,
             path,
@@ -240,5 +260,6 @@ class YdbCliHelper:
             timeout,
             check_canonical,
             query_syntax,
-            scale
+            scale,
+            query_prefix=query_prefix
         ).process()

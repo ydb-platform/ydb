@@ -44,6 +44,7 @@ PEERDIR(
     ydb/core/fq/libs/db_schema
     ydb/core/fq/libs/events
     ydb/core/fq/libs/grpc
+    ydb/core/fq/libs/metrics
     ydb/core/fq/libs/private_client
     ydb/core/fq/libs/rate_limiter/utils
     ydb/core/fq/libs/result_formatter

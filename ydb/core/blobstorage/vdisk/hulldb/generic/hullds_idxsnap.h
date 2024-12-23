@@ -28,9 +28,11 @@ namespace NKikimr {
 
         // TLevelIndexSnapshot is created via TLevelIndex::GetSnapshot
         TLevelIndexSnapshot(const TLevelSlicePtr &slice, TFreshDataSnapshot &&freshSnap, ui32 level0SegsNum,
-                TActorSystem *actorSystem, TIntrusivePtr<TDelayedCompactionDeleterInfo> deleterInfo)
+                ui64 allLevelsDataInplaced, TActorSystem *actorSystem,
+                TIntrusivePtr<TDelayedCompactionDeleterInfo> deleterInfo)
             : SliceSnap(slice, level0SegsNum)
             , FreshSnap(std::move(freshSnap))
+            , AllLevelsDataInplaced(allLevelsDataInplaced)
             , Notifier(actorSystem
                     ? new TDelayedCompactionDeleterNotifier(actorSystem, std::move(deleterInfo))
                     : nullptr)
@@ -58,6 +60,8 @@ namespace NKikimr {
 
         TLevelSliceSnapshot SliceSnap;
         TFreshDataSnapshot FreshSnap;
+
+        ui64 AllLevelsDataInplaced = 0;
 
     private:
         TIntrusivePtr<TDelayedCompactionDeleterNotifier> Notifier;

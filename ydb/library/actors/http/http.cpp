@@ -81,7 +81,7 @@ TUrlParameters THttpRequest::GetParameters() const {
 }
 
 template <>
-bool THttpParser<THttpRequest, TSocketBuffer>::HasBody() const {
+bool THttpParser<THttpRequest>::HasBody() const {
     if (!Body.empty()) {
         return true;
     }
@@ -89,7 +89,7 @@ bool THttpParser<THttpRequest, TSocketBuffer>::HasBody() const {
 }
 
 template <>
-void THttpParser<THttpRequest, TSocketBuffer>::Advance(size_t len) {
+void THttpParser<THttpRequest>::Advance(size_t len) {
     TStringBuf data(Pos(), len);
     while (!data.empty()) {
         if (Stage != EParseStage::Error) {
@@ -224,17 +224,17 @@ void THttpParser<THttpRequest, TSocketBuffer>::Advance(size_t len) {
 }
 
 template <>
-THttpParser<THttpRequest, TSocketBuffer>::EParseStage THttpParser<THttpRequest, TSocketBuffer>::GetInitialStage() {
+THttpParser<THttpRequest>::EParseStage THttpParser<THttpRequest>::GetInitialStage() {
     return EParseStage::Method;
 }
 
 template <>
-bool THttpParser<THttpResponse, TSocketBuffer>::ExpectedBody() const {
+bool THttpParser<THttpResponse>::ExpectedBody() const {
     return !Status.starts_with("1") && Status != "204" && Status != "304";
 }
 
 template <>
-bool THttpParser<THttpResponse, TSocketBuffer>::HasBody() const {
+bool THttpParser<THttpResponse>::HasBody() const {
     if (!Body.empty()) {
         return true;
     }
@@ -242,7 +242,7 @@ bool THttpParser<THttpResponse, TSocketBuffer>::HasBody() const {
 }
 
 template <>
-THttpParser<THttpResponse, TSocketBuffer>::EParseStage THttpParser<THttpResponse, TSocketBuffer>::GetInitialStage() {
+THttpParser<THttpResponse>::EParseStage THttpParser<THttpResponse>::GetInitialStage() {
     return EParseStage::Protocol;
 }
 
@@ -253,7 +253,7 @@ void THttpResponse::Clear() {
 }
 
 template <>
-void THttpParser<THttpResponse, TSocketBuffer>::Advance(size_t len) {
+void THttpParser<THttpResponse>::Advance(size_t len) {
     TStringBuf data(Pos(), len);
     while (!data.empty()) {
         if (Stage != EParseStage::Error) {
@@ -398,7 +398,7 @@ void THttpParser<THttpResponse, TSocketBuffer>::Advance(size_t len) {
 }
 
 template <>
-void THttpParser<THttpResponse, TSocketBuffer>::ConnectionClosed() {
+void THttpParser<THttpResponse>::ConnectionClosed() {
     if (Stage == EParseStage::Done) {
         return;
     }
@@ -412,7 +412,7 @@ void THttpParser<THttpResponse, TSocketBuffer>::ConnectionClosed() {
 }
 
 THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseString(TStringBuf data) {
-    THttpParser<THttpResponse, TSocketBuffer> parser(data);
+    THttpParser<THttpResponse> parser(data);
     THeadersBuilder headers(parser.Headers);
     if (!Endpoint->WorkerName.empty()) {
         headers.Set("X-Worker-Name", Endpoint->WorkerName);
@@ -654,7 +654,7 @@ void THttpOutgoingResponse::AddDataChunk(THttpOutgoingDataChunkPtr dataChunk) {
 }
 
 THttpOutgoingDataChunk::THttpOutgoingDataChunk(THttpOutgoingResponsePtr response, TStringBuf data)
-    : THttpDataChunk<TSocketBuffer>(data)
+    : THttpDataChunk(data)
     , Response(std::move(response))
 {}
 

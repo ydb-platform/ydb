@@ -2,12 +2,14 @@ import os
 import sys
 import json
 import signal
-import shutil
 import tempfile
 import logging
 import argparse
 import subprocess
 import warnings
+
+import library.python.resource as rs
+
 from urllib3.exceptions import HTTPWarning
 
 from ydb.tools.cfg.walle import NopHostsInformationProvider
@@ -499,7 +501,42 @@ def ssh_args():
         metavar="SSH_USER",
         default=current_user,
         help="user for ssh interaction with slice. Default value is $USER "
-             "(which equals {user} now)".format(user=current_user),
+        "(which equals {user} now)".format(user=current_user),
+    )
+    return args
+
+
+def databases_config_path_args():
+    args = argparse.ArgumentParser(add_help=False)
+    args.add_argument(
+        "--databases-config",
+        metavar="DATABASES_CONFIG",
+        default="",
+        required=False,
+        help="Path to file with databases configuration",
+    )
+    return args
+
+
+def cluster_type_args():
+    args = argparse.ArgumentParser(add_help=False)
+    args.add_argument(
+        "--cluster-type",
+        metavar="CLUSTER_TYPE",
+        required=True,
+        help="Erasure type for slice",
+        choices=["block-4-2-8-nodes", "mirror-3-dc-3-nodes-in-memory", "mirror-3-dc-3-nodes", "mirror-3-dc-9-nodes"],
+    )
+    return args
+
+
+def output_file():
+    args = argparse.ArgumentParser(add_help=False)
+    args.add_argument(
+        "--output-file",
+        metavar="OUTPUT_FILE",
+        required=False,
+        help="File to save cluster configuration",
     )
     return args
 
@@ -583,7 +620,7 @@ def dispatch_run(func, args, walle_provider):
 
     if clear_tmp:
         logger.debug("remove temp dirs '%s'", temp_dir)
-        shutil.rmtree(temp_dir)
+        # shutil.rmtree(temp_dir)
 
 
 def add_install_mode(modes, walle_provider):
@@ -593,9 +630,17 @@ def add_install_mode(modes, walle_provider):
     mode = modes.add_parser(
         "install",
         conflict_handler='resolve',
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), log_args(), ssh_args()],
+        parents=[
+            direct_nodes_args(),
+            cluster_description_args(),
+            binaries_args(),
+            component_args(),
+            log_args(),
+            ssh_args(),
+            # databases_config_path_args(),
+        ],
         description="Full installation of the cluster from scratch. "
-                    "You can use --hosts to specify particular hosts. But it is tricky."
+        "You can use --hosts to specify particular hosts. But it is tricky.",
     )
     mode.set_defaults(handler=_run)
 
@@ -672,7 +717,7 @@ def add_clear_mode(modes, walle_provider):
         "clear",
         parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
         description="Stop all kikimr instances at the nodes, format all kikimr drivers, shutdown dynamic slots. "
-                    "And don't start nodes afrer it. "
+                    "And don't start nodes after it. "
                     "Use --hosts to specify particular hosts."
     )
     mode.set_defaults(handler=_run)
@@ -686,12 +731,42 @@ def add_format_mode(modes, walle_provider):
         "format",
         parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
         description="Stop all kikimr instances at the nodes, format all kikimr drivers at the nodes, start the instances. "
-                    "If you call format for all cluster, you will spoil it. "
-                    "Additional dynamic configuration will required after it. "
-                    "If you call format for few nodes, cluster will regenerate after it. "
-                    "Use --hosts to specify particular hosts."
-
+        "If you call format for all cluster, you will spoil it. "
+        "Additional dynamic configuration will required after it. "
+        "If you call format for few nodes, cluster will regenerate after it. "
+        "Use --hosts to specify particular hosts.",
     )
+    mode.set_defaults(handler=_run)
+
+
+def add_sample_config_mode(modes):
+    def _run(args):
+        cluster_type = args.cluster_type
+        template_path = ""
+        if cluster_type == "block-4-2-8-nodes":
+            template_path = "/ydbd_slice/baremetal/templates/block-4-2-8-nodes.yaml"
+        elif cluster_type == "mirror-3-dc-3-nodes-in-memory":
+            pass
+        elif cluster_type == "mirror-3-dc-3-nodes":
+            template_path = "/ydbd_slice/baremetal/templates/mirror-3-dc-3-nodes.yaml"
+        elif cluster_type == "mirror-3-dc-9-nodes":
+            template_path = "/ydbd_slice/baremetal/templates/mirror-3-dc-9-nodes.yaml"
+        else:
+            raise "Unreachable code"  # TODO(shmel1k@): improve error
+
+        f = rs.find(template_path).decode()
+        if args.output_file is not None and args.output_file != "":
+            with open(args.output_file, "w+") as f1:
+                f1.write(f)
+        else:
+            print(f)
+
+    mode = modes.add_parser(
+        "sample-config",
+        parents=[cluster_type_args(), output_file()],
+        description="Generate default mock-configuration for provided cluster-type"
+    )
+
     mode.set_defaults(handler=_run)
 
 
@@ -1205,6 +1280,8 @@ def main(walle_provider=None):
         add_clear_mode(modes, walle_provider)
         add_format_mode(modes, walle_provider)
         add_explain_mode(modes, walle_provider)
+        add_sample_config_mode(modes)
+
         add_docker_build_mode(modes)
         add_kube_generate_mode(modes)
         add_kube_install_mode(modes)

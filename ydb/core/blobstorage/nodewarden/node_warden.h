@@ -21,6 +21,7 @@ namespace NKikimr {
         NKikimrConfig::TBlobStorageConfig BlobStorageConfig;
         NKikimrConfig::TStaticNameserviceConfig NameserviceConfig;
         std::optional<NKikimrConfig::TDomainsConfig> DomainsConfig;
+        std::optional<NKikimrConfig::TSelfManagementConfig> SelfManagementConfig;
         TIntrusivePtr<IPDiskServiceFactory> PDiskServiceFactory;
         TIntrusivePtr<TAllVDiskKinds> AllVDiskKinds;
         TIntrusivePtr<NPDisk::TDriveModelDb> AllDriveModels;

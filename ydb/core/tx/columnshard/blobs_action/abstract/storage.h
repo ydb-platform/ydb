@@ -54,6 +54,7 @@ protected:
     virtual void DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& counters) const = 0;
 
     void StartGCAction(const std::shared_ptr<IBlobsGCAction>& action) const {
+        AFL_VERIFY(IsReady());
         return DoStartGCAction(action);
     }
 
@@ -96,14 +97,17 @@ public:
     }
 
     std::shared_ptr<IBlobsDeclareRemovingAction> StartDeclareRemovingAction(const NBlobOperations::EConsumer consumerId) {
+        AFL_VERIFY(IsReady());
         return DoStartDeclareRemovingAction(Counters->GetConsumerCounter(consumerId)->GetRemoveDeclareCounters());
     }
     std::shared_ptr<IBlobsWritingAction> StartWritingAction(const NBlobOperations::EConsumer consumerId) {
+        AFL_VERIFY(IsReady());
         auto result = DoStartWritingAction();
         result->SetCounters(Counters->GetConsumerCounter(consumerId)->GetWriteCounters());
         return result;
     }
     std::shared_ptr<IBlobsReadingAction> StartReadingAction(const NBlobOperations::EConsumer consumerId) {
+        AFL_VERIFY(IsReady());
         auto result = DoStartReadingAction();
         result->SetCounters(Counters->GetConsumerCounter(consumerId)->GetReadCounters());
         return result;
@@ -129,6 +133,8 @@ public:
         CurrentGCAction = task;
         return CurrentGCAction;
     }
+
+    virtual bool IsReady() const = 0;
 };
 
 }

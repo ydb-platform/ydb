@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {PostingTable_ParentColumn, "Uint32", true, true},
+            {ParentColumn, "Uint32", true, true},
             {"key", "Uint32", true, true},
             {"data", "String", false, false},
         });
@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {PostingTable_ParentColumn, "Uint32", true, true},
+            {ParentColumn, "Uint32", true, true},
             {"key", "Uint32", true, true},
             {"embedding", "String", false, false},
             {"data", "String", false, false},
@@ -292,8 +292,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         // Upsert some initial values
         ExecSQL(server, sender,
                 R"(
-        UPSERT INTO `/Root/table-main` 
-            (key, embedding, data) 
+        UPSERT INTO `/Root/table-main`
+            (key, embedding, data)
         VALUES )"
                 "(1, \"\x30\x30\3\", \"one\"),"
                 "(2, \"\x31\x31\3\", \"two\"),"
@@ -377,8 +377,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         // Upsert some initial values
         ExecSQL(server, sender,
                 R"(
-        UPSERT INTO `/Root/table-main` 
-            (key, embedding, data) 
+        UPSERT INTO `/Root/table-main`
+            (key, embedding, data)
         VALUES )"
                 "(1, \"\x30\x30\3\", \"one\"),"
                 "(2, \"\x31\x31\3\", \"two\"),"
@@ -462,8 +462,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         // Upsert some initial values
         ExecSQL(server, sender,
                 R"(
-        UPSERT INTO `/Root/table-main` 
-            (__ydb_parent, key, embedding, data) 
+        UPSERT INTO `/Root/table-main`
+            (__ydb_parent, key, embedding, data)
         VALUES )"
                 "(39, 1, \"\x30\x30\3\", \"one\"),"
                 "(40, 1, \"\x30\x30\3\", \"one\"),"
@@ -549,8 +549,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         // Upsert some initial values
         ExecSQL(server, sender,
                 R"(
-        UPSERT INTO `/Root/table-main` 
-            (__ydb_parent, key, embedding, data) 
+        UPSERT INTO `/Root/table-main`
+            (__ydb_parent, key, embedding, data)
         VALUES )"
                 "(39, 1, \"\x30\x30\3\", \"one\"),"
                 "(40, 1, \"\x30\x30\3\", \"one\"),"

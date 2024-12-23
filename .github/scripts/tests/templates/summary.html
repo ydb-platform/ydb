@@ -291,7 +291,7 @@
     function copyTestNameToClipboard(text) {
         const full_name = text.trim();
         let pieces 
-        if (full_name.includes('.py/'))
+        if (full_name.includes('.py.'))
         {
             pieces = /(.+)\/(.*py.*[^\/]+)$/.exec(full_name);
         } else

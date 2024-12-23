@@ -26,6 +26,7 @@ SRCS(
     log.cpp
     list_dead_letter_source_queues.cpp
     list_permissions.cpp
+    list_queue_tags.cpp
     list_queues.cpp
     list_users.cpp
     local_rate_limiter_allocator.cpp

@@ -565,10 +565,10 @@ class SqsHttpApi(object):
     def list_queue_tags(self, queue_url):
         tags = self.execute_request(
             action='ListQueueTags',
-            extract_result_method=lambda x: x['ListQueueTagsResponse']['ListQueueTagsResult']['Tags'],
+            extract_result_method=lambda x: x['ListQueueTagsResponse']['ListQueueTagsResult']['Tag'],
             QueueUrl=queue_url
         )
-        return tags
+        return {} if tags is None else tags
 
     def tag_queue(self, queue_url, tags):
         params = {}

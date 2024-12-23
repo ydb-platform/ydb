@@ -90,6 +90,9 @@ private:
     const char* GetAttrKeys() const {
         return TablesFormat_ == 1 ? QUEUE_ID_KEYS : "'('State (Uint64 '0))";
     }
+    const char* GetTagKeys() const {
+        return TablesFormat_ == 1 ? QUEUE_ID_KEYS : "";
+    }
     const char* GetIdKeys() const {
         return TablesFormat_ == 1 ? QUEUE_ID_KEYS : "";
     }

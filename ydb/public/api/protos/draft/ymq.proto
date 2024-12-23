@@ -298,3 +298,17 @@ message ListDeadLetterSourceQueuesResult {
     string next_token = 1;
     repeated string queue_urls = 2;
 }
+
+
+message ListQueueTagsRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string queue_url = 2;
+}
+
+message ListQueueTagsResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListQueueTagsResult {
+    map<string, string> tags = 1;
+}

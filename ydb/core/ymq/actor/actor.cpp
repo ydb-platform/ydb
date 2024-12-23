@@ -67,6 +67,7 @@ IActor* CreateActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyC
         REQUEST_CASE(SetQueueAttributes)
         REQUEST_CASE(ListDeadLetterSourceQueues)
         REQUEST_CASE(CountQueues)
+        REQUEST_CASE(ListQueueTags)
 
 #undef REQUEST_CASE
 

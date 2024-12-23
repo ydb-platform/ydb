@@ -945,6 +945,54 @@ namespace NKikimr::NYmq::V1 {
         }
     };
 
+    class TListQueueTagsReplyCallback : public TReplyCallback<
+            NKikimr::NSQS::TListQueueTagsResponse,
+            Ydb::Ymq::V1::ListQueueTagsResult> {
+    public:
+        TListQueueTagsReplyCallback (
+                std::shared_ptr<NKikimr::NGRpcService::IRequestOpCtx> request)
+            : TReplyCallback<
+                NKikimr::NSQS::TListQueueTagsResponse,
+                Ydb::Ymq::V1::ListQueueTagsResult>(request)
+        {
+        }
+
+    private:
+        const NKikimr::NSQS::TListQueueTagsResponse& GetResponse(const NKikimrClient::TSqsResponse& resp) override {
+            return resp.GetListQueueTags();
+        }
+
+        Ydb::Ymq::V1::ListQueueTagsResult GetResult(const NKikimrClient::TSqsResponse& resp) override {
+            Ydb::Ymq::V1::ListQueueTagsResult result;
+            const auto& tags = GetResponse(resp);
+
+            for (const auto& t: tags.GetTags()) {
+                result.mutable_tags()->emplace(t.GetKey(), t.GetValue());
+            }
+
+            return result;
+        }
+    };
+
+    class TListQueueTagsActor : public TBaseRpcRequestActor<
+            TEvYmqListQueueTagsRequest,
+            NKikimr::NSQS::TListQueueTagsRequest,
+            TListQueueTagsReplyCallback> {
+    public:
+        using TBaseRpcRequestActor::TBaseRpcRequestActor;
+
+    private:
+        NKikimr::NSQS::TListQueueTagsRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutableListQueueTags();
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
+            return result;
+        }
+
+        THolder<TListQueueTagsReplyCallback> CreateReplyCallback() override {
+            return MakeHolder<TListQueueTagsReplyCallback>(Request_);
+        }
+    };
+
     #undef COPY_FIELD_IF_PRESENT
     #undef COPY_FIELD_IF_PRESENT_IN_ENTRY
 }
@@ -975,5 +1023,8 @@ DECLARE_RPC(SendMessageBatch);
 DECLARE_RPC(DeleteMessageBatch);
 DECLARE_RPC(ChangeMessageVisibilityBatch);
 DECLARE_RPC(ListDeadLetterSourceQueues);
+DECLARE_RPC(ListQueueTags);
+// DECLARE_RPC(TagQueue);
+// DECLARE_RPC(UntagQueue);
 
 }

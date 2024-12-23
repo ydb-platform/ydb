@@ -32,6 +32,7 @@ enum EAction {
     ListPermissions,
     ListDeadLetterSourceQueues,
     CountQueues,
+    ListQueueTags,
 
     ActionsArraySize,
 };
@@ -85,7 +86,9 @@ EAction GetNonBatchAction(EAction action);
         macro(SendMessage)                  \
         macro(SendMessageBatch)             \
         macro(ListDeadLetterSourceQueues)   \
-        macro(SetQueueAttributes)
+        macro(SetQueueAttributes)           \
+        macro(ListQueueTags)
+
 
 // All actions
 #define ENUMERATE_ALL_ACTIONS(macro)     \
@@ -112,6 +115,7 @@ EAction GetNonBatchAction(EAction action);
     macro(ModifyPermissions)             \
     macro(ListPermissions)               \
     macro(CountQueues)                   \
-    macro(ListDeadLetterSourceQueues)
+    macro(ListDeadLetterSourceQueues)    \
+    macro(ListQueueTags)
 
 } // namespace NKikimr::NSQS

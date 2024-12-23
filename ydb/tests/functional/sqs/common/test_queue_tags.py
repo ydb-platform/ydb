@@ -12,6 +12,16 @@ class TestQueueTags(KikimrSqsTestBase):
         config_generator = super(TestQueueTags, cls)._setup_config_generator()
         return config_generator
 
+    def test_list_queue_tags(self):
+        self._init_with_params()
+
+        queue_url = self._create_queue_and_assert(self.queue_name, use_http=True)
+
+        def get_tags():
+            return self._sqs_api.list_queue_tags(queue_url)
+
+        assert get_tags() == {}
+
     def test_tag_queue(self):
         self._init_with_params()
 
@@ -21,7 +31,7 @@ class TestQueueTags(KikimrSqsTestBase):
             return self._sqs_api.tag_queue(queue_url, Tags=tags)
 
         def get_tags():
-            return self._sqs_api.list_queue_tags(queue_url)['Tags']
+            return self._sqs_api.list_queue_tags(queue_url)
 
         tags = get_tags()
         assert len(tags) == 0
@@ -61,7 +71,7 @@ class TestQueueTags(KikimrSqsTestBase):
             return self._sqs_api.untag_queue(queue_url, TagKeys=keys)
 
         def get_tags():
-            return self._sqs_api.list_queue_tags(queue_url)['Tags']
+            return self._sqs_api.list_queue_tags(queue_url)
 
         # Removing unknown tags is OK:
         remove_tags(['key0'])

@@ -351,6 +351,7 @@ protected:
                 RESPONSE_CASE(SetQueueAttributes)
                 RESPONSE_CASE(ListDeadLetterSourceQueues)
                 RESPONSE_CASE(CountQueues)
+                RESPONSE_CASE(ListQueueTags)
             case NKikimrClient::TSqsResponse::kDeleteQueueBatch:
             case NKikimrClient::TSqsResponse::kGetQueueAttributesBatch:
             case NKikimrClient::TSqsResponse::kPurgeQueueBatch:

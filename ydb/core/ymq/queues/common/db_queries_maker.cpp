@@ -71,10 +71,12 @@ namespace NKikimr::NSQS {
             GetDlqIdKeys(),                         // 16
             GetDlqIdAndShardKeys(),                 // 17
             GetShardColumnType(DlqTablesFormat_),   // 18
-            GetDlqStateKeys()                       // 19
+            GetDlqStateKeys(),                      // 19
+
+            GetTagKeys()                            // 20
         );
     }
-    
+
     TString TDbQueriesMaker::operator() (EQueryId id) const {
         return FillQuery(GetQueryById(id));
     }

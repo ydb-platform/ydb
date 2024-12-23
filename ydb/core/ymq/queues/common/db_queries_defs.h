@@ -23,3 +23,5 @@
 #define DLQ_ID_AND_SHARD_KEYS_PARAM                 "%17$s"
 #define DLQ_SHARD_TYPE_PARAM                        "%18$s"
 #define DLQ_STATE_KEYS_PARAM                        "%19$s"
+
+#define TAGS_KEYS_PARAM                             "%20$s"

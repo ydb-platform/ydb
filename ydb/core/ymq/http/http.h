@@ -93,6 +93,7 @@ private:
     void SetupSendMessageBatch(TSendMessageBatchRequest* const req);
     void SetupPurgeQueue(TPurgeQueueRequest* const req);
     void SetupSetQueueAttributes(TSetQueueAttributesRequest* const req);
+    void SetupListQueueTags(TListQueueTagsRequest* const req);
 
     void ExtractSourceAddressFromSocket();
 

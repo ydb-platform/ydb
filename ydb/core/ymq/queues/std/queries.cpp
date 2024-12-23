@@ -564,6 +564,27 @@ const char* const InternalGetQueueAttributesQuery = R"__(
     )
 )__";
 
+const char* const InternalListQueueTagsQuery = R"__(
+    (
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+
+        (let tagsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Tags)
+
+        (let tagsRow '(
+            )__" TAGS_KEYS_PARAM R"__())
+        (let tagsSelect '(
+            'Key
+            'Value))
+
+        (let tagsRead (SelectRow tagsTable attrsRow attrsSelect))
+
+        (return (AsList
+            (SetResult 'queueExists (Exists tagsRead))
+            (SetResult 'tags tagsRead)))
+    )
+)__";
+
 const char* const ListQueuesQuery = R"__(
     (
         (let folderId (Parameter 'FOLDERID  (DataType 'Utf8String)))
@@ -1177,7 +1198,7 @@ const char* const LoadInflyQuery = R"__(
             'InflyCount
             'MessageCount
             'ReadOffset
-            'CreatedTimestamp    
+            'CreatedTimestamp
         ))
         (let state (SelectRow stateTable stateRow stateFields))
 
@@ -1394,6 +1415,8 @@ const char* GetStdQueryById(size_t id) {
         return GetMessageCountMetricsQuery;
     case GET_STATE_ID:
         return GetStateQuery;
+    case INTERNAL_LIST_QUEUE_TAGS_ID:
+        return InternalListQueueTagsQuery;
     }
     return nullptr;
 }

@@ -25,4 +25,5 @@ service YmqService {
     rpc YmqDeleteMessageBatch(DeleteMessageBatchRequest) returns (DeleteMessageBatchResponse);
     rpc YmqChangeMessageVisibilityBatch(ChangeMessageVisibilityBatchRequest) returns (ChangeMessageVisibilityBatchResponse);
     rpc YmqListDeadLetterSourceQueues(ListDeadLetterSourceQueuesRequest) returns (ListDeadLetterSourceQueuesResponse);
+    rpc YmqListQueueTags(ListQueueTagsRequest) returns (ListQueueTagsResponse);
 }

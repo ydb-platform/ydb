@@ -57,7 +57,8 @@ public:
             {"ListPermissions", {EACLSourceType::Custom, describePath}},
             {"CountQueues", {EACLSourceType::AccountDir, describePath}},
             {"DeleteUser", {EACLSourceType::AccountDir, deleteUser}},
-            {"DeleteQueue", {EACLSourceType::QueueDir, deleteQueue}}};
+            {"DeleteQueue", {EACLSourceType::QueueDir, deleteQueue}},
+            {"ListQueueTags", {EACLSourceType::QueueDir, describePath}}};
 
         for (const auto& pair : ACE2AccessIndex) {
             Access2ACEIndex[pair.second] = pair.first;

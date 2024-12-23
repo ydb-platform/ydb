@@ -148,6 +148,16 @@ public:
         }
     }
 
+    bool ReadNext(const ui32 count) {
+        for (ui32 i = 0; i < count; ++i) {
+            if (!ReadNext()) {
+                AFL_VERIFY(i + 1 == count);
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool ReadNext() {
         std::optional<bool> result;
         for (auto&& i : Columns) {

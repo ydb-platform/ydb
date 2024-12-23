@@ -40,7 +40,7 @@ message TMessageAttribute {
 }
 
 message TQueueTag {
-    optional string Name = 1;
+    optional string Key = 1;
     optional string Value = 2;
 }
 

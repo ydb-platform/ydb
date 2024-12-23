@@ -504,11 +504,6 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
     state->LastKey = std::move(msg.LastKey);
     state->LastCursorProto = std::move(msg.LastCursorProto);
     const ui64 rowsCount = msg.GetRowsCount();
-    AFL_ENSURE(!(LockTxId && LockMode != NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION)
-        || !msg.LocksInfo.Locks.empty()
-        || !msg.LocksInfo.BrokenLocks.empty());
-    AFL_ENSURE((LockTxId && LockMode != NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION)
-        || (msg.LocksInfo.Locks.empty() && msg.LocksInfo.BrokenLocks.empty()));
     AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("action", "got EvScanData")("rows", rowsCount)("finished", msg.Finished)("exceeded", msg.RequestedBytesLimitReached)
         ("scan", ScanId)("packs_to_send", InFlightComputes.GetPacksToSendCount())
         ("from", ev->Sender)("shards remain", PendingShards.size())

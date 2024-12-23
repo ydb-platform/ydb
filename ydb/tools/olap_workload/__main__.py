@@ -26,7 +26,7 @@ class YdbClient:
             if is_ddl:
                 return self.session_pool.retry_operation_sync(lambda session: session.execute_scheme(statement))
             else:
-                raise "Unsuppported dml" #TODO implement me
+                raise "Unsuppported dml"  # TODO implement me
 
     def drop_table(self, path_to_table):
         if self.use_query_service:
@@ -85,6 +85,7 @@ class WorkloadBase:
 
     def start(self):
         funcs = self.get_workload_thread_funcs()
+
         def wrapper(f):
             try:
                 f()
@@ -166,6 +167,7 @@ class WorkloadTablesCreateDrop(WorkloadBase):
         r = [self._create_tables_loop for x in range(0, 10)]
         r.append(self._delete_tables_loop)
         return r
+
 
 class WorkloadInsertDelete(WorkloadBase):
     def __init__(self, client, prefix, stop):

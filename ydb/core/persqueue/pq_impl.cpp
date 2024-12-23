@@ -3910,10 +3910,22 @@ TMaybe<TPartitionId> TPersQueue::FindPartitionId(const NKikimrPQ::TDataTransacti
 void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
                                                    TDistributedTransaction& tx)
 {
+    auto OriginalPartitionExists = [this](ui32 partitionId) {
+        return Partitions.contains(TPartitionId(partitionId));
+    };
+
+    // if the predicate is violated, the transaction will end with the ABORTED code
+    bool forceFalse = false;
     THashMap<ui32, std::unique_ptr<TEvPQ::TEvTxCalcPredicate>> events;
 
     for (auto& operation : tx.Operations) {
         ui32 originalPartitionId = operation.GetPartitionId();
+
+        if (!OriginalPartitionExists(originalPartitionId)) {
+            forceFalse = true;
+            continue;
+        }
+
         auto& event = events[originalPartitionId];
         if (!event) {
             event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(tx.Step, tx.TxId);
@@ -3928,32 +3940,42 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
 
     if (tx.WriteId.Defined()) {
         const TWriteId& writeId = *tx.WriteId;
-        Y_ABORT_UNLESS(TxWrites.contains(writeId),
-                       "PQ %" PRIu64 ", TxId %" PRIu64 ", WriteId {%" PRIu64 ", %" PRIu64 "}",
-                       TabletID(), tx.TxId, writeId.NodeId, writeId.KeyId);
-        const TTxWriteInfo& writeInfo = TxWrites.at(writeId);
+        if (TxWrites.contains(writeId)) {
+            const TTxWriteInfo& writeInfo = TxWrites.at(writeId);
 
-        for (auto& [originalPartitionId, partitionId] : writeInfo.Partitions) {
-            auto& event = events[originalPartitionId];
-            if (!event) {
-                event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(tx.Step, tx.TxId);
+            for (auto& [originalPartitionId, partitionId] : writeInfo.Partitions) {
+                if (!OriginalPartitionExists(originalPartitionId)) {
+                    PQ_LOG_W("Unknown partition " << originalPartitionId << " for TxId " << tx.TxId);
+                    forceFalse = true;
+                    continue;
+                }
+
+                auto& event = events[originalPartitionId];
+                if (!event) {
+                    event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(tx.Step, tx.TxId);
+                }
+
+                if (!Partitions.contains(partitionId)) {
+                    PQ_LOG_W("Unknown partition " << partitionId << " for TxId " << tx.TxId);
+                    forceFalse = true;
+                    continue;
+                }
+
+                const TPartitionInfo& partition = Partitions.at(partitionId);
+
+                event->SupportivePartitionActor = partition.Actor;
             }
-
-            if (!Partitions.contains(partitionId)) {
-                event->ForceFalse = true;
-                continue;
-            }
-
-            const TPartitionInfo& partition = Partitions.at(partitionId);
-
-            event->SupportivePartitionActor = partition.Actor;
+        } else {
+            PQ_LOG_W("Unknown WriteId " << writeId << " for TxId " << tx.TxId);
+            forceFalse = true;
         }
     }
 
     for (auto& [originalPartitionId, event] : events) {
         TPartitionId partitionId(originalPartitionId);
-        Y_ABORT_UNLESS(Partitions.contains(partitionId));
         const TPartitionInfo& partition = Partitions.at(partitionId);
+
+        event->ForceFalse = forceFalse;
 
         ctx.Send(partition.Actor, event.release());
     }

@@ -706,6 +706,7 @@ private:
                                               Config,
                                               ControlPlaneStorageServiceActorId(),
                                               requestCounters,
+                                              Counters.GetCommonCounters(RTC_RATE_LIMITER),
                                               probe,
                                               availablePermissions));
     }
@@ -1871,6 +1872,7 @@ private:
                                                    Config.RequestTimeout,
                                                    Counters,
                                                    Config.CommonConfig,
+                                                   Config.ComputeConfig,
                                                    Signer));
                 return;
             }

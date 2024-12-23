@@ -4,7 +4,6 @@ import ydb
 import time
 import os
 import random
-import string
 import threading
 
 ydb.interceptor.monkey_patch_event_handler()
@@ -85,9 +84,18 @@ class WorkloadBase:
         return self.stop.is_set()
 
     def start(self):
-        self.create_workload_threads()
-        for t in self.workload_threads:
+        funcs = self.get_workload_thread_funcs()
+        def wrapper(f):
+            try:
+                f()
+            except Exception as e:
+                print(f"FATAL: {e}")
+                os._exit(1)
+
+        for f in funcs:
+            t = threading.Thread(target=lambda: wrapper(f))
             t.start()
+            self.workload_threads.append(t)
 
     def join(self):
         for t in self.workload_threads:
@@ -154,11 +162,10 @@ class WorkloadTablesCreateDrop(WorkloadBase):
                 self.tables.remove(n)
                 self.deleted += 1
 
-    def create_workload_threads(self):
-        for _ in range(0, 10):
-            self.workload_threads.append(threading.Thread(target=self._create_tables_loop))
-        self.workload_threads.append(threading.Thread(target=self._delete_tables_loop))
-
+    def get_workload_thread_funcs(self):
+        r = [self._create_tables_loop for x in range(0, 10)]
+        r.append(self._delete_tables_loop)
+        return r
 
 class WorkloadInsertDelete(WorkloadBase):
     def __init__(self, client, prefix, stop):
@@ -167,7 +174,6 @@ class WorkloadInsertDelete(WorkloadBase):
         self.current = 0
         self.table_name = "table"
         self.lock = threading.Lock()
-        self.workload_thread = None
 
     def get_stat(self):
         with self.lock:
@@ -211,7 +217,7 @@ class WorkloadInsertDelete(WorkloadBase):
 
             actual = self.client.query(
                 f"""
-                select count(*) as cnt, sum(i64Val) as vals, sum(id) as ids FROM `{table_path}`
+                SELECT COUNT(*) as cnt, SUM(i64Val) as vals, SUM(id) as ids FROM `{table_path}`
             """,
                 False,
             )[0].rows[0]
@@ -223,8 +229,8 @@ class WorkloadInsertDelete(WorkloadBase):
                 self.inserted += 2
                 self.current = actual["cnt"]
 
-    def create_workload_threads(self):
-        self.workload_threads = [threading.Thread(target=self._loop)]
+    def get_workload_thread_funcs(self):
+        return [self._loop]
 
 
 class WorkloadRunner:
@@ -267,15 +273,16 @@ class WorkloadRunner:
         print("Waiting for stop... stopped")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="olap stability workload", formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument('--endpoint', default='localhost:2136', help="An endpoint to be used")
-    parser.add_argument('--database', default='Root/test', help='A database to connect')
-    parser.add_argument('--duration', default=10, type=lambda x: int(x), help='A duration of workload in seconds.')
+    parser.add_argument("--endpoint", default="localhost:2135", help="An endpoint to be used")
+    parser.add_argument("--database", default="Root/test", help="A database to connect")
+    parser.add_argument("--path", default="olap_workload", help="A path prefix for tables")
+    parser.add_argument("--duration", default=10 ** 9, type=lambda x: int(x), help="A duration of workload in seconds.")
     args = parser.parse_args()
     client = YdbClient(args.endpoint, args.database, True)
     client.wait_connection()
-    with WorkloadRunner(client, "olap_workload", args.duration) as runner:
+    with WorkloadRunner(client, args.path, args.duration) as runner:
         runner.run()

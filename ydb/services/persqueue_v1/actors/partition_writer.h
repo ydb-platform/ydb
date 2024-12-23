@@ -21,20 +21,12 @@ struct TPartitionWriter {
     ui64 MaxSeqNo = 0;
     TInstant LastActivity;
 
-    struct TUserWriteRequest {
-        THolder<NPQ::TEvPartitionWriter::TEvWriteRequest> Write;
-    };
-
-    struct TSentRequest {
-        ui64 Cookie;
-    };
-
     // Quoted, but not sent requests
-    TDeque<TUserWriteRequest> QuotedRequests;
+    TDeque<THolder<NPQ::TEvPartitionWriter::TEvWriteRequest>> QuotedRequests;
     // Requests that is sent to partition actor, but not accepted
-    TDeque<TSentRequest> SentRequests;
+    TDeque<ui64> SentRequests;
     // Accepted requests
-    TDeque<TSentRequest> AcceptedRequests;
+    TDeque<ui64> AcceptedRequests;
 };
 
 }

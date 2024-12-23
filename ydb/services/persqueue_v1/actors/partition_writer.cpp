@@ -19,22 +19,19 @@ void TPartitionWriter::OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteR
     Y_ABORT_UNLESS(ev->Record.HasPartitionRequest());
 
     if (SentRequests.size() < MAX_RESERVE_REQUESTS_INFLIGHT) {
-        SentRequests.emplace_back(ev->Record.GetPartitionRequest().GetCookie());
-
+        SentRequests.push_back(ev->Record.GetPartitionRequest().GetCookie());
         ctx.Send(Actor, ev.Release());
     } else {
-        QuotedRequests.emplace_back(std::move(ev));
+        QuotedRequests.push_back(std::move(ev));
     }
 }
 
 void TPartitionWriter::OnWriteAccepted(const NPQ::TEvPartitionWriter::TEvWriteAccepted& ev, const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(!SentRequests.empty());
-    Y_ABORT_UNLESS(ev.Cookie == SentRequests.front().Cookie);
+    Y_ABORT_UNLESS(ev.Cookie == SentRequests.front());
 
-    const TSentRequest& front = SentRequests.front();
-
-    AcceptedRequests.emplace_back(front.Cookie);
+    AcceptedRequests.push_back(SentRequests.front());
     SentRequests.pop_front();
 
     if (QuotedRequests.empty()) {
@@ -45,9 +42,8 @@ void TPartitionWriter::OnWriteAccepted(const NPQ::TEvPartitionWriter::TEvWriteAc
         auto next = std::move(QuotedRequests.front());
         QuotedRequests.pop_front();
 
-        SentRequests.emplace_back(next.Write->Record.GetPartitionRequest().GetCookie());
-
-        ctx.Send(Actor, next.Write.Release());
+        SentRequests.push_back(next->Record.GetPartitionRequest().GetCookie());
+        ctx.Send(Actor, next.Release());
     }
 }
 
@@ -56,7 +52,7 @@ void TPartitionWriter::OnWriteResponse(const NPQ::TEvPartitionWriter::TEvWriteRe
     Y_ABORT_UNLESS(ev.IsSuccess());
 
     Y_ABORT_UNLESS(!AcceptedRequests.empty());
-    Y_ABORT_UNLESS(ev.Record.GetPartitionResponse().GetCookie() == AcceptedRequests.front().Cookie);
+    Y_ABORT_UNLESS(ev.Record.GetPartitionResponse().GetCookie() == AcceptedRequests.front());
 
     AcceptedRequests.pop_front();
 }

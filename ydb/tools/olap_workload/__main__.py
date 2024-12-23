@@ -223,7 +223,7 @@ class WorkloadInsertDelete(WorkloadBase):
             )[0].rows[0]
             expected = {"cnt": i, "vals": i * (i + 1) * 5, "ids": i * (i + 1)}
             if actual != expected:
-                raise f"Incorrect result: expected:{expected}, actual:{actual}"
+                raise Exception(f"Incorrect result: expected:{expected}, actual:{actual}")
             i += 1
             with self.lock:
                 self.inserted += 2

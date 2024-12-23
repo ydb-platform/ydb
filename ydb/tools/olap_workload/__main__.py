@@ -117,7 +117,7 @@ class WorkloadTablesCreateDrop(WorkloadBase):
         with self.lock:
             if len(self.tables) == 0:
                 return None
-            return next(iter(self.tables))  # random.choice(tables)
+            return next(iter(self.tables))
 
     def create_table(self, table):
         path = self.get_table_path(table)

@@ -16,6 +16,14 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TEST(TSignatureTest, PayloadConstruct)
+{
+    TSignature signature(TYsonString("payload"_sb));
+    EXPECT_EQ(signature.Payload().ToString(), "payload");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TSignatureTest, DeserializeSerialize)
 {
     // SignatureSize bytes.

@@ -15,6 +15,14 @@ namespace NYT::NSignature {
 class TSignature final
 {
 public:
+    // NB(pavook) only needed for Deserialize internals.
+
+    //! Constructs an empty TSignature.
+    TSignature() = default;
+
+    //! Creates a TSignature containing the given payload without an actual signature.
+    explicit TSignature(NYson::TYsonString payload);
+
     [[nodiscard]] const NYson::TYsonString& Payload() const;
 
 private:

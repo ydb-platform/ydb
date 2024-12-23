@@ -574,9 +574,7 @@ message TListQueueTagsRequest {
 message TListQueueTagsResponse {
     optional TError Error = 1;
     optional string RequestId = 2;
-    /// Batch Id. Available only in case of batch request.
-    optional string Id = 3;
-    repeated TQueueTag Tags = 4;
+    repeated TQueueTag Tags = 3;
 }
 
 message TTagQueueRequest {

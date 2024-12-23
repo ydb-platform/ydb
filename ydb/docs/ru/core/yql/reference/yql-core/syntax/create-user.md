@@ -12,6 +12,6 @@ CREATE USER user_name [option]
 * `option` — опция команды:
   * `PASSWORD 'password'` — создает пользователя с паролем `password`.
   * `PASSWORD NULL` — создает пользователя с пустым паролем.
-  * Если опустить данную опцию — это эквивалентно `PASSWORD NULL`.
+  Значение по умолчанию: `PASSWORD NULL`.
 
 {% include [!](../../../_includes/do-not-create-users-in-ldap.md) %}

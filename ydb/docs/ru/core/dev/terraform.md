@@ -62,8 +62,8 @@
 Где:
 
 * `token` - указывается токен доступа к БД, если используется аутентификация, например, с использованием стороннего [IAM](../security/authentication.md#iam) провайдера.
-* `user` - имя пользователя для доступа к базе данных в случае использования аутентификации по [логину и паролю](../security/authentication.md#static-credentials)
-* `password` - пароль для доступа к базе данных в случае использования аутентификации по [логину и паролю](../security/authentication.md#static-credentials)
+* `user` - имя пользователя для доступа к базе данных в случае использования аутентификации по [логину и паролю](../security/authentication.md#static-credentials).
+* `password` - пароль для доступа к базе данных в случае использования аутентификации по [логину и паролю](../security/authentication.md#static-credentials).
 
 ## Использование Terraform провайдера {{ ydb-short-name }} {#work-with-tf}
 

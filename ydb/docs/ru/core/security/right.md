@@ -27,8 +27,8 @@
 `ydb.granular.select_row` | `SELECT ROW` | Право читать строки из таблицы (select), читать сообщения сообщения из топиков
 `ydb.granular.update_row` | `UPDATE ROW` | Право обновлять строки в таблице (insert, update, insert, erase), писать сообщения в топики
 `ydb.granular.erase_row` | `ERASE ROW` | Право удалять строки из таблицы
-`ydb.granular.create_directory` | `CREATE DIRECTORY` | Право создавать и удалять директории, в том числе существующие и вложенные.
-`ydb.granular.create_table` | `CREATE TABLE` | Право создавать таблицы (в том числе индексные, внешние, колоночные), представления, последовательности.
+`ydb.granular.create_directory` | `CREATE DIRECTORY` | Право создавать и удалять директории, в том числе существующие и вложенные
+`ydb.granular.create_table` | `CREATE TABLE` | Право создавать таблицы (в том числе индексные, внешние, колоночные), представления, последовательности
 `ydb.granular.create_queue` | `CREATE QUEUE` | Право создавать топики
 `ydb.granular.remove_schema` | `REMOVE SCHEMA` | Право удалять объекты (директории, таблицы, топики), которые были созданы посредством использования прав
 `ydb.granular.describe_schema` | `DESCRIBE SCHEMA` | Право просмотра имеющихся прав доступа (ACL) на объект доступа, просмотра описания объектов доступа (директории, таблицы, топики)
@@ -65,13 +65,13 @@
 
 Это команды принимают названия прав в обоих стилях: "{{ ydb-short-name }} право.2 и "Ключевое слово YQL".
 
-Пример использования c "Ключевое слово YQL":
+Пример использования c ключевым словом YQL:
 
 ```yql
 GRANT CREATE DIRECTORY ON `/Root/db1` TO testuser
 ```
 
-Пример использования c "{{ ydb-short-name }} право":
+Пример использования c именем {{ ydb-short-name }} права:
 
 ```yql
 GRANT "ydb.granular.create_directory" ON `/Root/db1` TO testuser

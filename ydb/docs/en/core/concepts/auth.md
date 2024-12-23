@@ -10,7 +10,7 @@ The following authentication modes are supported:
 
 ## Anonymous authentication
 
-Anonymous authentication allows you to connect to YDB without specifying a username and password. This type of access should be used only for informational purposes for internal local databases that do not have access over the network.
+Anonymous authentication allows you to connect to YDB without specifying a username and password. This type of access should be used only for informational purposes for internal local databases that cannot be accessed over the network.
 
 To enable anonymous authentication, use `false` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../reference/configuration/index.md#auth).
 

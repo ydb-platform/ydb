@@ -34,7 +34,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << "Execute"
+            DebugHint() << " Execute"
             << ", at schemeshard: " << Self->TabletID());
 
         // NIceDb::TNiceDb db(txc.DB);
@@ -53,7 +53,7 @@ public:
 
     void Complete(const TActorContext &ctx) override {
         LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << "Complete"
+            DebugHint() << " Complete"
                 << ", done ??? for " << RemovedCount << " paths" // TODO
             //    << ", left " << TablesToClean.size()
                 << ", at schemeshard: "<< Self->TabletID());
@@ -105,7 +105,7 @@ public:
         auto ssId = context.SS->SelfTabletId();
         
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << "HandleReply TEvRemoveUserAccessResult"
+            DebugHint() << " HandleReply TEvRemoveUserAccessResult"
             << ", at schemeshard: " << ssId);
 
         context.SS->ChangeTxState(db, OperationId, TTxState::Done);
@@ -312,6 +312,7 @@ public:
             << ", opId: " << OperationId
             << ", at schemeshard: " << ssId);
 
+        // TODO:
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterLogin, rootPath->PathId);
         txState.State = TRemoveUserAccess::GetTxState();
 
@@ -415,7 +416,10 @@ ISubOperation::TPtr CreateAlterLogin(TOperationId id, TTxState::ETxState state) 
 void TSchemeShard::Handle(TEvPrivate::TEvRemoveUserAccess::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
 
-    Cerr << "Handle " << msg->ToString() << Endl;
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Handle " << msg->ToString()
+            << ", at schemeshard: " << TabletID());
+
     Execute(new TTxRemoveUserAccess(this, msg->OpId), ctx);
 }
 

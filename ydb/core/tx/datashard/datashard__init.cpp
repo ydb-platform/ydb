@@ -26,6 +26,7 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         Self->NextSeqno = 1;
         Self->NextChangeRecordOrder = 1;
         Self->LastChangeRecordGroup = 1;
+        Self->Pipeline.Reset();
         Self->TransQueue.Reset();
         Self->SnapshotManager.Reset();
         Self->SchemaSnapshotManager.Reset();

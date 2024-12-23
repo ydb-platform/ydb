@@ -32,16 +32,28 @@ public:
         auto ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+            DebugHint() << " ProgressState"
+            << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterLogin);
 
-        context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvRemoveUserAccess(THashSet<TPathId>{}));
+        context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvRemoveUserAccess(OperationId));
 
         return false;
+    }
+
+    bool HandleReply(TEvPrivate::TEvRemoveUserAccessResult::TPtr& ev, TOperationContext& context) override {
+        NIceDb::TNiceDb db(context.GetDB());
+        auto ssId = context.SS->SelfTabletId();
+        
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            DebugHint() << "HandleReply TEvRemoveUserAccessResult"
+            << ", at schemeshard: " << ssId);
+
+        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+        return true;
     }
 };
 
@@ -345,9 +357,11 @@ ISubOperation::TPtr CreateAlterLogin(TOperationId id, TTxState::ETxState state) 
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvRemoveUserAccess::TPtr& ev, const TActorContext& ctx) {
-    Cerr << "Handle TEvRemoveUserAccess" << Endl;
+    const auto* msg = ev->Get();
+
+    Cerr << "Handle " << msg->ToString() << Endl;
     // Execute(CreateTxCleanDroppedSubDomains(), ctx);
-    Send(ev->Sender, new TEvPrivate::TEvRemoveUserAccessResult);
+    Send(ev->Sender, new TEvPrivate::TEvRemoveUserAccessResult(ev->Get()->OpId));
 }
 
 }

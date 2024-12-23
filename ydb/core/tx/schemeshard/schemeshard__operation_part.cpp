@@ -62,6 +62,13 @@ struct TDebugEvent<TEvPrivate::TEvUndoTenantUpdate> {
     }
 };
 
+template <>
+struct TDebugEvent<TEvPrivate::TEvRemoveUserAccessResult> {
+    static TString ToString(const TEvPrivate::TEvRemoveUserAccessResult::TPtr& ev) {
+        return ev->ToString();
+    }
+};
+
 
 template <EventBasePtr TEvPtr>
 TString ISubOperationState::DebugReply(const TEvPtr& ev) {

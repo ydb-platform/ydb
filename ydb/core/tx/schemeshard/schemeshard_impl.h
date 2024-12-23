@@ -1171,6 +1171,7 @@ public:
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx);
 
     void Handle(TEvSchemeShard::TEvLogin::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvRemoveUserAccessResult::TPtr &ev, const TActorContext &ctx);
 
     void RestartPipeTx(TTabletId tabletId, const TActorContext& ctx);
 

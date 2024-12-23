@@ -196,14 +196,33 @@ namespace TEvPrivate {
     };
 
     struct TEvRemoveUserAccess : public TEventLocal<TEvRemoveUserAccess, EvRemoveUserAccess> {
-        THashSet<TPathId> Paths;
+        const TOperationId OpId;
+        
+        TEvRemoveUserAccess(const TOperationId& opId)
+            : OpId(opId)
+        {}
 
-        explicit TEvRemoveUserAccess(THashSet<TPathId>&& paths)
-            : Paths(paths)
-        { }
+        TString ToString() const {
+            return TStringBuilder() << ToStringHeader()
+                                    << " {"
+                                    << " OpId: " << OpId
+                                    << " }";
+        }
     };
 
-    struct TEvRemoveUserAccessResult : public TEventLocal<TEvRemoveUserAccessResult, EvRemoveUserAccess> {
+    struct TEvRemoveUserAccessResult : public TEventLocal<TEvRemoveUserAccessResult, EvRemoveUserAccessResult> {
+        const TOperationId OpId;
+        
+        TEvRemoveUserAccessResult(const TOperationId& opId)
+            : OpId(opId)
+        {}
+
+        TString ToString() const {
+            return TStringBuilder() << ToStringHeader()
+                                    << " {"
+                                    << " OpId: " << OpId
+                                    << " }";
+        }
     };
 
 }; // TEvPrivate

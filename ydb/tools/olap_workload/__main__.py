@@ -10,55 +10,27 @@ import threading
 ydb.interceptor.monkey_patch_event_handler()
 
 
-def timestamp():
-    return int(1000 * time.time())
-
-
-def table_name_with_timestamp():
-    return os.path.join("column_table_" + str(timestamp()))
-
-
-def random_string(length):
-    letters = string.ascii_lowercase
-    return bytes(''.join(random.choice(letters) for i in range(length)), encoding='utf8')
-
-
-def random_type():
-    return random.choice([ydb.PrimitiveType.Int64, ydb.PrimitiveType.String])
-
-
-def random_value(type):
-    if isinstance(type, ydb.OptionalType):
-        return random_value(type.item)
-    if type == ydb.PrimitiveType.Int64:
-        return random.randint(0, 1 << 31)
-    if type == ydb.PrimitiveType.String:
-        return random_string(random.randint(1, 32))
-
-
 class YdbClient:
-    def __init__(self, enpoint, database, use_query_service=False):
-        self.driver = ydb.Driver(endpoint=args.endpoint, database=args.database, oauth=None)
+    def __init__(self, endpoint, database, use_query_service=False):
+        self.driver = ydb.Driver(endpoint=endpoint, database=database, oauth=None)
         self.database = database
+        self.use_query_service = use_query_service
         self.session_pool = ydb.QuerySessionPool(self.driver) if use_query_service else ydb.SessionPool(self.driver)
 
     def wait_connection(self, timeout=5):
         self.driver.wait(timeout, fail_fast=True)
 
-    def use_query_service(self):
-        return isinstance(self.session_pool, ydb.QuerySessionPool)
-
-    def query(self, statement, ddl):
-        if self.use_query_service():
+    def query(self, statement, is_ddl):
+        if self.use_query_service:
             return self.session_pool.execute_with_retries(statement)
         else:
-            if ddl:
+            if is_ddl:
                 return self.session_pool.retry_operation_sync(lambda session: session.execute_scheme(statement))
             else:
-                raise "Unsuppported dml"
+                raise "Unsuppported dml" #TODO implement me
 
     def drop_table(self, path_to_table):
-        if self.use_query_service():
+        if self.use_query_service:
             self.session_pool.execute_with_retries(f"DROP TABLE `{path_to_table}`")
         else:
             self.session_pool.retry_operation_sync(lambda session: session.drop_table(path_to_table))

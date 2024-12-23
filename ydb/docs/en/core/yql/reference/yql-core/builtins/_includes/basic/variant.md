@@ -97,7 +97,7 @@ SELECT
 
 ## Way {#way}
 
-Returns active field (active index) of a variant over struct (over tuple)
+Returns an active field (active index) of a variant over a struct (tuple).
 
 ### Signature
 

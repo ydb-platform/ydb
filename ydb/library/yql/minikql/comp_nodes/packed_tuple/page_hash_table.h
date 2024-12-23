@@ -60,7 +60,7 @@ public:
     void Clear() override;
 
 private:
-    static constexpr ui32 PROBE_BYTE_INDEX = 10; // Index of probe byte. This byte is used to check whether the page contains a tuple
+    static constexpr ui32 PROBE_BYTE_INDEX = 3; // Index of probe byte. This byte is used to check whether the page contains a tuple
 
 private:
     ui32    KeySize_{0};                // Size of the key in bytes

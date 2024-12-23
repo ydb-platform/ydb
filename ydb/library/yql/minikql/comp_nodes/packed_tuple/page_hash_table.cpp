@@ -144,9 +144,9 @@ ui32 TPageHashTableImpl<TTraits>::FindMatches(const TTupleLayout* layout, const 
 
         while (true) { // Check all possible pages in collisions cycle
             ui8 filledSlotsCounter = ReadUnaligned<ui8>(pageAddr);
-            TSimd8 headerReg = TSimd8(pageAddr + 1);                                          // [<Probe byte 1> ... <Probe byte K>]
+            TSimd8 headerReg = TSimd8(reinterpret_cast<const ui8*>(pageAddr + 1));            // [<Probe byte 1> ... <Probe byte K>]
             TSimd8 hashPartReg = TSimd8(static_cast<ui8>((hash >> PROBE_BYTE_INDEX) & 0xFF)); // [< Hash byte  > ... < Hash byte  >]
-            ui32 foundBitMask = (headerReg == hashPartReg).ToBitMask(); // get all possible positions where desired tuples could be stored
+            ui32 foundBitMask = (headerReg == hashPartReg).ToBitMask() & ((1ULL << filledSlotsCounter) - 1); // get all possible positions where desired tuples could be stored
 
             ui32 nextSetPos = 0;
             while (foundBitMask != 0) { // Check all possible matches in single page

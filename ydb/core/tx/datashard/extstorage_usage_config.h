@@ -46,10 +46,6 @@ public:
         return ObjectKeyPattern + '/' + NBackupRestoreTraits::PermissionsKeySuffix();
     }
 
-    inline TString GetPersQueueKey() const {
-        return NBackupRestoreTraits::PersQueueKey(ObjectKeyPattern);
-    }
-
     inline TString GetMetadataKey() const {
         return ObjectKeyPattern + '/' + NBackupRestoreTraits::MetadataKeySuffix();
     }

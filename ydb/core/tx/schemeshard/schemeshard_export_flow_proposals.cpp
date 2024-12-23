@@ -151,19 +151,26 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
                 ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
             FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
         }
-        for (const auto& child : sourceDescription.GetChildren()) {
-            if (child.GetPathType() == NKikimrSchemeOp::EPathTypeCdcStream) {
-                TPathId pathId = {child.GetSchemeshardId(), child.GetPathId()};
-                auto cdcStreamSourceDescription = GetDescription(ss, pathId);
-                for (const auto& childCdcStream : cdcStreamSourceDescription.GetChildren()) {
-                    if (childCdcStream.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
-                        TPathId pathId = {childCdcStream.GetSchemeshardId(), childCdcStream.GetPathId()};
+        auto forFiltered = [](const auto& list, NKikimrSchemeOp::EPathType type, auto func){
+            for (const auto& x : list) {
+                if (x.GetPathType() == type) {
+                    func(x);
+                }
+            }
+        };
+        forFiltered(sourceDescription.GetChildren(), NKikimrSchemeOp::EPathTypeCdcStream, 
+            [&ss, &forFiltered, &task](auto x){
+                TPathId pathId = {x.GetSchemeshardId(), x.GetPathId()};
+                auto desc = GetDescription(ss, pathId);
+                forFiltered(desc.GetChildren(), NKikimrSchemeOp::EPathTypePersQueueGroup, 
+                    [&ss, &task](auto y){
+                        TPathId pathId = {y.GetSchemeshardId(), y.GetPathId()};
                         ::NKikimrSchemeOp::TPathDescription* newPersQueue = task.MutablePersQueue()->Add();
                         *newPersQueue = GetDescription(ss, pathId);
                     }
-                }
+                );
             }
-        }
+        );
         task.MutableTable()->CopyFrom(sourceDescription);
     }
 

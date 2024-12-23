@@ -41,7 +41,7 @@ static const std::pair<EAction, TStringBuf> Action2Permission[] = {
     {EAction::SendMessageBatch, "ymq.messages.send"},
     {EAction::SetQueueAttributes, "ymq.queues.setAttributes"},
     {EAction::ListDeadLetterSourceQueues, "ymq.queues.listDeadLetterSourceQueues"},
-    {EAction::ListQueueTags, "ymq.queues.listQueueTags"},
+    {EAction::ListQueueTags, "ymq.queues.getAttributes"},
 };
 
 TString const ActionToPermissionName(const EAction action) {

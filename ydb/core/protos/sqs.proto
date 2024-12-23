@@ -40,7 +40,7 @@ message TMessageAttribute {
 }
 
 message TQueueTag {
-    optional string Key = 1;
+    optional string Name = 1;
     optional string Value = 2;
 }
 
@@ -567,14 +567,12 @@ message TListQueueTagsRequest {
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     optional string QueueName = 2;
-    /// Batch Id. Available only in case of batch request.
-    optional string Id = 4;
 }
 
 message TListQueueTagsResponse {
     optional TError Error = 1;
     optional string RequestId = 2;
-    repeated TQueueTag Tags = 3;
+    repeated TQueueTag Tags = 4;
 }
 
 message TTagQueueRequest {

@@ -834,7 +834,7 @@ public:
 
         record.SetResultFormat(Settings->GetDataFormat());
 
-        if (Settings->HasLockTxId() && BrokenLocks.empty() && Settings->GetLockMode() != NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT_ISOLATION) {
+        if (Settings->HasLockTxId() && BrokenLocks.empty() && Settings->GetLockMode() != NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION) {
             record.SetLockTxId(Settings->GetLockTxId());
         }
 

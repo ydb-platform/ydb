@@ -497,7 +497,7 @@ private:
             YQL_ENSURE(AllowInconsistentReads, "Expected valid snapshot or enabled inconsistent read mode");
         }
 
-        if (LockTxId && BrokenLocks.empty() && LockMode != NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT_ISOLATION) {
+        if (LockTxId && BrokenLocks.empty() && LockMode != NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION) {
             record.SetLockTxId(*LockTxId);
         }
 

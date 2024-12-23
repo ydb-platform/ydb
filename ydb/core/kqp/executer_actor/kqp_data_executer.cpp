@@ -1786,7 +1786,7 @@ private:
                     && (ReadOnlyTx
                         || Request.UseImmediateEffects
                         || (Request.LocksOp == ELocksOp::Unspecified
-                            && TasksGraph.GetMeta().LockMode == NKikimrDataEvents::OPTIMISTIC_EXCLUSIVE_SNAPSHOT_ISOLATION))) {
+                            && TasksGraph.GetMeta().LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION))) {
                 evData.reset(new TEvDataShard::TEvProposeTransaction(
                     NKikimrTxDataShard::TX_KIND_DATA,
                     SelfId(),

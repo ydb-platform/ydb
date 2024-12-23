@@ -67,8 +67,8 @@ message TMvccSnapshot {
 }
 
 enum ELockMode {
-    OPTIMISTIC_EXCLUSIVE = 0;
-    OPTIMISTIC_EXCLUSIVE_SNAPSHOT_ISOLATION = 1;
+    OPTIMISTIC = 0;
+    OPTIMISTIC_SNAPSHOT_ISOLATION = 1;
 }
 
 enum EDataFormat {

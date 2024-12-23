@@ -60,7 +60,6 @@ public:
     METHOD_IMPL(GetQueueAttributes,      "can't get queue attributes");
     METHOD_IMPL(SetQueueAttributes,      "can't set queue attributes");
     METHOD_IMPL(ListPermissions,         "can't list permissions");
-    METHOD_IMPL(ListQueueTags,           "can't get queue tags");
 
 #undef METHOD_IMPL
 
@@ -145,10 +144,6 @@ TSetQueueAttributesResponse TQueueClient::SetQueueAttributes(const TSetQueueAttr
 
 TListPermissionsResponse TQueueClient::ListPermissions(const TListPermissionsRequest& req) {
     return Impl_->ListPermissions(req);
-}
-
-TListQueueTagsResponse TQueueClient::ListQueueTags(const TListQueueTagsRequest& req) {
-    return Impl_->ListQueueTags(req);
 }
 
 } // namespace NKikimr::NSQS

@@ -98,8 +98,6 @@ public:
 
     TListPermissionsResponse ListPermissions(const TListPermissionsRequest& req);
 
-    TListQueueTagsResponse ListQueueTags(const TListQueueTagsRequest& req);
-
 private:
     class TImpl;
     THolder<TImpl> Impl_;

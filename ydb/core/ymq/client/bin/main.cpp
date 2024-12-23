@@ -693,14 +693,6 @@ static int HandleSetQueueAttributes(int argc, const char* argv[]) {
     return 0;
 }
 
-
-
-static int HandleListQueueTags(int argc, const char* argv[]) {
-    // TODO(qyryq)
-    return 0;
-}
-
-
 int main(int argc, const char* argv[]) {
     try {
         TModChooser mods;
@@ -717,7 +709,6 @@ int main(int argc, const char* argv[]) {
         mods.AddMode("get-attributes",   HandleGetQueueAttributes, "get queue attributes");
         mods.AddMode("set-attributes",   HandleSetQueueAttributes, "set queue attributes");
         mods.AddMode("list-permissions", HandleListPermissions,    "list permissions");
-        mods.AddMode("list-queue-tags",  HandleListQueueTags,      "list queue tags");
         return mods.Run(argc, argv);
     } catch (const TQueueException& e) {
         Cerr << "Queue Error: "

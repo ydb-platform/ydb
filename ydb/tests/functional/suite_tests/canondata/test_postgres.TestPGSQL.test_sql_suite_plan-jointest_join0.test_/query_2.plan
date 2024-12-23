@@ -30,7 +30,7 @@
                                 "Plans": [
                                     {
                                         "CTE Name": "precompute_0_0",
-                                        "Node Type": "Limit-CrossJoin-InnerJoin (MapJoin)-Filter-TableFullScan-Filter-ConstantExpr-ConstantExpr",
+                                        "Node Type": "Limit-CrossJoin-InnerJoin (MapJoin)-ConstantExpr-Filter-TableFullScan-ConstantExpr",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -71,7 +71,7 @@
                                                         "InternalOperatorId": 2
                                                     },
                                                     {
-                                                        "InternalOperatorId": 7
+                                                        "InternalOperatorId": 6
                                                     }
                                                 ],
                                                 "Name": "CrossJoin"
@@ -80,18 +80,23 @@
                                                 "Condition": "t.thousand = b.Sum0",
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 3
+                                                        "InternalOperatorId": 4
                                                     },
                                                     {
-                                                        "InternalOperatorId": 5
+                                                        "InternalOperatorId": 3
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
                                             },
                                             {
+                                                "Inputs": [],
+                                                "Name": "ToFlow",
+                                                "ToFlow": "precompute_0_0"
+                                            },
+                                            {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 4
+                                                        "InternalOperatorId": 5
                                                     }
                                                 ],
                                                 "Name": "Filter",
@@ -110,20 +115,6 @@
                                                 ],
                                                 "Scan": "Parallel",
                                                 "Table": "postgres_jointest/join0.test_plan/tenk1"
-                                            },
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 6
-                                                    }
-                                                ],
-                                                "Name": "Filter",
-                                                "Predicate": "Exist(item.Sum0)"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "ToFlow",
-                                                "ToFlow": "precompute_0_0"
                                             },
                                             {
                                                 "Inputs": [],

@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan-Filter");
+        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan");
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan-Filter");
+        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan");
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto join = FindPlanNodeByKv(
             plan,
             "Node Type",
-            "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan-Filter"
+            "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan"
         );
 
         UNIT_ASSERT(join.IsDefined());
@@ -367,9 +367,9 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        auto join1 = FindPlanNodeByKv(plan, "Node Type", "Sort-InnerJoin (MapJoin)-Filter-Filter");
+        auto join1 = FindPlanNodeByKv(plan, "Node Type", "Sort-InnerJoin (MapJoin)-Filter");
         UNIT_ASSERT(join1.IsDefined());
-        auto join2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-Filter");
+        auto join2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter");
         UNIT_ASSERT(join2.IsDefined());
     }
 

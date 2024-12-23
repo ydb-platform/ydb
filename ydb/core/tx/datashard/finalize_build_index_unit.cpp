@@ -30,7 +30,7 @@ public:
 
         const auto& params = schemeTx.GetFinalizeBuildIndex();
 
-        const auto pathId = PathIdFromPathId(params.GetPathId());
+        const auto pathId = TPathId::FromProto(params.GetPathId());
         Y_ABORT_UNLESS(pathId.OwnerId == DataShard.GetPathOwnerId());
 
         const auto version = params.GetTableSchemaVersion();
@@ -38,11 +38,11 @@ public:
 
         TUserTable::TPtr tableInfo;
         if (params.HasOutcome() && params.GetOutcome().HasApply()) {
-            const auto indexPathId = PathIdFromPathId(params.GetOutcome().GetApply().GetIndexPathId());
+            const auto indexPathId = TPathId::FromProto(params.GetOutcome().GetApply().GetIndexPathId());
 
             tableInfo = DataShard.AlterTableSwitchIndexState(ctx, txc, pathId, version, indexPathId, NKikimrSchemeOp::EIndexStateReady);
         } else if (params.HasOutcome() && params.GetOutcome().HasCancel()) {
-            const auto indexPathId = PathIdFromPathId(params.GetOutcome().GetCancel().GetIndexPathId());
+            const auto indexPathId = TPathId::FromProto(params.GetOutcome().GetCancel().GetIndexPathId());
 
             const auto& userTables = DataShard.GetUserTables();
             Y_ABORT_UNLESS(userTables.contains(pathId.LocalPathId));

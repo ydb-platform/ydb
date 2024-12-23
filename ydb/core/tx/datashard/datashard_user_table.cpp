@@ -147,7 +147,7 @@ static bool IsJsonCdcStream(TUserTable::TCdcStream::EFormat format) {
 
 void TUserTable::AddCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) {
     Y_ABORT_UNLESS(streamDesc.HasPathId());
-    const auto streamPathId = PathIdFromPathId(streamDesc.GetPathId());
+    const auto streamPathId = TPathId::FromProto(streamDesc.GetPathId());
 
     if (CdcStreams.contains(streamPathId)) {
         return;
@@ -175,7 +175,7 @@ void TUserTable::SwitchCdcStreamState(const TPathId& streamPathId, TCdcStream::E
     GetSchema(schema);
 
     for (auto it = schema.MutableCdcStreams()->begin(); it != schema.MutableCdcStreams()->end(); ++it) {
-        if (streamPathId != PathIdFromPathId(it->GetPathId())) {
+        if (streamPathId != TPathId::FromProto(it->GetPathId())) {
             continue;
         }
 
@@ -201,7 +201,7 @@ void TUserTable::DropCdcStream(const TPathId& streamPathId) {
     GetSchema(schema);
 
     for (auto it = schema.GetCdcStreams().begin(); it != schema.GetCdcStreams().end(); ++it) {
-        if (streamPathId != PathIdFromPathId(it->GetPathId())) {
+        if (streamPathId != TPathId::FromProto(it->GetPathId())) {
             continue;
         }
 
@@ -327,7 +327,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 
     for (const auto& streamDesc : descr.GetCdcStreams()) {
         Y_ABORT_UNLESS(streamDesc.HasPathId());
-        CdcStreams.emplace(PathIdFromPathId(streamDesc.GetPathId()), TCdcStream(streamDesc));
+        CdcStreams.emplace(TPathId::FromProto(streamDesc.GetPathId()), TCdcStream(streamDesc));
         JsonCdcStreamCount += ui32(IsJsonCdcStream(streamDesc.GetFormat()));
     }
 }

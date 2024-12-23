@@ -85,7 +85,7 @@ public:
             context.SS->FillSeqNo(tx, seqNo);
 
             auto notice = tx.MutableDropIndexNotice();
-            PathIdFromPathId(pathId, notice->MutablePathId());
+            pathId.ToProto(notice->MutablePathId());
             notice->SetTableSchemaVersion(table->AlterVersion + 1);
 
             bool found = false;
@@ -98,11 +98,11 @@ public:
                 }
 
                 Y_VERIFY_S(!found, "Too many indexes are planned to drop"
-                    << ": found# " << PathIdFromPathId(notice->GetIndexPathId())
+                    << ": found# " << TPathId::FromProto(notice->GetIndexPathId())
                     << ", another# " << childPathId);
                 found = true;
 
-                PathIdFromPathId(childPathId, notice->MutableIndexPathId());
+                childPathId.ToProto(notice->MutableIndexPathId());
             }
 
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);

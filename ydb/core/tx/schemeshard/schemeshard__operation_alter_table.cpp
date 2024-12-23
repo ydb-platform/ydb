@@ -500,7 +500,7 @@ public:
         TPathId pathId;
         if (alter.HasId_Deprecated() || alter.HasPathId()) {
             pathId = alter.HasPathId()
-                ? PathIdFromPathId(alter.GetPathId())
+                ? TPathId::FromProto(alter.GetPathId())
                 : context.SS->MakeLocalId(alter.GetId_Deprecated());
         }
 
@@ -712,7 +712,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
     const TString& parentPathStr = tx.GetWorkingDir();
     const TString& name = alter.GetName();
 
-    TPathId pathId = alter.HasPathId() ? PathIdFromPathId(alter.GetPathId()) : InvalidPathId;
+    TPathId pathId = alter.HasPathId() ? TPathId::FromProto(alter.GetPathId()) : InvalidPathId;
 
     if (!alter.HasName() && !pathId) {
         return {CreateAlterTable(id, tx)};

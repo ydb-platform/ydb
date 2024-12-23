@@ -524,10 +524,10 @@ private:
         ev->Record.SetId(ui64(BuildId));
 
         if (buildInfo.KMeans.Parent == 0) {
-            PathIdFromPathId(buildInfo.TablePathId, ev->Record.MutablePathId());
+            buildInfo.TablePathId.ToProto(ev->Record.MutablePathId());
         } else {
             auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
-            PathIdFromPathId(path.Dive(buildInfo.KMeans.ReadFrom())->PathId, ev->Record.MutablePathId());
+            path.Dive(buildInfo.KMeans.ReadFrom())->PathId.ToProto(ev->Record.MutablePathId());
         }
 
         ev->Record.SetK(buildInfo.KMeans.K);
@@ -555,9 +555,9 @@ private:
 
         auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
         if (buildInfo.KMeans.Parent == 0) {
-            PathIdFromPathId(buildInfo.TablePathId, ev->Record.MutablePathId());
+            buildInfo.TablePathId.ToProto(ev->Record.MutablePathId());
         } else {
-            PathIdFromPathId(path.Dive(buildInfo.KMeans.ReadFrom())->PathId, ev->Record.MutablePathId());
+            path.Dive(buildInfo.KMeans.ReadFrom())->PathId.ToProto(ev->Record.MutablePathId());
             path.Rise();
         }
 
@@ -593,9 +593,9 @@ private:
 
         auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
         if (buildInfo.KMeans.Parent == 0) {
-            PathIdFromPathId(buildInfo.TablePathId, ev->Record.MutablePathId());
+            buildInfo.TablePathId.ToProto(ev->Record.MutablePathId());
         } else {
-            PathIdFromPathId(path.Dive(buildInfo.KMeans.ReadFrom())->PathId, ev->Record.MutablePathId());
+            path.Dive(buildInfo.KMeans.ReadFrom())->PathId.ToProto(ev->Record.MutablePathId());
             path.Rise();
         }
         *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(

@@ -158,8 +158,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
                 for (const auto& childCdcStream : cdcStreamSourceDescription.GetChildren()) {
                     if (childCdcStream.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
                         TPathId pathId = {childCdcStream.GetSchemeshardId(), childCdcStream.GetPathId()};
-                        auto persQueueGroupDescription = GetDescription(ss, pathId);
-                        task.MutablePersQueue()->add_pers_queue(persQueueGroupDescription);
+                        ::NKikimrSchemeOp::TPathDescription* newPersQueue = task.MutablePersQueue()->Add();
+                        *newPersQueue = GetDescription(ss, pathId);
                     }
                 }
             }

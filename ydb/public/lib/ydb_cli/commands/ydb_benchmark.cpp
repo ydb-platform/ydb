@@ -347,7 +347,7 @@ bool TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkloa
                 if (client) {
                     res = Explain(query, *client, GetDeadline());
                 } else {
-                    res = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TDuration::Zero(), "Dry run", "Dry run");
+                    res = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TDuration::Zero(), "", "");
                 }
             } catch (...) {
                 res = TQueryBenchmarkResult::Error(CurrentExceptionMessage(), "", "");
@@ -362,7 +362,7 @@ bool TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkloa
                 if (client) {
                     res = Execute(query, *client, GetDeadline());
                 } else {
-                    res = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TDuration::Zero(), "Dry run", "Dry run");
+                    res = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TDuration::Zero(), "", "");
                 }
             } catch (...) {
                 res = TQueryBenchmarkResult::Error(CurrentExceptionMessage(), "", "");

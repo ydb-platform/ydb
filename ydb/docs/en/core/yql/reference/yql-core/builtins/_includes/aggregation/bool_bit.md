@@ -23,7 +23,7 @@ For `BOOL_AND`:
 For `BOOL_OR`:
 
 - If there is any `false` value and even one `NULL`, the result is `NULL`.
-- If there is even one `true`, the result changes to `true`, regardless of whether `NULL` is present.
+- If at least one `true` value is present, the result changes to `true` regardless of `NULL` values in the expression.
 
 For `BOOL_XOR`:
 

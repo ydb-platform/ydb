@@ -1356,14 +1356,14 @@ TNode::TListType TClient::SkyShareTable(
     // As documented at https://wiki.yandex-team.ru/yt/userdoc/blob_tables/#shag3.sozdajomrazdachu
     // first request returns HTTP status code 202 (Accepted). And we need retrying until we have 200 (OK).
     NHttpClient::IHttpResponsePtr response;
-    while (response->GetStatusCode() != 200) {
+    do {
         response = RequestWithRetry<NHttpClient::IHttpResponsePtr>(
             ClientRetryPolicy_->CreatePolicyForGenericRequest(),
             [this, &tablePaths, &options] (TMutationId /*mutationId*/) {
                 return RawClient_->SkyShareTable(tablePaths, options);
             });
         TWaitProxy::Get()->Sleep(TDuration::Seconds(5));
-    }
+    } while (response->GetStatusCode() != 200);
 
     if (options.KeyColumns_) {
         return NodeFromJsonString(response->GetResponse())["torrents"].AsList();

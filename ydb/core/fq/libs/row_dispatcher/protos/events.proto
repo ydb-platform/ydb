@@ -49,7 +49,7 @@ message TEvNewDataArrived {
 }
 
 message TEvStopSession {
-    enum StopReason {
+    enum EStopReason {
         STOP_REASON_UNSPECIFIED = 0;
         COMMON = 1;
         WRONG_SESSION = 2;
@@ -57,7 +57,7 @@ message TEvStopSession {
 
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
     uint32 PartitionId = 2;
-    StopReason Reason = 3;
+    EStopReason Reason = 3;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 

@@ -145,7 +145,6 @@ public:
         event->Record.SetPartitionId(partitionId);
         event->Record.SetReason(reason);
         event->Record.MutableTransportMeta()->SetSeqNo(1);
-        //meta->SetSeqNo(1);
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, 1));
     }
 

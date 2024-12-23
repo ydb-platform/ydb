@@ -343,8 +343,8 @@ void TRedirectableHttpClient::ProcessResponse(const TStringBuf relativeUrl, THtt
             THttpURL u;
             if (THttpURL::ParsedOK == u.Parse(url)) {
                 const char* p = u.Get(THttpURL::FieldPort);
+                port = u.GetPort();
                 if (p) {
-                    port = FromString<ui16>(p);
                     url = u.PrintS(THttpURL::FlagScheme | THttpURL::FlagHost);
                 }
             }

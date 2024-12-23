@@ -1,13 +1,16 @@
 #pragma once
 #include "common.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/library/formats/arrow/common/validation.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
+
+#include <ydb/library/formats/arrow/common/validation.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
-#include <util/generic/set.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/set.h>
 
 namespace NKikimr::NOlap {
 
@@ -28,8 +31,7 @@ public:
         : Name(tierName)
         , EvictColumnName(column)
         , EvictDuration(evictDuration)
-        , TtlUnitsInSecond(unitsInSecond)
-    {
+        , TtlUnitsInSecond(unitsInSecond) {
         Y_ABORT_UNLESS(!!Name);
         Y_ABORT_UNLESS(!!EvictColumnName);
     }
@@ -242,7 +244,7 @@ public:
                     tierInfo = TTierInfo::MakeTtl(TDuration::Seconds(tier.GetApplyAfterSeconds()), ttlColumnName, unitsInSecond);
                     break;
                 case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
-                    tierInfo = std::make_shared<TTierInfo>(tier.GetEvictToExternalStorage().GetStorage(),
+                    tierInfo = std::make_shared<TTierInfo>(CanonizePath(tier.GetEvictToExternalStorage().GetStorage()),
                         TDuration::Seconds(tier.GetApplyAfterSeconds()), ttlColumnName, unitsInSecond);
                     break;
                 case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:
@@ -268,16 +270,21 @@ public:
         return sb;
     }
 
+    THashSet<TString> GetUsedTiers() const {
+        THashSet<TString> tiers;
+        for (const auto& [name, info] : TierByName) {
+            if (name != NTiering::NCommon::DeleteTierName) {
+                tiers.emplace(name);
+            }
+        }
+        return tiers;
+    }
+
     static THashSet<TString> GetUsedTiers(const TProto& ttlSettings) {
         THashSet<TString> usedTiers;
         for (const auto& tier : ttlSettings.GetTiers()) {
-            switch (tier.GetActionCase()) {
-                case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
-                    usedTiers.emplace(tier.GetEvictToExternalStorage().GetStorage());
-                    break;
-                case NKikimrSchemeOp::TTTLSettings_TTier::kDelete:
-                case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:
-                    break;
+            if (tier.HasEvictToExternalStorage()) {
+                usedTiers.emplace(CanonizePath(tier.GetEvictToExternalStorage().GetStorage()));
             }
         }
         return usedTiers;

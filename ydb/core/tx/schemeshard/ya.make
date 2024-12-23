@@ -310,6 +310,7 @@ PEERDIR(
     yql/essentials/providers/common/proto
     ydb/services/bg_tasks
     ydb/core/tx/columnshard/bg_tasks/manager
+    ydb/core/tx/tiering/tier
 )
 
 YQL_LAST_ABI_VERSION()

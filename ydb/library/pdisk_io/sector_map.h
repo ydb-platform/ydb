@@ -359,6 +359,7 @@ private:
     THashMap<ui64, TString> Map;
     NSectorMap::EDiskMode DiskMode = NSectorMap::DM_NONE;
     THolder<NSectorMap::TSectorOperationThrottler> SectorOperationThrottler;
+    std::function<void()> ReadCallback = nullptr;
 };
 
 } // NPDisk

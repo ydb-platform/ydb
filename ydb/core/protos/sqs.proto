@@ -39,6 +39,11 @@ message TMessageAttribute {
     optional bytes  BinaryValue = 4;
 }
 
+message TQueueTag {
+    optional string Name = 1;
+    optional string Value = 2;
+}
+
 message TChangeMessageVisibilityRequest {
     optional TCredentials Credentials = 100;
     /// Sender's authentification.
@@ -555,4 +560,49 @@ message TCountQueuesResponse {
     optional string RequestId = 2;
 
     optional uint64 Count = 3;
+}
+
+message TListQueueTagsRequest {
+    optional TCredentials Credentials = 100;
+    /// Sender's authentification.
+    optional TAuthentification Auth = 1;
+    optional string QueueName = 2;
+    /// Batch Id. Available only in case of batch request.
+    optional string Id = 4;
+}
+
+message TListQueueTagsResponse {
+    optional TError Error = 1;
+    optional string RequestId = 2;
+    /// Batch Id. Available only in case of batch request.
+    optional string Id = 3;
+    repeated TQueueTag Tags = 4;
+}
+
+message TTagQueueRequest {
+    optional TCredentials Credentials = 100;
+    /// Sender's authentification.
+    optional TAuthentification Auth = 1;
+    /// The name of the queue.
+    optional string QueueName = 2;
+    repeated TQueueTag Tags = 3;
+}
+
+message TTagQueueResponse {
+    optional TError Error = 1;
+    optional string RequestId = 2;
+}
+
+message TUntagQueueRequest {
+    optional TCredentials Credentials = 100;
+    /// Sender's authentification.
+    optional TAuthentification Auth = 1;
+    /// The name of the queue.
+    optional string QueueName = 2;
+    repeated string TagKeys = 3;
+}
+
+message TUntagQueueResponse {
+    optional TError Error = 1;
+    optional string RequestId = 2;
 }

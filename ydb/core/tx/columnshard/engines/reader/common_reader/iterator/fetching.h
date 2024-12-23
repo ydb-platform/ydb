@@ -1,6 +1,7 @@
 #pragma once
 #include "columns_set.h"
 
+#include <ydb/core/tx/columnshard/counters/common/owner.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/conveyor_task.h>
 
@@ -17,11 +18,58 @@ class IDataSource;
 class TSpecialReadContext;
 class TFetchingScriptCursor;
 
-class IFetchingStep {
+class TFetchingStepSignals: public NColumnShard::TCommonCountersOwner {
+private:
+    using TBase = NColumnShard::TCommonCountersOwner;
+    NMonitoring::TDynamicCounters::TCounterPtr DurationCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr BytesCounter;
+
+public:
+    TFetchingStepSignals(NColumnShard::TCommonCountersOwner&& owner)
+        : TBase(std::move(owner))
+        , DurationCounter(TBase::GetDeriviative("duration_ms"))
+        , BytesCounter(TBase::GetDeriviative("bytes_ms")) {
+    }
+
+    void AddDuration(const TDuration d) const {
+        DurationCounter->Add(d.MilliSeconds());
+    }
+
+    void AddBytes(const ui32 v) const {
+        BytesCounter->Add(v);
+    }
+};
+
+class TFetchingStepsSignalsCollection: public NColumnShard::TCommonCountersOwner {
+private:
+    using TBase = NColumnShard::TCommonCountersOwner;
+    TMutex Mutex;
+    THashMap<TString, TFetchingStepSignals> Collection;
+    TFetchingStepSignals GetSignalsImpl(const TString& name) {
+        TGuard<TMutex> g(Mutex);
+        auto it = Collection.find(name);
+        if (it == Collection.end()) {
+            it = Collection.emplace(name, TFetchingStepSignals(CreateSubGroup("step_name", name))).first;
+        }
+        return it->second;
+    }
+
+public:
+    TFetchingStepsSignalsCollection()
+        : TBase("scan_steps") {
+    }
+
+    static TFetchingStepSignals GetSignals(const TString& name) {
+        return Singleton<TFetchingStepsSignalsCollection>()->GetSignalsImpl(name);
+    }
+};
+
+class IFetchingStep: public TNonCopyable {
 private:
     YDB_READONLY_DEF(TString, Name);
     YDB_READONLY(TDuration, SumDuration, TDuration::Zero());
     YDB_READONLY(ui64, SumSize, 0);
+    TFetchingStepSignals Signals;
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const = 0;
@@ -32,9 +80,11 @@ protected:
 public:
     void AddDuration(const TDuration d) {
         SumDuration += d;
+        Signals.AddDuration(d);
     }
     void AddDataSize(const ui64 size) {
         SumSize += size;
+        Signals.AddBytes(size);
     }
 
     virtual ~IFetchingStep() = default;
@@ -48,7 +98,8 @@ public:
     }
 
     IFetchingStep(const TString& name)
-        : Name(name) {
+        : Name(name)
+        , Signals(TFetchingStepsSignalsCollection::GetSignals(name)) {
     }
 
     TString DebugString() const;
@@ -195,9 +246,7 @@ public:
 
     template <class T>
     TStepAction(const std::shared_ptr<T>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId)
-        : TStepAction(std::static_pointer_cast<IDataSource>(source), std::move(cursor), ownerActorId)
-    {
-
+        : TStepAction(std::static_pointer_cast<IDataSource>(source), std::move(cursor), ownerActorId) {
     }
     TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId);
 };

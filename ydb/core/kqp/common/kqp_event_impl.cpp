@@ -107,8 +107,6 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
         Record.MutableRequest()->SetIsInternalCall(RequestCtx->IsInternalCall());
         Record.MutableRequest()->SetOutputChunkMaxSize(QuerySettings.OutputChunkMaxSize);
 
-        Record.MutableRequest()->SetCollectDiagnostics(QuerySettings.CollectFullDiagnostics);
-
         RequestCtx.reset();
     }
 }

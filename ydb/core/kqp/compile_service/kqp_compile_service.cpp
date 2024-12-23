@@ -29,17 +29,17 @@ using namespace NYql;
 
 
 struct TKqpCompileSettings {
-    TKqpCompileSettings(bool keepInCache, bool isQueryActionPrepare, bool perStatementResult,
+    TKqpCompileSettings(bool keepInCache, NKikimrKqp::EQueryAction queryAction, bool perStatementResult,
         const TInstant& deadline, ECompileActorAction action = ECompileActorAction::COMPILE)
         : KeepInCache(keepInCache)
-        , IsQueryActionPrepare(isQueryActionPrepare)
+        , QueryAction(queryAction)
         , PerStatementResult(perStatementResult)
         , Deadline(deadline)
         , Action(action)
     {}
 
     bool KeepInCache;
-    bool IsQueryActionPrepare;
+    NKikimrKqp::EQueryAction QueryAction;
     bool PerStatementResult;
     TInstant Deadline;
     ECompileActorAction Action;
@@ -461,7 +461,7 @@ private:
 
         TKqpCompileSettings compileSettings(
             request.KeepInCache,
-            request.IsQueryActionPrepare,
+            request.QueryAction,
             request.PerStatementResult,
             request.Deadline,
             ev->Get()->Split
@@ -529,7 +529,7 @@ private:
 
             TKqpCompileSettings compileSettings(
                 true,
-                request.IsQueryActionPrepare,
+                request.QueryAction,
                 false,
                 request.Deadline,
                 ev->Get()->Split
@@ -623,7 +623,7 @@ private:
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
                 if (!hasTempTablesNameClashes) {
-                    UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution);
+                    UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.QueryAction == NKikimrKqp::QUERY_ACTION_PREPARE, isPerStatementExecution);
                 }
 
                 if (ev->Get()->ReplayMessage && !QueryReplayBackend->IsNull()) {
@@ -846,7 +846,7 @@ private:
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, request.ClientAddress, FederatedQuerySetup, request.DbCounters, request.GUCSettings, request.ApplicationName, request.UserRequestContext,
-            request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), CollectDiagnostics,
+            request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.QueryAction, request.CompileSettings.Action, std::move(request.QueryAst), CollectDiagnostics,
             request.CompileSettings.PerStatementResult, request.SplitCtx, request.SplitExpr);
         auto compileActorId = ctx.Register(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);

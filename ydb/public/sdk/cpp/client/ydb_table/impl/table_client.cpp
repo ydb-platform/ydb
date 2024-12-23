@@ -1017,7 +1017,6 @@ TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TScanQueryProcessorPtr>> TT
     }
 
     request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
-    request.set_collect_full_diagnostics(settings.CollectFullDiagnostics_);
 
     auto promise = NewPromise<std::pair<TPlainStatus, TScanQueryProcessorPtr>>();
 

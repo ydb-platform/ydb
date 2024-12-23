@@ -656,7 +656,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         {
             TExecuteQuerySettings settings;
-            settings.CollectFullDiagnostics(true);
+            settings.StatsMode(EStatsMode::Full);
 
             auto result = db.ExecuteQuery(R"(
                 SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;
@@ -687,7 +687,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         {
             TExecuteQuerySettings settings;
-            settings.CollectFullDiagnostics(true);
+            settings.StatsMode(EStatsMode::Basic);
 
             auto result = db.ExecuteQuery(R"(
                 SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;

@@ -56,6 +56,16 @@ TMaybe<TString> TExecStats::GetAst() const {
     return proto.query_ast();
 }
 
+TMaybe<TString> TExecStats::GetDiagnostics() const {
+    auto proto = Impl_->Proto;
+
+    if (proto.query_diagnostics().empty()) {
+        return {};
+    }
+
+    return proto.query_diagnostics();
+}
+
 TDuration TExecStats::GetTotalDuration() const {
     return TDuration::MicroSeconds(Impl_->Proto.total_duration_us());
 }

@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
             {
                 auto settings = TExecDataQuerySettings();
-                settings.CollectFullDiagnostics(true);
+                settings.CollectQueryStats(ECollectQueryStatsMode::Full);
 
                 auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
 

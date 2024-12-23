@@ -179,6 +179,25 @@ bool NeedReportAst(const Ydb::Query::ExecuteQueryRequest& req) {
     }
 }
 
+bool NeedCollectDiagnostics(const Ydb::Query::ExecuteQueryRequest& req) {
+    switch (req.exec_mode()) {
+        case Ydb::Query::EXEC_MODE_EXPLAIN:
+            return true;
+
+        case Ydb::Query::EXEC_MODE_EXECUTE:
+            switch (req.stats_mode()) {
+                case Ydb::Query::StatsMode::STATS_MODE_FULL:
+                case Ydb::Query::StatsMode::STATS_MODE_PROFILE:
+                    return true;
+                default:
+                    return false;
+            }
+
+        default:
+            return false;
+    }
+}
+
 class TExecuteQueryRPC : public TActorBootstrapped<TExecuteQueryRPC> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -265,8 +284,7 @@ private:
             .SetUseCancelAfter(false)
             .SetSyntax(syntax)
             .SetSupportStreamTrailingResult(true)
-            .SetOutputChunkMaxSize(req->response_part_limit_bytes())
-            .SetCollectFullDiagnostics(req->Getcollect_full_diagnostics());
+            .SetOutputChunkMaxSize(req->response_part_limit_bytes());
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             QueryAction,
@@ -285,6 +303,7 @@ private:
             req->pool_id());
 
         ev->SetProgressStatsPeriod(TDuration::MilliSeconds(req->stats_period_ms()));
+        ev->Record.MutableRequest()->SetCollectDiagnostics(NeedCollectDiagnostics(*req));
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0, Span_.GetTraceId())) {
             NYql::TIssues issues;
@@ -404,6 +423,9 @@ private:
             if (NeedReportAst(*Request_->GetProtoRequest())) {
                 response.mutable_exec_stats()->set_query_ast(kqpResponse.GetQueryAst());
             }
+            if (NeedCollectDiagnostics(*Request_->GetProtoRequest())) {
+                response.mutable_exec_stats()->set_query_diagnostics(kqpResponse.GetQueryDiagnostics());
+            }
         }
 
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
@@ -423,7 +445,6 @@ private:
                 hasTrailingMessage = true;
                 response.mutable_tx_meta()->set_id(kqpResponse.GetTxMeta().id());
             }
-            response.set_query_full_diagnostics(kqpResponse.GetQueryDiagnostics());
         }
 
         if (hasTrailingMessage) {

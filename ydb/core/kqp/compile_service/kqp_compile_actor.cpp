@@ -52,7 +52,7 @@ public:
         TKqpDbCountersPtr dbCounters, std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState, bool collectFullDiagnostics,
-        bool perStatementResult,
+        bool perStatementResult, NKikimrKqp::EQueryAction queryAction,
         ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst,
         NYql::TExprContext* splitCtx,
         NYql::TExprNode::TPtr splitExpr)
@@ -75,6 +75,7 @@ public:
         , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "CompileActor")
         , TempTablesState(std::move(tempTablesState))
         , CollectFullDiagnostics(collectFullDiagnostics)
+        , QueryAction(queryAction)
         , CompileAction(compileAction)
         , QueryAst(std::move(queryAst))
         , SplitCtx(splitCtx)
@@ -365,7 +366,9 @@ private:
         replayMessage.InsertValue("query_syntax", ToString(Config->_KqpYqlSyntaxVersion.Get().GetRef()));
         replayMessage.InsertValue("query_database", QueryId.Database);
         replayMessage.InsertValue("query_cluster", QueryId.Cluster);
-        replayMessage.InsertValue("query_plan", queryPlan);
+        if (QueryAction == NKikimrKqp::QUERY_ACTION_EXPLAIN) {
+            replayMessage.InsertValue("query_plan", queryPlan);
+        }
         replayMessage.InsertValue("query_type", ToString(QueryId.Settings.QueryType));
 
         if (CollectFullDiagnostics) {
@@ -613,6 +616,7 @@ private:
     bool CollectFullDiagnostics;
 
     bool PerStatementResult;
+    NKikimrKqp::EQueryAction QueryAction;
     ECompileActorAction CompileAction;
     TMaybe<TQueryAst> QueryAst;
 
@@ -662,7 +666,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     const TString& uid, const TKqpQueryId& query, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TString& clientAddress,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, TKqpDbCountersPtr dbCounters, const TGUCSettings::TPtr& gUCSettings,
     const TMaybe<TString>& applicationName, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-    NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState,
+    NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState, NKikimrKqp::EQueryAction queryAction,
     ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst, bool collectFullDiagnostics,
     bool perStatementResult, NYql::TExprContext* splitCtx, NYql::TExprNode::TPtr splitExpr)
 {
@@ -671,7 +675,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
                                 uid, query, userToken, clientAddress, dbCounters,
                                 federatedQuerySetup, userRequestContext,
                                 std::move(traceId), std::move(tempTablesState), collectFullDiagnostics,
-                                perStatementResult, compileAction, std::move(queryAst),
+                                perStatementResult, queryAction, compileAction, std::move(queryAst),
                                 splitCtx, splitExpr);
 }
 

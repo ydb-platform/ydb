@@ -27,6 +27,16 @@ using namespace Ydb;
 using namespace Ydb::Table;
 using namespace NKqp;
 
+bool NeedCollectDiagnostics(const Ydb::Table::ExecuteDataQueryRequest& req) {
+    switch (req.collect_stats()) {
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
+            return true;
+        default:
+            return false;
+    }
+}
+
 using TEvExecuteDataQueryRequest = TGrpcRequestOperationCall<Ydb::Table::ExecuteDataQueryRequest,
     Ydb::Table::ExecuteDataQueryResponse>;
 
@@ -145,8 +155,9 @@ public:
             &req->parameters(),
             req->collect_stats(),
             req->has_query_cache_policy() ? &req->query_cache_policy() : nullptr,
-            req->has_operation_params() ? &req->operation_params() : nullptr,
-            NKqp::NPrivateEvents::TQueryRequestSettings().SetCollectFullDiagnostics(req->Getcollect_full_diagnostics()));
+            req->has_operation_params() ? &req->operation_params() : nullptr);
+        
+        ev->Record.MutableRequest()->SetCollectDiagnostics(NeedCollectDiagnostics(*req));
 
         ReportCostInfo_ = req->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED;
 
@@ -167,6 +178,7 @@ public:
         if (from.HasQueryStats()) {
             FillQueryStats(*to->mutable_query_stats(), from);
             to->mutable_query_stats()->set_query_ast(from.GetQueryAst());
+            to->mutable_query_stats()->set_query_diagnostics(from.GetQueryDiagnostics());
             return;
         }
     }
@@ -204,7 +216,6 @@ public:
                         queryMeta.mutable_parameters_types()->insert({queryParameter.GetName(), parameterType});
                     }
                 }
-                queryResult->set_query_full_diagnostics(kqpResponse.GetQueryDiagnostics());
             } catch (const std::exception& ex) {
                 NYql::TIssues issues;
                 issues.AddIssue(NYql::ExceptionToIssue(ex));

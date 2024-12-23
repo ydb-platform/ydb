@@ -926,7 +926,6 @@ message ExecuteDataQueryRequest {
     QueryCachePolicy query_cache_policy = 5;
     Ydb.Operations.OperationParams operation_params = 6;
     QueryStatsCollection.Mode collect_stats = 7;
-    bool collect_full_diagnostics = 8;
 }
 
 message ExecuteDataQueryResponse {
@@ -969,8 +968,6 @@ message ExecuteQueryResult {
     QueryMeta query_meta = 3;
     // Query execution statistics
     Ydb.TableStats.QueryStats query_stats = 4;
-    // Full query diagnostics
-    string query_full_diagnostics = 5;
 }
 
 // Explain data query
@@ -1275,9 +1272,7 @@ message ExecuteScanQueryRequest {
     Mode mode = 6;
     reserved 7; // report_progress
     QueryStatsCollection.Mode collect_stats = 8;
-    // works only in mode: MODE_EXPLAIN,
-    // collects additional diagnostics about query compilation, including query plan and scheme
-    bool collect_full_diagnostics = 9;
+    reserved 9; // collect_full_diagnostics
 }
 
 message ExecuteScanQueryPartialResponse {
@@ -1293,9 +1288,7 @@ message ExecuteScanQueryPartialResult {
     reserved 4; // query_progress
     reserved 5; // query_plan
     Ydb.TableStats.QueryStats query_stats = 6;
-    // works only in mode: MODE_EXPLAIN,
-    // collects additional diagnostics about query compilation, including query plan and scheme
-    string query_full_diagnostics = 7;
+    reserved 7; // query_full_diagnostics
 }
 
 // Returns information about an external data source with a given path.

@@ -43,4 +43,5 @@ message QueryStats {
     string query_ast = 5;
     uint64 total_duration_us = 6;
     uint64 total_cpu_time_us = 7;
+    string query_diagnostics = 8;
 }

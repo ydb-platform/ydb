@@ -45,17 +45,11 @@ struct TQueryRequestSettings {
         return *this;
     }
 
-    TQueryRequestSettings& SetCollectFullDiagnostics(bool flag) {
-        CollectFullDiagnostics = flag;
-        return *this;
-    }
-
     ui64 OutputChunkMaxSize = 0;
     bool KeepSession = false;
     bool UseCancelAfter = true;
     ::Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
     bool SupportsStreamTrailingResult = false;
-    bool CollectFullDiagnostics = false;
 };
 
 struct TEvQueryRequest: public NActors::TEventLocal<TEvQueryRequest, TKqpEvents::EvQueryRequest> {
@@ -288,7 +282,7 @@ public:
     }
 
     bool GetCollectDiagnostics() const {
-        return RequestCtx ? QuerySettings.CollectFullDiagnostics : Record.MutableRequest()->GetCollectDiagnostics();
+        return Record.MutableRequest()->GetCollectDiagnostics();
     }
 
     ui32 CalculateSerializedSize() const override {

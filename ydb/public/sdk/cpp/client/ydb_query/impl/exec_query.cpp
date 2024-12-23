@@ -70,14 +70,13 @@ public:
         auto readCb = [self, promise](TGRpcStatus&& grpcStatus) mutable {
             if (!grpcStatus.Ok()) {
                 self->Finished_ = true;
-                promise.SetValue({TStatus(TPlainStatus(grpcStatus, self->Endpoint_)), {}, {}, ""});
+                promise.SetValue({TStatus(TPlainStatus(grpcStatus, self->Endpoint_)), {}, {}});
             } else {
                 NYql::TIssues issues;
                 NYql::IssuesFromMessage(self->Response_.issues(), issues);
                 EStatus clientStatus = static_cast<EStatus>(self->Response_.status());
                 TPlainStatus plainStatus{clientStatus, std::move(issues), self->Endpoint_, {}};
                 TStatus status{std::move(plainStatus)};
-                TString diagnostics;
 
                 TMaybe<TExecStats> stats;
                 TMaybe<TTransaction> tx;
@@ -89,19 +88,16 @@ public:
                     tx = TTransaction(self->Session_.GetRef(), self->Response_.tx_meta().id());
                 }
 
-                diagnostics = self->Response_.query_full_diagnostics();
-
                 if (self->Response_.has_result_set()) {
                     promise.SetValue({
                         std::move(status),
                         TResultSet(std::move(*self->Response_.mutable_result_set())),
                         self->Response_.result_set_index(),
                         std::move(stats),
-                        std::move(tx),
-                        std::move(diagnostics)
+                        std::move(tx)
                     });
                 } else {
-                    promise.SetValue({std::move(status), std::move(stats), std::move(tx), std::move(diagnostics)});
+                    promise.SetValue({std::move(status), std::move(stats), std::move(tx)});
                 }
             }
         };
@@ -172,12 +168,10 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                     TVector<NYql::TIssue> issues;
                     TVector<Ydb::ResultSet> resultProtos;
                     TMaybe<TTransaction> tx;
-                    TString diagnostics;
 
                     std::swap(self->Issues_, issues);
                     std::swap(self->ResultSets_, resultProtos);
                     std::swap(self->Tx_, tx);
-                    std::swap(self->Diagnostics_, diagnostics);
 
                     TVector<TResultSet> resultSets;
                     for (auto& proto : resultProtos) {
@@ -188,11 +182,10 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                         TStatus(EStatus::SUCCESS, NYql::TIssues(std::move(issues))),
                         std::move(resultSets),
                         std::move(stats),
-                        std::move(tx),
-                        std::move(diagnostics)
+                        std::move(tx)
                     ));
                 } else {
-                    self->Promise_.SetValue(TExecuteQueryResult(std::move(part), {}, std::move(stats), {}, {}));
+                    self->Promise_.SetValue(TExecuteQueryResult(std::move(part), {}, std::move(stats), {}));
                 }
 
                 return;
@@ -220,8 +213,6 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
             if (const auto& tx = part.GetTransaction()) {
                 self->Tx_ = tx;
             }
-
-            self->Diagnostics_ = part.GetDiagnostics();
 
             self->Next();
         });
@@ -252,8 +243,6 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
     if (settings.OutputChunkMaxSize_) {
         request.set_response_part_limit_bytes(*settings.OutputChunkMaxSize_);
     }
-
-    request.set_collect_full_diagnostics(settings.CollectFullDiagnostics_);
 
     if (txControl.HasTx()) {
         auto requestTxControl = request.mutable_tx_control();

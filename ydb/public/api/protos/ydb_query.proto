@@ -181,8 +181,6 @@ message ExecuteQueryRequest {
     // When query statistics are enabled (stats_mode != STATS_MODE_NONE), by default statistics will be sent only once after query execution is finished.
     // In case when stats_period_ms is specified and is non-zero, query statistics will be additionally sent every stats_period_ms milliseconds beginning from the start of query execution.
     int64 stats_period_ms = 11 [(Ydb.value) = ">= 0"];
-
-    bool collect_full_diagnostics = 12;
 }
 
 message ResultSetMeta {
@@ -202,9 +200,6 @@ message ExecuteQueryResponsePart {
     Ydb.TableStats.QueryStats exec_stats = 5;
 
     TransactionMeta tx_meta = 6;
-
-    // Full query diagnostics
-    string query_full_diagnostics = 7;
 }
 
 message ExecuteScriptRequest {

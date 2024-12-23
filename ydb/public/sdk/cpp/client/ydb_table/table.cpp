@@ -2158,15 +2158,13 @@ TTableDescription TDescribeTableResult::GetTableDescription() const {
 ////////////////////////////////////////////////////////////////////////////////
 
 TDataQueryResult::TDataQueryResult(TStatus&& status, TVector<TResultSet>&& resultSets,
-    const TMaybe<TTransaction>& transaction, const TMaybe<TDataQuery>& dataQuery, bool fromCache, const TMaybe<TQueryStats> &queryStats,
-    TString&& diagnostics)
+    const TMaybe<TTransaction>& transaction, const TMaybe<TDataQuery>& dataQuery, bool fromCache, const TMaybe<TQueryStats> &queryStats)
     : TStatus(std::move(status))
     , Transaction_(transaction)
     , ResultSets_(std::move(resultSets))
     , DataQuery_(dataQuery)
     , FromCache_(fromCache)
     , QueryStats_(queryStats)
-    , Diagnostics_(std::move(diagnostics))
 {}
 
 const TVector<TResultSet>& TDataQueryResult::GetResultSets() const {
@@ -2213,9 +2211,12 @@ const TString TDataQueryResult::GetQueryPlan() const {
     }
 }
 
-const TString& TDataQueryResult::GetDiagnostics() const {
-    CheckStatusOk("TDataQueryResult::GetDiagnostics");
-    return Diagnostics_;
+const TString TDataQueryResult::GetDiagnostics() const {
+    if (QueryStats_.Defined()) {
+        return NYdb::TProtoAccessor::GetProto(*QueryStats_.Get()).query_diagnostics();
+    } else {
+        return "";
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -2,6 +2,7 @@
 #include "healthcheck_record.h"
 #include "json_handlers.h"
 #include "json_pipe_req.h"
+#include "log.h"
 #include "viewer.h"
 #include <library/cpp/monlib/encode/prometheus/prometheus.h>
 #include <ydb/core/util/proto_duration.h>
@@ -124,6 +125,11 @@ public:
     THolder<THashMap<TMetricRecord, ui32>> GetRecordCounters() {
         const auto *descriptor = Ydb::Monitoring::StatusFlag_Status_descriptor();
         THashMap<TMetricRecord, ui32> recordCounters;
+
+        TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
+        auto *domain = domains->GetDomain();
+        auto filterDatabase = Database ? Database : "/" + domain->Name;
+
         for (auto& log : Result->issue_log()) {
             TMetricRecord record {
                 .Database = log.location().database().name(),
@@ -138,6 +144,13 @@ public:
             } else {
                 recordCounters[record] = GetIssueCount(log);
             }
+
+            BLOG_EXPORT_I("sensor: ydb_healthcheck, "
+                << ", DATABASE: " << (record.Database ? record.Database : filterDatabase)
+                << ", MESSAGE: " << record.Message
+                << ", STATUS: " << record.Status
+                << ", TYPE: " << record.Type
+                << ", location [" << GetIssueCount(log) << "]: " << log.location().ShortDebugString());
         }
 
         return MakeHolder<THashMap<TMetricRecord, ui32>>(recordCounters);

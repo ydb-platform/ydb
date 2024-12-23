@@ -206,6 +206,7 @@ enum EServiceKikimr {
     // HEALTH section
     HEALTH = 500;
     DB_METADATA_CACHE = 501;
+    HEALTH_EXPORT = 505;
 
     MEMORY_PROFILER = 510;
     MEMORY_CONTROLLER = 511;

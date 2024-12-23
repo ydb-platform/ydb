@@ -17,4 +17,5 @@ inline TString GetLogPrefix() {
 #define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() << stream)
 #define BLOG_CRIT(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() << stream)
 #define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() << stream)
+#define BLOG_EXPORT_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::HEALTH_EXPORT, GetLogPrefix() << stream)
 #define Y_ENSURE_LOG(cond, stream) if (!(cond)) { BLOG_ERROR("Failed condition \"" << #cond << "\" " << stream); }

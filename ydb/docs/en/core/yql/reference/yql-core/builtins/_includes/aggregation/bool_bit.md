@@ -31,7 +31,7 @@ For `BOOL_XOR`:
 
 Examples of such behavior can be found below.
 
-To skip `NULL` values during aggregation, you can use the functions `MIN`/`MAX` or `BIT_AND`/`BIT_OR`/`BIT_XOR`.
+To skip `NULL` values during aggregation, use the `MIN`/`MAX` or `BIT_AND`/`BIT_OR`/`BIT_XOR` functions.
 
 ### Examples
 

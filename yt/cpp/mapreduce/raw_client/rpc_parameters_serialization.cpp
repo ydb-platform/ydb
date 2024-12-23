@@ -663,6 +663,37 @@ TNode SerializeParamsForReadTable(
     return result;
 }
 
+TNode SerializeParamsForReadBlobTable(
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TKey& key,
+    const TBlobTableReaderOptions& options)
+{
+    auto lowerLimitKey = key;
+    lowerLimitKey.Parts_.push_back(options.StartPartIndex_);
+    auto upperLimitKey = key;
+    upperLimitKey.Parts_.push_back(std::numeric_limits<i64>::max());
+
+    TNode result = PathToParamNode(
+        TRichYPath(path).
+            AddRange(TReadRange()
+                .LowerLimit(TReadLimit().Key(lowerLimitKey))
+                .UpperLimit(TReadLimit().Key(upperLimitKey))));
+
+    SetTransactionIdParam(&result, transactionId);
+
+    result["start_part_index"] = options.StartPartIndex_;
+    result["offset"] = options.Offset_;
+    if (options.PartIndexColumnName_) {
+        result["part_index_column_name"] = *options.PartIndexColumnName_;
+    }
+    if (options.DataColumnName_) {
+        result["data_column_name"] = *options.DataColumnName_;
+    }
+    result["part_size"] = options.PartSize_;
+    return result;
+}
+
 TNode SerializeParamsForParseYPath(const TRichYPath& path)
 {
     TNode result;

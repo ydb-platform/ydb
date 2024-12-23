@@ -152,6 +152,12 @@ TNode SerializeParamsForReadTable(
     const TRichYPath& path,
     const TTableReaderOptions& options);
 
+TNode SerializeParamsForReadBlobTable(
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TKey& key,
+    const TBlobTableReaderOptions& options);
+
 TNode SerializeParamsForParseYPath(
     const TRichYPath& path);
 

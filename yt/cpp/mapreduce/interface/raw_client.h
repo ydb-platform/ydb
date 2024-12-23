@@ -209,6 +209,12 @@ public:
         const std::vector<TYPath>& tablePaths,
         const TSkyShareTableOptions& options = {}) = 0;
 
+    // Files
+    virtual std::unique_ptr<IInputStream> ReadFile(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TFileReaderOptions& options = {}) = 0;
+
     // File cache
 
     virtual TMaybe<TYPath> GetFileFromCache(
@@ -284,6 +290,12 @@ public:
         const TRichYPath& path,
         const TMaybe<TFormat>& format,
         const TTableReaderOptions& options = {}) = 0;
+
+    virtual std::unique_ptr<IInputStream> ReadBlobTable(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TKey& key,
+        const TBlobTableReaderOptions& options = {}) = 0;
 
     virtual void AlterTableReplica(
         TMutationId& mutationId,

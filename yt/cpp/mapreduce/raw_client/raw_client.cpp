@@ -614,6 +614,24 @@ NHttpClient::IHttpResponsePtr THttpRawClient::SkyShareTable(
     return RequestWithoutRetry(skyApiHost, mutationId, header, "");
 }
 
+std::unique_ptr<IInputStream> THttpRawClient::ReadFile(
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TFileReaderOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", GetReadFileCommand(Context_.Config->ApiVersion));
+    header.AddTransactionId(transactionId);
+    header.SetOutputFormat(TMaybe<TFormat>()); // Binary format
+    header.MergeParameters(FormIORequestParameters(path, options));
+    header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
+
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    return std::make_unique<NHttpClient::THttpResponseStream>(std::move(responseInfo));
+}
+
 TMaybe<TYPath> THttpRawClient::GetFileFromCache(
     const TTransactionId& transactionId,
     const TString& md5Signature,
@@ -812,6 +830,24 @@ std::unique_ptr<IInputStream> THttpRawClient::ReadTable(
     header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
     header.MergeParameters(NRawClient::SerializeParamsForReadTable(transactionId, Context_.Config->Prefix, path, options));
     header.MergeParameters(FormIORequestParameters(path, options));
+
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    return std::make_unique<NHttpClient::THttpResponseStream>(std::move(responseInfo));
+}
+
+std::unique_ptr<IInputStream> THttpRawClient::ReadBlobTable(
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TKey& key,
+    const TBlobTableReaderOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "read_blob_table");
+    header.SetOutputFormat(TMaybe<TFormat>()); // Binary format
+    header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
+    header.MergeParameters(NRawClient::SerializeParamsForReadBlobTable(transactionId, path, key, options));
 
     TRequestConfig config;
     config.IsHeavy = true;

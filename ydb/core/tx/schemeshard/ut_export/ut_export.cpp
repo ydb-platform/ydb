@@ -38,7 +38,11 @@ namespace {
     void Run(TTestBasicRuntime& runtime, TTestEnv& env, const std::variant<TVector<TString>, TTablesWithAttrs>& tablesVar, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
             const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "", const TString& peerName = "", 
+<<<<<<< HEAD
             const TVector<TString>& cdcStreams = {}) {
+=======
+            THashMap<TString, TVector<TString>> cdcStreams = {}) {
+>>>>>>> tests
 
         TTablesWithAttrs tables;
 
@@ -130,9 +134,16 @@ namespace {
             env.TestWaitNotification(runtime, txId, schemeshardId);
         }
 
+<<<<<<< HEAD
         for (const auto& cdcStream : cdcStreams) {
             TestCreateCdcStream(runtime, schemeshardId, ++txId, dbName, cdcStream);
             env.TestWaitNotification(runtime, txId, schemeshardId);
+=======
+        for (const auto& [tablePath, streams] : cdcStreams) {
+            for (const auto& stream : streams) {
+                TestCreateCdcStream(runtime, schemeshardId, ++txId, tablePath, stream);
+            }
+>>>>>>> tests
         }
 
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
@@ -297,7 +308,8 @@ namespace {
 } // anonymous
 
 Y_UNIT_TEST_SUITE(TExportToS3Tests) {
-    void RunS3(TTestBasicRuntime& runtime, const TVector<TString>& tables, const TString& requestTpl) {
+    void RunS3(TTestBasicRuntime& runtime, const TVector<TString>& tables, const TString& requestTpl,
+    const THashMap<TString, TVector<TString>>& cdcStreams = {}) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -307,7 +319,7 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
         auto request = Sprintf(requestTpl.c_str(), port);
 
         TTestEnv env(runtime);
-        Run(runtime, env, tables, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false);
+        Run(runtime, env, tables, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", cdcStreams);
 
         for (auto &path : GetExportTargetPaths(request)) {
             auto canonPath = (path.StartsWith("/") || path.empty()) ? path : TString("/") + path;
@@ -2358,11 +2370,6 @@ partitioning_settings {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-    Y_UNIT_TEST(ChecksumsWithCompression) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "key" Type: "Utf8" }
@@ -2506,5 +2513,49 @@ partitioning_settings {
         }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", gen.GetChangefeeds());
 
         gen.Check();
+    }
+
+    Y_UNIT_TEST(CdcStreams) {
+        TTestBasicRuntime runtime;
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        auto request = Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port);
+
+        TTestEnv env(runtime);
+        Run(runtime, env, TVector<TString>{
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", {
+            R"(
+                TableName: "Table"
+                StreamDescription {
+                    Name: "update_feed"
+                    Mode: ECdcStreamModeUpdate
+                    Format: ECdcStreamFormatJson
+                    State: ECdcStreamStateReady
+                }
+            )",
+        });
+
+        auto* persqueue = s3Mock.GetData().FindPtr("/update_feed/persqueue_description.pb");
+        UNIT_ASSERT(persqueue);
     }
 }

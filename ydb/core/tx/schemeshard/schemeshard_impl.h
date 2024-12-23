@@ -952,8 +952,6 @@ public:
     void ScheduleCleanDroppedSubDomains();
     void Handle(TEvPrivate::TEvCleanDroppedSubDomains::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPrivate::TEvRemoveUserAccess::TPtr& ev, const TActorContext& ctx);
-
     struct TTxFixBadPaths;
     NTabletFlatExecutor::ITransaction* CreateTxFixBadPaths();
 
@@ -1171,6 +1169,7 @@ public:
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx);
 
     void Handle(TEvSchemeShard::TEvLogin::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvRemoveUserAccess::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRemoveUserAccessResult::TPtr &ev, const TActorContext &ctx);
 
     void RestartPipeTx(TTabletId tabletId, const TActorContext& ctx);

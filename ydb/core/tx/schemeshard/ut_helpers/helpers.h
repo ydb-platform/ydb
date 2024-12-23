@@ -525,19 +525,19 @@ namespace NSchemeShardUT_Private {
 
     void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
         const TString& user, const TString& password,
-        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusAccepted}});
+        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
     
     void CreateAlterLoginRemoveUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
         const TString& user,
-        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusAccepted}});
+        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
 
     void AlterLoginAddGroupMembership(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
         const TString& member, const TString& group, 
-        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusAccepted}});
+        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
 
     void AlterLoginRemoveGroupMembership(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
         const TString& member, const TString& group, 
-        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusAccepted}});
+        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
 
     NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, 
         const TString& user, const TString& password);

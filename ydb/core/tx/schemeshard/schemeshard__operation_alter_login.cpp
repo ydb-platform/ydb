@@ -423,4 +423,14 @@ void TSchemeShard::Handle(TEvPrivate::TEvRemoveUserAccess::TPtr& ev, const TActo
     Execute(new TTxRemoveUserAccess(this, msg->OpId), ctx);
 }
 
+void TSchemeShard::Handle(TEvPrivate::TEvRemoveUserAccessResult::TPtr& ev, const TActorContext &ctx) {
+    const auto* msg = ev->Get();
+
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Handle " << msg->ToString()
+                << ", at schemeshard: " << TabletID());
+
+    Execute(CreateTxOperationReply(msg->OpId, ev), ctx);
+}
+
 }

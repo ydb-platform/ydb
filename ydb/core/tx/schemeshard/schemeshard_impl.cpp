@@ -7470,16 +7470,6 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvLogin::TPtr &ev, const TActorContex
     Execute(CreateTxLogin(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvPrivate::TEvRemoveUserAccessResult::TPtr& ev, const TActorContext &ctx) {
-    const auto* msg = ev->Get();
-
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Handle " << msg->ToString()
-                << ", at schemeshard: " << TabletID());
-
-    Execute(CreateTxOperationReply(msg->OpId, ev), ctx);
-}
-
 void TSchemeShard::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext&) {
     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
         "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"

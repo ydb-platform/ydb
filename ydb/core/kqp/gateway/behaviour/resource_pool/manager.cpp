@@ -136,7 +136,7 @@ TAsyncStatus CheckFeatureFlag(const TResourcePoolManager::TExternalModificationC
     return TYqlConclusionStatus::Success();
 }
 
-[[nodiscard]] TYqlConclusionStatus StatusFromActivityType(TResourcePoolManager::EActivityType activityType) {
+[[nodiscard]] TYqlConclusionStatus ErrorFromActivityType(TResourcePoolManager::EActivityType activityType) {
     using EActivityType = TResourcePoolManager::EActivityType;
 
     switch (activityType) {
@@ -144,10 +144,8 @@ TAsyncStatus CheckFeatureFlag(const TResourcePoolManager::TExternalModificationC
             return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Undefined operation for RESOURCE_POOL object");
         case EActivityType::Upsert:
             return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED, "Upsert operation for RESOURCE_POOL objects is not implemented");
-        case EActivityType::Create:
-        case EActivityType::Alter:
-        case EActivityType::Drop:
-            return TYqlConclusionStatus::Success();
+        default:
+            throw yexception() << "Unexpected status to fail: " << activityType;
     }
 }
 
@@ -167,7 +165,7 @@ TAsyncStatus TResourcePoolManager::DoModify(const NYql::TObjectSettingsImpl& set
             case EActivityType::Drop:
                 return DropResourcePool(settings, context, nodeId);
             default:
-                return NThreading::MakeFuture<TYqlConclusionStatus>(StatusFromActivityType(context.GetActivityType()));
+                return NThreading::MakeFuture<TYqlConclusionStatus>(ErrorFromActivityType(context.GetActivityType()));
         }
     } catch (...) {
         return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Got unexpected exception during RESOURCE_POOL modification operation: " << CurrentExceptionMessage()));
@@ -212,7 +210,7 @@ TYqlConclusionStatus TResourcePoolManager::DoPrepare(NKqpProto::TKqpSchemeOperat
             case EActivityType::Drop:
                 return PrepareDropResourcePool(schemeOperation, settings, context);
             default:
-                return StatusFromActivityType(context.GetActivityType());
+                return ErrorFromActivityType(context.GetActivityType());
         }
     } catch (...) {
         return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Got unexpected exception during preparation of RESOURCE_POOL modification operation: " << CurrentExceptionMessage());

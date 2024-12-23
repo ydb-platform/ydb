@@ -122,7 +122,7 @@ TYqlConclusion<std::pair<TString, TString>> SplitPath(const TString& tableName, 
     return TYqlConclusionStatus::Success();
 }
 
-[[nodiscard]] TYqlConclusionStatus StatusFromActivityType(TExternalDataSourceManager::EActivityType activityType) {
+[[nodiscard]] TYqlConclusionStatus ErrorFromActivityType(TExternalDataSourceManager::EActivityType activityType) {
     using EActivityType = TExternalDataSourceManager::EActivityType;
 
     switch (activityType) {
@@ -132,9 +132,8 @@ TYqlConclusion<std::pair<TString, TString>> SplitPath(const TString& tableName, 
             return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED, "Upsert operation for EXTERNAL_DATA_SOURCE objects is not implemented");
         case EActivityType::Alter:
             return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED, "Alter operation for EXTERNAL_DATA_SOURCE objects is not implemented");
-        case EActivityType::Create:
-        case EActivityType::Drop:
-            return TYqlConclusionStatus::Success();
+        default:
+            throw yexception() << "Unexpected status to fail: " << activityType;
     }
 }
 
@@ -152,7 +151,7 @@ TAsyncStatus TExternalDataSourceManager::DoModify(const NYql::TObjectSettingsImp
             case EActivityType::Drop:
                 return DropExternalDataSource(settings, context);
             default:
-                return NThreading::MakeFuture<TYqlConclusionStatus>(StatusFromActivityType(context.GetActivityType()));
+                return NThreading::MakeFuture<TYqlConclusionStatus>(ErrorFromActivityType(context.GetActivityType()));
         }
     } catch (...) {
         return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Got unexpected exception during EXTERNAL_DATA_SOURCE modification operation: " << CurrentExceptionMessage()));
@@ -187,7 +186,7 @@ TYqlConclusionStatus TExternalDataSourceManager::DoPrepare(NKqpProto::TKqpScheme
             case EActivityType::Drop:
                 return PrepareDropExternalDataSource(schemeOperation, settings, context);
             default:
-                return StatusFromActivityType(context.GetActivityType());
+                return ErrorFromActivityType(context.GetActivityType());
         }
     } catch (...) {
         return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Got unexpected exception during preparation of EXTERNAL_DATA_SOURCE modification operation: " << CurrentExceptionMessage());

@@ -1,3 +1,4 @@
+#include <ydb/public/api/protos/draft/ydb_maintenance.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -28,4 +29,11 @@ Y_DECLARE_OUT_SPEC(, Ydb::Export::ExportProgress::Progress, stream, value) {
 
 Y_DECLARE_OUT_SPEC(, Ydb::Import::ImportProgress::Progress, stream, value) {
     stream << Ydb::Import::ImportProgress_Progress_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, Ydb::Maintenance::ActionState::ActionStatus, stream, value) {
+    stream << Ydb::Maintenance::ActionState::ActionStatus_Name(value);
+}
+Y_DECLARE_OUT_SPEC(, Ydb::Maintenance::ActionState::ActionReason, stream, value) {
+    stream << Ydb::Maintenance::ActionState::ActionReason_Name(value);
 }

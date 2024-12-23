@@ -864,7 +864,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;
-            toResolve.RequiredAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            toResolve.RequiredAccess = (IsSelfChangePasswordOperation(pbModifyScheme.GetAlterLogin()) ? NACLib::EAccessRights::NoAccess : NACLib::EAccessRights::AlterSchema | accessToUserAttrs);
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -914,6 +914,16 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return false;
         }
         return true;
+    }
+
+    bool IsSelfChangePasswordOperation(const NKikimrSchemeOp::TAlterLogin& alterLogin) {
+        if (alterLogin.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser) {
+            if (UserToken) {
+                const auto& modifyUser = alterLogin.GetModifyUser();
+                return UserToken->GetUserSID() == modifyUser.GetUser();
+            }
+        }
+        return false;
     }
 
     THolder<NSchemeCache::TSchemeCacheNavigate> ResolveRequestForACL() {

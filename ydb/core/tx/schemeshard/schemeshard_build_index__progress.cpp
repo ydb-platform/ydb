@@ -686,8 +686,9 @@ private:
                         .Dive(buildInfo.IndexName)
                         .Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
         Y_ASSERT(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
-        auto actor = new TUploadSampleK(path.PathString(), buildInfo.Limits, Self->SelfId(), ui64(BuildId),
-                                        buildInfo.Sample.Rows, buildInfo.KMeans.ChildBegin);
+        auto actor = new TUploadSampleK(path.PathString(),
+            buildInfo.Limits, Self->SelfId(), ui64(BuildId),
+            buildInfo.Sample.Rows, buildInfo.KMeans.ChildBegin);
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
         buildInfo.Sample.Sent = true;

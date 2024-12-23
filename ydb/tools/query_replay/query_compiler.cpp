@@ -109,8 +109,13 @@ struct TMetadataInfoHolder {
         : TableMetadata(tableMetadata)
     {
         for (auto& [name, ptr] : TableMetadata) {
-            for (auto& secondary : ptr->SecondaryGlobalIndexMetadata) {
-                Indexes.emplace(secondary->Name, secondary);
+            for (auto implTable : ptr->ImplTables) {
+                YQL_ENSURE(implTable);
+                do {
+                    auto nextImplTable = implTable->Next;
+                    Indexes.emplace(implTable->Name, std::move(implTable));
+                    implTable = std::move(nextImplTable);
+                } while (implTable);
             }
         }
     }

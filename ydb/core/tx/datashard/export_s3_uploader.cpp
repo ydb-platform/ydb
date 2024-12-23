@@ -193,20 +193,10 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
 
         this->Become(&TThis::StateUploadScheme);
-    }
 
-    void UploadPersQueueGroups() {
-        Y_ABORT_UNLESS(!CdcStremsUploaded);
-
-        for (const auto& message : PersQueues) {
-            google::protobuf::TextFormat::PrintToString(message, &Buffer);
+        if (!CdcStremsUploaded) {
+            UploadPersQueueGroups();
         }
-        
-        auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Settings.GetSchemeKey());
-        this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
-
-        this->Become(&TThis::StateUploadScheme);
     }
 
     void UploadPermissions() {
@@ -226,6 +216,21 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
 
         this->Become(&TThis::StateUploadPermissions);
+    }
+
+    void UploadPersQueueGroups() {
+        Y_ABORT_UNLESS(!CdcStremsUploaded);
+
+        for (const auto& message : PersQueues) {
+            google::protobuf::TextFormat::PrintToString(message, &Buffer);
+            const auto objKeyPattern = TStringBuilder() << Settings.ObjectKeyPattern << "/" << message.GetName();
+            auto request = Aws::S3::Model::PutObjectRequest()
+            .WithKey(NBackupRestoreTraits::PersQueueKey(objKeyPattern));
+            this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
+
+            this->Become(&TThis::StateUploadScheme);
+        }
+        
     }
 
     void UploadMetadata() {

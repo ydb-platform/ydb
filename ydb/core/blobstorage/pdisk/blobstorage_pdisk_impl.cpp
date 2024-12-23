@@ -2412,7 +2412,7 @@ void TPDisk::ClearQuarantineChunks() {
                 ++it;
             }
             LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                    << " removed ownerId# " << (ui32)owner << " lastSeenLsn#" << lastSeenLsn << " from chunks Keeper through QuarantineOwners" << (haveChunksToRelease ? " along with log chunks" : "");
+                    << " removed ownerId# " << (ui32)owner << " lastSeenLsn#" << lastSeenLsn << " from chunks Keeper through QuarantineOwners" << (haveChunksToRelease ? " along with log chunks" : ""));
         }
         QuarantineOwners.erase(it, QuarantineOwners.end());
         *Mon.QuarantineOwners = QuarantineOwners.size();

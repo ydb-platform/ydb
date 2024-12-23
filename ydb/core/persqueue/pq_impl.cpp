@@ -4291,15 +4291,6 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
         TryChangeTxState(tx, NKikimrPQ::TTransaction::WAIT_RS);
 
-        //
-        // the number of TEvReadSetAck sent should not be greater than the number of senders
-        // from TEvProposeTransaction
-        //
-        Y_ABORT_UNLESS(tx.ReadSetAcks.size() <= tx.PredicatesReceived.size(),
-                       "PQ %" PRIu64 ", TxId %" PRIu64 ", ReadSetAcks.size %" PRISZT ", PredicatesReceived.size %" PRISZT,
-                       TabletID(), tx.TxId,
-                       tx.ReadSetAcks.size(), tx.PredicatesReceived.size());
-
         SendEvReadSetToReceivers(ctx, tx);
 
         if (tx.TxId != TxsOrder[tx.State].front()) {

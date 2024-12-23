@@ -229,8 +229,6 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         }
         // ReadOnly transaction here
     } else {
-        YQL_ENSURE(txCtx.EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE);
-
         // We don't want snapshot when there are effects at the moment,
         // because it hurts performance when there are multiple single-shard
         // reads and a single distributed commit. Taking snapshot costs

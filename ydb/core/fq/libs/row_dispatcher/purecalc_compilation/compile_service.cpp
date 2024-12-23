@@ -43,6 +43,8 @@ public:
         , Request(std::move(request))
     {}
 
+    static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_COMPILE_ACTOR";
+
     void Bootstrap() {
         Y_DEFER {
             Finish();
@@ -115,6 +117,8 @@ public:
         , LogPrefix("TPurecalcCompileService: ")
         , Counters(counters)
     {}
+
+    static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_COMPILE_SERVICE";
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvRowDispatcher::TEvPurecalcCompileRequest, Handle);

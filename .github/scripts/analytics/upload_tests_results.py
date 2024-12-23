@@ -242,18 +242,17 @@ def main():
             })
         print(f'upserting runs: {len(prepared_for_upload_rows)} rows')
         if prepared_for_upload_rows:
-
             batch_rows_for_upload_size = 1000
-            for start in range(0, len(prepared_for_upload_rows), batch_rows_for_upload_size):
-                batch_rows_for_upload = prepared_for_upload_rows[start:start + batch_rows_for_upload_size]
-                with ydb.SessionPool(driver) as pool:
-                    create_tables(pool, test_table_name)
+            with ydb.SessionPool(driver) as pool:
+                create_tables(pool, test_table_name)
+                for start in range(0, len(prepared_for_upload_rows), batch_rows_for_upload_size):
+                    batch_rows_for_upload = prepared_for_upload_rows[start:start + batch_rows_for_upload_size]     
                     bulk_upsert(driver.table_client, full_path,
                             batch_rows_for_upload)
                 
             print('tests uploaded')
         else:
-            print('nothing to upsert')
+            print('nothing to upload')
 
        
 

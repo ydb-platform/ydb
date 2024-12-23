@@ -538,7 +538,7 @@ void TDataShard::SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEven
     delayedAcks.clear();
 }
 
-void TDataShard::GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies) {
+void TDataShard::GetCleanupReplies(TOperation* op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies) {
     if (!op->HasOutputData()) {
         // There are no replies
         return;
@@ -560,6 +560,10 @@ void TDataShard::GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::
         }
     }
     expectedReadSets.clear();
+}
+
+void TDataShard::GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies) {
+    GetCleanupReplies(op.Get(), cleanupReplies);
 }
 
 void TDataShard::SendConfirmedReplies(TMonotonic ts, std::vector<std::unique_ptr<IEventHandle>>&& replies) {

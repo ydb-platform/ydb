@@ -1250,10 +1250,17 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_EQUAL(upsertResult.GetStatus(), EStatus::SUCCESS);
         }
 
-        {
+        for (size_t i = 10; i--;){
             // Check CDC
             std::vector<std::pair<TString, std::vector<i32>>> topics {{feedPath, {0}}};
             auto msg = client.Fetch(topics);
+
+            if (msg->Responses.empty() || msg->Responses[0].Partitions.empty() || !msg->Responses[0].Partitions[0].Records.has_value()) {
+                UNIT_ASSERT_C(i, "Timeout");
+                Sleep(TDuration::Seconds(1));
+                continue;
+            }
+
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
@@ -1264,6 +1271,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto data = record.Value.value();
             auto dataStr = TString(data.data(), data.size());
             UNIT_ASSERT_VALUES_EQUAL(dataStr, "{\"update\":{\"value\":2},\"key\":[1]}");
+
+            break;
         }
 
     } // Y_UNIT_TEST(FetchScenario)

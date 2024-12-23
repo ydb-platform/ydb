@@ -40,7 +40,7 @@ RESOURCE(
     kube/templates/legacy-cms-config-items/table-profile.txt /ydbd_slice/templates/legacy-cms-config-items/table-profile.txt
     kube/templates/legacy-cms-config-items/unified-agent.txt /ydbd_slice/templates/legacy-cms-config-items/unified-agent.txt
 
-    baremetal/templates/block-4-2.yaml /ydbd_slice/baremetal/templates/block-4-2.yaml
+    baremetal/templates/block-4-2-8-nodes.yaml /ydbd_slice/baremetal/templates/block-4-2-8-nodes.yaml
     baremetal/templates/mirror-3-dc-9-nodes.yaml /ydbd_slice/baremetal/templates/mirror-3-dc-9-nodes.yaml
     baremetal/templates/mirror-3-dc-3-nodes.yaml /ydbd_slice/baremetal/templates/mirror-3-dc-3-nodes.yaml
 )

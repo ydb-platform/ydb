@@ -1749,7 +1749,7 @@ private:
             dataTransaction.SetLockTxId(*lockTxId);
             dataTransaction.SetLockNodeId(SelfId().NodeId());
         }
-        if (TasksGraph.GetMeta().LockMode) {
+        if (TasksGraph.GetMeta().LockMode && ImmediateTx) {
             dataTransaction.SetLockMode(*TasksGraph.GetMeta().LockMode);
         }
 

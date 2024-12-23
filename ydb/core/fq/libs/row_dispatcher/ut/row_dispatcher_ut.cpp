@@ -139,7 +139,7 @@ public:
     }
 
     void MockStopSession(const NYql::NPq::NProto::TDqPqTopicSource& source, ui64 partitionId, TActorId readActorId,
-        NFq::NRowDispatcherProto::TEvStopSession::StopReason reason = NFq::NRowDispatcherProto::TEvStopSession::COMMON) {
+        NFq::NRowDispatcherProto::TEvStopSession::EStopReason reason = NFq::NRowDispatcherProto::TEvStopSession::COMMON) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
         event->Record.MutableSource()->CopyFrom(source);
         event->Record.SetPartitionId(partitionId);

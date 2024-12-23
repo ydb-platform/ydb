@@ -151,6 +151,75 @@ void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Unpack(
     const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
     ui32 count) const;
 
+// It is expected that key columns layout is same for lhs and rhs
+Y_FORCE_INLINE
+bool CompareKeys(
+    const TTupleLayout* lhsLayout, const ui8* lhsData, const std::vector<ui8, TMKQLAllocator<ui8>>& lhsOverflow,
+    const TTupleLayout* rhsLayout, const ui8* rhsData, const std::vector<ui8, TMKQLAllocator<ui8>>& rhsOverflow)
+{
+    const ui8* lhsKey = lhsData + lhsLayout->KeyColumnsOffset;
+    const ui8* rhsKey = rhsData + rhsLayout->KeyColumnsOffset;
+
+    ui32 fixedEndOffset = lhsLayout->KeyColumnsFixedEnd - lhsLayout->KeyColumnsOffset;
+    if (!std::equal(lhsKey, lhsKey + fixedEndOffset, rhsKey)) { // fixed size columns can be compared via std::equal
+        return false;
+    }
+
+    lhsKey += fixedEndOffset;
+    rhsKey += fixedEndOffset;
+
+    const auto n = lhsLayout->KeyColumnsNum;
+    for (ui32 i = lhsLayout->KeyColumnsFixedNum; i < n; ++i) {
+        const auto& lhsCol = lhsLayout->KeyColumns[i];
+        const auto& rhsCol = lhsLayout->KeyColumns[i];
+
+        auto lhsSize = ReadUnaligned<ui8>(lhsKey);
+        auto rhsSize = ReadUnaligned<ui8>(rhsKey);
+
+        if (lhsSize != rhsSize) {
+            return false;
+        }
+
+        if (lhsSize < 255) { // embedded str
+            if (!std::equal(lhsKey + 1, lhsKey + 1 + lhsSize, rhsKey + 1)) {
+                return false;
+            }
+        } else { // overflow buffer used
+            const auto lhsPrefixSize = (lhsCol.DataSize - 1 - 2 * sizeof(ui32));
+            const auto rhsPrefixSize = (rhsCol.DataSize - 1 - 2 * sizeof(ui32));
+
+            if (lhsPrefixSize != rhsPrefixSize) {
+                return false;
+            }
+
+            const auto lhsOverflowOffset = ReadUnaligned<ui32>(lhsKey + 1 + 0 * sizeof(ui32));
+            const auto lhsOverflowSize = ReadUnaligned<ui32>(lhsKey + 1 + 1 * sizeof(ui32));
+
+            const auto rhsOverflowOffset = ReadUnaligned<ui32>(rhsKey + 1 + 0 * sizeof(ui32));
+            const auto rhsOverflowSize = ReadUnaligned<ui32>(rhsKey + 1 + 1 * sizeof(ui32));
+
+            if (lhsOverflowSize != rhsOverflowSize) {
+                return false;
+            }
+
+            if (!std::equal(lhsKey + 1 + 2 * sizeof(ui32), lhsKey + 1 + 2 * sizeof(ui32) + lhsPrefixSize, rhsKey + 1 + 2 * sizeof(ui32))) {
+                return false;
+            }
+            auto lhsBit = lhsOverflow.begin() + lhsOverflowOffset;
+            auto lhsEit = lhsOverflow.begin() + lhsOverflowOffset + lhsOverflowSize;
+            auto rhsBit = rhsOverflow.begin() + rhsOverflowOffset;
+            if (!std::equal(lhsBit, lhsEit, rhsBit)) {
+                return false;
+            }
+        }
+
+        lhsKey += lhsCol.DataSize;
+        rhsKey += rhsCol.DataSize;
+    }
+
+    return true;
+}
+
 } // namespace NPackedTuple
 } // namespace NMiniKQL
 } // namespace NKikimr

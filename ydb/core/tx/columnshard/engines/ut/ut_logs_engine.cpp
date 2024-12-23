@@ -358,6 +358,9 @@ class TTestCompactionAccessorsSubscriber: public NOlap::IDataAccessorRequestsSub
 private:
     std::shared_ptr<TColumnEngineChanges> Changes;
     const std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Default<std::shared_ptr<const TAtomicCounter>>();
+    }
 
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         const TDataAccessorsInitializationContext context(VersionedIndex);
@@ -438,6 +441,9 @@ private:
     std::shared_ptr<IMetadataAccessorResultProcessor> Processor;
     TColumnEngineForLogs& Engine;
 
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Default<std::shared_ptr<const TAtomicCounter>>();
+    }
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         Processor->ApplyResult(
             NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>::BuildForTest(std::move(result)), Engine);

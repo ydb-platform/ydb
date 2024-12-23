@@ -847,7 +847,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
         return CurrentConfig.GetEnableFastTabletMove();
     }
 
-    TDuration GetTabletRestartsPeriod() const {
+    TDuration GetTabletRestartsPeriodForPenalties() const {
         return TDuration::MilliSeconds(CurrentConfig.GetTabletRestartsPeriod());
     }
 

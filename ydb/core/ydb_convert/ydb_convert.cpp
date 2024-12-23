@@ -3,6 +3,8 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 
@@ -1032,15 +1034,22 @@ void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::
 void ConvertDirectoryEntry(const NKikimrSchemeOp::TPathDescription& from, Ydb::Scheme::Entry* to, bool processAcl) {
     ConvertDirectoryEntry(from.GetSelf(), to, processAcl);
 
+    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("ConvertDirectoryEntry", "");
+
     if(from.has_columntabledescription()) {
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("ConvertDirectoryEntry", "has_columntabledescription");
+
         auto &desc = from.GetColumnTableDescription();
         const auto& sharding = desc.GetSharding();
         auto &tabletInfo = sharding.GetHashSharding().GetTabletsForConsistency();
 
         for(auto &tablet: tabletInfo) {
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("ConvertDirectoryEntry tabletInfo", tablet.GetTabletId());
+
             Ydb::Scheme::ConsistencyShardingTablet toTablet;
-            toTablet.set_tablet_id(tablet.GetHashIntervalLeftClosed());
-            toTablet.set_left_closed(tablet.GetHashIntervalRightOpened());
+            toTablet.set_tablet_id(tablet.GetTabletId());
+            toTablet.set_left_closed(tablet.GetHashIntervalLeftClosed());
+            toTablet.set_right_opened(tablet.GetHashIntervalRightOpened());
 
             *to->add_sharding_info() = toTablet;
         }

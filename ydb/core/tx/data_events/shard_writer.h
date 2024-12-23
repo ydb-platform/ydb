@@ -34,6 +34,7 @@ class TCSUploadCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
     NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
+    NMonitoring::TDynamicCounters::TCounterPtr WritesCount;
     NMonitoring::THistogramPtr CSReplyDuration;
     NMonitoring::THistogramPtr SucceedFullReplyDuration;
     NMonitoring::THistogramPtr FailedFullReplyDuration;
@@ -50,6 +51,7 @@ public:
     TCSUploadCounters()
         : TBase("CSUpload")
         , RequestsCount(TBase::GetDeriviative("Requests"))
+        , WritesCount(TBase::GetDeriviative("WritesCount"))
         , CSReplyDuration(TBase::GetHistogram("Replies/Shard/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10)))
         , SucceedFullReplyDuration(TBase::GetHistogram("Replies/Success/Full/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10)))
         , FailedFullReplyDuration(TBase::GetHistogram("Replies/Failed/Full/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10)))
@@ -70,6 +72,10 @@ public:
 
     void OnRetryTimeout() const {
         RetryTimeoutCount->Inc();
+    }
+
+    void OnWrite(const ui64 writesCount) {
+        WritesCount->Add(writesCount);
     }
 
     void OnRequest(const ui64 rows, const ui64 bytes) const {

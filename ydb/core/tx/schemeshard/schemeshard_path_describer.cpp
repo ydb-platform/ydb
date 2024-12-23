@@ -577,10 +577,14 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
     const auto tableInfo = Self->ColumnTables.GetVerified(pathId);
     Y_UNUSED(pathEl);
 
+    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("TPathDescriber::DescribeColumnTable", "");
+
     auto* pathDescription = Result->Record.MutablePathDescription();
     auto description = pathDescription->MutableColumnTableDescription();
     description->CopyFrom(tableInfo->Description);
     description->MutableSharding()->CopyFrom(tableInfo->Description.GetSharding());
+
+    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("SHARDING SIZE!!!", (int)tableInfo->Description.GetSharding().GetHashSharding().TabletsForConsistencySize());
 
     if (tableInfo->IsStandalone()) {
         FillAggregatedStats(*pathDescription, tableInfo->GetStats());

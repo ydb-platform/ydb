@@ -59,6 +59,7 @@ namespace NKikimr::NEvWrite {
         , ImmediateWrite(immediateWrite)
         , Timeout(timeout)
     {
+        ExternalController->GetCounters()->OnWrite(WriteInfos.size());
     }
 
     void TShardWriter::SendWriteRequest() {

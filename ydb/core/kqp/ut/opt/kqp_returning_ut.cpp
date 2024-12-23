@@ -330,6 +330,68 @@ Y_UNIT_TEST(ReturningTypes) {
     }
 }
 
+Y_UNIT_TEST(ReturningRandom) {
+    auto kikimr = DefaultKikimrRunner();
+
+    auto client = kikimr.GetTableClient();
+    auto session = client.CreateSession().GetValueSync().GetSession();
+    auto db = kikimr.GetQueryClient();
+
+    const auto queryCreate = Q_(R"(
+        CREATE TABLE test (id Uint64, v String, PRIMARY KEY(id));
+        )");
+
+    auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
+    UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+    const auto upsert = Q_(R"(
+        UPSERT INTO test (id, v) VALUES (1, CAST(RandomUuid(1) AS String)) RETURNING *;
+    )");
+    auto upsertResult = session.ExecuteDataQuery(upsert, TTxControl::BeginTx().CommitTx()).GetValueSync();
+    UNIT_ASSERT(upsertResult.IsSuccess());
+
+    const auto select = Q_(R"(
+        SELECT * FROM test;
+    )");
+    auto selectResult = session.ExecuteDataQuery(select, TTxControl::BeginTx().CommitTx()).GetValueSync();
+    UNIT_ASSERT(selectResult.IsSuccess());
+
+    CompareYson(FormatResultSetYson(upsertResult.GetResultSet(0)), FormatResultSetYson(selectResult.GetResultSet(0)));
+}
+
+Y_UNIT_TEST(ReturningRandomWithSinks) {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+    appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+    auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+    TKikimrRunner kikimr(serverSettings);
+
+    auto client = kikimr.GetTableClient();
+    auto session = client.CreateSession().GetValueSync().GetSession();
+    auto db = kikimr.GetQueryClient();
+
+    const auto queryCreate = Q_(R"(
+        CREATE TABLE test (id Uint64, v String, PRIMARY KEY(id));
+        )");
+
+    auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
+    UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+    const auto upsert = Q_(R"(
+        UPSERT INTO test (id, v) VALUES (1, CAST(RandomUuid(1) AS String)) RETURNING *;
+    )");
+    auto upsertResult = session.ExecuteDataQuery(upsert, TTxControl::BeginTx().CommitTx()).GetValueSync();
+    UNIT_ASSERT(upsertResult.IsSuccess());
+
+    const auto select = Q_(R"(
+        SELECT * FROM test;
+    )");
+    auto selectResult = session.ExecuteDataQuery(select, TTxControl::BeginTx().CommitTx()).GetValueSync();
+    UNIT_ASSERT(selectResult.IsSuccess());
+
+    CompareYson(FormatResultSetYson(upsertResult.GetResultSet(0)), FormatResultSetYson(selectResult.GetResultSet(0)));
+}
+
 }
 
 } // namespace NKikimr::NKqp

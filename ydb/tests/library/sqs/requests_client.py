@@ -561,3 +561,34 @@ class SqsHttpApi(object):
                     assert i < len(result) and i >= 0
                     result[i]['BatchResultErrorEntry'] = err
         return result
+
+    def list_queue_tags(self, queue_url):
+        tags = self.execute_request(
+            action='ListQueueTags',
+            extract_result_method=lambda x: x['ListQueueTagsResponse']['ListQueueTagsResult']['Tags'],
+            QueueUrl=queue_url
+        )
+        return tags
+
+    def tag_queue(self, queue_url, tags):
+        params = {}
+        for i, (k, v) in enumerate(tags, 1):
+            params['Tag.{}.Name'.format(i)] = k
+            params['Tag.{}.Value'.format(i)] = v
+        return self.execute_request(
+            action='TagQueue',
+            extract_result_method=lambda x: x['TagQueueResponse']['ResponseMetadata']['RequestId'],
+            QueueUrl=queue_url,
+            **params
+        )
+
+    def untag_queue(self, queue_url, tag_keys):
+        params = {}
+        for i, k in enumerate(tag_keys, 1):
+            params['Tag.{}'.format(i)] = k
+        return self.execute_request(
+            action='UntagQueue',
+            extract_result_method=lambda x: x['UntagQueueResponse']['ResponseMetadata']['RequestId'],
+            QueueUrl=queue_url,
+            **params
+        )

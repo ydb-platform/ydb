@@ -15,8 +15,6 @@ class TestQueueTags(KikimrSqsTestBase):
     def test_tag_queue(self):
         self._init_with_params()
 
-        # TODO Check on invalid queue_url
-
         queue_url = self._create_queue_and_assert(self.queue_name, use_http=True)
 
         def add_tags(tags):
@@ -53,8 +51,6 @@ class TestQueueTags(KikimrSqsTestBase):
 
     def test_untag_queue(self):
         self._init_with_params()
-
-        # TODO Check on invalid queue_url
 
         queue_url = self._create_queue_and_assert(self.queue_name, use_http=True)
 

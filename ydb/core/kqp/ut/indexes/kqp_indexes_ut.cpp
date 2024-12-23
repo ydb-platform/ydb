@@ -5293,6 +5293,64 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 1);
         }
     }
+
+    Y_UNIT_TEST(Uint8Index) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            const TString createTableSql = R"(CREATE TABLE `/Root/table` (
+                key Uint8,
+                value Uint8,
+                PRIMARY KEY (key)
+            );)";
+
+            auto result = session.ExecuteSchemeQuery(createTableSql).GetValueSync();
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            const TString upsertSql(Q_(R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES
+                (0, 1),
+                (10, 11),
+                (100, 101),
+                (200, 201);
+            )"));
+
+            auto result = session.ExecuteDataQuery(upsertSql, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            const TString createTableSql = R"(ALTER TABLE `/Root/table`
+                ADD INDEX value_index GLOBAL ON (value)
+            )";
+
+            auto result = session.ExecuteSchemeQuery(createTableSql).GetValueSync();
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }        
+
+        {
+            const auto& yson = ReadTablePartToYson(session, "/Root/table");
+            const TString expected = R"([[[0u];[1u]];[[10u];[11u]];[[100u];[101u]];[[200u];[201u]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        {
+            const TString selectSql(Q1_(R"(
+                SELECT * FROM `/Root/table` VIEW value_index WHERE value > 100;
+            )"));
+
+            auto result = session.ExecuteDataQuery(selectSql, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), R"([[[100u];[101u]];[[200u];[201u]]])");            
+        }
+    }    
 }
 
 }

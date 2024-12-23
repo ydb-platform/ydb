@@ -11,6 +11,9 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/public/api/protos/draft/ydb_maintenance.pb.h>
+
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/datetime/base.h>
 #include <util/system/mutex.h>

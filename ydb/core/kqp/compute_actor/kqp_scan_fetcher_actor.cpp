@@ -449,8 +449,11 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
     ev->Record.SetStatsMode(RuntimeSettings.StatsMode);
     ev->Record.SetScanId(scanId);
     ev->Record.SetTxId(std::get<ui64>(TxId));
-    if (LockTxId && LockMode != NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION) {
+    if (LockTxId) {
         ev->Record.SetLockTxId(*LockTxId);
+        if (LockMode) {
+            ev->Record.SetLockMode(*LockMode);
+        }
     }
     ev->Record.SetLockNodeId(LockNodeId);
     ev->Record.SetTablePath(ScanDataMeta.TablePath);

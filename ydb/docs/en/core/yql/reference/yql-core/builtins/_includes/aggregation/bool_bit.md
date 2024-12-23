@@ -18,7 +18,7 @@ Unlike most other aggregate functions, these functions **don't skip** `NULL` dur
 For `BOOL_AND`:
 
 - If there is any `true` value and even one `NULL`, the result is `NULL`.
-- If there is even one `false`, the result changes to `false`, regardless of whether `NULL` is present.
+- If at least one `false` value is present, the result changes to `false` regardless of `NULL` values in the expression.
 
 For `BOOL_OR`:
 

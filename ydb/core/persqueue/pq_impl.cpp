@@ -3934,13 +3934,17 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
         const TTxWriteInfo& writeInfo = TxWrites.at(writeId);
 
         for (auto& [originalPartitionId, partitionId] : writeInfo.Partitions) {
-            Y_ABORT_UNLESS(Partitions.contains(partitionId));
-            const TPartitionInfo& partition = Partitions.at(partitionId);
-
             auto& event = events[originalPartitionId];
             if (!event) {
                 event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(tx.Step, tx.TxId);
             }
+
+            if (!Partitions.contains(partitionId)) {
+                event->ForceFalse = true;
+                continue;
+            }
+
+            const TPartitionInfo& partition = Partitions.at(partitionId);
 
             event->SupportivePartitionActor = partition.Actor;
         }

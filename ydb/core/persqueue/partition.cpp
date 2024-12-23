@@ -2154,6 +2154,12 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
 
 TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx, TMaybe<bool>& predicate)
 {
+    if (tx.ForceFalse) {
+        predicate = false;
+        return EProcessResult::Continue;
+    }
+
+    const auto& ctx = ActorContext();
     THashSet<TString> consumers;
     bool ok = true;
     for (auto& operation : tx.Operations) {

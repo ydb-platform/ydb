@@ -122,7 +122,7 @@ def parse_junit_xml(test_results_file, build_type, job_name, job_id, commit, bra
                     "test_name": name,
                     "duration": Decimal(duration),
                     "status": status,
-                    "status_description": status_description.replace("\r\n", ";;").replace("\n", ";;").replace("\"", "'")[:max_characters_per_row/2],
+                    "status_description": (status_description.replace("\r\n", ";;").replace("\n", ";;").replace("\"", "'")[:max_characters_per_row/2] if isinstance(status_description, str) and status_description is not None else "") ,
                     "log": "" if testcase.find("properties/property/[@name='url:log']") is None else testcase.find("properties/property/[@name='url:log']").get('value'),
                     "logsdir": "" if testcase.find("properties/property/[@name='url:logsdir']") is None else testcase.find("properties/property/[@name='url:logsdir']").get('value'),
                     "stderr": "" if testcase.find("properties/property/[@name='url:stderr']") is None else testcase.find("properties/property/[@name='url:stderr']").get('value'),

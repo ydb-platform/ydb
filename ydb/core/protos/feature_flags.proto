@@ -157,4 +157,5 @@ message TFeatureFlags {
     optional bool EnableExternalDataSourcesOnServerless = 143 [default = true];
     optional bool EnableSparsedColumns = 144 [default = false];
     optional bool EnableDriveSerialsDiscovery = 152 [default = false];
+    optional bool DisableLocalDBEraseCache = 161 [default = false];
 }

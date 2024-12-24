@@ -12,6 +12,8 @@
 #include "util_fmt_abort.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -1070,7 +1072,11 @@ TAutoPtr<TTableIter> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, 
     }
 
     if (EraseCacheEnabled && (!RollbackState || !RollbackState->DisableEraseCache)) {
-        if (!ErasedKeysCache) {
+        if (HasAppData() && AppData()->FeatureFlags.GetDisableLocalDBEraseCache()) {
+            // Note: it's not very clean adding dependency to appdata here, but
+            // we want to allow disabling erase cache at runtime without alters.
+            ErasedKeysCache.Reset();
+        } else if (!ErasedKeysCache) {
             ErasedKeysCache = new TKeyRangeCache(*Scheme->Keys, EraseCacheConfig, EraseCacheGCList);
         }
         dbIter->ErasedKeysCache = ErasedKeysCache;
@@ -1118,7 +1124,11 @@ TAutoPtr<TTableReverseIter> TTable::IterateReverse(TRawVals key_, TTagsRef tags,
     }
 
     if (EraseCacheEnabled && (!RollbackState || !RollbackState->DisableEraseCache)) {
-        if (!ErasedKeysCache) {
+        if (HasAppData() && AppData()->FeatureFlags.GetDisableLocalDBEraseCache()) {
+            // Note: it's not very clean adding dependency to appdata here, but
+            // we want to allow disabling erase cache at runtime without alters.
+            ErasedKeysCache.Reset();
+        } else if (!ErasedKeysCache) {
             ErasedKeysCache = new TKeyRangeCache(*Scheme->Keys, EraseCacheConfig, EraseCacheGCList);
         }
         dbIter->ErasedKeysCache = ErasedKeysCache;

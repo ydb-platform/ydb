@@ -2159,7 +2159,6 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
         return EProcessResult::Continue;
     }
 
-    const auto& ctx = ActorContext();
     THashSet<TString> consumers;
     bool ok = true;
     for (auto& operation : tx.Operations) {

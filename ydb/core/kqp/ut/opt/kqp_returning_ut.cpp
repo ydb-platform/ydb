@@ -344,19 +344,17 @@ Y_UNIT_TEST(ReturningRandom) {
     auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
     UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
 
-    const auto upsert = Q_(R"(
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .Syntax(NYdb::NQuery::ESyntax::YqlV1)
+        .ConcurrentResultSets(false);
+
+    auto result = db.ExecuteQuery(R"(
         UPSERT INTO test (id, v) VALUES (1, CAST(RandomUuid(1) AS String)) RETURNING *;
-    )");
-    auto upsertResult = session.ExecuteDataQuery(upsert, TTxControl::BeginTx().CommitTx()).GetValueSync();
-    UNIT_ASSERT(upsertResult.IsSuccess());
-
-    const auto select = Q_(R"(
         SELECT * FROM test;
-    )");
-    auto selectResult = session.ExecuteDataQuery(select, TTxControl::BeginTx().CommitTx()).GetValueSync();
-    UNIT_ASSERT(selectResult.IsSuccess());
+    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
 
-    CompareYson(FormatResultSetYson(upsertResult.GetResultSet(0)), FormatResultSetYson(selectResult.GetResultSet(0)));
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    CompareYson(FormatResultSetYson(result.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(1)));
 }
 
 Y_UNIT_TEST(ReturningRandomWithSinks) {
@@ -377,19 +375,17 @@ Y_UNIT_TEST(ReturningRandomWithSinks) {
     auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
     UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
 
-    const auto upsert = Q_(R"(
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .Syntax(NYdb::NQuery::ESyntax::YqlV1)
+        .ConcurrentResultSets(false);
+
+    auto result = db.ExecuteQuery(R"(
         UPSERT INTO test (id, v) VALUES (1, CAST(RandomUuid(1) AS String)) RETURNING *;
-    )");
-    auto upsertResult = session.ExecuteDataQuery(upsert, TTxControl::BeginTx().CommitTx()).GetValueSync();
-    UNIT_ASSERT(upsertResult.IsSuccess());
-
-    const auto select = Q_(R"(
         SELECT * FROM test;
-    )");
-    auto selectResult = session.ExecuteDataQuery(select, TTxControl::BeginTx().CommitTx()).GetValueSync();
-    UNIT_ASSERT(selectResult.IsSuccess());
+    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
 
-    CompareYson(FormatResultSetYson(upsertResult.GetResultSet(0)), FormatResultSetYson(selectResult.GetResultSet(0)));
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    CompareYson(FormatResultSetYson(result.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(1)));
 }
 
 }

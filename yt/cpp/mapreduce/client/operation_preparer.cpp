@@ -37,7 +37,7 @@ class TWaitOperationStartPollerItem
     : public IYtPollerItem
 {
 public:
-    TWaitOperationStartPollerItem(TOperationId operationId, THolder<TPingableTransaction> transaction)
+    TWaitOperationStartPollerItem(TOperationId operationId, std::unique_ptr<TPingableTransaction> transaction)
         : OperationId_(operationId)
         , Transaction_(std::move(transaction))
     { }
@@ -78,7 +78,7 @@ public:
 
 private:
     TOperationId OperationId_;
-    THolder<TPingableTransaction> Transaction_;
+    std::unique_ptr<TPingableTransaction> Transaction_;
     ::NThreading::TFuture<TOperationAttributes> Future_;
 };
 
@@ -139,7 +139,7 @@ private:
 TOperationPreparer::TOperationPreparer(TClientPtr client, TTransactionId transactionId)
     : Client_(std::move(client))
     , TransactionId_(transactionId)
-    , FileTransaction_(MakeHolder<TPingableTransaction>(
+    , FileTransaction_(std::make_unique<TPingableTransaction>(
         Client_->GetRawClient(),
         Client_->GetRetryPolicy(),
         Client_->GetContext(),
@@ -305,9 +305,9 @@ public:
         return result;
     }
 
-    THolder<IInputStream> CreateInputStream() const override
+    std::unique_ptr<IInputStream> CreateInputStream() const override
     {
-        return MakeHolder<TFileInput>(FileName_);
+        return std::make_unique<TFileInput>(FileName_);
     }
 
     TString GetDescription() const override
@@ -343,9 +343,9 @@ public:
         return result;
     }
 
-    THolder<IInputStream> CreateInputStream() const override
+    std::unique_ptr<IInputStream> CreateInputStream() const override
     {
-        return MakeHolder<TMemoryInput>(Data_.data(), Data_.size());
+        return std::make_unique<TMemoryInput>(Data_.data(), Data_.size());
     }
 
     TString GetDescription() const override

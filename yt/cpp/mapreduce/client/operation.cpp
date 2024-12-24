@@ -2784,7 +2784,7 @@ void TOperation::TOperationImpl::AsyncFinishOperation(TOperationAttributes opera
 
 void* TOperation::TOperationImpl::SyncFinishOperationProc(void* pArgs)
 {
-    THolder<TAsyncFinishOperationsArgs> args(static_cast<TAsyncFinishOperationsArgs*>(pArgs));
+    std::unique_ptr<TAsyncFinishOperationsArgs> args(static_cast<TAsyncFinishOperationsArgs*>(pArgs));
     args->OperationImpl->SyncFinishOperationImpl(args->OperationAttributes);
     return nullptr;
 }
@@ -3013,7 +3013,7 @@ struct TAsyncPrepareAndStartOperationArgs
 
 void* SyncPrepareAndStartOperation(void* pArgs)
 {
-    THolder<TAsyncPrepareAndStartOperationArgs> args(static_cast<TAsyncPrepareAndStartOperationArgs*>(pArgs));
+    std::unique_ptr<TAsyncPrepareAndStartOperationArgs> args(static_cast<TAsyncPrepareAndStartOperationArgs*>(pArgs));
     args->PrepareAndStart();
     return nullptr;
 }

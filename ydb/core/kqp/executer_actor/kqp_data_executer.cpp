@@ -156,8 +156,12 @@ public:
         YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
 
         if (Request.AcquireLocksTxId || Request.LocksOp == ELocksOp::Commit || Request.LocksOp == ELocksOp::Rollback) {
-            YQL_ENSURE(Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE);
+            YQL_ENSURE(Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE
+                || Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW);
         }
+
+        YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
+            || tableServiceConfig.GetEnableKqpDataQueryStreamLookup());
 
         ReadOnlyTx = IsReadOnlyTx();
     }
@@ -1740,10 +1744,13 @@ private:
             dataTransaction.SetPerShardKeysSizeLimitBytes(Request.PerShardKeysSizeLimitBytes);
         }
 
-        auto& lockTxId = TasksGraph.GetMeta().LockTxId;
+        const auto& lockTxId = TasksGraph.GetMeta().LockTxId;
         if (lockTxId) {
             dataTransaction.SetLockTxId(*lockTxId);
             dataTransaction.SetLockNodeId(SelfId().NodeId());
+        }
+        if (TasksGraph.GetMeta().LockMode && ImmediateTx) {
+            dataTransaction.SetLockMode(*TasksGraph.GetMeta().LockMode);
         }
 
         for (auto& task : dataTransaction.GetKqpTransaction().GetTasks()) {
@@ -1775,7 +1782,11 @@ private:
                 (ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0) |
                 (VolatileTx ? NTxDataShard::TTxFlags::VolatilePrepare : 0);
             std::unique_ptr<TEvDataShard::TEvProposeTransaction> evData;
-            if (GetSnapshot().IsValid() && (ReadOnlyTx || Request.UseImmediateEffects)) {
+            if (GetSnapshot().IsValid()
+                    && (ReadOnlyTx
+                        || Request.UseImmediateEffects
+                        || (Request.LocksOp == ELocksOp::Unspecified
+                            && TasksGraph.GetMeta().LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION))) {
                 evData.reset(new TEvDataShard::TEvProposeTransaction(
                     NKikimrTxDataShard::TX_KIND_DATA,
                     SelfId(),
@@ -2664,6 +2675,7 @@ private:
             .TxId = TxId,
             .LockTxId = lockTxId,
             .LockNodeId = SelfId().NodeId(),
+            .LockMode = TasksGraph.GetMeta().LockMode,
             .Executer = SelfId(),
             .Snapshot = GetSnapshot(),
             .Database = Database,

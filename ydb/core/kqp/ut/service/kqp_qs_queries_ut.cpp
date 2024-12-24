@@ -4241,7 +4241,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST_TWIN(TableSink_Oltp_Replace, UseSink) {
-        //UseSink = true;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(UseSink);
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);

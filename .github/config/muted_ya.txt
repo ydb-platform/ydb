@@ -49,6 +49,8 @@ ydb/core/kqp/ut/olap [*/*] chunk chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpLimits.QueryExecTimeoutCancel
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWrite*
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictRead*
 ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication

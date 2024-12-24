@@ -10,7 +10,6 @@ RECURSE(
     cms
     compatibility
     config
-    dynumber
     encryption
     hive
     kqp
@@ -18,7 +17,6 @@ RECURSE(
     large_serializable
     limits
     minidumps
-    open_source
     postgresql
     query_cache
     rename

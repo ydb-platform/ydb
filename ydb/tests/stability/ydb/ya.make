@@ -13,7 +13,7 @@ DATA(
 
 DEPENDS(
     ydb/tests/workloads/simple_queue
-    ydb/tools/olap_workload
+    ydb/tests/workloads/olap_workload
     ydb/tests/workloads/statistics_workload
     ydb/tools/cfg/bin
     ydb/tests/tools/nemesis/driver

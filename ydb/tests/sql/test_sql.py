@@ -64,9 +64,9 @@ class TestYdbKvWorkload(object):
         if is_column:
             table_definition += " PARTITION BY HASH(id) WITH(STORE=COLUMN)"
 
-        self.pool.execute_with_retries(
-            table_definition
-        )
+            self.pool.execute_with_retries(
+                table_definition
+            )
 
         self.pool.execute_with_retries(
             f"""
@@ -84,3 +84,34 @@ class TestYdbKvWorkload(object):
         assert len(rows) == 1, "Expected one row"
         assert rows[0].id == 1, "ID does not match"
         assert rows[0].value == value, "Value does not match"
+
+
+    def test_dynumber(self):
+        table_name = "{}/{}".format(self.table_path, "dynamber")
+        self.pool.execute_with_retries(
+            f"""
+                CREATE TABLE `{table_name}` (
+                id DyNumber,
+                PRIMARY KEY (id)
+            );"""
+        )
+
+        self.pool.execute_with_retries(
+            f"""
+                UPSERT INTO `{table_name}` (id)
+                VALUES
+                    (DyNumber(".149e4")),
+                    (DyNumber("15e2")),
+                    (DyNumber("150e1")),  -- same as 15e2
+                    (DyNumber("151e4")),
+                    (DyNumber("1500.1"));
+            """
+        )
+
+        result = self.pool.execute_with_retries(
+            f"""
+                SELECT count(*) FROM `{table_name}`;
+            """
+        )
+
+        assert result[0].rows[0][0] == 4

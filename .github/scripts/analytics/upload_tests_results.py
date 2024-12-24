@@ -18,7 +18,7 @@ from codeowners import CodeOwners
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
 
-max_characters_per_row = 3670016
+max_characters_per_row = 3670016 # cannot split batch in according to limits: there is row with size more then limit (7340032)
 
 def create_tables(pool,  table_path):
     print(f"> create table if not exists:'{table_path}'")

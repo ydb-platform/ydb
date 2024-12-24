@@ -183,7 +183,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         google::protobuf::TextFormat::PrintToString(Scheme.GetRef(), &Buffer);
         if (EnableChecksums) {
-            SchemeChecksum = IExportChecksum::Compute(Buffer);
+            SchemeChecksum = ComputeExportChecksum(Buffer);
         }
 
         auto request = Aws::S3::Model::PutObjectRequest()
@@ -202,7 +202,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         google::protobuf::TextFormat::PrintToString(Permissions.GetRef(), &Buffer);
         if (EnableChecksums) {
-            PermissionsChecksum = IExportChecksum::Compute(Buffer);
+            PermissionsChecksum = ComputeExportChecksum(Buffer);
         }
 
         auto request = Aws::S3::Model::PutObjectRequest()
@@ -217,7 +217,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         Buffer = std::move(Metadata);
         if (EnableChecksums) {
-            MetadataChecksum = IExportChecksum::Compute(Buffer);
+            MetadataChecksum = ComputeExportChecksum(Buffer);
         }
 
         auto request = Aws::S3::Model::PutObjectRequest()

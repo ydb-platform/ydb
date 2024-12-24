@@ -24,7 +24,7 @@ private:
     SHA256_CTX Context;
 };
 
-TString IExportChecksum::Compute(TStringBuf data) {
+TString ComputeExportChecksum(TStringBuf data) {
     IExportChecksum::TPtr checksum(CreateExportChecksum());
     checksum->AddData(data);
     return checksum->Serialize();

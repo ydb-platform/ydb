@@ -1,7 +1,5 @@
 #pragma once
 
-#include <openssl/sha.h>
-
 #include <util/generic/string.h>
 
 namespace NKikimr::NDataShard {
@@ -14,10 +12,9 @@ public:
 
     virtual void AddData(TStringBuf data) = 0;
     virtual TString Serialize() = 0;
-
-    static TString Compute(TStringBuf data);
 };
 
 IExportChecksum* CreateExportChecksum();
+TString ComputeExportChecksum(TStringBuf data);
 
 } // NKikimr::NDataShard

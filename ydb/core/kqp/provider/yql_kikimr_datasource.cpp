@@ -338,12 +338,16 @@ public:
                 tableDesc->Metadata = res.Metadata;
 
                 bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
-                YQL_ENSURE(res.Metadata->Indexes.size() == res.Metadata->SecondaryGlobalIndexMetadata.size());
-                for (const auto& indexMeta : res.Metadata->SecondaryGlobalIndexMetadata) {
-                    YQL_ENSURE(indexMeta);
-                    auto& desc = SessionCtx->Tables().GetOrAddTable(indexMeta->Cluster, SessionCtx->GetDatabase(), indexMeta->Name);
-                    desc.Metadata = indexMeta;
-                    desc.Load(ctx, sysColumnsEnabled);
+                YQL_ENSURE(res.Metadata->Indexes.size() == res.Metadata->ImplTables.size());
+                for (auto implTable : res.Metadata->ImplTables) {
+                    YQL_ENSURE(implTable);
+                    do {
+                        auto nextImplTable = implTable->Next;
+                        auto& desc = SessionCtx->Tables().GetOrAddTable(implTable->Cluster, SessionCtx->GetDatabase(), implTable->Name);
+                        desc.Metadata = std::move(implTable);
+                        desc.Load(ctx, sysColumnsEnabled);
+                        implTable = std::move(nextImplTable);
+                    } while (implTable);
                 }
 
                 if (!tableDesc->Load(ctx, sysColumnsEnabled)) {

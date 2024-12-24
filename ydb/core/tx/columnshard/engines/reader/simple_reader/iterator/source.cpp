@@ -1,4 +1,3 @@
-#include "constructor.h"
 #include "fetched_data.h"
 #include "plain_read_data.h"
 #include "source.h"
@@ -6,6 +5,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
@@ -29,7 +29,7 @@ void IDataSource::StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr)
         GetContext()->GetProcessMemoryControlId(), GetContext()->GetCommonContext()->GetScanId());
     SetMemoryGroupId(SourceGroupGuard->GetGroupId());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", GetSourceIdx());
-//    NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
+    //    NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
     TFetchingScriptCursor cursor(FetchingPlan, 0);
     auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), GetContext()->GetCommonContext()->GetScanActorId());
     NConveyor::TScanServiceOperator::SendTaskToExecute(task);
@@ -123,7 +123,8 @@ bool TPortionDataSource::DoStartFetchingColumns(
         return false;
     }
 
-    auto constructor = std::make_shared<TBlobsFetcherTask>(readActions, sourcePtr, step, GetContext(), "CS::READ::" + step.GetName(), "");
+    auto constructor =
+        std::make_shared<NCommon::TBlobsFetcherTask>(readActions, sourcePtr, step, GetContext(), "CS::READ::" + step.GetName(), "");
     NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
     return true;
 }
@@ -158,8 +159,8 @@ bool TPortionDataSource::DoStartFetchingIndexes(
         return false;
     }
 
-    auto constructor = std::make_shared<TBlobsFetcherTask>(
-        readingActions, std::static_pointer_cast<NCommon::IDataSource>(sourcePtr), step, GetContext(), "CS::READ::" + step.GetName(), "");
+    auto constructor =
+        std::make_shared<NCommon::TBlobsFetcherTask>(readingActions, sourcePtr, step, GetContext(), "CS::READ::" + step.GetName(), "");
     NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
     return true;
 }
@@ -234,6 +235,10 @@ private:
     TFetchingScriptCursor Step;
     std::shared_ptr<IDataSource> Source;
     const NColumnShard::TCounterGuard Guard;
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Source->GetContext()->GetCommonContext()->GetAbortionFlag();
+    }
+
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         AFL_VERIFY(!result.HasErrors());
         AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
@@ -243,7 +248,6 @@ private:
         auto task = std::make_shared<TStepAction>(Source, std::move(Step), Source->GetContext()->GetCommonContext()->GetScanActorId());
         NConveyor::TScanServiceOperator::SendTaskToExecute(task);
     }
-
 public:
     TPortionAccessorFetchingSubscriber(const TFetchingScriptCursor& step, const std::shared_ptr<IDataSource>& source)
         : Step(step)

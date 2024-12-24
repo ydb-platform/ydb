@@ -1,4 +1,3 @@
-#include "constructor.h"
 #include "fetched_data.h"
 #include "interval.h"
 #include "plain_read_data.h"
@@ -7,6 +6,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
@@ -17,7 +17,7 @@ namespace NKikimr::NOlap::NReader::NPlain {
 
 void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching) {
     AFL_VERIFY(fetching);
-//    AFL_VERIFY(!FetchingPlan);
+    //    AFL_VERIFY(!FetchingPlan);
     FetchingPlan = fetching;
 }
 
@@ -122,7 +122,8 @@ bool TPortionDataSource::DoStartFetchingColumns(
         return false;
     }
 
-    auto constructor = std::make_shared<TBlobsFetcherTask>(readActions, sourcePtr, step, GetContext(), "CS::READ::" + step.GetName(), "");
+    auto constructor =
+        std::make_shared<NCommon::TBlobsFetcherTask>(readActions, sourcePtr, step, GetContext(), "CS::READ::" + step.GetName(), "");
     NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
     return true;
 }
@@ -157,7 +158,8 @@ bool TPortionDataSource::DoStartFetchingIndexes(
         return false;
     }
 
-    auto constructor = std::make_shared<TBlobsFetcherTask>(readingActions, std::static_pointer_cast<NCommon::IDataSource>(sourcePtr), step, GetContext(), "CS::READ::" + step.GetName(), "");
+    auto constructor =
+        std::make_shared<NCommon::TBlobsFetcherTask>(readingActions, sourcePtr, step, GetContext(), "CS::READ::" + step.GetName(), "");
     NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
     return true;
 }
@@ -232,6 +234,9 @@ private:
     TFetchingScriptCursor Step;
     std::shared_ptr<IDataSource> Source;
     const NColumnShard::TCounterGuard Guard;
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Source->GetContext()->GetCommonContext()->GetAbortionFlag();
+    }
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         AFL_VERIFY(!result.HasErrors());
         AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
@@ -276,7 +281,7 @@ bool TCommittedDataSource::DoStartFetchingColumns(
     readAction->AddRange(CommittedBlob.GetBlobRange());
 
     std::vector<std::shared_ptr<IBlobsReadingAction>> actions = { readAction };
-    auto constructor = std::make_shared<TBlobsFetcherTask>(actions, sourcePtr, step, GetContext(), "CS::READ::" + step.GetName(), "");
+    auto constructor = std::make_shared<NCommon::TBlobsFetcherTask>(actions, sourcePtr, step, GetContext(), "CS::READ::" + step.GetName(), "");
     NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
     return true;
 }
@@ -290,7 +295,8 @@ void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>&
         AFL_VERIFY(GetStageData().GetBlobs().size() == 1);
         auto bData = MutableStageData().ExtractBlob(GetStageData().GetBlobs().begin()->first);
         auto schema = GetContext()->GetReadMetadata()->GetBlobSchema(CommittedBlob.GetSchemaVersion());
-        auto rBatch = NArrow::DeserializeBatch(bData, std::make_shared<arrow::Schema>(CommittedBlob.GetSchemaSubset().Apply(schema.begin(), schema.end())));
+        auto rBatch = NArrow::DeserializeBatch(
+            bData, std::make_shared<arrow::Schema>(CommittedBlob.GetSchemaSubset().Apply(schema.begin(), schema.end())));
         AFL_VERIFY(rBatch)("schema", schema.ToString());
         auto batch = std::make_shared<NArrow::TGeneralContainer>(rBatch);
         std::set<ui32> columnIdsToDelete = batchSchema->GetColumnIdsToDelete(resultSchema);

@@ -101,7 +101,7 @@ class TestHttpApi(TestBase):
             response = client.start_query(query_id)
             assert response.status_code == 204
 
-            assert client.get_query_status(query_id) in ["STARTING", "RUNNING", "COMPLETED", "FAILED"]
+            assert client.get_query_status(query_id) in ["STARTING", "RUNNING", "COMPLETED"]
 
             response = client.stop_query(query_id)
             assert response.status_code == 204

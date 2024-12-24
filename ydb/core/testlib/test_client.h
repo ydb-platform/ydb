@@ -461,7 +461,8 @@ namespace Tests {
         NMsgBusProxy::EResponseStatus CreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken = "");
         NMsgBusProxy::EResponseStatus ModifyUser(const TString& parent, const TString& user, const TString& password, const TString& userToken = "");
         NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password);
-
+        NMsgBusProxy::EResponseStatus CreateGroup(const TString& parent, const TString& group);
+        
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const TString& scheme, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CreateTableWithUniformShardedIndex(const TString& parent,

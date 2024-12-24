@@ -51,6 +51,11 @@ public:
     }
 
 protected:
+    void SendThroughPipeCache(IEventBase* ev, ui64 tabletId) const noexcept {
+        TBase::Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ev, tabletId, true),
+            IEventHandle::FlagTrackDelivery);
+    }
+
     void SendBatch(THolder<NKqp::TEvKqpCompute::TEvScanData> batch) {
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
             "Sending scan batch, actor: " << TBase::SelfId()

@@ -615,9 +615,13 @@ struct Schema : NIceDb::Schema {
 
     struct Sids : Table<15> {
         struct Name: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Kind: Column<2, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Name>;
-        using TColumns = TableColumns<Name>;
+        using TColumns = TableColumns<
+            Name,
+            Kind
+        >;
     };
 
     struct PgColumn {

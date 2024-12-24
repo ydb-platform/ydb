@@ -1730,7 +1730,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 23);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 24);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -2145,6 +2145,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
         env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
         env.GetClient().CreateUser("/Root/Tenant2", "user3", "password3");
         env.GetClient().CreateUser("/Root/Tenant2", "user4", "password4");
+        env.GetClient().CreateGroup("/Root", "group1");
+        env.GetClient().CreateGroup("/Root/Tenant1", "group2");
+        env.GetClient().CreateGroup("/Root/Tenant2", "group3");
+        env.GetClient().CreateGroup("/Root/Tenant2", "group4");
 
         // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
 
@@ -2152,12 +2156,11 @@ Y_UNIT_TEST_SUITE(SystemView) {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
                 FROM `Root/.sys/sids`
-                ORDER BY Name
             )").GetValueSync();
 
-            // [["GET /index.html HTTP/1.1"];[1]];
             auto expected = R"([
-                [["user1"]]
+                [["group"];["group1"]];
+                [["user"];["user1"]];
             ])";
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
@@ -2167,11 +2170,11 @@ Y_UNIT_TEST_SUITE(SystemView) {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
                 FROM `Root/Tenant1/.sys/sids`
-                ORDER BY Name
             )").GetValueSync();
 
             auto expected = R"([
-                [["user2"]]
+                [["group"];["group2"]];
+                [["user"];["user2"]]
             ])";
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
@@ -2179,15 +2182,15 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         {
             auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Name
+                SELECT *
                 FROM `Root/Tenant2/.sys/sids`
-                ORDER BY Name
             )").GetValueSync();
 
-            // TODO: wtf with sort?
             auto expected = R"([
-                [["user4"]];
-                [["user3"]];
+                [["group"];["group4"]];
+                [["group"];["group3"]];
+                [["user"];["user4"]];
+                [["user"];["user3"]];
             ])";
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));

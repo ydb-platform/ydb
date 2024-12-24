@@ -791,7 +791,7 @@ void TController::Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext
 
     const auto& record = ev->Get()->Record;
     const auto id = TWorkerId::Parse(record.GetWorker());
-    const auto version = TRowVersion::Parse(record.GetVersion());
+    const auto version = TRowVersion::FromProto(record.GetVersion());
     PendingHeartbeats[id] = version;
 
     RunTxHeartbeat(ctx);

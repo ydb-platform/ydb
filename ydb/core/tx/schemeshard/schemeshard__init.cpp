@@ -3548,7 +3548,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
                         bool deserializeRes = ParseFromStringNoSizeLimit(proto, extraData);
                         Y_ABORT_UNLESS(deserializeRes);
-                        txState.CdcPathId = PathIdFromPathId(proto.GetTxCopyTableExtraData().GetCdcPathId());
+                        txState.CdcPathId = TPathId::FromProto(proto.GetTxCopyTableExtraData().GetCdcPathId());
                     }
                 }
 

@@ -87,7 +87,6 @@ void TCommitOffsetActor::Die(const TActorContext& ctx) {
 }
 
 void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx) {
-
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "CommitOffset auth ok, got " << ev->Get()->TopicAndTablets.size() << " topics");
     TopicAndTablets = std::move(ev->Get()->TopicAndTablets);
     if (TopicAndTablets.empty()) {
@@ -102,42 +101,61 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
         return;
     }
 
-    ui64 tabletId = topicInitInfo.Partitions.at(PartitionId).TabletId;
+    auto commitRequest = dynamic_cast<const Ydb::Topic::CommitOffsetRequest*>(GetProtoRequest());
 
-    NTabletPipe::TClientConfig clientConfig;
-    clientConfig.RetryPolicy = {
-        .RetryLimitCount = 6,
-        .MinRetryTime = TDuration::MilliSeconds(10),
-        .MaxRetryTime = TDuration::MilliSeconds(100),
-        .BackoffMultiplier = 2,
-        .DoFirstRetryInstantly = true
-    };
+    auto* partitionNode = topicInitInfo.PartitionGraph->GetPartition(commitRequest->partition_id());
 
-    PipeClient = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
+    if (partitionNode->AllParents.size() == 0 && partitionNode->DirectChildren.size() == 0) {
+        SendCommit(topicInitInfo, commitRequest, ctx);
+    } else {
+        std::vector<TKqpHelper::TCommitInfo> commits;
 
-    auto client_req = dynamic_cast<const Ydb::Topic::CommitOffsetRequest*>(GetProtoRequest());
+        for (auto& parent: partitionNode->AllParents) {
+            TKqpHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = true, .OnlyCheckCommitedToFinish = false};
+            commits.push_back(commit);
+        }
 
-    NKikimrClient::TPersQueueRequest request;
-    request.MutablePartitionRequest()->SetTopic(topicInitInfo.TopicNameConverter->GetPrimaryPath());
-    request.MutablePartitionRequest()->SetPartition(client_req->partition_id());
+        for (auto& child: partitionNode->AllChildren) {
+            TKqpHelper::TCommitInfo commit {.PartitionId = child->Id, .Offset = 0, .KillReadSession = true, .OnlyCheckCommitedToFinish = false};
+            commits.push_back(commit);
+        }
 
-    Y_ABORT_UNLESS(PipeClient);
+        TKqpHelper::TCommitInfo commit {.PartitionId = partitionNode->Id, .Offset = commitRequest->offset(), .KillReadSession = true, .OnlyCheckCommitedToFinish = false};
+        commits.push_back(commit);
 
-    auto commit = request.MutablePartitionRequest()->MutableCmdSetClientOffset();
-    commit->SetClientId(ClientId);
-    commit->SetOffset(client_req->offset());
-    commit->SetStrict(true);
+        // savnik if empty database?
+        Kqp = std::make_unique<TKqpHelper>(Request().GetDatabaseName().GetOrElse(TString()), ClientId, topic, commits); // savnik add cookie?
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "strict CommitOffset, partition " << client_req->partition_id()
-                        << " committing to position " << client_req->offset() /*<< " prev " << CommittedOffset
-                        << " end " << EndOffset << " by cookie " << readId*/);
-
-    TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
-    req->Record.Swap(&request);
-
-    NTabletPipe::SendData(ctx, PipeClient, req.Release());
+        Kqp->SendCreateSessionRequest(ctx);
+    }
 }
 
+void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx) {
+    if (!Kqp->Handle(ev, ctx)) {
+        AnswerError(ev->Get()->Record.GetError(), PersQueue::ErrorCode::ERROR, ctx);
+    }
+}
+
+void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+    auto& record = ev->Get()->Record;
+    if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "strict CommitOffset failed. Kqp error: " << ev->Get()->Record);
+
+        Ydb::Topic::CommitOffsetResult result; // savnik: how to return exception?
+        Request().SendResult(result, record.GetYdbStatus());
+        Die(ctx);
+        return;
+    }
+
+    auto step = Kqp->Handle(ev, ctx);
+
+    if (step == TKqpHelper::ECurrentStep::DONE) {
+        Ydb::Topic::CommitOffsetResult result;
+        Request().SendResult(result, Ydb::StatusIds::SUCCESS);
+        Die(ctx);
+        return;
+    }
+}
 
 void TCommitOffsetActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
@@ -157,17 +175,50 @@ void TCommitOffsetActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActo
     Die(ctx);
 }
 
+void TCommitOffsetActor::SendCommit(const TTopicInitInfo& topic, const Ydb::Topic::CommitOffsetRequest* commitRequest, const TActorContext& ctx) {
+    ui64 tabletId = topic.Partitions.at(PartitionId).TabletId;
+
+    NTabletPipe::TClientConfig clientConfig;
+    clientConfig.RetryPolicy = {
+        .RetryLimitCount = 6,
+        .MinRetryTime = TDuration::MilliSeconds(10),
+        .MaxRetryTime = TDuration::MilliSeconds(100),
+        .BackoffMultiplier = 2,
+        .DoFirstRetryInstantly = true
+    };
+
+    PipeClient = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
+
+    NKikimrClient::TPersQueueRequest request;
+    request.MutablePartitionRequest()->SetTopic(topic.TopicNameConverter->GetPrimaryPath());
+    request.MutablePartitionRequest()->SetPartition(commitRequest->partition_id());
+
+    Y_ABORT_UNLESS(PipeClient);
+
+    auto commit = request.MutablePartitionRequest()->MutableCmdSetClientOffset();
+    commit->SetClientId(ClientId);
+    commit->SetOffset(commitRequest->offset());
+    commit->SetStrict(true);
+
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "strict CommitOffset, partition " << commitRequest->partition_id()
+                        << " committing to position " << commitRequest->offset() /*<< " prev " << CommittedOffset
+                        << " end " << EndOffset << " by cookie " << readId*/);
+
+    TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+    req->Record.Swap(&request);
+
+    NTabletPipe::SendData(ctx, PipeClient, req.Release());
+}
 
 void TCommitOffsetActor::AnswerError(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx) {
-
     Ydb::Topic::CommitOffsetResponse response;
     response.mutable_operation()->set_ready(true);
     auto issue = response.mutable_operation()->add_issues();
     FillIssue(issue, errorCode, errorReason);
-    response.mutable_operation()->set_status(ConvertPersQueueInternalCodeToStatus(errorCode));
-    Reply(ConvertPersQueueInternalCodeToStatus(errorCode), response.operation().issues(), ctx);
+    auto status = ConvertPersQueueInternalCodeToStatus(errorCode);
+    response.mutable_operation()->set_status(status);
+    Reply(status, response.operation().issues(), ctx);
 }
-
 
 void TCommitOffsetActor::Handle(TEvPQProxy::TEvCloseSession::TPtr& ev, const TActorContext& ctx) {
     AnswerError(ev->Get()->Reason, ev->Get()->ErrorCode, ctx);
@@ -185,6 +236,5 @@ void TCommitOffsetActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, con
 void TCommitOffsetActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
     AnswerError(TStringBuilder() <<"pipe to tablet destroyed" << ev->Get()->TabletId, PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, ctx);
 }
-
 
 }

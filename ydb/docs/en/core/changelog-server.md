@@ -21,7 +21,7 @@ Release date: December 24, 2024.
 * Added support for constant default values for columns.
 * Added support for the RETURNING clause in queries.
 * [Added](https://github.com/ydb-platform/ydb/pull/8708) start/end times and authors in the metadata for backup/restore operations from S3-compatible storage.
-* Supported ACL for table backup/restore from S3-compatible storage.
+* Added support for backup/restore of ACL for tables from/to S3-compatible storage.
 * Included paths and decompression methods in query plans for reading from S3.
 * Added new parsing options for timestamp/datetime fields when reading data from S3.
 * Added support for changing retention periods in CDC topics.
@@ -43,8 +43,8 @@ Release date: December 24, 2024.
 * Enhanced the PDisk page with attributes, disk space consumption details, and a button to initiate [disk decommissioning](./devops/manual/decommissioning).
 * Added information about currently running queries.
 * [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1291) a row limit setting for query editor output and a notification when results exceed the limit.
-* Added display of top CPU-consuming queries over the last hour.
-* Enabled search on the history and saved queries pages.
+* Added a tab to display top CPU-consuming queries over the last hour.
+* Added a control to search the history and saved queries pages.
 * Added the ability to cancel query execution.
 * [Added](https://github.com/ydb-platform/ydb-embedded-ui/issues/944) a shortcut to save queries in the editor.
 * Added a display of the number of rows retrieved for all queries.

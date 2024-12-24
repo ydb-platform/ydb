@@ -39,10 +39,14 @@ namespace {
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
             const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "", const TString& peerName = "", 
 <<<<<<< HEAD
+<<<<<<< HEAD
             const TVector<TString>& cdcStreams = {}) {
 =======
             THashMap<TString, TVector<TString>> cdcStreams = {}) {
 >>>>>>> tests
+=======
+            const TVector<TString>& cdcStreams = {}) {
+>>>>>>> test
 
         TTablesWithAttrs tables;
 
@@ -135,6 +139,7 @@ namespace {
         }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
         for (const auto& cdcStream : cdcStreams) {
             TestCreateCdcStream(runtime, schemeshardId, ++txId, dbName, cdcStream);
             env.TestWaitNotification(runtime, txId, schemeshardId);
@@ -144,6 +149,11 @@ namespace {
                 TestCreateCdcStream(runtime, schemeshardId, ++txId, tablePath, stream);
             }
 >>>>>>> tests
+=======
+        for (const auto& cdcStream : cdcStreams) {
+            TestCreateCdcStream(runtime, schemeshardId, ++txId, dbName, cdcStream);
+            env.TestWaitNotification(runtime, txId, schemeshardId);
+>>>>>>> test
         }
 
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
@@ -308,8 +318,7 @@ namespace {
 } // anonymous
 
 Y_UNIT_TEST_SUITE(TExportToS3Tests) {
-    void RunS3(TTestBasicRuntime& runtime, const TVector<TString>& tables, const TString& requestTpl,
-    const THashMap<TString, TVector<TString>>& cdcStreams = {}) {
+    void RunS3(TTestBasicRuntime& runtime, const TVector<TString>& tables, const TString& requestTpl) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 

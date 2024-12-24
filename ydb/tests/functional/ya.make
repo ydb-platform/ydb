@@ -17,7 +17,6 @@ RECURSE(
     large_serializable
     limits
     minidumps
-    open_source
     postgresql
     query_cache
     rename

@@ -23,7 +23,7 @@ enum class EInitPhase {
 };
 
 enum EOwner {
-    OwnerSystem = 0, // Chunk0, SysLog chunks and CommonLog + just common log tracking, mens "for dynamic" in requests
+    OwnerSystem = 0, // Chunk0, SysLog chunks and CommonLog + just common log tracking, means "for dynamic" in requests
     OwnerUnallocated = 1, // Unallocated chunks, Trim scheduling, Slay commands
     OwnerBeginUser = 2,
     OwnerEndUser = 241,
@@ -154,6 +154,10 @@ struct TOwnerData {
 
     bool HaveRequestsInFlight() const {
         return LogReader || InFlight->ChunkWrites.load() || InFlight->ChunkReads.load() || InFlight->LogWrites.load();
+    }
+
+    bool ReadingLog() const {
+        return bool(LogReader);
     }
 
     TString ToString() const {

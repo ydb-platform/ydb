@@ -145,7 +145,7 @@ private:
         if (size == 0) {
             return;
         }
-        
+
         ui64 beginSector = offset / NSectorMap::SECTOR_SIZE;
         ui64 endSector = (offset + size + NSectorMap::SECTOR_SIZE - 1) / NSectorMap::SECTOR_SIZE;
         ui64 midSector = (beginSector + endSector) / 2;
@@ -262,9 +262,13 @@ public:
             offset += NSectorMap::SECTOR_SIZE;
             data += NSectorMap::SECTOR_SIZE;
         }
-        
+
         if (SectorOperationThrottler.Get() != nullptr) {
             SectorOperationThrottler->ThrottleRead(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000);
+        }
+
+        if (ReadCallback) {
+            ReadCallback();
         }
     }
 
@@ -295,7 +299,7 @@ public:
                 data += NSectorMap::SECTOR_SIZE;
             }
         }
-        
+
         if (SectorOperationThrottler.Get() != nullptr) {
             SectorOperationThrottler->ThrottleRead(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000);
         }
@@ -316,6 +320,11 @@ public:
 
     ui64 DataBytes() const {
         return Map.size() * NSectorMap::SECTOR_SIZE;
+    }
+
+    void SetReadCallback(std::function<void()> callback) {
+        TGuard<TTicketLock> guard(MapLock);
+        ReadCallback = callback;
     }
 
     TString ToString() const {
@@ -350,6 +359,7 @@ private:
     THashMap<ui64, TString> Map;
     NSectorMap::EDiskMode DiskMode = NSectorMap::DM_NONE;
     THolder<NSectorMap::TSectorOperationThrottler> SectorOperationThrottler;
+    std::function<void()> ReadCallback = nullptr;
 };
 
 } // NPDisk

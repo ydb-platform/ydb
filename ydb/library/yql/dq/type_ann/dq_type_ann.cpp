@@ -1,5 +1,4 @@
 #include "dq_type_ann.h"
-
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -83,6 +82,16 @@ const TTypeAnnotationNode* GetColumnType(const TDqConnection& node, const TStruc
     }
 
     return result;
+}
+
+template <typename TType>
+bool EnsureConvertibleTo(const TExprNode& value, const TStringBuf name, TExprContext& ctx) {
+    auto&& stringValue = value.Content();
+    if (!TryFromString<TType>(stringValue)) {
+        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder() << "Unsupported " << name << " value: " << stringValue));
+        return false;
+    }
+    return true;
 }
 
 template <typename TStage>
@@ -521,8 +530,7 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
                        return nullptr;
                    }
                    auto& value = *joinAlgoOption.Child(TCoNameValueTuple::idx_Value);
-                   if (!TryFromString<ui64>(value.Content())) {
-                       ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder() << "DqJoin: Expected integer, but got: " << value.Content()));
+                   if (!EnsureConvertibleTo<ui64>(value, name.Content(), ctx)) {
                        return nullptr;
                    }
                    continue;
@@ -629,18 +637,9 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
         cnStreamLookup.JoinKeys(),
         ctx
     );
-    auto validateIntParam = [&ctx=ctx](auto&& value) {
-        // matches dq_tasks.proto
-        auto&& stringValue = value.StringValue();
-        if (!TryFromString<ui64>(stringValue)) {
-            ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder() << "Expected integer, but got: " << stringValue));
-            return false;
-        }
-        return true;
-    };
-    if (!(validateIntParam(cnStreamLookup.MaxCachedRows()) &&
-          validateIntParam(cnStreamLookup.TTL()) &&
-          validateIntParam(cnStreamLookup.MaxDelayedRows()))) {
+    if (!EnsureConvertibleTo<ui64>(cnStreamLookup.MaxCachedRows().Ref(), "MaxCachedRows", ctx) ||
+        !EnsureConvertibleTo<ui64>(cnStreamLookup.TTL().Ref(), "TTL", ctx) ||
+        !EnsureConvertibleTo<ui64>(cnStreamLookup.MaxDelayedRows().Ref(), "MaxDelayedRows", ctx)) {
         return TStatus::Error;
     }
     input->SetTypeAnn(ctx.MakeType<TStreamExprType>(outputRowType));
@@ -1261,16 +1260,13 @@ bool TDqStageSettings::Validate(const TExprNode& stage, TExprContext& ctx) {
                 return false;
             }
 
-            if (name == LogicalIdSettingName && !TryFromString<ui64>(value->Content())) {
-                ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), TStringBuilder() << "Setting " << name << " should contain ui64 value, but got: " << value->Content()));
+            if (name == LogicalIdSettingName && !EnsureConvertibleTo<ui64>(*value, name, ctx)) {
                 return false;
             }
-            if (name == BlockStatusSettingName && !TryFromString<EBlockStatus>(value->Content())) {
-                ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), TStringBuilder() << "Unsupported " << name << " value: " << value->Content()));
+            if (name == BlockStatusSettingName && !EnsureConvertibleTo<EBlockStatus>(*value, name, ctx)) {
                 return false;
             }
-            if (name == PartitionModeSettingName && !TryFromString<EPartitionMode>(value->Content())) {
-                ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), TStringBuilder() << "Unsupported " << name << " value: " << value->Content()));
+            if (name == PartitionModeSettingName && !EnsureConvertibleTo<EPartitionMode>(*value, name, ctx)) {
                 return false;
             }
         } else if (name == WideChannelsSettingName) {

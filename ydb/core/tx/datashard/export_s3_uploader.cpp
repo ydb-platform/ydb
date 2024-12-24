@@ -227,14 +227,14 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         this->Become(&TThis::StateUploadMetadata);
     }
 
-    void UploadChecksum(TString&& checksum, const TString& key, const TString& checksumFile, 
+    void UploadChecksum(TString&& checksum, const TString& checksumKey, const TString& objectKeySuffix, 
         std::function<void()> checksumUploadedCallback)
     {   
         // make checksum verifiable using sha256sum CLI
-        checksum += ' ' + checksumFile;
+        checksum += ' ' + objectKeySuffix;
 
         auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(key);
+            .WithKey(checksumKey);
         this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(checksum)));
 
         ChecksumUploadedCallback = checksumUploadedCallback;
@@ -263,7 +263,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         if (EnableChecksums) {
             TString checksumKey = ChecksumKey(Settings.GetSchemeKey());
-            UploadChecksum(std::move(SchemeChecksum), checksumKey, SchemeFile(), nextStep);
+            UploadChecksum(std::move(SchemeChecksum), checksumKey, SchemeKeySuffix(), nextStep);
         } else {
             nextStep();
         }
@@ -291,7 +291,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         if (EnableChecksums) {
             TString checksumKey = ChecksumKey(Settings.GetPermissionsKey());
-            UploadChecksum(std::move(PermissionsChecksum), checksumKey, PermissionsFile(), nextStep);
+            UploadChecksum(std::move(PermissionsChecksum), checksumKey, PermissionsKeySuffix(), nextStep);
         } else {
             nextStep();
         }
@@ -315,7 +315,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         if (EnableChecksums) {
             TString checksumKey = ChecksumKey(Settings.GetMetadataKey());
-            UploadChecksum(std::move(MetadataChecksum), checksumKey, MetadataFile(), nextStep);
+            UploadChecksum(std::move(MetadataChecksum), checksumKey, MetadataKeySuffix(), nextStep);
         } else {
             nextStep();
         }
@@ -410,8 +410,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         if (EnableChecksums) {
             // checksum is always calculated before compression
             TString checksumKey = ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None));
-            TString dataFile = Settings.GetDataFile(DataFormat, ECompressionCodec::None);
-            UploadChecksum(std::move(DataChecksum), checksumKey, dataFile, nextStep);
+            TString dataKeySuffix = DataKeySuffix(ShardNum, DataFormat, ECompressionCodec::None);
+            UploadChecksum(std::move(DataChecksum), checksumKey, dataKeySuffix, nextStep);
         } else {
             nextStep();
         }
@@ -504,8 +504,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             if (EnableChecksums) {
                 // checksum is always calculated before compression
                 TString checksumKey = ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None));
-                TString dataFile = Settings.GetDataFile(DataFormat, ECompressionCodec::None);
-                return UploadChecksum(std::move(DataChecksum), checksumKey, dataFile, nextStep);
+                TString dataKeySuffix = DataKeySuffix(ShardNum, DataFormat, ECompressionCodec::None);
+                UploadChecksum(std::move(DataChecksum), checksumKey, dataKeySuffix, nextStep);
             } else {
                 return nextStep();
             }
@@ -669,6 +669,7 @@ public:
         , Settings(TS3Settings::FromBackupTask(task))
         , DataFormat(EDataFormat::Csv)
         , CompressionCodec(CodecFromTask(task))
+        , ShardNum(task.GetShardNum())
         , HttpResolverConfig(GetHttpResolverConfig(*GetS3StorageConfig()))
         , DataShard(dataShard)
         , TxId(txId)
@@ -678,9 +679,9 @@ public:
         , Retries(task.GetNumberOfRetries())
         , Attempt(0)
         , Delay(TDuration::Minutes(1))
-        , SchemeUploaded(task.GetShardNum() == 0 ? false : true)
-        , MetadataUploaded(task.GetShardNum() == 0 ? false : true)
-        , PermissionsUploaded(task.GetShardNum() == 0 ? false : true)
+        , SchemeUploaded(ShardNum == 0 ? false : true)
+        , MetadataUploaded(ShardNum == 0 ? false : true)
+        , PermissionsUploaded(ShardNum == 0 ? false : true)
         , EnableChecksums(task.GetEnableChecksums())
     {
     }
@@ -767,6 +768,7 @@ private:
     TS3Settings Settings;
     const EDataFormat DataFormat;
     const ECompressionCodec CompressionCodec;
+    const ui32 ShardNum;
     bool ProxyResolved;
 
     TMaybe<THttpResolverConfig> HttpResolverConfig;

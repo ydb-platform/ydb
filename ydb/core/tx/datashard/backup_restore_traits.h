@@ -30,10 +30,10 @@ ECompressionCodec NextCompressionCodec(ECompressionCodec cur);
 
 TString DataFileExtension(EDataFormat format, ECompressionCodec codec);
 
-TString PermissionsFile();
-TString SchemeFile();
-TString MetadataFile();
-TString DataFile(ui32 n, EDataFormat format, ECompressionCodec codec);
+TString PermissionsKeySuffix();
+TString SchemeKeySuffix();
+TString MetadataKeySuffix();
+TString DataKeySuffix(ui32 n, EDataFormat format, ECompressionCodec codec);
 
 TString ChecksumKey(const TString& objKey);
 

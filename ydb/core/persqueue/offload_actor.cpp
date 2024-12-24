@@ -71,10 +71,10 @@ public:
     auto CreateWriterFactory() {
         return [=]() -> IActor* {
             if (Config.HasIncrementalBackup()) {
-                return NBackup::NImpl::CreateLocalTableWriter(PathIdFromPathId(Config.GetIncrementalBackup().GetDstPathId()));
+                return NBackup::NImpl::CreateLocalTableWriter(TPathId::FromProto(Config.GetIncrementalBackup().GetDstPathId()));
             } else {
                 return NBackup::NImpl::CreateLocalTableWriter(
-                    PathIdFromPathId(Config.GetIncrementalRestore().GetDstPathId()),
+                    TPathId::FromProto(Config.GetIncrementalRestore().GetDstPathId()),
                     NBackup::NImpl::EWriterType::Restore);
             }
         };

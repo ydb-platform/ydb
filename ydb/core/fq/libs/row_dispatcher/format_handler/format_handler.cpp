@@ -333,8 +333,11 @@ public:
     }
 
     void Handle(NActors::TEvents::TEvPoison::TPtr&) {
-        with_lock(Alloc) {
-            Clients.clear();
+        if (Filters) {
+            for (const auto& [clientId, _] : Clients) {
+                Filters->RemoveFilter(clientId);
+            }
+            Filters.Reset();
         }
         PassAway();
     }

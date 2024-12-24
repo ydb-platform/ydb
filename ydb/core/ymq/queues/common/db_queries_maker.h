@@ -23,6 +23,11 @@ const char* const QUEUE_ID_KEYS = R"__(
             '('QueueIdNumber queueIdNumber)
         )__";
 
+const char* const QUEUE_ID_AND_KEY_KEYS_RANGE = R"__(
+            '('QueueIdNumberHash queueIdNumberHash queueIdNumberHash)
+            '('QueueIdNumber queueIdNumber queueIdNumber)
+        )__";
+
 const char* const DLQ_ID_KEYS = R"__(
             '('QueueIdNumberHash dlqIdNumberHash)
             '('QueueIdNumber dlqIdNumber)
@@ -91,7 +96,8 @@ private:
         return TablesFormat_ == 1 ? QUEUE_ID_KEYS : "'('State (Uint64 '0))";
     }
     const char* GetTagKeys() const {
-        return TablesFormat_ == 1 ? QUEUE_ID_KEYS : "";
+        // TODO(qyryq) TablesFormat_ == 0???
+        return TablesFormat_ == 1 ? QUEUE_ID_AND_KEY_KEYS_RANGE : "";
     }
     const char* GetIdKeys() const {
         return TablesFormat_ == 1 ? QUEUE_ID_KEYS : "";

@@ -1128,4 +1128,22 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(json["Successful"][0]["Id"], "Id-0");
         UNIT_ASSERT_VALUES_EQUAL(json["Successful"][1]["Id"], "Id-1");
     }
+
+    Y_UNIT_TEST_F(TestListQueueTags, THttpProxyTestMock) {
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+        json = ListQueueTags({{"QueueUrl", queueUrl}});
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMapSafe().size(), 0);
+    }
+
+    Y_UNIT_TEST_F(TestTagQueue, THttpProxyTestMock) {
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+    }
+
+    Y_UNIT_TEST_F(TestUntagQueue, THttpProxyTestMock) {
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+    }
+
 } // Y_UNIT_TEST_SUITE(TestYmqHttpProxy)

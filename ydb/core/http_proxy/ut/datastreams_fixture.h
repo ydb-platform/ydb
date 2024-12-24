@@ -405,6 +405,18 @@ public:
         return SendJsonRequest("SetQueueAttributes", request, expectedHttpCode);
     }
 
+    NJson::TJsonMap ListQueueTags(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("ListQueueTags", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap TagQueue(NJson::TJsonMap request = {}, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("TagQueue", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap UntagQueue(NJson::TJsonMap request = {}, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("UntagQueue", request, expectedHttpCode);
+    }
+
     void WaitQueueAttributes(TString queueUrl, size_t retries, NJson::TJsonMap attributes) {
         WaitQueueAttributes(queueUrl, retries, [&attributes](NJson::TJsonMap json) {
             for (const auto& [k, v] : attributes.GetMapSafe()) {
@@ -701,6 +713,15 @@ private:
            "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\"]";
         client.CreateTable("/Root/SQS/.STD", attributesTable);
         client.CreateTable("/Root/SQS/.FIFO", attributesTable);
+
+        auto tagsTable = "Name: \"Tags\""
+           "Columns { Name: \"QueueIdNumberHash\"             Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"                 Type: \"Uint64\"}"
+           "Columns { Name: \"Key\"                           Type: \"Utf8\"}"
+           "Columns { Name: \"Value\"                         Type: \"Utf8\"}"
+           "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"Key\"]";
+        client.CreateTable("/Root/SQS/.STD", tagsTable);
+        client.CreateTable("/Root/SQS/.FIFO", tagsTable);
 
         client.CreateTable("/Root/SQS",
            "Name: \".Events\""

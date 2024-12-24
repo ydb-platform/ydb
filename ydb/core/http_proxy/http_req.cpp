@@ -510,40 +510,8 @@ namespace NKikimr::NHttpProxy {
                     SendGrpcRequestNoDriver(ctx);
                 } else {
                     auto requestHolder = MakeHolder<NKikimrClient::TSqsRequest>();
-                    // TODO? action = NSQS::ActionFromString(Method);
-                    NSQS::EAction action = NSQS::EAction::Unknown;
-                    if (Method == "CreateQueue") {
-                        action = NSQS::EAction::CreateQueue;
-                    } else if (Method == "GetQueueUrl") {
-                        action = NSQS::EAction::GetQueueUrl;
-                    } else if (Method == "SendMessage") {
-                        action = NSQS::EAction::SendMessage;
-                    } else if (Method == "ReceiveMessage") {
-                        action = NSQS::EAction::ReceiveMessage;
-                    } else if (Method == "GetQueueAttributes") {
-                        action = NSQS::EAction::GetQueueAttributes;
-                    } else if (Method == "ListQueues") {
-                        action = NSQS::EAction::ListQueues;
-                    } else if (Method == "DeleteMessage") {
-                        action = NSQS::EAction::DeleteMessage;
-                    } else if (Method == "PurgeQueue") {
-                        action = NSQS::EAction::PurgeQueue;
-                    } else if (Method == "DeleteQueue") {
-                        action = NSQS::EAction::DeleteQueue;
-                    } else if (Method == "ChangeMessageVisibility") {
-                        action = NSQS::EAction::ChangeMessageVisibility;
-                    } else if (Method == "SetQueueAttributes") {
-                        action = NSQS::EAction::SetQueueAttributes;
-                    } else if (Method == "SendMessageBatch") {
-                        action = NSQS::EAction::SendMessageBatch;
-                    }else if (Method == "DeleteMessageBatch") {
-                        action = NSQS::EAction::DeleteMessageBatch;
-                    } else if (Method == "ChangeMessageVisibilityBatch") {
-                        action = NSQS::EAction::ChangeMessageVisibilityBatch;
-                    } else if (Method == "ListDeadLetterSourceQueues") {
-                        action = NSQS::EAction::ListDeadLetterSourceQueues;
-                    }
 
+                    NSQS::EAction action = NSQS::ActionFromString(Method);
                     requestHolder->SetRequestId(HttpContext.RequestId);
 
                     NSQS::TAuthActorData data {
@@ -1081,6 +1049,7 @@ namespace NKikimr::NHttpProxy {
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(DeleteMessageBatch);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibilityBatch);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ListDeadLetterSourceQueues);
+        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ListQueueTags);
         #undef DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN
     }
 

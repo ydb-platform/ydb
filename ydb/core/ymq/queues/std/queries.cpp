@@ -571,16 +571,16 @@ const char* const InternalListQueueTagsQuery = R"__(
 
         (let tagsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Tags)
 
-        (let tagsRow '(
-            )__" TAGS_KEYS_PARAM R"__())
-        (let tagsSelect '(
-            'Key
-            'Value))
+        (let tagsRange '(
+            )__" TAGS_KEYS_PARAM R"__(
+            '('Key (Utf8String '"") (Void))
+            ))
+        (let tagsSelect '('Key 'Value))
 
-        (let tagsRead (SelectRow tagsTable tagsRow tagsSelect))
+        (let tags (Member (SelectRange tagsTable tagsRange tagsSelect '()) 'List))
 
         (return (AsList
-            (SetResult 'tags tagsRead)))
+            (SetResult 'tags tags)))
     )
 )__";
 

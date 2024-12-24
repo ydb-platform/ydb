@@ -1,23 +1,29 @@
-#include <contrib/libs/breakpad/src/client/linux/handler/exception_handler.h>
 #include <util/generic/ptr.h>
-#include <util/generic/string.h>
-#include <util/system/env.h>
-#include <util/system/shellcommand.h>
+#include <contrib/libs/breakpad/src/client/linux/handler/exception_handler.h>
+#include <unistd.h>
+#include <sys/wait.h>
+
 
 class TMinidumper {
 public:
     TMinidumper() {
-        if(const auto path = GetEnv("BREAKPAD_MINIDUMPS_PATH")) {
+        if(const char* path = getenv("BREAKPAD_MINIDUMPS_PATH")) {
             using namespace google_breakpad;
-            Handler = MakeHolder<ExceptionHandler>(MinidumpDescriptor(path.c_str()), nullptr, DumpCallback, nullptr, true, -1, true);
+            Handler = MakeHolder<ExceptionHandler>(MinidumpDescriptor(path), nullptr, DumpCallback, nullptr, true, -1, true);
         }
     }
 
 private:
     static bool DumpCallback(const google_breakpad::MinidumpDescriptor& descriptor, void* context, bool succeeded) {
-        if (const auto script = GetEnv("BREAKPAD_MINIDUMPS_SCRIPT")) {
-            TShellCommand cmd(script, succeeded ? TList<TString>{"true", descriptor.path()} : TList<TString>{"false", ""});
-            cmd.Run().Wait();
+        if (char* script = getenv("BREAKPAD_MINIDUMPS_SCRIPT")) {
+            if (auto pid = fork()) {
+                waitpid(pid, 0, 0);
+            } else {
+                char* dumpSucceded = succeeded ? (char *)"true" : (char *)"false";  
+                char* descriptorPath = succeeded ? (char *)descriptor.path() : (char *)"\0";  
+                char* cmd[] = {script, dumpSucceded, descriptorPath, NULL};  
+                execve(cmd[0], &cmd[0], NULL);
+            }
         }
         return succeeded;
     }

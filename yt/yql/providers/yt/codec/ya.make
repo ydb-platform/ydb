@@ -18,6 +18,7 @@ PEERDIR(
     yt/cpp/mapreduce/interface
     yt/cpp/mapreduce/io
     contrib/libs/apache/arrow
+    yql/essentials/core
     yql/essentials/minikql
     yql/essentials/minikql/computation
     yql/essentials/public/udf

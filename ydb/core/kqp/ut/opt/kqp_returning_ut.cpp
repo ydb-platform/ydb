@@ -330,37 +330,10 @@ Y_UNIT_TEST(ReturningTypes) {
     }
 }
 
-Y_UNIT_TEST(ReturningRandom) {
-    auto kikimr = DefaultKikimrRunner();
-
-    auto client = kikimr.GetTableClient();
-    auto session = client.CreateSession().GetValueSync().GetSession();
-    auto db = kikimr.GetQueryClient();
-
-    const auto queryCreate = Q_(R"(
-        CREATE TABLE test (id Uint64, v String, PRIMARY KEY(id));
-        )");
-
-    auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
-    UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
-
-    auto settings = NYdb::NQuery::TExecuteQuerySettings()
-        .Syntax(NYdb::NQuery::ESyntax::YqlV1)
-        .ConcurrentResultSets(false);
-
-    auto result = db.ExecuteQuery(R"(
-        UPSERT INTO test (id, v) VALUES (1, CAST(RandomUuid(1) AS String)) RETURNING *;
-        SELECT * FROM test;
-    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-    CompareYson(FormatResultSetYson(result.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(1)));
-}
-
-Y_UNIT_TEST(ReturningRandomWithSinks) {
+Y_UNIT_TEST_TWIN(ReturningRandom, isSink) {
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
-    appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+    appConfig.MutableTableServiceConfig()->SetEnableOltpSink(isSink);
+    appConfig.MutableTableServiceConfig()->SetEnableOlapSink(isSink);
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
     TKikimrRunner kikimr(serverSettings);
 

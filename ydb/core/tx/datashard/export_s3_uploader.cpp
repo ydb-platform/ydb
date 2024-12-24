@@ -632,6 +632,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
                 this->Send(DataShard, new TEvDataShard::TEvChangeS3UploadStatus(this->SelfId(), TxId,
                     TS3Upload::EStatus::Abort, *Error));
             }
+            Become(&TThis::StateUploadData);
         }
     }
 

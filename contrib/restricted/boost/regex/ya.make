@@ -13,17 +13,9 @@ ORIGINAL_SOURCE(https://github.com/boostorg/regex/archive/boost-1.87.0.tar.gz)
 PEERDIR(
     contrib/libs/icu
     contrib/restricted/boost/assert
-    contrib/restricted/boost/concept_check
     contrib/restricted/boost/config
-    contrib/restricted/boost/container_hash
-    contrib/restricted/boost/core
-    contrib/restricted/boost/integer
-    contrib/restricted/boost/mpl
     contrib/restricted/boost/predef
-    contrib/restricted/boost/smart_ptr
-    contrib/restricted/boost/static_assert
     contrib/restricted/boost/throw_exception
-    contrib/restricted/boost/type_traits
 )
 
 ADDINCL(
@@ -37,6 +29,7 @@ NO_UTIL()
 CFLAGS(
     -DBOOST_HAS_ICU
     -DBOOST_NO_CXX98_BINDERS
+    -DBOOST_REGEX_STANDALONE
 )
 
 IF (DYNAMIC_BOOST)

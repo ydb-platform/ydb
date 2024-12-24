@@ -16,7 +16,7 @@ class BrokenResourceError(Exception):
 
 class BrokenWorkerProcess(Exception):
     """
-    Raised by :func:`run_sync_in_process` if the worker process terminates abruptly or
+    Raised by :meth:`~anyio.to_process.run_sync` if the worker process terminates abruptly or
     otherwise misbehaves.
     """
 

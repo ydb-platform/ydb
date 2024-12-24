@@ -27,6 +27,8 @@ void FillResponseHeaders(const TOutputEncodingContext& outputEncodingContext, co
 //! Creates output encoder according to request headers.
 TOutputEncodingContext CreateOutputEncodingContextFromHeaders(const NHttp::THeadersPtr& headers);
 
+i64 GetCountersBytesAlive();
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NProfiling

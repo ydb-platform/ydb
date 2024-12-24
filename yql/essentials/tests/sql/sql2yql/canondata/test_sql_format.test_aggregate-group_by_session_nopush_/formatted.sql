@@ -17,5 +17,4 @@ FROM (
 )
 WHERE
     ss != 100500
-;
--- should not push down
+; -- should not push down

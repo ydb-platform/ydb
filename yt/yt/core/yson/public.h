@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yt/yt/core/misc/public.h>
+#include <yt/yt/core/misc/configurable_singleton_decl.h>
 
 #include <library/cpp/yt/yson/public.h>
 #include <library/cpp/yt/yson_string/public.h>
@@ -97,6 +98,8 @@ class TProtobufMessageType;
 
 //! An opaque reflected counterpart of ::google::protobuf::EnumDescriptor.
 class TProtobufEnumType;
+
+YT_DECLARE_RECONFIGURABLE_SINGLETON(TProtobufInteropConfig, TProtobufInteropDynamicConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

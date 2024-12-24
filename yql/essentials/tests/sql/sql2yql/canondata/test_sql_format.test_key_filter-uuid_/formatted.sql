@@ -98,23 +98,20 @@ FROM
     @uuid
 WHERE
     value == CAST('00000000-0000-0000-0000-100000000000' AS Uuid)
-;
+; -- Safe key filter calc
 
--- Safe key filter calc
 SELECT
     *
 FROM
     @uuid
 WHERE
     value == CAST($asIs('00000000-0000-0000-0000-200000000000') AS Uuid)
-;
+; -- Unsafe key filter calc
 
--- Unsafe key filter calc
 SELECT
     *
 FROM
     @uuid
 WHERE
     value == CAST($asIs('bad') AS Uuid)
-;
--- Unsafe key filter calc
+; -- Unsafe key filter calc

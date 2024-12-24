@@ -26,5 +26,4 @@ SELECT
     $udf(name, age, age AS age) AS val
 FROM
     $data
-;
--- age is reused as named after positional
+; -- age is reused as named after positional

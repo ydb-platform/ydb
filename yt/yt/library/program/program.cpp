@@ -18,8 +18,6 @@
 
 #include <yt/yt/library/profiling/tcmalloc/profiler.h>
 
-#include <library/cpp/yt/stockpile/stockpile.h>
-
 #include <library/cpp/yt/system/exit.h>
 
 #include <library/cpp/yt/backtrace/absl_unwinder/absl_unwinder.h>

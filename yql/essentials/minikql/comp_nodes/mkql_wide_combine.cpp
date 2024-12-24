@@ -1022,6 +1022,7 @@ public:
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (state.IsInvalid()) {
             MakeState(ctx, state);
+            std::cerr << std::format("[{}] Non LLVM wide combiner\n", (const void*)this);
         }
 
         while (const auto ptr = static_cast<TState*>(state.AsBoxed().Get())) {
@@ -1347,12 +1348,13 @@ public:
             }
 
             const auto check = CheckAdjustedMemLimit<TrackRss>(MemLimit, totalUsed, ctx, block);
-            BranchInst::Create(done, loop, check, block);
 
             const auto isOutOfMemoryPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetIsOutOfMemory() }, "is_out_of_memory_ptr", block);
             const auto isOutOfMemory = new LoadInst(storedType, isOutOfMemoryPtr, "is_out_of_memory", block);
-            const auto checkIsOutOfMemory = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, isOutOfMemory, ConstantInt::get(isOutOfMemory->getType(), 0), "check_is_out_of_memory", block);
-            BranchInst::Create(done, loop, checkIsOutOfMemory, block);
+            const auto checkIsOutOfMemory = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, isOutOfMemory, ConstantInt::get(isOutOfMemory->getType(), 0), "check_is_out_of_memory", block);
+
+            const auto any = BinaryOperator::CreateOr(check, checkIsOutOfMemory, "any", block);
+            BranchInst::Create(done, loop, any, block);
 
             block = done;
 
@@ -1499,6 +1501,7 @@ public:
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (state.IsInvalid()) {
             MakeState(ctx, state);
+            std::cerr << std::format("[{}] Non LLVM wide last combiner\n", (const void*)this);
         }
 
         if (const auto ptr = static_cast<TSpillingSupportState*>(state.AsBoxed().Get())) {

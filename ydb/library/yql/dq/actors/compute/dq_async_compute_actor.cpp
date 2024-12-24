@@ -265,19 +265,20 @@ private:
             html << "CheckpointingMode: " << NDqProto::ECheckpointingMode_Name(info.CheckpointingMode) << "<br />";
             DUMP(info, FreeSpace);
             html << "IsPaused: " << info.IsPaused() << "<br />";
-            if (info.Channel) {
-                html << "DqInputChannel.ChannelId: " << info.Channel->GetChannelId() << "<br />";
-                html << "DqInputChannel.FreeSpace: " << info.Channel->GetFreeSpace() << "<br />";
-                html << "DqInputChannel.StoredBytes: " << info.Channel->GetStoredBytes() << "<br />";
-                html << "DqInputChannel.Empty: " << info.Channel->Empty() << "<br />";
-                html << "DqInputChannel.InputType: " << (info.Channel->GetInputType() ? info.Channel->GetInputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
-                html << "DqInputChannel.InputWidth: " << (info.Channel->GetInputWidth() ? ToString(*info.Channel->GetInputWidth()) : TString{"unknown"})  << "<br />";
-                html << "DqInputChannel.IsFinished: " << info.Channel->IsFinished() << "<br />";
+            auto channel = info.Channel;
+            if (channel) {
+                html << "DqInputChannel.ChannelId: " << channel->GetChannelId() << "<br />";
+                html << "DqInputChannel.FreeSpace: " << channel->GetFreeSpace() << "<br />";
+                html << "DqInputChannel.StoredBytes: " << channel->GetStoredBytes() << "<br />";
+                html << "DqInputChannel.Empty: " << channel->Empty() << "<br />";
+                html << "DqInputChannel.InputType: " << (channel->GetInputType() ? channel->GetInputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
+                html << "DqInputChannel.InputWidth: " << (channel->GetInputWidth() ? ToString(*channel->GetInputWidth()) : TString{"unknown"})  << "<br />";
+                html << "DqInputChannel.IsFinished: " << channel->IsFinished() << "<br />";
 
-                const auto& pushStats = info.Channel->GetPushStats();
+                const auto& pushStats = channel->GetPushStats();
                 dumpInputChannelStats("DqInputChannel.PushStats.", pushStats);
 
-                const auto& popStats = info.Channel->GetPopStats();
+                const auto& popStats = channel->GetPopStats();
                 dumpInputStats("DqInputChannel.PopStats."sv, popStats);
             }
         }
@@ -290,18 +291,19 @@ private:
             html << "PendingWatermark: " << !!info.PendingWatermark << " " << (!info.PendingWatermark ? TString{} : info.PendingWatermark->ToString()) << "<br />";
             html << "WatermarksMode: " << NDqProto::EWatermarksMode_Name(info.WatermarksMode) << "<br />";
             html << "FreeSpace: " << info.GetFreeSpace() << "<br />";
-            if (info.Buffer) {
-                html << "DqInputBuffer.InputIndex: " << info.Buffer->GetInputIndex() << "<br />";
-                html << "DqInputBuffer.FreeSpace: " << info.Buffer->GetFreeSpace() << "<br />";
-                html << "DqInputBuffer.StoredBytes: " << info.Buffer->GetStoredBytes() << "<br />";
-                html << "DqInputBuffer.Empty: " << info.Buffer->Empty() << "<br />";
-                html << "DqInputBuffer.InputType: " << (info.Buffer->GetInputType() ? info.Buffer->GetInputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
-                html << "DqInputBuffer.InputWidth: " << (info.Buffer->GetInputWidth() ? ToString(*info.Buffer->GetInputWidth()) : TString{"unknown"})  << "<br />";
-                html << "DqInputBuffer.IsFinished: " << info.Buffer->IsFinished() << "<br />";
-                html << "DqInputBuffer.IsPaused: " << info.Buffer->IsPaused() << "<br />";
-                html << "DqInputBuffer.IsPending: " << info.Buffer->IsPending() << "<br />";
+            auto buffer = info.Buffer;
+            if (buffer) {
+                html << "DqInputBuffer.InputIndex: " << buffer->GetInputIndex() << "<br />";
+                html << "DqInputBuffer.FreeSpace: " << buffer->GetFreeSpace() << "<br />";
+                html << "DqInputBuffer.StoredBytes: " << buffer->GetStoredBytes() << "<br />";
+                html << "DqInputBuffer.Empty: " << buffer->Empty() << "<br />";
+                html << "DqInputBuffer.InputType: " << (buffer->GetInputType() ? buffer->GetInputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
+                html << "DqInputBuffer.InputWidth: " << (buffer->GetInputWidth() ? ToString(*buffer->GetInputWidth()) : TString{"unknown"})  << "<br />";
+                html << "DqInputBuffer.IsFinished: " << buffer->IsFinished() << "<br />";
+                html << "DqInputBuffer.IsPaused: " << buffer->IsPaused() << "<br />";
+                html << "DqInputBuffer.IsPending: " << buffer->IsPending() << "<br />";
 
-                const auto& popStats = info.Buffer->GetPopStats();
+                const auto& popStats = buffer->GetPopStats();
                 dumpInputStats("DqInputBuffer."sv, popStats);
             }
             if (info.AsyncInput) {
@@ -332,18 +334,19 @@ private:
                 html << "AsyncData.Watermark: " << info.AsyncData->Watermark << "<br />";
             }
 
-            if (info.Channel) {
-                html << "DqOutputChannel.ChannelId: " << info.Channel->GetChannelId() << "<br />";
-                html << "DqOutputChannel.ValuesCount: " << info.Channel->GetValuesCount() << "<br />";
-                html << "DqOutputChannel.IsFull: " << info.Channel->IsFull() << "<br />";
-                html << "DqOutputChannel.HasData: " << info.Channel->HasData() << "<br />";
-                html << "DqOutputChannel.IsFinished: " << info.Channel->IsFinished() << "<br />";
-                html << "DqInputChannel.OutputType: " << (info.Channel->GetOutputType() ? info.Channel->GetOutputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
+            auto channel = info.Channel;
+            if (channel) {
+                html << "DqOutputChannel.ChannelId: " << channel->GetChannelId() << "<br />";
+                html << "DqOutputChannel.ValuesCount: " << channel->GetValuesCount() << "<br />";
+                html << "DqOutputChannel.IsFull: " << channel->IsFull() << "<br />";
+                html << "DqOutputChannel.HasData: " << channel->HasData() << "<br />";
+                html << "DqOutputChannel.IsFinished: " << channel->IsFinished() << "<br />";
+                html << "DqInputChannel.OutputType: " << (channel->GetOutputType() ? channel->GetOutputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
 
-                const auto& pushStats = info.Channel->GetPushStats();
+                const auto& pushStats = channel->GetPushStats();
                 dumpOutputStats("DqOutputChannel.PushStats."sv, pushStats);
 
-                const auto& popStats = info.Channel->GetPopStats();
+                const auto& popStats = channel->GetPopStats();
                 html << "DqOutputChannel.PopStats.ChannelId: " << popStats.ChannelId << "<br />";
                 html << "DqOutputChannel.PopStats.DstStageId: " << popStats.DstStageId << "<br />";
                 html << "DqOutputChannel.PopStats.MaxMemoryUsage: " << popStats.MaxMemoryUsage << "<br />";

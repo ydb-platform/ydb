@@ -100,18 +100,6 @@ public:
     const ui32 StagePlanNodeId;
 };
 
-class TSource {
-
-public:
-    TSource(const TString& nodeType) : NodeType(nodeType) {
-    }
-
-    TString NodeType;
-    std::shared_ptr<TSingleMetric> IngressBytes;
-    std::shared_ptr<TSingleMetric> IngressRows;
-    std::vector<std::string> Info;
-};
-
 class TStage {
 
 public:
@@ -119,8 +107,6 @@ public:
     }
 
     TString NodeType;
-    std::shared_ptr<TSource> Source;
-    std::shared_ptr<TSingleMetric> IngressBytes;
     std::vector<std::shared_ptr<TConnection>> Connections;
     ui32 IndentX = 0;
     ui32 IndentY = 0;
@@ -134,6 +120,9 @@ public:
     std::shared_ptr<TSingleMetric> SpillingComputeBytes;
     std::shared_ptr<TSingleMetric> SpillingChannelTime;
     std::shared_ptr<TSingleMetric> SpillingChannelBytes;
+    TString IngressName;
+    std::shared_ptr<TSingleMetric> IngressBytes;
+    std::shared_ptr<TSingleMetric> IngressRows;
     std::vector<std::string> Info;
     ui64 BaseTime = 0;
     ui32 PlanNodeId = 0;
@@ -209,7 +198,7 @@ public:
 
     void Load(const NJson::TJsonValue& node);
     void LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& node, ui32 parentPlanNodeId);
-    void LoadSource(std::shared_ptr<TSource> source, const NJson::TJsonValue& node);
+    void LoadSource(const NJson::TJsonValue& node, std::vector<std::string>& info);
     void MarkStageIndent(ui32 indentX, ui32& offsetY, std::shared_ptr<TStage> stage);
     void MarkLayout();
     void ResolveCteRefs();

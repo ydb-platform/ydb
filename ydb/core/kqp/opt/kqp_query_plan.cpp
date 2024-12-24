@@ -524,9 +524,10 @@ private:
 
             TTableRead readInfo;
             readInfo.Type = EPlanTableReadType::Lookup;
-            TString table(tableLookup.Table().Path().Value());
-            auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
-            planNode.NodeInfo["Table"] = tableData.RelativePath ? *tableData.RelativePath : table;
+            TString tablePath(tableLookup.Table().Path().Value());
+            auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
+            planNode.NodeInfo["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
+            planNode.NodeInfo["Path"] = tablePath;
 
             readInfo.Columns.reserve(tableLookup.Columns().Size());
             auto& columns = planNode.NodeInfo["Columns"];
@@ -575,7 +576,7 @@ private:
                 }
             }
 
-            SerializerCtx.Tables[table].Reads.push_back(std::move(readInfo));
+            SerializerCtx.Tables[tablePath].Reads.push_back(std::move(readInfo));
         } else {
             planNode.TypeName = connection.Ref().Content();
         }
@@ -603,20 +604,21 @@ private:
 
     void Visit(const TKqpReadRangesSourceSettings& sourceSettings, TQueryPlanNode& planNode) {
         if (sourceSettings.RangesExpr().Maybe<TKqlKeyRange>()) {
-            auto table = TString(sourceSettings.Table().Path());
+            auto tablePath = TString(sourceSettings.Table().Path());
             auto range = sourceSettings.RangesExpr().Cast<TKqlKeyRange>();
-            Visit(table, range, sourceSettings, planNode);
+            Visit(tablePath, range, sourceSettings, planNode);
             return;
         }
 
-        const auto table = TString(sourceSettings.Table().Path());
+        const auto tablePath = TString(sourceSettings.Table().Path());
         const auto explainPrompt = TKqpReadTableExplainPrompt::Parse(sourceSettings.ExplainPrompt().Cast());
 
         TTableRead readInfo;
         TOperator op;
 
-        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
-        op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : table;
+        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
+        op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
+        op.Properties["Path"] = tablePath;
         planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
 
         auto rangesDesc = NPlanUtils::PrettyExprStr(sourceSettings.RangesExpr());
@@ -692,7 +694,7 @@ private:
         op.Properties["Name"] = readName;
         AddOperator(planNode, readName, std::move(op));
 
-        SerializerCtx.Tables[table].Reads.push_back(std::move(readInfo));
+        SerializerCtx.Tables[tablePath].Reads.push_back(std::move(readInfo));
     }
 
     // Try get cluster from data surce or data sink node
@@ -1402,12 +1404,13 @@ private:
     }
 
     std::variant<ui32, TArgContext> Visit(const TKqpUpsertRows& upsert, TQueryPlanNode& planNode) {
-        const auto table = upsert.Table().Path().StringValue();
+        const auto tablePath = upsert.Table().Path().StringValue();
 
         TOperator op;
         op.Properties["Name"] = "Upsert";
-        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
-        op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : table;
+        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
+        op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
+        op.Properties["Path"] = tablePath;
 
         TTableWrite writeInfo;
         writeInfo.Type = EPlanTableWriteType::MultiUpsert;
@@ -1415,23 +1418,24 @@ private:
             writeInfo.Columns.push_back(TString(column.Value()));
         }
 
-        SerializerCtx.Tables[table].Writes.push_back(writeInfo);
+        SerializerCtx.Tables[tablePath].Writes.push_back(writeInfo);
         planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
         return AddOperator(planNode, "Upsert", std::move(op));
     }
 
     std::variant<ui32, TArgContext> Visit(const TKqpDeleteRows& del, TQueryPlanNode& planNode) {
-        const auto table = del.Table().Path().StringValue();
+        const auto tablePath = del.Table().Path().StringValue();
 
         TOperator op;
         op.Properties["Name"] = "Delete";
-        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
-        op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : table;
+        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
+        op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
+        op.Properties["Path"] = tablePath;
 
         TTableWrite writeInfo;
         writeInfo.Type = EPlanTableWriteType::MultiErase;
 
-        SerializerCtx.Tables[table].Writes.push_back(writeInfo);
+        SerializerCtx.Tables[tablePath].Writes.push_back(writeInfo);
         planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
         return AddOperator(planNode, "Delete", std::move(op));
     }
@@ -1597,8 +1601,8 @@ private:
     }
 
     std::variant<ui32, TArgContext> Visit(const TKqlLookupTableBase& lookup, TQueryPlanNode& planNode) {
-        auto table = TString(lookup.Table().Path().Value());
-        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
+        auto tablePath = TString(lookup.Table().Path().Value());
+        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
 
         auto lookupKeysType = lookup.LookupKeys().Ref().GetTypeAnn();
         const TTypeAnnotationNode* lookupKeysItemType = nullptr;
@@ -1621,7 +1625,8 @@ private:
 
         TOperator op;
         op.Properties["Name"] = readName;
-        op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : table;
+        op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
+        op.Properties["Path"] = tablePath;
         auto& columns = op.Properties["ReadColumns"];
         for (auto const& col : lookup.Columns()) {
             readInfo.Columns.push_back(TString(col.Value()));
@@ -1630,20 +1635,21 @@ private:
 
         AddOptimizerEstimates(op, lookup);
 
-        SerializerCtx.Tables[table].Reads.push_back(readInfo);
+        SerializerCtx.Tables[tablePath].Reads.push_back(readInfo);
         planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
         return AddOperator(planNode, readName, std::move(op));
     }
 
     std::variant<ui32, TArgContext> Visit(const TKqlReadTableRangesBase& read, TQueryPlanNode& planNode) {
-        const auto table = TString(read.Table().Path());
+        const auto tablePath = TString(read.Table().Path());
         const auto explainPrompt = TKqpReadTableExplainPrompt::Parse(read);
 
         TTableRead readInfo;
         TOperator op;
 
-        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
-        op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : table;
+        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
+        op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
+        op.Properties["Path"] = tablePath;
         planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
 
         auto rangesDesc = NPlanUtils::PrettyExprStr(read.Ranges());
@@ -1712,7 +1718,7 @@ private:
         AddReadTableSettings(op, read, readInfo);
 
         if (auto maybeRead = read.Maybe<TKqpReadOlapTableRangesBase>()) {
-            op.Properties["SsaProgram"] = GetSsaProgramInJsonByTable(table, planNode.StageProto);
+            op.Properties["SsaProgram"] = GetSsaProgramInJsonByTable(tablePath, planNode.StageProto);
             AddOptimizerEstimates(op, maybeRead.Cast().Process());
         } else {
             AddOptimizerEstimates(op, read);
@@ -1722,12 +1728,12 @@ private:
         op.Properties["Name"] = readName;
         ui32 operatorId = AddOperator(planNode, readName, std::move(op));
 
-        SerializerCtx.Tables[table].Reads.push_back(std::move(readInfo));
+        SerializerCtx.Tables[tablePath].Reads.push_back(std::move(readInfo));
         return operatorId;
     }
 
     template <typename TReadTableNode>
-    std::variant<ui32, TArgContext> Visit(const TString& table, const TKqlKeyRange& range, const TReadTableNode& read, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TString& tablePath, const TKqlKeyRange& range, const TReadTableNode& read, TQueryPlanNode& planNode) {
         TOperator op;
         TTableRead readInfo;
 
@@ -1764,8 +1770,9 @@ private:
             std::optional<std::string> To{};
             std::string ColumnName{};
         };
-        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
-        op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : table;
+        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
+        op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
+        op.Properties["Path"] = tablePath;
         planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
         TVector<TKeyPartRange> scanRangeDescr(tableData.Metadata->KeyColumnNames.size());
 
@@ -1834,7 +1841,7 @@ private:
             AddReadTableSettings(op, read, readInfo);
         }
 
-        SerializerCtx.Tables[table].Reads.push_back(readInfo);
+        SerializerCtx.Tables[tablePath].Reads.push_back(readInfo);
 
         AddOptimizerEstimates(op, read);
 
@@ -2330,6 +2337,33 @@ struct TQueryPlanReconstructor {
                             if (opId == op1Id) {
                                 // colission detected, do not apply stats
                                 opType = "";
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (opName == "TableFullScan" && stats.contains("Table")) {
+                TString tablePath;
+                if (op.GetMapSafe().contains("Path")) {
+                    tablePath = op.GetMapSafe().at("Path").GetStringSafe();
+                } else if (op.GetMapSafe().contains("Table")) {
+                    tablePath = op.GetMapSafe().at("Table").GetStringSafe();
+                }
+                if (tablePath) {
+                    for (auto& opStat : stats.at("Table").GetArraySafe()) {
+                        if (opStat.IsMap()) {
+                            auto& opMap = opStat.GetMapSafe();
+                            if (opMap.contains("Path") && opMap.at("Path").GetStringSafe() == tablePath) {
+                                if (opMap.contains("ReadRows")) {
+                                    op["A-Rows"] = opMap.at("ReadRows").GetMapSafe().at("Sum").GetDouble();
+                                    operatorRows = true;
+                                }
+                                if (opMap.contains("ReadBytes")) {
+                                    op["A-Size"] = opMap.at("ReadBytes").GetMapSafe().at("Sum").GetDouble();
+                                    operatorRows = true;
+                                }
                                 break;
                             }
                         }
@@ -2981,6 +3015,19 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                         }
                         if (op.HasRows()) {
                             FillAggrStat(operatorInfo, op.GetRows(), "Rows");
+                        }
+                    }
+                }
+                if (!(*stat)->GetTables().empty()) {
+                    auto& tableStats = stats.InsertValue("Table", NJson::JSON_ARRAY);
+                    for (auto& t : (*stat)->GetTables()) {
+                        auto& tableInfo = tableStats.AppendValue(NJson::JSON_MAP);
+                        tableInfo["Path"] = t.GetTablePath();
+                        if (t.HasReadBytes()) {
+                            FillAggrStat(tableInfo, t.GetReadBytes(), "ReadBytes");
+                        }
+                        if (t.HasReadRows()) {
+                            FillAggrStat(tableInfo, t.GetReadRows(), "ReadRows");
                         }
                     }
                 }

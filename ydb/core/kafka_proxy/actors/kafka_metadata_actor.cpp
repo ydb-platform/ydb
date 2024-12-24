@@ -88,11 +88,11 @@ void TKafkaMetadataActor::HandleNodesResponse(NKikimr::NIcNodeCache::TEvICNodesI
 }
 
 TActorId TKafkaMetadataActor::SendTopicRequest(const TMetadataRequestData::TMetadataRequestTopic& topicRequest) {
-    KAFKA_LOG_D("Describe partitions locations for topic '" << *topicRequest.Name << "' for user '" << Context->UserToken->GetUserSID() << "'");
+    KAFKA_LOG_D("Describe partitions locations for topic '" << *topicRequest.Name << "' for user " << GetUsernameOrAnonymous(Context));
 
     TGetPartitionsLocationRequest locationRequest{};
     locationRequest.Topic = NormalizePath(Context->DatabasePath, topicRequest.Name.value());
-    locationRequest.Token = Context->UserToken->GetSerializedToken();
+    locationRequest.Token = GetUserSerializedToken(Context);
     locationRequest.Database = Context->DatabasePath;
 
     PendingResponses++;

@@ -303,7 +303,11 @@ private:
 
     ITopicClient& GetTopicClient() {
         if (!TopicClient) {
-            TopicClient = PqGateway->GetTopicClient(Driver, GetTopicClientSettings());
+            if (PqGateway) {
+                TopicClient = PqGateway->GetTopicClient(Driver, GetTopicClientSettings());
+            } else {
+                TopicClient = MakeIntrusive<TNativeTopicClient>(Driver, GetTopicClientSettings());
+            }
         }
         return *TopicClient;
     }

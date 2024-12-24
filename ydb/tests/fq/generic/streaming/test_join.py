@@ -270,9 +270,12 @@ TESTCASES = [
             ]
             * 1000
         ),
-        "TTL", "10",
-        "MaxCachedRows", "5",
-        "MaxDelayedRows", "100",
+        "TTL",
+        "10",
+        "MaxCachedRows",
+        "5",
+        "MaxDelayedRows",
+        "100",
     ),
     # 5
     (

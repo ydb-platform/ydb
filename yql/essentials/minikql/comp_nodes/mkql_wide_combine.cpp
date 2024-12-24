@@ -19,7 +19,6 @@
 
 #include <format>
 
-
 #include <contrib/libs/xxhash/xxhash.h>
 
 namespace NKikimr {
@@ -295,7 +294,7 @@ public:
             std::cerr << std::format("[{}] - Exception. IsOutOfMemory = {}, AllowOutOfMemory = {}\n", (const void*)this, IsOutOfMemory, AllowOutOfMemory);
             YQL_LOG(INFO) << "State failed to grow";
             if (IsOutOfMemory || !AllowOutOfMemory) {
-                std::cerr << std::format("[{}] - Rethrowing.\n", (const void*)this);
+                std::cerr << std::format("[{}] - Rethrowing. Exception\n", (const void*)this);
                 throw;
             } else {
                 std::cerr << std::format("[{}] - Handle. Exception\n", (const void*)this);

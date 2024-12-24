@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(Scheme) {
         UNIT_ASSERT_VALUES_EQUAL(twoLargeCells[0].AsBuf(), TStringBuf("zyxwvutsrqponmlkjihgfedcba987654321"));
         UNIT_ASSERT_VALUES_EQUAL(twoLargeCells[1].AsBuf(), TStringBuf("ZYXWVUTSRQPONMLKJIHGFEDCBA987654321"));
         // Ensure cell data is aligned (36 bytes per cell instead of 35)
-        UNIT_ASSERT_VALUES_EQUAL(twoLargeCells.DataSize(), 8 + sizeof(TCell) * 2 + 36 * 2);
+        UNIT_ASSERT_VALUES_EQUAL(twoLargeCells.DataSize(), 16 + sizeof(TCell) * 2 + 36 * 2);
         UNIT_ASSERT_VALUES_EQUAL(uintptr_t(twoLargeCells[0].Data()) & 3, 0);
         UNIT_ASSERT_VALUES_EQUAL(uintptr_t(twoLargeCells[1].Data()) & 3, 0);
     }

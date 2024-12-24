@@ -68,6 +68,7 @@ enum ESimpleCounters {
     COUNTER_PQ_TABLET_OPENED_PIPES = 5                               [(CounterOpts) = {Name: "OpenedPipes"}];
     COUNTER_PQ_TABLET_INFLIGHT = 6                                   [(CounterOpts) = {Name: "RequestsInflight"}];
 
+    COUNTER_PQ_TABLET_TX_COMPLETE_LAG = 7                            [(CounterOpts) = {Name: "TxCompleteLag"}];
 }
 
 enum EPercentileCounters {

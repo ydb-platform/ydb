@@ -3087,6 +3087,7 @@ void TPersQueue::HandleWakeup(const TActorContext& ctx) {
     }
     MeteringSink.MayFlush(ctx.Now());
     DeleteExpiredTransactions(ctx);
+    SetTxCompleteLagCounter();
     ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
 }
 
@@ -3105,6 +3106,22 @@ void TPersQueue::DeleteExpiredTransactions(const TActorContext& ctx)
     }
 
     TryWriteTxs(ctx);
+}
+
+void TPersQueue::SetTxCompleteLagCounter()
+{
+    ui64 lag = 0;
+
+    if (!TxQueue.empty() && MediatorTimeCastEntry) {
+        ui64 firstTxStep = TxQueue.front().first;
+        ui64 currentStep = MediatorTimeCastEntry->Get(TabletID());
+
+        if (currentStep > firstTxStep) {
+            lag = currentStep - firstTxStep;
+        }
+    }
+
+    Counters->Simple()[COUNTER_PQ_TABLET_TX_COMPLETE_LAG] = lag;
 }
 
 void TPersQueue::Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx)

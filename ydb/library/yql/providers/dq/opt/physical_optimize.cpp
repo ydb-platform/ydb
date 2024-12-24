@@ -241,18 +241,7 @@ protected:
         return DqRewriteLeftPureJoin(node, ctx, *getParents(), IsGlobal);
     }
 
-    TMaybeNode<TExprBase> RewriteStreamLookupJoin(TExprBase node, TExprContext& ctx) {
-        const auto join = node.Cast<TDqJoin>();
-        if (join.JoinAlgo().StringValue() != "StreamLookupJoin") {
-            return node;
-        }
-
-        const auto pos = node.Pos();
-        const auto left = join.LeftInput().Maybe<TDqConnection>();
-        if (!left) {
-            return node;
-        }
-
+    bool ValidateStreamLookupJoinFlags(const TDqJoin& join, TExprContext& ctx) {
         bool leftAny = false;
         bool rightAny = false;
         if (const auto maybeFlags = join.Flags()) {
@@ -268,16 +257,34 @@ protected:
             }
             if (leftAny) {
                 ctx.AddError(TIssue(ctx.GetPosition(maybeFlags.Cast().Pos()), "Streamlookup ANY LEFT join is not implemented"));
-                return {};
+                return false;
             }
         }
         if (!rightAny) {
             if (false) { // Tempoarily change to waring to allow for smooth transition
-                ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: must be LEFT JOIN ANY"));
-                return {};
+                ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: must be LEFT JOIN /*+streamlookup(...)*/ ANY"));
+                return false;
             } else {
                 ctx.AddWarning(TIssue(ctx.GetPosition(join.Pos()), "(Deprecation) Streamlookup: must be LEFT JOIN /*+streamlookup(...)*/ ANY"));
             }
+        }
+        return true;
+    }
+
+    TMaybeNode<TExprBase> RewriteStreamLookupJoin(TExprBase node, TExprContext& ctx) {
+        const auto join = node.Cast<TDqJoin>();
+        if (join.JoinAlgo().StringValue() != "StreamLookupJoin") {
+            return node;
+        }
+
+        const auto pos = node.Pos();
+        const auto left = join.LeftInput().Maybe<TDqConnection>();
+        if (!left) {
+            return node;
+        }
+
+        if (!ValidateStreamLookupJoinFlags(join, ctx)) {
+            return {};
         }
 
         TExprNode::TPtr ttl;

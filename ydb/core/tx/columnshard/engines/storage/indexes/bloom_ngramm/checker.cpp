@@ -1,6 +1,7 @@
 #include "checker.h"
 
 #include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom/checker.h>
 
 #include <ydb/library/formats/arrow/common/validation.h>
 

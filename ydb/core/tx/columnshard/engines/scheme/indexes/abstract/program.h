@@ -3,17 +3,59 @@
 
 namespace NKikimr::NOlap::NIndexes::NRequest {
 
-class TLikeDescription {
+class TLikePart {
+public:
+    enum class EOperation {
+        StartsWith,
+        EndsWith,
+        Contains
+    };
+
 private:
-    THashMap<TString, std::vector<TString>> LikeSequences;
+    YDB_READONLY(EOperation, Operation, EOperation::Contains);
+    YDB_READONLY_DEF(TString, Value);
 
 public:
-    TLikeDescription(const TString& likeEquation) {
-        LikeSequences.emplace(likeEquation, StringSplitter(likeEquation).Split('%').ToList<TString>());
-
+    TLikePart(const EOperation op, const TString& value)
+        : Operation(op)
+        , Value(value) {
     }
 
-    const THashMap<TString, std::vector<TString>>& GetLikeSequences() const {
+    static TLikePart MakeStart(const TString& value) {
+        return TLikePart(EOperation::StartsWith, value);
+    }
+    static TLikePart MakeEnd(const TString& value) {
+        return TLikePart(EOperation::EndsWith, value);
+    }
+    static TLikePart MakeContains(const TString& value) {
+        return TLikePart(EOperation::Contains, value);
+    }
+
+    TString ToString() const {
+        if (Operation == EOperation::StartsWith) {
+            return '%' + Value;
+        }
+        if (Operation == EOperation::EndsWith) {
+            return Value + '%';
+        }
+        if (Operation == EOperation::Contains) {
+            return Value;
+        }
+        AFL_VERIFY(false);
+        return "";
+    }
+};
+
+class TLikeDescription {
+private:
+    THashMap<TString, TLikePart> LikeSequences;
+
+public:
+    TLikeDescription(const TLikePart& likePart) {
+        LikeSequences.emplace(likePart.ToString(), likePart);
+    }
+
+    const THashMap<TString, TLikePart>& GetLikeSequences() const {
         return LikeSequences;
     }
 
@@ -25,13 +67,11 @@ public:
 
     TString ToString() const {
         TStringBuilder sb;
+        sb << "[";
         for (auto&& i : LikeSequences) {
-            sb << "{" << i.first << ":[";
-            for (auto&& s: i.second) {
-                sb << s << ",";
-            }
-            sb << "];}";
+            sb << i.first << ",";
         }
+        sb << "];";
         return sb;
     }
 };
@@ -43,12 +83,9 @@ private:
     YDB_ACCESSOR_DEF(std::vector<std::shared_ptr<IIndexChecker>>, Indexes);
 
 public:
-    TBranchCoverage(
-        const THashMap<TString, std::shared_ptr<arrow::Scalar>>& equals, const THashMap<TString, TLikeDescription>& likes)
+    TBranchCoverage(const THashMap<TString, std::shared_ptr<arrow::Scalar>>& equals, const THashMap<TString, TLikeDescription>& likes)
         : Equals(equals)
-        , Likes(likes)
-    {
-
+        , Likes(likes) {
     }
 
     const THashMap<TString, std::shared_ptr<arrow::Scalar>>& GetEquals() const {
@@ -65,6 +102,7 @@ public:
 class TDataForIndexesCheckers {
 private:
     YDB_READONLY_DEF(std::vector<std::shared_ptr<TBranchCoverage>>, Branches);
+
 public:
     void AddBranch(const THashMap<TString, std::shared_ptr<arrow::Scalar>>& equalsData, const THashMap<TString, TLikeDescription>& likesData) {
         Branches.emplace_back(std::make_shared<TBranchCoverage>(equalsData, likesData));

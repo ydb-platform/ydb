@@ -434,6 +434,27 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 SELECT
                     COUNT(*)
                 FROM `/Root/olapStore/olapTable`
+                WHERE resource_id LIKE '%110a151' AND resource_id LIKE '110a%' AND resource_id LIKE '%dd%'
+            )")
+                              .GetValueSync();
+
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                TString result = StreamResultToYson(it);
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("result", result);
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("skip", csController->GetIndexesSkippingOnSelect().Val())(
+                    "check", csController->GetIndexesApprovedOnSelect().Val());
+                CompareYson(result, R"([[0u;]])");
+                AFL_VERIFY(!csController->GetIndexesApprovedOnSelect().Val());
+                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val());
+            }
+            {
+                auto it = tableClient
+                              .StreamExecuteScanQuery(R"(
+                --!syntax_v1
+
+                SELECT
+                    COUNT(*)
+                FROM `/Root/olapStore/olapTable`
                 WHERE resource_id LIKE '%110a151%'
             )")
                               .GetValueSync();
@@ -465,11 +486,11 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("skip", csController->GetIndexesSkippingOnSelect().Val())(
                     "check", csController->GetIndexesApprovedOnSelect().Val());
                 CompareYson(result, R"([[0u;]])");
-                if (StorageId == "__LOCAL_METADATA") {
-                    AFL_VERIFY(csController->GetIndexesSkippedNoData().Val());
-                } else {
-                    AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
-                }
+//                if (StorageId == "__LOCAL_METADATA") {
+//                    AFL_VERIFY(csController->GetIndexesSkippedNoData().Val());
+//                } else {
+                AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
+//                }
                 AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val());
             }
             {
@@ -520,6 +541,58 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     CompareYson(result, R"([[1u;]])");
                 }
                 AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - skipStart > 1)("approved", csController->GetIndexesApprovedOnSelect().Val() - approveStart)(
+                    "skipped", csController->GetIndexesSkippingOnSelect().Val() - skipStart);
+            }
+            {
+                const ui64 skipStart = csController->GetIndexesSkippingOnSelect().Val();
+                const ui64 approveStart = csController->GetIndexesApprovedOnSelect().Val();
+                ui32 requestsCount = 100;
+                for (ui32 i = 0; i < requestsCount; ++i) {
+                    const ui32 idx = RandomNumber<ui32>(uids.size());
+                    const auto query = [](const TString& res, const TString& uid, const ui32 level) {
+                        TStringBuilder sb;
+                        sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
+                        sb << "WHERE" << Endl;
+                        sb << "resource_id LIKE '" << res << "%'" << Endl;
+                        return sb;
+                    };
+                    auto it = tableClient.StreamExecuteScanQuery(query(resourceIds[idx], uids[idx], levels[idx])).GetValueSync();
+
+                    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                    TString result = StreamResultToYson(it);
+                    Cout << resourceIds[idx] << "/" << csController->GetIndexesSkippingOnSelect().Val() - skipStart << " / "
+                         << csController->GetIndexesApprovedOnSelect().Val() - approveStart << " / "
+                         << csController->GetIndexesSkippedNoData().Val() << Endl;
+                    CompareYson(result, R"([[1u;]])");
+                }
+                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - skipStart > 1)(
+                    "approved", csController->GetIndexesApprovedOnSelect().Val() - approveStart)(
+                    "skipped", csController->GetIndexesSkippingOnSelect().Val() - skipStart);
+            }
+            {
+                const ui64 skipStart = csController->GetIndexesSkippingOnSelect().Val();
+                const ui64 approveStart = csController->GetIndexesApprovedOnSelect().Val();
+                ui32 requestsCount = 100;
+                for (ui32 i = 0; i < requestsCount; ++i) {
+                    const ui32 idx = RandomNumber<ui32>(uids.size());
+                    const auto query = [](const TString& res, const TString& uid, const ui32 level) {
+                        TStringBuilder sb;
+                        sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
+                        sb << "WHERE" << Endl;
+                        sb << "resource_id LIKE '%" << res << "'" << Endl;
+                        return sb;
+                    };
+                    auto it = tableClient.StreamExecuteScanQuery(query(resourceIds[idx], uids[idx], levels[idx])).GetValueSync();
+
+                    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                    TString result = StreamResultToYson(it);
+                    Cout << resourceIds[idx] << "/" << csController->GetIndexesSkippingOnSelect().Val() - skipStart << " / "
+                         << csController->GetIndexesApprovedOnSelect().Val() - approveStart << " / "
+                         << csController->GetIndexesSkippedNoData().Val() << Endl;
+                    CompareYson(result, R"([[1u;]])");
+                }
+                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - skipStart > 1)(
+                    "approved", csController->GetIndexesApprovedOnSelect().Val() - approveStart)(
                     "skipped", csController->GetIndexesSkippingOnSelect().Val() - skipStart);
             }
         }

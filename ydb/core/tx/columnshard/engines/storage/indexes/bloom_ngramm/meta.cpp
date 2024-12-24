@@ -2,6 +2,7 @@
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/hash/calcer.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom/checker.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
@@ -15,23 +16,28 @@ namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 class TNGrammBuilder {
 private:
     NArrow::NHash::NXX64::TStreamStringHashCalcer HashCalcer;
-
+    TBuffer Zeros;
     template <class TAction>
-    void BuildNGramms(const char* data, const ui32 dataSize, const ui32 nGrammSize, const TAction& pred) const {
-        for (ui32 c = 1; c <= nGrammSize; ++c) {
-            TString fakeStart('\0', nGrammSize - c);
-            fakeStart += TString(data, std::min(c, dataSize));
-            if (fakeStart.size() < nGrammSize) {
-                fakeStart += TString('\0', nGrammSize - fakeStart.size());
+    void BuildNGramms(const char* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, const ui32 nGrammSize,
+        const TAction& pred) const {
+        if (!op || op == NRequest::TLikePart::EOperation::StartsWith) {
+            for (ui32 c = 1; c <= nGrammSize; ++c) {
+                TBuffer fakeStart;
+                fakeStart.Fill('\0', nGrammSize - c);
+                fakeStart.Append(data, std::min(c, dataSize));
+                if (fakeStart.size() < nGrammSize) {
+                    fakeStart.Append(Zeros.data(), nGrammSize - fakeStart.size());
+                }
+                pred(fakeStart.data());
             }
-            pred(fakeStart.data());
         }
         for (ui32 c = 0; c < dataSize; ++c) {
             if (c + nGrammSize <= dataSize) {
                 pred(data + c);
-            } else {
-                TString fakeStart = TString(data + c, dataSize - c);
-                fakeStart += TString('\0', nGrammSize - fakeStart.size());
+            } else if (!op || op == NRequest::TLikePart::EOperation::EndsWith) {
+                TBuffer fakeStart;
+                fakeStart.Append(data + c, dataSize - c);
+                fakeStart.Append(Zeros.data(), nGrammSize - fakeStart.size());
                 pred(fakeStart.data());
             }
         }
@@ -40,6 +46,7 @@ private:
 public:
     TNGrammBuilder()
         : HashCalcer(0) {
+        Zeros.Fill('\0', 1024);
     }
 
     template <class TFiller>
@@ -65,7 +72,7 @@ public:
                         HashCalcer.Update((const ui8*)data, nGrammSize);
                         fillData(HashCalcer.Finish());
                     };
-                    BuildNGramms(value.data(), value.size(), nGrammSize, pred);
+                    BuildNGramms(value.data(), value.size(), {}, nGrammSize, pred);
                 } else {
                     AFL_VERIFY(false);
                 }
@@ -75,13 +82,13 @@ public:
     }
 
     template <class TFiller>
-    void FillNGrammHashes(const ui32 nGrammSize, const TString& userReq, const TFiller& fillData) {
+    void FillNGrammHashes(const ui32 nGrammSize, const NRequest::TLikePart::EOperation op, const TString& userReq, const TFiller& fillData) {
         const auto pred = [&](const char* value) {
             HashCalcer.Start();
             HashCalcer.Update((const ui8*)value, nGrammSize);
             fillData(HashCalcer.Finish());
         };
-        BuildNGramms(userReq.data(), userReq.size(), nGrammSize, pred);
+        BuildNGramms(userReq.data(), userReq.size(), op, nGrammSize, pred);
     }
 };
 
@@ -135,12 +142,7 @@ void TIndexMeta::DoFillIndexCheckers(
         TNGrammBuilder builder;
         for (auto&& c : foundColumns) {
             for (auto&& ls : c.second.GetLikeSequences()) {
-                for (auto&& s : ls.second) {
-                    if (!s) {
-                        continue;
-                    }
-                    builder.FillNGrammHashes(NGrammSize, s, pred);
-                }
+                builder.FillNGrammHashes(NGrammSize, ls.second.GetOperation(), ls.second.GetValue(), pred);
             }
         }
         branch->MutableIndexes().emplace_back(std::make_shared<TFilterChecker>(GetIndexId(), std::move(hashes)));

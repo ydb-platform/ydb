@@ -276,9 +276,9 @@ public:
         AddEqual(cName, value);
     }
 
-    TPackAnd(const TString& cName, const TString& likeMap)
+    TPackAnd(const TString& cName, const TLikePart& part)
         : TBase(GetNextId("PackAnd")) {
-        AddLike(cName, TLikeDescription(likeMap));
+        AddLike(cName, TLikeDescription(part));
     }
 
     const THashMap<TString, std::shared_ptr<arrow::Scalar>>& GetEquals() const {
@@ -345,13 +345,24 @@ protected:
             Parent->Exchange(GetNodeName(), std::make_shared<TPackAnd>(Children[0]->As<TOriginalColumn>()->GetColumnName(), Children[1]->As<TConstantNode>()->GetConstant()));
             return true;
         }
-        if (Operation == NYql::TKernelRequestBuilder::EBinaryOp::StringContains && Children.size() == 2 && Children[1]->Is<TConstantNode>() &&
-            Children[0]->Is<TOriginalColumn>()) {
+        const bool isLike = (Operation == NYql::TKernelRequestBuilder::EBinaryOp::StringContains ||
+                      Operation == NYql::TKernelRequestBuilder::EBinaryOp::StartsWith ||
+                      Operation == NYql::TKernelRequestBuilder::EBinaryOp::EndsWith);
+        if (isLike && Children.size() == 2 && Children[1]->Is<TConstantNode>() && Children[0]->Is<TOriginalColumn>()) {
             auto scalar = Children[1]->As<TConstantNode>()->GetConstant();
             AFL_VERIFY(scalar->type->id() == arrow::binary()->id());
-            auto scalarString = static_pointer_cast<arrow::StringScalar>(scalar);
-            TString likeMap((const char*)scalarString->value->data(), scalarString->value->size());
-            Parent->Exchange(GetNodeName(), std::make_shared<TPackAnd>(Children[0]->As<TOriginalColumn>()->GetColumnName(), likeMap));
+            auto scalarString = static_pointer_cast<arrow::BinaryScalar>(scalar);
+            std::optional<TLikePart::EOperation> op;
+            if (Operation == NYql::TKernelRequestBuilder::EBinaryOp::StringContains) {
+                op = TLikePart::EOperation::Contains;
+            } else if (Operation == NYql::TKernelRequestBuilder::EBinaryOp::EndsWith) {
+                op = TLikePart::EOperation::EndsWith;
+            } else if (Operation == NYql::TKernelRequestBuilder::EBinaryOp::StartsWith) {
+                op = TLikePart::EOperation::StartsWith;
+            }
+            AFL_VERIFY(op);
+            TLikePart likePart(*op, TString((const char*)scalarString->value->data(), scalarString->value->size()));
+            Parent->Exchange(GetNodeName(), std::make_shared<TPackAnd>(Children[0]->As<TOriginalColumn>()->GetColumnName(), likePart));
             return true;
         }
         if (Operation == NYql::TKernelRequestBuilder::EBinaryOp::And) {
@@ -448,7 +459,7 @@ public:
             if (arg.IsGenerated()) {
                 auto it = Nodes.find(arg.GetColumnName());
                 if (it == Nodes.end()) {
-                    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "program_arg_is_missing")("program", program.DebugString());
+                    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "program_arg_is_missing")("program", program.DebugString());
                     return false;
                 }
                 argNodes.emplace_back(it->second);
@@ -483,10 +494,10 @@ public:
 };
 
 std::shared_ptr<TDataForIndexesCheckers> TDataForIndexesCheckers::Build(const TProgramContainer& program) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("program", program.DebugString());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("program", program.DebugString());
     auto& steps = program.GetStepsVerified();
     if (!steps.size()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "no_steps_in_program");
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "no_steps_in_program");
         return nullptr;
     }
     auto fStep = steps.front();
@@ -500,9 +511,10 @@ std::shared_ptr<TDataForIndexesCheckers> TDataForIndexesCheckers::Build(const TP
     if (!rootNode) {
         return nullptr;
     }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("original_program", rootNode->SerializeToJson());
     while (rootNode->Collapse()) {
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("collapsed_program", rootNode->SerializeToJson());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("collapsed_program", rootNode->SerializeToJson());
     if (rootNode->GetChildren().size() != 1) {
         return nullptr;
     }

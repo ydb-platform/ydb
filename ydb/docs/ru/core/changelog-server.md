@@ -2,7 +2,7 @@
 
 ## Версия 24.3 {#24-3}
 
-Дата выхода: 
+Дата выхода:
 
 **Функциональность:**
 
@@ -35,7 +35,8 @@
 * **_(Экспериментально)_** Добавлена поддержка операций записи в колоночные таблицы.
 
 **YDB UI:**
-* Добавлено создание и [отображение](https://github.com/ydb-platform/ydb-embedded-ui/issues/782) экземпляра асинхронной репликации.
+
+* Поддержано создание и [отображение](https://github.com/ydb-platform/ydb-embedded-ui/issues/782) экземпляра асинхронной репликации.
 * [Добавлено](https://github.com/ydb-platform/ydb-embedded-ui/issues/929) обозначение [столбцов с автоинкрементом](./yql/reference/types/serial).
 * [Добавлена](https://github.com/ydb-platform/ydb-embedded-ui/pull/1438) страница с информацией о [таблетках](./concepts/glossary#tablet).
 * Добавлена страница с информацией о [группах распределенного хранилища](./concepts/glossary#storage-group).

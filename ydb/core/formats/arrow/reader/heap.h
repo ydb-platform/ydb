@@ -12,30 +12,19 @@ template <class TSortCursor>
 class TSortingHeap {
 private:
     std::deque<TSortCursor> FinishedCursors;
+    static constexpr size_t NoneValue = -1;
 public:
     TSortingHeap() = default;
 
-    template <typename TCursors>
-    TSortingHeap(TCursors& cursors, bool notNull) {
-        Queue.reserve(cursors.size());
-        for (auto& cur : cursors) {
-            if (!cur.Empty()) {
-                Queue.emplace_back(TSortCursor(&cur, notNull));
-            }
-        }
-        std::make_heap(Queue.begin(), Queue.end());
-    }
-
-    const TSortCursor& Current() const { return Queue.front(); }
-    TSortCursor& MutableCurrent() { return Queue.front(); }
-    size_t Size() const { return Queue.size(); }
-    bool Empty() const { return Queue.empty(); }
-    TSortCursor& NextChild() { return Queue[NextChildIndex()]; }
+    const TSortCursor& Current() const { return Cursors[Tree[0]]; }
+    TSortCursor& MutableCurrent() { return Cursors[Tree[0]]; }
+    size_t Size() const { return Capacity() - FreePos.size(); }
+    bool Empty() const { return Size() == 0; }
 
     void Next() {
-        Y_ABORT_UNLESS(Size());
+        Y_ABORT_UNLESS(IsValid());
 
-        if (Queue.front().Next()) {
+        if (MutableCurrent().Next()) {
             UpdateTop();
         } else {
             RemoveTop();
@@ -47,87 +36,102 @@ public:
     }
 
     void RemoveTop() {
-        std::pop_heap(Queue.begin(), Queue.end());
-        FinishedCursors.emplace_back(std::move(Queue.back()));
-        Queue.pop_back();
-        NextIdx = 0;
+        Y_ABORT_UNLESS(IsValid());
+        size_t old_top = Tree[0];
+        Update(old_top, NoneValue);
+        FinishedCursors.emplace_back(std::move(Cursors[old_top]));
+        FreePos.push_back(old_top);
     }
 
     void Push(TSortCursor&& cursor) {
-        Queue.emplace_back(std::move(cursor));
-        std::push_heap(Queue.begin(), Queue.end());
-        NextIdx = 0;
+        if (FreePos.empty()) {
+            IncreaseCap();
+        }
+        size_t pos = FreePos.back();
+        FreePos.pop_back();
+        if(pos >= Cursors.size()) {
+            Y_ABORT_UNLESS(pos == Cursors.size());
+            Cursors.emplace_back(std::move(cursor));
+        } else {
+            Cursors[pos] = std::move(cursor);
+        }
+        Update(pos, pos);
     }
 
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_ARRAY;
-        for (auto&& i : Queue) {
-            result.AppendValue(i.DebugJson());
+        for (size_t i = Tree.size() / 2; i < Tree.size(); ++i) {
+            if (Tree[i] != NoneValue) 
+                result.AppendValue(Cursors[Tree[i]].DebugJson());
         }
         return result;
     }
 
-    /// This is adapted version of the function __sift_down from libc++.
-    /// Why cannot simply use std::priority_queue?
-    /// - because it doesn't support updating the top element and requires pop and push instead.
-    /// Also look at "Boost.Heap" library.
     void UpdateTop() {
-        size_t size = Queue.size();
-        if (size < 2)
-            return;
-
-        auto begin = Queue.begin();
-
-        size_t child_idx = NextChildIndex();
-        auto child_it = begin + child_idx;
-
-        /// Check if we are in order.
-        if (*child_it < *begin)
-            return;
-
-        NextIdx = 0;
-
-        auto curr_it = begin;
-        auto top(std::move(*begin));
-        do {
-            /// We are not in heap-order, swap the parent with it's largest child.
-            *curr_it = std::move(*child_it);
-            curr_it = child_it;
-
-            // recompute the child based off of the updated parent
-            child_idx = 2 * child_idx + 1;
-
-            if (child_idx >= size)
-                break;
-
-            child_it = begin + child_idx;
-
-            if ((child_idx + 1) < size && *child_it < *(child_it + 1)) {
-                /// Right child exists and is greater than left child.
-                ++child_it;
-                ++child_idx;
-            }
-
-            /// Check if we are in order.
-        } while (!(*child_it < top));
-        *curr_it = std::move(top);
+        if (!Tree.empty() && Tree[0] != NoneValue)
+            Update(Tree[0], Tree[0]);
     }
+
 private:
-    std::vector<TSortCursor> Queue;
-    /// Cache comparison between first and second child if the order in queue has not been changed.
-    size_t NextIdx = 0;
+    std::vector<TSortCursor> Cursors;
+    std::vector<size_t> Tree;
+    std::vector<size_t> FreePos;
 
-    size_t NextChildIndex() {
-        if (NextIdx == 0) {
-            NextIdx = 1;
-            if (Queue.size() > 2 && Queue[1] < Queue[2]) {
-                ++NextIdx;
+    bool IsValid() const { return !Empty(); }
+
+    size_t Capacity() const { return (Tree.size() + 1) / 2; }
+
+    void IncreaseCap() {
+        if (Tree.empty()) {
+            FreePos.resize(1);
+            Cursors.reserve(1);
+            Tree.resize(1, NoneValue);
+        } else {
+            FreePos.reserve(Cursors.size());
+            for (size_t i = 0; i < Cursors.size(); ++i) {
+                FreePos.push_back(2 * Cursors.size() - 1 - i);
             }
-        }
+            Cursors.reserve(2 * Cursors.size());
 
-        return NextIdx;
+            size_t l = Tree.size() >> 1;
+            size_t sz = (Tree.size() + 1) >> 1;
+
+            Tree.resize(Tree.size() * 2 + 1, NoneValue);
+
+            for (; sz != 0; l >>= 1, sz >>= 1) {
+                std::copy(Tree.begin() + l, Tree.begin() + l + sz, Tree.begin() + 2 * l + 1);
+                std::fill(Tree.begin() + l + sz / 2, Tree.begin() + l + sz, NoneValue);
+            }
+            Tree[0] = Tree[1];
+        }
     }
 
+    void Update(size_t index, size_t value) {
+        Y_ABORT_UNLESS(!Tree.empty());
+
+        index += Tree.size() >> 1;
+        Tree[index] = value;
+
+        auto cmp = [this](size_t x, size_t y) {
+            if (x == NoneValue) {
+                return y;
+            }
+            if (y == NoneValue) {
+                return x;
+            }
+            return Cursors[x] < Cursors[y] ? y : x;
+        };
+
+        while (index != 0) {
+            size_t parent = (index - 1) >> 1;
+            size_t new_val = cmp(Tree[2 * parent + 1], Tree[2 * parent + 2]);
+            if (Tree[parent] == new_val && (new_val == NoneValue || new_val != Tree[index])) {
+                break;
+            }
+            Tree[parent] = new_val;
+            index = parent;
+        }
+    }
 };
 
 }

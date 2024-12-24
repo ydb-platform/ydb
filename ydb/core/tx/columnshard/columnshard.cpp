@@ -44,6 +44,7 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
         ctx.Send(i, new TEvents::TEvPoisonPill);
     }
 
+    
     StoragesManager->Stop();
     DataLocksManager->Stop();
     if (Tiers) {

@@ -4,7 +4,7 @@ import allure
 import json
 import yatest
 import os
-import logger
+import logging
 from allure_commons._core import plugin_manager
 from allure_pytest.listener import AllureListener
 from copy import deepcopy
@@ -111,15 +111,15 @@ class LoadSuiteBase:
             ssh_cmd += ['-i', ssh_key_file]
         for host in hosts:
             for c in exec_kikimr.keys():
-                try
+                try:
                     exec_kikimr[c][host] = yatest.common.execute(ssh_cmd + [host, cmd.format(storage='kikimr', container=c)], wait=False)
                 except BaseException as e:
-                    logger.error(e)
+                    logging.error(e)
             for c in exec_start.keys():
-                try
+                try:
                     exec_start[c][host] = yatest.common.execute(ssh_cmd + [host, cmd.format(storage='kikimr-start', container=c)], wait=False)
                 except BaseException as e:
-                    logger.error(e)
+                    logging.error(e)
 
         error_log = ''
         for c, execs in exec_start.items():

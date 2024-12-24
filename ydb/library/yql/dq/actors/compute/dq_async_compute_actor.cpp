@@ -266,6 +266,18 @@ private:
             DUMP(info, FreeSpace);
             html << "IsPaused: " << info.IsPaused() << "<br />";
             auto channel = info.Channel;
+            if (!channel) {
+                auto stats = GetTaskRunnerStats();
+                if (stats) {
+                    auto stageIt = stats->InputChannels.find(info.SrcStageId);
+                    if (stageIt != stats->InputChannels.end()) {
+                        auto channelIt = stageIt->second.find(info.ChannelId);
+                        if (channelIt != stageIt->second.end()) {
+                            channel = channelIt->second;
+                        }
+                    }
+                }
+            }
             if (channel) {
                 html << "DqInputChannel.ChannelId: " << channel->GetChannelId() << "<br />";
                 html << "DqInputChannel.FreeSpace: " << channel->GetFreeSpace() << "<br />";
@@ -335,6 +347,19 @@ private:
             }
 
             auto channel = info.Channel;
+            if (!channel) {
+                auto stats = GetTaskRunnerStats();
+                if (stats) {
+                    auto stageIt = stats->OutputChannels.find(info.DstStageId);
+                    if (stageIt != stats->OutputChannels.end()) {
+                        auto channelIt = stageIt->second.find(info.ChannelId);
+                        if (channelIt != stageIt->second.end()) {
+                            channel = channelIt->second;
+                        }
+                    }
+                }
+            }
+
             if (channel) {
                 html << "DqOutputChannel.ChannelId: " << channel->GetChannelId() << "<br />";
                 html << "DqOutputChannel.ValuesCount: " << channel->GetValuesCount() << "<br />";
@@ -367,8 +392,8 @@ private:
             DUMP(info, Finished);
             DUMP(info, FinishIsAcknowledged);
             DUMP(info, PopStarted);
-            if (info.Buffer) {
-                const auto& buffer = *info.Buffer;
+            if (info.Buffer || TaskRunnerStats.GetSink(id)) {
+                const auto& buffer = info.Buffer ? *info.Buffer : *TaskRunnerStats.GetSink(id);
                 html << "DqOutputBuffer.OutputIndex: " << buffer.GetOutputIndex() << "<br />";
                 html << "DqOutputBuffer.IsFull: " << buffer.IsFull() << "<br />";
                 html << "DqOutputBuffer.OutputType: " << (buffer.GetOutputType() ? buffer.GetOutputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";

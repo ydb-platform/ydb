@@ -251,7 +251,7 @@ public:
         CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
         CurrentPosition = 0;
         Tongue = CurrentPage->data();
-        std::cerr << std::format("[{}] - CreateTState. AllowOutOfMemory = {}\n", (const void*)this, allowOutOfMemory);
+        // std::cerr << std::format("[{}] - CreateTState. AllowOutOfMemory = {}\n", (const void*)this, allowOutOfMemory);
     }
 
     ~TState() {
@@ -298,7 +298,7 @@ public:
                 std::cerr << std::format("[{}] - Rethrowing.\n", (const void*)this);
                 throw;
             } else {
-                std::cerr << std::format("[{}] - Handle.\n", (const void*)this);
+                std::cerr << std::format("[{}] - Handle. Exception\n", (const void*)this);
                 IsOutOfMemory = true;
             }
         }
@@ -326,6 +326,7 @@ public:
         CurrentPosition = 0;
         Tongue = CurrentPage->data();
         StoredDataSize = 0;
+        IsOutOfMemory = 0;
 
         CleanupCurrentContext();
         return true;
@@ -359,12 +360,12 @@ public:
     NUdf::TUnboxedValuePod* Throat = nullptr;
     i64 StoredDataSize = 0;
     NYql::NUdf::TCounter CounterOutputRows_;
+    i64 IsOutOfMemory = 0;
 
 private:
     std::optional<TStorageIterator> ExtractIt;
     const ui32 KeyWidth, StateWidth;
     const bool AllowOutOfMemory;
-    bool IsOutOfMemory = false;
     ui64 CurrentPosition = 0;
     TRow* CurrentPage = nullptr;
     TStorage Storage;
@@ -964,6 +965,7 @@ public:
         result.emplace_back(PtrValueType); //tongue
         result.emplace_back(PtrValueType); //throat
         result.emplace_back(StoredType); //StoredDataSize
+        result.emplace_back(StoredType); //IsOutOfMemory
         result.emplace_back(Type::getInt32Ty(Context)); //size
         result.emplace_back(Type::getInt32Ty(Context)); //size
         return result;
@@ -983,6 +985,10 @@ public:
 
     llvm::Constant* GetStored() {
         return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 3);
+    }
+
+    llvm::Constant* GetIsOutOfMemory() {
+        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 4);
     }
 
     TLLVMFieldsStructureState(llvm::LLVMContext& context)
@@ -1343,6 +1349,11 @@ public:
             const auto check = CheckAdjustedMemLimit<TrackRss>(MemLimit, totalUsed, ctx, block);
             BranchInst::Create(done, loop, check, block);
 
+            const auto isOutOfMemoryPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetIsOutOfMemory() }, "is_out_of_memory_ptr", block);
+            const auto isOutOfMemory = new LoadInst(storedType, isOutOfMemoryPtr, "is_out_of_memory", block);
+            const auto checkIsOutOfMemory = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, isOutOfMemory, ConstantInt::get(isOutOfMemory->getType(), 0), "check_is_out_of_memory", block);
+            BranchInst::Create(done, loop, checkIsOutOfMemory, block);
+
             block = done;
 
             new StoreInst(getres.first, statusPtr, block);
@@ -1396,8 +1407,10 @@ public:
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
 #ifdef MKQL_DISABLE_CODEGEN
+        std::cerr << "DISABL CODEGEN\n";
         state = ctx.HolderFactory.Create<TState>(Nodes.KeyNodes.size(), Nodes.StateNodes.size(), TMyValueHasher(KeyTypes), TMyValueEqual(KeyTypes));
 #else
+        std::cerr << "Enable CODEGEN\n";
         state = ctx.HolderFactory.Create<TState>(Nodes.KeyNodes.size(), Nodes.StateNodes.size(),
             ctx.ExecuteLLVM && Hash ? THashFunc(std::ptr_fun(Hash)) : THashFunc(TMyValueHasher(KeyTypes)),
             ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TMyValueEqual(KeyTypes))

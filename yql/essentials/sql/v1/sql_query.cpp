@@ -198,24 +198,6 @@ static bool TransferSettings(std::map<TString, TNodePtr>& out,
     return true;
 }
 
-static bool TransferTarget(std::vector<std::tuple<TString, TString, TString>>& out, TStringBuf prefixPath,
-        const TRule_transfer_target& in, TTranslation& ctx)
-{
-    const TString remote = Id(in.GetRule_object_ref1().GetRule_id_or_at2(), ctx).second;
-    const TString local = Id(in.GetRule_object_ref3().GetRule_id_or_at2(), ctx).second;
-    TString lambda;
-    if (in.GetBlock4().HasRule_lambda2()) {
-        NSQLTranslation::TTranslationSettings settings;
-        settings.Antlr4Parser = true;
-        settings.AnsiLexer = true;
-        auto formatter = NSQLFormat::MakeSqlFormatter(settings);
-
-        lambda = formatter->Format(&in.GetBlock4().GetRule_lambda2());
-    }
-    out.emplace_back(remote, BuildTablePath(prefixPath, local), lambda);
-    return true;
-}
-
 static bool AsyncReplicationAlterAction(std::map<TString, TNodePtr>& settings,
         const TRule_alter_replication_action& in, TSqlExpression& ctx)
 {
@@ -1846,25 +1828,28 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             auto prefixPath = Ctx.GetPrefixPath(context.ServiceId, context.Cluster);
 
-            std::vector<std::tuple<TString, TString, TString>> targets;
-            if (!TransferTarget(targets, prefixPath, node.GetRule_transfer_target5(), *this)) {
-                return false;
-            }
-            for (auto& block : node.GetBlock6()) {
-                if (!TransferTarget(targets, prefixPath, block.GetRule_transfer_target2(), *this)) {
-                    return false;
-                }
-            }
-
             std::map<TString, TNodePtr> settings;
             TSqlExpression expr(Ctx, Mode);
-            if (!TransferSettings(settings, node.GetRule_transfer_settings9(), expr, true)) {
+            if (!TransferSettings(settings, node.GetRule_transfer_settings11(), expr, true)) {
                 return false;
             }
 
             const TString id = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
+            const TString source = Id(node.GetRule_object_ref5().GetRule_id_or_at2(), *this).second;
+            const TString target = Id(node.GetRule_object_ref7().GetRule_id_or_at2(), *this).second;
+            TString transformLambda;
+            if (node.GetBlock8().HasRule_lambda2()) {
+                NSQLTranslation::TTranslationSettings settings;
+                settings.Antlr4Parser = true;
+                settings.AnsiLexer = true;
+                auto formatter = NSQLFormat::MakeSqlFormatter(settings);
+
+                transformLambda = formatter->Format(&node.GetBlock8().GetRule_lambda2());
+            }
+
+
             AddStatementToBlocks(blocks, BuildCreateTransfer(Ctx.Pos(), BuildTablePath(prefixPath, id),
-                std::move(targets), std::move(settings), context));
+                std::move(source), std::move(target), std::move(transformLambda), std::move(settings), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore59: {

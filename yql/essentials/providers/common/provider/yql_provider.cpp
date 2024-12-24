@@ -602,7 +602,9 @@ TWriteReplicationSettings ParseWriteReplicationSettings(TExprList node, TExprCon
 
 TWriteTransferSettings ParseWriteTransferSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoAtom> mode;
-    TVector<TCoTransferTarget> targets;
+    TMaybeNode<TCoAtom> source;
+    TMaybeNode<TCoAtom> target;
+    TMaybeNode<TCoAtom> transformLambda;
     TVector<TCoNameValueTuple> settings;
     TVector<TCoNameValueTuple> other;
 
@@ -614,27 +616,15 @@ TWriteTransferSettings ParseWriteTransferSettings(TExprList node, TExprContext& 
             if (name == "mode") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
                 mode = tuple.Value().Cast<TCoAtom>();
-            } else if (name == "targets") {
-                YQL_ENSURE(tuple.Value().Maybe<TExprList>());
-                for (const auto& target : tuple.Value().Cast<TExprList>()) {
-                    auto builtTarget = Build<TCoTransferTarget>(ctx, node.Pos());
-
-                    YQL_ENSURE(target.Maybe<TCoNameValueTupleList>());
-                    for (const auto& item : target.Cast<TCoNameValueTupleList>()) {
-                        auto itemName = item.Name().Value();
-                        if (itemName == "remote") {
-                            builtTarget.RemotePath(item.Value().Cast<TCoAtom>());
-                        } else if (itemName == "local") {
-                            builtTarget.LocalPath(item.Value().Cast<TCoAtom>());
-                        } else if (itemName == "lambda") {
-                            builtTarget.Lambda(item.Value().Cast<TCoAtom>());
-                        } else {
-                            YQL_ENSURE(false, "unknown target item");
-                        }
-                    }
-
-                    targets.push_back(builtTarget.Done());
-                }
+            } else if (name == "source") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                source = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "target") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                target = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "transformLambda") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                transformLambda = tuple.Value().Cast<TCoAtom>();
             } else if (name == "settings") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
                 for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
@@ -646,10 +636,6 @@ TWriteTransferSettings ParseWriteTransferSettings(TExprList node, TExprContext& 
         }
     }
 
-    const auto& builtTargets = Build<TCoTransferTargetList>(ctx, node.Pos())
-        .Add(targets)
-        .Done();
-
     const auto& builtSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
         .Add(settings)
         .Done();
@@ -660,7 +646,9 @@ TWriteTransferSettings ParseWriteTransferSettings(TExprList node, TExprContext& 
 
     TWriteTransferSettings ret(builtOther);
     ret.Mode = mode;
-    ret.Targets = builtTargets;
+    ret.Source = source;
+    ret.Target = target;
+    ret.TransformLambda = transformLambda;
     ret.TransferSettings = builtSettings;
 
     return ret;

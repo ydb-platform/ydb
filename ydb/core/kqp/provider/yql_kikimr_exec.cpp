@@ -2344,13 +2344,11 @@ public:
             TCreateTransferSettings settings;
             settings.Name = TString(createTransfer.Transfer());
 
-            for (auto target : createTransfer.Targets()) {
-                settings.Targets.emplace_back(
-                    target.RemotePath().Cast<TCoAtom>().StringValue(),
-                    target.LocalPath().Cast<TCoAtom>().StringValue(),
-                    target.Lambda().Cast<TCoAtom>().StringValue()
-                );
-            }
+            settings.Targets.emplace_back(
+                createTransfer.Source(),
+                createTransfer.Target(),
+                createTransfer.TransformLambda()
+            );
 
             if (!ParseTransferSettings(settings.Settings, createTransfer.TransferSettings(), ctx, createTransfer.Pos())) {
                 return SyncError();

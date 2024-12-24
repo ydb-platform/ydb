@@ -2657,29 +2657,23 @@ private:
 
 class TCreateTransfer final: public TTransfer {
 public:
-    explicit TCreateTransfer(TPosition pos, const TString& id,
-            std::vector<std::tuple<TString, TString, TString>>&& targets,
+    explicit TCreateTransfer(TPosition pos, const TString& id, const TString&& source, const TString&& target,
+            const TString&& transformLambda,
             std::map<TString, TNodePtr>&& settings,
             const TObjectOperatorContext& context)
         : TTransfer(pos, id, "create", context)
-        , Targets(std::move(targets))
+        , Source(std::move(source))
+        , Target(std::move(target))
+        , TransformLambda(std::move(transformLambda))
         , Settings(std::move(settings))
     {
     }
 
 protected:
     INode::TPtr FillOptions(INode::TPtr options) const override {
-        if (!Targets.empty()) {
-            auto targets = Y();
-            for (auto&& [remote, local, lambda] : Targets) {
-                auto target = Y();
-                target = L(target, Q(Y(Q("remote"), Q(remote))));
-                target = L(target, Q(Y(Q("local"), Q(local))));
-                target = L(target, Q(Y(Q("lambda"), Q(lambda))));
-                targets = L(targets, Q(target));
-            }
-            options = L(options, Q(Y(Q("targets"), Q(targets))));
-        }
+        options = L(options, Q(Y(Q("source"), Q(Source))));
+        options = L(options, Q(Y(Q("target"), Q(Target))));
+        options = L(options, Q(Y(Q("transformLambda"), Q(TransformLambda))));
 
         if (!Settings.empty()) {
             auto settings = Y();
@@ -2697,17 +2691,19 @@ protected:
     }
 
 private:
-    std::vector<std::tuple<TString, TString, TString>> Targets; // (remote, local, lambda)
+    const TString Source;
+    const TString Target;
+    const TString TransformLambda;
     std::map<TString, TNodePtr> Settings;
 
 }; // TCreateTransfer
 
-TNodePtr BuildCreateTransfer(TPosition pos, const TString& id,
-        std::vector<std::tuple<TString, TString, TString>>&& targets,
+TNodePtr BuildCreateTransfer(TPosition pos, const TString& id, const TString&& source, const TString&& target,
+        const TString&& transformLambda,
         std::map<TString, TNodePtr>&& settings,
         const TObjectOperatorContext& context)
 {
-    return new TCreateTransfer(pos, id, std::move(targets), std::move(settings), context);
+    return new TCreateTransfer(pos, id, std::move(source), std::move(target), std::move(transformLambda), std::move(settings), context);
 }
 
 class TDropTransfer final: public TTransfer {

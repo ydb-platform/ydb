@@ -98,7 +98,9 @@ struct TWriteReplicationSettings {
 
 struct TWriteTransferSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
-    NNodes::TMaybeNode<NNodes::TCoTransferTargetList> Targets;
+    NNodes::TMaybeNode<NNodes::TCoAtom> Source;
+    NNodes::TMaybeNode<NNodes::TCoAtom> Target;
+    NNodes::TMaybeNode<NNodes::TCoAtom> TransformLambda;
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> TransferSettings;
     NNodes::TCoNameValueTupleList Other;
 

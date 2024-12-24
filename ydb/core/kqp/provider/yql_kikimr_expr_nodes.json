@@ -508,9 +508,11 @@
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Transfer", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Targets", "Type": "TCoTransferTargetList"},
-                {"Index": 4, "Name": "TransferSettings", "Type": "TCoNameValueTupleList"},
-                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+                {"Index": 3, "Name": "Source", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "Target", "Type": "TCoAtom"},
+                {"Index": 5, "Name": "TransformLambda", "Type": "TCoAtom"},
+                {"Index": 6, "Name": "TransferSettings", "Type": "TCoNameValueTupleList"},
+                {"Index": 7, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {

@@ -1,12 +1,11 @@
 diff --git a/include/__config b/include/__config
-index 2b93653..5bec389 100644
+index de02565..104d517 100644
 --- a/include/__config
 +++ b/include/__config
-@@ -1545,4 +1545,7 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
+@@ -1546,4 +1546,6 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
  
  #endif // __cplusplus
  
 +#include <__config_epilogue.h>
 +
  #endif // _LIBCPP___CONFIG
-+

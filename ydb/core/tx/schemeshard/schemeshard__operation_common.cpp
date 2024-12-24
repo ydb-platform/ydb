@@ -428,10 +428,7 @@ TDone::TDone(const TOperationId& id)
     IgnoreMessages(DebugHint(), AllIncomingEvents());
 }
 
-bool TDone::ProgressState(TOperationContext& context) {
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " ProgressState");
-
+bool TDone::Process(TOperationContext& context) {
     const auto* txState = context.SS->FindTx(OperationId);
 
     const auto& pathId = txState->TargetPathId;
@@ -478,6 +475,13 @@ bool TDone::ProgressState(TOperationContext& context) {
 
     context.OnComplete.DoneOperation(OperationId);
     return true;
+}
+
+bool TDone::ProgressState(TOperationContext& context) {
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " ProgressState");
+
+    return Process(context);
 }
 
 namespace {
@@ -984,6 +988,7 @@ TProposedWaitParts::TProposedWaitParts(TOperationId id, TTxState::ETxState nextS
     : OperationId(id)
     , NextState(nextState)
 {
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint() << " Constructed");
     IgnoreMessages(DebugHint(),
         { TEvHive::TEvCreateTabletReply::EventType
         , TEvDataShard::TEvProposeTransactionResult::EventType

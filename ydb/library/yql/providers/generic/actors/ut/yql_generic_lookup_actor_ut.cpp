@@ -81,13 +81,13 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         runtime.Initialize();
         auto edge = runtime.AllocateEdgeActor();
 
-        NYql::NConnector::NApi::TDataSourceInstance dsi;
-        dsi.Setkind(NYql::NConnector::NApi::EDataSourceKind::YDB);
+        NYql::TGenericDataSourceInstance dsi;
+        dsi.Setkind(NYql::EGenericDataSourceKind::YDB);
         dsi.mutable_endpoint()->Sethost("some_host");
         dsi.mutable_endpoint()->Setport(2135);
         dsi.Setdatabase("some_db");
         dsi.Setuse_tls(true);
-        dsi.set_protocol(::NYql::NConnector::NApi::EProtocol::NATIVE);
+        dsi.set_protocol(::NYql::EGenericProtocol::NATIVE);
         auto token = dsi.mutable_credentials()->mutable_token();
         token->Settype("IAM");
         token->Setvalue("TEST_TOKEN");

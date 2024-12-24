@@ -4,4 +4,6 @@ USE plato;
 
 SELECT
     *
-FROM Folder(``, "foo;bar");
+FROM
+    Folder(``, 'foo;bar')
+;

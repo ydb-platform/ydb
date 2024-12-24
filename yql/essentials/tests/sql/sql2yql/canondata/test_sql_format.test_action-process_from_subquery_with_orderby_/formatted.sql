@@ -2,9 +2,11 @@
 DEFINE SUBQUERY $src() AS
     SELECT
         *
-    FROM plato.Input
+    FROM
+        plato.Input
     ORDER BY
-        key;
+        key
+    ;
 END DEFINE;
 
 PROCESS $src();

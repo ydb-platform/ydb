@@ -1,10 +1,12 @@
 /* postgres can not */
 /* syntax version 1 */
 USE plato;
+
 $udfScript = @@
 def Len(val_key, input):
     return {"joined": {val_key: b", ".join(input)}}
 @@;
+
 $udf = Python::Len(Callable<(String, Stream<String>) -> Struct<joined: Dict<String, String>>>, $udfScript);
 
 --INSERT INTO Output
@@ -19,6 +21,8 @@ $res = (
 
 SELECT
     *
-FROM $res
+FROM
+    $res
 ORDER BY
-    DictKeys(joined);
+    DictKeys(joined)
+;

@@ -9,6 +9,7 @@ struct TActorFactory : public IActorFactory {
     TActorFactory() {}
 
     NActors::TActorId RegisterTopicSession(
+        const TString& readGroup,
         const TString& topicPath,
         const TString& endpoint,
         const TString& database,
@@ -19,10 +20,12 @@ struct TActorFactory : public IActorFactory {
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
+        const ::NMonitoring::TDynamicCounterPtr& countersRoot,
         const NYql::IPqGateway::TPtr& pqGateway,
         ui64 maxBufferSize) const override {
 
         auto actorPtr = NFq::NewTopicSession(
+            readGroup,
             topicPath,
             endpoint,
             database,
@@ -33,6 +36,7 @@ struct TActorFactory : public IActorFactory {
             std::move(driver),
             credentialsProviderFactory,
             counters,
+            countersRoot,
             pqGateway,
             maxBufferSize
         );

@@ -5,6 +5,8 @@ USE plato;
 $path = (
     SELECT
         min(Path)
-    FROM folder("")
+    FROM
+        folder('')
 );
+
 DROP TABLE $path;

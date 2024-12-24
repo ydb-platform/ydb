@@ -13,12 +13,14 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/data_events/shards_splitter.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -107,6 +109,23 @@ namespace {
             *protoLocks->AddLocks() = lock;
         }
     }
+
+    void FillTopicsCommit(NKikimrPQ::TDataTransaction& transaction, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager) {
+        transaction.SetOp(NKikimrPQ::TDataTransaction::Commit);
+        const auto prepareSettings = txManager->GetPrepareTransactionInfo();
+
+        if (!prepareSettings.ArbiterColumnShard) {
+            for (const ui64 sendingShardId : prepareSettings.SendingShards) {
+                transaction.AddSendingShards(sendingShardId);
+            }
+            for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
+                transaction.AddReceivingShards(receivingShardId);
+            }
+        } else {
+            transaction.AddSendingShards(*prepareSettings.ArbiterColumnShard);
+            transaction.AddReceivingShards(*prepareSettings.ArbiterColumnShard);
+        }
+    }
 }
 
 
@@ -125,6 +144,17 @@ struct IKqpTableWriterCallbacks {
     virtual void OnMessageAcknowledged(ui64 dataSize) = 0;
 
     virtual void OnError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues) = 0;
+};
+
+struct TKqpTableWriterStatistics {
+    ui64 ReadRows = 0;
+    ui64 ReadBytes = 0;
+    ui64 WriteRows = 0;
+    ui64 WriteBytes = 0;
+    ui64 EraseRows = 0;
+    ui64 EraseBytes = 0;
+
+    THashSet<ui64> AffectedPartitions;
 };
 
 
@@ -492,8 +522,7 @@ public:
                 return builder;
             }()
             << ", Cookie=" << ev->Cookie);
-
-
+        UpdateStats(ev->Get()->Record.GetTxStats());
 
         switch (ev->Get()->GetStatus()) {
         case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED: {
@@ -955,6 +984,56 @@ public:
         Send(this->SelfId(), new TEvPrivate::TEvTerminate{});
     }
 
+    void UpdateStats(const NKikimrQueryStats::TTxStats& txStats) {
+        for (const auto& tableAccessStats : txStats.GetTableAccessStats()) {
+            YQL_ENSURE(tableAccessStats.GetTableInfo().GetPathId() == TableId.PathId.LocalPathId);
+            Stats.ReadRows += tableAccessStats.GetSelectRow().GetRows();
+            Stats.ReadRows += tableAccessStats.GetSelectRange().GetRows();
+            Stats.ReadBytes += tableAccessStats.GetSelectRow().GetBytes();
+            Stats.ReadBytes += tableAccessStats.GetSelectRange().GetBytes();
+            Stats.WriteRows += tableAccessStats.GetUpdateRow().GetRows();
+            Stats.WriteBytes += tableAccessStats.GetUpdateRow().GetBytes();
+            Stats.EraseRows += tableAccessStats.GetEraseRow().GetRows();
+            Stats.EraseBytes += tableAccessStats.GetEraseRow().GetRows();
+        }
+
+        for (const auto& perShardStats : txStats.GetPerShardStats()) {
+            Stats.AffectedPartitions.insert(perShardStats.GetShardId());
+        }
+    }
+
+    void FillStats(NYql::NDqProto::TDqTaskStats* stats) {
+        NYql::NDqProto::TDqTableStats* tableStats = nullptr;
+        for (size_t i = 0; i < stats->TablesSize(); ++i) {
+            auto* table = stats->MutableTables(i);
+            if (table->GetTablePath() == TablePath) {
+                tableStats = table;
+            }
+        }
+        if (!tableStats) {
+            tableStats = stats->AddTables();
+            tableStats->SetTablePath(TablePath);
+        }
+
+        tableStats->SetReadRows(tableStats->GetReadRows() + Stats.ReadRows);
+        tableStats->SetReadBytes(tableStats->GetReadBytes() + Stats.ReadBytes);
+        tableStats->SetWriteRows(tableStats->GetWriteRows() + Stats.WriteRows);
+        tableStats->SetWriteBytes(tableStats->GetWriteBytes() + Stats.WriteBytes);
+        tableStats->SetEraseRows(tableStats->GetEraseRows() + Stats.EraseRows);
+        tableStats->SetEraseBytes(tableStats->GetEraseBytes() + Stats.EraseBytes);
+    
+        Stats.ReadRows = 0;
+        Stats.ReadBytes = 0;
+        Stats.WriteRows = 0;
+        Stats.WriteBytes = 0;
+        Stats.EraseRows = 0;
+        Stats.EraseBytes = 0;
+
+        tableStats->SetAffectedPartitions(
+            tableStats->GetAffectedPartitions() + Stats.AffectedPartitions.size());
+        Stats.AffectedPartitions.clear();
+    }
+
     NActors::TActorId PipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
 
     TString LogPrefix;
@@ -986,6 +1065,8 @@ public:
     IShardedWriteControllerPtr ShardedWriteController = nullptr;
 
     TIntrusivePtr<TKqpCounters> Counters;
+
+    TKqpTableWriterStatistics Stats;
 
     NWilson::TSpan TableWriteActorSpan;
     NWilson::TSpan TableWriteActorStateSpan;
@@ -1208,6 +1289,12 @@ private:
         RuntimeError(message, statusCode, subIssues);
     }
 
+    void FillExtraStats(NYql::NDqProto::TDqTaskStats* stats, bool last, const NYql::NDq::TDqMeteringStats*) override {
+        if (last && WriteTableActor) {
+            WriteTableActor->FillStats(stats);
+        }
+    }
+
     TString LogPrefix;
     const NKikimrKqp::TKqpTableSinkSettings Settings;
     TWriteActorSettings MessageSettings;
@@ -1287,6 +1374,7 @@ struct TEvBufferWriteResult : public TEventLocal<TEvBufferWriteResult, TKqpEvent
 
 class TKqpBufferWriteActor :public TActorBootstrapped<TKqpBufferWriteActor>, public IKqpTableWriterCallbacks {
     using TBase = TActorBootstrapped<TKqpBufferWriteActor>;
+    using TTopicTabletTxs = NTopic::TTopicOperationTransactions;
 
 public:
     enum class EState {
@@ -1315,6 +1403,7 @@ public:
         State = EState::WRITING;
         Alloc->Release();
         Counters->BufferActorsCount->Inc();
+        TxManager->AddTopicsToShards();
     }
 
     void Bootstrap() {
@@ -1335,6 +1424,7 @@ public:
                 hFunc(TEvBufferWrite, Handle);
 
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, Handle);
+                hFunc(TEvPersQueue::TEvProposeTransactionResult, Handle);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             default:
@@ -1521,6 +1611,7 @@ public:
         Close();
         Process();
         SendToExternalShards(false);
+        SendToTopics(false);
     }
 
     void ImmediateCommit() {
@@ -1539,6 +1630,7 @@ public:
         }
         Close();
         Process();
+        SendToTopics(true);
     }
 
     void DistributedCommit() {
@@ -1566,6 +1658,7 @@ public:
         CA_LOG_D("Start rollback");
         State = EState::ROLLINGBACK;
         SendToExternalShards(true);
+        SendToTopics(true);
     }
 
     void SendToExternalShards(bool isRollback) {
@@ -1615,6 +1708,54 @@ public:
                 new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
                 IEventHandle::FlagTrackDelivery,
                 0);
+        }
+    }
+
+    void SendToTopics(bool isImmediateCommit) {
+        if (!TxManager->HasTopics()) {
+            return;
+        }
+
+        TTopicTabletTxs topicTxs;
+        TxManager->BuildTopicTxs(topicTxs);
+
+        TMaybe<ui64> writeId;
+        if (TxManager->GetTopicOperations().HasWriteId()) {
+            writeId = TxManager->GetTopicOperations().GetWriteId();
+        }
+
+        for (auto& [tabletId, t] : topicTxs) {
+            auto& transaction = t.tx;
+            
+            if (!isImmediateCommit) {
+                FillTopicsCommit(transaction, TxManager);
+            }
+
+            if (t.hasWrite && writeId.Defined()) {
+                auto* w = transaction.MutableWriteId();
+                w->SetNodeId(SelfId().NodeId());
+                w->SetKeyId(*writeId);
+            }
+            transaction.SetImmediate(isImmediateCommit);
+
+            auto ev = std::make_unique<TEvPersQueue::TEvProposeTransactionBuilder>();
+
+            ActorIdToProto(SelfId(), ev->Record.MutableSourceActor());
+            ev->Record.MutableData()->Swap(&transaction);
+            ev->Record.SetTxId(*TxId);
+
+            SendTime[tabletId] = TInstant::Now();
+            auto traceId = BufferWriteActor.GetTraceId();
+
+            CA_LOG_D("Executing KQP transaction on topic tablet: " << tabletId
+            << ", writeId: " << writeId << ", isImmediateCommit: " << isImmediateCommit);
+
+            Send(
+                MakePipePerNodeCacheID(false),
+                new TEvPipeCache::TEvForward(ev.release(), tabletId, /* subscribe */ true),
+                IEventHandle::FlagTrackDelivery,
+                0,
+                std::move(traceId));
         }
     }
 
@@ -1741,6 +1882,69 @@ public:
         }
     }
 
+    void Handle(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
+        auto& event = ev->Get()->Record;
+        const ui64 tabletId = event.GetOrigin();
+        
+        CA_LOG_D("Got ProposeTransactionResult" <<
+              ", PQ tablet: " << tabletId <<
+              ", status: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
+
+        switch (event.GetStatus()) {
+        case NKikimrPQ::TEvProposeTransactionResult::PREPARED:
+            ProcessPreparedTopic(ev);
+            return;
+        case NKikimrPQ::TEvProposeTransactionResult::COMPLETE:
+            ProcessCompletedTopic(ev);
+            return;
+        case NKikimrPQ::TEvProposeTransactionResult::ABORTED:
+            CA_LOG_E("Got ABORTED ProposeTransactionResult for PQ."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << ".");
+            ReplyErrorAndDie(
+                TStringBuilder() << "Aborted proposal status for PQ. ",
+                NYql::NDqProto::StatusIds::ABORTED,
+                {});
+            return;
+        case NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST:
+            CA_LOG_E("Got BAD REQUEST ProposeTransactionResult for PQ."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << ".");
+            ReplyErrorAndDie(
+                TStringBuilder() << "Bad request proposal status for PQ. ",
+                NYql::NDqProto::StatusIds::BAD_REQUEST,
+                {});
+            return;
+        case NKikimrPQ::TEvProposeTransactionResult::OVERLOADED:
+            CA_LOG_E("Got OVERLOADED ProposeTransactionResult for PQ."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << ".");
+            ReplyErrorAndDie(
+                TStringBuilder() << "Overloaded proposal status for PQ. ",
+                NYql::NDqProto::StatusIds::OVERLOADED,
+                {});
+            return;
+        case NKikimrPQ::TEvProposeTransactionResult::CANCELLED:
+            CA_LOG_E("Got CANCELLED ProposeTransactionResult for PQ."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << ".");
+            ReplyErrorAndDie(
+                TStringBuilder() << "Cancelled proposal status for PQ. ",
+                NYql::NDqProto::StatusIds::CANCELLED,
+                {});
+            return;
+        default:
+            CA_LOG_E("Got undefined ProposeTransactionResult for PQ."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << ".");
+            ReplyErrorAndDie(
+                TStringBuilder() << "Undefined proposal status for PQ. ",
+                NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                {});
+            return;
+        }
+    }
+
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
         ReplyErrorAndDie(TStringBuilder() << "Failed to deviler message.", NYql::NDqProto::StatusIds::UNAVAILABLE, {});
@@ -1768,7 +1972,7 @@ public:
             Rollback();
             State = EState::FINISHED;
             Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
-        } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && !WriteInfos.empty()) {
+        } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && (!WriteInfos.empty() || TxManager->HasTopics())) {
             TxManager->StartExecute();
             ImmediateCommit();
         } else {
@@ -1947,6 +2151,47 @@ public:
         }
     }
 
+    void ProcessPreparedTopic(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
+        if (State != EState::PREPARING) {
+            CA_LOG_D("Ignored topic prepared event.");
+            return;
+        }
+        OnMessageReceived(ev->Get()->Record.GetOrigin());
+        CA_LOG_D("Got propose prepared result TxId=" << ev->Get()->Record.GetTxId()
+            << ", TabletId=" << ev->Get()->Record.GetOrigin()
+            << ", Cookie=" << ev->Cookie);
+
+        const auto& record = ev->Get()->Record;
+        IKqpTransactionManager::TPrepareResult preparedInfo;
+        preparedInfo.ShardId = record.GetOrigin();
+        preparedInfo.MinStep = record.GetMinStep();
+        preparedInfo.MaxStep = record.GetMaxStep();
+
+        preparedInfo.Coordinator = 0;
+        if (record.DomainCoordinatorsSize()) {
+            auto domainCoordinators = TCoordinators(TVector<ui64>(record.GetDomainCoordinators().begin(),
+                                                                  record.GetDomainCoordinators().end()));
+            preparedInfo.Coordinator = domainCoordinators.Select(*TxId);
+        }
+
+        OnPrepared(std::move(preparedInfo), 0);
+    }
+
+    void ProcessCompletedTopic(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
+        NKikimrPQ::TEvProposeTransactionResult& event = ev->Get()->Record;
+
+        if (State != EState::COMMITTING) {
+            CA_LOG_D("Ignored completed event.");
+            return;
+        }
+        OnMessageReceived(event.GetOrigin());
+        CA_LOG_D("Got propose completed result" <<
+              ", topic tablet: " << event.GetOrigin() <<
+              ", status: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
+
+        OnCommitted(event.GetOrigin(), 0);
+    }
+
     void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         if (State != EState::PREPARING) {
             CA_LOG_D("Ignored write prepared event.");
@@ -2019,7 +2264,9 @@ public:
         if (TxManager->ConsumeCommitResult(shardId)) {
             CA_LOG_D("Committed");
             State = EState::FINISHED;
-            Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
+            Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{
+                BuildStats()
+            });
             ExecuterActorId = {};
             Y_ABORT_UNLESS(GetTotalMemory() == 0);
             return;
@@ -2036,7 +2283,9 @@ public:
             "BufferWriteActorState::Writing", NWilson::EFlags::AUTO_END);
         CA_LOG_D("Flushed");
         State = EState::WRITING;
-        Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
+        Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{
+            BuildStats()
+        });
         ExecuterActorId = {};
         Y_ABORT_UNLESS(GetTotalMemory() == 0);
     }
@@ -2061,6 +2310,14 @@ public:
             });
         }
         PassAway();
+    }
+
+    NYql::NDqProto::TDqTaskStats BuildStats() {
+        NYql::NDqProto::TDqTaskStats result;
+        for (const auto& [_, writeInfo] : WriteInfos) {
+            writeInfo.WriteTableActor->FillStats(&result);
+        }
+        return result;
     }
 
 private:

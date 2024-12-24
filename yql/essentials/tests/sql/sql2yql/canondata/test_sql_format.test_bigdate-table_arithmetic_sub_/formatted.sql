@@ -16,11 +16,13 @@ SELECT
     l.ts64 - r.d32,
     l.ts64 - r.dt64,
     l.ts64 - r.ts64
-FROM BigDates
-    AS l
-CROSS JOIN BigDates
-    AS r
-WHERE abs(l.row) <= 7 AND abs(r.row) <= 7
+FROM
+    BigDates AS l
+CROSS JOIN
+    BigDates AS r
+WHERE
+    abs(l.row) <= 7 AND abs(r.row) <= 7
 ORDER BY
     l.row,
-    r.row;
+    r.row
+;

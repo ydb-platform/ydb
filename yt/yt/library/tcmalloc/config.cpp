@@ -35,6 +35,7 @@ TTCMallocConfigPtr TTCMallocConfig::ApplyDynamic(const TTCMallocConfigPtr& dynam
     // TODO(babenko): fix this mess
     auto mergedConfig = CloneYsonStruct(dynamicConfig);
     mergedConfig->HeapSizeLimit->MemoryProfileDumpPath = HeapSizeLimit->MemoryProfileDumpPath;
+    mergedConfig->Postprocess();
     return mergedConfig;
 }
 
@@ -42,11 +43,6 @@ TTCMallocConfigPtr TTCMallocConfig::ApplyDynamic(const TTCMallocConfigPtr& dynam
 
 void TTCMallocConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("background_release_rate", &TThis::BackgroundReleaseRate)
-        .Default(32_MB);
-    registrar.Parameter("max_per_cpu_cache_size", &TThis::MaxPerCpuCacheSize)
-        .Default(3_MB);
-
     registrar.Parameter("aggressive_release_threshold", &TThis::AggressiveReleaseThreshold)
         .Default(20_GB);
     registrar.Parameter("aggressive_release_threshold_ratio", &TThis::AggressiveReleaseThresholdRatio)
@@ -58,6 +54,14 @@ void TTCMallocConfig::Register(TRegistrar registrar)
         .Default(TDuration::MilliSeconds(100));
     registrar.Parameter("guarded_sampling_rate", &TThis::GuardedSamplingRate)
         .Default(128_MB);
+    registrar.Parameter("profile_sampling_rate", &TThis::ProfileSamplingRate)
+        .Default(2_MB);
+    registrar.Parameter("max_per_cpu_cache_size", &TThis::MaxPerCpuCacheSize)
+        .Default(3_MB);
+    registrar.Parameter("max_total_thread_cache_bytes", &TThis::MaxTotalThreadCacheBytes)
+        .Default(24_MB);
+    registrar.Parameter("background_release_rate", &TThis::BackgroundReleaseRate)
+        .Default(32_MB);
 
     registrar.Parameter("heap_size_limit", &TThis::HeapSizeLimit)
         .DefaultNew();

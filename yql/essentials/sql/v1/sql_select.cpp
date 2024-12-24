@@ -43,6 +43,7 @@ bool CollectJoinLinkSettings(TPosition pos, TJoinLinkSettings& linkSettings, TCo
 
         if (TJoinLinkSettings::EStrategy::Default == linkSettings.Strategy) {
             linkSettings.Strategy = newStrategy;
+            linkSettings.Values = hint.Values;
         } else if (newStrategy == linkSettings.Strategy) {
             ctx.Error() << "Duplicate join strategy hint";
             return false;

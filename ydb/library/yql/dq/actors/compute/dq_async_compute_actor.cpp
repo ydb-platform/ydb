@@ -193,11 +193,11 @@ private:
         html << "QuoterServiceActorId: " << QuoterServiceActorId.ToString() << "<br />";
         if (ContinueRunEvent) {
             html << "ContinueRunEvent.AskFreeSpace: " << ContinueRunEvent->AskFreeSpace << "<br />";
-            html << "ContinueRunEvent.AskFreeSpace: " << ContinueRunEvent->CheckpointOnly << "<br />";
-            html << "ContinueRunEvent.AskFreeSpace: " << ContinueRunEvent->CheckpointRequest.Defined() << "<br />";
-            html << "ContinueRunEvent.AskFreeSpace: " << ContinueRunEvent->WatermarkRequest.Defined() << "<br />";
-            html << "ContinueRunEvent.AskFreeSpace: " << ContinueRunEvent->CheckpointOnly << "<br />";
-            html << "ContinueRunEvent.AskFreeSpace: " << ContinueRunEvent->MemLimit << "<br />";
+            html << "ContinueRunEvent.CheckpointOnly: " << ContinueRunEvent->CheckpointOnly << "<br />";
+            html << "ContinueRunEvent.CheckpointRequest: " << ContinueRunEvent->CheckpointRequest.Defined() << "<br />";
+            html << "ContinueRunEvent.WatermarkRequest: " << ContinueRunEvent->WatermarkRequest.Defined() << "<br />";
+            html << "ContinueRunEvent.CheckpointOnly: " << ContinueRunEvent->CheckpointOnly << "<br />";
+            html << "ContinueRunEvent.MemLimit: " << ContinueRunEvent->MemLimit << "<br />";
             for (const auto& sinkId: ContinueRunEvent->SinkIds) {
                 html << "ContinueRunEvent.SinkIds: " << sinkId << "<br />";
             }

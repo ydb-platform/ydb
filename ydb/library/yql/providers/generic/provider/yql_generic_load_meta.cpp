@@ -28,7 +28,7 @@ namespace NYql {
     struct TGenericTableDescription {
         using TPtr = std::shared_ptr<TGenericTableDescription>;
 
-        NConnector::NApi::TDataSourceInstance DataSourceInstance;
+        NYql::TGenericDataSourceInstance DataSourceInstance;
         std::optional<NConnector::NApi::TDescribeTableResponse> Response;
     };
 
@@ -328,40 +328,49 @@ namespace NYql {
             request.set_schema(schema);
         }
 
-        void GetOracleServiceName(NYql::NConnector::NApi::TOracleDataSourceOptions& request, const TGenericClusterConfig& clusterConfig) {
+        void SetOracleServiceName(NYql::TOracleDataSourceOptions& options, const TGenericClusterConfig& clusterConfig) {
             const auto it = clusterConfig.GetDataSourceOptions().find("service_name");
             if (it != clusterConfig.GetDataSourceOptions().end()) {
-                request.set_service_name(it->second);
+                options.set_service_name(it->second);
+            }
+        }
+
+        void SetLoggingFolderId(NYql::TLoggingDataSourceOptions& options, const TGenericClusterConfig& clusterConfig) {
+            const auto it = clusterConfig.GetDataSourceOptions().find("folder_id");
+            if (it != clusterConfig.GetDataSourceOptions().end()) {
+                options.set_folder_id(it->second);
             }
         }
 
         void FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig) {
             const auto dataSourceKind = clusterConfig.GetKind();
             switch (dataSourceKind) {
-                case NYql::NConnector::NApi::CLICKHOUSE:
+                case NYql::EGenericDataSourceKind::CLICKHOUSE:
                     break;
-                case NYql::NConnector::NApi::YDB:
+                case NYql::EGenericDataSourceKind::YDB:
                     break;
-                case NYql::NConnector::NApi::MYSQL:
+                case NYql::EGenericDataSourceKind::MYSQL:
                     break;
-                case NYql::NConnector::NApi::GREENPLUM: {
+                case NYql::EGenericDataSourceKind::GREENPLUM: {
                     auto* options = request.mutable_data_source_instance()->mutable_gp_options();
                     SetSchema(*options, clusterConfig);
                 } break;
-                case NYql::NConnector::NApi::MS_SQL_SERVER:
+                case NYql::EGenericDataSourceKind::MS_SQL_SERVER:
                     break;
-                case NYql::NConnector::NApi::POSTGRESQL: {
+                case NYql::EGenericDataSourceKind::POSTGRESQL: {
                     auto* options = request.mutable_data_source_instance()->mutable_pg_options();
                     SetSchema(*options, clusterConfig);
                 } break;
-                case NYql::NConnector::NApi::ORACLE: {
+                case NYql::EGenericDataSourceKind::ORACLE: {
                     auto* options = request.mutable_data_source_instance()->mutable_oracle_options();
-                    GetOracleServiceName(*options, clusterConfig);
+                    SetOracleServiceName(*options, clusterConfig);
                 } break;
-                case NYql::NConnector::NApi::LOGGING:
-                    break;
+                case NYql::EGenericDataSourceKind::LOGGING: {
+                    auto* options = request.mutable_data_source_instance()->mutable_logging_options();
+                    SetLoggingFolderId(*options, clusterConfig);
+                } break;
                 default:
-                    ythrow yexception() << "Unexpected data source kind: '" << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind)
+                    ythrow yexception() << "Unexpected data source kind: '" << NYql::EGenericDataSourceKind_Name(dataSourceKind)
                                         << "'";
             }
         }

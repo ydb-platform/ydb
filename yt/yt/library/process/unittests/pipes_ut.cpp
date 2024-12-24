@@ -350,7 +350,7 @@ TEST_F(TNamedPipeReadWriteTest, CapacityDontDiscardSurplus)
     EXPECT_TRUE(writeFuture.Get().IsOK());
 }
 
-#if defined(_linux_) && defined(F_SET_PIPE_WAKE_WRITER)
+#if defined(_linux_)
 
 TEST_F(TNamedPipeReadWriteTest, DeliveryFencedWriteJustWorks)
 {

@@ -155,13 +155,13 @@ namespace NKikimr::NStorage {
                     return AdvanceGeneration();
 
                 case TQuery::kFetchStorageConfig:
-                    return FetchStorageConfig();
+                    return FetchStorageConfig(record.GetFetchStorageConfig().GetManual());
 
                 case TQuery::kReplaceStorageConfig:
                     return ReplaceStorageConfig(record.GetReplaceStorageConfig().GetYAML());
 
-                case TQuery::kBootstrap:
-                    return DoBootstrap(record.GetBootstrap().GetSelfAssemblyUUID());
+                case TQuery::kBootstrapCluster:
+                    return BootstrapCluster(record.GetBootstrapCluster().GetSelfAssemblyUUID());
 
                 case TQuery::REQUEST_NOT_SET:
                     return FinishWithError(TResult::ERROR, "Request field not set");
@@ -373,10 +373,10 @@ namespace NKikimr::NStorage {
             }
             const auto& ss = bsConfig.GetServiceSet();
 
-            if (!bsConfig.HasAutoconfigSettings()) {
-                return FinishWithError(TResult::ERROR, "no AutoconfigSettings defined");
+            if (!config.HasSelfManagementConfig() || !config.GetSelfManagementConfig().GetEnabled()) {
+                return FinishWithError(TResult::ERROR, "self-management is not enabled");
             }
-            const auto& settings = bsConfig.GetAutoconfigSettings();
+            const auto& smConfig = config.GetSelfManagementConfig();
 
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks;
             NBsController::TGroupMapper::TForbiddenPDisks forbid;
@@ -405,8 +405,8 @@ namespace NKikimr::NStorage {
                     try {
                         Self->AllocateStaticGroup(&config, vdiskId.GroupID.GetRawId(), vdiskId.GroupGeneration + 1,
                             TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies()),
-                            settings.GetGeometry(), settings.GetPDiskFilter(),
-                            settings.HasPDiskType() ? std::make_optional(settings.GetPDiskType()) : std::nullopt,
+                            smConfig.GetGeometry(), smConfig.GetPDiskFilter(),
+                            smConfig.HasPDiskType() ? std::make_optional(smConfig.GetPDiskType()) : std::nullopt,
                             replacedDisks, forbid, maxSlotSize,
                             &BaseConfig.value(), cmd.GetConvertToDonor(), cmd.GetIgnoreVSlotQuotaCheck(),
                             cmd.GetIsSelfHealReasonDecommit());
@@ -625,7 +625,7 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Storage configuration YAML manipulation
 
-        void FetchStorageConfig() {
+        void FetchStorageConfig(bool manual) {
             if (!Self->StorageConfig) {
                 FinishWithError(TResult::ERROR, "no agreed StorageConfig");
             } else if (!Self->StorageConfig->HasStorageConfigCompressedYAML()) {
@@ -634,7 +634,13 @@ namespace NKikimr::NStorage {
                 auto ev = PrepareResult(TResult::OK, std::nullopt);
                 auto *record = &ev->Record;
                 TStringInput ss(Self->StorageConfig->GetStorageConfigCompressedYAML());
-                record->MutableFetchStorageConfig()->SetYAML(TZstdDecompress(&ss).ReadAll());
+                TString config = TZstdDecompress(&ss).ReadAll();
+
+                if (manual) {
+                    // add BlobStorageConfig, NameserviceConfig, DomainsConfig
+                }
+
+                record->MutableFetchStorageConfig()->SetYAML(config);
                 Finish(Sender, SelfId(), ev.release(), 0, Cookie);
             }
         }
@@ -670,7 +676,7 @@ namespace NKikimr::NStorage {
             StartProposition(&config);
         }
 
-        void DoBootstrap(const TString& selfAssemblyUUID) {
+        void BootstrapCluster(const TString& selfAssemblyUUID) {
             if (!RunCommonChecks()) {
                 return;
             } else if (Self->StorageConfig->GetGeneration()) {
@@ -679,6 +685,8 @@ namespace NKikimr::NStorage {
                 } else {
                     return FinishWithError(TResult::ERROR, "bootstrap on already bootstrapped cluster");
                 }
+            } else if (!selfAssemblyUUID) {
+                return FinishWithError(TResult::ERROR, "SelfAssemblyUUID can't be empty");
             }
 
             const ERootState prevState = std::exchange(Self->RootState, ERootState::IN_PROGRESS);
@@ -765,6 +773,8 @@ namespace NKikimr::NStorage {
             auto *propose = task.MutableProposeStorageConfig();
             propose->MutableConfig()->CopyFrom(*Self->CurrentProposedStorageConfig);
             IssueScatterTask(std::move(task), done);
+
+            Self->RootState = ERootState::IN_PROGRESS; // forbid any concurrent activity
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

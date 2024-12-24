@@ -1,32 +1,40 @@
 /* postgres can not */
 /* syntax version 1 */
 USE plato;
+
 PRAGMA OrderedColumns;
 
 SELECT
     *
-FROM Input
+FROM
+    Input
 GROUP BY
     value,
     key
 ORDER BY
     key,
-    value;
+    value
+;
 
 SELECT
     *
-FROM Input
+FROM
+    Input
 GROUP BY
     value,
     key
-HAVING key == "150";
+HAVING
+    key == '150'
+;
 
 SELECT
     *
-FROM Input
+FROM
+    Input
 GROUP BY
     subkey,
-    key || "x" AS key
+    key || 'x' AS key
 ORDER BY
     subkey,
-    key;
+    key
+;

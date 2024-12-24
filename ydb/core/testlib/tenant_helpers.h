@@ -335,10 +335,14 @@ inline void CheckTenantScaleRecommenderPolicies(TTenantTestRuntime &runtime, con
     Ydb::Cms::GetDatabaseStatusResult status;
     UNIT_ASSERT(operation.result().UnpackTo(&status));
 
-    Ydb::Cms::ScaleRecommenderPolicies expectedPolicies;
-    UNIT_ASSERT_C(NProtoBuf::TextFormat::ParseFromString(policies, &expectedPolicies), policies);
-    UNIT_ASSERT_C(NProtoBuf::util::MessageDifferencer::Equals(status.scale_recommender_policies(), expectedPolicies),
-                  TStringBuilder() << "Expected: " << policies << ", got: " << status.scale_recommender_policies().ShortDebugString());
+    if (!policies.empty()) {
+        Ydb::Cms::ScaleRecommenderPolicies expectedPolicies;
+        UNIT_ASSERT_C(NProtoBuf::TextFormat::ParseFromString(policies, &expectedPolicies), policies);
+        UNIT_ASSERT_C(NProtoBuf::util::MessageDifferencer::Equals(status.scale_recommender_policies(), expectedPolicies),
+                      TStringBuilder() << "Expected: " << policies << ", got: " << status.scale_recommender_policies().ShortDebugString());
+    } else {
+        UNIT_ASSERT(!status.has_scale_recommender_policies());
+    }
 }
 
 inline void AlterScaleRecommenderPolicies(TTenantTestRuntime &runtime, const TString &path,

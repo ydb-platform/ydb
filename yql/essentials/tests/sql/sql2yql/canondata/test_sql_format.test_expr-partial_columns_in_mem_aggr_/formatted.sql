@@ -9,4 +9,5 @@ FROM (
         3 AS Domain
 )
 GROUP BY
-    Domain;
+    Domain
+;

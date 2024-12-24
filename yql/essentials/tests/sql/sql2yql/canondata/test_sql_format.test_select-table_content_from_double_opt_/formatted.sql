@@ -5,15 +5,23 @@ USE plato;
 INSERT INTO @tmp WITH truncate
 SELECT
     Just(Just(key)) AS key
-FROM Input;
+FROM
+    Input
+;
+
 COMMIT;
 
-$key =
+$key = (
     SELECT
         key
-    FROM @tmp;
+    FROM
+        @tmp
+);
 
 SELECT
     *
-FROM Input
-WHERE key == $key;
+FROM
+    Input
+WHERE
+    key == $key
+;

@@ -29,6 +29,9 @@ ENABLE_KEYPAIR_VALIDATION = bool(
 ENABLE_AMI_VALIDATION = bool(os.environ.get("MOTO_ENABLE_AMI_VALIDATION", False))
 
 
+PRETTIFY_RESPONSES = bool(os.environ.get("MOTO_PRETTIFY_RESPONSES", False))
+
+
 def get_sf_execution_history_type():
     """
     Determines which execution history events `get_execution_history` returns
@@ -115,13 +118,17 @@ def get_docker_host():
         else:
             _ip = network_settings["IPAddress"]
             if network_name:
-                print(
+                print(  # noqa
                     f"WARNING - Moto couldn't find network '{network_name}' - defaulting to {_ip}"
                 )
         return f"http://{_ip}"
     except Exception as e:  # noqa
-        print(
+        print(  # noqa
             "WARNING - Unable to parse Docker API response. Defaulting to 'host.docker.internal'"
         )
-        print(f"{type(e)}::{e}")
+        print(f"{type(e)}::{e}")  # noqa
         return "http://host.docker.internal"
+
+
+def get_cognito_idp_user_pool_id_strategy():
+    return os.environ.get("MOTO_COGNITO_IDP_USER_POOL_ID_STRATEGY")

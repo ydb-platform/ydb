@@ -1,25 +1,34 @@
 PRAGMA SeqMode;
+
 USE plato;
 
 DEFINE ACTION $a() AS
     INSERT INTO @tmp
     SELECT
-        1;
+        1
+    ;
     COMMIT;
 
-    $r =
+    $r = (
         SELECT
             *
-        FROM @tmp;
+        FROM
+            @tmp
+    );
 
     SELECT
         *
-    FROM $r;
+    FROM
+        $r
+    ;
 
     SELECT
         *
-    FROM $r;
+    FROM
+        $r
+    ;
 END DEFINE;
+
 DO
     $a()
 ;

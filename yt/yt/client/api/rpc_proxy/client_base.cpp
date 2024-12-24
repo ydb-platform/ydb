@@ -514,6 +514,7 @@ TFuture<NCypressClient::TNodeId> TClientBase::MoveNode(
     req->set_preserve_expiration_time(options.PreserveExpirationTime);
     req->set_preserve_expiration_timeout(options.PreserveExpirationTimeout);
     req->set_preserve_owner(options.PreserveOwner);
+    req->set_preserve_acl(options.PreserveAcl);
     req->set_pessimistic_quota_check(options.PessimisticQuotaCheck);
     req->set_enable_cross_cell_copying(options.EnableCrossCellCopying);
 
@@ -1020,6 +1021,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
 
     auto req = proxy.SelectRows();
     req->SetResponseHeavy(true);
+    req->SetMultiplexingBand(NRpc::EMultiplexingBand::Interactive);
     req->set_query(query);
 
     const auto& config = GetRpcProxyConnection()->GetConfig();

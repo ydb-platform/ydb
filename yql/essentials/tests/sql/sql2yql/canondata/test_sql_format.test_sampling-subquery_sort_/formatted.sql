@@ -7,8 +7,10 @@ FROM (
     SELECT
         key,
         value
-    FROM plato.Input
+    FROM
+        plato.Input
 )
-    TABLESAMPLE BERNOULLI (33)
+TABLESAMPLE BERNOULLI (33)
 ORDER BY
-    key;
+    key
+;

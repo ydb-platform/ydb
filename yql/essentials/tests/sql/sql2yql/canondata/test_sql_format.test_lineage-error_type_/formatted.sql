@@ -4,8 +4,11 @@ USE plato;
 INSERT INTO Output
 SELECT
     1 AS foo
-FROM Input
+FROM
+    Input
 UNION ALL
 SELECT
     'x' AS foo
-FROM Input;
+FROM
+    Input
+;

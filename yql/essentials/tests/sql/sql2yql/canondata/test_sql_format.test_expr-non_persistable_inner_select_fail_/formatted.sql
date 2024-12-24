@@ -1,5 +1,6 @@
 /* custom error:Persistable required*/
-PRAGMA Warning("error", '1104');
+PRAGMA Warning('error', '1104');
+
 USE plato;
 
 SELECT
@@ -7,5 +8,6 @@ SELECT
 FROM (
     SELECT
         YQL::NewMTRand(1) AS x
-    FROM Input
+    FROM
+        Input
 );

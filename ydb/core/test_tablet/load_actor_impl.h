@@ -8,7 +8,7 @@
 
 namespace NKikimr::NTestShard {
 
-    class TLoadActor : public TActorBootstrapped<TLoadActor> {
+    class TLoadActor : public TActor<TLoadActor> {
         const ui64 TabletId;
         const ui32 Generation;
         const TActorId Tablet;
@@ -58,14 +58,16 @@ namespace NKikimr::NTestShard {
         TLoadActor(ui64 tabletId, ui32 generation, const TActorId tablet,
             const NKikimrClient::TTestShardControlRequest::TCmdInitialize& settings);
         ~TLoadActor();
+        void Registered(TActorSystem *sys, const TActorId& owner) override;
         void ClearKeys();
-        void Bootstrap(const TActorId& parentId);
+        void Bootstrap();
         void PassAway() override;
         void HandleWakeup();
         void Action();
         void Handle(TEvStateServerStatus::TPtr ev);
 
         STRICT_STFUNC(StateFunc,
+            cFunc(TEvents::TSystem::Bootstrap, Bootstrap);
             hFunc(TEvKeyValue::TEvResponse, Handle);
             hFunc(NMon::TEvRemoteHttpInfo, Handle);
             hFunc(TEvStateServerStatus, Handle);

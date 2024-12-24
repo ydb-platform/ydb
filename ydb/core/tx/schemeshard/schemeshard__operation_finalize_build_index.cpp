@@ -19,7 +19,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TFinalizeBuildIndex TConfigureParts"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -69,7 +69,7 @@ public:
 
             NKikimrTxDataShard::TFlatSchemeTransaction tx;
             auto* op = tx.MutableFinalizeBuildIndex();
-            PathIdFromPathId(pathId, op->MutablePathId());
+            pathId.ToProto(op->MutablePathId());
 
             op->SetSnapshotTxId(ui64(snapshotTxId));
             op->SetSnapshotStep(ui64(snapshotStepId));
@@ -105,7 +105,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TFinalizeBuildIndex TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:

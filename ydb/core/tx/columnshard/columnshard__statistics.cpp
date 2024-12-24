@@ -133,6 +133,9 @@ public:
         const std::shared_ptr<TResultAccumulator> Result;
         std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
         const std::set<ui32> ColumnTagsRequested;
+        virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+            return Default<std::shared_ptr<const TAtomicCounter>>();
+        }
 
         virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result) override {
             THashMap<ui32, std::unique_ptr<TCountMinSketch>> sketchesByColumns;
@@ -140,7 +143,7 @@ public:
                 sketchesByColumns.emplace(id, TCountMinSketch::Create());
             }
 
-            for (const auto& portionInfo : result.GetPortions()) {
+            for (const auto& [id, portionInfo] : result.GetPortions()) {
                 std::shared_ptr<NOlap::ISnapshotSchema> portionSchema = portionInfo.GetPortionInfo().GetSchema(*VersionedIndex);
                 for (const ui32 columnId : ColumnTagsRequested) {
                     auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaCountMinSketch({ columnId });
@@ -179,7 +182,7 @@ public:
             return;
         }
         Result->AddWaitingTask();
-        std::shared_ptr<NOlap::TDataAccessorsRequest> request = std::make_shared<NOlap::TDataAccessorsRequest>();
+        std::shared_ptr<NOlap::TDataAccessorsRequest> request = std::make_shared<NOlap::TDataAccessorsRequest>("STATISTICS_FLUSH");
         for (auto&& i : Portions) {
             request->AddPortion(i);
         }
@@ -227,7 +230,7 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
         columnTagsRequested = std::set<ui32>(allColumnIds.begin(), allColumnIds.end());
     }
 
-    NOlap::TDataAccessorsRequest request;
+    NOlap::TDataAccessorsRequest request("STATISTICS");
     std::shared_ptr<TResultAccumulator> resultAccumulator =
         std::make_shared<TResultAccumulator>(columnTagsRequested, ev->Sender, ev->Cookie, std::move(response));
     auto versionedIndex = std::make_shared<NOlap::TVersionedIndex>(index.GetVersionedIndex());

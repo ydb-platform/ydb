@@ -2,18 +2,23 @@
 $in = (
     SELECT
         *
-    FROM plato.Input
-    WHERE key == "150"
+    FROM
+        plato.Input
+    WHERE
+        key == '150'
     UNION ALL
     SELECT
         *
-    FROM plato.Input
-    WHERE key == "075"
+    FROM
+        plato.Input
+    WHERE
+        key == '075'
 );
 
 SELECT
     *
-FROM $in
+FROM
+    $in
 ORDER BY
     key
 LIMIT 100 OFFSET 90;

@@ -35,11 +35,16 @@ std::shared_ptr<NDataLocks::TManager> EmptyDataLocksManager = std::make_shared<N
 
 class TTestDbWrapper: public IDbWrapper {
 private:
-    std::map<TPortionAddress, std::map<TChunkAddress, TColumnChunkLoadContextV1>> LoadContexts;
+    std::map<TPortionAddress, TColumnChunkLoadContextV2> LoadContexts;
 
 public:
-    virtual void WriteColumns(const NOlap::TPortionInfo& /*portion*/, const NKikimrTxColumnShard::TIndexPortionAccessor& /*proto*/) override {
-
+    virtual void WriteColumns(const NOlap::TPortionInfo& portion, const NKikimrTxColumnShard::TIndexPortionAccessor& proto) override {
+        auto it = LoadContexts.find(portion.GetAddress());
+        if (it == LoadContexts.end()) {
+            LoadContexts.emplace(portion.GetAddress(), TColumnChunkLoadContextV2(portion.GetPathId(), portion.GetPortionId(), proto));
+        } else {
+            it->second = TColumnChunkLoadContextV2(portion.GetPathId(), portion.GetPortionId(), proto);
+        }
     }
 
     virtual const IBlobGroupSelector* GetDsGroupSelector() const override {
@@ -124,11 +129,6 @@ public:
         }
 
         auto& data = Indices[0].Columns[portion.GetPathId()];
-        NOlap::TColumnChunkLoadContextV1 loadContext(portion.GetPathId(), portion.GetPortionId(), row.GetAddress(), row.BlobRange, rowProto);
-        auto itInsertInfo = LoadContexts[portion.GetAddress()].emplace(row.GetAddress(), loadContext);
-        if (!itInsertInfo.second) {
-            itInsertInfo.first->second = loadContext;
-        }
         auto it = data.find(portion.GetPortionId());
         if (it == data.end()) {
             it = data.emplace(portion.GetPortionId(), TPortionInfoConstructor(portion, true, true)).first;
@@ -173,7 +173,7 @@ public:
         portionLocal.TestMutableRecords().swap(filtered);
     }
 
-    bool LoadColumns(const std::optional<ui64> reqPathId, const std::function<void(TColumnChunkLoadContextV1&&)>& callback) override {
+    bool LoadColumns(const std::optional<ui64> reqPathId, const std::function<void(TColumnChunkLoadContextV2&&)>& callback) override {
         auto& columns = Indices[0].Columns;
         for (auto& [pathId, portions] : columns) {
             if (pathId && *reqPathId != pathId) {
@@ -182,14 +182,10 @@ public:
             for (auto& [portionId, portionLocal] : portions) {
                 auto copy = portionLocal.MakeCopy();
                 copy.TestMutableRecords().clear();
-                for (const auto& rec : portionLocal.GetRecords()) {
-                    auto address = copy.GetPortionConstructor().GetAddress();
-                    auto itContextLoader = LoadContexts[address].find(rec.GetAddress());
-                    Y_ABORT_UNLESS(itContextLoader != LoadContexts[address].end());
-                    auto copy = itContextLoader->second;
-                    callback(std::move(copy));
-                    LoadContexts[address].erase(itContextLoader);
-                }
+                auto it = LoadContexts.find(portionLocal.GetPortionConstructor().GetAddress());
+                AFL_VERIFY(it != LoadContexts.end());
+                callback(std::move(it->second));
+                LoadContexts.erase(it);
             }
         }
         return true;
@@ -333,14 +329,14 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, st
     NOlap::TConstructionContext context(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Indexation"), snap);
     Y_ABORT_UNLESS(changes->ConstructBlobs(context).Ok());
 
-    UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(changes->GetAppendedPortions().size(), 1);
     ui32 blobsCount = 0;
-    for (auto&& i : changes->AppendedPortions) {
+    for (auto&& i : changes->GetAppendedPortions()) {
         blobsCount += i.GetBlobs().size();
     }
     UNIT_ASSERT_VALUES_EQUAL(blobsCount, 1);   // add 2 columns: planStep, txId
 
-    AddIdsToBlobs(changes->AppendedPortions, blobs, step);
+    AddIdsToBlobs(changes->MutableAppendedPortions(), blobs, step);
 
     const bool result = engine.ApplyChangesOnTxCreate(changes, snap) && engine.ApplyChangesOnExecute(db, changes, snap);
 
@@ -362,6 +358,9 @@ class TTestCompactionAccessorsSubscriber: public NOlap::IDataAccessorRequestsSub
 private:
     std::shared_ptr<TColumnEngineChanges> Changes;
     const std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Default<std::shared_ptr<const TAtomicCounter>>();
+    }
 
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         const TDataAccessorsInitializationContext context(VersionedIndex);
@@ -394,7 +393,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
     Y_ABORT_UNLESS(changes->ConstructBlobs(context).Ok());
 
     //    UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), expected.NewPortions);
-    AddIdsToBlobs(changes->AppendedPortions, changes->Blobs, step);
+    AddIdsToBlobs(changes->MutableAppendedPortions(), changes->Blobs, step);
 
     //    UNIT_ASSERT_VALUES_EQUAL(changes->GetTmpGranuleIds().size(), expected.NewGranules);
 
@@ -404,7 +403,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
     NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine, snap);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     if (blobsPool) {
-        for (auto&& i : changes->AppendedPortions) {
+        for (auto&& i : changes->GetAppendedPortions()) {
             for (auto&& r : i.GetPortionResult().TestGetRecords()) {
                 Y_ABORT_UNLESS(blobsPool
                                    ->emplace(i.GetPortionResult().GetPortionInfo().RestoreBlobRange(r.BlobRange),
@@ -442,8 +441,12 @@ private:
     std::shared_ptr<IMetadataAccessorResultProcessor> Processor;
     TColumnEngineForLogs& Engine;
 
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Default<std::shared_ptr<const TAtomicCounter>>();
+    }
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
-        Processor->ApplyResult(std::move(result), Engine);
+        Processor->ApplyResult(
+            NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>::BuildForTest(std::move(result)), Engine);
     }
 
 public:
@@ -527,7 +530,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // load
         TSnapshot indexSnapshot(1, 1);
         TColumnEngineForLogs engine(
-            0, NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
+            0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo));
         for (auto&& i : paths) {
             engine.RegisterTable(i);
         }
@@ -565,28 +568,28 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             ui64 planStep = 1;
             ui64 txId = 0;
             auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
-            UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 0);
         }
 
         {   // select from snap between insert (greater txId)
             ui64 planStep = 1;
             ui64 txId = 2;
             auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
-            UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 0);
         }
 
         {   // select from snap after insert (greater planStep)
             ui64 planStep = 2;
             ui64 txId = 1;
             auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
-            UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 1);
         }
 
         {   // select another pathId
             ui64 planStep = 2;
             ui64 txId = 1;
             auto selectInfo = engine.Select(paths[1], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
-            UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 0);
         }
     }
 
@@ -612,7 +615,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         TSnapshot indexSnapshot(1, 1);
         TColumnEngineForLogs engine(
-            0, NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
+            0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo));
         engine.RegisterTable(pathId);
         engine.TestingLoad(db);
 
@@ -656,7 +659,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         {   // full scan
             ui64 txId = 1;
             auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
-            UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 20);
+            UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 20);
         }
 
         // predicates
@@ -670,7 +673,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             NOlap::TPKRangesFilter pkFilter(false);
             Y_ABORT_UNLESS(pkFilter.Add(gt10k, nullptr, indexInfo.GetReplaceKey()));
             auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), pkFilter, false);
-            UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 10);
         }
 
         {
@@ -682,7 +685,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             NOlap::TPKRangesFilter pkFilter(false);
             Y_ABORT_UNLESS(pkFilter.Add(nullptr, lt10k, indexInfo.GetReplaceKey()));
             auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), pkFilter, false);
-            UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 9);
+            UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 9);
         }
     }
 
@@ -713,7 +716,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         TSnapshot indexSnapshot(1, 1);
         TColumnEngineForLogs engine(
-            0, NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
+            0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo));
         engine.RegisterTable(pathId);
         engine.TestingLoad(db);
 
@@ -739,7 +742,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         {   // check it's overloaded after reload
             TColumnEngineForLogs tmpEngine(
-                0, NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo));
+                0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, TSnapshot::Zero(), 0, TIndexInfo(tableInfo));
             tmpEngine.RegisterTable(pathId);
             tmpEngine.TestingLoad(db);
         }
@@ -771,7 +774,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         {   // check it's not overloaded after reload
             TColumnEngineForLogs tmpEngine(
-                0, NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo));
+                0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, TSnapshot::Zero(), 0, TIndexInfo(tableInfo));
             tmpEngine.RegisterTable(pathId);
             tmpEngine.TestingLoad(db);
         }
@@ -792,7 +795,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TSnapshot indexSnapshot(1, 1);
         {
             TColumnEngineForLogs engine(
-                0, NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
+                0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo));
             engine.RegisterTable(pathId);
             engine.TestingLoad(db);
 
@@ -840,7 +843,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             {   // full scan
                 ui64 txId = 1;
                 auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
-                UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 20);
+                UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 20);
             }
 
             // Cleanup
@@ -849,7 +852,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             {   // full scan
                 ui64 txId = 1;
                 auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
-                UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 20);
+                UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 20);
             }
 
             // TTL
@@ -865,13 +868,13 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             {   // full scan
                 ui64 txId = 1;
                 auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
-                UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 10);
+                UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 10);
             }
         }
         {
             // load
             TColumnEngineForLogs engine(
-                0, NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
+                0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo));
             engine.RegisterTable(pathId);
             engine.TestingLoad(db);
 
@@ -881,7 +884,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             {   // full scan
                 ui64 txId = 1;
                 auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
-                UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 10);
+                UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 10);
             }
         }
     }

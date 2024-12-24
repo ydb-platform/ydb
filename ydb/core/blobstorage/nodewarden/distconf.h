@@ -339,7 +339,7 @@ namespace NKikimr::NStorage {
 
         struct TExConfigError : yexception {};
 
-        void GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID);
+        std::optional<TString> GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID);
 
         void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, ui32 groupId, ui32 groupGeneration,
             TBlobStorageGroupType gtype, const NKikimrBlobStorage::TGroupGeometry& geometry,
@@ -442,18 +442,13 @@ namespace NKikimr::NStorage {
         }
         const auto& bsConfig = config.GetBlobStorageConfig();
 
-        if (!bsConfig.HasAutoconfigSettings()) {
+        if (!bsConfig.HasDefineBox()) {
             return;
         }
-        const auto& autoconfigSettings = bsConfig.GetAutoconfigSettings();
-
-        if (!autoconfigSettings.HasDefineBox()) {
-            return;
-        }
-        const auto& defineBox = autoconfigSettings.GetDefineBox();
+        const auto& defineBox = bsConfig.GetDefineBox();
 
         THashMap<ui64, const NKikimrBlobStorage::TDefineHostConfig*> defineHostConfigMap;
-        for (const auto& defineHostConfig : autoconfigSettings.GetDefineHostConfig()) {
+        for (const auto& defineHostConfig : bsConfig.GetDefineHostConfig()) {
             defineHostConfigMap.emplace(defineHostConfig.GetHostConfigId(), &defineHostConfig);
         }
 

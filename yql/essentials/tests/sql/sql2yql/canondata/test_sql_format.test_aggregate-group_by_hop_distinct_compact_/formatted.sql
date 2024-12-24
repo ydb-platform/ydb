@@ -5,13 +5,15 @@
 /* yt can not */
 /* dq can not */
 /* dqfile can not */
-PRAGMA dq.AnalyticsHopping = "true";
+PRAGMA dq.AnalyticsHopping = 'true';
 
 SELECT
     user,
     HOP_START() AS ts,
     SUM(DISTINCT payload) AS payload
-FROM plato.Input
+FROM
+    plato.Input
 GROUP COMPACT BY
-    HOP (DateTime::FromSeconds(CAST(ts AS Uint32)), "PT10S", "PT10S", "PT10S"),
-    user;
+    HOP (DateTime::FromSeconds(CAST(ts AS Uint32)), 'PT10S', 'PT10S', 'PT10S'),
+    user
+;

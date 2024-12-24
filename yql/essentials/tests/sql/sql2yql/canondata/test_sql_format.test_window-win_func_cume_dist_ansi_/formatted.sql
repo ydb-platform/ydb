@@ -8,13 +8,13 @@ FROM (
         (5),
         (5),
         (6)
+) AS a (
+    x
 )
-    AS a (
-        x
-    )
 WINDOW
     w AS (
         ORDER BY
             x
         ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING
-    );
+    )
+;

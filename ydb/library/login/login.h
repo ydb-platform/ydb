@@ -7,6 +7,7 @@
 #include <deque>
 #include <util/generic/string.h>
 #include <ydb/library/login/protos/login.pb.h>
+#include <ydb/library/login/password_checker/password_checker.h>
 
 namespace NLogin {
 
@@ -47,8 +48,17 @@ public:
     };
 
     struct TLoginUserResponse : TBasicResponse {
+        enum class EStatus {
+            UNSPECIFIED,
+            SUCCESS,
+            INVALID_USER,
+            INVALID_PASSWORD,
+            UNAVAILABLE_KEY
+        };
+
         TString Token;
         TString SanitizedToken; // Token for audit logs
+        EStatus Status = EStatus::UNSPECIFIED;
     };
 
     struct TValidateTokenRequest : TBasicRequest {
@@ -72,11 +82,6 @@ public:
     struct TModifyUserRequest : TBasicRequest {
         TString User;
         TString Password;
-    };
-
-    struct TRemoveUserRequest : TBasicRequest {
-        TString User;
-        bool MissingOk;
     };
 
     struct TRemoveUserResponse : TBasicResponse {
@@ -164,8 +169,8 @@ public:
 
     TBasicResponse CreateUser(const TCreateUserRequest& request);
     TBasicResponse ModifyUser(const TModifyUserRequest& request);
-    TRemoveUserResponse RemoveUser(const TRemoveUserRequest& request);
-    bool CheckUserExists(const TString& name);
+    TRemoveUserResponse RemoveUser(const TString& user);
+    bool CheckUserExists(const TString& user);
 
     TBasicResponse CreateGroup(const TCreateGroupRequest& request);
     TBasicResponse AddGroupMembership(const TAddGroupMembershipRequest& request);
@@ -173,7 +178,10 @@ public:
     TRenameGroupResponse RenameGroup(const TRenameGroupRequest& request);
     TRemoveGroupResponse RemoveGroup(const TRemoveGroupRequest& request);
 
+    void UpdatePasswordCheckParameters(const TPasswordComplexity& passwordComplexity);
+
     TLoginProvider();
+    TLoginProvider(const TPasswordComplexity& passwordComplexity);
     ~TLoginProvider();
 
     std::vector<TString> GetGroupsMembership(const TString& member);
@@ -188,6 +196,8 @@ private:
 
     struct TImpl;
     THolder<TImpl> Impl;
+
+    TPasswordChecker PasswordChecker;
 };
 
 }

@@ -2,5 +2,6 @@ USE plato;
 
 SELECT
     a
-FROM Input
+FROM
+    Input
 LIMIT 3;

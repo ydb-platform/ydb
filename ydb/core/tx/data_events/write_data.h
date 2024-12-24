@@ -37,13 +37,13 @@ private:
     YDB_READONLY(ui64, TableId, 0);
     YDB_ACCESSOR_DEF(NActors::TActorId, Source);
     YDB_ACCESSOR_DEF(std::optional<ui32>, GranuleShardingVersion);
+    YDB_READONLY(TString, Id, TGUID::CreateTimebased().AsUuidString());
 
     // Long Tx logic
     YDB_OPT(NLongTxService::TLongTxId, LongTxId);
     YDB_ACCESSOR(ui64, WritePartId, 0);
     YDB_ACCESSOR_DEF(TString, DedupId);
 
-    YDB_READONLY(TString, Id, TGUID::CreateTimebased().AsUuidString());
     YDB_ACCESSOR(EModificationType, ModificationType, EModificationType::Replace);
     YDB_READONLY(TMonotonic, WriteStartInstant, TMonotonic::Now());
     YDB_ACCESSOR(TMonotonic, WriteMiddle1StartInstant, TMonotonic::Now());
@@ -80,11 +80,13 @@ public:
         }
     }
 
-    TWriteMeta(const ui64 writeId, const ui64 tableId, const NActors::TActorId& source, const std::optional<ui32> granuleShardingVersion)
+    TWriteMeta(const ui64 writeId, const ui64 tableId, const NActors::TActorId& source, const std::optional<ui32> granuleShardingVersion,
+        const TString& writingIdentifier)
         : WriteId(writeId)
         , TableId(tableId)
         , Source(source)
-        , GranuleShardingVersion(granuleShardingVersion) {
+        , GranuleShardingVersion(granuleShardingVersion)
+        , Id(writingIdentifier) {
     }
 };
 

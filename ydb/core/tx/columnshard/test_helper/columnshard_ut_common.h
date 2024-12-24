@@ -11,6 +11,7 @@
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
+#include <ydb/core/tx/tiering/manager.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 #include <ydb/services/metadata/abstract/fetcher.h>
@@ -107,7 +108,7 @@ struct TTestSchema {
             s3Config.SetProxyPort(8080);
             s3Config.SetProxyScheme(NKikimrSchemeOp::TS3Settings::HTTP);
 #else
-            s3Config.SetEndpoint("fake");
+            s3Config.SetEndpoint("fake.fake");
             s3Config.SetSecretKey("fakeSecret");
 #endif
             s3Config.SetRequestTimeoutMs(10000);
@@ -118,20 +119,14 @@ struct TTestSchema {
     };
 
     struct TTableSpecials : public TStorageTier {
-    private:
-        bool NeedTestStatisticsFlag = true;
     public:
         std::vector<TStorageTier> Tiers;
         bool WaitEmptyAfter = false;
 
         TTableSpecials() noexcept = default;
 
-        bool NeedTestStatistics() const {
-            return NeedTestStatisticsFlag;
-        }
-
-        void SetNeedTestStatistics(const bool value) {
-            NeedTestStatisticsFlag = value;
+        bool NeedTestStatistics(const std::vector<NArrow::NTest::TTestColumn>& pk) const {
+            return GetTtlColumn() != pk.front().GetName();
         }
 
         bool HasTiers() const {
@@ -160,6 +155,13 @@ struct TTestSchema {
             }
             result << ";TTL=" << TStorageTier::DebugString();
             return result;
+        }
+
+        TString GetTtlColumn() const {
+            for (const auto& tier : Tiers) {
+                UNIT_ASSERT_VALUES_EQUAL(tier.TtlColumn, TtlColumn);
+            }
+            return TtlColumn;
         }
     };
     using TTestColumn = NArrow::NTest::TTestColumn;
@@ -256,7 +258,7 @@ struct TTestSchema {
             UNIT_ASSERT(tier.EvictAfter);
             UNIT_ASSERT_EQUAL(specials.TtlColumn, tier.TtlColumn);
             auto* tierSettings = ttlSettings->MutableEnabled()->AddTiers();
-            tierSettings->MutableEvictToExternalStorage()->SetStorageName(tier.Name);
+            tierSettings->MutableEvictToExternalStorage()->SetStorage(tier.Name);
             tierSettings->SetApplyAfterSeconds(tier.EvictAfter->Seconds());
         }
         if (specials.HasTtl()) {
@@ -358,7 +360,7 @@ struct TTestSchema {
         return out;
     }
 
-    static NMetadata::NFetcher::ISnapshot::TPtr BuildSnapshot(const TTableSpecials& specials);
+    static THashMap<TString, NColumnShard::NTiers::TTierConfig> BuildSnapshot(const TTableSpecials& specials);
 
     static TString CommitTxBody(ui64, const std::vector<ui64>& writeIds) {
         NKikimrTxColumnShard::TCommitTxBody proto;
@@ -403,8 +405,9 @@ struct TTestSchema {
     }
 };
 
+void RefreshTiering(TTestBasicRuntime& runtime, const TActorId& sender);
+
 bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, NOlap::TSnapshot snap);
-void ProvideTieringSnapshot(TTestBasicRuntime& runtime, const TActorId& sender, NMetadata::NFetcher::ISnapshot::TPtr snapshot);
 void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap);
 
 void PlanWriteTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap, bool waitResult = true);

@@ -1,9 +1,11 @@
 USE plato;
 
-$t =
+$t = (
     SELECT DISTINCT
         key
-    FROM Input;
+    FROM
+        Input
+);
 
 SELECT
     key,
@@ -13,10 +15,12 @@ SELECT
     grouping(a.subkey, a.key) AS g_sk,
     grouping(a.key) AS g_k,
     grouping(a.subkey) AS g_s,
-FROM Input
-    AS a
-JOIN $t
-    AS b
-ON a.key == b.key
+FROM
+    Input AS a
+JOIN
+    $t AS b
+ON
+    a.key == b.key
 GROUP BY
-    ROLLUP (a.key, a.subkey);
+    ROLLUP (a.key, a.subkey)
+;

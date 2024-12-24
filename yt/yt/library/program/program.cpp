@@ -18,11 +18,11 @@
 
 #include <yt/yt/library/profiling/tcmalloc/profiler.h>
 
-#include <library/cpp/yt/mlock/mlock.h>
-
 #include <library/cpp/yt/stockpile/stockpile.h>
 
 #include <library/cpp/yt/system/exit.h>
+
+#include <library/cpp/yt/backtrace/absl_unwinder/absl_unwinder.h>
 
 #include <tcmalloc/malloc_extension.h>
 
@@ -80,6 +80,8 @@ private:
     TProgram* const Owner_;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
 TProgram::TProgram()
 {
     Opts_.AddHelpOption();
@@ -100,12 +102,12 @@ TProgram::TProgram()
     ConfigureCoverageOutput();
 }
 
+TProgram::~TProgram() = default;
+
 void TProgram::SetCrashOnError()
 {
     CrashOnError_ = true;
 }
-
-TProgram::~TProgram() = default;
 
 void TProgram::HandleVersionAndBuild()
 {
@@ -124,13 +126,12 @@ int TProgram::Run(int argc, const char** argv)
 {
     ::srand(time(nullptr));
 
+    Argv0_ = TString(argv[0]);
+    OptsParseResult_ = std::make_unique<TOptsParseResult>(this, argc, argv);
+
     auto run = [&] {
-        Argv0_ = TString(argv[0]);
-        TOptsParseResult result(this, argc, argv);
-
         HandleVersionAndBuild();
-
-        DoRun(result);
+        DoRun();
     };
 
     if (!CrashOnError_) {
@@ -212,6 +213,11 @@ void TProgram::PrintBuildAndExit()
 void TProgram::PrintVersionAndExit()
 {
     PrintYTVersionAndExit();
+}
+
+const NLastGetopt::TOptsParseResult& TProgram::GetOptsParseResult() const
+{
+    return *OptsParseResult_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -331,33 +337,12 @@ void ConfigureExitZeroOnSigterm()
 
 void ConfigureAllocator(const TAllocatorOptions& options)
 {
-    NYT::MlockFileMappings();
-
 #ifdef _linux_
-    if (tcmalloc::MallocExtension::NeedsProcessBackgroundActions()) {
-        std::thread backgroundThread([] {
-            TThread::SetCurrentThreadName("TCAllocBack");
-            tcmalloc::MallocExtension::ProcessBackgroundActions();
-            YT_ABORT();
-        });
-        backgroundThread.detach();
-    }
-
     NProfiling::EnableTCMallocProfiler();
 
     NYTProf::EnableMemoryProfilingTags(options.SnapshotUpdatePeriod);
 
-    absl::SetStackUnwinder(NYTProf::AbslStackUnwinder);
-    // TODO(prime@): tune parameters.
-    tcmalloc::MallocExtension::SetProfileSamplingRate(2_MB);
-    if (options.TCMallocGuardedSamplingRate) {
-        tcmalloc::MallocExtension::SetGuardedSamplingRate(*options.TCMallocGuardedSamplingRate);
-        tcmalloc::MallocExtension::ActivateGuardedSampling();
-    }
-    tcmalloc::MallocExtension::SetMaxPerCpuCacheSize(3_MB);
-    tcmalloc::MallocExtension::SetMaxTotalThreadCacheBytes(24_MB);
-    tcmalloc::MallocExtension::SetBackgroundReleaseRate(tcmalloc::MallocExtension::BytesPerSecond{32_MB});
-    tcmalloc::MallocExtension::EnableForkSupport();
+    NBacktrace::SetAbslStackUnwinder();
 #else
     Y_UNUSED(options);
 #endif

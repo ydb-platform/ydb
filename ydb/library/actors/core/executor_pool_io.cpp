@@ -34,8 +34,8 @@ namespace NActors {
         i16 workerId = wctx.WorkerId;
         Y_DEBUG_ABORT_UNLESS(workerId < PoolThreads);
 
-        const TAtomic x = AtomicDecrement(Semaphore);
-        if (x < 0) {
+        const TAtomic semaphoreRaw = AtomicDecrement(Semaphore);
+        if (semaphoreRaw < 0) {
             TExecutorThreadCtx& threadCtx = Threads[workerId];
             ThreadQueue.Push(workerId + 1, revolvingCounter);
 
@@ -54,7 +54,7 @@ namespace NActors {
         }
 
         while (!StopFlag.load(std::memory_order_acquire)) {
-            if (const ui32 activation = std::visit([&revolvingCounter](auto &x){return x.Pop(++revolvingCounter);}, Activations)) {
+            if (const ui32 activation = std::visit([&revolvingCounter](auto &queue){return queue.Pop(++revolvingCounter);}, Activations)) {
                 return MailboxTable->Get(activation);
             }
             SpinLockPause();
@@ -87,14 +87,14 @@ namespace NActors {
     }
 
     void TIOExecutorPool::ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingWriteCounter) {
-        std::visit([mailbox, revolvingWriteCounter](auto &x) {
-            x.Push(mailbox->Hint, revolvingWriteCounter);
+        std::visit([mailbox, revolvingWriteCounter](auto &queue) {
+            queue.Push(mailbox->Hint, revolvingWriteCounter);
         }, Activations);
-        const TAtomic x = AtomicIncrement(Semaphore);
-        if (x <= 0) {
+        const TAtomic semaphoreRaw = AtomicIncrement(Semaphore);
+        if (semaphoreRaw <= 0) {
             for (;; ++revolvingWriteCounter) {
-                if (const ui32 x = ThreadQueue.Pop(revolvingWriteCounter)) {
-                    const ui32 threadIdx = x - 1;
+                if (const ui32 threadId = ThreadQueue.Pop(revolvingWriteCounter)) {
+                    const ui32 threadIdx = threadId - 1;
                     Threads[threadIdx].WaitingPad.Unpark();
                     return;
                 }
@@ -156,7 +156,7 @@ namespace NActors {
     void TIOExecutorPool::GetExecutorPoolState(TExecutorPoolState &poolState) const {
         if (Harmonizer) {
             TPoolHarmonizerStats stats = Harmonizer->GetPoolStats(PoolId);
-            poolState.UsedCpu = stats.AvgConsumedCpu;
+            poolState.ElapsedCpu = stats.AvgElapsedCpu;
         }
         poolState.CurrentLimit = PoolThreads;
         poolState.MaxLimit = PoolThreads;

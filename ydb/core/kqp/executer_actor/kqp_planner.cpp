@@ -110,6 +110,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , ResourceManager_(args.ResourceManager_)
     , CaFactory_(args.CaFactory_)
     , BlockTrackingMode(args.BlockTrackingMode)
+    , ArrayBufferMinFillPercentage(args.ArrayBufferMinFillPercentage)
 {
     if (GUCSettings) {
         SerializedGUCSettings = GUCSettings->SerializeToString();
@@ -216,6 +217,9 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     for (ui64 taskId : requestData.TaskIds) {
         const auto& task = TasksGraph.GetTask(taskId);
         NYql::NDqProto::TDqTask* serializedTask = ArenaSerializeTaskToProto(TasksGraph, task, /* serializeAsyncIoSettings = */ true);
+        if (ArrayBufferMinFillPercentage) {
+            serializedTask->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
+        }
         request.AddTasks()->Swap(serializedTask);
     }
 
@@ -472,6 +476,10 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         TxInfo = MakeIntrusive<NRm::TTxState>(
             TxId, TInstant::Now(), ResourceManager_->GetCounters(),
             UserRequestContext->PoolId, memoryPoolPercent, Database);
+    }
+
+    if (ArrayBufferMinFillPercentage) {
+        taskDesc->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
     }
 
     auto startResult = CaFactory_->CreateKqpComputeActor({

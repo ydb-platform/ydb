@@ -1,12 +1,13 @@
-from moto.core import get_account_id, BaseBackend, BaseModel
+from moto.core import BaseBackend, BaseModel
 from moto.core.utils import BackendDict
-import random
+from moto.moto_api._internal import mock_random as random
 import string
 
 
 class Pipeline(BaseModel):
     def __init__(
         self,
+        account_id,
         region,
         name,
         input_bucket,
@@ -19,9 +20,7 @@ class Pipeline(BaseModel):
         b = "".join(random.choice(string.ascii_lowercase) for _ in range(6))
         self.id = "{}-{}".format(a, b)
         self.name = name
-        self.arn = "arn:aws:elastictranscoder:{}:{}:pipeline/{}".format(
-            region, get_account_id(), self.id
-        )
+        self.arn = f"arn:aws:elastictranscoder:{region}:{account_id}:pipeline/{self.id}"
         self.status = "Active"
         self.input_bucket = input_bucket
         self.output_bucket = output_bucket or content_config["Bucket"]
@@ -80,6 +79,7 @@ class ElasticTranscoderBackend(BaseBackend):
         AWSKMSKeyArn, Notifications
         """
         pipeline = Pipeline(
+            self.account_id,
             self.region_name,
             name,
             input_bucket,

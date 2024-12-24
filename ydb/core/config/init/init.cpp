@@ -588,6 +588,12 @@ void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConf
     IProtoConfigFileProvider& protoConfigFileProvider = refs.ProtoConfigFileProvider;
 
     const TString yamlConfigString = protoConfigFileProvider.GetProtoFromFile(yamlConfigFile, errorCollector);
+
+    if (appConfig.HasSelfManagementConfig() && appConfig.GetSelfManagementConfig().GetEnabled()) {
+        // fill in InitialConfigYaml only when self-management through distconf is enabled
+        appConfig.MutableSelfManagementConfig()->SetInitialConfigYaml(yamlConfigString);
+    }
+
     /*
      * FIXME: if (ErrorCollector.HasFatal()) { return; }
      */

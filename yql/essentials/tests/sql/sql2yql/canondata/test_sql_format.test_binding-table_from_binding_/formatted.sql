@@ -1,8 +1,11 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
-$x = "Input";
+
+$x = 'Input';
 
 SELECT
     count(*)
-FROM $x;
+FROM
+    $x
+;

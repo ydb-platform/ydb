@@ -26,7 +26,7 @@ public:
     {
         YT_ASSERT(callback);
 
-        auto guard = NDetail::MakeCancelableContextCurrentTokenGuard(Context_);
+        auto currentTokenGuard = NDetail::MakeCancelableContextCurrentTokenGuard(Context_);
 
         if (Context_->Canceled_) {
             callback.Reset();
@@ -53,7 +53,7 @@ public:
 
     void Invoke(TMutableRange<TClosure> callbacks) override
     {
-        auto guard = NDetail::MakeCancelableContextCurrentTokenGuard(Context_);
+        auto currentTokenGuard = NDetail::MakeCancelableContextCurrentTokenGuard(Context_);
 
         std::vector<TClosure> capturedCallbacks;
         capturedCallbacks.reserve(callbacks.size());

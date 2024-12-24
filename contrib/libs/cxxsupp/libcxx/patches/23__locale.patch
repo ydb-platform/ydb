@@ -1,5 +1,5 @@
 diff --git a/include/__locale b/include/__locale
-index 6eb8922..9b59156 100644
+index 3ba7ac1..47ae41b 100644
 --- a/include/__locale
 +++ b/include/__locale
 @@ -16,6 +16,7 @@
@@ -10,13 +10,13 @@ index 6eb8922..9b59156 100644
  #include <cctype>
  #include <clocale>
  #include <cstdint>
-@@ -159,8 +160,7 @@ private:
+@@ -146,8 +147,7 @@ private:
+ };
  
- class _LIBCPP_EXPORTED_FROM_ABI locale::id
- {
--    once_flag      __flag_;
--    int32_t        __id_;
-+    std::atomic<int32_t>        __id_;
+ class _LIBCPP_EXPORTED_FROM_ABI locale::id {
+-  once_flag __flag_;
+-  int32_t __id_;
++  std::atomic<int32_t> __id_;
  
-     static int32_t __next_id;
- public:
+   static int32_t __next_id;
+ 

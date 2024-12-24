@@ -2,15 +2,19 @@
 
 namespace NKikimr::NOlap::NDataAccessorControl::NInMem {
 
-THashMap<ui64, TPortionDataAccessor> TCollector::DoAskData(
-    const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& /*callback*/) {
-    THashMap<ui64, TPortionDataAccessor> accessors;
+void TCollector::DoAskData(
+    const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& /*callback*/, const TString& /*consumer*/) {
+    AFL_VERIFY(portions.empty());
+}
+
+TDataCategorized TCollector::DoAnalyzeData(const std::vector<TPortionInfo::TConstPtr>& portions, const TString& /*consumer*/) {
+    TDataCategorized result;
     for (auto&& i : portions) {
         auto it = Accessors.find(i->GetPortionId());
         AFL_VERIFY(it != Accessors.end());
-        accessors.emplace(i->GetPortionId(), it->second);
+        result.AddFromCache(it->second);
     }
-    return accessors;
+    return result;
 }
 
 void TCollector::DoModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) {
@@ -22,4 +26,4 @@ void TCollector::DoModifyPortions(const std::vector<TPortionDataAccessor>& add, 
     }
 }
 
-}
+}   // namespace NKikimr::NOlap::NDataAccessorControl::NInMem

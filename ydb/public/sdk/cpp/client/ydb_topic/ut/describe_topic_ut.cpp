@@ -366,6 +366,8 @@ namespace NYdb::NTopic::NTests {
             Cerr << std::format("=== existingTopic={} allowUpdateRow={} allowDescribeSchema={} authToken={}\n",
                                 existingTopic, allowUpdateRow, allowDescribeSchema, std::string(authToken));
 
+            setup.GetServer().AnnoyingClient->GrantConnect(authToken);
+
             auto driverConfig = setup.MakeDriverConfig().SetAuthToken(authToken);
             auto client = TTopicClient(TDriver(driverConfig));
             auto settings = TDescribePartitionSettings().IncludeLocation(true);
@@ -380,7 +382,14 @@ namespace NYdb::NTopic::NTests {
             }
             setup.GetServer().AnnoyingClient->ModifyACL("/Root", TEST_TOPIC, acl.SerializeAsString());
 
-            return client.DescribePartition(existingTopic ? TEST_TOPIC : "bad-topic", testPartitionId, settings).GetValueSync();
+            while (true) { 
+                TDescribePartitionResult result = client.DescribePartition(existingTopic ? TEST_TOPIC : "bad-topic", testPartitionId, settings).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS || result.GetStatus() == EStatus::SCHEME_ERROR || result.GetStatus() == EStatus::UNAUTHORIZED, result.GetIssues());
+                // Connect access may appear later
+                if (result.GetStatus() != EStatus::UNAUTHORIZED)
+                    return result;
+                Sleep(TDuration::Seconds(1));
+            }
         }
 
         Y_UNIT_TEST(DescribePartitionPermissions) {

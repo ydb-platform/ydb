@@ -4,8 +4,10 @@
 SELECT
     count(1),
     z
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     key AS z
 ORDER BY
-    z;
+    z
+;

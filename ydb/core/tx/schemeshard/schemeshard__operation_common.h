@@ -116,6 +116,8 @@ protected:
             << " opId# " << OperationId;
     }
 
+    bool Process(TOperationContext& context);
+
 public:
     explicit TDone(const TOperationId& id);
 
@@ -133,7 +135,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "NPQState::TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -151,7 +153,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "NPQState::TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -205,7 +207,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "NBSVState::TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

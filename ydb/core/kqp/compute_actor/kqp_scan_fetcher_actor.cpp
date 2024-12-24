@@ -193,6 +193,13 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) 
         return PassAway();
     }
 
+    if (auto scanner = InFlightShards.GetShardScanner(state->TabletId)) {
+        if (!scanner || scanner->Stopped()) {
+            // Drop errors from stopped fetchers
+            return;
+        }
+    }
+
     if (state->State == EShardState::PostRunning || state->State == EShardState::Running) {
         CA_LOG_E("TKqpScanFetcherActor: broken tablet for this request " << state->TabletId
             << ", retries limit exceeded (" << state->TotalRetries << "/" << TotalRetries << ")");

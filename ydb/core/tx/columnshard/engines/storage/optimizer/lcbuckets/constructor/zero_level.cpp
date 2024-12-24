@@ -5,6 +5,9 @@
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 TConclusionStatus TZeroLevelConstructor::DoDeserializeFromJson(const NJson::TJsonValue& json) {
+    if (!json.IsMap()) {
+        return TConclusionStatus::Fail("incorrect level description");
+    }
     if (json.Has("portions_live_duration")) {
         const auto& jsonValue = json["portions_live_duration"];
         if (!jsonValue.IsString()) {

@@ -2,6 +2,20 @@ RECURSE_FOR_TESTS(
     ut
 )
 
+RECURSE(
+    accessor
+    common
+    switch
+    csv
+    validation
+    hash    
+    modifier
+    scalar
+    simple_builder
+    splitter
+    transformer
+)
+
 LIBRARY()
 
 PEERDIR(

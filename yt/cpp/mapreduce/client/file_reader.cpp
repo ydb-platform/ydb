@@ -19,6 +19,7 @@
 #include <yt/cpp/mapreduce/http/http_client.h>
 #include <yt/cpp/mapreduce/http/retry_request.h>
 
+#include <yt/cpp/mapreduce/raw_client/raw_client.h>
 #include <yt/cpp/mapreduce/raw_client/raw_requests.h>
 
 namespace NYT {
@@ -39,13 +40,16 @@ static TMaybe<ui64> GetEndOffset(const TFileReaderOptions& options) {
 ////////////////////////////////////////////////////////////////////////////////
 
 TStreamReaderBase::TStreamReaderBase(
+    const IRawClientPtr& rawClient,
     IClientRetryPolicyPtr clientRetryPolicy,
     ITransactionPingerPtr transactionPinger,
     const TClientContext& context,
     const TTransactionId& transactionId)
-    : Context_(context)
+    : RawClient_(rawClient)
+    , Context_(context)
     , ClientRetryPolicy_(std::move(clientRetryPolicy))
     , ReadTransaction_(MakeHolder<TPingableTransaction>(
+        RawClient_,
         ClientRetryPolicy_,
         context,
         transactionId,
@@ -57,7 +61,7 @@ TStreamReaderBase::~TStreamReaderBase() = default;
 
 TYPath TStreamReaderBase::Snapshot(const TYPath& path)
 {
-    return NYT::Snapshot(ClientRetryPolicy_, Context_, ReadTransaction_->GetId(), path);
+    return NYT::Snapshot(RawClient_, ClientRetryPolicy_, ReadTransaction_->GetId(), path);
 }
 
 TString TStreamReaderBase::GetActiveRequestId() const
@@ -94,7 +98,7 @@ size_t TStreamReaderBase::DoRead(void* buf, size_t len)
             if (!IsRetriable(e) || attempt == retryCount) {
                 throw;
             }
-            NDetail::TWaitProxy::Get()->Sleep(GetBackoffDuration(e, Context_.Config));
+            TWaitProxy::Get()->Sleep(GetBackoffDuration(e, Context_.Config));
         } catch (std::exception& e) {
             YT_LOG_ERROR("RSP %v - failed: %v (attempt %v of %v)",
                 GetActiveRequestId(),
@@ -108,7 +112,7 @@ size_t TStreamReaderBase::DoRead(void* buf, size_t len)
             if (attempt == retryCount) {
                 throw;
             }
-            NDetail::TWaitProxy::Get()->Sleep(GetBackoffDuration(e, Context_.Config));
+            TWaitProxy::Get()->Sleep(GetBackoffDuration(e, Context_.Config));
         }
         Input_ = nullptr;
     }
@@ -119,12 +123,13 @@ size_t TStreamReaderBase::DoRead(void* buf, size_t len)
 
 TFileReader::TFileReader(
     const TRichYPath& path,
+    const IRawClientPtr& rawClient,
     IClientRetryPolicyPtr clientRetryPolicy,
     ITransactionPingerPtr transactionPinger,
     const TClientContext& context,
     const TTransactionId& transactionId,
     const TFileReaderOptions& options)
-    : TStreamReaderBase(std::move(clientRetryPolicy), std::move(transactionPinger), context, transactionId)
+    : TStreamReaderBase(rawClient, std::move(clientRetryPolicy), std::move(transactionPinger), context, transactionId)
     , FileReaderOptions_(options)
     , Path_(path)
     , StartOffset_(FileReaderOptions_.Offset_.GetOrElse(0))
@@ -183,12 +188,13 @@ NHttpClient::IHttpResponsePtr TFileReader::Request(const TClientContext& context
 TBlobTableReader::TBlobTableReader(
     const TYPath& path,
     const TKey& key,
+    const IRawClientPtr& rawClient,
     IClientRetryPolicyPtr retryPolicy,
     ITransactionPingerPtr transactionPinger,
     const TClientContext& context,
     const TTransactionId& transactionId,
     const TBlobTableReaderOptions& options)
-    : TStreamReaderBase(std::move(retryPolicy), std::move(transactionPinger), context, transactionId)
+    : TStreamReaderBase(rawClient, std::move(retryPolicy), std::move(transactionPinger), context, transactionId)
     , Key_(key)
     , Options_(options)
 {

@@ -1,18 +1,22 @@
 /* postgres can not */
 $first = ($x) -> {
-    RETURN $x.0
+    RETURN $x.0;
 };
+
 $second = ($x) -> {
-    RETURN $x.1
+    RETURN $x.1;
 };
-$i = AsDict(AsTuple(1, "A"), AsTuple(2, "B"));
-$j = AsDict(AsTuple(1, "A"), AsTuple(2, "C"));
-$k = AsDict(AsTuple(1, "A"), AsTuple(2, "D"));
+
+$i = AsDict(AsTuple(1, 'A'), AsTuple(2, 'B'));
+$j = AsDict(AsTuple(1, 'A'), AsTuple(2, 'C'));
+$k = AsDict(AsTuple(1, 'A'), AsTuple(2, 'D'));
+
 $l = AsList(
-    AsTuple($i, "foo"),
-    AsTuple($i, "bar"),
-    AsTuple($j, "baz")
+    AsTuple($i, 'foo'),
+    AsTuple($i, 'bar'),
+    AsTuple($j, 'baz')
 );
+
 $d = ToDict($l);
 
 SELECT
@@ -22,9 +26,9 @@ SELECT
                 DictItems($d), ($x) -> {
                     RETURN ListMap(
                         DictItems($x.0), ($y) -> {
-                            RETURN ($y, $x.1)
+                            RETURN ($y, $x.1);
                         }
-                    )
+                    );
                 }
             )
         )
@@ -33,20 +37,24 @@ SELECT
         ListFlatten(
             ListMap(
                 DictKeys($d), ($x) -> {
-                    RETURN DictItems($x)
+                    RETURN DictItems($x);
                 }
             )
         )
     ),
-    ListSort(DictPayloads($d));
+    ListSort(DictPayloads($d))
+;
 
 SELECT
     DictLookup($d, $i),
-    DictLookup($d, $k);
+    DictLookup($d, $k)
+;
 
 SELECT
     DictContains($d, $i),
-    DictContains($d, $k);
+    DictContains($d, $k)
+;
+
 $d = ToMultiDict($l);
 
 SELECT
@@ -56,9 +64,9 @@ SELECT
                 DictItems($d), ($x) -> {
                     RETURN ListMap(
                         DictItems($x.0), ($y) -> {
-                            RETURN ($y, $x.1)
+                            RETURN ($y, $x.1);
                         }
-                    )
+                    );
                 }
             )
         )
@@ -67,21 +75,25 @@ SELECT
         ListFlatten(
             ListMap(
                 DictKeys($d), ($x) -> {
-                    RETURN DictItems($x)
+                    RETURN DictItems($x);
                 }
             )
         )
     ),
-    ListSort(DictPayloads($d));
+    ListSort(DictPayloads($d))
+;
 
 SELECT
     DictLookup($d, $i),
-    DictLookup($d, $k);
+    DictLookup($d, $k)
+;
 
 SELECT
     DictContains($d, $i),
-    DictContains($d, $k);
-$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom("Compact"), AsAtom("Hashed"), AsAtom("One")));
+    DictContains($d, $k)
+;
+
+$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom('Compact'), AsAtom('Hashed'), AsAtom('One')));
 
 SELECT
     ListSort(
@@ -90,9 +102,9 @@ SELECT
                 DictItems($d), ($x) -> {
                     RETURN ListMap(
                         DictItems($x.0), ($y) -> {
-                            RETURN ($y, $x.1)
+                            RETURN ($y, $x.1);
                         }
-                    )
+                    );
                 }
             )
         )
@@ -101,21 +113,25 @@ SELECT
         ListFlatten(
             ListMap(
                 DictKeys($d), ($x) -> {
-                    RETURN DictItems($x)
+                    RETURN DictItems($x);
                 }
             )
         )
     ),
-    ListSort(DictPayloads($d));
+    ListSort(DictPayloads($d))
+;
 
 SELECT
     DictLookup($d, $i),
-    DictLookup($d, $k);
+    DictLookup($d, $k)
+;
 
 SELECT
     DictContains($d, $i),
-    DictContains($d, $k);
-$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom("Compact"), AsAtom("Hashed"), AsAtom("Many")));
+    DictContains($d, $k)
+;
+
+$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom('Compact'), AsAtom('Hashed'), AsAtom('Many')));
 
 SELECT
     ListSort(
@@ -124,9 +140,9 @@ SELECT
                 DictItems($d), ($x) -> {
                     RETURN ListMap(
                         DictItems($x.0), ($y) -> {
-                            RETURN ($y, $x.1)
+                            RETURN ($y, $x.1);
                         }
-                    )
+                    );
                 }
             )
         )
@@ -135,13 +151,15 @@ SELECT
         ListFlatten(
             ListMap(
                 DictKeys($d), ($x) -> {
-                    RETURN DictItems($x)
+                    RETURN DictItems($x);
                 }
             )
         )
     ),
-    ListSort(DictPayloads($d));
+    ListSort(DictPayloads($d))
+;
 
 SELECT
     DictLookup($d, $i),
-    DictLookup($d, $k);
+    DictLookup($d, $k)
+;

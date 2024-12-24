@@ -33,35 +33,38 @@ $a = [
     ),
 ];
 
-$a =
+$a = (
     SELECT
         x AS bar,
         y AS foo
-    FROM AS_TABLE($a);
+    FROM
+        AS_TABLE($a)
+);
 
-$b =
+$b = (
     SELECT
         a.bar AS bar,
         count(*) AS cnt
-    FROM $a
-        AS a
+    FROM
+        $a AS a
     INNER JOIN (
         SELECT
             bar,
             min(foo) AS foo
-        FROM $a
+        FROM
+            $a
         GROUP BY
             bar
-    )
-        AS b
+    ) AS b
     USING (foo, bar)
     GROUP BY
-        a.bar;
+        a.bar
+);
 
 SELECT
     *
-FROM $a
-    AS a
-LEFT JOIN $b
-    AS b
+FROM
+    $a AS a
+LEFT JOIN
+    $b AS b
 USING (bar);

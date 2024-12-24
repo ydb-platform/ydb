@@ -2,5 +2,8 @@ SELECT
     key,
     subkey,
     value
-FROM plato.Input
-WHERE key != "fake";
+FROM
+    plato.Input
+WHERE
+    key != 'fake'
+;

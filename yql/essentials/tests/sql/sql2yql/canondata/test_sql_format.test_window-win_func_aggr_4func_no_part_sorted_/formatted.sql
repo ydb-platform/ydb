@@ -4,11 +4,13 @@ SELECT
     count(key) OVER w1 AS c,
     min(key) OVER w1 AS mink,
     max(key) OVER w1 AS maxk
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w1 AS (
         ORDER BY
             key
     )
 ORDER BY
-    c;
+    c
+;

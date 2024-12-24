@@ -4,14 +4,18 @@ PRAGMA DisableSimpleColumns;
 $in = (
     SELECT
         *
-    FROM plato.Input
-    WHERE key > "100"
+    FROM
+        plato.Input
+    WHERE
+        key > '100'
 );
 
 SELECT
     *
-FROM $in
-    AS a
-INNER JOIN $in
-    AS b
-ON a.key == b.key;
+FROM
+    $in AS a
+INNER JOIN
+    $in AS b
+ON
+    a.key == b.key
+;

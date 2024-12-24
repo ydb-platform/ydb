@@ -4,7 +4,7 @@ import pathlib
 
 import yatest.common
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind, EGenericProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 from ydb.library.yql.providers.generic.connector.tests.utils.docker_compose import DockerComposeHelper
 
@@ -100,7 +100,9 @@ class Settings:
     ydb: Ydb
 
     @classmethod
-    def from_env(cls, docker_compose_dir: pathlib.Path, data_source_kinds: Sequence[EDataSourceKind]) -> 'Settings':
+    def from_env(
+        cls, docker_compose_dir: pathlib.Path, data_source_kinds: Sequence[EGenericDataSourceKind]
+    ) -> 'Settings':
         docker_compose_file_relative_path = str(docker_compose_dir / 'docker-compose.yml')
         docker_compose_file_abs_path = yatest.common.source_path(docker_compose_file_relative_path)
         endpoint_determiner = DockerComposeHelper(docker_compose_file_abs_path)
@@ -109,7 +111,7 @@ class Settings:
 
         for data_source_kind in data_source_kinds:
             match data_source_kind:
-                case EDataSourceKind.CLICKHOUSE:
+                case EGenericDataSourceKind.CLICKHOUSE:
                     data_sources[data_source_kind] = cls.ClickHouse(
                         cluster_name='clickhouse_integration_test',
                         host_external='0.0.0.0',
@@ -125,7 +127,7 @@ class Settings:
                         password='password',
                         protocol='native',
                     )
-                case EDataSourceKind.MS_SQL_SERVER:
+                case EGenericDataSourceKind.MS_SQL_SERVER:
                     data_sources[data_source_kind] = cls.MsSQLServer(
                         cluster_name='ms_sql_server_integration_test',
                         host_external='0.0.0.0',
@@ -139,7 +141,7 @@ class Settings:
                         username='sa',
                         password='Qwerty12345!',
                     )
-                case EDataSourceKind.MYSQL:
+                case EGenericDataSourceKind.MYSQL:
                     data_sources[data_source_kind] = cls.MySQL(
                         cluster_name='mysql_integration_test',
                         host_external='0.0.0.0',
@@ -153,7 +155,7 @@ class Settings:
                         username='root',
                         password='password',
                     )
-                case EDataSourceKind.ORACLE:
+                case EGenericDataSourceKind.ORACLE:
                     data_sources[data_source_kind] = cls.Oracle(
                         cluster_name='oracle_integration_test',
                         host_external='0.0.0.0',
@@ -168,7 +170,7 @@ class Settings:
                         password='password',
                         service_name="FREE",
                     )
-                case EDataSourceKind.POSTGRESQL:
+                case EGenericDataSourceKind.POSTGRESQL:
                     data_sources[data_source_kind] = cls.PostgreSQL(
                         cluster_name='postgresql_integration_test',
                         host_external='0.0.0.0',
@@ -182,7 +184,7 @@ class Settings:
                         username='user',
                         password='password',
                     )
-                case EDataSourceKind.YDB:
+                case EGenericDataSourceKind.YDB:
                     data_sources[data_source_kind] = cls.Ydb(
                         cluster_name='ydb_integration_test',
                         host_internal=endpoint_determiner.get_container_name('ydb'),
@@ -195,36 +197,36 @@ class Settings:
                     raise Exception(f'invalid data source: {data_source_kind}')
 
         return cls(
-            clickhouse=data_sources.get(EDataSourceKind.CLICKHOUSE),
+            clickhouse=data_sources.get(EGenericDataSourceKind.CLICKHOUSE),
             connector=cls.Connector(
                 grpc_host='localhost',
                 grpc_port=endpoint_determiner.get_external_port('fq-connector-go', 2130),
                 paging_bytes_per_page=4 * 1024 * 1024,
                 paging_prefetch_queue_capacity=2,
             ),
-            ms_sql_server=data_sources.get(EDataSourceKind.MS_SQL_SERVER),
-            mysql=data_sources.get(EDataSourceKind.MYSQL),
-            oracle=data_sources.get(EDataSourceKind.ORACLE),
-            postgresql=data_sources.get(EDataSourceKind.POSTGRESQL),
-            ydb=data_sources.get(EDataSourceKind.YDB),
+            ms_sql_server=data_sources.get(EGenericDataSourceKind.MS_SQL_SERVER),
+            mysql=data_sources.get(EGenericDataSourceKind.MYSQL),
+            oracle=data_sources.get(EGenericDataSourceKind.ORACLE),
+            postgresql=data_sources.get(EGenericDataSourceKind.POSTGRESQL),
+            ydb=data_sources.get(EGenericDataSourceKind.YDB),
         )
 
-    def get_cluster_name(self, data_source_kind: EDataSourceKind) -> str:
+    def get_cluster_name(self, data_source_kind: EGenericDataSourceKind) -> str:
         match data_source_kind:
-            case EDataSourceKind.CLICKHOUSE:
+            case EGenericDataSourceKind.CLICKHOUSE:
                 return self.clickhouse.cluster_name
-            case EDataSourceKind.MYSQL:
+            case EGenericDataSourceKind.MYSQL:
                 return self.mysql.cluster_name
-            case EDataSourceKind.ORACLE:
+            case EGenericDataSourceKind.ORACLE:
                 return self.oracle.cluster_name
-            case EDataSourceKind.MS_SQL_SERVER:
+            case EGenericDataSourceKind.MS_SQL_SERVER:
                 return self.ms_sql_server.cluster_name
-            case EDataSourceKind.POSTGRESQL:
+            case EGenericDataSourceKind.POSTGRESQL:
                 return self.postgresql.cluster_name
-            case EDataSourceKind.YDB:
+            case EGenericDataSourceKind.YDB:
                 return self.ydb.cluster_name
             case _:
-                raise Exception(f'invalid data source: {EDataSourceKind.Name(data_source_kind)}')
+                raise Exception(f'invalid data source: {EGenericDataSourceKind.Name(data_source_kind)}')
 
 
 @dataclass
@@ -237,7 +239,7 @@ class GenericSettings:
             return hash(self.database) + hash(self.protocol)
 
         database: str
-        protocol: EProtocol
+        protocol: EGenericProtocol
 
     clickhouse_clusters: Sequence[ClickHouseCluster] = field(default_factory=list)
 

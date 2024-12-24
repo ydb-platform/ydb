@@ -24,7 +24,7 @@ private:
 protected:
     ui32 ShardsCount = 0;
 public:
-    bool Deserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) {
+    bool Deserialize(const NKikimrSchemeOp::TColumnTableDescription& description, const TOperationContext& context, IErrorCollector& errors) {
         Name = description.GetName();
         ShardsCount = std::max<ui32>(description.GetColumnShardCount(), 1);
 
@@ -34,7 +34,7 @@ public:
 
         if (description.HasTtlSettings()) {
             TtlSettings = description.GetTtlSettings();
-            if (!GetSchema().ValidateTtlSettings(description.GetTtlSettings(), errors)) {
+            if (!GetSchema().ValidateTtlSettings(description.GetTtlSettings(), context, errors)) {
                 return false;
             }
         }
@@ -50,7 +50,7 @@ public:
         }
         FillDefaultSharding(*tableInfo->Description.MutableSharding());
 
-        if (!Deserialize(description, errors)) {
+        if (!Deserialize(description, context, errors)) {
             return nullptr;
         }
         if (tableInfo->Description.GetSharding().HasHashSharding()) {
@@ -224,7 +224,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateColumnTable TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -343,7 +343,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateColumnTable TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -430,7 +430,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateColumnTable TProposedWaitParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -785,8 +785,8 @@ public:
             olapStorePath.Base()->LastTxId = opTxId;
             context.SS->PersistLastTxId(db, olapStorePath.Base());
         } else {
-            NKikimrSchemeOp::TColumnStorageConfig storageConfig; // default
-            storageConfig.SetDataChannelCount(1);
+            tableInfo->StandaloneSharding = NKikimrSchemeOp::TColumnStoreSharding();
+            const NKikimrSchemeOp::TColumnStorageConfig& storageConfig = tableInfo->Description.GetStorageConfig();
 
             TChannelsBindings channelsBindings;
             if (!context.SS->GetOlapChannelsBindings(dstPath.GetPathIdForDomain(), storageConfig, channelsBindings, errStr)) {
@@ -800,7 +800,6 @@ public:
             TShardInfo columnShardInfo = TShardInfo::ColumnShardInfo(opTxId, pathId);
             columnShardInfo.BindedChannels = channelsBindings;
 
-            tableInfo->StandaloneSharding = NKikimrSchemeOp::TColumnStoreSharding();
             Y_ABORT_UNLESS(tableInfo->GetOwnedColumnShardsVerified().empty());
 
             for (ui64 i = 0; i < shardsCount; ++i) {
@@ -835,6 +834,13 @@ public:
         }
 
         NIceDb::TNiceDb db(context.GetDB());
+
+        for (const auto& tier : tableInfo->GetUsedTiers()) {
+            auto tierPath = TPath::Resolve(tier, context.SS);
+            AFL_VERIFY(tierPath.IsResolved())("path", tier);
+            context.SS->PersistExternalDataSourceReference(db, tierPath->PathId, dstPath);
+        }
+
         context.SS->PersistTxState(db, OperationId);
 
         context.OnComplete.ActivateTx(OperationId);

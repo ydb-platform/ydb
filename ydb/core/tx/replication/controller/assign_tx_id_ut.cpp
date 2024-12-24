@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(AssignTxId) {
         int i = 0;
         for (const auto& [version, txId] : expected) {
             const auto& actual = result.GetVersionTxIds(i++);
-            UNIT_ASSERT_VALUES_EQUAL(TRowVersion::Parse(actual.GetVersion()), version);
+            UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(actual.GetVersion()), version);
             if (txId) {
                 UNIT_ASSERT_VALUES_EQUAL(actual.GetTxId(), txId);
             }
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(AssignTxId) {
                     `/Root/table` AS `/Root/replica`
                 WITH (
                     CONNECTION_STRING = "grpc://%s/?database=/Root",
-                    CONSISTENCY_MODE = "STRONG",
+                    CONSISTENCY_LEVEL = "GLOBAL",
                     COMMIT_INTERVAL = Interval("PT10S")
                 );
             )", env.GetEndpoint().c_str()))
@@ -60,9 +60,9 @@ Y_UNIT_TEST_SUITE(AssignTxId) {
         const auto& repl = desc.GetPathDescription().GetReplicationDescription();
         const auto tabletId = repl.GetControllerId();
 
-        const auto& cfg = repl.GetConfig();
-        UNIT_ASSERT(cfg.HasStrongConsistency());
-        UNIT_ASSERT_VALUES_EQUAL(cfg.GetStrongConsistency().GetCommitIntervalMilliSeconds(), 10000);
+        const auto& cfg = repl.GetConfig().GetConsistencySettings();
+        UNIT_ASSERT(cfg.HasGlobal());
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetGlobal().GetCommitIntervalMilliSeconds(), 10000);
 
         TVector<ui64> txIds;
 

@@ -249,7 +249,7 @@ void TTester::RegisterTableInResolver(const TString& schemeText)
     table.Table.TableName = tdesc.GetName();
     table.TableId.Reset(new TTableId(FAKE_SCHEMESHARD_TABLET_ID, tdesc.GetId_Deprecated()));
     if (tdesc.HasPathId()) {
-        table.TableId.Reset(new TTableId(PathIdFromPathId(tdesc.GetPathId())));
+        table.TableId.Reset(new TTableId(TPathId::FromProto(tdesc.GetPathId())));
     }
     table.KeyColumnCount = tdesc.KeyColumnIdsSize();
     for (size_t i = 0; i < tdesc.ColumnsSize(); i++) {
@@ -1282,9 +1282,9 @@ std::tuple<TVector<ui64>, TTableId> CreateShardedTable(
         desc->MutableReplicationConfig()->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
     }
 
-    if (opts.ReplicationConsistency_) {
-        desc->MutableReplicationConfig()->SetConsistency(
-            static_cast<NKikimrSchemeOp::TTableReplicationConfig::EConsistency>(*opts.ReplicationConsistency_));
+    if (opts.ReplicationConsistencyLevel_) {
+        desc->MutableReplicationConfig()->SetConsistencyLevel(
+            static_cast<NKikimrSchemeOp::TTableReplicationConfig::EConsistencyLevel>(*opts.ReplicationConsistencyLevel_));
     }
 
     WaitTxNotification(server, sender, RunSchemeTx(*server->GetRuntime(), std::move(request), sender));
@@ -1376,7 +1376,7 @@ std::pair<TTableInfoByPathIdMap, ui64> GetTablesByPathId(
     TAutoPtr<IEventHandle> handle;
     auto response = GetEvGetInfo(server, tabletId, handle);
     for (auto& table: response->Record.GetUserTables()) {
-        result[PathIdFromPathId(table.GetDescription().GetPathId())] = table;
+        result[TPathId::FromProto(table.GetDescription().GetPathId())] = table;
     }
 
     auto ownerId = response->Record.GetTabletInfo().GetSchemeShard();
@@ -1899,23 +1899,23 @@ ui64 AsyncAlterTakeIncrementalBackup(
 ui64 AsyncAlterRestoreIncrementalBackup(
         Tests::TServer::TPtr server,
         const TString& workingDir,
-        const TString& srcTableName,
+        const TString& srcTablePath,
         const TString& dstTablePath)
 {
-    return AsyncAlterRestoreMultipleIncrementalBackups(server, workingDir, {srcTableName}, dstTablePath);
+    return AsyncAlterRestoreMultipleIncrementalBackups(server, workingDir, {srcTablePath}, dstTablePath);
 }
 
 ui64 AsyncAlterRestoreMultipleIncrementalBackups(
         Tests::TServer::TPtr server,
         const TString& workingDir,
-        const TVector<TString>& srcTableNames,
+        const TVector<TString>& srcTablePaths,
         const TString& dstTablePath)
 {
     auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups, workingDir);
 
     auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableRestoreMultipleIncrementalBackups();
-    for (const auto& srcTableName : srcTableNames) {
-        desc.AddSrcTableNames(srcTableName);
+    for (const auto& srcTablePath: srcTablePaths) {
+        desc.AddSrcTablePaths(srcTablePath);
     }
     desc.SetDstTablePath(dstTablePath);
 
@@ -2743,7 +2743,7 @@ std::unique_ptr<TEvDataShard::TEvRead> GetBaseReadRequest(
     record.MutableTableId()->SetSchemaVersion(description.GetTableSchemaVersion());
 
     if (readVersion) {
-        readVersion.Serialize(*record.MutableSnapshot());
+        readVersion.ToProto(record.MutableSnapshot());
     }
 
     record.SetResultFormat(format);

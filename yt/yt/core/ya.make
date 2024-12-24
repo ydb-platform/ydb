@@ -64,6 +64,7 @@ SRCS(
     concurrency/fair_throttler.cpp
     concurrency/fiber_scheduler_thread.cpp
     concurrency/fiber.cpp
+    concurrency/fiber_manager.cpp
     concurrency/fls.cpp
     concurrency/invoker_alarm.cpp
     concurrency/invoker_queue.cpp
@@ -229,7 +230,6 @@ SRCS(
     threading/thread.cpp
 
     tracing/allocation_tags.cpp
-    tracing/config.cpp
     tracing/public.cpp
     GLOBAL tracing/trace_context.cpp
 

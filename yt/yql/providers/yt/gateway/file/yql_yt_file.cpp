@@ -7,6 +7,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
+#include <yql/essentials/providers/common/mkql_simple_file/mkql_simple_file.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
@@ -174,78 +175,15 @@ struct TFileYtLambdaBuilder: public TLambdaBuilder {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class TFileTransformProvider {
+class TFileTransformProvider : public TSimpleFileTransformProvider {
 public:
     TFileTransformProvider(const TYtFileServices::TPtr& services, const TUserDataTable& userDataBlocks)
-        : Services(services)
-        , UserDataBlocks(userDataBlocks)
+        : TSimpleFileTransformProvider(services->GetFunctionRegistry(), userDataBlocks)
         , ExtraArgs(std::make_shared<THashMap<TString, TRuntimeNode>>())
     {
     }
 
     TCallableVisitFunc operator()(TInternName name) {
-        if (name == "FilePath") {
-            return [&](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
-                MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arguments");
-                const TString name(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
-                auto block = TUserDataStorage::FindUserDataBlock(UserDataBlocks, name);
-                MKQL_ENSURE(block, "File not found: " << name);
-                MKQL_ENSURE(block->Type == EUserDataType::PATH || block->FrozenFile, "File is not frozen, name: "
-                    << name << ", block type: " << block->Type);
-                return TProgramBuilder(env, *Services->GetFunctionRegistry()).NewDataLiteral<NUdf::EDataSlot::String>(
-                    block->Type == EUserDataType::PATH ? block->Data : block->FrozenFile->GetPath().GetPath()
-                );
-            };
-        }
-
-        if (name == "FolderPath") {
-            return [&](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
-                MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arguments");
-                const TString name(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
-                auto folderName = TUserDataStorage::MakeFolderName(name);
-                TMaybe<TString> folderPath;
-                for (const auto& x : UserDataBlocks) {
-                    if (!x.first.Alias().StartsWith(folderName)) {
-                        continue;
-                    }
-
-                    MKQL_ENSURE(x.second.Type == EUserDataType::PATH, "FolderPath not supported for non-file data block, name: "
-                        << x.first.Alias() << ", block type: " << x.second.Type);
-                    auto newFolderPath = x.second.Data.substr(0, x.second.Data.size() - (x.first.Alias().size() - folderName.size()));
-                    if (!folderPath) {
-                        folderPath = newFolderPath;
-                    } else {
-                        MKQL_ENSURE(*folderPath == newFolderPath, "File " << x.second.Data << " is out of directory " << *folderPath);
-                    }
-                }
-
-                return TProgramBuilder(env, *Services->GetFunctionRegistry()).NewDataLiteral<NUdf::EDataSlot::String>(*folderPath);
-            };
-        }
-
-        if (name == "FileContent") {
-            return [&](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
-                MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arguments");
-                const TString name(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
-                auto block = TUserDataStorage::FindUserDataBlock(UserDataBlocks, name);
-                MKQL_ENSURE(block, "File not found: " << name);
-                const TProgramBuilder pgmBuilder(env, *Services->GetFunctionRegistry());
-                if (block->Type == EUserDataType::PATH) {
-                    auto content = TFileInput(block->Data).ReadAll();
-                    return pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(content);
-                }
-                else if (block->Type == EUserDataType::RAW_INLINE_DATA) {
-                    return pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(block->Data);
-                }
-                else if (block->FrozenFile && block->Type == EUserDataType::URL) {
-                    auto content = TFileInput(block->FrozenFile->GetPath().GetPath()).ReadAll();
-                    return pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(content);
-                } else {
-                   MKQL_ENSURE(false, "Unsupported block type");
-                }
-            };
-        }
-
         if (name == TYtTableIndex::CallableName()) {
             return [this, name](NMiniKQL::TCallable&, const TTypeEnvironment& env) {
                 return GetExtraArg(TString{name.Str()}, NUdf::EDataSlot::Uint32, env);
@@ -319,7 +257,7 @@ public:
             };
         }
 
-        return TCallableVisitFunc();
+        return TSimpleFileTransformProvider::operator()(name);
     }
 
 private:
@@ -333,8 +271,6 @@ private:
     }
 
 private:
-    TYtFileServices::TPtr Services;
-    const TUserDataTable& UserDataBlocks;
     std::shared_ptr<THashMap<TString, TRuntimeNode>> ExtraArgs;
 };
 
@@ -438,6 +374,8 @@ public:
                 if (exists) {
                     try {
                         LoadTableMetaInfo(req, path, *metaData);
+                    } catch (const TErrorException& e) {
+                        throw TErrorException(e.GetCode()) << "Error loading " << req.Cluster() << '.' << req.Table() << " table metadata: " << e.what();
                     } catch (const yexception& e) {
                         throw yexception() << "Error loading " << req.Cluster() << '.' << req.Table() << " table metadata: " << e.what();
                     }
@@ -450,6 +388,8 @@ public:
                     if (metaData->SqlView.empty()) {
                         try {
                             LoadTableStatInfo(path, *statData);
+                        } catch (const TErrorException& e) {
+                            throw TErrorException(e.GetCode()) << "Error loading " << req.Cluster() << '.' << req.Table() << " table stat: " << e.what();
                         } catch (const yexception& e) {
                             throw yexception() << "Error loading " << req.Cluster() << '.' << req.Table() << " table stat: " << e.what();
                         }
@@ -1231,6 +1171,12 @@ private:
             req.Table(), attrs, req.IgnoreYamrDsv(), req.IgnoreWeakSchema()
         );
 
+        if (attrs.AsMap().contains("erasure_codec") && attrs["erasure_codec"].AsString() != "none") {
+            info.Attrs["erasure_codec"] = attrs["erasure_codec"].AsString();
+        }
+        if (attrs.AsMap().contains("optimize_for") && attrs["optimize_for"].AsString() != "scan") {
+            info.Attrs["optimize_for"] = attrs["optimize_for"].AsString();
+        }
         if (attrs.AsMap().contains("schema_mode") && attrs["schema_mode"].AsString() == "weak") {
             info.Attrs["schema_mode"] = attrs["schema_mode"].AsString();
         }

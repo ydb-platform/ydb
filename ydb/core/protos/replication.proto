@@ -38,6 +38,20 @@ message TConnectionParams {
     }
 }
 
+message TConsistencySettings {
+    message TRowConsistency {
+    }
+
+    message TGlobalConsistency {
+        optional uint64 CommitIntervalMilliSeconds = 1;
+    }
+
+    oneof Level {
+        TRowConsistency Row = 1;
+        TGlobalConsistency Global = 2;
+    }
+}
+
 message TReplicationConfig {
     message TTargetEverything {
         optional string DstPrefix = 1;
@@ -58,7 +72,28 @@ message TReplicationConfig {
         repeated TTarget Targets = 1;
     }
 
+    message TTransferSpecific {
+        message TTarget {
+            // in/out
+            optional string SrcPath = 1;
+
+            oneof Dst {
+                string DstPath = 2;
+                string DstPathLambda = 3;
+            }
+
+            // out
+            optional uint64 Id = 4;
+            optional uint32 LagMilliSeconds = 5;
+            // transfer
+            optional string TransformLambda = 6;
+        }
+
+        repeated TTarget Targets = 1;
+    }
+
     optional TConnectionParams SrcConnectionParams = 1;
+    optional TConsistencySettings ConsistencySettings = 7;
 
     // targets to be replicated
     // Currently, only OLTP tables are supported.
@@ -67,21 +102,11 @@ message TReplicationConfig {
         TTargetEverything Everything = 4;
         // replicate specified objects
         TTargetSpecific Specific = 5;
+        // transfer  specified objects
+        TTransferSpecific TransferSpecific = 8;
     }
 
     reserved 6; // InitialSync
-
-    message TWeakConsistency {
-    }
-
-    message TStrongConsistency {
-        optional uint64 CommitIntervalMilliSeconds = 1;
-    }
-
-    oneof Consistency {
-        TWeakConsistency WeakConsistency = 7;
-        TStrongConsistency StrongConsistency = 8;
-    }
 }
 
 message TReplicationState {
@@ -230,6 +255,8 @@ message TRunWorkerCommand {
     oneof Writer {
         TLocalTableWriterSettings LocalTableWriter = 2;
     }
+
+    optional TConsistencySettings ConsistencySettings = 3;
 }
 
 message TEvRunWorker {

@@ -619,7 +619,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLStreamKeyExtractorCacheTest) {
         };
         const auto limit = pgmBuilder.NewDataLiteral<ui64>(n);
         const auto pgmRoot = pgmBuilder.Top(pgmBuilder.Iterator(list, {}), limit, ascending, extractor);
-        const auto graph = setup.BuildGraph(pgmRoot);
+        // XXX: The order of the result being yielded by Top
+        // computation node is not defined by design, hence
+        // manually sort the result to match the canonical one.
+        const auto pgmSorted = pgmBuilder.Sort(pgmRoot, pgmBuilder.NewDataLiteral(false),
+                                               [&](TRuntimeNode item) { return item; });
+        const auto graph = setup.BuildGraph(pgmSorted);
         const auto& value = graph->GetValue();
 
         NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<ui64>());
@@ -723,7 +728,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLStreamKeyExtractorCacheTest) {
         };
         const auto limit = pgmBuilder.NewDataLiteral<ui64>(n);
         const auto pgmRoot = pgmBuilder.FromFlow(pgmBuilder.Top(pgmBuilder.ToFlow(list), limit, ascending, extractor));
-        const auto graph = setup.BuildGraph(pgmRoot);
+        // XXX: The order of the result being yielded by Top
+        // computation node is not defined by design, hence
+        // manually sort the result to match the canonical one.
+        const auto pgmSorted = pgmBuilder.Sort(pgmRoot, pgmBuilder.NewDataLiteral(false),
+                                               [&](TRuntimeNode item) { return item; });
+        const auto graph = setup.BuildGraph(pgmSorted);
         const auto& value = graph->GetValue();
 
         NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<ui64>());

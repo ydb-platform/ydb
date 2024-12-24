@@ -1,8 +1,10 @@
 LIBRARY()
 
 SRCS(
-    yql_yt_block_input_filter.cpp
     yql_yt_block_input.cpp
+    yql_yt_block_io_filter.cpp
+    yql_yt_block_io_utils.cpp
+    yql_yt_block_output.cpp
     yql_yt_datasink_constraints.cpp
     yql_yt_datasink_exec.cpp
     yql_yt_datasink_finalize.cpp

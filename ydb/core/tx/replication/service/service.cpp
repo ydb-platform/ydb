@@ -274,9 +274,15 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         };
     }
 
-    static std::function<IActor*(void)> WriterFn(const NKikimrReplication::TLocalTableWriterSettings& settings) {
-        return [tablePathId = PathIdFromPathId(settings.GetPathId())]() {
-            return CreateLocalTableWriter(tablePathId);
+    static std::function<IActor*(void)> WriterFn(
+            const NKikimrReplication::TLocalTableWriterSettings& writerSettings,
+            const NKikimrReplication::TConsistencySettings& consistencySettings)
+    {
+        const auto mode = consistencySettings.HasGlobal()
+            ? EWriteMode::Consistent
+            : EWriteMode::Simple;
+        return [tablePathId = TPathId::FromProto(writerSettings.GetPathId()), mode]() {
+            return CreateLocalTableWriter(tablePathId, mode);
         };
     }
 
@@ -317,8 +323,9 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         // TODO: validate settings
         const auto& readerSettings = cmd.GetRemoteTopicReader();
         const auto& writerSettings = cmd.GetLocalTableWriter();
+        const auto& consistencySettings = cmd.GetConsistencySettings();
         const auto actorId = session.RegisterWorker(this, id,
-            CreateWorker(SelfId(), ReaderFn(readerSettings), WriterFn(writerSettings)));
+            CreateWorker(SelfId(), ReaderFn(readerSettings), WriterFn(writerSettings, consistencySettings)));
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }
 
@@ -363,7 +370,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         for (const auto& [version, txId] : result) {
             auto& item = *ev->Record.AddVersionTxIds();
-            version.Serialize(*item.MutableVersion());
+            version.ToProto(item.MutableVersion());
             item.SetTxId(txId);
         }
 
@@ -388,7 +395,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         TVector<TRowVersion> versionsWithoutTxId;
 
         for (const auto& v : ev->Get()->Record.GetVersions()) {
-            const auto version = TRowVersion::Parse(v);
+            const auto version = TRowVersion::FromProto(v);
             if (auto it = TxIds.upper_bound(version); it != TxIds.end()) {
                 result[it->first] = it->second;
             } else {
@@ -432,7 +439,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         THashMap<TActorId, TMap<TRowVersion, ui64>> results;
 
         for (const auto& kv : record.GetVersionTxIds()) {
-            const auto version = TRowVersion::Parse(kv.GetVersion());
+            const auto version = TRowVersion::FromProto(kv.GetVersion());
             TxIds.emplace(version, kv.GetTxId());
 
             for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
@@ -471,7 +478,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         LOG_I("Heartbeat"
             << ": worker# " << ev->Sender
-            << ", version# " << TRowVersion::Parse(record.GetVersion()));
+            << ", version# " << TRowVersion::FromProto(record.GetVersion()));
 
         session->GetWorkerId(ev->Sender).Serialize(*record.MutableWorker());
         Send(ev->Forward(*session));

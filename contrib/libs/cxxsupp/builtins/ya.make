@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(19.1.4)
+VERSION(19.1.5)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.4/compiler-rt-19.1.4.src.tar.xz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.5/compiler-rt-19.1.5.src.tar.xz)
 
 NO_COMPILER_WARNINGS()
 
@@ -410,9 +410,7 @@ ELSEIF (ARCH_X86_64)
             fixunsxfti.c
             fixxfdi.c
             fixxfti.c
-            floatdixf.c
             floattixf.c
-            floatundixf.c
             floatuntixf.c
             mulxc3.c
             powixf2.c
@@ -584,7 +582,7 @@ ELSE()
     )
 ENDIF()
 
-IF (OS_LINUX)
+IF (OS_LINUX AND NOT WITH_MAPKIT)
     SRCS(
         crtbegin.c
         crtend.c

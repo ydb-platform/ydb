@@ -16,7 +16,9 @@
 
 namespace NKikimr::NOlap::NReader {
 
-class TColumnShardScan: public TActorBootstrapped<TColumnShardScan>, NArrow::IRowWriter {
+class TColumnShardScan: public TActorBootstrapped<TColumnShardScan>,
+                        NArrow::IRowWriter,
+                        NColumnShard::TMonitoringObjectsCounter<TColumnShardScan> {
 private:
     TActorId ResourceSubscribeActorId;
     TActorId ReadCoordinatorActorId;
@@ -45,10 +47,11 @@ private:
     STATEFN(StateScan) {
         auto g = Stats->MakeGuard("processing");
         TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())(
-            "TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen));
+            "TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)("task_identifier", ReadMetadataRange->GetScanIdentifier()));
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScan);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleScan);
+            hFunc(NActors::TEvents::TEvPoison, HandleScan);
             hFunc(TEvents::TEvUndelivered, HandleScan);
             hFunc(TEvents::TEvWakeup, HandleScan);
             hFunc(NColumnShard::TEvPrivate::TEvTaskProcessedResult, HandleScan);
@@ -67,6 +70,7 @@ private:
     void ContinueProcessing();
 
     void HandleScan(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) noexcept;
+    void HandleScan(NActors::TEvents::TEvPoison::TPtr& ev) noexcept;
 
     void HandleScan(TEvents::TEvUndelivered::TPtr& ev);
 

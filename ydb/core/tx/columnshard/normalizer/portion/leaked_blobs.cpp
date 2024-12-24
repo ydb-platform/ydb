@@ -181,8 +181,8 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
         return TConclusionStatus::Fail("Not ready");
     }
 
-    NColumnShard::TTablesManager tablesManager(
-        controller.GetStoragesManager(), std::make_shared<NDataAccessorControl::TLocalManager>(nullptr), TabletId);
+    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), std::make_shared<NDataAccessorControl::TLocalManager>(nullptr),
+        std::make_shared<TSchemaObjectsCache>(), TabletId);
 
     if (!tablesManager.InitFromDB(db)) {
         ACFL_TRACE("normalizer", "TPortionsNormalizer")("error", "can't initialize tables manager");
@@ -221,9 +221,11 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(
     }
     if (Records.empty()) {
         THashMap<ui64, std::vector<TColumnChunkLoadContextV1>> recordsLocal;
-        if (!wrapper.LoadColumns(std::nullopt, [&](TColumnChunkLoadContextV1&& chunk) {
+        if (!wrapper.LoadColumns(std::nullopt, [&](TColumnChunkLoadContextV2&& chunk) {
                 const ui64 portionId = chunk.GetPortionId();
-                recordsLocal[portionId].emplace_back(std::move(chunk));
+                for (auto&& i : chunk.BuildRecordsV1()) {
+                    recordsLocal[portionId].emplace_back(std::move(i));
+                }
             })) {
             return TConclusionStatus::Fail("repeated read db");
         }

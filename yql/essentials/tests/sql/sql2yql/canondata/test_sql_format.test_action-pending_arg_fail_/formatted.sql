@@ -5,4 +5,6 @@ USE plato;
 
 SELECT
     ListExtract(value, key)
-FROM Input;
+FROM
+    Input
+;

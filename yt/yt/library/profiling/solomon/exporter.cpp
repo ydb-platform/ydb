@@ -88,6 +88,7 @@ TSolomonExporter::TSolomonExporter(
 
         return shard->GridStep->GetValue() / config->GridStep.GetValue();
     });
+    Registry_->SetLabelSanitizationPolicy(Config_->LabelSanitizationPolicy);
 
     if (Config_->ReportBuildInfo) {
         TProfiler profiler{registry, ""};

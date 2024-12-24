@@ -2,21 +2,31 @@
 /* syntax version 1 */
 USE plato;
 
-$a =
+$a = (
     SELECT
         *
-    FROM Input;
+    FROM
+        Input
+);
 
 SELECT
     count(*)
-FROM $a;
+FROM
+    $a
+;
 
 SELECT
     count(*)
-FROM $a
-WHERE key != '075';
+FROM
+    $a
+WHERE
+    key != '075'
+;
 
 SELECT
     *
-FROM $a
-WHERE key != '075';
+FROM
+    $a
+WHERE
+    key != '075'
+;

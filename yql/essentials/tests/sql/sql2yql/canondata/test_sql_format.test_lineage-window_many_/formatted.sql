@@ -6,7 +6,8 @@ SELECT
     lead(value) OVER w1,
     rank(value) OVER w2,
     dense_rank(value) OVER w2
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w1 AS (
         ORDER BY
@@ -15,4 +16,5 @@ WINDOW
     w2 AS (
         ORDER BY
             key DESC
-    );
+    )
+;

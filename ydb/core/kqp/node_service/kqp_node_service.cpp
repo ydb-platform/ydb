@@ -217,7 +217,7 @@ private:
             } else {
                 schedulerGroup = "";
             }
-        } 
+        }
 
         std::optional<ui64> querySchedulerGroup;
         if (msg.HasQueryCpuShare() && schedulerGroup) {
@@ -276,6 +276,7 @@ private:
                 .ComputesByStages = &computesByStage,
                 .State = State_,
                 .SchedulingOptions = std::move(schedulingTaskOptions),
+                // TODO: block tracking mode is not set!
             });
 
             if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {

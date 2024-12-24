@@ -1,25 +1,32 @@
 /* syntax version 1 */
 /* postgres can not */
-$input =
+$input = (
     SELECT
         *
-    FROM as_table([<|key: 1|>, <|key: 1|>]);
+    FROM
+        as_table([<|key: 1|>, <|key: 1|>])
+);
 
-$src =
+$src = (
     SELECT
         key,
         MIN(key) OVER w AS curr_min
-    FROM $input
+    FROM
+        $input
     WINDOW
         w AS (
             ORDER BY
                 key
-        );
+        )
+);
 
 SELECT
     *
-FROM $src
+FROM
+    $src
 UNION ALL
 SELECT
     *
-FROM $src;
+FROM
+    $src
+;

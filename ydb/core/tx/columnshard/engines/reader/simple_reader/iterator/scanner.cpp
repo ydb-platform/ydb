@@ -8,13 +8,20 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::shared_ptr<arrow::Table>&& table, const ui32 startIndex,
+void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::shared_ptr<arrow::Table>&& tableExt, const ui32 startIndex,
     const ui32 recordsCount, TPlainReadData& reader) {
-    source->MutableResultRecordsCount() += table ? table->num_rows() : 0;
-    source->MutableStageResult().SetResultChunk(std::move(table), startIndex, recordsCount);
-    if ((!table || !table->num_rows()) && Context->GetCommonContext()->GetReadMetadata()->Limit && InFlightLimit < MaxInFlight) {
+
+    source->MutableResultRecordsCount() += tableExt ? tableExt->num_rows() : 0;
+    if (!tableExt || !tableExt->num_rows()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("empty_source", source->DebugJson().GetStringRobust());
+    }
+    Context->GetCommonContext()->GetCounters().OnSourceFinished(
+        source->GetRecordsCount(), source->GetUsedRawBytes(), tableExt ? tableExt->num_rows() : 0);
+
+    if ((!tableExt || !tableExt->num_rows()) && Context->GetCommonContext()->GetReadMetadata()->HasLimit() && InFlightLimit < MaxInFlight) {
         InFlightLimit = 2 * InFlightLimit;
     }
+    source->MutableStageResult().SetResultChunk(std::move(tableExt), startIndex, recordsCount);
     while (FetchingSources.size()) {
         auto frontSource = FetchingSources.front();
         if (!frontSource->HasStageResult()) {
@@ -52,7 +59,7 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
         AFL_VERIFY(FetchingSourcesByIdx.erase(frontSource->GetSourceIdx()));
         FetchingSources.pop_front();
         frontSource->ClearResult();
-        if (Context->GetCommonContext()->GetReadMetadata()->Limit && FetchingSources.size() && frontSource->GetResultRecordsCount()) {
+        if (Context->GetCommonContext()->GetReadMetadata()->HasLimit() && FetchingSources.size() && frontSource->GetResultRecordsCount()) {
             FinishedSources.emplace(frontSource);
             while (FinishedSources.size() && (*FinishedSources.begin())->GetFinish() < FetchingSources.front()->GetStart()) {
                 auto fetchingSource = FetchingSources.front();
@@ -60,11 +67,11 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
                 FetchedCount += finishedSource->GetResultRecordsCount();
                 FinishedSources.erase(FinishedSources.begin());
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "source_finished")("source_id", finishedSource->GetSourceId())(
-                    "source_idx", finishedSource->GetSourceIdx())("limit", Context->GetCommonContext()->GetReadMetadata()->Limit)(
+                    "source_idx", finishedSource->GetSourceIdx())("limit", Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust())(
                     "fetched", finishedSource->GetResultRecordsCount());
-                if (FetchedCount > Context->GetCommonContext()->GetReadMetadata()->Limit) {
+                if (FetchedCount > (ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust()) {
                     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "limit_exhausted")(
-                        "limit", Context->GetCommonContext()->GetReadMetadata()->Limit)("fetched", FetchedCount);
+                        "limit", Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust())("fetched", FetchedCount);
                     SortedSources.clear();
                 }
             }
@@ -86,7 +93,7 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
             MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
         }
     }
-    if (Context->GetReadMetadata()->Limit) {
+    if (Context->GetReadMetadata()->HasLimit()) {
         InFlightLimit = 1;
     } else {
         InFlightLimit = MaxInFlight;
@@ -109,7 +116,7 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
 }
 
 TConclusion<bool> TScanHead::BuildNextInterval() {
-    if (Context->IsAborted()) {
+    if (!Context->IsActive()) {
         return false;
     }
     bool changed = false;
@@ -132,7 +139,7 @@ bool TScanHead::IsReverse() const {
 }
 
 void TScanHead::Abort() {
-    AFL_VERIFY(Context->IsAborted());
+    AFL_VERIFY(!Context->IsActive());
     for (auto&& i : FetchingSources) {
         i->Abort();
     }

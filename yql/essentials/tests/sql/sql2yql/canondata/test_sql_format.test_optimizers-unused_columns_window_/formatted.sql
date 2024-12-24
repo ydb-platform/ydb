@@ -4,7 +4,8 @@ SELECT
     a,
     lag(a) OVER w AS prev_a,
     min(a) OVER w AS min_a
-FROM Input
+FROM
+    Input
 WINDOW
     w AS (
         PARTITION BY
@@ -13,4 +14,5 @@ WINDOW
             c
     )
 ORDER BY
-    a;
+    a
+;

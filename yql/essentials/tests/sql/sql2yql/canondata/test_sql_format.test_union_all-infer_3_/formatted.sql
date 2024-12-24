@@ -10,4 +10,5 @@ SELECT
     2 AS y
 UNION ALL
 SELECT
-    3 AS y;
+    3 AS y
+;

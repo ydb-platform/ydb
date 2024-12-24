@@ -20,8 +20,9 @@ SELECT
     ListFromRange(1, 1.2, NULL),
     ListFromRange(1, NULL, NULL),
     ListFromRange(NULL, NULL, NULL),
-    ListFromRange(Interval("PT1S"), Interval("PT1S")),
-    ListFromRange(Interval("PT1M"), Just(Interval("PT1M"))),
-    ListFromRange(Interval("PT1M"), Interval("PT2M"), Just(Interval("PT10S"))),
-    ListFromRange(Interval("PT1S"), Interval("PT1M"), NULL),
-    ListFromRange(Interval("PT1S"), Interval("PT4S"), Nothing(Interval?));
+    ListFromRange(Interval('PT1S'), Interval('PT1S')),
+    ListFromRange(Interval('PT1M'), Just(Interval('PT1M'))),
+    ListFromRange(Interval('PT1M'), Interval('PT2M'), Just(Interval('PT10S'))),
+    ListFromRange(Interval('PT1S'), Interval('PT1M'), NULL),
+    ListFromRange(Interval('PT1S'), Interval('PT4S'), Nothing(Interval?))
+;

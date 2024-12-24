@@ -17,9 +17,11 @@ constexpr bool PrintCallableTimes = false;
 
 class TTypeAnnotationTransformer : public TGraphTransformerBase {
 public:
-    TTypeAnnotationTransformer(TAutoPtr<IGraphTransformer> callableTransformer, TTypeAnnotationContext& types)
+    TTypeAnnotationTransformer(TAutoPtr<IGraphTransformer> callableTransformer, TTypeAnnotationContext& types,
+        ETypeCheckMode mode)
         : CallableTransformer(callableTransformer)
         , Types(types)
+        , Mode(mode)
     {
     }
 
@@ -43,6 +45,10 @@ public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         YQL_PROFILE_SCOPE(DEBUG, "TypeAnnotationTransformer::DoTransform");
         output = input;
+        if (Mode == ETypeCheckMode::Initial && IsComplete) {
+            return TStatus::Ok;
+        }
+
         auto status = TransformNode(input, output, ctx);
         UpdateStatusIfChanged(status, input, output);
         if (status.Level != TStatus::Ok) {
@@ -60,6 +66,14 @@ public:
         }
 
         HasRenames = false;
+        if (Mode == ETypeCheckMode::Initial && status == TStatus::Ok) {
+            IsComplete = true;
+        }
+
+        if (Mode == ETypeCheckMode::Repeat) {
+            CheckFatalTypeError(status);
+        }
+
         return status;
     }
 
@@ -96,6 +110,10 @@ public:
             Processed.clear();
         }
 
+        if (Mode == ETypeCheckMode::Repeat) {
+            CheckFatalTypeError(combinedStatus);
+        }
+
         return combinedStatus;
     }
 
@@ -107,6 +125,7 @@ public:
         RepeatCallableCount.clear();
         CurrentFunctions = {};
         CallableTimes.clear();
+        IsComplete = false;
     }
 
 
@@ -547,6 +566,8 @@ private:
 private:
     TAutoPtr<IGraphTransformer> CallableTransformer;
     TTypeAnnotationContext& Types;
+    const ETypeCheckMode Mode;
+    bool IsComplete = false;
     TDeque<TExprNode::TPtr> CallableInputs;
     TNodeOnNodeOwnedMap Processed;
     bool HasRenames = false;
@@ -569,8 +590,8 @@ IGraphTransformer::TStatus CheckWholeProgramType(const TExprNode::TPtr& input, T
 }
 
 TAutoPtr<IGraphTransformer> CreateTypeAnnotationTransformer(TAutoPtr<IGraphTransformer> callableTransformer,
-    TTypeAnnotationContext& types) {
-    return new TTypeAnnotationTransformer(callableTransformer, types);
+    TTypeAnnotationContext& types, ETypeCheckMode mode) {
+    return new TTypeAnnotationTransformer(callableTransformer, types, mode);
 }
 
 TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(
@@ -637,11 +658,12 @@ TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(
 
     issueCode = TIssuesIds::CORE_TYPE_ANN;
     auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(typeAnnotationContext);
-    auto typeTransformer = CreateTypeAnnotationTransformer(callableTransformer, typeAnnotationContext);
+    auto typeTransformer = CreateTypeAnnotationTransformer(callableTransformer, typeAnnotationContext, ETypeCheckMode::Single);
     transformers.push_back(TTransformStage(
         typeTransformer,
         "TypeAnnotation",
         issueCode));
+
     if (wholeProgram) {
         transformers.push_back(TTransformStage(
             CreateFunctorTransformer(&CheckWholeProgramType),
@@ -685,13 +707,19 @@ TExprNode::TPtr ParseAndAnnotate(
     }
 
     const bool annotated = instant
-            ? InstantAnnotateTypes(exprRoot, exprCtx, wholeProgram, typeAnnotationContext)
-            : SyncAnnotateTypes(exprRoot, exprCtx, wholeProgram, typeAnnotationContext);
+        ? InstantAnnotateTypes(exprRoot, exprCtx, wholeProgram, typeAnnotationContext)
+        : SyncAnnotateTypes(exprRoot, exprCtx, wholeProgram, typeAnnotationContext);
     if (!annotated) {
         return nullptr;
     }
 
     return exprRoot;
+}
+
+void CheckFatalTypeError(IGraphTransformer::TStatus status) {
+    if (status == IGraphTransformer::TStatus::Error) {
+        throw yexception() << "Detected a type error after initial validation";
+    }
 }
 
 } // namespace NYql

@@ -17,14 +17,14 @@ const std::shared_ptr<arrow::Schema>& IColumnEngine::GetReplaceKey() const {
 ui64 IColumnEngine::GetMetadataLimit() {
     static const ui64 MemoryTotal = NSystemInfo::TotalMemorySize();
     if (!HasAppData()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("total", MemoryTotal);
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_WRITE)("total", MemoryTotal);
         return MemoryTotal * 0.3;
     } else if (AppDataVerified().ColumnShardConfig.GetIndexMetadataMemoryLimit().HasAbsoluteValue()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_WRITE)(
             "value", AppDataVerified().ColumnShardConfig.GetIndexMetadataMemoryLimit().GetAbsoluteValue());
         return AppDataVerified().ColumnShardConfig.GetIndexMetadataMemoryLimit().GetAbsoluteValue();
     } else {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("total", MemoryTotal)(
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_WRITE)("total", MemoryTotal)(
             "kff", AppDataVerified().ColumnShardConfig.GetIndexMetadataMemoryLimit().GetTotalRatio());
         return MemoryTotal * AppDataVerified().ColumnShardConfig.GetIndexMetadataMemoryLimit().GetTotalRatio();
     }
@@ -38,10 +38,10 @@ void IColumnEngine::FetchDataAccessors(const std::shared_ptr<TDataAccessorsReque
 
 TSelectInfo::TStats TSelectInfo::Stats() const {
     TStats out;
-    out.Portions = PortionsOrderedPK.size();
+    out.Portions = Portions.size();
 
     THashSet<TUnifiedBlobId> uniqBlob;
-    for (auto& portionInfo : PortionsOrderedPK) {
+    for (auto& portionInfo : Portions) {
         out.Rows += portionInfo->GetRecordsCount();
         for (auto& blobId : portionInfo->GetBlobIds()) {
             out.Bytes += blobId.BlobSize();
@@ -51,13 +51,16 @@ TSelectInfo::TStats TSelectInfo::Stats() const {
     return out;
 }
 
-void TSelectInfo::DebugStream(IOutputStream& out) {
-    if (PortionsOrderedPK.size()) {
-        out << "portions:";
-        for (auto& portionInfo : PortionsOrderedPK) {
-            out << portionInfo->DebugString();
+TString TSelectInfo::DebugString() const {
+    TStringBuilder result;
+    result << "count:" << Portions.size() << ";";
+    if (Portions.size()) {
+        result << "portions:";
+        for (auto& portionInfo : Portions) {
+            result << portionInfo->DebugString();
         }
     }
+    return result;
 }
 
 }   // namespace NKikimr::NOlap

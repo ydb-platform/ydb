@@ -4,7 +4,8 @@ $input = (
         CAST(key AS int32) AS key,
         CAST(subkey AS int32) AS subkey,
         value
-    FROM plato.Input
+    FROM
+        plato.Input
 );
 
 SELECT
@@ -13,11 +14,13 @@ SELECT
     (subkey - lag(subkey, 1) OVER w) AS subkey_diff,
     row_number() OVER w AS row,
     value
-FROM $input
+FROM
+    $input
 WINDOW
     w AS (
         ORDER BY
             key,
             subkey,
             value
-    );
+    )
+;

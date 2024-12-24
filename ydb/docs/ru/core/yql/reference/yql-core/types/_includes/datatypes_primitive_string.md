@@ -5,7 +5,7 @@
 `Json` | [JSON](https://en.wikipedia.org/wiki/JSON) в текстовом представлении|Не поддерживает возможность сравнения{% if feature_map_tables %}, не может быть использован в первичном ключе{% endif %}
 `JsonDocument` | [JSON](https://en.wikipedia.org/wiki/JSON) в бинарном индексированном представлении | Не поддерживает возможность сравнения{% if feature_map_tables %}, не может быть использован в первичном ключе{% endif %}
 `Yson` | [YSON](../yson.md) в текстовом или бинарном представлении | Не поддерживает возможность сравнения{% if feature_map_tables %}, не может быть использован в первичном ключе{% endif %}
-`Uuid` | Универсальный идентификатор [UUID](https://tools.ietf.org/html/rfc4122) | Не поддержан для столбцов таблиц
+`Uuid` | Универсальный идентификатор [UUID](https://tools.ietf.org/html/rfc4122) |
 
 {% note info "Ограничения на размер" %}
 

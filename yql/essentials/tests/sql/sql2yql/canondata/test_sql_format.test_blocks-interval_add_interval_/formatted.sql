@@ -5,7 +5,8 @@ SELECT
     a.ni + b.wi,
     a.wi + b.ni,
     a.wi + b.wi
-FROM Dates
-    AS a
-CROSS JOIN Dates
-    AS b;
+FROM
+    Dates AS a
+CROSS JOIN
+    Dates AS b
+;

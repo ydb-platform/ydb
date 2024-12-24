@@ -1,6 +1,7 @@
 #pragma once
-#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/tiering/manager.h>
 
 namespace NKikimr::NOlap {
 
@@ -8,8 +9,9 @@ class TWaitCompactionController: public NYDBTest::NColumnShard::TController {
 private:
     using TBase = NKikimr::NYDBTest::ICSController;
     TAtomicCounter ExportsFinishedCount = 0;
-    NMetadata::NFetcher::ISnapshot::TPtr CurrentConfig;
+    THashMap<TString, NColumnShard::NTiers::TTierConfig> OverrideTiers;
     ui32 TiersModificationsCount = 0;
+    YDB_READONLY(TAtomicCounter, TieringMetadataActualizationCount, 0);
     YDB_READONLY(TAtomicCounter, StatisticsUsageCount, 0);
     YDB_READONLY(TAtomicCounter, MaxValueUsageCount, 0);
     YDB_ACCESSOR_DEF(std::optional<ui64>, SmallSizeDetector);
@@ -53,20 +55,20 @@ public:
         return ExportsFinishedCount.Val();
     }
 
+    virtual void OnTieringMetadataActualized() override {
+        TieringMetadataActualizationCount.Inc();
+    }
     virtual void OnStatisticsUsage(const NKikimr::NOlap::NIndexes::TIndexMetaContainer& /*statOperator*/) override {
         StatisticsUsageCount.Inc();
     }
     virtual void OnMaxValueUsage() override {
         MaxValueUsageCount.Inc();
     }
-    void SetTiersSnapshot(TTestBasicRuntime& runtime, const TActorId& tabletActorId, const NMetadata::NFetcher::ISnapshot::TPtr& snapshot);
+    void OverrideTierConfigs(
+        TTestBasicRuntime& runtime, const TActorId& tabletActorId, THashMap<TString, NColumnShard::NTiers::TTierConfig> tiers);
 
-    virtual NMetadata::NFetcher::ISnapshot::TPtr GetFallbackTiersSnapshot() const override {
-        if (CurrentConfig) {
-            return CurrentConfig;
-        } else {
-            return TBase::GetFallbackTiersSnapshot();
-        }
+    THashMap<TString, NColumnShard::NTiers::TTierConfig> GetOverrideTierConfigs() const override {
+        return OverrideTiers;
     }
 };
 

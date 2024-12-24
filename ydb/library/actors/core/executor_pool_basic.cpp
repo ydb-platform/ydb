@@ -216,8 +216,8 @@ namespace NActors {
             Harmonizer->Harmonize(hpnow);
         }
 
-        TAtomic x = AtomicGet(Semaphore);
-        TSemaphore semaphore = TSemaphore::GetSemaphore(x);
+        TAtomic semaphoreRaw = AtomicGet(Semaphore);
+        TSemaphore semaphore = TSemaphore::GetSemaphore(semaphoreRaw);
         while (!StopFlag.load(std::memory_order_acquire)) {
             if (!semaphore.OldSemaphore || workerId >= 0 && semaphore.CurrentSleepThreadCount < 0) {
                 if (workerId < 0 || !wctx.IsNeededToWaitNextActivation) {
@@ -234,7 +234,7 @@ namespace NActors {
                 }
             } else {
                 TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
-                if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(++revolvingCounter);}, Activations)) {
+                if (const ui32 activation = std::visit([&revolvingCounter](auto &queue) {return queue.Pop(++revolvingCounter);}, Activations)) {
                     if (workerId >= 0) {
                         Threads[workerId].SetWork();
                     } else {
@@ -247,8 +247,8 @@ namespace NActors {
             }
 
             SpinLockPause();
-            x = AtomicGet(Semaphore);
-            semaphore = TSemaphore::GetSemaphore(x);
+            semaphoreRaw = AtomicGet(Semaphore);
+            semaphore = TSemaphore::GetSemaphore(semaphoreRaw);
         }
 
         return nullptr;
@@ -407,10 +407,6 @@ namespace NActors {
             poolStats.DecreasingThreadsByHoggishState = stats.DecreasingThreadsByHoggishState;
             poolStats.DecreasingThreadsByExchange = stats.DecreasingThreadsByExchange;
             poolStats.PotentialMaxThreadCount = stats.PotentialMaxThreadCount;
-            poolStats.MaxConsumedCpuUs = stats.MaxConsumedCpu;
-            poolStats.MinConsumedCpuUs = stats.MinConsumedCpu;
-            poolStats.MaxBookedCpuUs = stats.MaxBookedCpu;
-            poolStats.MinBookedCpuUs = stats.MinBookedCpu;
         }
 
         statsCopy.resize(MaxFullThreadCount + 1);
@@ -429,7 +425,7 @@ namespace NActors {
     void TBasicExecutorPool::GetExecutorPoolState(TExecutorPoolState &poolState) const {
         if (Harmonizer) {
             TPoolHarmonizerStats stats = Harmonizer->GetPoolStats(PoolId);
-            poolState.UsedCpu = stats.AvgConsumedCpu;
+            poolState.ElapsedCpu = stats.AvgElapsedCpu;
             poolState.PossibleMaxLimit = stats.PotentialMaxThreadCount;
         } else {
             poolState.PossibleMaxLimit = poolState.MaxLimit;
@@ -625,7 +621,7 @@ namespace NActors {
         TExecutorThreadCtx& threadCtx = Threads[threadIdx];
         TExecutorThreadStats stats;
         threadCtx.Thread->GetCurrentStatsForHarmonizer(stats);
-        return {Ts2Us(stats.SafeElapsedTicks), static_cast<double>(stats.CpuUs), stats.NotEnoughCpuExecutions};
+        return {static_cast<double>(stats.CpuUs), Ts2Us(stats.SafeElapsedTicks), stats.NotEnoughCpuExecutions};
     }
 
     i16 TBasicExecutorPool::GetBlockingThreadCount() const {

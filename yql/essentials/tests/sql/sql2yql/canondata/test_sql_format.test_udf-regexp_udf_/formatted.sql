@@ -1,7 +1,10 @@
 /* postgres can not */
-$regexp = Pire::Match("q.*");
+$regexp = Pire::Match('q.*');
 
 SELECT
     *
-FROM plato.Input
-WHERE $regexp(value);
+FROM
+    plato.Input
+WHERE
+    $regexp(value)
+;

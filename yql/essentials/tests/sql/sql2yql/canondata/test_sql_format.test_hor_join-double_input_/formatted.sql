@@ -5,25 +5,29 @@ SELECT
 FROM (
     SELECT
         key,
-        value || "a" AS value
-    FROM plato.Input
+        value || 'a' AS value
+    FROM
+        plato.Input
     UNION ALL
     SELECT
         key,
-        "1" AS value
-    FROM plato.Input
+        '1' AS value
+    FROM
+        plato.Input
     UNION ALL
     SELECT
         key,
-        "1" AS value
-    FROM plato.Input
+        '1' AS value
+    FROM
+        plato.Input
     UNION ALL
     SELECT
         key,
-        "3" AS value
-    FROM plato.Input
-)
-    AS x
+        '3' AS value
+    FROM
+        plato.Input
+) AS x
 ORDER BY
     key,
-    value;
+    value
+;

@@ -1,5 +1,6 @@
 /* postgres can not */
-FROM plato.Input
+FROM
+    plato.Input
 SELECT
     *
 ORDER BY

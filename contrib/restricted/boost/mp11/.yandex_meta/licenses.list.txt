@@ -59,6 +59,10 @@ Distributed under the [Boost Software License, Version 1.0](http://boost.org/LIC
 
 
 ====================COPYRIGHT====================
+//  Copyright 2015-2024 Peter Dimov.
+
+
+====================COPYRIGHT====================
 //  Copyright 2017 Peter Dimov.
 
 
@@ -68,6 +72,10 @@ Distributed under the [Boost Software License, Version 1.0](http://boost.org/LIC
 
 ====================COPYRIGHT====================
 //  Copyright 2019 Peter Dimov
+
+
+====================COPYRIGHT====================
+//  Copyright 2024 Joaquin M Lopez Munoz.
 
 
 ====================COPYRIGHT====================

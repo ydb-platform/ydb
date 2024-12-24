@@ -16,6 +16,7 @@ PEERDIR(
     yql/essentials/core/file_storage
     yql/essentials/core/file_storage/proto
     yql/essentials/core/file_storage/http_download
+    yql/essentials/core/issue
     yql/essentials/minikql/comp_nodes
     yql/essentials/public/udf
     yql/essentials/utils
@@ -27,6 +28,7 @@ PEERDIR(
     yql/essentials/providers/common/comp_nodes
     yql/essentials/providers/common/gateway
     yql/essentials/providers/common/mkql
+    yql/essentials/providers/common/mkql_simple_file
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/schema/expr
     yql/essentials/providers/common/schema/mkql

@@ -8,15 +8,16 @@ $list = (
         SELECT
             AsList('foo', 'bar', 'baz', 'quux', 'bat') AS `list`
     )
-        FLATTEN BY
-            `list` AS item
+        FLATTEN BY `list` AS item
 );
 
 --INSERT INTO Output
 SELECT
     item,
     YQL::Concat('+', Lead(item, 1) OVER w),
-    YQL::Concat("++", Lead(item, 2) OVER w)
-FROM $list
+    YQL::Concat('++', Lead(item, 2) OVER w)
+FROM
+    $list
 WINDOW
-    w AS ();
+    w AS ()
+;

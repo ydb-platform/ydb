@@ -28,9 +28,8 @@ public:
 
     TOperationId StartOperation(
         TOperation* operation,
-        const TString& operationType,
-        const TNode& spec,
-        bool useStartOperationRequest = false);
+        EOperationType type,
+        const TNode& spec);
 
     const IClientRetryPolicyPtr& GetClientRetryPolicy() const;
 

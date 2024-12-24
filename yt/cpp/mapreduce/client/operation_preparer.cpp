@@ -177,35 +177,26 @@ const IClientRetryPolicyPtr& TOperationPreparer::GetClientRetryPolicy() const
 
 TOperationId TOperationPreparer::StartOperation(
     TOperation* operation,
-    const TString& operationType,
-    const TNode& spec,
-    bool useStartOperationRequest)
+    EOperationType type,
+    const TNode& spec)
 {
     CheckValidity();
 
-    THttpHeader header("POST", (useStartOperationRequest ? "start_op" : operationType));
-    if (useStartOperationRequest) {
-        header.AddParameter("operation_type", operationType);
-    }
-    header.AddTransactionId(TransactionId_);
-    header.AddMutationId();
-
-    auto ysonSpec = NodeToYsonString(spec);
-    auto responseInfo = RetryRequestWithPolicy(
+    auto operationId = RequestWithRetry<TOperationId>(
         ::MakeIntrusive<TOperationForwardingRequestRetryPolicy>(
             ClientRetryPolicy_->CreatePolicyForStartOperationRequest(),
             TOperationPtr(operation)),
-        GetContext(),
-        header,
-        ysonSpec);
-    TOperationId operationId = ParseGuidFromResponse(responseInfo.Response);
+        [this, &type, &spec] (TMutationId& mutationId) {
+            return Client_->GetRawClient()->StartOperation(mutationId, TransactionId_, type, spec);
+        });
+
     YT_LOG_DEBUG("Operation started (OperationId: %v; PreparationId: %v)",
         operationId,
         GetPreparationId());
 
     YT_LOG_INFO("Operation %v started (%v): %v",
         operationId,
-        operationType,
+        type,
         GetOperationWebInterfaceUrl(GetContext().ServerName, operationId));
 
     TOperationExecutionTimeTracker::Get()->Start(operationId);

@@ -1,0 +1,16 @@
+{
+    "test.test[compute_range-tztypes-default.txt-Debug]": [
+        {
+            "checksum": "f16da776935c59e7de9005d2e87056e7",
+            "size": 1605,
+            "uri": "https://{canondata_backend}/1814674/34855a34556905749369ca6269d86a253802d364/resource.tar.gz#test.test_compute_range-tztypes-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[compute_range-tztypes-default.txt-Results]": [
+        {
+            "checksum": "b710beeb7841f97c54bf9d130fc2f8ed",
+            "size": 29342,
+            "uri": "https://{canondata_backend}/1814674/34855a34556905749369ca6269d86a253802d364/resource.tar.gz#test.test_compute_range-tztypes-default.txt-Results_/results.txt"
+        }
+    ]
+}

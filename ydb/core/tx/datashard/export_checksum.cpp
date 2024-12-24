@@ -1,5 +1,7 @@
 #include "export_checksum.h"
 
+#include <openssl/sha.h>
+
 #include <util/string/hex.h>
 
 namespace NKikimr::NDataShard {

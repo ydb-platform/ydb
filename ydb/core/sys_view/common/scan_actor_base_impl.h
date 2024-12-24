@@ -51,7 +51,8 @@ public:
     }
 
 protected:
-    void SendThroughPipeCache(IEventBase* ev, ui64 tabletId) const noexcept {
+    void SendThroughPipeCache(IEventBase* ev, ui64 tabletId) {
+        DoPipeCacheUnlink = true;
         TBase::Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ev, tabletId, true),
             IEventHandle::FlagTrackDelivery);
     }
@@ -119,6 +120,10 @@ protected:
 
         if (AllowedByLimiter) {
             ScanLimiter->Dec();
+        }
+
+        if (std::exchange(DoPipeCacheUnlink, false)) {
+            TBase::Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         }
 
         TBase::PassAway();
@@ -322,6 +327,7 @@ protected:
     bool AckReceived = false;
 
     bool BatchRequestInFlight = false;
+    bool DoPipeCacheUnlink = false;
 
 private:
     enum EFailState {

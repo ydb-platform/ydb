@@ -137,7 +137,7 @@ private:
 protected:
     virtual ::NKikimr::NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const override;
 
-    virtual ui64 DoGetLimitForPortionsMetadataAsk(const ui64 defaultValue) const {
+    virtual ui64 DoGetLimitForPortionsMetadataAsk(const ui64 defaultValue) const override {
         return OverrideLimitForPortionsMetadataAsk.value_or(defaultValue);
     }
 

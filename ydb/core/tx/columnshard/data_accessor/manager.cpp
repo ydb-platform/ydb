@@ -1,12 +1,15 @@
 #include "manager.h"
 
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+
 namespace NKikimr::NOlap::NDataAccessorControl {
 
 void TLocalManager::DrainQueue() {
     std::optional<ui64> lastPathId;
     IGranuleDataAccessor* lastDataAccessor = nullptr;
     ui32 countToFlight = 0;
-    while (PortionsAskInFlight + countToFlight < NYDBTest::TControllers::GetColumnShardController()->GetLimitForPortionsMetadataAsk() && PortionsAsk.size()) {
+    while (PortionsAskInFlight + countToFlight < NYDBTest::TControllers::GetColumnShardController()->GetLimitForPortionsMetadataAsk() &&
+           PortionsAsk.size()) {
         THashMap<ui64, std::vector<TPortionInfo::TConstPtr>> portionsToAsk;
         while (PortionsAskInFlight + countToFlight < 1000 && PortionsAsk.size()) {
             auto p = PortionsAsk.front().ExtractPortion();
@@ -118,4 +121,4 @@ void TLocalManager::DoAddPortion(const TPortionDataAccessor& accessor) {
     DrainQueue();
 }
 
-}   // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap::NDataAccessorControl

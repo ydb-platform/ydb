@@ -1400,11 +1400,6 @@ message TImmediateControlsConfig {
                 MinValue: 1,
                 MaxValue: 100000,
                 DefaultValue: 1 }];
-            optional uint64 UpdatingDurationMs = 4 [(ControlOptions) = {
-                Description: "Interval (ms) for updating Leaky Bucket",
-                MinValue: 1,
-                MaxValue: 3600000,
-                DefaultValue: 60000 }];
         }
 
         optional uint64 SlowDiskThreshold = 1 [(ControlOptions) = {

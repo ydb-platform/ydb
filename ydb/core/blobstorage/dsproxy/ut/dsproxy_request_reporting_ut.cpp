@@ -25,8 +25,7 @@ Y_UNIT_TEST(CheckDefaultBehaviour) {
     TControlWrapper bucketSize(1, 1, 100000);
     TControlWrapper leakDurationMs(60000, 1, 3600000);
     TControlWrapper leakRate(1, 1, 100000);
-    TControlWrapper updatingDurationMs(60000, 1, 3600000);
-    NActors::TActorId reportingThrottler = runtime.Register(CreateRequestReportingThrottler(bucketSize, leakDurationMs, leakRate, updatingDurationMs));
+    NActors::TActorId reportingThrottler = runtime.Register(CreateRequestReportingThrottler(bucketSize, leakDurationMs, leakRate));
     runtime.EnableScheduleForActor(reportingThrottler);
     runtime.AdvanceCurrentTime(TDuration::MilliSeconds(10));
     runtime.SimulateSleep(TDuration::MilliSeconds(1));
@@ -81,8 +80,7 @@ Y_UNIT_TEST(CheckLeakyBucketBehaviour) {
     TControlWrapper bucketSize(3, 1, 100000);
     TControlWrapper leakDurationMs(60000, 1, 3600000);
     TControlWrapper leakRate(1, 1, 100000);
-    TControlWrapper updatingDurationMs(1000, 1, 3600000);
-    NActors::TActorId reportingThrottler = runtime.Register(CreateRequestReportingThrottler(bucketSize, leakDurationMs, leakRate, updatingDurationMs));
+    NActors::TActorId reportingThrottler = runtime.Register(CreateRequestReportingThrottler(bucketSize, leakDurationMs, leakRate));
     runtime.EnableScheduleForActor(reportingThrottler);
     runtime.AdvanceCurrentTime(TDuration::MilliSeconds(10));
     runtime.SimulateSleep(TDuration::MilliSeconds(1));
@@ -133,6 +131,7 @@ Y_UNIT_TEST(CheckLeakyBucketBehaviour) {
     // 1 seconds after update
     runtime.UpdateCurrentTime(runtime.GetCurrentTime() + TDuration::MilliSeconds(1000));
     runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
     UNIT_ASSERT(!AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
 }
 

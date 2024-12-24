@@ -194,7 +194,6 @@ namespace NKikimr::NStorage {
         TControlWrapper ReportingControllerBucketSize;
         TControlWrapper ReportingControllerLeakDurationMs;
         TControlWrapper ReportingControllerLeakRate;
-        TControlWrapper ReportingControllerUpdatingDurationMs;
 
     public:
         struct TGroupRecord;

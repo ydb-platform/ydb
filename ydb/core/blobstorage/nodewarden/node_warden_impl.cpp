@@ -50,7 +50,6 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ReportingControllerBucketSize(1, 1, 100'000)
     , ReportingControllerLeakDurationMs(60'000, 1, 3'600'000)
     , ReportingControllerLeakRate(1, 1, 100'000)
-    , ReportingControllerUpdatingDurationMs(60'000, 1, 3'600'000)
 {
     Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
     AvailDomainId = 1;
@@ -284,7 +283,7 @@ void TNodeWarden::StopInvalidGroupProxy() {
 
 void TNodeWarden::StartRequestReportingThrottler() {
     STLOG(PRI_DEBUG, BS_NODE, NW62, "StartRequestReportingThrottler");
-    Register(CreateRequestReportingThrottler(ReportingControllerBucketSize, ReportingControllerLeakDurationMs, ReportingControllerLeakRate, ReportingControllerUpdatingDurationMs));
+    Register(CreateRequestReportingThrottler(ReportingControllerBucketSize, ReportingControllerLeakDurationMs, ReportingControllerLeakRate));
 }
 
 void TNodeWarden::PassAway() {
@@ -370,7 +369,6 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(ReportingControllerBucketSize, "DSProxyControls.RequestReportingSettings.BucketSize");
         icb->RegisterSharedControl(ReportingControllerLeakDurationMs, "DSProxyControls.RequestReportingSettings.LeakDurationMs");
         icb->RegisterSharedControl(ReportingControllerLeakRate, "DSProxyControls.RequestReportingSettings.LeakRate");
-        icb->RegisterSharedControl(ReportingControllerUpdatingDurationMs, "DSProxyControls.RequestReportingSettings.UpdatingDurationMs");
     }
 
     // start replication broker

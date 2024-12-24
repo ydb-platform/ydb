@@ -11,6 +11,6 @@ bool AllowToReport(NKikimrBlobStorage::EPutHandleClass handleClass);
 bool AllowToReport(NKikimrBlobStorage::EGetHandleClass handleClass);
 
 IActor* CreateRequestReportingThrottler(const TControlWrapper& bucketSize, const TControlWrapper& leakDurationMs,
-    const TControlWrapper& leakRate, const TControlWrapper& updatingDurationMs);
+    const TControlWrapper& leakRate);
 
 } // namespace NKikimr

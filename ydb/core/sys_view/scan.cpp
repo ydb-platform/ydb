@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 
 #include <ydb/core/sys_view/auth/sids.h>
+#include <ydb/core/sys_view/auth/group_members.h>
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/sys_view/nodes/nodes.h>
@@ -241,6 +242,9 @@ THolder<NActors::IActor> CreateSystemViewScan(
 
     if (tableId.SysViewInfo == SidsName) {
         return CreateSidsScan(ownerId, scanId, tableId, tableRange, columns);
+    }
+    if (tableId.SysViewInfo == GroupMembersName) {
+        return CreateGroupMembersScan(ownerId, scanId, tableId, tableRange, columns);
     }
 
     return {};

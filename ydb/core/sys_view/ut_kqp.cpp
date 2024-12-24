@@ -2196,6 +2196,77 @@ Y_UNIT_TEST_SUITE(SystemView) {
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
     }
+
+    Y_UNIT_TEST(GroupMembers) {
+        TTestEnv env;
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+        CreateTenantsAndTables(env, true);
+        TTableClient client(env.GetDriver());
+
+        env.GetClient().CreateUser("/Root", "user1", "password1");
+        env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
+        env.GetClient().CreateUser("/Root/Tenant2", "user3", "password3");
+        env.GetClient().CreateUser("/Root/Tenant2", "user4", "password4");
+        env.GetClient().CreateGroup("/Root", "group1");
+        env.GetClient().CreateGroup("/Root/Tenant1", "group2");
+        env.GetClient().CreateGroup("/Root/Tenant2", "group3");
+        env.GetClient().CreateGroup("/Root/Tenant2", "group4");
+        env.GetClient().CreateGroup("/Root/Tenant2", "group5");
+
+        env.GetClient().AddGroupMembership("/Root", "group1", "user1");
+        env.GetClient().AddGroupMembership("/Root/Tenant1", "group2", "user2");
+        env.GetClient().AddGroupMembership("/Root/Tenant2", "group3", "user4");
+        env.GetClient().AddGroupMembership("/Root/Tenant2", "group4", "user3");
+        env.GetClient().AddGroupMembership("/Root/Tenant2", "group4", "user4");
+        env.GetClient().AddGroupMembership("/Root/Tenant2", "group4", "group3");
+        env.GetClient().AddGroupMembership("/Root/Tenant2", "group4", "group4");
+
+        // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
+        // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant2").DebugString() << Endl;
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/.sys/group_members`
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["group1"];["user1"]];
+            ])";
+
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/Tenant1/.sys/group_members`
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["group2"];["user2"]];
+            ])";
+
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/Tenant2/.sys/group_members`
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["group4"];["group4"]];
+                [["group4"];["group3"]];
+                [["group4"];["user4"]];
+                [["group4"];["user3"]];
+                [["group3"];["user4"]];
+            ])";
+
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+    }
 }
 
 } // NSysView

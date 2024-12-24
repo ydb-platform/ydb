@@ -1,4 +1,4 @@
-#include "sids.h"
+#include "group_members.h"
 
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/schema.h>
@@ -13,15 +13,15 @@ namespace NKikimr::NSysView {
 using namespace NSchemeShard;
 using namespace NActors;
 
-class TSidsScan : public TScanActorBase<TSidsScan> {
+class TGroupMembersScan : public TScanActorBase<TGroupMembersScan> {
 public:
-    using TBase = TScanActorBase<TSidsScan>;
+    using TBase = TScanActorBase<TGroupMembersScan>;
 
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 
-    TSidsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TGroupMembersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
         : TBase(ownerId, scanId, tableId, tableRange, columns)
     {
@@ -37,13 +37,13 @@ public:
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TSidsScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                    "NSysView::TGroupMembersScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
     }
 
 private:
     void ProceedToScan() override {
-        Become(&TSidsScan::StateScan);
+        Become(&TGroupMembersScan::StateScan);
         if (AckReceived) {
             StartScan();
         }
@@ -102,33 +102,35 @@ private:
         // TODO: add rows according to request's sender user rights
 
         for (const auto& sid : sids) {
-            TString sidType = NProtoBuf::GetEnumDescriptor<NLoginProto::ESidType_SidType>()->FindValueByNumber(sid.GetType())->name();
-            sidType.to_lower();
-
-            for (auto& column : Columns) {
-                switch (column.Tag) {
-                case Schema::Sids::Name::ColumnId:
-                    cells.push_back(TCell(sid.GetName().data(), sid.GetName().size()));
-                    break;
-                case Schema::Sids::Kind::ColumnId:
-                    cells.push_back(TCell(sidType.data(), sidType.size()));
-                    break;
-                default:
-                    cells.emplace_back();
-                }
+            if (sid.GetType() != NLoginProto::ESidType_SidType_GROUP) {
+                continue;
             }
+            for (const auto& member : sid.GetMembers()) {
+                for (auto& column : Columns) {
+                    switch (column.Tag) {
+                    case Schema::GroupMembers::GroupSid::ColumnId:
+                        cells.push_back(TCell(sid.GetName().data(), sid.GetName().size()));
+                        break;
+                    case Schema::GroupMembers::MemberSid::ColumnId:
+                        cells.push_back(TCell(member.data(), member.size()));
+                        break;
+                    default:
+                        cells.emplace_back();
+                    }
+                }
 
-            TArrayRef<const TCell> ref(cells);
-            batch.Rows.emplace_back(TOwnedCellVec::Make(ref));
-            cells.clear();
+                TArrayRef<const TCell> ref(cells);
+                batch.Rows.emplace_back(TOwnedCellVec::Make(ref));
+                cells.clear();
+            }
         }
     }
 };
 
-THolder<NActors::IActor> CreateSidsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreateGroupMembersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TSidsScan>(ownerId, scanId, tableId, tableRange, columns);
+    return MakeHolder<TGroupMembersScan>(ownerId, scanId, tableId, tableRange, columns);
 }
 
 }

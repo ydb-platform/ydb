@@ -50,6 +50,7 @@ constexpr TStringBuf InformationSchemaTablesName = "tables";
 constexpr TStringBuf PgClassName = "pg_class";
 
 constexpr TStringBuf SidsName = "sids";
+constexpr TStringBuf GroupMembersName = "group_members";
 
 
 struct Schema : NIceDb::Schema {
@@ -621,6 +622,17 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<
             Name,
             Kind
+        >;
+    };
+
+    struct GroupMembers : Table<16> {
+        struct GroupSid: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct MemberSid: Column<2, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<GroupSid, MemberSid>;
+        using TColumns = TableColumns<
+            GroupSid,
+            MemberSid
         >;
     };
 

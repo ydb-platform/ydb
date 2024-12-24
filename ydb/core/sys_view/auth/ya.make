@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    group_members.h
+    group_members.cpp
     sids.h
     sids.cpp
 )

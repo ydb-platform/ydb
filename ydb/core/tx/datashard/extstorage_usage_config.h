@@ -43,27 +43,27 @@ public:
     Aws::S3::Model::StorageClass GetStorageClass() const;
 
     inline TString GetPermissionsKey() const {
-        return NBackupRestoreTraits::PermissionsKey(ObjectKeyPattern);
+        return ObjectKeyPattern + '/' + NBackupRestoreTraits::PermissionsFile();
     }
 
     inline TString GetMetadataKey() const {
-        return NBackupRestoreTraits::MetadataKey(ObjectKeyPattern);
+        return ObjectKeyPattern + '/' + NBackupRestoreTraits::MetadataFile();
     }
 
     inline TString GetSchemeKey() const {
-        return NBackupRestoreTraits::SchemeKey(ObjectKeyPattern);
+        return ObjectKeyPattern + '/' + NBackupRestoreTraits::SchemeFile();
     }
 
     inline TString GetDataKey(
         NBackupRestoreTraits::EDataFormat format,
         NBackupRestoreTraits::ECompressionCodec codec) const {
-        return NBackupRestoreTraits::DataKey(ObjectKeyPattern, Shard, format, codec);
+        return ObjectKeyPattern + '/' + NBackupRestoreTraits::DataFile(Shard, format, codec);
     }
 
-    inline TString GetRelativeDataKey(
+    inline TString GetDataFile(
         NBackupRestoreTraits::EDataFormat format,
         NBackupRestoreTraits::ECompressionCodec codec) const {
-        return NBackupRestoreTraits::DataKey("", Shard, format, codec);
+        return NBackupRestoreTraits::DataFile(Shard, format, codec);
     }
 
 }; // TS3Settings

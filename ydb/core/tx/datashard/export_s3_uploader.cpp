@@ -183,7 +183,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         google::protobuf::TextFormat::PrintToString(Scheme.GetRef(), &Buffer);
         if (EnableChecksums) {
-            SchemeChecksum = TExportChecksum::Compute(Buffer.data(), Buffer.size());
+            SchemeChecksum = IExportChecksum::Compute(Buffer);
         }
 
         auto request = Aws::S3::Model::PutObjectRequest()
@@ -202,7 +202,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         google::protobuf::TextFormat::PrintToString(Permissions.GetRef(), &Buffer);
         if (EnableChecksums) {
-            PermissionsChecksum = TExportChecksum::Compute(Buffer.data(), Buffer.size());
+            PermissionsChecksum = IExportChecksum::Compute(Buffer);
         }
 
         auto request = Aws::S3::Model::PutObjectRequest()
@@ -217,7 +217,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         Buffer = std::move(Metadata);
         if (EnableChecksums) {
-            MetadataChecksum = TExportChecksum::Compute(Buffer.data(), Buffer.size());
+            MetadataChecksum = IExportChecksum::Compute(Buffer);
         }
 
         auto request = Aws::S3::Model::PutObjectRequest()
@@ -227,12 +227,11 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         this->Become(&TThis::StateUploadMetadata);
     }
 
-    void UploadChecksum(TString&& checksum, const TString& key, const TString& relativeObjKey, 
+    void UploadChecksum(TString&& checksum, const TString& key, const TString& checksumFile, 
         std::function<void()> checksumUploadedCallback)
     {   
-        // make it verifiable from sha256sum CLI
-        checksum += " ";
-        checksum += relativeObjKey;
+        // make checksum verifiable using sha256sum CLI
+        checksum += ' ' + checksumFile;
 
         auto request = Aws::S3::Model::PutObjectRequest()
             .WithKey(key);
@@ -263,8 +262,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         };
 
         if (EnableChecksums) {
-            TString relativeObjKey = SchemeKey("");
-            UploadChecksum(std::move(SchemeChecksum), ChecksumKey(Settings.GetSchemeKey()), relativeObjKey, nextStep);
+            TString checksumKey = ChecksumKey(Settings.GetSchemeKey());
+            UploadChecksum(std::move(SchemeChecksum), checksumKey, SchemeFile(), nextStep);
         } else {
             nextStep();
         }
@@ -291,8 +290,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         };
 
         if (EnableChecksums) {
-            TString relativeObjKey = PermissionsKey("");
-            UploadChecksum(std::move(PermissionsChecksum), ChecksumKey(Settings.GetPermissionsKey()), relativeObjKey, nextStep);
+            TString checksumKey = ChecksumKey(Settings.GetPermissionsKey());
+            UploadChecksum(std::move(PermissionsChecksum), checksumKey, PermissionsFile(), nextStep);
         } else {
             nextStep();
         }
@@ -315,8 +314,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         };
 
         if (EnableChecksums) {
-            TString relativeObjKey = MetadataKey("");
-            UploadChecksum(std::move(MetadataChecksum), ChecksumKey(Settings.GetMetadataKey()), relativeObjKey, nextStep);
+            TString checksumKey = ChecksumKey(Settings.GetMetadataKey());
+            UploadChecksum(std::move(MetadataChecksum), checksumKey, MetadataFile(), nextStep);
         } else {
             nextStep();
         }
@@ -411,8 +410,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         if (EnableChecksums) {
             // checksum is always calculated before compression
             TString checksumKey = ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None));
-            TString relativeObjKey = Settings.GetRelativeDataKey(DataFormat, ECompressionCodec::None);
-            UploadChecksum(std::move(DataChecksum), checksumKey, relativeObjKey, nextStep);
+            TString dataFile = Settings.GetDataFile(DataFormat, ECompressionCodec::None);
+            UploadChecksum(std::move(DataChecksum), checksumKey, dataFile, nextStep);
         } else {
             nextStep();
         }
@@ -505,8 +504,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             if (EnableChecksums) {
                 // checksum is always calculated before compression
                 TString checksumKey = ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None));
-                TString relativeObjKey = Settings.GetRelativeDataKey(DataFormat, ECompressionCodec::None);
-                return UploadChecksum(std::move(DataChecksum), checksumKey, relativeObjKey, nextStep);
+                TString dataFile = Settings.GetDataFile(DataFormat, ECompressionCodec::None);
+                return UploadChecksum(std::move(DataChecksum), checksumKey, dataFile, nextStep);
             } else {
                 return nextStep();
             }
@@ -820,7 +819,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     metadata.SetVersion(Task.GetEnableChecksums() ? 1 : 0);
 
     NBackupRestore::TFullBackupMetadata::TPtr backup = new NBackupRestore::TFullBackupMetadata{
-        .SnapshotVts = NBackup::TVirtualTimestamp(
+        .SnapshotVts = NBackupRestore::TVirtualTimestamp(
             Task.GetSnapshotStep(),
             Task.GetSnapshotTxId())
     };

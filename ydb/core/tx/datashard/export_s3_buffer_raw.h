@@ -43,7 +43,7 @@ protected:
     TBuffer Buffer;
 
     bool EnableChecksums;
-    TExportChecksum Checksum;
+    IExportChecksum::TPtr Checksum;
 
     TString ErrorString;
 }; // TS3BufferRaw

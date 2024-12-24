@@ -68,7 +68,9 @@ public:
             return false;
         }
 
-        Checksum.AddData(BufferRaw.data(), BufferRaw.size());
+        if (EnableChecksums) {
+            Checksum->AddData(BufferRaw);
+        }
         BytesRaw += BufferRaw.size();
 
         auto input = ZSTD_inBuffer{BufferRaw.data(), BufferRaw.size(), 0};

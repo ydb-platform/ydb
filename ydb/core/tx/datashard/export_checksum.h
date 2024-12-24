@@ -6,16 +6,18 @@
 
 namespace NKikimr::NDataShard {
 
-class TExportChecksum {
+class IExportChecksum {
 public:
-    TExportChecksum();
+    using TPtr = std::unique_ptr<IExportChecksum>;
 
-    void AddData(const char* data, size_t dataSize);
-    TString Serialize();
+    virtual ~IExportChecksum() = default;
 
-    static TString Compute(const char* data, size_t dataSize);
-private:
-    SHA256_CTX Context;
+    virtual void AddData(TStringBuf data) = 0;
+    virtual TString Serialize() = 0;
+
+    static TString Compute(TStringBuf data);
 };
+
+IExportChecksum* CreateExportChecksum();
 
 } // NKikimr::NDataShard

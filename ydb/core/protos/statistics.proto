@@ -96,7 +96,7 @@ message TEvAnalyzeResponse {
         STATUS_SUCCESS = 1;
         STATUS_ERROR = 2;
     }
-    optional EStatus Status = 2;    
+    optional EStatus Status = 2;
 }
 
 // KQP -> SA
@@ -129,6 +129,7 @@ message TEvAnalyzeTableResponse {
     optional bytes OperationId = 1;
     optional NKikimrProto.TPathID PathId = 2;
     optional fixed64 ShardTabletId = 3;
+    optional TEvAnalyzeResponse.EStatus Status = 4;
 }
 
 

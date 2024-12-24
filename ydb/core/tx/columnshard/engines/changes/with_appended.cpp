@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
+#include <ydb/core/tx/columnshard/subscriber/events/append_completed/event.h>
 
 namespace NKikimr::NOlap {
 
@@ -115,6 +116,9 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
         for (auto& portionBuilder : AppendedPortions) {
             context.EngineLogs.AppendPortion(portionBuilder.GetPortionResult());
         }
+    }
+    if (self) {
+        self->Subscribers->OnEvent(std::make_shared<NColumnShard::NSubscriber::TEventAppendCompleted>());
     }
 }
 

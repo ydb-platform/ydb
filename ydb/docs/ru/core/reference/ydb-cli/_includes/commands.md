@@ -49,6 +49,8 @@
 [scheme permissions revoke](../commands/scheme-permissions.md#grant-revoke) | Удаление разрешения
 [scheme permissions set](../commands/scheme-permissions.md#set) | Установка разрешений
 [scheme permissions list](../commands/scheme-permissions.md#list) | Просмотр разрешений
+[scheme permissions clear-inheritance](../commands/scheme-permissions.md#clear-inheritance) | Запрет наследования разрешений
+[scheme permissions set-inheritance](../commands/scheme-permissions.md#set-inheritance) | Установка наследования разрешений
 [scheme rmdir](../commands/dir.md#rmdir) | Удаление директории
 [scripting yql](../scripting-yql.md) | Выполнение YQL-скрипта
 table attribute add | Добавление атрибута для строкой или колоночной таблицы

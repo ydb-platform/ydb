@@ -38,7 +38,7 @@
 Права, основанные на других правах
 `ydb.tables.modify` | `MODIFY TABLES` | `ydb.granular.update_row` + `ydb.granular.erase_row`
 `ydb.tables.read` | `SELECT TABLES` | Синоним `ydb.granular.select_row`
-`ydb.generic.list` | `LIST` | Синоним `ydb.granular..describe_schema`
+`ydb.generic.list` | `LIST` | Синоним `ydb.granular.describe_schema`
 `ydb.generic.read` | `SELECT` | `ydb.granular.select_row` + `ydb.generic.list`
 `ydb.generic.write` | `INSERT` | `ydb.granular.update_row` + `ydb.granular.erase_row` + `ydb.granular.create_directory` + `ydb.granular.create_table` + `ydb.granular.create_queue` + `ydb.granular.remove_schema` + `ydb.granular.alter_schema`
 `ydb.generic.use_legacy` | `USE LEGACY` | `ydb.generic.read` + `ydb.generic.write` + `ydb.access.grant`

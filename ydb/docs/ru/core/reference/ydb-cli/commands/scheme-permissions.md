@@ -182,3 +182,47 @@ DATABASE-ADMINS:ydb.generic.manage
 В текущей версии {{ ydb }} есть ограничение, что только непосредственно текущий владелец схемного объекта может сменить владельца.
 
 {% endnote %}
+
+## clear-inheritance
+
+Команда `clear-inheritance` запретить наследование разрешений для схемного объекта.
+
+Синтаксис команды:
+
+```bash
+{{ ydb-cli }} [connection options] scheme permissions clear-inheritance [options...] <path>
+```
+
+Параметры:
+`<path>` - полный путь от корня кластера до объекта, права на который необходимо модифицировать.
+
+Дополнительные параметры `[options...]`:
+`--timeout ms` - технологический параметр, задающий таймаут на отклик сервера. Для наших операций не критичен и здесь мы его не применяем.
+
+Пример команды clear-inheritance:
+
+```bash
+{{ ydb-cli }} scheme permissions clear-inheritance '/Root/db1'
+```
+
+## set-inheritance
+
+Команда `set-inheritance` позволяет установить наследование разрешений для схемного объекта.
+
+Синтаксис команды:
+
+```bash
+{{ ydb-cli }} [connection options] scheme permissions set-inheritance [options...] <path>
+```
+
+Параметры:
+`<path>` - полный путь от корня кластера до объекта, права на который необходимо модифицировать.
+
+Дополнительные параметры `[options...]`:
+`--timeout ms` - технологический параметр, задающий таймаут на отклик сервера. Для наших операций не критичен и здесь мы его не применяем.
+
+Пример команды set-inheritance:
+
+```bash
+{{ ydb-cli }} scheme permissions set-inheritance '/Root/db1'
+```

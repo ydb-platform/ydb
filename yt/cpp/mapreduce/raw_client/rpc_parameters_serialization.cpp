@@ -393,7 +393,21 @@ TNode SerializeParamsForListOperations(
     return result;
 }
 
-TNode SerializeParamsForGetOperation(const std::variant<TString, TOperationId>& aliasOrOperationId, const TGetOperationOptions& options)
+TNode SerializeParamsForStartOperation(
+    const TTransactionId& transactionId,
+    EOperationType type,
+    const TNode& spec)
+{
+    TNode result;
+    SetTransactionIdParam(&result, transactionId);
+    result["operation_type"] = ToString(type);
+    result["spec"] = spec;
+    return result;
+}
+
+TNode SerializeParamsForGetOperation(
+    const std::variant<TString, TOperationId>& aliasOrOperationId,
+    const TGetOperationOptions& options)
 {
     auto includeRuntime = options.IncludeRuntime_;
     TNode result;

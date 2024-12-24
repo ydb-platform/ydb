@@ -288,8 +288,7 @@ def normalize_yson(y):
         return [normalize_yson(i) for i in y]
     if isinstance(y, dict):
         return {normalize_yson(k): normalize_yson(v) for k, v in six.iteritems(y)}
-    s = str(y) if not isinstance(y, six.text_type) else y.encode('utf-8', errors='xmlcharrefreplace')
-    return s
+    return y
 
 
 volatile_attrs = {'DataSize', 'ModifyTime', 'Id', 'Revision'}
@@ -301,9 +300,13 @@ def _replace_vals_impl(y):
         return [_replace_vals_impl(i) for i in y]
     if isinstance(y, dict):
         return {_replace_vals_impl(k): _replace_vals_impl(v) for k, v in six.iteritems(y) if k not in volatile_attrs}
+    if isinstance(y, bytes):
+        s = y.replace(b'tmp/yql/' + current_user.encode('ascii') + b'/', b'tmp/')
+        s = re.sub(b'tmp/[0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+', b'tmp/<temp_table_guid>', s)
+        return s
     if isinstance(y, str):
         s = y.replace('tmp/yql/' + current_user + '/', 'tmp/')
-        s = re.sub(r'tmp/[0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+', 'tmp/<temp_table_guid>', s)
+        s = re.sub('tmp/[0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+', 'tmp/<temp_table_guid>', s)
         return s
     return y
 
@@ -953,17 +956,17 @@ def pytest_get_current_part(path):
 
 
 def normalize_result(res, sort):
-    res = cyson.loads(res) if res else cyson.loads("[]")
+    res = cyson.loads(res) if res else cyson.loads(b"[]")
     res = replace_vals(res)
     for r in res:
-        for data in r['Write']:
-            if sort and 'Data' in data:
-                data['Data'] = sorted(data['Data'])
-            if 'Ref' in data:
-                data['Ref'] = []
-                data['Truncated'] = True
-            if 'Data' in data and len(data['Data']) == 0:
-                del data['Data']
+        for data in r[b'Write']:
+            if sort and b'Data' in data:
+                data[b'Data'] = sorted(data[b'Data'])
+            if b'Ref' in data:
+                data[b'Ref'] = []
+                data[b'Truncated'] = True
+            if b'Data' in data and len(data[b'Data']) == 0:
+                del data[b'Data']
     return res
 
 
@@ -993,20 +996,20 @@ def stable_write(writer, node):
 def stable_result_file(res):
     path = res.results_file
     assert os.path.exists(path)
-    with open(path) as f:
+    with open(path, 'rb') as f:
         res = f.read()
     res = cyson.loads(res)
     res = replace_vals(res)
     for r in res:
-        for data in r['Write']:
-            if 'Unordered' in r and 'Data' in data:
-                data['Data'] = sorted(data['Data'])
-    with open(path, 'w') as f:
+        for data in r[b'Write']:
+            if b'Unordered' in r and b'Data' in data:
+                data[b'Data'] = sorted(data[b'Data'])
+    with open(path, 'wb') as f:
         writer = cyson.Writer(stream=cyson.OutputStream.from_file(f), format='pretty', mode='node')
         writer.begin_stream()
         stable_write(writer, res)
         writer.end_stream()
-    with open(path) as f:
+    with open(path, 'rb') as f:
         return f.read()
 
 
@@ -1015,21 +1018,21 @@ def stable_table_file(table):
     assert os.path.exists(path)
     assert table.attr is not None
     is_sorted = False
-    for column in cyson.loads(table.attr)['schema']:
-        if 'sort_order' in column:
+    for column in cyson.loads(table.attr)[b'schema']:
+        if b'sort_order' in column:
             is_sorted = True
             break
     if not is_sorted:
-        with open(path) as f:
+        with open(path, 'rb') as f:
             r = cyson.Reader(cyson.InputStream.from_file(f), mode='list_fragment')
             lst = sorted(list(r.list_fragments()))
-        with open(path, 'w') as f:
+        with open(path, 'wb') as f:
             writer = cyson.Writer(stream=cyson.OutputStream.from_file(f), format='pretty', mode='list_fragment')
             writer.begin_stream()
             for r in lst:
                 stable_write(writer, r)
             writer.end_stream()
-    with open(path) as f:
+    with open(path, 'rb') as f:
         return f.read()
 
 

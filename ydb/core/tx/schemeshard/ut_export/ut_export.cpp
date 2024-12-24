@@ -307,7 +307,7 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
         auto request = Sprintf(requestTpl.c_str(), port);
 
         TTestEnv env(runtime);
-        Run(runtime, env, tables, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", cdcStreams);
+        Run(runtime, env, tables, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false);
 
         for (auto &path : GetExportTargetPaths(request)) {
             auto canonPath = (path.StartsWith("/") || path.empty()) ? path : TString("/") + path;

@@ -72,6 +72,7 @@ SRCS(
     yverify_ut.cpp
     zerocopy_output_writer_ut.cpp
     hedging_manager_ut.cpp
+    configurable_singleton_ut.cpp
 
     proto/ref_counted_tracker_ut.proto
 )

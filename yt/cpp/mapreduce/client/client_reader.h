@@ -2,8 +2,6 @@
 
 #include <yt/cpp/mapreduce/common/fwd.h>
 
-#include <yt/cpp/mapreduce/interface/io.h>
-
 #include <yt/cpp/mapreduce/http/context.h>
 #include <yt/cpp/mapreduce/http/requests.h>
 #include <yt/cpp/mapreduce/http/http.h>
@@ -55,8 +53,7 @@ private:
 
     THolder<TPingableTransaction> ReadTransaction_;
 
-    NHttpClient::IHttpResponsePtr Response_;
-    IInputStream* Input_;
+    std::unique_ptr<IInputStream> Input_;
 
     IRequestRetryPolicyPtr CurrentRequestRetryPolicy_;
 

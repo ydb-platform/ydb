@@ -174,8 +174,9 @@ public:
                 bool needLibrary = false;
                 for (auto& m : *import->Modules) {
                     if (requiredLoadedModules.contains(m)) {
-                        YQL_ENSURE(import->Block->Type == EUserDataType::PATH);
-                        path2LoadedImport[import->Block->Data] = import;
+                        if (import->Block->Type == EUserDataType::PATH) {
+                            path2LoadedImport[import->Block->Data] = import;
+                        }
                     }
 
                     if (requiredExternalModules.contains(m)) {

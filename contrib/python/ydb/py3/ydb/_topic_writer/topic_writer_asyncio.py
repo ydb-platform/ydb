@@ -307,7 +307,7 @@ class WriterAsyncIOReconnector:
 
     def _prepare_internal_messages(self, messages: List[PublicMessage]) -> List[InternalMessage]:
         if self._settings.auto_created_at:
-            now = datetime.datetime.now()
+            now = datetime.datetime.now(datetime.timezone.utc)
         else:
             now = None
 

@@ -796,14 +796,17 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestOptional) {
             expectedSubkey.push_back(leftSubkeyInit[i]);
             expectedValue.push_back(leftValueInit[i]);
 
-            const auto& found = rightMap.find(*leftKeyInit[i]);
-            if (found != rightMap.cend()) {
-                expectedRightKey.push_back(found->first);
-                expectedRightValue.push_back(found->second);
-            } else {
-                expectedRightKey.push_back(std::nullopt);
-                expectedRightValue.push_back(std::nullopt);
+            if (leftKeyInit[i].has_value()) {
+                const auto& found = rightMap.find(*leftKeyInit[i]);
+                if (found != rightMap.cend()) {
+                    expectedRightKey.push_back(found->first);
+                    expectedRightValue.push_back(found->second);
+                    continue;
+                }
             }
+
+            expectedRightKey.push_back(std::nullopt);
+            expectedRightValue.push_back(std::nullopt);
         }
 
         auto [leftType, leftList] = ConvertVectorsToTuples(setup,

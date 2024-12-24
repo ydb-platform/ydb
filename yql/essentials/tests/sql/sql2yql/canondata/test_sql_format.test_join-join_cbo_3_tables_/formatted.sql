@@ -1,8 +1,6 @@
 USE plato;
 
-PRAGMA warning('disable', '8001');
-
--- CBO_MISSING_TABLE_STATS
+PRAGMA warning('disable', '8001'); -- CBO_MISSING_TABLE_STATS
 PRAGMA CostBasedOptimizer = 'pg';
 
 SELECT

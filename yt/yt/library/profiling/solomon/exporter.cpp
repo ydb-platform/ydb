@@ -636,6 +636,9 @@ void TSolomonExporter::DoHandleShard(
         if (Config_->ConvertCountersToDeltaGauge && outputEncodingContext.IsSolomonPull) {
             options.ConvertCountersToDeltaGauge = true;
         }
+        if (Config_->EnableHistogramCompat && outputEncodingContext.IsSolomonPull) {
+            options.EnableHistogramCompat = true;
+        }
 
         options.EnableSolomonAggregationWorkaround = outputEncodingContext.IsSolomonPull;
         options.Times = readWindow;

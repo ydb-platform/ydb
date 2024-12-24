@@ -8,7 +8,7 @@ def post_install(self):
     with open(includeFilePath, "r") as file:
         filedata = file.read()
 
-    filedata = filedata.replace("<nghttp3/version.h>", "\"version.h\"")
+    filedata = filedata.replace("<nghttp3/version.h>", '"version.h"')
 
     with open(includeFilePath, "w") as file:
         file.write(filedata)

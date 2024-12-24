@@ -115,7 +115,20 @@ public:
 
     // Transactions
 
-    virtual void PingTx(const TTransactionId& transactionId) = 0;
+    virtual TTransactionId StartTransaction(
+        TMutationId& mutationId,
+        const TTransactionId& parentId,
+        const TStartTransactionOptions& options = {}) = 0;
+
+    virtual void PingTransaction(const TTransactionId& transactionId) = 0;
+
+    virtual void AbortTransaction(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId) = 0;
+
+    virtual void CommitTransaction(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId) = 0;
 
     // Operations
 
@@ -183,6 +196,21 @@ public:
         const TOperationId& operationId,
         const TGetJobTraceOptions& options = {}) = 0;
 
+    // File cache
+
+    virtual TMaybe<TYPath> GetFileFromCache(
+        const TTransactionId& transactionId,
+        const TString& md5Signature,
+        const TYPath& cachePath,
+        const TGetFileFromCacheOptions& options = {}) = 0;
+
+    virtual TYPath PutFileToCache(
+        const TTransactionId& transactionId,
+        const TYPath& filePath,
+        const TString& md5Signature,
+        const TYPath& cachePath,
+        const TPutFileToCacheOptions& options = {}) = 0;
+
     // Tables
 
     virtual void MountTable(
@@ -232,7 +260,52 @@ public:
         const TString& query,
         const TSelectRowsOptions& options = {}) = 0;
 
+    virtual void AlterTable(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        const TYPath& path,
+        const TAlterTableOptions& options = {}) = 0;
+
+    virtual void AlterTableReplica(
+        TMutationId& mutationId,
+        const TReplicaId& replicaId,
+        const TAlterTableReplicaOptions& options = {}) = 0;
+
+    virtual void DeleteRows(
+        const TYPath& path,
+        const TNode::TListType& keys,
+        const TDeleteRowsOptions& options = {}) = 0;
+
+    virtual void FreezeTable(
+        const TYPath& path,
+        const TFreezeTableOptions& options = {}) = 0;
+
+    virtual void UnfreezeTable(
+        const TYPath& path,
+        const TUnfreezeTableOptions& options = {}) = 0;
+
     // Misc
+
+    virtual TCheckPermissionResponse CheckPermission(
+        const TString& user,
+        EPermission permission,
+        const TYPath& path,
+        const TCheckPermissionOptions& options = {}) = 0;
+
+    virtual TVector<TTabletInfo> GetTabletInfos(
+        const TYPath& path,
+        const TVector<int>& tabletIndexes,
+        const TGetTabletInfosOptions& options = {}) = 0;
+
+    virtual TVector<TTableColumnarStatistics> GetTableColumnarStatistics(
+        const TTransactionId& transactionId,
+        const TVector<TRichYPath>& paths,
+        const TGetTableColumnarStatisticsOptions& options = {}) = 0;
+
+    virtual TMultiTablePartitions GetTablePartitions(
+        const TTransactionId& transactionId,
+        const TVector<TRichYPath>& paths,
+        const TGetTablePartitionsOptions& options = {}) = 0;
 
     virtual ui64 GenerateTimestamp() = 0;
 

@@ -1,5 +1,52 @@
 # Список изменений {{ ydb-short-name }} Server
 
+
+## Версия 24.2 {#24-2}
+
+Дата выхода: 20 августа 2024.
+
+**Функциональность:**
+
+* Добавлена возможность [задать приоритеты](./devops/manual/maintenance-without-downtime#priority) задачам обслуживания в [системе управления кластером](./concepts/glossary#cms).
+* Добавлена [настройка стабильных имён](./reference/configuration/#node-broker-config) для узлов кластера в рамках тенанта.
+* Добавлено получение вложенных групп от [LDAP-сервера](./concepts/auth#ldap-auth-provider), в [LDAP-конфигурации](./reference/configuration/#ldap-auth-config) улучшен парсинг хостов и добавлена настройка для отключения встроенной аутентификацию по логину и паролю.
+* Добавлена возможность аутентификации [динамических узлов](./concepts/glossary#dynamic) по SSL-сертификату.
+* Реализовано удаление неактивных узлов из [Hive](./concepts/glossary#hive) без его перезапуска.
+* Улучшено управление inflight pings при перезапуске Hive в кластерах большого размера.
+* [Изменен](https://github.com/ydb-platform/ydb/pull/6381) порядок установления соединения с узлами при перезапуске Hive.
+
+**YDB UI:**
+
+* [Добавлена](https://github.com/ydb-platform/ydb/pull/7485) возможность задать TTL для сессии пользователя в конфигурационном файле.
+* [Добавлена](https://github.com/ydb-platform/ydb-embedded-ui/pull/1028) сортировка по `CPUTime` в таблицу со списком запросов.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/7779) потеря точности при работе с `double`, `float`.
+* Поддержано [создание директорий из UI](https://github.com/ydb-platform/ydb-embedded-ui/issues/958).
+* [Добавлена возможность](https://github.com/ydb-platform/ydb-embedded-ui/pull/976) задать интервал фонового обновления данных на всех страницах.
+* [Улучшено](https://github.com/ydb-platform/ydb-embedded-ui/issues/955) отображения ACL.
+* Включено автодополнение в редакторе запросов по умолчанию.
+* [Добавлена](https://github.com/ydb-platform/ydb-embedded-ui/pull/834) поддержка View.
+
+**Исправления ошибок:**
+
+* Добавлена проверка на размер локальной транзакции до ее коммита, чтобы исправить [ошибки](https://github.com/ydb-platform/ydb/issues/6677) в работе схемных операции при выполнении экспорта/бекапа больших баз.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/7709) [ошибка](https://github.com/ydb-platform/ydb/issues/7674) дублирования результатов SELECT-запроса при уменьшении квоты в [DataShard](./concepts/glossary#data-shard).
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/6461) [ошибки](https://github.com/ydb-platform/ydb/issues/6220), возникающие при изменении состояния [координатора](./concepts/glossary#coordinator).
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/5992) ошибки, возникающие в момент первичного сканирования [CDC](./dev/cdc).
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/6615) состояние гонки в асинхронной доставке изменений (асинхронные индексы, CDC).
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/5993) редкая ошибка, из-за которой удаление по [TTL](./concepts/ttl) приводило к аварийному завершению процесса.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/5760) ошибка отображения статуса PDisk в интерфейсе [CMS](./concepts/glossary#cms).
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/6008) ошибки, из-за которых мягкий перенос (drain) таблеток с узла мог зависать.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/6445) ошибка остановки interconnect proxy на узле, работающем без перезапусков, при добавлении другого узла в кластер.
+* [Исправлен](https://github.com/ydb-platform/ydb/pull/6695) учет свободной памяти в [interconnect](./concepts/glossary#actor-system-interconnect).
+* [Исправлены](https://github.com/ydb-platform/ydb/issues/6405) счетчики UnreplicatedPhantoms/UnreplicatedNonPhantoms в VDisk.
+* [Исправлена](https://github.com/ydb-platform/ydb/issues/6398) обработка пустых запросов сборки мусора на VDisk.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/5894) управление настройками TVDiskControls через CMS.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/5883) ошибка загрузки данных, созданных более новыми версиями VDisk.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/5862) ошибка выполнении запроса `REPLACE INTO` со значением по умолчанию.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/7714) ошибка исполнения запросов, в которых выполнялось несколько left join'ов к одной строковой таблице.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/7740) потеря точности для `float`, `double` типов при использовании CDC.
+
+
 ## Версия 24.1 {#24-1}
 
 Дата выхода: 31 июля 2024.
@@ -288,4 +335,4 @@
   * Добавлена поддержка сжатия при экспорте данных в S3.
   * Добавлен audit log для DDL statements.
   * Поддержана аутентификация со статическими учетными данными.
-  * Добавлены системные таблицы для диагностики производительности запросов.
+  * Добавлены системные представления для диагностики производительности запросов.

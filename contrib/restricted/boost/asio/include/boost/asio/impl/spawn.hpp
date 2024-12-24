@@ -29,7 +29,6 @@
 #include <boost/asio/detail/noncopyable.hpp>
 #include <boost/asio/detail/type_traits.hpp>
 #include <boost/asio/detail/utility.hpp>
-#include <boost/asio/error.hpp>
 #include <boost/system/system_error.hpp>
 
 #if defined(BOOST_ASIO_HAS_BOOST_CONTEXT_FIBER)
@@ -976,6 +975,7 @@ private:
   cancellation_signal signal_;
   Executor ex_;
 };
+
 
 template <typename Handler, typename Executor>
 class spawn_cancellation_handler<Handler, Executor,

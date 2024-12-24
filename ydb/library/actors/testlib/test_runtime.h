@@ -305,6 +305,7 @@ namespace NActors {
             const TActorId& parentid = TActorId());
         TActorId Register(IActor *actor, ui32 nodeIndex, ui32 poolId, TMailbox *mailbox,
             const TActorId& parentid = TActorId());
+        TActorId RegisterAlias(TMailbox* mailbox, IActor* actor, ui32 nodeIndex, ui32 poolId);
         TActorId RegisterService(const TActorId& serviceId, const TActorId& actorId, ui32 nodeIndex = 0);
         TActorId AllocateEdgeActor(ui32 nodeIndex = 0);
         TEventsList CaptureEvents();

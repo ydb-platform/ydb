@@ -97,7 +97,7 @@ MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansReque
 
     Ydb::Type type;
     type.set_type_id(Ydb::Type::UINT32);
-    uploadTypes->emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::PostingTable_ParentColumn, type);
+    uploadTypes->emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type);
 
     auto addType = [&](const auto& column) {
         auto it = types.find(column);

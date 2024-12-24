@@ -270,9 +270,8 @@ context::context(context::method m)
 #endif // defined(SSL_TXT_TLSV1_2)
 
     // TLS v1.3.
-#if ((OPENSSL_VERSION_NUMBER >= 0x10101000L) \
-      && !defined(LIBRESSL_VERSION_NUMBER)) \
-    || defined(BOOST_ASIO_USE_WOLFSSL)
+#if (OPENSSL_VERSION_NUMBER >= 0x10101000L) \
+    && !defined(LIBRESSL_VERSION_NUMBER)
   case context::tlsv13:
     handle_ = ::SSL_CTX_new(::TLS_method());
     if (handle_)
@@ -297,18 +296,16 @@ context::context(context::method m)
       SSL_CTX_set_max_proto_version(handle_, TLS1_3_VERSION);
     }
     break;
-#else // ((OPENSSL_VERSION_NUMBER >= 0x10101000L)
-      //     && !defined(LIBRESSL_VERSION_NUMBER))
-      //   || defined(BOOST_ASIO_USE_WOLFSSL)
+#else // (OPENSSL_VERSION_NUMBER >= 0x10101000L)
+      //   && !defined(LIBRESSL_VERSION_NUMBER)
   case context::tlsv13:
   case context::tlsv13_client:
   case context::tlsv13_server:
     boost::asio::detail::throw_error(
         boost::asio::error::invalid_argument, "context");
     break;
-#endif // ((OPENSSL_VERSION_NUMBER >= 0x10101000L)
-       //     && !defined(LIBRESSL_VERSION_NUMBER))
-       //   || defined(BOOST_ASIO_USE_WOLFSSL)
+#endif // (OPENSSL_VERSION_NUMBER >= 0x10101000L)
+       //   && !defined(LIBRESSL_VERSION_NUMBER)
 
     // Any supported SSL/TLS version.
   case context::sslv23:
@@ -798,7 +795,7 @@ BOOST_ASIO_SYNC_OP_VOID context::use_certificate_chain(
         BOOST_ASIO_SYNC_OP_VOID_RETURN(ec);
       }
     }
-
+  
     result = ::ERR_peek_last_error();
     if ((ERR_GET_LIB(result) == ERR_LIB_PEM)
         && (ERR_GET_REASON(result) == PEM_R_NO_START_LINE))

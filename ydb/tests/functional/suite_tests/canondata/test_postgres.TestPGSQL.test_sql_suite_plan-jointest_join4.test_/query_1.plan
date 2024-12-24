@@ -138,6 +138,7 @@
                                                                                                                     {
                                                                                                                         "Inputs": [],
                                                                                                                         "Name": "TableFullScan",
+                                                                                                                        "Path": "/Root/postgres_jointest/join4.test_plan/nt1",
                                                                                                                         "ReadColumns": [
                                                                                                                             "a1",
                                                                                                                             "a2",
@@ -179,6 +180,7 @@
                                                                                                     {
                                                                                                         "Inputs": [],
                                                                                                         "Name": "TableFullScan",
+                                                                                                        "Path": "/Root/postgres_jointest/join4.test_plan/nt2",
                                                                                                         "ReadColumns": [
                                                                                                             "b1",
                                                                                                             "b2",
@@ -225,6 +227,7 @@
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TablePointLookup",
+                                                                        "Path": "/Root/postgres_jointest/join4.test_plan/nt3",
                                                                         "ReadColumns": [
                                                                             "id",
                                                                             "nt2_id"

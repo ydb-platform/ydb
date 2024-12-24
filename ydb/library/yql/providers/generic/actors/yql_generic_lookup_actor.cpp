@@ -397,6 +397,21 @@ namespace NYql::NDq {
             return result;
         }
 
+        void AddClause(NConnector::NApi::TPredicate_TDisjunction &disjunction, 
+                       ui32 columns, auto&& getter) {
+            NConnector::NApi::TPredicate_TConjunction conjunction;
+            for (ui32 c = 0; c != columns; ++c) {
+                NConnector::NApi::TPredicate_TComparison eq;
+                eq.Setoperation(NConnector::NApi::TPredicate_TComparison_EOperation::TPredicate_TComparison_EOperation_EQ);
+                eq.mutable_left_value()->Setcolumn(TString(KeyType->GetMemberName(c)));
+                auto rightTypedValue = eq.mutable_right_value()->mutable_typed_value();
+                ExportTypeToProto(KeyType->GetMemberType(c), *rightTypedValue->mutable_type());
+                ExportValueToProto(KeyType->GetMemberType(c), getter(c), *rightTypedValue->mutable_value());
+                *conjunction.mutable_operands()->Add()->mutable_comparison() = eq;
+            }
+            *disjunction.mutable_operands()->Add()->mutable_conjunction() = conjunction;
+        }
+
         TString FillSelect(NConnector::NApi::TSelect& select) {
             auto dsi = LookupSource.data_source_instance();
             auto error = TokenProvider->MaybeFillToken(dsi);
@@ -414,28 +429,15 @@ namespace NYql::NDq {
             select.mutable_from()->Settable(LookupSource.table());
 
             NConnector::NApi::TPredicate_TDisjunction disjunction;
-            auto addClause = [&disjunction, KeyType = this->KeyType](ui32 columns, auto&& getter) {
-                NConnector::NApi::TPredicate_TConjunction conjunction;
-                for (ui32 c = 0; c != columns; ++c) {
-                    NConnector::NApi::TPredicate_TComparison eq;
-                    eq.Setoperation(NConnector::NApi::TPredicate_TComparison_EOperation::TPredicate_TComparison_EOperation_EQ);
-                    eq.mutable_left_value()->Setcolumn(TString(KeyType->GetMemberName(c)));
-                    auto rightTypedValue = eq.mutable_right_value()->mutable_typed_value();
-                    ExportTypeToProto(KeyType->GetMemberType(c), *rightTypedValue->mutable_type());
-                    ExportValueToProto(KeyType->GetMemberType(c), getter(c), *rightTypedValue->mutable_value());
-                    *conjunction.mutable_operands()->Add()->mutable_comparison() = eq;
-                }
-                *disjunction.mutable_operands()->Add()->mutable_conjunction() = conjunction;
-            };
             for (const auto& [k, _] : *Request) {
-                addClause(KeyType->GetMembersCount(), [&k = k](auto c) {
+                AddClause(disjunction, KeyType->GetMembersCount(), [&k = k](auto c) {
                     return k.GetElement(c);
                 });
             }
             auto& k = Request->begin()->first; // Request is never empty
             // Pad query with dummy clauses to improve caching
             for (ui32 nRequests = Request->size(); !IsPowerOf2(nRequests) && nRequests < MaxKeysInRequest; ++nRequests) {
-                addClause(KeyType->GetMembersCount(), [&k = k](auto c) {
+                AddClause(disjunction, KeyType->GetMembersCount(), [&k = k](auto c) {
                     return k.GetElement(c);
                 });
             }

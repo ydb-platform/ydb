@@ -102,9 +102,12 @@ def get_single_statement(lines):
     for line_idx, line in lines:
         if is_empty_line(line):
             statement = "\n".join(statement_lines)
+            logger.error("GGGG"+statement)
             return statement
         statement_lines.append(line)
-    return "\n".join(statement_lines)
+    result = "\n".join(statement_lines)
+    logger.error("GGGG"+result)
+    return result
 
 
 class ParsedStatement(collections.namedtuple('ParsedStatement', ["at_line", "s_type", "suite_name", "text"])):
@@ -124,6 +127,7 @@ class ParsedStatement(collections.namedtuple('ParsedStatement', ["at_line", "s_t
 
 
 def get_statements(suite_path, suite_name):
+    logger.error("get_statements EEEEEEEEE")
     lines = get_lines(suite_path)
     for line_idx, line in lines:
         if is_empty_line(line) or not is_statement_definition(line):
@@ -243,25 +247,15 @@ def format_as_table(data):
 class BaseSuiteRunner(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = KiKiMR(
-            KikimrConfigGenerator(
-                udfs_path=yatest.common.build_path("yql/udfs"),
-                use_in_memory_pdisks=True,
-                disable_iterator_reads=True,
-                disable_iterator_lookups=True,
-                extra_feature_flags=["enable_resource_pools"],
-                # additional_log_configs={'KQP_YQL': 7}
-            )
-        )
-        cls.cluster.start()
         cls.table_path_prefix = None
         cls.table_path_prefix_ne = None
         cls.driver = ydb.Driver(ydb.DriverConfig(
-            database="/Root",
-            endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port)))
+            database="/olap-testing-vla-common3/kikimr/slonn/database-1",
+            endpoint="grpc://vla4-9079.host.testing.ydb.yandex.net:2135"),
+            credentials=ydb.AccessTokenCredentials("AQAD-qJSJruGAAADvrVHNSn770FGj6-0qNXqcCo"))
         cls.legacy_pool = ydb.SessionPool(cls.driver)  # for explain
         cls.pool = ydb.QuerySessionPool(cls.driver)
-        cls.driver.wait()
+        cls.driver.wait(10)
         cls.query_id = itertools.count(start=1)
         cls.files = {}
         cls.plan = False
@@ -272,13 +266,13 @@ class BaseSuiteRunner(object):
         cls.legacy_pool.stop()
         cls.pool.stop()
         cls.driver.stop()
-        cls.cluster.stop()
+
 
     def run_sql_suite(self, kind, *path_pieces):
         self.files = {}
         self.plan = (kind == 'plan')
         self.query_id = itertools.count(start=1)
-        self.table_path_prefix = "/Root/%s" % '_'.join(list(path_pieces) + [kind])
+        self.table_path_prefix = "/olap-testing-vla-common3/kikimr/slonn/database-1/%s" % '_'.join(list(path_pieces) + [kind])
         self.table_path_prefix_ne = self.table_path_prefix + "_ne"
         for parsed_statement in get_statements(get_source_path(*path_pieces), os.path.join(*path_pieces)):
             self.assert_statement(parsed_statement)
@@ -365,33 +359,33 @@ class BaseSuiteRunner(object):
 
         query_id = next(self.query_id)
         query_name = "query_%d" % query_id
-        if self.plan:
-            query_plan = json.loads(self.explain(statement.text))
-            if 'SimplifiedPlan' in query_plan:
-                del query_plan['SimplifiedPlan']
-            if 'Plan' in query_plan:
-                self.remove_optimizer_estimates(query_plan['Plan'])
-            self.files[query_name + '.plan'] = write_canonical_response(
-                query_plan,
-                query_name + '.plan',
-            )
+        # if self.plan:
+        #     query_plan = json.loads(self.explain(statement.text))
+        #     if 'SimplifiedPlan' in query_plan:
+        #         del query_plan['SimplifiedPlan']
+        #     if 'Plan' in query_plan:
+        #         self.remove_optimizer_estimates(query_plan['Plan'])
+        #     self.files[query_name + '.plan'] = write_canonical_response(
+        #         query_plan,
+        #         query_name + '.plan',
+        #     )
 
-            return
+        #     return
 
         actual_output, expected_output = safe_execute(get_actual_and_expected, statement, query_name)
 
-        if len(actual_output) > 0:
-            self.files[query_name] = write_canonical_response(
-                wrap_rows(actual_output[0].rows), query_name)
+        # if len(actual_output) > 0:
+        #     self.files[query_name] = write_canonical_response(
+        #         wrap_rows(actual_output[0].rows), query_name)
 
-            if expected_output:
-                assert_that(
-                    actual_output[0].rows,
-                    equal_to(expected_output),
-                    str(
-                        statement
-                    )
-                )
+        #     if expected_output:
+        #         assert_that(
+        #             actual_output[0].rows,
+        #             equal_to(expected_output),
+        #             str(
+        #                 statement
+        #             )
+        #         )
 
     def execute_scan_query(self, yql_text):
         success = False

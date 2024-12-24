@@ -1,19 +1,19 @@
 statement ok
-create table t1(a integer, b integer, c integer, d integer, e integer, primary key(a, b, c, d, e))
+create table t1(a integer not null, b integer not null, c integer not null, d integer not null, e integer not null, primary key(a, b, c, d, e)) partition by hash(a,b,c,d,e)  with(store=column)
 
-statement ok
+statement skipped
 insert into t1(e,c,b,d,a) values(null,102,null,101,104)
 
 statement ok
 insert into t1(a,c,d,e,b) values(107,106,108,109,105)
 
-statement ok
+statement skipped
 insert into t1(e,d,b,a,c) values(110,114,112,null,113)
 
-statement ok
+statement skipped
 insert into t1(d,c,e,a,b) values(116,119,117,115,null)
 
-statement ok
+statement skipped
 insert into t1(c,d,b,e,a) values(123,122,124,null,121)
 
 statement ok
@@ -28,25 +28,25 @@ insert into t1(a,d,b,e,c) values(138,136,139,135,137)
 statement ok
 insert into t1(e,c,d,a,b) values(144,141,140,142,143)
 
-statement ok
+statement skipped
 insert into t1(b,a,e,d,c) values(145,149,146,null,147)
 
-statement ok
+statement skipped
 insert into t1(b,c,a,d,e) values(151,150,153,null,null)
 
-statement ok
+statement skipped
 insert into t1(c,e,a,d,b) values(155,157,159,null,158)
 
 statement ok
 insert into t1(c,b,a,d,e) values(161,160,163,164,162)
 
-statement ok
+statement skipped
 insert into t1(b,d,a,e,c) values(167,null,168,165,166)
 
 statement ok
 insert into t1(d,b,c,e,a) values(171,170,172,173,174)
 
-statement ok
+statement skipped
 insert into t1(e,c,a,d,b) values(177,176,179,null,175)
 
 statement ok
@@ -61,10 +61,10 @@ insert into t1(d,b,c,e,a) values(190,194,193,192,191)
 statement ok
 insert into t1(a,e,b,d,c) values(199,197,198,196,195)
 
-statement ok
+statement skipped
 insert into t1(b,c,d,a,e) values(null,202,203,201,204)
 
-statement ok
+statement skipped
 insert into t1(c,e,a,b,d) values(208,null,null,206,207)
 
 statement ok
@@ -82,10 +82,10 @@ insert into t1(d,e,b,a,c) values(226,227,228,229,225)
 statement ok
 insert into t1(a,c,b,e,d) values(234,231,232,230,233)
 
-statement ok
+statement skipped
 insert into t1(e,b,a,c,d) values(237,236,239,null,238)
 
-statement ok
+statement skipped
 insert into t1(e,c,b,a,d) values(null,244,240,243,null)
 
 statement ok

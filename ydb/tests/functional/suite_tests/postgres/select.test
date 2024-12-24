@@ -1,7 +1,7 @@
 statement ok
 CREATE TABLE onek (
- unique1 int32,
- unique2 int32,
+ unique1 int32 not null,
+ unique2 int32 not null,
  two int32,
  four int32,
  ten int32,
@@ -17,7 +17,9 @@ CREATE TABLE onek (
  stringu2 string,
  string4 string,
  PRIMARY KEY (unique1, unique2)
-);
+)
+partition by hash(unique1,unique2) with(store=column)
+;
 
 statement ok
 CREATE TABLE int8_tbl(q1 int64, q2 int64, primary key(q1, q2));

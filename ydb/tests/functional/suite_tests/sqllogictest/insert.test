@@ -1,11 +1,11 @@
 statement ok
-CREATE TABLE a1(a integer, b integer, primary key(a, b));
+CREATE TABLE a1(a integer not null, b integer not null, primary key(a, b))  partition by hash(a,b) with(store=column);
 
 statement ok
-CREATE TABLE a2(a integer, b integer, c int32, primary key(a, b, c));
+CREATE TABLE a2(a integer not null, b integer not null, c int32 not null, primary key(a, b, c)) partition by hash(a,b,c) with(store=column);
 
 statement skipped
-CREATE TABLE a3(x DEFAULT 1.0, y DEFAULT 'string', z);
+CREATE TABLE a3(x DEFAULT 1.0, y DEFAULT 'string', z) with(store=column);
 
 statement skipped
 CREATE TABLE a4(c UNIQUE, d);

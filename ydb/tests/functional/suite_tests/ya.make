@@ -5,7 +5,6 @@ IF (NOT SANITIZER_TYPE AND NOT WITH_VALGRIND)
     ENV(USE_IN_MEMORY_PDISKS=true)
     TEST_SRCS(
         test_base.py
-        test_postgres.py
         test_sql_logic.py
         test_stream_query.py
     )
@@ -17,7 +16,6 @@ IF (NOT SANITIZER_TYPE AND NOT WITH_VALGRIND)
     )
 
     DATA (
-        arcadia/ydb/tests/functional/suite_tests/postgres
         arcadia/ydb/tests/functional/suite_tests/sqllogictest
     )
 

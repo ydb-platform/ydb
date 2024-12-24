@@ -6,30 +6,50 @@
 
 namespace NKikimr::NStorage {
 
-    void TDistributedConfigKeeper::GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID) {
-        if (config->HasBlobStorageConfig()) {
-            const auto& bsConfig = config->GetBlobStorageConfig();
-            const bool noStaticGroup = !bsConfig.HasServiceSet() || !bsConfig.GetServiceSet().GroupsSize();
-            if (noStaticGroup && bsConfig.HasAutoconfigSettings() && bsConfig.GetAutoconfigSettings().HasErasureSpecies()) {
-                try {
-                    const auto& settings = bsConfig.GetAutoconfigSettings();
+    std::optional<TString> TDistributedConfigKeeper::GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config,
+            const TString& selfAssemblyUUID) {
+        if (!config->HasSelfManagementConfig() || !config->GetSelfManagementConfig().GetEnabled()) {
+            return "self-management is not enabled";
+        }
+        const auto& smConfig = config->GetSelfManagementConfig();
 
-                    const auto species = TBlobStorageGroupType::ErasureSpeciesByName(settings.GetErasureSpecies());
-                    if (species == TBlobStorageGroupType::ErasureSpeciesCount) {
-                        throw TExConfigError() << "invalid erasure specified for static group"
-                            << " Erasure# " << settings.GetErasureSpecies();
-                    }
-
-                    AllocateStaticGroup(config, 0 /*groupId*/, 1 /*groupGeneration*/, TBlobStorageGroupType(species),
-                        settings.GetGeometry(), settings.GetPDiskFilter(),
-                        settings.HasPDiskType() ? std::make_optional(settings.GetPDiskType()) : std::nullopt, {}, {}, 0,
-                        nullptr, false, true, false);
-                    STLOG(PRI_DEBUG, BS_NODE, NWDC33, "Allocated static group", (Group, bsConfig.GetServiceSet().GetGroups(0)));
-                } catch (const TExConfigError& ex) {
-                    STLOG(PRI_ERROR, BS_NODE, NWDC10, "Failed to allocate static group", (Reason, ex.what()));
+        const bool noStaticGroup = !config->HasBlobStorageConfig() || // either no BlobStorageConfig section at all
+            !config->GetBlobStorageConfig().HasServiceSet() || // or no ServiceSet in there
+            !config->GetBlobStorageConfig().GetServiceSet().GroupsSize(); // or no groups in ServiceSet
+        if (noStaticGroup) {
+            try {
+                if (!smConfig.HasErasureSpecies()) {
+                    return "missing ErasureSpecies in SelfManagementConfig";
                 }
+
+                const auto species = TBlobStorageGroupType::ErasureSpeciesByName(smConfig.GetErasureSpecies());
+                if (species == TBlobStorageGroupType::ErasureSpeciesCount) {
+                    throw TExConfigError() << "invalid erasure specified for static group"
+                        << " Erasure# " << smConfig.GetErasureSpecies();
+                }
+
+                AllocateStaticGroup(config, 0 /*groupId*/, 1 /*groupGeneration*/, TBlobStorageGroupType(species),
+                    smConfig.GetGeometry(), smConfig.GetPDiskFilter(),
+                    smConfig.HasPDiskType() ? std::make_optional(smConfig.GetPDiskType()) : std::nullopt, {}, {}, 0,
+                    nullptr, false, true, false);
+                STLOG(PRI_DEBUG, BS_NODE, NWDC33, "Allocated static group",
+                    (Group, config->GetBlobStorageConfig().GetServiceSet().GetGroups(0)));
+            } catch (const TExConfigError& ex) {
+                return TStringBuilder() << "failed to allocate static group: " << ex.what();
             }
         }
+
+        // initial config YAML is taken from the Cfg->SelfManagementConfig as it is cleared in TStorageConfig while
+        // deriving it from NodeWarden configuration
+        if (!Cfg->SelfManagementConfig || !Cfg->SelfManagementConfig->HasInitialConfigYaml()) {
+            return "missing initial config YAML";
+        }
+        TStringStream ss;
+        {
+            TZstdCompress zstd(&ss);
+            zstd << Cfg->SelfManagementConfig->GetInitialConfigYaml();
+        }
+        config->SetStorageConfigCompressedYAML(ss.Str());
 
         if (!Cfg->DomainsConfig) { // no automatic configuration required
         } else if (Cfg->DomainsConfig->StateStorageSize() == 1) { // the StateStorage config is already defined explicitly, just migrate it
@@ -45,16 +65,7 @@ namespace NKikimr::NStorage {
 
         config->SetSelfAssemblyUUID(selfAssemblyUUID);
 
-        if (const auto& bsconfig = Cfg->BlobStorageConfig; bsconfig.HasAutoconfigSettings()) {
-            if (const auto& autoconfigSettings = bsconfig.GetAutoconfigSettings(); autoconfigSettings.HasInitialConfigYaml()) {
-                TStringStream ss;
-                {
-                    TZstdCompress zstd(&ss);
-                    zstd << autoconfigSettings.GetInitialConfigYaml();
-                }
-                config->SetStorageConfigCompressedYAML(ss.Str());
-            }
-        }
+        return std::nullopt;
     }
 
     void TDistributedConfigKeeper::AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, ui32 groupId,

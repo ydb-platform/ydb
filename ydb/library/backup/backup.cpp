@@ -2,18 +2,22 @@
 #include "db_iterator.h"
 #include "util.h"
 
+#include <ydb/public/api/protos/draft/ydb_view.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
+#include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb/public/sdk/cpp/client/draft/ydb_view.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <yql/essentials/sql/v1/format/sql_format.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/regex/pcre/regexp.h>
@@ -25,6 +29,7 @@
 #include <util/folder/pathsplit.h>
 #include <util/generic/ptr.h>
 #include <util/generic/yexception.h>
+#include <util/stream/file.h>
 #include <util/stream/format.h>
 #include <util/stream/mem.h>
 #include <util/stream/null.h>
@@ -33,6 +38,8 @@
 #include <util/string/printf.h>
 #include <util/system/file.h>
 #include <util/system/fs.h>
+
+#include <format>
 
 namespace NYdb::NBackup {
 
@@ -411,7 +418,7 @@ Ydb::Table::CreateTableRequest ProtoFromTableDescription(const NTable::TTableDes
 
 NScheme::TSchemeEntry DescribePath(TDriver driver, const TString& fullPath) {
     NScheme::TSchemeClient client(driver);
-    
+
     auto status = NDump::DescribePath(client, fullPath);
     VerifyStatus(status);
 
@@ -496,7 +503,7 @@ void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& 
 
     for (const auto& changefeedDesc : desc.GetChangefeedDescriptions()) {
         TFsPath changefeedDirPath = CreateDirectory(folderPath, changefeedDesc.GetName());
-        
+
         auto protoChangeFeedDesc = ProtoFromChangefeedDesc(changefeedDesc);
         const auto descTopicResult = DescribeTopic(driver, JoinDatabasePath(tablePath, changefeedDesc.GetName()));
         VerifyStatus(descTopicResult);
@@ -520,13 +527,122 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     auto desc = DescribeTable(driver, fullPath);
     auto proto = ProtoFromTableDescription(desc, preservePoolKinds);
     WriteProtoToFile(proto, folderPath, NDump::NFiles::TableScheme());
-  
+
     BackupChangefeeds(driver, JoinDatabasePath(dbPrefix, path), folderPath);
     BackupPermissions(driver, dbPrefix, path, folderPath);
 
     if (!schemaOnly) {
         ReadTable(driver, desc, fullPath, folderPath, ordered);
     }
+}
+
+namespace {
+
+NView::TViewDescription DescribeView(NView::TViewClient& client, const TString& path) {
+    auto status = NConsoleClient::RetryFunction([&]() {
+        return client.DescribeView(path).ExtractValueSync();
+    });
+    VerifyStatus(status);
+    return status.GetViewDescription();
+}
+
+struct TViewQuerySplit {
+    TString ContextRecreation;
+    TString Select;
+};
+
+TViewQuerySplit SplitViewQuery(TStringInput query) {
+    // to do: make the implementation more versatile
+    TViewQuerySplit split;
+
+    TString line;
+    while (query.ReadLine(line)) {
+        (line.StartsWith("--") || line.StartsWith("PRAGMA ")
+            ? split.ContextRecreation
+            : split.Select
+        ) += line;
+    }
+
+    return split;
+}
+
+void ValidateViewQuery(const TString& query, const TString& dbPath, NYql::TIssues& accumulatedIssues) {
+    NYql::TIssues subIssues;
+    if (!NDump::ValidateViewQuery(query, subIssues)) {
+        NYql::TIssue restorabilityIssue(
+            TStringBuilder() << "Restorability of the view: " << dbPath.Quote()
+            << " storing the following query:\n"
+            << query
+            << "\ncannot be guaranteed. For more information, please consult the 'ydb tools dump' documentation."
+        );
+        restorabilityIssue.Severity = NYql::TSeverityIds::S_WARNING;
+        for (const auto& subIssue : subIssues) {
+            restorabilityIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
+        }
+        accumulatedIssues.AddIssue(std::move(restorabilityIssue));
+    }
+}
+
+TString BuildCreateViewQuery(TStringBuf name, const NView::TViewDescription& description, TStringBuf backupRoot) {
+    auto [contextRecreation, select] = SplitViewQuery(description.GetQueryText());
+
+    const TString query = std::format(
+        "-- backup root: \"{}\"\n"
+        "{}\n"
+        "CREATE VIEW IF NOT EXISTS `{}` WITH (security_invoker = TRUE) AS\n"
+        "    {};\n",
+        backupRoot.data(),
+        contextRecreation.data(),
+        name.data(),
+        select.data()
+    );
+
+    TString formattedQuery;
+    TString errors;
+    Y_ENSURE(NSQLFormat::SqlFormatSimple(
+        query,
+        formattedQuery,
+        errors
+    ), errors);
+    return formattedQuery;
+}
+
+}
+
+/*!
+The BackupView function retrieves the view's description from the database,
+constructs a corresponding CREATE VIEW statement,
+and writes it to the backup folder designated for this view.
+
+\param dbBackupRoot the root of the backup in the database
+\param dbPathRelativeToBackupRoot the path to the view in the database relative to the backup root
+\param fsBackupDir the path on the file system to write the file with the CREATE VIEW statement to
+\param issues the accumulated backup issues container
+*/
+void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPathRelativeToBackupRoot,
+    const TFsPath& fsBackupDir, NYql::TIssues& issues
+) {
+    Y_ENSURE(!dbPathRelativeToBackupRoot.empty());
+    const auto dbPath = JoinDatabasePath(dbBackupRoot, dbPathRelativeToBackupRoot);
+
+    LOG_I("Backup view " << dbPath.Quote() << " to " << fsBackupDir.GetPath().Quote());
+
+    NView::TViewClient client(driver);
+    auto viewDescription = DescribeView(client, dbPath);
+
+    ValidateViewQuery(viewDescription.GetQueryText(), dbPath, issues);
+
+    const auto fsPath = fsBackupDir.Child(NDump::NFiles::CreateView().FileName);
+    LOG_D("Write view creation query to " << fsPath.GetPath().Quote());
+
+    TFileOutput output(fsPath);
+    output << BuildCreateViewQuery(
+        TFsPath(dbPathRelativeToBackupRoot).GetName(),
+        viewDescription,
+        dbBackupRoot
+    );
+
+    BackupPermissions(driver, dbBackupRoot, dbPathRelativeToBackupRoot, fsBackupDir);
 }
 
 void CreateClusterDirectory(const TDriver& driver, const TString& path, bool rootBackupDir = false) {
@@ -575,7 +691,9 @@ static void MaybeCreateEmptyFile(const TFsPath& folderPath) {
 
 void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& backupPrefix,
         const TFsPath folderPath, const TVector<TRegExMatch>& exclusionPatterns,
-        bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool preservePoolKinds, bool ordered) {
+        bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool preservePoolKinds, bool ordered,
+        NYql::TIssues& issues
+) {
     TFile(folderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways);
 
     TMap<TString, TAsyncStatus> copiedTablesStatuses;
@@ -610,6 +728,9 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
                 } else if (dbIt.IsDir()) {
                     CreateClusterDirectory(driver, JoinDatabasePath(backupPrefix, dbIt.GetRelPath()));
                 }
+            }
+            if (dbIt.IsView()) {
+                BackupView(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath, issues);
             }
             dbIt.Next();
         }
@@ -721,8 +842,14 @@ void BackupFolder(const TDriver& driver, const TString& database, const TString&
             CreateClusterDirectory(driver, tmpDbFolder, true);
         }
 
+        NYql::TIssues issues;
         BackupFolderImpl(driver, dbPrefix, tmpDbFolder, folderPath, exclusionPatterns,
-            schemaOnly, useConsistentCopyTable, avoidCopy, preservePoolKinds, ordered);
+            schemaOnly, useConsistentCopyTable, avoidCopy, preservePoolKinds, ordered, issues
+        );
+
+        if (issues) {
+            Cerr << issues.ToString();
+        }
     } catch (...) {
         if (!schemaOnly && !avoidCopy) {
             RemoveClusterDirectoryRecursive(driver, tmpDbFolder);

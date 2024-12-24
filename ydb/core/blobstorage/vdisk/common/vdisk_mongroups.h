@@ -135,6 +135,11 @@ public:                                                                         
 
                 COUNTER_INIT_IF_EXTENDED(FreshSatisfactionRankPercent, false);
                 COUNTER_INIT_IF_EXTENDED(LevelSatisfactionRankPercent, false);
+
+                COUNTER_INIT_IF_EXTENDED(ThrottlingCurrentSpeedLimit, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingIsActive, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingLevel0SstCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingAllLevelsInplacedSize, false);
             }
 
             COUNTER_DEF(EmergencyMovedPatchQueueItems);
@@ -153,6 +158,11 @@ public:                                                                         
 
             COUNTER_DEF(FreshSatisfactionRankPercent);
             COUNTER_DEF(LevelSatisfactionRankPercent);
+
+            COUNTER_DEF(ThrottlingCurrentSpeedLimit);
+            COUNTER_DEF(ThrottlingIsActive);
+            COUNTER_DEF(ThrottlingLevel0SstCount);
+            COUNTER_DEF(ThrottlingAllLevelsInplacedSize);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -455,6 +465,7 @@ public:                                                                         
             TLsmLevelGroup Level9to16;
             TLsmLevelGroup Level17;
             TLsmLevelGroup Level18;
+            TLsmLevelGroup Level19;
 
             TLsmAllLevelsStat(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
                 : Group(counters->GetSubgroup("subsystem", "levels"))
@@ -463,6 +474,7 @@ public:                                                                         
                 , Level9to16(Group, "level", "9..16")
                 , Level17(Group, "level", "17")
                 , Level18(Group, "level", "18")
+                , Level19(Group, "level", "19")
             {}
         };
 
@@ -715,4 +727,3 @@ public:                                                                         
 
     } // NMonGroup
 } // NKikimr
-

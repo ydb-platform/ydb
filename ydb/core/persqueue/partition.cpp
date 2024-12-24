@@ -5,6 +5,7 @@
 #include "partition.h"
 #include "partition_log.h"
 
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/counters.h>
@@ -139,6 +140,11 @@ void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue
     );
 }
 
+void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, NWilson::TSpan& span) {
+    ReplyError(ctx, dst, errorCode, error);
+    span.EndError(error);
+}
+
 void TPartition::ReplyPropose(const TActorContext& ctx,
                               const NKikimrPQ::TEvProposeTransaction& event,
                               NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
@@ -153,6 +159,11 @@ void TPartition::ReplyPropose(const TActorContext& ctx,
 
 void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst) {
     ctx.Send(Tablet, MakeReplyOk(dst).Release());
+}
+
+void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst, NWilson::TSpan& span) {
+    ReplyOk(ctx, dst);
+    span.EndOk();
 }
 
 void TPartition::ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst, const i64 offset,
@@ -240,6 +251,7 @@ void TPartition::EmplaceResponse(TMessage&& message, const TActorContext& ctx) {
     const auto now = ctx.Now();
     Responses.emplace_back(
         message.Body,
+        std::move(message.Span),
         (now - TInstant::Zero()) - message.QueueTime,
         now
     );
@@ -500,8 +512,9 @@ void TPartition::DestroyActor(const TActorContext& ctx)
         ReplyError(ctx, ev->Cookie, NPersQueue::NErrorCode::INITIALIZING, ss);
     }
 
-    for (const auto& w : PendingRequests) {
+    for (auto& w : PendingRequests) {
         ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::INITIALIZING, ss);
+        w.Span.EndError(static_cast<const TString&>(ss));
     }
 
     for (const auto& w : Responses) {
@@ -1815,8 +1828,10 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 
         AddCmdDeleteRangeForAllKeys(*PersistRequest);
 
-        ctx.Send(Tablet, PersistRequest.Release());
+        ctx.Send(Tablet, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
         PersistRequest = nullptr;
+        CurrentPersistRequestSpan = std::move(PersistRequestSpan);
+        PersistRequestSpan = NWilson::TSpan();
         DeletePartitionState = DELETION_IN_PROCESS;
         KVWriteInProgress = true;
 
@@ -1873,6 +1888,9 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
             break;
         }
         auto& front = UserActionAndTransactionEvents.front();
+        if (TMessage* msg = std::get_if<TMessage>(&front.Event); msg && msg->WaitPreviousWriteSpan) {
+            msg->WaitPreviousWriteSpan.End();
+        }
         switch (std::visit(visitor, front.Event)) {
         case EProcessResult::Continue:
             MoveUserActOrTxToCommitState();
@@ -2021,7 +2039,10 @@ void TPartition::RunPersist() {
         WriteInfosApplied.clear();
         //Done with counters.
 
-        ctx.Send(HaveWriteMsg ? BlobCache : Tablet, PersistRequest.Release());
+        PersistRequestSpan.Attribute("bytes", static_cast<i64>(PersistRequest->Record.ByteSizeLong()));
+        ctx.Send(HaveWriteMsg ? BlobCache : Tablet, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
+        CurrentPersistRequestSpan = std::move(PersistRequestSpan);
+        PersistRequestSpan = NWilson::TSpan();
         KVWriteInProgress = true;
     } else {
         OnProcessTxsAndUserActsWriteComplete(ActorContext());
@@ -2133,6 +2154,11 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
 
 TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx, TMaybe<bool>& predicate)
 {
+    if (tx.ForcePredicateFalse) {
+        predicate = false;
+        return EProcessResult::Continue;
+    }
+
     THashSet<TString> consumers;
     bool ok = true;
     for (auto& operation : tx.Operations) {
@@ -3361,6 +3387,10 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
     Y_ABORT_UNLESS(TopicQuotaRequestCookie == cookie);
     ConsumeBlobQuota();
     TopicQuotaRequestCookie = 0;
+    for (auto& r : QuotaWaitingRequests) {
+        r.WaitQuotaSpan.End();
+    }
+
     RemoveMessagesToQueue(QuotaWaitingRequests);
 
     // Metrics
@@ -3554,6 +3584,16 @@ const NKikimrPQ::TPQTabletConfig::TPartition* TPartition::GetPartitionConfig(con
 bool TPartition::IsSupportive() const
 {
     return Partition.IsSupportivePartition();
+}
+
+void TPartition::AttachPersistRequestSpan(NWilson::TSpan& span)
+{
+    if (span) {
+        if (!PersistRequestSpan) {
+            PersistRequestSpan = NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId::NewTraceId(span.GetTraceId().GetVerbosity(), Max<ui32>()), "Topic.Partition.PersistRequest");
+        }
+        span.Link(PersistRequestSpan.GetTraceId());
+    }
 }
 
 } // namespace NKikimr::NPQ

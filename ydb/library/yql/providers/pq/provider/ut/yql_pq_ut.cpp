@@ -45,7 +45,7 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, c
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
     RegisterDqPqReadActorFactory(*factory, driver, nullptr, pqGateway);
 
-    RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
+    RegisterDqPqWriteActorFactory(*factory, driver, nullptr, pqGateway);
     return factory;
 }
 

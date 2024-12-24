@@ -1605,7 +1605,6 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
     writer.OnBeginMap();
 
     // Providers
-    bool hasStatistics = false;
     THashSet<TStringBuf> processed;
     for (auto& datasink : TypeCtx_->DataSinks) {
         TStringStream providerOut;
@@ -1613,7 +1612,6 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
         if (datasink->CollectStatistics(providerWriter, totalOnly)) {
             writer.OnKeyedItem(datasink->GetName());
             writer.OnRaw(providerOut.Str());
-            hasStatistics = true;
             processed.insert(datasink->GetName());
         }
     }
@@ -1624,7 +1622,6 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
             if (datasource->CollectStatistics(providerWriter, totalOnly)) {
                 writer.OnKeyedItem(datasource->GetName());
                 writer.OnRaw(providerOut.Str());
-                hasStatistics = true;
             }
         }
     }
@@ -1655,20 +1652,23 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
 
     writer.OnEndMap(); // system
 
+    if (TypeCtx_->Modules) {
+        writer.OnKeyedItem("moduleResolver");
+        writer.OnBeginMap();
+        TypeCtx_->Modules->WriteStatistics(writer);
+        writer.OnEndMap();
+    }
+
     // extra
     for (const auto &[k, extraYson] : extraYsons) {
         writer.OnKeyedItem(k);
         writer.OnRaw(extraYson);
-        hasStatistics = true;
     }
 
     // Footer
     writer.OnEndMap();
     writer.OnEndMap();
-    if (hasStatistics) {
-        return out.Str();
-    }
-    return Nothing();
+    return out.Str();
 }
 
 TMaybe<TString> TProgram::GetDiscoveredData() {
@@ -1916,6 +1916,10 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
 
     if (providerNames.contains(DqProviderName)) {
         resultProviderDataSources.push_back(TString(DqProviderName));
+    }
+
+    if (providerNames.contains(PureProviderName)) {
+        resultProviderDataSources.push_back(TString(PureProviderName));
     }
 
     if (!resultProviderDataSources.empty())

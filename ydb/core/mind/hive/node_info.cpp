@@ -24,6 +24,14 @@ TNodeInfo::TNodeInfo(TNodeId nodeId, THive& hive)
 void TNodeInfo::ChangeVolatileState(EVolatileState state) {
     BLOG_W("Node(" << Id << ", " << ResourceValues << ") VolatileState: " << EVolatileStateName(VolatileState) << " -> " << EVolatileStateName(state));
 
+    if (VolatileState != state) {
+        if (VolatileState == EVolatileState::Connected) {
+            --Hive.AliveNodes;
+        } else if (state == EVolatileState::Connected) {
+            ++Hive.AliveNodes;
+        }
+    }
+
     if (state == EVolatileState::Connected) {
         switch (VolatileState) {
         case EVolatileState::Unknown:

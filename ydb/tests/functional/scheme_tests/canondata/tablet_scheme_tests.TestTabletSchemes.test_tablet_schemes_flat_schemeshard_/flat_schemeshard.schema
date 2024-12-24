@@ -6594,6 +6594,21 @@
                 "ColumnId": 3,
                 "ColumnName": "SidHash",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "LastSuccessfulAttempt",
+                "ColumnType": "Timestamp"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "LastFailedAttempt",
+                "ColumnType": "Timestamp"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "FailedAttemptCount",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -6602,7 +6617,10 @@
                 "Columns": [
                     1,
                     2,
-                    3
+                    3,
+                    4,
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,

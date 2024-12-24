@@ -654,7 +654,7 @@ private:
         LOG_E("Shard " << tabletId << " transaction lost during reconnect: " << record.GetStatus());
 
         CancelProposal(tabletId);
-        ReplyTxStateUnknown(tabletId);
+        ReplyUnavailable(TStringBuilder() << "Disconnected from shard " << tabletId);
     }
 
     void HandlePrepare(TEvDqCompute::TEvState::TPtr& ev) {
@@ -696,7 +696,7 @@ private:
                     return ReplyUnavailable(TStringBuilder() << "Could not prepare program on shard " << msg->TabletId);
                 }
 
-                return ReplyTxStateUnknown(msg->TabletId);
+                return ReplyUnavailable(TStringBuilder() << "Disconnected from shard " << msg->TabletId);
             }
 
             case TShardState::EState::Prepared: {
@@ -717,7 +717,7 @@ private:
                     << (msg->NotDelivered ? ", last message not delivered" : ""));
 
                 CancelProposal(0);
-                return ReplyTxStateUnknown(msg->TabletId);
+                return ReplyUnavailable(TStringBuilder() << "Disconnected from shard " << msg->TabletId);
             }
 
             case TShardState::EState::Initial:

@@ -265,11 +265,12 @@ auto CalcVectorKmeansTreePostingImplTableDescImpl(
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
     {
         auto parentColumn = implTableDesc.AddColumns();
-        parentColumn->SetName(NTableVectorKmeansTreeIndex::PostingTable_ParentColumn);
+        parentColumn->SetName(NTableVectorKmeansTreeIndex::ParentColumn);
         parentColumn->SetType("Uint32");
         parentColumn->SetTypeId(NScheme::NTypeIds::Uint32);
+        parentColumn->SetNotNull(true);
     }
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::PostingTable_ParentColumn);
+    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::ParentColumn);
     FillIndexImplTableColumns(GetColumns(baseTable), implTableColumns, implTableDesc);
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
@@ -307,25 +308,28 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
 
     {
         auto parentColumn = implTableDesc.AddColumns();
-        parentColumn->SetName(NTableVectorKmeansTreeIndex::LevelTable_ParentColumn);
+        parentColumn->SetName(NTableVectorKmeansTreeIndex::ParentColumn);
         parentColumn->SetType("Uint32");
         parentColumn->SetTypeId(NScheme::NTypeIds::Uint32);
+        parentColumn->SetNotNull(true);
     }
     {
         auto idColumn = implTableDesc.AddColumns();
-        idColumn->SetName(NTableVectorKmeansTreeIndex::LevelTable_IdColumn);
+        idColumn->SetName(NTableVectorKmeansTreeIndex::IdColumn);
         idColumn->SetType("Uint32");
         idColumn->SetTypeId(NScheme::NTypeIds::Uint32);
+        idColumn->SetNotNull(true);
     }
     {
         auto centroidColumn = implTableDesc.AddColumns();
-        centroidColumn->SetName(NTableVectorKmeansTreeIndex::LevelTable_EmbeddingColumn);
+        centroidColumn->SetName(NTableVectorKmeansTreeIndex::CentroidColumn);
         centroidColumn->SetType("String");
         centroidColumn->SetTypeId(NScheme::NTypeIds::String);
+        centroidColumn->SetNotNull(true);
     }
 
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::LevelTable_ParentColumn);
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::LevelTable_IdColumn);
+    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::ParentColumn);
+    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::IdColumn);
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
 

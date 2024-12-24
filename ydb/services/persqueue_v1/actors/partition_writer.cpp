@@ -13,7 +13,7 @@ void TPartitionWriter::OnEvInitResult(const NPQ::TEvPartitionWriter::TEvInitResu
     MaxSeqNo = result.GetResult().SourceIdInfo.GetSeqNo();
 }
 
-void TPartitionWriter::OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteRequest>&& ev,
+void TPartitionWriter::OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteRequest>&& ev, NWilson::TTraceId traceId,
                                       const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(ev->Record.HasPartitionRequest());
@@ -21,7 +21,7 @@ void TPartitionWriter::OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteR
     if (SentRequests.size() < MAX_RESERVE_REQUESTS_INFLIGHT) {
         SentRequests.emplace_back(ev->Record.GetPartitionRequest().GetCookie());
 
-        ctx.Send(Actor, ev.Release());
+        ctx.Send(Actor, ev.Release(), 0, 0, std::move(traceId));
     } else {
         QuotedRequests.emplace_back(std::move(ev));
     }

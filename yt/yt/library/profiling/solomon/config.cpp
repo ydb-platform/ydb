@@ -92,6 +92,9 @@ void TSolomonExporterConfig::Register(TRegistrar registrar)
         .Default(DefaultProducerCollectionBatchSize)
         .GreaterThan(0);
 
+    registrar.Parameter("label_sanitization_policy", &TThis::LabelSanitizationPolicy)
+        .Default(ELabelSanitizationPolicy::None);
+
     registrar.Postprocessor([] (TThis* config) {
         if (config->LingerTimeout.GetValue() % config->GridStep.GetValue() != 0) {
             THROW_ERROR_EXCEPTION("\"linger_timeout\" must be multiple of \"grid_step\"");

@@ -9,7 +9,7 @@
 
 namespace NKikimr::NOlap {
 
-class TBuildBatchesTask: public NConveyor::ITask {
+class TBuildBatchesTask: public NConveyor::ITask, public NColumnShard::TMonitoringObjectsCounter<TBuildBatchesTask> {
 private:
     NEvWrite::TWriteData WriteData;
     const NActors::TActorId BufferActorId;

@@ -2,7 +2,7 @@ from __future__ import annotations
 import pytest
 from .conftest import LoadSuiteBase
 from os import getenv
-from ydb.tests.olap.lib.ydb_cli import WorkloadType
+from ydb.tests.olap.lib.ydb_cli import WorkloadType, CheckCanonicalPolicy
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
@@ -46,7 +46,7 @@ class TpcdsSuiteBase(LoadSuiteBase):
 
 class TestTpcds1(TpcdsSuiteBase):
     scale: int = 1
-    check_canonical: bool = True
+    check_canonical: bool = CheckCanonicalPolicy.ERROR
     tables_size: dict[str, int] = {
         'call_center': 6,
         'catalog_page': 11718,
@@ -71,8 +71,12 @@ class TestTpcds1(TpcdsSuiteBase):
 
 class TestTpcds10(TpcdsSuiteBase):
     scale: int = 10
-    check_canonical: bool = True
+    check_canonical: bool = CheckCanonicalPolicy.WARNING
     timeout = max(TpcdsSuiteBase.timeout, 300.)
+    query_settings = {
+        # temporary, https://github.com/ydb-platform/ydb/issues/11767#issuecomment-2553353146
+        72: LoadSuiteBase.QuerySettings(query_prefix='pragma ydb.UseGraceJoinCoreForMap = "false";'),
+    }
     tables_size: dict[str, int] = {
         'call_center': 24,
         'catalog_page': 12000,
@@ -97,7 +101,7 @@ class TestTpcds10(TpcdsSuiteBase):
 
 class TestTpcds100(TpcdsSuiteBase):
     scale: int = 100
-    check_canonical: bool = True
+    check_canonical: bool = CheckCanonicalPolicy.WARNING
     iterations: int = 2
     timeout = max(TpcdsSuiteBase.timeout, 3600.)
     query_settings = {

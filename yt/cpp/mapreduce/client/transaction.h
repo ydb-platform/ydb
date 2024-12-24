@@ -44,6 +44,7 @@ public:
     const std::pair<TDuration, TDuration> GetPingInterval() const;
     const TClientContext GetContext() const;
 
+    void Ping() const;
     void Commit();
     void Abort();
     void Detach();
@@ -77,6 +78,7 @@ private:
 
 private:
     void Init(
+        const IRawClientPtr& rawClient,
         const TClientContext& context,
         const TTransactionId& transactionId,
         TDuration timeout);

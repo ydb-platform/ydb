@@ -47,6 +47,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_internal_interface.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -150,14 +151,15 @@ namespace NKikimr {
         }
 
         void ProcessPostponedEvents(const TActorContext &ctx, bool actualizeLevels) {
-            if (OverloadHandler) {
-                // we perform postponed events processing in batch to prioritize emergency
-                // queue over new incoming messages; we still make pauses to allow handling
-                // of other messages, 'Gets' for instance
-                bool proceedFurther = OverloadHandler->ProcessPostponedEvents(ctx, 16, actualizeLevels);
-                if (proceedFurther) {
-                    ctx.Send(ctx.SelfID, new TEvKickEmergencyPutQueue());
-                }
+            if (!OverloadHandler) {
+                return;
+            }
+            // we perform postponed events processing in batch to prioritize emergency
+            // queue over new incoming messages; we still make pauses to allow handling
+            // of other messages, 'Gets' for instance
+            bool proceedFurther = OverloadHandler->ProcessPostponedEvents(ctx, 16, actualizeLevels);
+            if (proceedFurther) {
+                ctx.Send(ctx.SelfID, new TEvKickEmergencyPutQueue());
             }
         }
 
@@ -167,6 +169,7 @@ namespace NKikimr {
         }
 
         void KickEmergencyPutQueue(const TActorContext &ctx) {
+            OverloadHandler->OnKickEmergencyPutQueue();
             ProcessPostponedEvents(ctx, false);
         }
 
@@ -1986,6 +1989,8 @@ namespace NKikimr {
 
                 // actualize weights before we start
                 OverloadHandler->ActualizeWeights(ctx, AllEHullDbTypes, true);
+
+                OverloadHandler->RegisterIcbControls(AppData()->Icb);
 
                 // run Anubis
                 if (Config->RunAnubis && !Config->BaseInfo.DonorMode) {

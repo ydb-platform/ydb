@@ -64,6 +64,13 @@ public:
             }
         }
 
+        void OnFilteredBatch(ui64 firstRow, ui64 lastRow) override {
+            UNIT_ASSERT_C(Started, "Unexpected data for not started filter");
+            for (ui64 rowId = firstRow; rowId <= lastRow; ++rowId) {
+                Callback(rowId);
+            }
+        }
+
         void OnFilteredData(ui64 rowId) override {
             UNIT_ASSERT_C(Started, "Unexpected data for not started filter");
             Callback(rowId);
@@ -85,7 +92,7 @@ public:
     virtual void SetUp(NUnitTest::TTestContext& ctx) override {
         TBase::SetUp(ctx);
 
-        CompileServiceActorId = Runtime.Register(CreatePurecalcCompileService());
+        CompileServiceActorId = Runtime.Register(CreatePurecalcCompileService({}, MakeIntrusive<NMonitoring::TDynamicCounters>()));
     }
 
     virtual void TearDown(NUnitTest::TTestContext& ctx) override {

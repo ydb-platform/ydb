@@ -26,6 +26,7 @@ RECURSE_FOR_TESTS(
     ut_index_build
     ut_index_build_reboots
     ut_login
+    ut_login_large
     ut_move
     ut_move_reboots
     ut_olap
@@ -309,6 +310,7 @@ PEERDIR(
     yql/essentials/providers/common/proto
     ydb/services/bg_tasks
     ydb/core/tx/columnshard/bg_tasks/manager
+    ydb/core/tx/tiering/tier
 )
 
 YQL_LAST_ABI_VERSION()

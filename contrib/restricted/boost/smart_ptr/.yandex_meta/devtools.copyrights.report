@@ -115,7 +115,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/smart_ptr/detail/requires_cxx11.hpp [4:6]
         include/boost/smart_ptr/detail/sp_thread_pause.hpp [4:6]
         include/boost/smart_ptr/detail/sp_thread_sleep.hpp [4:6]
         include/boost/smart_ptr/detail/sp_thread_yield.hpp [4:6]
@@ -199,13 +198,15 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL 3097182274a2e77f502de94f323359af
 BELONGS ya.make
     License text:
-        //  Copyright (c) 2001, 2002 Peter Dimov and Multi Media Ltd.
+        // Copyright (c) 2001, 2002 Peter Dimov and Multi Media Ltd.
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/detail/atomic_count.hpp [13:13]
+        include/boost/detail/atomic_count.hpp [4:6]
         include/boost/smart_ptr/detail/atomic_count.hpp [13:14]
         include/boost/smart_ptr/detail/atomic_count_gcc.hpp [11:13]
         include/boost/smart_ptr/detail/atomic_count_pt.hpp [7:7]
@@ -257,7 +258,6 @@ BELONGS ya.make
     Files with this license:
         include/boost/smart_ptr/detail/atomic_count_nt.hpp [11:11]
         include/boost/smart_ptr/detail/atomic_count_std_atomic.hpp [9:9]
-        include/boost/smart_ptr/detail/sp_nullptr_t.hpp [12:12]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 3ca4379da2fa49ccbaaf67782ff8bd4f
 BELONGS ya.make
@@ -469,16 +469,19 @@ BELONGS ya.make
     Files with this license:
         include/boost/smart_ptr/enable_shared_from_this.hpp [7:7]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 73025b91e8cf54ab81ff410c38be7452
+KEEP     COPYRIGHT_SERVICE_LABEL 726373a8b35d0ca115f5f73412514c2a
 BELONGS ya.make
     License text:
-        //  Copyright (c) 2001-2009, 2012 Peter Dimov
+        // Copyright 2024 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/smart_ptr/detail/operator_bool.hpp [3:3]
+        include/boost/smart_ptr/detail/deprecated_macros.hpp [4:6]
+        include/boost/smart_ptr/detail/sp_type_traits.hpp [4:6]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 778d126a908ae2e1cc990627956713b8
 BELONGS ya.make
@@ -521,13 +524,15 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL 828b79ff16e0bf70fedcf473356bf326
 BELONGS ya.make
     License text:
-        //  Copyright (c) 2002, 2003 Peter Dimov and Multi Media Ltd.
+        // Copyright (c) 2002, 2003 Peter Dimov and Multi Media Ltd.
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/detail/lightweight_mutex.hpp [13:13]
+        include/boost/detail/lightweight_mutex.hpp [4:6]
         include/boost/smart_ptr/detail/lightweight_mutex.hpp [13:13]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 897c9e939f14dd9c42b2594da26b4078
@@ -541,7 +546,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/detail/quick_allocator.hpp [13:14]
+        include/boost/detail/quick_allocator.hpp [4:7]
         include/boost/smart_ptr.hpp [10:12]
         include/boost/smart_ptr/detail/quick_allocator.hpp [13:14]
 
@@ -594,14 +599,16 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL 9f416aa8f1e6678b0d6d5857d642b969
 BELONGS ya.make
     License text:
-        //  Copyright (c) 2002 Peter Dimov and Multi Media Ltd.
-        //  Copyright (c) 2008, 2018 Peter Dimov
+        // Copyright (c) 2002 Peter Dimov and Multi Media Ltd.
+        // Copyright (c) 2008, 2018 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/detail/lightweight_thread.hpp [12:13]
+        include/boost/detail/lightweight_thread.hpp [4:7]
         include/boost/smart_ptr/detail/lightweight_thread.hpp [12:13]
         include/boost/smart_ptr/detail/lwm_pthreads.hpp [13:13]
 
@@ -644,14 +651,16 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL a81f16b19633169e29f73443fb23e585
 BELONGS ya.make
     License text:
-        //  Copyright (c) 2003 David Abrahams
-        //  Copyright (c) 2003 Peter Dimov
+        // Copyright (c) 2003 David Abrahams
+        // Copyright (c) 2003 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/detail/quick_allocator.hpp [13:14]
+        include/boost/detail/quick_allocator.hpp [4:7]
         include/boost/smart_ptr/detail/quick_allocator.hpp [13:14]
 
 KEEP     COPYRIGHT_SERVICE_LABEL b13bccd796707ee307c756c5292480d5
@@ -775,17 +784,6 @@ BELONGS ya.make
     Files with this license:
         include/boost/smart_ptr/detail/spinlock_gcc_arm.hpp [5:5]
 
-KEEP     COPYRIGHT_SERVICE_LABEL df0ccc1d436763dd3030b1b12f23d451
-BELONGS ya.make
-    License text:
-        //  Copyright 2008,2012 Peter Dimov
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/smart_ptr/detail/sp_forward.hpp [12:12]
-
 KEEP     COPYRIGHT_SERVICE_LABEL e323857368fb1433c9c3079428ca51d3
 BELONGS ya.make
     License text:
@@ -868,14 +866,16 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL f1024c091dd2c793b61b861740198222
 BELONGS ya.make
     License text:
-        //  Copyright (c) 2002 Peter Dimov and Multi Media Ltd.
-        //  Copyright (c) 2008, 2018 Peter Dimov
+        // Copyright (c) 2002 Peter Dimov and Multi Media Ltd.
+        // Copyright (c) 2008, 2018 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/detail/lightweight_thread.hpp [12:13]
+        include/boost/detail/lightweight_thread.hpp [4:7]
         include/boost/smart_ptr/detail/lightweight_thread.hpp [12:13]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f68164228ffa5c0764d510b1da25be15

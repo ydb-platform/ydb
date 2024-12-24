@@ -53,6 +53,7 @@ private:
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
         Request->Record.SetTxId(ev->Get()->TxId);
         Send(SSActorId, Request.Release());
+        TActorBootstrapped::PassAway();
     }
 
 private:
@@ -126,7 +127,7 @@ public:
         }
 
         if (Finalize) {
-            Self->CdcStreamScanFinalizer = ctx.Register(new TCdcStreamScanFinalizer(ctx.SelfID, std::move(Finalize)));
+            ctx.Register(new TCdcStreamScanFinalizer(ctx.SelfID, std::move(Finalize)));
         }
     }
 
@@ -185,9 +186,9 @@ private:
             streamInfo->PendingShards.erase(it);
 
             auto ev = MakeHolder<TEvDataShard::TEvCdcStreamScanRequest>();
-            PathIdFromPathId(tablePathId, ev->Record.MutableTablePathId());
+            tablePathId.ToProto(ev->Record.MutableTablePathId());
             ev->Record.SetTableSchemaVersion(table->AlterVersion);
-            PathIdFromPathId(streamPathId, ev->Record.MutableStreamPathId());
+            streamPathId.ToProto(ev->Record.MutableStreamPathId());
             ev->Record.SetSnapshotStep(ui64(streamPath->StepCreated));
             ev->Record.SetSnapshotTxId(ui64(streamPath->CreateTxId));
             ScanRequests.emplace_back(streamPathId, tabletId, std::move(ev));
@@ -218,7 +219,7 @@ private:
         LOG_D("Response"
             << ": ev# " << record.ShortDebugString());
 
-        const auto streamPathId = PathIdFromPathId(record.GetStreamPathId());
+        const auto streamPathId = TPathId::FromProto(record.GetStreamPathId());
         if (!Self->CdcStreams.contains(streamPathId)) {
             LOG_W("Cannot process response"
                 << ": streamPathId# " << streamPathId

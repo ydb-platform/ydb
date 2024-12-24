@@ -30,9 +30,13 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     if (BackgroundSessionsManager) {
         BackgroundSessionsManager->Stop();
     }
+    InFlightReadsTracker.Stop(this);
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
     ctx.Send(BufferizationWriteActorId, new TEvents::TEvPoisonPill);
     ctx.Send(DataAccessorsControlActorId, new TEvents::TEvPoisonPill);
+    if (!!OperationsManager) {
+        OperationsManager->StopWriting();
+    }
     if (PrioritizationClientId) {
         NPrioritiesQueue::TCompServiceOperator::UnregisterClient(PrioritizationClientId);
     }
@@ -54,25 +58,27 @@ void TColumnShard::BecomeBroken(const TActorContext& ctx) {
     CleanupActors(ctx);
 }
 
-void TColumnShard::SwitchToWork(const TActorContext& ctx) {
+void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
+    if (!Tiers->AreConfigsComplete()) {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "skip_switch_to_work")("reason", "tiering_metadata_not_ready");
+        return;
+    }
+    if (!IsTxInitFinished) {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "skip_switch_to_work")("reason", "db_reading_not_finished");
+        return;
+    }
+
+    ProgressTxController->OnTabletInit();
     {
         const TLogContextGuard gLogging =
             NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId())("process", "SwitchToWork");
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SwitchToWork");
-
-        for (const auto& [pathId, tiering] : TablesManager.GetTtl()) {
-            THashSet<TString> tiers;
-            for (const auto& [name, config] : tiering.GetTierByName()) {
-                tiers.emplace(name);
-            }
-            ActivateTiering(pathId, tiers);
-        }
-
         Become(&TThis::StateWork);
         SignalTabletActive(ctx);
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SignalTabletActive");
         TryRegisterMediatorTimeCast();
         EnqueueProgressTx(ctx, std::nullopt);
+        OnTieringModified();
     }
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     EnqueueBackgroundActivities();
@@ -83,6 +89,7 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
     AFL_VERIFY(!!StartInstant);
     Counters.GetCSCounters().Initialization.OnSwitchToWork(TMonotonic::Now() - *StartInstant, TMonotonic::Now() - CreateInstant);
+    NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*this);
 }
 
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
@@ -100,8 +107,10 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
         ctx.Send(selfActorId, new TEvPrivate::TEvTieringModified);
     });
     Tiers->Start(Tiers);
-    if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
-        Tiers->TakeConfigs(NYDBTest::TControllers::GetColumnShardController()->GetFallbackTiersSnapshot(), nullptr);
+    if (const auto& tiersSnapshot = NYDBTest::TControllers::GetColumnShardController()->GetOverrideTierConfigs(); !tiersSnapshot.empty()) {
+        for (const auto& [id, tier] : tiersSnapshot) {
+            Tiers->UpdateTierConfig(tier, CanonizePath(id), false);
+        }
     }
     BackgroundSessionsManager = std::make_shared<NOlap::NBackground::TSessionsManager>(
         std::make_shared<NBackground::TAdapter>(selfActorId, (NOlap::TTabletId)TabletID(), *this));
@@ -120,8 +129,18 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvTieringModified::TPtr& /*ev*/, const TActorContext& /*ctx*/) {
+    if (const auto& tiersSnapshot = NYDBTest::TControllers::GetColumnShardController()->GetOverrideTierConfigs(); !tiersSnapshot.empty()) {
+        for (const auto& [id, tier] : tiersSnapshot) {
+            Tiers->UpdateTierConfig(tier, CanonizePath(id), false);
+        }
+    }
+
     OnTieringModified();
     NYDBTest::TControllers::GetColumnShardController()->OnTieringModified(Tiers);
+}
+
+void TColumnShard::HandleInit(TEvPrivate::TEvTieringModified::TPtr& /*ev*/, const TActorContext& ctx) {
+    TrySwitchToWork(ctx);
 }
 
 void TColumnShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&) {

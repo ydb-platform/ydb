@@ -436,6 +436,14 @@ namespace NActors {
             return Runtime->Register(actor, NodeIndex, PoolId, mailbox, parentId);
         }
 
+        TActorId RegisterAlias(TMailbox* mailbox, IActor* actor) override {
+            return Runtime->RegisterAlias(mailbox, actor, NodeIndex, PoolId);
+        }
+
+        void UnregisterAlias(TMailbox* mailbox, const TActorId& actorId) override {
+            mailbox->DetachAlias(actorId.LocalId());
+        }
+
         // lifecycle stuff
         void Prepare(TActorSystem *actorSystem, NSchedulerQueue::TReader **scheduleReaders, ui32 *scheduleSz) override {
             Y_UNUSED(actorSystem);
@@ -547,6 +555,9 @@ namespace NActors {
         TMailbox* senderMailbox = node->MailboxTable->Get(senderMailboxHint);
         if (senderMailbox) {
             IActor* senderActor = senderMailbox->FindActor(senderLocalId);
+            if (!senderActor) {
+                senderActor = senderMailbox->FindAlias(senderLocalId);
+            }
             TTestDecorator *decorator = dynamic_cast<TTestDecorator*>(senderActor);
             return !decorator || decorator->BeforeSending(ev);
         }
@@ -955,6 +966,26 @@ namespace NActors {
         DoActorInit(node->ActorSystem.Get(), actor, actorId, parentId ? parentId : CurrentRecipient);
 
         return actorId;
+    }
+
+    TActorId TTestActorRuntimeBase::RegisterAlias(TMailbox* mailbox, IActor* actor, ui32 nodeIndex, ui32 poolId) {
+        Y_ABORT_UNLESS(nodeIndex < NodeCount);
+        TGuard<TMutex> guard(Mutex);
+        TNodeDataBase* node = Nodes[FirstNodeId + nodeIndex].Get();
+        if (UseRealThreads) {
+            Y_ABORT_UNLESS(node->ExecutorPools.contains(poolId));
+            return node->ExecutorPools[poolId]->RegisterAlias(mailbox, actor);
+        }
+
+        Y_ABORT_UNLESS(mailbox->FindActor(actor->SelfId().LocalId()) == actor);
+
+        const ui64 localActorId = AllocateLocalId();
+        if (VERBOSE) {
+            Cerr << "Register actor " << TypeName(*actor) << " with alias " << localActorId << "\n";
+        }
+
+        mailbox->AttachAlias(localActorId, actor);
+        return TActorId(FirstNodeId + nodeIndex, poolId, localActorId, mailbox->Hint);
     }
 
     TActorId TTestActorRuntimeBase::RegisterService(const TActorId& serviceId, const TActorId& actorId, ui32 nodeIndex) {
@@ -1635,6 +1666,14 @@ namespace NActors {
 
         TMailbox* mailbox = node->MailboxTable->Get(mailboxHint);
         IActor* recipientActor = mailbox->FindActor(recipientLocalId);
+        if (!recipientActor) {
+            recipientActor = mailbox->FindAlias(recipientLocalId);
+            if (recipientActor) {
+                // Work as if some alias actor rewrites events and delivers them to the real actor id
+                ev->Rewrite(ev->GetTypeRewrite(), recipientActor->SelfId());
+                recipientLocalId = ev->GetRecipientRewrite().LocalId();
+            }
+        }
         if (recipientActor) {
             // Save actorId by value in order to prevent ctx from being invalidated during another Send call.
             TActorId actorId = ev->GetRecipientRewrite();
@@ -1669,6 +1708,9 @@ namespace NActors {
         ui64 localId = actorId.LocalId();
         TMailbox* mailbox = node->MailboxTable->Get(mailboxHint);
         IActor* actor = mailbox->FindActor(localId);
+        if (!actor) {
+            actor = mailbox->FindAlias(localId);
+        }
         return actor;
     }
 

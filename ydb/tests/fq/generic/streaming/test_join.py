@@ -12,7 +12,7 @@ from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
 from ydb.library.yql.providers.generic.connector.tests.utils.one_time_waiter import OneTimeWaiter
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 
 import conftest
 
@@ -413,7 +413,7 @@ TESTCASES = [
 
 
 one_time_waiter = OneTimeWaiter(
-    data_source_kind=EDataSourceKind.YDB,
+    data_source_kind=EGenericDataSourceKind.YDB,
     docker_compose_file_path=conftest.docker_compose_file_path,
     expected_tables=["simple_table", "join_table", "dummy_table"],
 )

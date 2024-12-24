@@ -1832,6 +1832,15 @@ TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, con
                     }
                     return candidate;
                 }
+
+                auto callableType = candidate.Get()->Head().GetTypeAnn()->Cast<TCallableExprType>();
+                for (const auto& arg : callableType->GetArguments()) {
+                    if (arg.Type->GetKind() == ETypeAnnotationKind::Stream &&
+                        arg.Flags & NUdf::ICallablePayload::TArgumentFlags::NoYield) {
+                        return candidate;
+                    }
+                }
+
                 if (!udfSupportsYield) {
                     while (TCoApply::Match(candidate.Get())) {
                         candidate = candidate->HeadPtr();

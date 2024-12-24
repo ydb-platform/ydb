@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.4
 ARG BASE_IMAGE="cr.yandex/mirror/ubuntu"
 ARG BASE_IMAGE_TAG="focal"
+ARG BREAKPAD_INIT_IMAGE="cr.yandex/crp2lrlsrs36odlvd8dv/breakpad_init"
+ARG BREAKPAD_INIT_IMAGE_TAG="v2023.06.01"
 
 ###
 # Base image with required deb packages
@@ -23,6 +25,7 @@ COPY --chmod=0644 /liblibaio-dynamic.so /lib/liblibaio-dynamic.so
 # Base image with google brekpad assets
 ###
 
+FROM ${BREAKPAD_INIT_IMAGE}:${BREAKPAD_INIT_IMAGE_TAG} AS breakpad_init
 FROM base AS base-breakpad
 RUN \
     apt-get -yqq update && \

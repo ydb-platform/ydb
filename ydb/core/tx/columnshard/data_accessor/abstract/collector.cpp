@@ -5,10 +5,15 @@
 
 namespace NKikimr::NOlap::NDataAccessorControl {
 
-THashMap<ui64, TPortionDataAccessor> IGranuleDataAccessor::AskData(
+void IGranuleDataAccessor::AskData(
     const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& callback, const TString& consumer) {
     AFL_VERIFY(portions.size());
-    return DoAskData(portions, callback, consumer);
+    DoAskData(portions, callback, consumer);
+}
+
+TDataCategorized IGranuleDataAccessor::AnalyzeData(
+    const std::vector<TPortionInfo::TConstPtr>& portions, const TString& consumer) {
+    return DoAnalyzeData(portions, consumer);
 }
 
 void TActorAccessorsCallback::OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors) {

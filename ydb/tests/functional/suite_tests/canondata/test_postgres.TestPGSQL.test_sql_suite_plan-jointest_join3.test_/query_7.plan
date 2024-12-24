@@ -75,6 +75,7 @@
                                                                     "id"
                                                                 ],
                                                                 "Node Type": "TableLookupJoin",
+                                                                "Path": "/Root/postgres_jointest/join3.test_plan/qa",
                                                                 "PlanNodeId": 3,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
@@ -88,6 +89,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
+                                                                                        "Path": "/Root/postgres_jointest/join3.test_plan/qb",
                                                                                         "ReadColumns": [
                                                                                             "a_id",
                                                                                             "id"

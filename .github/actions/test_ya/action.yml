@@ -208,12 +208,6 @@ runs:
           release)  
             params+=(--build "release")
             ;;
-          release-clang14)  # TODO: remove after removing from workflow 
-            params+=(--build "release")
-            params+=(--target-platform="CLANG14-LINUX-X86_64")
-            params+=(-DLLD_VERSION=16)
-            params+=(-DSTRIP)
-            ;;
           release-asan)
             params+=(
               --build "release" --sanitize="address"

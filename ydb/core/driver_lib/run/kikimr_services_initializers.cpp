@@ -945,6 +945,9 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
     if (Config.HasDomainsConfig()) {
         nodeWardenConfig->DomainsConfig.emplace(Config.GetDomainsConfig());
     }
+    if (Config.HasSelfManagementConfig()) {
+        nodeWardenConfig->SelfManagementConfig.emplace(Config.GetSelfManagementConfig());
+    }
 
     ObtainTenantKey(&nodeWardenConfig->TenantKey, Config.GetKeyConfig());
     ObtainStaticKey(&nodeWardenConfig->StaticKey);

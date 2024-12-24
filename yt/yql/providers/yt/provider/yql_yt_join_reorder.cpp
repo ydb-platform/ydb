@@ -427,7 +427,7 @@ private:
         const TStructExprType* rightItemTypeBeforePremap = nullptr;
 
         {
-            if (leftLeaf) {
+            if (leftLeaf && !labels.Inputs.empty()) {
                 TYtSection section{leftLeaf->Section};
                 if (Y_UNLIKELY(!section.Settings().Empty() && section.Settings().Item(0).Name() == "Test")) {
                     return;
@@ -441,7 +441,7 @@ private:
                 leftJoinKeys = BuildJoinKeys(labels.Inputs[0], *op->LeftLabel);
                 ++numLeaves;
             }
-            if (rightLeaf) {
+            if (rightLeaf && labels.Inputs.size() > 1) {
                 TYtSection section{rightLeaf->Section};
                 if (Y_UNLIKELY(!section.Settings().Empty() && section.Settings().Item(0).Name() == "Test")) {
                     return;

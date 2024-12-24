@@ -176,7 +176,7 @@ inline size_t EstimateSize(TCellsRef cells) {
     for (auto& cell : cells) {
         if (!cell.IsNull() && !cell.IsInline()) {
             const size_t cellSize = cell.Size();
-            size += AlignUp(cellSize);
+            size += AlignUp(cellSize, size_t(4));
         }
     }
 
@@ -439,6 +439,8 @@ private:
 
     static TInit Allocate(TCellVec cells);
 
+    static TInit AllocateFromSerialized(std::string_view data);
+
     TCellVec& CellVec() {
         return static_cast<TCellVec&>(*this);
     }
@@ -455,6 +457,10 @@ public:
 
     static TOwnedCellVec Make(TCellVec cells) {
         return TOwnedCellVec(Allocate(cells));
+    }
+
+    static TOwnedCellVec FromSerialized(std::string_view data) {
+        return TOwnedCellVec(AllocateFromSerialized(data));
     }
 
     TOwnedCellVec(const TOwnedCellVec& rhs) noexcept

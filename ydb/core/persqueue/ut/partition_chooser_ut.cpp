@@ -218,7 +218,8 @@ TWriteSessionMock* ChoosePartition(NPersQueue::TTestServer& server,
                                                                                    graph,
                                                                                    fullConverter,
                                                                                    sourceId,
-                                                                                   preferedPartition));
+                                                                                   preferedPartition,
+                                                                                   {}));
 
     mock->Promise.GetFuture().GetValueSync();
 

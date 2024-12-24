@@ -564,7 +564,7 @@ void TDataShard::SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEven
     delayedAcks.clear();
 }
 
-void TDataShard::GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies) {
+void TDataShard::GetCleanupReplies(TOperation* op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies) {
     if (!op->HasOutputData()) {
         // There are no replies
         return;
@@ -586,6 +586,10 @@ void TDataShard::GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::
         }
     }
     expectedReadSets.clear();
+}
+
+void TDataShard::GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies) {
+    GetCleanupReplies(op.Get(), cleanupReplies);
 }
 
 void TDataShard::SendConfirmedReplies(TMonotonic ts, std::vector<std::unique_ptr<IEventHandle>>&& replies) {
@@ -1882,8 +1886,8 @@ TUserTable::TPtr TDataShard::CreateUserTable(TTransactionContext& txc,
 THashMap<TPathId, TPathId> TDataShard::GetRemapIndexes(const NKikimrTxDataShard::TMoveTable& move) {
     THashMap<TPathId, TPathId> remap;
     for (const auto& item: move.GetReMapIndexes()) {
-        const auto prevId = PathIdFromPathId(item.GetSrcPathId());
-        const auto newId = PathIdFromPathId(item.GetDstPathId());
+        const auto prevId = TPathId::FromProto(item.GetSrcPathId());
+        const auto newId = TPathId::FromProto(item.GetDstPathId());
         remap[prevId] = newId;
     }
     return remap;
@@ -1892,8 +1896,8 @@ THashMap<TPathId, TPathId> TDataShard::GetRemapIndexes(const NKikimrTxDataShard:
 TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxDataShard::TMoveTable& move,
     const TActorContext& ctx, TTransactionContext& txc)
 {
-    const auto prevId = PathIdFromPathId(move.GetPathId());
-    const auto newId = PathIdFromPathId(move.GetDstPathId());
+    const auto prevId = TPathId::FromProto(move.GetPathId());
+    const auto newId = TPathId::FromProto(move.GetDstPathId());
 
     Y_ABORT_UNLESS(GetPathOwnerId() == prevId.OwnerId);
     Y_ABORT_UNLESS(TableInfos.contains(prevId.LocalPathId));
@@ -1955,7 +1959,7 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
 TUserTable::TPtr TDataShard::MoveUserIndex(TOperation::TPtr op, const NKikimrTxDataShard::TMoveIndex& move,
     const TActorContext& ctx, TTransactionContext& txc)
 {
-    const auto pathId = PathIdFromPathId(move.GetPathId());
+    const auto pathId = TPathId::FromProto(move.GetPathId());
 
     Y_ABORT_UNLESS(GetPathOwnerId() == pathId.OwnerId);
     Y_ABORT_UNLESS(TableInfos.contains(pathId.LocalPathId));
@@ -1969,7 +1973,7 @@ TUserTable::TPtr TDataShard::MoveUserIndex(TOperation::TPtr op, const NKikimrTxD
     newTableInfo->GetSchema(schema);
 
     if (move.GetReMapIndex().HasReplacedPathId()) {
-        const auto oldPathId = PathIdFromPathId(move.GetReMapIndex().GetReplacedPathId());
+        const auto oldPathId = TPathId::FromProto(move.GetReMapIndex().GetReplacedPathId());
         newTableInfo->Indexes.erase(oldPathId);
 
         auto& indexes = *schema.MutableTableIndexes();
@@ -1982,8 +1986,8 @@ TUserTable::TPtr TDataShard::MoveUserIndex(TOperation::TPtr op, const NKikimrTxD
         }
     }
 
-    const auto remapPrevId = PathIdFromPathId(move.GetReMapIndex().GetSrcPathId());
-    const auto remapNewId = PathIdFromPathId(move.GetReMapIndex().GetDstPathId());
+    const auto remapPrevId = TPathId::FromProto(move.GetReMapIndex().GetSrcPathId());
+    const auto remapNewId = TPathId::FromProto(move.GetReMapIndex().GetDstPathId());
     Y_ABORT_UNLESS(move.GetReMapIndex().HasDstName());
     const auto dstIndexName = move.GetReMapIndex().GetDstName();
 

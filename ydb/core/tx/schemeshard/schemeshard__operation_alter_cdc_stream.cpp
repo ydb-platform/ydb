@@ -240,7 +240,7 @@ protected:
         auto table = context.SS->Tables.at(pathId);
 
         auto& notice = *tx.MutableAlterCdcStreamNotice();
-        PathIdFromPathId(pathId, notice.MutablePathId());
+        pathId.ToProto(notice.MutablePathId());
         notice.SetTableSchemaVersion(table->AlterVersion + 1);
 
         bool found = false;
@@ -256,7 +256,7 @@ protected:
             auto stream = context.SS->CdcStreams.at(childPathId);
 
             Y_VERIFY_S(!found, "Too many cdc streams are planned to alter"
-                << ": found# " << PathIdFromPathId(notice.GetStreamDescription().GetPathId())
+                << ": found# " << TPathId::FromProto(notice.GetStreamDescription().GetPathId())
                 << ", another# " << childPathId);
             found = true;
 

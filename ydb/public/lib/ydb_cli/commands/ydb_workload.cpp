@@ -397,7 +397,7 @@ void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& wo
         if (DryRun) {
             Cout << "Remove " << fullPath << Endl;
         } else {
-            ThrowOnError(RemovePathRecursive(*SchemeClient, *TableClient, *TopicClient, fullPath, ERecursiveRemovePrompt::Never, settings));
+            ThrowOnError(RemovePathRecursive(*SchemeClient, *TableClient, TopicClient.Get(), QueryClient.Get(), fullPath, ERecursiveRemovePrompt::Never, settings));
         }
         Cout << "Remove path " << path << "...Ok"  << Endl;
     }
@@ -444,7 +444,7 @@ TWorkloadCommandRoot::TWorkloadCommandRoot(const TString& key)
     }
     AddCommand(std::make_unique<TWorkloadCommandClean>(*Params));
 }
-    
+
 void TWorkloadCommandRoot::Config(TConfig& config) {
     TClientCommandTree::Config(config);
     Params->ConfigureOpts(*config.Opts, NYdbWorkload::TWorkloadParams::ECommandType::Root, 0);

@@ -30,6 +30,11 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
     , DefaultHugeGarbagePerMille(300, 1, 1000)
     , HugeDefragFreeSpaceBorderPerMille(260, 1, 1000)
+    , ThrottlingDeviceSpeed(50 << 20, 1 << 20, 10ull << 30)
+    , ThrottlingMinSstCount(100, 1, 1000)
+    , ThrottlingMaxSstCount(250, 1, 1000)
+    , ThrottlingMinInplacedSize(20ull << 30, 1 << 20, 500ull < 30)
+    , ThrottlingMaxInplacedSize(60ull << 30, 1 << 20, 500ull < 30)
     , MaxCommonLogChunksHDD(200, 1, 1'000'000)
     , MaxCommonLogChunksSSD(200, 1, 1'000'000)
     , CostMetricsParametersByMedia({
@@ -82,6 +87,7 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(NIncrHuge::TEvIncrHugeInit, HandleIncrHugeInit);
 
         hFunc(TEvInterconnect::TEvNodeInfo, Handle);
+        hFunc(TEvInterconnect::TEvNodesInfo, Handle);
 
         hFunc(TEvTabletPipe::TEvClientConnected, Handle);
         hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
@@ -335,6 +341,13 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(MaxSyncLogChunksInFlightSSD, "VDiskControls.MaxSyncLogChunksInFlightSSD");
         icb->RegisterSharedControl(DefaultHugeGarbagePerMille, "VDiskControls.DefaultHugeGarbagePerMille");
         icb->RegisterSharedControl(HugeDefragFreeSpaceBorderPerMille, "VDiskControls.HugeDefragFreeSpaceBorderPerMille");
+
+        icb->RegisterSharedControl(ThrottlingDeviceSpeed, "VDiskControls.ThrottlingDeviceSpeed");
+        icb->RegisterSharedControl(ThrottlingMinSstCount, "VDiskControls.ThrottlingMinSstCount");
+        icb->RegisterSharedControl(ThrottlingMaxSstCount, "VDiskControls.ThrottlingMaxSstCount");
+        icb->RegisterSharedControl(ThrottlingMinInplacedSize, "VDiskControls.ThrottlingMinInplacedSize");
+        icb->RegisterSharedControl(ThrottlingMaxInplacedSize, "VDiskControls.ThrottlingMaxInplacedSize");
+
         icb->RegisterSharedControl(MaxCommonLogChunksHDD, "PDiskControls.MaxCommonLogChunksHDD");
         icb->RegisterSharedControl(MaxCommonLogChunksSSD, "PDiskControls.MaxCommonLogChunksSSD");
 
@@ -392,11 +405,14 @@ void TNodeWarden::Bootstrap() {
 
     // fill in a base storage config (from the file)
     NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableBlobStorageConfig()->CopyFrom(Cfg->BlobStorageConfig);
+    appConfig.MutableNameserviceConfig()->CopyFrom(Cfg->NameserviceConfig);
     if (Cfg->DomainsConfig) {
         appConfig.MutableDomainsConfig()->CopyFrom(*Cfg->DomainsConfig);
     }
-    appConfig.MutableBlobStorageConfig()->CopyFrom(Cfg->BlobStorageConfig);
-    appConfig.MutableNameserviceConfig()->CopyFrom(Cfg->NameserviceConfig);
+    if (Cfg->SelfManagementConfig) {
+        appConfig.MutableSelfManagementConfig()->CopyFrom(*Cfg->SelfManagementConfig);
+    }
     TString errorReason;
     const bool success = DeriveStorageConfig(appConfig, &StorageConfig, &errorReason);
     Y_VERIFY_S(success, "failed to generate initial TStorageConfig: " << errorReason);
@@ -414,6 +430,7 @@ void TNodeWarden::Bootstrap() {
     EstablishPipe();
 
     Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(LocalNodeId));
+    Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
 
     if (Cfg->IsCacheEnabled()) {
         TActivationContext::Schedule(TDuration::Seconds(5), new IEventHandle(TEvPrivate::EvReadCache, 0, SelfId(), {}, nullptr, 0));
@@ -478,6 +495,21 @@ void TNodeWarden::HandleReadCache() {
 void TNodeWarden::Handle(TEvInterconnect::TEvNodeInfo::TPtr ev) {
     if (const auto& node = ev->Get()->Node) {
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(node->Location));
+    }
+}
+
+void TNodeWarden::Handle(TEvInterconnect::TEvNodesInfo::TPtr ev) {
+    NodeLocationMap.clear();
+    for (const auto& info : ev->Get()->Nodes) {
+        NodeLocationMap.emplace(info.NodeId, std::move(info.Location));
+    }
+    for (auto& [groupId, group] : Groups) {
+        if (group.Info && group.Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
+            group.NodeLayoutInfo = MakeIntrusive<TNodeLayoutInfo>(NodeLocationMap[LocalNodeId], group.Info, NodeLocationMap);
+            if (group.ProxyId) {
+                Send(group.ProxyId, new TEvBlobStorage::TEvConfigureProxy(group.Info, group.NodeLayoutInfo));
+            }
+        }
     }
 }
 
@@ -992,26 +1024,23 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         *errorReason = "original config missing mandatory BlobStorageConfig section";
         return false;
     }
+
+    if (appConfig.HasSelfManagementConfig()) {
+        const auto& smFrom = appConfig.GetSelfManagementConfig();
+        auto *smTo = config->MutableSelfManagementConfig();
+        if (smFrom.HasGeneration() && smTo->HasGeneration() && smFrom.GetGeneration() != smTo->GetGeneration() + 1) {
+            *errorReason = TStringBuilder() << "generation mismatch for SelfManagementConfig section existing Generation# "
+                << smTo->GetGeneration() << " newly provided Generation# " << smFrom.GetGeneration();
+            return false;
+        }
+        smTo->CopyFrom(smFrom);
+        smTo->ClearInitialConfigYaml(); // do not let this section into final StorageConfig
+    } else {
+        config->ClearSelfManagementConfig();
+    }
     
     const auto& bsFrom = appConfig.GetBlobStorageConfig();
     auto *bsTo = config->MutableBlobStorageConfig();
-    if (bsFrom.HasAutoconfigSettings()) {
-        const auto& acFrom = bsFrom.GetAutoconfigSettings();
-        auto *acTo = bsTo->MutableAutoconfigSettings();
-        if (acFrom.HasGeneration() && acTo->HasGeneration() && acTo->GetGeneration() + 1 != acFrom.GetGeneration()) {
-            *errorReason = TStringBuilder() << "generation mismatch for AutoconfigSettings section existing Generation# "
-                << acTo->GetGeneration() << " newly provided Generation# " << acFrom.GetGeneration();
-            return false;
-        } else if (acTo->HasGeneration() && !acFrom.HasGeneration()) {
-            *errorReason = "existing AutoconfigSettings has set generation, but newly provided one doesn't have it";
-            return false;
-        }
-
-        acTo->CopyFrom(acFrom);
-        acTo->ClearInitialConfigYaml();
-    } else {
-        bsTo->ClearAutoconfigSettings();
-    }
 
     if (bsFrom.HasServiceSet()) {
         const auto& ssFrom = bsFrom.GetServiceSet();
@@ -1034,7 +1063,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         };
 
         // update static group information unless distconf is enabled
-        if (!hasStaticGroupInfo(ssFrom) && bsFrom.HasAutoconfigSettings()) {
+        if (!hasStaticGroupInfo(ssFrom) && config->HasSelfManagementConfig() && config->GetSelfManagementConfig().GetEnabled()) {
             // distconf enabled, keep it as is
         } else if (!hasStaticGroupInfo(*ssTo)) {
             ssTo->MutablePDisks()->CopyFrom(ssFrom.GetPDisks());

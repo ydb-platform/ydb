@@ -97,6 +97,10 @@ public:
         }
     }
 
+    bool Stopped() {
+        return !ActorId.has_value();
+    }
+
     void Start(const TActorId& actorId) {
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "start_scanner")("actor_id", actorId);
         AFL_ENSURE(!ActorId);

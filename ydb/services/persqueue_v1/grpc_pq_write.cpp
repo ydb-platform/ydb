@@ -132,7 +132,7 @@ void TPQWriteService::Handle(TEvPQProxy::TEvSessionSetPreferredCluster::TPtr& ev
     const auto& cookie = ev->Get()->Cookie;
     const auto& preferredCluster = ev->Get()->PreferredCluster;
     if (!Sessions.contains(cookie)) {
-        LOG_ERROR_S(ctx, NKikimrServices::PQ_WRITE_PROXY, TStringBuilder() << "Got TEvSessionSetPreferredCluster message from session with cookie " << cookie << " that is not in session collection");
+        LOG_ERROR_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "Got TEvSessionSetPreferredCluster message from session with cookie " << cookie << " that is not in session collection");
         return;
     }
     if (!preferredCluster.empty() && *LocalCluster != preferredCluster) {

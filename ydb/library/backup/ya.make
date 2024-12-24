@@ -6,11 +6,13 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/string_utils/quote
     yql/essentials/types/dynumber
+    yql/essentials/sql/v1/format
     ydb/public/api/protos
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/dump/util
     ydb/public/lib/yson_value
     ydb/public/lib/ydb_cli/dump/files
+    ydb/public/sdk/cpp/client/draft
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/public/sdk/cpp/client/ydb_proto
     ydb/public/sdk/cpp/client/ydb_result

@@ -49,6 +49,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/local/base_table_types_script_script/TableTypes",
                                                         "ReadColumns": [
                                                             "Key",
                                                             "Value01",
@@ -148,6 +149,7 @@
                                             }
                                         ],
                                         "Name": "Upsert",
+                                        "Path": "/local/base_table_types_script_script/TableTypes",
                                         "Table": "base_table_types_script_script/TableTypes"
                                     },
                                     {

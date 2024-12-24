@@ -292,7 +292,7 @@ namespace NPQ {
             request->Record = std::move(srcRequest);
             request->Record.SetCookie(cookie);
 
-            ctx.Send(Tablet, request.Release()); // -> KV
+            ctx.Send(Tablet, request.Release(), 0, 0, std::move(ev->TraceId)); // -> KV
         }
 
         void Handle(TEvPqCache::TEvCacheL2Response::TPtr& ev, const TActorContext& ctx)

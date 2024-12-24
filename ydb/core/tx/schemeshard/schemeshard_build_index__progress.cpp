@@ -161,10 +161,10 @@ public:
         Types = std::make_shared<NTxProxy::TUploadTypes>(3);
         Ydb::Type type;
         type.set_type_id(Ydb::Type::UINT32);
-        (*Types)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::LevelTable_ParentColumn, type};
-        (*Types)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::LevelTable_IdColumn, type};
+        (*Types)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
+        (*Types)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
         type.set_type_id(Ydb::Type::STRING);
-        (*Types)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::LevelTable_EmbeddingColumn, type};
+        (*Types)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
 
         Become(&TThis::StateWork);
 
@@ -337,7 +337,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     modifyScheme.SetWorkingDir(path.Dive(buildInfo.IndexName).PathString());
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
     auto& op = *modifyScheme.MutableCreateTable();
-    const char* suffix = buildInfo.KMeans.Level % 2 != 0 ? BuildPostingTableSuffix0 : BuildPostingTableSuffix1;
+    const char* suffix = buildInfo.KMeans.Level % 2 != 0 ? BuildSuffix0 : BuildSuffix1;
     op = CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, {}, suffix);
 
     const auto [count, parts, step] = ComputeKMeansBoundaries(*tableInfo, buildInfo);
@@ -524,10 +524,10 @@ private:
         ev->Record.SetId(ui64(BuildId));
 
         if (buildInfo.KMeans.Parent == 0) {
-            PathIdFromPathId(buildInfo.TablePathId, ev->Record.MutablePathId());
+            buildInfo.TablePathId.ToProto(ev->Record.MutablePathId());
         } else {
             auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
-            PathIdFromPathId(path.Dive(buildInfo.KMeans.ReadFrom())->PathId, ev->Record.MutablePathId());
+            path.Dive(buildInfo.KMeans.ReadFrom())->PathId.ToProto(ev->Record.MutablePathId());
         }
 
         ev->Record.SetK(buildInfo.KMeans.K);
@@ -555,9 +555,9 @@ private:
 
         auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
         if (buildInfo.KMeans.Parent == 0) {
-            PathIdFromPathId(buildInfo.TablePathId, ev->Record.MutablePathId());
+            buildInfo.TablePathId.ToProto(ev->Record.MutablePathId());
         } else {
-            PathIdFromPathId(path.Dive(buildInfo.KMeans.ReadFrom())->PathId, ev->Record.MutablePathId());
+            path.Dive(buildInfo.KMeans.ReadFrom())->PathId.ToProto(ev->Record.MutablePathId());
             path.Rise();
         }
 
@@ -593,9 +593,9 @@ private:
 
         auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
         if (buildInfo.KMeans.Parent == 0) {
-            PathIdFromPathId(buildInfo.TablePathId, ev->Record.MutablePathId());
+            buildInfo.TablePathId.ToProto(ev->Record.MutablePathId());
         } else {
-            PathIdFromPathId(path.Dive(buildInfo.KMeans.ReadFrom())->PathId, ev->Record.MutablePathId());
+            path.Dive(buildInfo.KMeans.ReadFrom())->PathId.ToProto(ev->Record.MutablePathId());
             path.Rise();
         }
         *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
@@ -686,8 +686,9 @@ private:
                         .Dive(buildInfo.IndexName)
                         .Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
         Y_ASSERT(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
-        auto actor = new TUploadSampleK(path.PathString(), buildInfo.Limits, Self->SelfId(), ui64(BuildId),
-                                        buildInfo.Sample.Rows, buildInfo.KMeans.ChildBegin);
+        auto actor = new TUploadSampleK(path.PathString(),
+            buildInfo.Limits, Self->SelfId(), ui64(BuildId),
+            buildInfo.Sample.Rows, buildInfo.KMeans.ChildBegin);
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
         buildInfo.Sample.Sent = true;

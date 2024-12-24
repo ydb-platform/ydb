@@ -546,7 +546,7 @@ public:
         }
     }
 
-    bool ProcessEndOfData(const TComputationContext& ctx) {
+    bool ProcessEndOfData(const TComputationContext& /* ctx */) {
         EndOfData = true;
         return HasMatched();
     }

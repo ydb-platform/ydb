@@ -133,6 +133,9 @@ public:
         const std::shared_ptr<TResultAccumulator> Result;
         std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
         const std::set<ui32> ColumnTagsRequested;
+        virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+            return Default<std::shared_ptr<const TAtomicCounter>>();
+        }
 
         virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result) override {
             THashMap<ui32, std::unique_ptr<TCountMinSketch>> sketchesByColumns;

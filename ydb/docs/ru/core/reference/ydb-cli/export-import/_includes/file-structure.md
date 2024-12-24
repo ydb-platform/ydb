@@ -4,14 +4,18 @@
 
 ## Директории {#dir}
 
-Каждой директории в базе данных соответствует директория в файловой структуре. Иерархия директорий в файловой структуре соответствует иерархии директорий в базе данных. Если в некоторой директории базы данных нет никаких объектов (ни таблиц, ни поддиректорий), то в файловой структуре в такой директории присутствует один файл нулевого размера с именем `empty_dir`.
+Каждой директории в базе данных соответствует директория в файловой структуре. В каждой из них находится файл `permissions.pb`, содержащий информацию об ACL директории и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format). Иерархия директорий в файловой структуре соответствует иерархии директорий в базе данных. Если в какой-либо директории базы данных отсутствуют объекты (таблицы или поддиректории), то в файловой структуре такая директория содержит файл нулевого размера с именем `empty_dir`.
 
 ## Таблицы {#tables}
 
 Каждой таблице в базе данных также соответствует одноименная директория в иерархии директорий файловой структуры, в которой находятся:
 
 - Файл `scheme.pb`, содержащий информацию о структуре таблицы и её параметрах в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
+- Файл `permissions.pb`, содержащий информацию об ACL таблицы и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 - Один или несколько файлов `data_XX.csv`, содержащих данные таблицы в формате `csv`, где `XX` - порядковый номер файла. Выгрузка начинается с файла `data_00.csv`, каждый следующий файл создается при превышении размера текущего файла в 100MB.
+- Директории для описания [потоков изменений](https://ydb.tech/docs/ru/concepts/cdc). Имя директории соответствует названию потока изменений. В директории находятся:
+  - Файл `changefeed_description.pb`, содержащий информацию о потоке изменений в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format).
+  - Файл `topic_description.pb`, содержащий информацию о нижележащем топике в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format).
 
 ## Файлы с данными {#datafiles}
 
@@ -21,20 +25,28 @@
 1,"%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82"
 ```
 
-## Пример {#example}
+## Примеры {#example}
+
+### Таблицы {#example-table}
 
 При выгрузке таблиц, созданных в разделе [{#T}]({{ quickstart-path }}) Начала работы, будет создана следующая файловая структура:
 
 ```text
 ├── episodes
 │   ├── data_00.csv
+│   ├── permissions.pb
 │   └── scheme.pb
 ├── seasons
 │   ├── data_00.csv
+│   ├── permissions.pb
 │   └── scheme.pb
 └── series
     ├── data_00.csv
+    ├── permissions.pb
     └── scheme.pb
+    └── updates_feed
+        └── changefeed_description.pb
+        └── topic_description.pb
 ```
 
 Содержимое файла `series/scheme.pb`:
@@ -88,4 +100,57 @@ column_families {
   name: "default"
   compression: COMPRESSION_NONE
 }
+```
+
+Содержимое файла `series/update_feed/changefeed_description.pb`:
+
+```proto
+name: "update_feed"
+mode: MODE_UPDATES
+format: FORMAT_JSON
+state: STATE_ENABLED
+```
+
+Содержимое файла `series/update_feed/topic_description.pb`:
+
+```proto
+self {
+  name: "update_feed"
+  owner: "Alice"
+  type: TOPIC
+  created_at {
+    plan_step: 1734362034420
+    tx_id: 281474982949619
+  }
+}
+consumers {
+  name: "my_consumer"
+  read_from {
+  }
+  attributes {
+    key: "_service_type"
+    value: "data-streams"
+  }
+}
+```
+
+### Директории {#example-directory}
+
+При выгрузке пустой директории `directory` будет создана следующая структура файлов:
+
+```markdown
+└── directory
+    ├── permissions.pb
+    └── empty_dir
+```
+
+При выгрузке директории `directory` с вложенной таблицей `table` будет создана следующая структура файлов:
+
+```markdown
+└── directory
+    ├── permissions.pb
+    └── table
+        ├── data_00.csv
+        ├── permissions.pb
+        └── scheme.pb
 ```

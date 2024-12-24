@@ -112,8 +112,11 @@ namespace {
 
 } // namespace
 
-void TOwnedCellVec::TData::operator delete(void* mem) noexcept {
-    ::free(mem);
+void TOwnedCellVec::TData::operator delete(TData* data, std::destroying_delete_t) noexcept {
+    void* ptr = data;
+    size_t size = data->DataSize;
+    data->~TData();
+    ::operator delete(ptr, size);
 }
 
 TOwnedCellVec::TInit TOwnedCellVec::Allocate(TOwnedCellVec::TCellVec cells) {
@@ -124,7 +127,6 @@ TOwnedCellVec::TInit TOwnedCellVec::Allocate(TOwnedCellVec::TCellVec cells) {
         return TInit{
             TCellVec(),
             nullptr,
-            0,
         };
     }
 
@@ -136,7 +138,7 @@ TOwnedCellVec::TInit TOwnedCellVec::Allocate(TOwnedCellVec::TCellVec cells) {
         }
     }
 
-    void* mem = ::malloc(size);
+    void* mem = ::operator new(size);
     if (Y_UNLIKELY(!mem)) {
         throw std::bad_alloc();
     }
@@ -165,8 +167,7 @@ TOwnedCellVec::TInit TOwnedCellVec::Allocate(TOwnedCellVec::TCellVec cells) {
 
     return TInit {
         cellvec,
-        new (mem) TData(),
-        size,
+        new (mem) TData(size),
     };
 }
 
@@ -176,7 +177,6 @@ TOwnedCellVec::TInit TOwnedCellVec::AllocateFromSerialized(std::string_view data
         return TInit{
             TCellVec(),
             nullptr,
-            0,
         };
     }
 
@@ -192,7 +192,6 @@ TOwnedCellVec::TInit TOwnedCellVec::AllocateFromSerialized(std::string_view data
         return TInit{
             TCellVec(),
             nullptr,
-            0,
         };
     }
 
@@ -210,7 +209,7 @@ TOwnedCellVec::TInit TOwnedCellVec::AllocateFromSerialized(std::string_view data
         }
     }
 
-    void* mem = ::malloc(size);
+    void* mem = ::operator new(size);
     if (Y_UNLIKELY(!mem)) {
         throw std::bad_alloc();
     }
@@ -245,8 +244,7 @@ TOwnedCellVec::TInit TOwnedCellVec::AllocateFromSerialized(std::string_view data
 
     return TInit {
         cellvec,
-        new (mem) TData(),
-        size,
+        new (mem) TData(size),
     };
 }
 

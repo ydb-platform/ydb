@@ -3,6 +3,8 @@ ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 TEST_SRCS(
     test_sql.py
+    test_crud.py
+    test_inserts.py
 )
 
 SIZE(MEDIUM)

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
-
+import pytest
 import ydb
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -30,49 +30,57 @@ class TestYdbKvWorkload(object):
         cls.driver.stop()
         cls.cluster.stop()
 
-    def setup(self):
+    def setup_method(self):
         current_test_full_name = os.environ.get("PYTEST_CURRENT_TEST")
         self.table_path = "table_" + current_test_full_name.replace("::", ".").removesuffix(" (setup)")
         print(self.table_path)
 
-    def test_minimal_maximal_values(self):
+    @pytest.mark.parametrize("is_column", [True, False])
+    @pytest.mark.parametrize("type_,value",
+                             [
+                                 ("Int32", -2 ** 31),
+                                 ("Int32", 2 ** 31 - 1),
+                                 ("UInt32", 0),
+                                 ("UInt32", 2 ** 32 - 1),
+                                 ("Int64", -2 ** 63),
+                                 ("Int64", 2 ** 63 - 1),
+                                 ("Uint64", 0),
+                                 ("Uint64", 2 ** 64 - 1)
+                                 ])
+    def test_minimal_maximal_values(self, is_column, type_, value):
         """
         Test verifies correctness of handling minimal and maximal values for types
         """
 
-        type_to_values_to_check = {
-            "Int32": [-2 ** 31, 2 ** 31 - 1],
-            "Uint32": [0, 2 ** 32 - 1],
-            "Int64": [-2 ** 63, 2 ** 63 - 1],
-            "Uint64": [0, 2 ** 64 - 1],
-        }
+        table_name = table_name = "{}/{}_{}_{}".format(self.table_path, type_, value, is_column)
 
-        for type_, values in type_to_values_to_check.items():
-            for i, value in enumerate(values):
-                table_name = table_name = "{}/{}_{}".format(self.table_path, type_, i)
+        table_definition = f"""
+                CREATE TABLE `{table_name}` (
+                id Int64 NOT NULL,
+                value {type_} NOT NULL,
+                PRIMARY KEY (id)
+            ) """
 
-                self.pool.execute_with_retries(
-                    f"""
-                        CREATE TABLE `{table_name}` (
-                        id Int64,
-                        value {type_},
-                        PRIMARY KEY (id)
-                    );"""
-                )
+        if is_column:
+            table_definition += " PARTITION BY HASH(id) WITH(STORE=COLUMN)"
 
-                self.pool.execute_with_retries(
-                    f"""
-                        UPSERT INTO `{table_name}` (id, value) VALUES (1, {value});
-                    """
-                )
+        self.pool.execute_with_retries(
+            table_definition
+        )
 
-                result = self.pool.execute_with_retries(
-                    f"""
-                        SELECT id, value FROM `{table_name}` WHERE id = 1;
-                    """
-                )
+        self.pool.execute_with_retries(
+            f"""
+                UPSERT INTO `{table_name}` (id, value) VALUES (1, {value});
+            """
+        )
 
-                rows = result[0].rows
-                assert len(rows) == 1, "Expected one row"
-                assert rows[0].id == 1, "ID does not match"
-                assert rows[0].value == value, "Value does not match"
+        result = self.pool.execute_with_retries(
+            f"""
+                SELECT id, value FROM `{table_name}` WHERE id = 1;
+            """
+        )
+
+        rows = result[0].rows
+        assert len(rows) == 1, "Expected one row"
+        assert rows[0].id == 1, "ID does not match"
+        assert rows[0].value == value, "Value does not match"

@@ -457,6 +457,7 @@ def binaries_args():
     args = argparse.ArgumentParser(add_help=False)
     args.add_argument(
         "--binary",
+        "--kikimr",
         metavar="BIN",
         default=None,
         help="explicit path to ydbd"

@@ -270,6 +270,9 @@ TESTCASES = [
             ]
             * 1000
         ),
+        "TTL", "10",
+        "MaxCachedRows", "5",
+        "MaxDelayedRows", "100",
     ),
     # 5
     (
@@ -501,12 +504,12 @@ class TestJoinStreaming(TestYdsBase):
             database_id='local',
         )
 
-        sql, messages = TESTCASES[testcase]
+        sql, messages, *options = TESTCASES[testcase]
         sql = sql.format(
             input_topic=self.input_topic,
             output_topic=self.output_topic,
             table_name=table_name,
-            streamlookup=R'/*+ streamlookup() */' if streamlookup else '',
+            streamlookup=Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else '',
         )
 
         one_time_waiter.wait()

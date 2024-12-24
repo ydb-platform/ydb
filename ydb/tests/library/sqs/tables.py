@@ -162,6 +162,16 @@ def create_attibutes_table(root, session, queue_type, common_table=True):
     _create_table(root, session, 'Attributes', columns, len(queue_keys), common_table, queue_type)
 
 
+def create_tags_table(root, session, queue_type):
+    queue_keys = get_table_keys_for_queue(True)
+
+    columns = queue_keys + [
+        ('Key', ydb.PrimitiveType.Utf8),
+        ('Value', ydb.PrimitiveType.Utf8),
+    ]
+    _create_table(root, session, 'Tags', columns, len(queue_keys) + 1, True, queue_type)
+
+
 def create_state_table(root, session, queue_type, common_table=True):
     queue_keys = []
     if common_table:
@@ -320,6 +330,7 @@ def create_all_tables(root, driver, session):
         create_message_table(root, session, queue_type)
         create_state_table(root, session, queue_type)
         create_attibutes_table(root, session, queue_type)
+        create_tags_table(root, session, queue_type)
 
     # only STD
     create_infly_table(root, session)

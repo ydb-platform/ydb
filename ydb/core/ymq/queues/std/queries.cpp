@@ -577,10 +577,9 @@ const char* const InternalListQueueTagsQuery = R"__(
             'Key
             'Value))
 
-        (let tagsRead (SelectRow tagsTable attrsRow attrsSelect))
+        (let tagsRead (SelectRow tagsTable tagsRow tagsSelect))
 
         (return (AsList
-            (SetResult 'queueExists (Exists tagsRead))
             (SetResult 'tags tagsRead)))
     )
 )__";

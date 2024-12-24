@@ -199,6 +199,11 @@ private:
     TInstant AttributesUpdateTime_ = TInstant::Zero();
     TMaybe<TSqsEvents::TQueueAttributes> QueueAttributes_;
 
+    // tags cache
+    TDuration QueueTagsCacheTime_ = TDuration::Zero();
+    TInstant TagsUpdateTime_ = TInstant::Zero();
+    TMaybe<TSqsEvents::TQueueTags> QueueTags_;
+
     // counters
     TIntrusivePtr<TQueueCounters> Counters_;
     TIntrusivePtr<TUserCounters> UserCounters_;

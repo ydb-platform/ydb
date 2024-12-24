@@ -1,5 +1,6 @@
 #include "action.h"
 #include "error.h"
+#include "executor.h"
 #include "log.h"
 
 #include <ydb/core/ymq/base/constants.h>
@@ -46,6 +47,21 @@ private:
     void DoAction() override {
         Become(&TThis::StateFunc);
 
+        TExecutorBuilder builder(SelfId(), RequestId_);
+        builder
+            .User(UserName_)
+            .Queue(GetQueueName())
+            .TablesFormat(TablesFormat_.GetRef())
+            .QueueLeader(QueueLeader_)
+            .QueryId(INTERNAL_LIST_QUEUE_TAGS_ID)
+            .Counters(QueueCounters_)
+            .RetryOnTimeout()
+            .Params()
+                .Uint64("QUEUE_ID_NUMBER", QueueVersion_.GetRef())
+                .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
+            .ParentBuilder().Start();
+        ++WaitCount_;
+
         ReplyIfReady();
     }
 
@@ -55,7 +71,7 @@ private:
 
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvWakeup,      HandleWakeup);
+            hFunc(TEvWakeup, HandleWakeup);
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
             hFunc(TSqsEvents::TEvQueueFolderIdAndCustomName, HandleQueueFolderIdAndCustomName);
         }
@@ -68,13 +84,11 @@ private:
         bool queueExists = true;
 
         if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
-            const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
-            queueExists = val["queueExists"];
-            if (queueExists) {
-                --WaitCount_;
-                ReplyIfReady();
-                return;
-            }
+            // const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
+            // Cerr << "XXXXX " << val.DumpToString() << Endl;
+            --WaitCount_;
+            ReplyIfReady();
+            return;
         }
 
         RLOG_SQS_ERROR("Get queue tags query failed, queue exists: " << queueExists << ", answer: " << record);

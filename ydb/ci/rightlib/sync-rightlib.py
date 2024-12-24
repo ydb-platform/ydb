@@ -44,7 +44,7 @@ class RightlibSync:
         return self.rightlib_sha_file_contents(ref=self.base_branch)
 
     def get_latest_open_pr(self) -> Optional[PullRequest]:
-        query = f"label:{self.pr_label_rightlib} repo:{self.repo_name} is:pr state:open sort:created-desc"
+        query = f"label:{self.pr_label_rightlib} repo:{self.repo_name} base:{self.base_branch} is:pr state:open sort:created-desc"
         result = self.gh.search_issues(query).get_page(0)
         if result:
             return result[0].as_pull_request()

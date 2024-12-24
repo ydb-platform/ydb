@@ -261,6 +261,8 @@ message TKqpReadRangesSourceSettings {
     optional bool AllowInconsistentReads = 18 [default = false];
 
     repeated TKqpTransaction.TColumnMeta DuplicateCheckColumns = 19;
+
+    optional NKikimrDataEvents.ELockMode LockMode = 20;
 }
 
 message TKqpTaskInfo {
@@ -298,6 +300,7 @@ message TDataTransaction {
 
     // Datashard will subscribe to lock status when node id is non-zero
     optional uint32 LockNodeId = 17;
+    optional NKikimrDataEvents.ELockMode LockMode = 18;
 }
 
 message TCreateVolatileSnapshot {
@@ -1702,6 +1705,7 @@ message TEvKqpScan {
     optional uint32 LockNodeId = 25;
     optional string CSScanPolicy = 26;
     optional NKikimrKqp.TEvKqpScanCursor ScanCursor = 27;
+    optional NKikimrDataEvents.ELockMode LockMode = 28;
 }
 
 message TEvCompactTable {
@@ -1887,6 +1891,8 @@ message TEvRead {
 
     optional bytes Program = 902;
     optional NKikimrSchemeOp.EOlapProgramType ProgramType = 903;
+
+    optional NKikimrDataEvents.ELockMode LockMode = 904;
 }
 
 message TReadContinuationToken {

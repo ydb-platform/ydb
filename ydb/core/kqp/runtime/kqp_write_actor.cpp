@@ -157,7 +157,6 @@ struct TKqpTableWriterStatistics {
     THashSet<ui64> AffectedPartitions;
 };
 
-
 class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
     using TBase = TActorBootstrapped<TKqpTableWriteActor>;
 
@@ -202,12 +201,16 @@ public:
         TVector<NScheme::TTypeInfo> keyColumnTypes,
         const NMiniKQL::TTypeEnvironment& typeEnv,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot,
+        const NKikimrDataEvents::ELockMode lockMode,
         const IKqpTransactionManagerPtr& txManager,
         const TActorId sessionActorId,
         TIntrusivePtr<TKqpCounters> counters,
         NWilson::TTraceId traceId)
         : TypeEnv(typeEnv)
         , Alloc(alloc)
+        , MvccSnapshot(mvccSnapshot)
+        , LockMode(lockMode)
         , TableId(tableId)
         , TablePath(tablePath)
         , LockTxId(lockTxId)
@@ -850,6 +853,12 @@ public:
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
+            evWrite->Record.SetLockMode(LockMode);
+
+            if (LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION) {
+                YQL_ENSURE(MvccSnapshot);
+                *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
+            }
         }
 
         const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite);
@@ -1041,6 +1050,9 @@ public:
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
+    const std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
+    const NKikimrDataEvents::ELockMode LockMode;
+
     const TTableId TableId;
     const TString TablePath;
 
@@ -1133,6 +1145,8 @@ public:
             std::move(keyColumnTypes),
             TypeEnv,
             Alloc,
+            Settings.GetMvccSnapshot(),
+            Settings.GetLockMode(),
             nullptr,
             TActorId{},
             Counters,
@@ -1337,6 +1351,8 @@ struct TTransactionSettings {
     ui64 LockTxId = 0;
     ui64 LockNodeId = 0;
     bool InconsistentTx = false;
+    std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
+    NKikimrDataEvents::ELockMode LockMode;
 };
 
 struct TWriteSettings {
@@ -1470,6 +1486,8 @@ public:
                     std::move(keyColumnTypes),
                     TypeEnv,
                     Alloc,
+                    settings.TransactionSettings.MvccSnapshot,
+                    settings.TransactionSettings.LockMode,
                     TxManager,
                     SessionActorId,
                     Counters,
@@ -2475,6 +2493,8 @@ private:
                     .LockTxId = Settings.GetLockTxId(),
                     .LockNodeId = Settings.GetLockNodeId(),
                     .InconsistentTx = Settings.GetInconsistentTx(),
+                    .MvccSnapshot = Settings.GetMvccSnapshot(),
+                    .LockMode = Settings.GetLockMode(),
                 },
                 .Priority = Settings.GetPriority(),
                 .IsOlap = Settings.GetIsOlap(),

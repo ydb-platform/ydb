@@ -10,7 +10,6 @@ RECURSE(
     cms
     compatibility
     config
-    dynumber
     encryption
     hive
     kqp

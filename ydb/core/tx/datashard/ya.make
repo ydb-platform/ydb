@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     alter_cdc_stream_unit.cpp
     alter_table_unit.cpp
-    backup_restore_common.cpp
     backup_restore_traits.cpp
     backup_unit.cpp
     build_and_wait_dependencies_unit.cpp
@@ -153,7 +152,6 @@ SRCS(
     execution_unit.h
     execution_unit_ctors.h
     execution_unit_kind.h
-    export_checksum.cpp
     export_common.cpp
     export_iface.cpp
     export_iface.h

@@ -138,6 +138,7 @@ namespace {
     };
 
     struct TTestDataWithScheme {
+        TString Metadata;
         TString Scheme;
         TString Permissions;
         TVector<TTestData> Data;
@@ -245,11 +246,13 @@ namespace {
     TTestDataWithScheme GenerateTestData(
         const TString& scheme,
         const TVector<std::pair<TString, ui64>>& shardsConfig,
-        const TString& permissions = "")
+        const TString& permissions = "",
+        const TString& metadata = "")
     {
         TTestDataWithScheme result;
         result.Scheme = scheme;
         result.Permissions = permissions;
+        result.Metadata = metadata;
 
         for (const auto& [keyPrefix, count] : shardsConfig) {
             result.Data.push_back(GenerateTestData(keyPrefix, count));
@@ -263,6 +266,12 @@ namespace {
 
         for (const auto& [prefix, item] : data) {
             result.emplace(prefix + "/scheme.pb", item.Scheme);
+            if (item.Metadata) {
+                result.emplace(prefix + "/metadata.json", item.Metadata);
+            } else {
+                result.emplace(prefix + "/metadata.json", R"({"version": 0})"); // without checksums
+            }
+            
             if (item.Permissions) {
                 result.emplace(prefix + "/permissions.pb", item.Permissions);
             }
@@ -4006,6 +4015,139 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::HasNoRight("+W:alice"),
             NLs::HasNoRight("+R:bob")
         });
+    }
+
+    Y_UNIT_TEST(CorruptedMetadata) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const auto metadata = R"(
+            corrupted
+        )";
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}}, "", metadata);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        auto desc = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        auto entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_CANCELLED);
+    }
+
+    Y_UNIT_TEST(NoDataChecksums) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const auto metadata = R"({
+            "version": 1
+        })";
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}}, "", metadata);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        auto desc = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        auto entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_CANCELLED);
+    }
+
+    Y_UNIT_TEST(SkipChecksumValidation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const auto metadata = R"(
+            corrupted
+        )";
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}}, "", metadata);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+              skip_checksum_validation: true
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        auto desc = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        auto entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_CANCELLED);
     }
 }
 

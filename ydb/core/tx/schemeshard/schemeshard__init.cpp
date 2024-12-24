@@ -3887,6 +3887,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 sid.SetFailedLoginAttemptCount(rowset.GetValueOrDefault<Schema::LoginSids::FailedAttemptCount>());
                 sid.SetLastFailedLogin(rowset.GetValueOrDefault<Schema::LoginSids::LastFailedAttempt>());
                 sid.SetLastSuccessfulLogin(rowset.GetValueOrDefault<Schema::LoginSids::LastSuccessfulAttempt>());
+                sid.SetIsEnabled(rowset.GetValueOrDefault<Schema::LoginSids::IsEnabled>());
                 sidIndex[sid.name()] = securityState.SidsSize() - 1;
                 if (!rowset.Next()) {
                     return false;

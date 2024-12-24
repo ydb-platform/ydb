@@ -88,6 +88,17 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
     user.CreatedAt = std::chrono::system_clock::now();
     user.LastFailedLogin = std::chrono::system_clock::time_point();
 
+    switch (request.CanLogin) {
+    case ETypeOfLogin::Login:
+        user.IsEnabled = true;
+        break;
+    case ETypeOfLogin::NoLogin:
+        user.IsEnabled = false;
+        break;
+    case ETypeOfLogin::Undefined:
+        break;
+    }
+
     return response;
 }
 
@@ -117,6 +128,17 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
 
     TSidRecord& user = itUserModify->second;
     user.Hash = Impl->GenerateHash(request.Password);
+
+    switch (request.CanLogin) {
+    case ETypeOfLogin::Login:
+        user.IsEnabled = true;
+        break;
+    case ETypeOfLogin::NoLogin:
+        user.IsEnabled = false;
+        break;
+    case ETypeOfLogin::Undefined:
+        break;
+    }
 
     return response;
 }
@@ -409,6 +431,15 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
             sid->FailedLoginAttemptCount++;
             return response;
         }
+
+        if (!itUser->second.IsEnabled) {
+            response.Status = TLoginUserResponse::EStatus::NOLOGIN;
+            response.Error = "role \"" + request.User + "\" is not permitted to log in";
+            return response;
+        }
+    }
+
+        itUser->second.LastSuccessfulLogin = response.LoginAttemptTime;
     }
 
     const TKeyRecord& key = Keys.back();
@@ -742,6 +773,8 @@ void TLoginProvider::UpdateSecurityState(const NLoginProto::TSecurityState& stat
             sid.Type = pbSid.GetType();
             sid.Name = pbSid.GetName();
             sid.Hash = pbSid.GetHash();
+            sid.LastSuccessfulLogin = pbSid.GetLastSuccessfulLogin();
+            sid.IsEnabled = pbSid.GetIsEnabled();
             for (const auto& pbSubSid : pbSid.GetMembers()) {
                 sid.Members.emplace(pbSubSid);
                 ChildToParentIndex[pbSubSid].emplace(sid.Name);

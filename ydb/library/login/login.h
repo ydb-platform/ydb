@@ -71,6 +71,7 @@ public:
             INVALID_USER,
             INVALID_PASSWORD,
             UNAVAILABLE_KEY,
+            NOLOGIN
         };
 
         TString Token;
@@ -91,14 +92,22 @@ public:
         TString ExternalAuth;
     };
 
+    enum class ETypeOfLogin {
+        Undefined,
+        Login,
+        NoLogin
+    };
+
     struct TCreateUserRequest : TBasicRequest {
         TString User;
         TString Password;
+        ETypeOfLogin CanLogin = ETypeOfLogin::Undefined;
     };
 
     struct TModifyUserRequest : TBasicRequest {
         TString User;
         TString Password;
+        ETypeOfLogin CanLogin = ETypeOfLogin::Undefined;
     };
 
     struct TRemoveUserResponse : TBasicResponse {
@@ -161,6 +170,7 @@ public:
         ESidType::SidType Type = ESidType::UNKNOWN;
         TString Name;
         TString Hash;
+        bool IsEnabled;
         std::unordered_set<TString> Members;
         // CreatedAt, FailedLoginAttemptCount, LastFailedLogin, LastSuccessfulLogin do not need in describe result.
         // We will not add these parameters to security state

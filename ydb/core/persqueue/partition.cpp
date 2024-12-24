@@ -2154,7 +2154,7 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
 
 TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx, TMaybe<bool>& predicate)
 {
-    if (tx.ForceFalse) {
+    if (tx.ForcePredicateFalse) {
         predicate = false;
         return EProcessResult::Continue;
     }

@@ -3915,14 +3915,14 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
     };
 
     // if the predicate is violated, the transaction will end with the ABORTED code
-    bool forceFalse = false;
+    bool forcePredicateFalse = false;
     THashMap<ui32, std::unique_ptr<TEvPQ::TEvTxCalcPredicate>> events;
 
     for (auto& operation : tx.Operations) {
         ui32 originalPartitionId = operation.GetPartitionId();
 
         if (!OriginalPartitionExists(originalPartitionId)) {
-            forceFalse = true;
+            forcePredicateFalse = true;
             continue;
         }
 
@@ -3946,7 +3946,7 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
             for (auto& [originalPartitionId, partitionId] : writeInfo.Partitions) {
                 if (!OriginalPartitionExists(originalPartitionId)) {
                     PQ_LOG_W("Unknown partition " << originalPartitionId << " for TxId " << tx.TxId);
-                    forceFalse = true;
+                    forcePredicateFalse = true;
                     continue;
                 }
 
@@ -3957,7 +3957,7 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
 
                 if (!Partitions.contains(partitionId)) {
                     PQ_LOG_W("Unknown partition " << partitionId << " for TxId " << tx.TxId);
-                    forceFalse = true;
+                    forcePredicateFalse = true;
                     continue;
                 }
 
@@ -3967,7 +3967,7 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
             }
         } else {
             PQ_LOG_W("Unknown WriteId " << writeId << " for TxId " << tx.TxId);
-            forceFalse = true;
+            forcePredicateFalse = true;
         }
     }
 
@@ -3975,7 +3975,7 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
         TPartitionId partitionId(originalPartitionId);
         const TPartitionInfo& partition = Partitions.at(partitionId);
 
-        event->ForceFalse = forceFalse;
+        event->ForcePredicateFalse = forcePredicateFalse;
 
         ctx.Send(partition.Actor, event.release());
     }

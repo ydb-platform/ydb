@@ -1,4 +1,4 @@
-name: Sync rightlib into main
+name: Rightlib sync
 on:
   workflow_dispatch:
 concurrency:

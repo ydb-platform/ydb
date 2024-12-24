@@ -29,11 +29,11 @@ $y = (
         FROM
             Input
         WHERE
-            key != ""
+            key != ''
     ) AS info
     USING (key)
     WHERE
-        t.key IN ("023", "150")
+        t.key IN ('023', '150')
 );
 
 SELECT DISTINCT

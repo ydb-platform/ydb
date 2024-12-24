@@ -2,7 +2,7 @@
 /* postgres can not */
 USE plato;
 
-$c = "cccc";
+$c = 'cccc';
 
 INSERT INTO @$c
 SELECT

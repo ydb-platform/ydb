@@ -1,13 +1,13 @@
 USE plato;
 
-PRAGMA yt.MaxInputTables = "2";
+PRAGMA yt.MaxInputTables = '2';
 
 SELECT
     key AS key,
-    "" AS subkey,
-    "value:" || value AS value
+    '' AS subkey,
+    'value:' || value AS value
 FROM
     concat(Input, Input, Input)
 WHERE
-    key == "07" || "5"
+    key == '07' || '5'
 ;

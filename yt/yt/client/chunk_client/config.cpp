@@ -83,6 +83,11 @@ void TRemoteReaderConfigBase::Register(TRegistrar registrar)
     registrar.Parameter("net_queue_size_factor", &TThis::NetQueueSizeFactor)
         .Default(0.5);
 
+    registrar.Parameter("cached_block_count_factor", &TThis::CachedBlockCountFactor)
+        .Default(0.0);
+    registrar.Parameter("cached_block_size_factor", &TThis::CachedBlockSizeFactor)
+        .Default(0.0);
+
     registrar.Parameter("suspicious_node_grace_period", &TThis::SuspiciousNodeGracePeriod)
         .Default();
 

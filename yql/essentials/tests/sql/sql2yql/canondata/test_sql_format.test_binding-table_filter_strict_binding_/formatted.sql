@@ -1,14 +1,14 @@
 /* syntax version 1 */
 /* postgres can not */
 /* kikimr can not - range not supported */
-$a = "";
+$a = '';
 
 $b = ($_item) -> {
     RETURN TRUE;
 };
 
-$c = "";
-$d = "";
+$c = '';
+$d = '';
 
 SELECT
     count(*)
@@ -16,14 +16,14 @@ FROM
     plato.filter_strict($a, $b, $c, $d)
 ;
 
-$a = "";
+$a = '';
 
 $b = ($_item) -> {
     RETURN TRUE;
 };
 
-$c = "";
-$d = "raw";
+$c = '';
+$d = 'raw';
 
 SELECT
     count(*)
@@ -33,14 +33,14 @@ FROM
 
 USE plato;
 
-$a = "";
+$a = '';
 
 $b = ($_item) -> {
     RETURN TRUE;
 };
 
-$c = "";
-$d = "";
+$c = '';
+$d = '';
 
 SELECT
     count(*)
@@ -48,14 +48,14 @@ FROM
     filter_strict($a, $b, $c, $d)
 ;
 
-$a = "";
+$a = '';
 
 $b = ($_item) -> {
     RETURN TRUE;
 };
 
-$c = "";
-$d = "raw";
+$c = '';
+$d = 'raw';
 
 SELECT
     count(*)

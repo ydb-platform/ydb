@@ -7,5 +7,5 @@ SELECT
 FROM
     plato.Input
 WHERE
-    value MATCH "q"
+    value MATCH 'q'
 ;

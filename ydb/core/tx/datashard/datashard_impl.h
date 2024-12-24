@@ -156,6 +156,9 @@ struct TSetupSysLocks;
 
 class TNeedGlobalTxId : public yexception {};
 
+class IDataShardInMemoryRestoreActor;
+class IDataShardInMemoryStateActor;
+
 ///
 class TDataShard
     : public TActor<TDataShard>
@@ -164,6 +167,7 @@ class TDataShard
     class TTxStopGuard;
     class TTxGetShardState;
     class TTxInit;
+    class TTxInitRestored;
     class TTxInitSchema;
     class TTxInitSchemaDefaults;
     class TTxPlanStep;
@@ -253,6 +257,8 @@ class TDataShard
     void HandleMonCleanupBorrowedParts(NMon::TEvRemoteHttpInfo::TPtr& ev);
     void HandleMonResetSchemaVersion(NMon::TEvRemoteHttpInfo::TPtr& ev);
 
+    friend class TDataShardInMemoryRestoreActor;
+    friend class TDataShardInMemoryStateActor;
     friend class TDataShardMiniKQLFactory;
     friend class TDataTransactionProcessor;
     friend class TSchemeTransactionProcessor;
@@ -1147,6 +1153,10 @@ class TDataShard
             SysMvcc_FollowerReadEdgeTxId = 43,
             SysMvcc_FollowerReadEdgeRepeatable = 44,
 
+            // Last known in-memory state actor
+            Sys_InMemoryStateActorId = 45,
+            Sys_InMemoryStateGeneration = 46,
+
             // reserved
             SysPipeline_Flags = 1000,
             SysPipeline_LimitActiveTx,
@@ -1208,6 +1218,8 @@ class TDataShard
             value = rowset.GetValue<Schema::Sys::Bytes>();
         return true;
     }
+
+    static bool SysGetActorId(NIceDb::TNiceDb& db, ui64 key, TActorId& value);
 
     template <typename TEvHandle>
     void ForwardEventToOperation(TAutoPtr<TEvHandle> ev, const TActorContext &ctx) {
@@ -1428,6 +1440,7 @@ class TDataShard
     void PersistSys(NIceDb::TNiceDb& db, ui64 key, ui64 value) const;
     void PersistSys(NIceDb::TNiceDb& db, ui64 key, ui32 value) const;
     void PersistSys(NIceDb::TNiceDb& db, ui64 key, bool value) const;
+    void PersistSys(NIceDb::TNiceDb& db, ui64 key, const TActorId& value) const;
     void PersistUserTable(NIceDb::TNiceDb& db, ui64 tableId, const TUserTable& tableInfo);
     void PersistUserTableFullCompactionTs(NIceDb::TNiceDb& db, ui64 tableId, ui64 ts);
     void PersistMoveUserTable(NIceDb::TNiceDb& db, ui64 prevTableId, ui64 tableId, const TUserTable& tableInfo);
@@ -1438,6 +1451,7 @@ class TDataShard
     bool CheckMediatorAuthorisation(ui64 mediatorId);
 
     NTabletFlatExecutor::ITransaction* CreateTxInit();
+    NTabletFlatExecutor::ITransaction* CreateTxInitRestored();
     NTabletFlatExecutor::ITransaction* CreateTxInitSchema();
     NTabletFlatExecutor::ITransaction* CreateTxInitSchemaDefaults();
     NTabletFlatExecutor::ITransaction* CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedResult::TPtr& ev);
@@ -1456,6 +1470,7 @@ public:
     }
 
     TDataShard(const TActorId &tablet, TTabletStorageInfo *info);
+    ~TDataShard();
 
 
     void PrepareAndSaveOutReadSets(ui64 step,
@@ -1479,6 +1494,7 @@ public:
                       TVector<THolder<TEvTxProcessing::TEvReadSet>> &&readsets);
     void ResendReadSet(const TActorContext& ctx, ui64 step, ui64 txId, ui64 source, ui64 target, const TString& body, ui64 seqno);
     void SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEventHandle>>& delayedAcks) const;
+    void GetCleanupReplies(TOperation* op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies);
     void GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies);
     void SendConfirmedReplies(TMonotonic ts, std::vector<std::unique_ptr<IEventHandle>>&& replies);
     void SendCommittedReplies(std::vector<std::unique_ptr<IEventHandle>>&& replies);
@@ -2684,6 +2700,30 @@ private:
     TS3UploadsManager S3Uploads;
     TS3DownloadsManager S3Downloads;
 
+    // Initial state
+    struct TInitialState {
+        TVector<IDataShardChangeCollector::TChange> ChangeRecords;
+    };
+    std::optional<TInitialState> InitialState;
+
+    // In-memory state transfer support
+    IDataShardInMemoryRestoreActor* InMemoryRestoreActor = nullptr;
+    IDataShardInMemoryStateActor* InMemoryStateActor = nullptr;
+    TActorId InMemoryStateActorId;
+    TActorId InMemoryStatePrevActorId;
+    ui64 InMemoryStatePrevGeneration = 0;
+
+    void StartInMemoryRestoreActor();
+    void OnInMemoryStateRestored();
+    bool StartInMemoryStateActor();
+
+    struct TPreservedInMemoryState {
+        TVector<TString> Chunks;
+        TVector<size_t> Checkpoints;
+    };
+
+    TPreservedInMemoryState PreserveInMemoryState();
+
     struct TMediatorDelayedReply {
         TActorId Target;
         THolder<IEventBase> Event;
@@ -2719,6 +2759,9 @@ private:
     TVector<THolder<IEventHandle>> MediatorStateWaitingMsgs;
     bool MediatorStateWaiting = false;
     bool MediatorStateRestoreTxPending = false;
+
+    bool InMemoryVarsRestored = false;
+    bool InMemoryVarsFrozen = false;
 
     bool IcbRegistered = false;
 

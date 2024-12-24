@@ -5,13 +5,13 @@ USE plato;
 
 INSERT INTO Output
 SELECT
-    "3" || key AS key,
+    '3' || key AS key,
     subkey,
     value
 FROM
     Input
 WHERE
-    key >= "0"
+    key >= '0'
 ASSUME ORDER BY
     key,
     subkey

@@ -1,11 +1,11 @@
 USE plato;
 
-$one =
+$one = (
     SELECT
         dummy
     FROM
         as_table([<|dummy: 1|>])
-;
+);
 
 INSERT INTO Output
 SELECT

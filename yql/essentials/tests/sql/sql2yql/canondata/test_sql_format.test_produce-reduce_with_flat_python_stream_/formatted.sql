@@ -24,14 +24,14 @@ $udf_stream = Python3::f(
     >, $udfScript
 );
 
-$res =
+$res = (
     REDUCE Input0
     PRESORT
         value
     ON
         key
     USING ALL $udf_stream(TableRows())
-;
+);
 
 SELECT
     *

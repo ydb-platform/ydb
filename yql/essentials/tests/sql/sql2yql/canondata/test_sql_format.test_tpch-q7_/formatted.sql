@@ -1,7 +1,7 @@
 -- TPC-H/TPC-R Volume Shipping Query (Q7)
 -- TPC TPC-H Parameter Substitution (Version 2.17.2 build 0)
 -- using 1680793381 as a seed to the RNG
-$n =
+$n = (
     SELECT
         n_name,
         n_nationkey
@@ -9,9 +9,9 @@ $n =
         plato.nation AS n
     WHERE
         n_name == 'PERU' OR n_name == 'MOZAMBIQUE'
-;
+);
 
-$l =
+$l = (
     SELECT
         l_orderkey,
         l_suppkey,
@@ -21,9 +21,9 @@ $l =
         plato.lineitem AS l
     WHERE
         CAST(CAST(l.l_shipdate AS Timestamp) AS Date) BETWEEN Date('1995-01-01') AND Date('1996-12-31')
-;
+);
 
-$j1 =
+$j1 = (
     SELECT
         n_name AS supp_nation,
         s_suppkey
@@ -33,9 +33,9 @@ $j1 =
         $n AS n1
     ON
         supplier.s_nationkey == n1.n_nationkey
-;
+);
 
-$j2 =
+$j2 = (
     SELECT
         n_name AS cust_nation,
         c_custkey
@@ -45,9 +45,9 @@ $j2 =
         $n AS n2
     ON
         customer.c_nationkey == n2.n_nationkey
-;
+);
 
-$j3 =
+$j3 = (
     SELECT
         cust_nation,
         o_orderkey
@@ -57,9 +57,9 @@ $j3 =
         $j2 AS customer
     ON
         orders.o_custkey == customer.c_custkey
-;
+);
 
-$j4 =
+$j4 = (
     SELECT
         cust_nation,
         l_orderkey,
@@ -72,9 +72,9 @@ $j4 =
         $j3 AS orders
     ON
         lineitem.l_orderkey == orders.o_orderkey
-;
+);
 
-$j5 =
+$j5 = (
     SELECT
         supp_nation,
         cust_nation,
@@ -89,7 +89,7 @@ $j5 =
     WHERE
         (supp_nation == 'PERU' AND cust_nation == 'MOZAMBIQUE')
         OR (supp_nation == 'MOZAMBIQUE' AND cust_nation == 'PERU')
-;
+);
 
 SELECT
     supp_nation,

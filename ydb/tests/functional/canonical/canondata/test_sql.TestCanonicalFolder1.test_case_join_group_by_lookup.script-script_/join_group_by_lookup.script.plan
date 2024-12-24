@@ -45,7 +45,7 @@
                                                         ],
                                                         "Limit": "1001",
                                                         "Name": "TopSort",
-                                                        "TopSortBy": ""
+                                                        "TopSortBy": "[Arg.a.Group,Arg.a.Count0,Arg.t.Value]"
                                                     }
                                                 ],
                                                 "PlanNodeId": 8,
@@ -71,11 +71,23 @@
                                                                             "Group"
                                                                         ],
                                                                         "Node Type": "TableLookupJoin",
+                                                                        "Path": "/local/base_join_group_by_lookup_script_script/Temp",
                                                                         "PlanNodeId": 5,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "Stage",
+                                                                                "Node Type": "Aggregate",
+                                                                                "Operators": [
+                                                                                    {
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "ExternalPlanNodeId": 3
+                                                                                            }
+                                                                                        ],
+                                                                                        "Name": "Aggregate",
+                                                                                        "Phase": "Final"
+                                                                                    }
+                                                                                ],
                                                                                 "PlanNodeId": 4,
                                                                                 "Plans": [
                                                                                     {
@@ -90,14 +102,15 @@
                                                                                                 "Node Type": "Aggregate",
                                                                                                 "Operators": [
                                                                                                     {
-                                                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
+                                                                                                        "Aggregation": "{SUM(1)}",
                                                                                                         "GroupBy": "item.Group",
                                                                                                         "Inputs": [
                                                                                                             {
                                                                                                                 "ExternalPlanNodeId": 1
                                                                                                             }
                                                                                                         ],
-                                                                                                        "Name": "Aggregate"
+                                                                                                        "Name": "Aggregate",
+                                                                                                        "Phase": "Intermediate"
                                                                                                     }
                                                                                                 ],
                                                                                                 "PlanNodeId": 2,
@@ -108,6 +121,7 @@
                                                                                                             {
                                                                                                                 "Inputs": [],
                                                                                                                 "Name": "TableFullScan",
+                                                                                                                "Path": "/local/base_join_group_by_lookup_script_script/Input1",
                                                                                                                 "ReadColumns": [
                                                                                                                     "Group"
                                                                                                                 ],
@@ -209,6 +223,7 @@
                                             }
                                         ],
                                         "Name": "Upsert",
+                                        "Path": "/local/base_join_group_by_lookup_script_script/Temp",
                                         "Table": "base_join_group_by_lookup_script_script/Temp"
                                     },
                                     {

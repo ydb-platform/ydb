@@ -165,6 +165,20 @@ A **column family** or **column group** is a feature that allows storing a subse
 
 **Time to live** or **TTL** is a mechanism for automatically removing old rows from a table asynchronously in the background. It is explained in a separate article [{#T}](ttl.md).
 
+### View {#view}
+
+A **view** logically represents a table formed by a given query. The view itself contains no data. The content of a view is generated every time you SELECT from it. Thus, any changes in the underlying tables are reflected immediately in the view.
+
+There are user-defined and system-defined views.
+
+#### User-defined view {#user-view}
+
+A **user-defined view** is created by a user with the [{#T}](../yql/reference/syntax/create-view.md) statement.  For more information, see [{#T}](../concepts/datamodel/view.md).
+
+#### System view {#system-view}
+
+A **system view** is for monitoring the DB status. System views are located in the .sys directory in the root of the database tree. It is explained in a separate article [{#T}](../dev/system-views.md).
+
 ### Topic {#topic}
 
 A **topic** is a persistent queue that can be used for reliable asynchronous communications between various systems via message passing. {{ ydb-short-name }} provides the infrastructure to ensure "exactly once" semantics in such communications, which ensures that there are both no lost messages and no accidental duplicates.

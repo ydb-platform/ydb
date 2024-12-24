@@ -172,6 +172,7 @@ namespace NSQLTranslationV1 {
             ForceGrace
         };
         EStrategy Strategy = EStrategy::Default;
+        TVector<TString> Values;
         bool Compact = false;
     };
 

@@ -5,11 +5,11 @@ INSERT INTO @tmp
 SELECT
     Just(
         (
-            AsTagged(1, "A"),
-            AsTagged(just(2), "B"),
-            AsTagged(NULL, "C"),
-            AsTagged(Nothing(Int32?), "D"),
-            AsTagged(Nothing(pgint4?), "E")
+            AsTagged(1, 'A'),
+            AsTagged(just(2), 'B'),
+            AsTagged(NULL, 'C'),
+            AsTagged(Nothing(Int32?), 'D'),
+            AsTagged(Nothing(pgint4?), 'E')
         )
     ) AS x
 ;

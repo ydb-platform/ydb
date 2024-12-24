@@ -1,7 +1,7 @@
 /* postgres can not */
 USE plato;
 
-PRAGMA yt.MapJoinLimit = "1M";
+PRAGMA yt.MapJoinLimit = '1M';
 
 INSERT INTO @a
 SELECT

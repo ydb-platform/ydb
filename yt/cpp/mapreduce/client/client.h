@@ -292,7 +292,7 @@ public:
     //
     // Start a new transaction.
     TTransaction(
-        IRawClientPtr rawClient,
+        const IRawClientPtr& rawClient,
         TClientPtr parentClient,
         const TClientContext& context,
         const TTransactionId& parentTransactionId,
@@ -301,7 +301,7 @@ public:
     //
     // Attach an existing transaction.
     TTransaction(
-        IRawClientPtr rawClient,
+        const IRawClientPtr& rawClient,
         TClientPtr parentClient,
         const TClientContext& context,
         const TTransactionId& transactionId,
@@ -332,7 +332,6 @@ protected:
     TClientPtr GetParentClientImpl() override;
 
 private:
-    const IRawClientPtr RawClient_;
     ITransactionPingerPtr TransactionPinger_;
     THolder<TPingableTransaction> PingableTx_;
     TClientPtr ParentClient_;
@@ -496,14 +495,9 @@ protected:
     TClientPtr GetParentClientImpl() override;
 
 private:
-    template <class TOptions>
-    void SetTabletParams(
-        THttpHeader& header,
-        const TYPath& path,
-        const TOptions& options);
-
     void CheckShutdown() const;
 
+private:
     ITransactionPingerPtr TransactionPinger_;
 
     std::atomic<bool> Shutdown_ = false;

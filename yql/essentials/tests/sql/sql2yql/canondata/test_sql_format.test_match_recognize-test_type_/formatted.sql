@@ -1,9 +1,9 @@
-PRAGMA FeatureR010 = "prototype";
-PRAGMA config.flags("MatchRecognizeStream", "disable");
+PRAGMA FeatureR010 = 'prototype';
+PRAGMA config.flags('MatchRecognizeStream', 'disable');
 
 USE plato;
 
-$data = [<|dt: 4, host: "fqdn1", key: 14|>];
+$data = [<|dt: 4, host: 'fqdn1', key: 14|>];
 
 -- NoPartitionNoMeasure
 SELECT
@@ -28,7 +28,7 @@ FROM
         ORDER BY
             CAST(dt AS Timestamp)
         MEASURES
-            "SomeString" AS Measure1
+            'SomeString' AS Measure1
         ONE ROW PER MATCH
         AFTER MATCH SKIP TO NEXT ROW
         PATTERN (Q)
@@ -64,7 +64,7 @@ FROM
         ORDER BY
             CAST(dt AS Timestamp)
         MEASURES
-            "SomeString" AS Measure1
+            'SomeString' AS Measure1
         ONE ROW PER MATCH
         AFTER MATCH SKIP TO NEXT ROW
         PATTERN (Y)
@@ -84,7 +84,7 @@ FROM
         ORDER BY
             CAST(dt AS Timestamp)
         MEASURES
-            "SomeString" AS S,
+            'SomeString' AS S,
             345 AS I
         ONE ROW PER MATCH
         AFTER MATCH SKIP TO NEXT ROW

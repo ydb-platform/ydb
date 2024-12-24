@@ -4,7 +4,7 @@ PRAGMA DisableSimpleColumns;
 /* kikimr can not */
 USE plato;
 
-PRAGMA yt.mapjoinlimit = "1m";
+PRAGMA yt.mapjoinlimit = '1m';
 
 $cnt = (
     SELECT
@@ -21,7 +21,7 @@ $in1 = (
     FROM
         Input
     WHERE
-        key != ""
+        key != ''
     ORDER BY
         key
     LIMIT 10 OFFSET $offset
@@ -45,7 +45,7 @@ $in2 = (
     FROM
         Input
     WHERE
-        key != ""
+        key != ''
     LIMIT $limit
 );
 

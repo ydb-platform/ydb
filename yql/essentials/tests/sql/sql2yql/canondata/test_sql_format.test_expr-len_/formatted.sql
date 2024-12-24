@@ -1,7 +1,7 @@
 USE plato;
 
 SELECT
-    LEN("My String")
+    LEN('My String')
 ;
 
 SELECT

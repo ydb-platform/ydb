@@ -4,7 +4,7 @@ SELECT
 FROM
     plato.Input
 WHERE
-    key IN YQL::DictFromKeys(ParseType("String"), AsTuple("075", "023", "037"))
+    key IN YQL::DictFromKeys(ParseType('String'), AsTuple('075', '023', '037'))
 ORDER BY
     key
 ;

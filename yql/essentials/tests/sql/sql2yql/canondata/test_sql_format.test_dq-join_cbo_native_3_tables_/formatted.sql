@@ -1,6 +1,6 @@
 USE plato;
 
-PRAGMA CostBasedOptimizer = "native";
+PRAGMA CostBasedOptimizer = 'native';
 
 SELECT
     i1.value,

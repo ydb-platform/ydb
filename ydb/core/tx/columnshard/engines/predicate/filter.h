@@ -17,6 +17,18 @@ private:
 public:
     TPKRangesFilter(const bool reverse);
 
+    std::optional<ui32> GetFilteredCountLimit(const std::shared_ptr<arrow::Schema>& pkSchema) {
+        ui32 result = 0;
+        for (auto&& i : SortedRanges) {
+            if (i.IsPointRange(pkSchema)) {
+                ++result;
+            } else {
+                return std::nullopt;
+            }
+        }
+        return result;
+    }
+
     [[nodiscard]] TConclusionStatus Add(
         std::shared_ptr<NOlap::TPredicate> f, std::shared_ptr<NOlap::TPredicate> t, const std::shared_ptr<arrow::Schema>& pkSchema);
     std::shared_ptr<arrow::RecordBatch> SerializeToRecordBatch(const std::shared_ptr<arrow::Schema>& pkSchema) const;

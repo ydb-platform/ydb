@@ -349,7 +349,7 @@ public:
 
                 if (valueNode.HasKey("Ranges")) {
                     p.Ranges.ConstructInPlace();
-                    for (const auto& r : valueNode["Ranges"].AsString()) {
+                    for (const auto& r : valueNode["Ranges"].AsList()) {
                         NYT::TReadRange range;
                         NYT::Deserialize(range, r);
                         p.Ranges->push_back(range);

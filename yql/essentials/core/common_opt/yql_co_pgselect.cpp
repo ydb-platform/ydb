@@ -401,7 +401,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(TPositionHand
 
                 auto select = ExpandPgSelectSublink(node->TailPtr(), ctx, optCtx, it->second, cleanedInputs, inputAliases);
 
-                auto exportsPtr = optCtx.Types->Modules->GetModule("/lib/yql/aggregate.yql");
+                auto exportsPtr = optCtx.Types->Modules->GetModule("/lib/yql/aggregate.yqls");
                 YQL_ENSURE(exportsPtr);
                 const auto& exports = exportsPtr->Symbols();
 

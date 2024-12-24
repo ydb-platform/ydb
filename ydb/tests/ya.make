@@ -10,4 +10,5 @@ RECURSE(
     stability
     supp
     tools
+    workloads
 )

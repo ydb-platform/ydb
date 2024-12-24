@@ -1,10 +1,10 @@
 /* syntax version 1 */
 /* postgres can not */
 /* yt can not */
-PRAGMA warning("disable", "4510");
+PRAGMA warning('disable', '4510');
 
 $type = Struct<x: Int32, y: Int32, z: Int32>;
-$keys = AsTuple(AsAtom("x"), AsAtom("y"), AsAtom("z"));
+$keys = AsTuple(AsAtom('x'), AsAtom('y'), AsAtom('z'));
 $range_for = ($pred) -> (YQL::RangeComputeFor($type, $pred, $keys));
 $pred1 = ($row) -> (($row.x, $row.y, $row.z) >= (11, 22, 33));
 $pred2 = ($row) -> (($row.x, $row.y, $row.z) > (11, 22, 33));

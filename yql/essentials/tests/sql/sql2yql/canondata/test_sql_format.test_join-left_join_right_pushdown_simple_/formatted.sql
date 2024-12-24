@@ -12,5 +12,5 @@ LEFT JOIN
 ON
     a.value == b.value
 WHERE
-    b.value >= "ddd"
+    b.value >= 'ddd'
 ;

@@ -10,6 +10,7 @@ enum EFilesType {
     INCOMPLETE_DATA,
     INCOMPLETE,
     EMPTY,
+    CREATE_VIEW,
 };
 
 static constexpr TFileInfo FILES_INFO[] = {
@@ -20,6 +21,7 @@ static constexpr TFileInfo FILES_INFO[] = {
     {"incomplete.csv", "incomplete"},
     {"incomplete", "incomplete"},
     {"empty_dir", "empty_dir"},
+    {"create_view.sql", "view"},
 };
 
 const TFileInfo& TableScheme() {
@@ -48,6 +50,10 @@ const TFileInfo& Incomplete() {
 
 const TFileInfo& Empty() {
     return FILES_INFO[EMPTY];
+}
+
+const TFileInfo& CreateView() {
+    return FILES_INFO[CREATE_VIEW];
 }
 
 } // NYdb::NDump::NFiles

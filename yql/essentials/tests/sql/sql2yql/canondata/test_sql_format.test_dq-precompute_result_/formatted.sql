@@ -1,11 +1,11 @@
 USE plato;
 
-$l =
+$l = (
     SELECT
         min(CAST(key AS uint64)) AS key
     FROM
         Input
-;
+);
 
 $l = EvaluateExpr($l);
 

@@ -9,5 +9,5 @@ SELECT
 FROM
     Input
 WHERE
-    key == "150"
+    key == '150'
 ;

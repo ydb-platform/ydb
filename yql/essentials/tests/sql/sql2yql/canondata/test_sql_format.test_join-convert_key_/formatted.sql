@@ -2,7 +2,7 @@
 USE plato;
 
 PRAGMA SimpleColumns;
-PRAGMA yt.MapJoinLimit = "1m";
+PRAGMA yt.MapJoinLimit = '1m';
 
 $join_result = (
     SELECT

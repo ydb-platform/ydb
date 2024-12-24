@@ -1,8 +1,8 @@
 /* syntax version 1 */
 USE plato;
 
-PRAGMA yt.MapJoinLimit = "1m";
-PRAGMA yt.DisableOptimizers = "PhysicalOptimizer-FuseInnerMap";
+PRAGMA yt.MapJoinLimit = '1m';
+PRAGMA yt.DisableOptimizers = 'PhysicalOptimizer-FuseInnerMap';
 
 SELECT
     v3

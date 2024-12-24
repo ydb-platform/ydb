@@ -9,7 +9,7 @@ SELECT
 FROM
     yt: $foo.Input
 WHERE
-    key < "100"
+    key < '100'
 ORDER BY
     key
 ;
@@ -23,7 +23,7 @@ DEFINE ACTION $bar() AS
     FROM
         yt: $foo.Input
     WHERE
-        key < "100"
+        key < '100'
     ORDER BY
         key
     ;

@@ -3,5 +3,5 @@ SELECT
 FROM
     plato.Input
 WHERE
-    key > "100"
+    key > '100'
 ;

@@ -252,6 +252,30 @@
             [
               1
             ]
+        },
+      "DefineHostConfig":
+        [
+          {
+            "HostConfigId":1,
+            "Drive":
+              [
+                {
+                  "Path":"/tmp/ydb.data",
+                  "Type":"SSD"
+                }
+              ]
+          }
+        ],
+      "DefineBox":
+        {
+          "BoxId":1,
+          "Host":
+            [
+              {
+                "HostConfigId":1,
+                "EnforcedNodeId":1
+              }
+            ]
         }
     },
   "ChannelProfileConfig":

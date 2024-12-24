@@ -39,7 +39,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[Arg.i1.q1,Arg.i1.q2]"
                                             },
                                             {
                                                 "Condition": "i1.q2 = i2_1.q2",
@@ -104,6 +104,7 @@
                                                                                                     "q1"
                                                                                                 ],
                                                                                                 "Node Type": "TableLookupJoin",
+                                                                                                "Path": "/Root/postgres_jointest/join0.test_plan/int8_tbl",
                                                                                                 "PlanNodeId": 2,
                                                                                                 "PlanNodeType": "Connection",
                                                                                                 "Plans": [
@@ -112,7 +113,7 @@
                                                                                                         "Operators": [
                                                                                                             {
                                                                                                                 "Inputs": [],
-                                                                                                                "Iterator": "[]",
+                                                                                                                "Iterator": "[[{q1: 123},{x: 123}]]",
                                                                                                                 "Name": "Iterator"
                                                                                                             }
                                                                                                         ],
@@ -148,6 +149,7 @@
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
+                                                                        "Path": "/Root/postgres_jointest/join0.test_plan/int8_tbl",
                                                                         "ReadColumns": [
                                                                             "q1",
                                                                             "q2"

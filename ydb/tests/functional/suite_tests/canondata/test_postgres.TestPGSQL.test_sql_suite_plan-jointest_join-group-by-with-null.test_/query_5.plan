@@ -29,17 +29,26 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort",
+                                        "Node Type": "TopSort-Aggregate",
                                         "Operators": [
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "argument.t1.q2"
+                                            },
                                             {
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 10
                                                     }
                                                 ],
-                                                "Limit": "1001",
-                                                "Name": "TopSort",
-                                                "TopSortBy": "argument.t1.q2"
+                                                "Name": "Aggregate",
+                                                "Phase": "Final"
                                             }
                                         ],
                                         "PlanNodeId": 11,
@@ -56,14 +65,15 @@
                                                         "Node Type": "Aggregate-LeftJoin (MapJoin)-Filter",
                                                         "Operators": [
                                                             {
-                                                                "Aggregation": "{_yql_agg_0: COUNT(item.t2.q1,state._yql_agg_0)}",
+                                                                "Aggregation": "{COUNT(item.t2.q1)}",
                                                                 "GroupBy": "item.t1.q2",
                                                                 "Inputs": [
                                                                     {
                                                                         "InternalOperatorId": 1
                                                                     }
                                                                 ],
-                                                                "Name": "Aggregate"
+                                                                "Name": "Aggregate",
+                                                                "Phase": "Intermediate"
                                                             },
                                                             {
                                                                 "Condition": "t1.q2 = t2.q1",
@@ -104,6 +114,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
+                                                                                        "Path": "/Root/postgres_jointest/join-group-by-with-null.test_plan/int8_tbl",
                                                                                         "ReadColumns": [
                                                                                             "q1",
                                                                                             "q2"
@@ -150,6 +161,7 @@
                                                                                                     {
                                                                                                         "Inputs": [],
                                                                                                         "Name": "TableFullScan",
+                                                                                                        "Path": "/Root/postgres_jointest/join-group-by-with-null.test_plan/int8_tbl",
                                                                                                         "ReadColumns": [
                                                                                                             "q1",
                                                                                                             "q2"

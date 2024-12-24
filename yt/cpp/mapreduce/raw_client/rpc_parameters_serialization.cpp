@@ -304,12 +304,11 @@ TNode SerializeParamsForUnlock(
     const TTransactionId& transactionId,
     const TString& pathPrefix,
     const TYPath& path,
-    const TUnlockOptions& options)
+    const TUnlockOptions& /*options*/)
 {
     TNode result;
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
-    Y_UNUSED(options);
     return result;
 }
 
@@ -449,11 +448,10 @@ TNode SerializeParamsForSuspendOperation(
 
 TNode SerializeParamsForResumeOperation(
     const TOperationId& operationId,
-    const TResumeOperationOptions& options)
+    const TResumeOperationOptions& /*options*/)
 {
     TNode result;
     SetOperationIdParam(&result, operationId);
-    Y_UNUSED(options);
     return result;
 }
 
@@ -863,9 +861,8 @@ TNode SerializeParamsForGetTabletInfos(
     const TString& pathPrefix,
     const TYPath& path,
     const TVector<int>& tabletIndexes,
-    const TGetTabletInfosOptions& options)
+    const TGetTabletInfosOptions& /*options*/)
 {
-    Y_UNUSED(options);
     TNode result;
     SetPathParam(&result, pathPrefix, path);
     result["tablet_indexes"] = TNode::CreateList();

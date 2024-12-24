@@ -5,81 +5,81 @@ USE plato;
 SELECT
     count(*)
 FROM
-    concat("Inp" || Unicode::ToLower("ut"u))
+    concat('Inp' || Unicode::ToLower("ut"u))
 ;
 
 SELECT
     count(*)
 FROM
-    concat_strict("Inp" || Unicode::ToLower("ut"u))
+    concat_strict('Inp' || Unicode::ToLower("ut"u))
 ;
 
 SELECT
     count(*)
 FROM
-    range("", "Inp" || Unicode::ToLower("ut"u))
+    range('', 'Inp' || Unicode::ToLower("ut"u))
 ;
 
 SELECT
     count(*)
 FROM
-    range_strict("", "Inp" || Unicode::ToLower("ut"u))
+    range_strict('', 'Inp' || Unicode::ToLower("ut"u))
 ;
 
 SELECT
     count(*)
 FROM
-    filter("", ($x) -> {
-        RETURN $x == "Input";
+    filter('', ($x) -> {
+        RETURN $x == 'Input';
     })
 ;
 
 SELECT
     count(*)
 FROM
-    filter_strict("", ($x) -> {
-        RETURN $x == "Input";
+    filter_strict('', ($x) -> {
+        RETURN $x == 'Input';
     })
 ;
 
 SELECT
     count(*)
 FROM
-    like("", "Inp" || "%")
+    like('', 'Inp' || '%')
 ;
 
 SELECT
     count(*)
 FROM
-    like_strict("", "Inp" || "%")
+    like_strict('', 'Inp' || '%')
 ;
 
 SELECT
     count(*)
 FROM
-    regexp("", "Inp" || ".t")
+    regexp('', 'Inp' || '.t')
 ;
 
 SELECT
     count(*)
 FROM
-    regexp_strict("", "Inp" || ".t")
+    regexp_strict('', 'Inp' || '.t')
 ;
 
 SELECT
     count(*)
 FROM
-    each(AsList("Input"))
+    each(AsList('Input'))
 ;
 
 SELECT
     count(*)
 FROM
-    each_strict(AsList("Input"))
+    each_strict(AsList('Input'))
 ;
 
 SELECT
     count(*)
 FROM
-    folder(SUBSTRING("foo", 0, 0))
+    folder(SUBSTRING('foo', 0, 0))
 ;

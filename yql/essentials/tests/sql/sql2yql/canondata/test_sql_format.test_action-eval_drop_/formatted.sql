@@ -6,7 +6,7 @@ $path = (
     SELECT
         min(Path)
     FROM
-        folder("")
+        folder('')
 );
 
 DROP TABLE $path;

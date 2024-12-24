@@ -10,7 +10,7 @@ FROM (
     FROM
         a
     WHERE
-        a.key > "zzz"
+        a.key > 'zzz'
 ) AS a
 JOIN
     b

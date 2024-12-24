@@ -2,14 +2,14 @@
 /* postgres can not */
 PRAGMA EmitAggApply;
 
-$t =
+$t = (
     SELECT
         *
     FROM
         AS_TABLE([<|key: 1, value: 2|>, <|key: 1, value: 3|>])
-;
+);
 
-$p =
+$p = (
     SELECT
         key,
         avg(value) AS a
@@ -18,11 +18,11 @@ $p =
     GROUP BY
         key
         WITH combine
-;
+);
 
-$p =
+$p = (
     PROCESS $p
-;
+);
 
 --select FormatType(TypeOf($p));
 SELECT
@@ -31,7 +31,7 @@ FROM
     $p
 ;
 
-$p =
+$p = (
     SELECT
         key,
         avg(a) AS a
@@ -40,11 +40,11 @@ $p =
     GROUP BY
         key
         WITH combinestate
-;
+);
 
-$p =
+$p = (
     PROCESS $p
-;
+);
 
 --select FormatType(TypeOf($p));
 SELECT
@@ -53,7 +53,7 @@ FROM
     $p
 ;
 
-$p =
+$p = (
     SELECT
         key,
         avg(a) AS a
@@ -62,11 +62,11 @@ $p =
     GROUP BY
         key
         WITH mergestate
-;
+);
 
-$p =
+$p = (
     PROCESS $p
-;
+);
 
 --select FormatType(TypeOf($p));
 SELECT
@@ -75,7 +75,7 @@ FROM
     $p
 ;
 
-$p1 =
+$p1 = (
     SELECT
         key,
         avg(a) AS a
@@ -84,11 +84,11 @@ $p1 =
     GROUP BY
         key
         WITH mergefinalize
-;
+);
 
-$p1 =
+$p1 = (
     PROCESS $p1
-;
+);
 
 --select FormatType(TypeOf($p1));
 SELECT
@@ -97,7 +97,7 @@ FROM
     $p1
 ;
 
-$p2 =
+$p2 = (
     SELECT
         key,
         avg(a) AS a
@@ -111,11 +111,11 @@ $p2 =
     GROUP BY
         key
         WITH mergemanyfinalize
-;
+);
 
-$p2 =
+$p2 = (
     PROCESS $p2
-;
+);
 
 --select FormatType(TypeOf($p2));
 SELECT
@@ -124,7 +124,7 @@ FROM
     $p2
 ;
 
-$p3 =
+$p3 = (
     SELECT
         key,
         avg(value) AS a
@@ -133,11 +133,11 @@ $p3 =
     GROUP BY
         key
         WITH finalize
-;
+);
 
-$p3 =
+$p3 = (
     PROCESS $p3
-;
+);
 
 --select FormatType(TypeOf($p));
 SELECT

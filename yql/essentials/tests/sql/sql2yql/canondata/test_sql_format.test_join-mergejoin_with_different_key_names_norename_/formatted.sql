@@ -2,9 +2,9 @@ PRAGMA DisableSimpleColumns;
 
 USE plato;
 
-PRAGMA yt.JoinMergeTablesLimit = "10";
-PRAGMA yt.JoinMergeUnsortedFactor = "3.0";
-PRAGMA yt.JoinAllowColumnRenames = "false";
+PRAGMA yt.JoinMergeTablesLimit = '10';
+PRAGMA yt.JoinMergeUnsortedFactor = '3.0';
+PRAGMA yt.JoinAllowColumnRenames = 'false';
 
 FROM
     SortedBySubkeyValue AS a

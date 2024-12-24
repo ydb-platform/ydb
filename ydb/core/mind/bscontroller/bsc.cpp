@@ -69,7 +69,7 @@ void TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
         TBlobStorageGroupInfo::TGroupVDisks failed(Topology.get());
         TBlobStorageGroupInfo::TGroupVDisks failedByPDisk(Topology.get());
         for (const TVSlotInfo *slot : VDisksInGroup) {
-            if (!slot->IsReady || slot->PDisk->Mood == TPDiskMood::Restarting) {
+            if (!slot->IsReady) {
                 failed |= {Topology.get(), slot->GetShortVDiskId()};
             } else if (!slot->PDisk->HasGoodExpectedStatus()) {
                 failedByPDisk |= {Topology.get(), slot->GetShortVDiskId()};
@@ -155,14 +155,14 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         } else {
             Y_FAIL("no storage configuration provided");
         }
+    }
 
-        if (bsConfig.HasAutoconfigSettings()) {
-            // assuming that in autoconfig mode HostRecords are managed by the distconf; we need to apply it here to
-            // avoid race with box autoconfiguration and node list change
-            HostRecords = std::make_shared<THostRecordMap::element_type>(StorageConfig);
-            if (SelfHealId) {
-                Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
-            }
+    if (StorageConfig.HasSelfManagementConfig() && StorageConfig.GetSelfManagementConfig().GetEnabled()) {
+        // assuming that in autoconfig mode HostRecords are managed by the distconf; we need to apply it here to
+        // avoid race with box autoconfiguration and node list change
+        HostRecords = std::make_shared<THostRecordMap::element_type>(StorageConfig);
+        if (SelfHealId) {
+            Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
         }
     }
 
@@ -188,19 +188,13 @@ void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
 }
 
 void TBlobStorageController::ApplyStorageConfig() {
-    if (!StorageConfig.HasBlobStorageConfig()) {
+    if (!StorageConfig.HasBlobStorageConfig() || // this would be strange
+            !StorageConfig.HasSelfManagementConfig() ||
+            !StorageConfig.GetSelfManagementConfig().GetEnabled() ||
+            !StorageConfig.GetSelfManagementConfig().GetAutomaticBoxManagement()) {
         return;
     }
     const auto& bsConfig = StorageConfig.GetBlobStorageConfig();
-
-    if (!bsConfig.HasAutoconfigSettings()) {
-        return;
-    }
-    const auto& autoconfigSettings = bsConfig.GetAutoconfigSettings();
-
-    if (autoconfigSettings.HasAutomaticBoxManagement() && !autoconfigSettings.GetAutomaticBoxManagement()) {
-        return;
-    }
 
     if (Boxes.size() > 1) {
         return;
@@ -230,13 +224,13 @@ void TBlobStorageController::ApplyStorageConfig() {
     auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
     auto& r = ev->Record;
     auto *request = r.MutableRequest();
-    for (const auto& hostConfig : autoconfigSettings.GetDefineHostConfig()) {
+    for (const auto& hostConfig : bsConfig.GetDefineHostConfig()) {
         auto *cmd = request->AddCommand();
         cmd->MutableDefineHostConfig()->CopyFrom(hostConfig);
     }
     auto *cmd = request->AddCommand();
     auto *defineBox = cmd->MutableDefineBox();
-    defineBox->CopyFrom(autoconfigSettings.GetDefineBox());
+    defineBox->CopyFrom(bsConfig.GetDefineBox());
     defineBox->SetBoxId(1);
     for (auto& host : *defineBox->MutableHost()) {
         const ui32 nodeId = host.GetEnforcedNodeId();
@@ -476,6 +470,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kCancelVirtualGroup:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSetVDiskReadOnly:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kRestartPDisk:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetPDiskReadOnly:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

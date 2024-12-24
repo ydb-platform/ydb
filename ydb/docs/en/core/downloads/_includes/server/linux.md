@@ -1,7 +1,7 @@
 | Version | Release date | Download | Changelog |
 :--- | :--- | :--- | :---
 **v24.2**
-v.24.2.7  | 20/08/2024 | [Binary file](https://binaries.ydb.tech/release/24.2.7/ydbd-24.2.7-linux-amd64.tar.gz)
+v.24.2.7  | 20/08/2024 | [Binary file](https://binaries.ydb.tech/release/24.2.7/ydbd-24.2.7-linux-amd64.tar.gz) | [See the changelog](../../../changelog-server.md#24-2)
 **v24.1**
 v.24.1.18 | 31/07/2024 | [Binary file](https://binaries.ydb.tech/release/24.1.18/ydbd-24.1.18-linux-amd64.tar.gz) | [See the changelog](../../../changelog-server.md#24-1)
 **v23.4**

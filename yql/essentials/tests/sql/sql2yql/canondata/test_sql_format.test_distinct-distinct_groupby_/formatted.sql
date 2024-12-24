@@ -2,8 +2,8 @@
 USE plato;
 
 SELECT DISTINCT
-    k || "_" AS k1,
-    "_" || v AS v1
+    k || '_' AS k1,
+    '_' || v AS v1
 FROM
     Input2
 GROUP BY

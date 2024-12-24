@@ -14,6 +14,7 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/providers/common/comp_nodes
     yql/essentials/providers/common/schema/mkql
+    yql/essentials/public/udf
     ydb/library/actors/util
 )
 
@@ -27,6 +28,7 @@ SRCS(
     dq_input_producer.cpp
     dq_output_channel.cpp
     dq_output_consumer.cpp
+    dq_tasks_counters.cpp
     dq_tasks_runner.cpp
     dq_transport.cpp
 )

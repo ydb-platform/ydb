@@ -1,9 +1,9 @@
 /* syntax version 1 */
 USE plato;
 
-PRAGMA yt.JoinEnableStarJoin = "true";
+PRAGMA yt.JoinEnableStarJoin = 'true';
 
-$rightSemi =
+$rightSemi = (
     SELECT
         *
     FROM
@@ -12,9 +12,9 @@ $rightSemi =
         Input1 AS a
     ON
         a.v1 == b.v2 AND a.k1 == b.k2
-;
+);
 
-$leftOnly =
+$leftOnly = (
     SELECT
         *
     FROM
@@ -23,9 +23,9 @@ $leftOnly =
         Input3 AS c
     ON
         rs.k1 == c.k3 AND rs.v1 == c.v3
-;
+);
 
-$right =
+$right = (
     SELECT
         *
     FROM
@@ -34,9 +34,9 @@ $right =
         $leftOnly AS lo
     ON
         d.v4 == lo.v1 AND lo.k1 == d.k4
-;
+);
 
-$inner =
+$inner = (
     SELECT
         *
     FROM
@@ -45,7 +45,7 @@ $inner =
         Input5 AS e
     ON
         r.k1 == e.k5 AND e.v5 == r.v1
-;
+);
 
 SELECT
     *

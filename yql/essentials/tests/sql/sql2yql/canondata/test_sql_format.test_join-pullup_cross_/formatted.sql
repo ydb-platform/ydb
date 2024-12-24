@@ -6,7 +6,7 @@ FROM (
     SELECT
         key,
         subkey || key AS subkey,
-        value || "v" AS value
+        value || 'v' AS value
     FROM
         Input1
 ) AS a

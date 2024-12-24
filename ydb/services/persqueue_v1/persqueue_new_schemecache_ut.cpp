@@ -6,7 +6,7 @@
 
 #include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
-#include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
 #include <ydb/library/persqueue/obfuscate/obfuscate.h>
@@ -68,6 +68,7 @@ namespace NKikimr::NPersQueueTests {
                 NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PQ_METACACHE}
             );
             PrepareForGrpcNoDC(*server.AnnoyingClient);
+            server.AnnoyingClient->GrantConnect("topic1@" BUILTIN_ACL_DOMAIN);
 
             TPQDataWriter writer("source1", server, DEFAULT_TOPIC_PATH);
 
@@ -100,6 +101,8 @@ namespace NKikimr::NPersQueueTests {
             NYdb::TDriverConfig driverCfg;
 
             driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort).SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)).SetDatabase("/Root");
+
+            server.AnnoyingClient->GrantConnect("user1@" BUILTIN_ACL_DOMAIN);
 
             auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
             auto persQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver);
@@ -354,7 +357,7 @@ namespace NKikimr::NPersQueueTests {
                                                                                     {{"folder_id", folderId},
                                                                                      {"cloud_id", cloudId},
                                                                                      {"database_id", databaseId}}));
-
+                server.AnnoyingClient->GrantConnect(consumerName);
                 server.AnnoyingClient->SetNoConfigMode();
                 server.AnnoyingClient->FullInit();
                 server.AnnoyingClient->InitUserRegistry();
@@ -367,7 +370,7 @@ namespace NKikimr::NPersQueueTests {
 
                 const auto monPort = TPortManager().GetPort();
                 auto Counters = server.CleverServer->GetGRpcServerRootCounters();
-                NActors::TSyncHttpMon Monitoring({
+                NActors::TMon Monitoring({
                     .Port = monPort,
                     .Address = "localhost",
                     .Threads = 3,
@@ -375,7 +378,7 @@ namespace NKikimr::NPersQueueTests {
                     .Host = "localhost",
                 });
                 Monitoring.RegisterCountersPage("counters", "Counters", Counters);
-                Monitoring.Start();
+                Monitoring.Start(server.CleverServer->GetRuntime()->GetAnyNodeActorSystem());
 
                 auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
                 auto persQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver);
@@ -440,8 +443,9 @@ namespace NKikimr::NPersQueueTests {
                 }
 
                 static constexpr auto userAgent = "test-client/v0.1 ' ?*'\"`| (some build info (codename); os 1.0)";
-
                 {
+                    server.AnnoyingClient->GrantConnect("user@builtin");
+
                     auto newDriverCfg = driverCfg;
                     newDriverCfg.SetAuthToken("user@builtin");
 
@@ -526,6 +530,7 @@ namespace NKikimr::NPersQueueTests {
                     checkUserAgentCounters(monPort, "BytesWrittenByUserAgent", "pqv1", userAgent, fullTopicName, "");
                     checkUserAgentCounters(monPort, "BytesReadByUserAgent", "pqv1", userAgent, "", consumerName);
                 }
+                Monitoring.Stop();
             };
 
             testWriteStat1stClass("user1");
@@ -558,7 +563,7 @@ namespace NKikimr::NPersQueueTests {
 
                 const auto monPort = TPortManager().GetPort();
                 auto Counters = server.CleverServer->GetGRpcServerRootCounters();
-                NActors::TSyncHttpMon Monitoring({
+                NActors::TMon Monitoring({
                     .Port = monPort,
                     .Address = "localhost",
                     .Threads = 3,
@@ -566,7 +571,7 @@ namespace NKikimr::NPersQueueTests {
                     .Host = "localhost",
                 });
                 Monitoring.RegisterCountersPage("counters", "Counters", Counters);
-                Monitoring.Start();
+                Monitoring.Start(server.CleverServer->GetRuntime()->GetAnyNodeActorSystem());
 
                 auto driverCfg = NYdb::TDriverConfig()
                     .SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort)
@@ -629,6 +634,7 @@ namespace NKikimr::NPersQueueTests {
                     };
 
                 {
+                    server.AnnoyingClient->GrantConnect("user@builtin");
                     NYdb::NScheme::TSchemeClient schemeClient(*ydbDriver);
                     NYdb::NScheme::TPermissions permissions("user@builtin", {"ydb.generic.read", "ydb.generic.write"});
 
@@ -734,6 +740,7 @@ namespace NKikimr::NPersQueueTests {
                     checkUserAgentCounters(monPort, "BytesWrittenByUserAgent", "topic", userAgent, fullTopicName, "");
                     checkUserAgentCounters(monPort, "BytesReadByUserAgent", "topic", userAgent, "", consumerName);
                 }
+                Monitoring.Stop();
             };
 
             testWriteStat1stClass("user1");

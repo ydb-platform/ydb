@@ -16,5 +16,5 @@ SELECT
 FROM
     $x
 WHERE
-    key > "000"
+    key > '000'
 LIMIT coalesce(CAST(0.1 * 0 AS Uint64), 0);

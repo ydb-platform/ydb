@@ -381,6 +381,7 @@ protected:
     TDuration MaxTimeBetweenConnects;
     bool WarmUp;
     ui64 ExpectedNodes;
+    ui64 AliveNodes = 0;
 
     THashMap<ui32, TEvInterconnect::TNodeInfo> NodesInfo;
     TTabletCountersBase* TabletCounters;
@@ -852,7 +853,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
         return CurrentConfig.GetEnableFastTabletMove();
     }
 
-    TDuration GetTabletRestartsPeriod() const {
+    TDuration GetTabletRestartsPeriodForPenalties() const {
         return TDuration::MilliSeconds(CurrentConfig.GetTabletRestartsPeriod());
     }
 

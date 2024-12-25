@@ -1,7 +1,7 @@
 #ifndef STRIPPED_ERROR_INL_H_
-#error "Direct inclusion of this file is not allowed, include stripped_error.h"
+#error "Direct inclusion of this file is not allowed, include error.h"
 // For the sake of sane code completion.
-#include "stripped_error.h"
+#include "error.h"
 #endif
 
 #include <library/cpp/yt/error/error_attributes.h>
@@ -66,6 +66,8 @@ inline TString FormatErrorMessage(TStringBuf format)
 }
 
 } // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
 
 template <class... TArgs>
 TError::TErrorOr(TFormatString<TArgs...> format, TArgs&&... args)
@@ -151,17 +153,6 @@ TError TError::Wrap(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... 
 
 #undef IMPLEMENT_COPY_WRAP
 #undef IMPLEMENT_MOVE_WRAP
-
-template <CMergeableDictionary TDictionary>
-TError& TError::operator <<= (const TDictionary& attributes) &
-{
-    // This forces inclusion of error_attributes in the header file
-    // which is undesirable.
-    // One could (and probably should) implement type-erasure
-    // like AnyDictionaryRef to move this implementation in cpp file.
-    MutableAttributes()->MergeFrom(attributes);
-    return *this;
-}
 
 template <CErrorNestable TValue>
 TError&& TError::operator << (TValue&& rhs) &&

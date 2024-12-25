@@ -1,8 +1,8 @@
 #pragma once
 
-#include "error.h"
+#include <library/cpp/yt/error/error.h>
 
-#include <yt/yt/core/ytree/attributes.h>
+#include <library/cpp/yt/error/error_attributes.h>
 
 #include <library/cpp/yt/misc/optional.h>
 

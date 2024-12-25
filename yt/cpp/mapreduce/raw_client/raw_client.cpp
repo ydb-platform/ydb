@@ -289,6 +289,18 @@ void THttpRawClient::CommitTransaction(
     RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
+TOperationId THttpRawClient::StartOperation(
+    TMutationId& mutationId,
+    const TTransactionId& transactionId,
+    EOperationType type,
+    const TNode& spec)
+{
+    THttpHeader header("POST", "start_op");
+    header.AddMutationId();
+    header.MergeParameters(NRawClient::SerializeParamsForStartOperation(transactionId, type, spec));
+    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header)->GetResponse());
+}
+
 TOperationAttributes THttpRawClient::GetOperation(
     const TOperationId& operationId,
     const TGetOperationOptions& options)

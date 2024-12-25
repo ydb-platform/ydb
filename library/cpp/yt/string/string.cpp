@@ -359,4 +359,20 @@ TStringBuf FormatBool(bool value)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TruncateStringInplace(TString* string, int lengthLimit, TStringBuf truncatedSuffix)
+{
+    if (std::ssize(*string) > lengthLimit) {
+        string->resize(lengthLimit);
+        string->append(truncatedSuffix);
+    }
+}
+
+TString TruncateString(TString string, int lengthLimit, TStringBuf truncatedSuffix)
+{
+    TruncateStringInplace(&string, lengthLimit, truncatedSuffix);
+    return string;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT

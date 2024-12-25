@@ -1,0 +1,16 @@
+{
+    "test.test[compute_range-huge_in-default.txt-Debug]": [
+        {
+            "checksum": "80c96f098a46ff47413c0efdc212ea0d",
+            "size": 1053,
+            "uri": "https://{canondata_backend}/1942525/7665133ac15a3f92aef975c99a4dfe3023179a69/resource.tar.gz#test.test_compute_range-huge_in-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[compute_range-huge_in-default.txt-Results]": [
+        {
+            "checksum": "518dc39b0f56b4461fb4c9f1642444e7",
+            "size": 4793,
+            "uri": "https://{canondata_backend}/1942525/7665133ac15a3f92aef975c99a4dfe3023179a69/resource.tar.gz#test.test_compute_range-huge_in-default.txt-Results_/results.txt"
+        }
+    ]
+}

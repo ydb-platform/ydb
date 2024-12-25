@@ -23,9 +23,9 @@ TSimpleServer::TSimpleServer(int port, TRequestHandler requestHandler)
     ret = listenSocket->Listen(10);
     Y_ENSURE_EX(ret == 0, TSystemError() << "Can not listen socket");
 
-    SendFinishSocket_ = MakeHolder<TInetStreamSocket>(socketPair[1]);
+    SendFinishSocket_ = std::make_unique<TInetStreamSocket>(socketPair[1]);
 
-    ThreadPool_ = MakeHolder<TAdaptiveThreadPool>();
+    ThreadPool_ = std::make_unique<TAdaptiveThreadPool>();
     ThreadPool_->Start(1);
 
     auto receiveFinish = MakeAtomicShared<TInetStreamSocket>(socketPair[0]);
@@ -76,7 +76,7 @@ void TSimpleServer::Stop()
     SendFinishSocket_->Send("X", 1);
     ListenerThread_->Join();
     ThreadPool_->Stop();
-    ThreadPool_.Destroy();
+    ThreadPool_.reset();
 }
 
 int TSimpleServer::GetPort() const

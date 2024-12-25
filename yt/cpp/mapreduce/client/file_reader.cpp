@@ -47,7 +47,7 @@ TStreamReaderBase::TStreamReaderBase(
     const TTransactionId& transactionId)
     : RawClient_(rawClient)
     , ClientRetryPolicy_(std::move(clientRetryPolicy))
-    , ReadTransaction_(MakeHolder<TPingableTransaction>(
+    , ReadTransaction_(std::make_unique<TPingableTransaction>(
         RawClient_,
         ClientRetryPolicy_,
         context,

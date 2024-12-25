@@ -267,15 +267,11 @@ static std::optional<NScheduler::EAbortReason> TryGetJobAbortReasonFromError(con
         return std::nullopt;
     }
 
-    if (auto yson = error.Attributes().FindYson("abort_reason")) {
-        try {
-            return ConvertTo<NScheduler::EAbortReason>(yson);
-        } catch (const std::exception& exception) {
-            return std::nullopt;
-        }
+    try {
+        return error.Attributes().Find<NScheduler::EAbortReason>("abort_reason");
+    } catch (const std::exception&) {
+        return std::nullopt;
     }
-
-    return std::nullopt;
 }
 
 void Serialize(const TJob& job, NYson::IYsonConsumer* consumer, TStringBuf idKey)

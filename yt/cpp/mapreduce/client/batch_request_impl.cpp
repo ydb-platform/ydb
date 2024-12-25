@@ -50,7 +50,7 @@ TBatchRequest::~TBatchRequest() = default;
 IBatchRequestBase& TBatchRequest::WithTransaction(const TTransactionId& transactionId)
 {
     if (!TmpWithTransaction_) {
-        TmpWithTransaction_.Reset(new TBatchRequest(Impl_.Get(), Client_));
+        TmpWithTransaction_.reset(new TBatchRequest(Impl_.Get(), Client_));
     }
     TmpWithTransaction_->DefaultTransaction_ = transactionId;
     return *TmpWithTransaction_;

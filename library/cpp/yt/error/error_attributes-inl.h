@@ -9,34 +9,34 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-    requires CConvertsTo<T, TErrorAttributes::TValue>
+    requires CConvertibleFromAttributeValue<T>
 T TErrorAttributes::Get(TStringBuf key) const
 {
-    auto yson = GetYson(key);
+    auto yson = GetValue(key);
     try {
-        return NYT::ConvertTo<T>(yson);
+        return NYT::FromErrorAttributeValue<T>(yson);
     } catch (const std::exception& ex) {
         ThrowCannotParseAttributeException(key, ex);
     }
 }
 
 template <class T>
-    requires CConvertsTo<T, TErrorAttributes::TValue>
+    requires CConvertibleFromAttributeValue<T>
 typename TOptionalTraits<T>::TOptional TErrorAttributes::Find(TStringBuf key) const
 {
-    auto yson = FindYson(key);
-    if (!yson) {
+    auto value = FindValue(key);
+    if (!value) {
         return typename TOptionalTraits<T>::TOptional();
     }
     try {
-        return NYT::ConvertTo<T>(yson);
+        return NYT::FromErrorAttributeValue<T>(value);
     } catch (const std::exception& ex) {
         ThrowCannotParseAttributeException(key, ex);
     }
 }
 
 template <class T>
-    requires CConvertsTo<T, TErrorAttributes::TValue>
+    requires CConvertibleFromAttributeValue<T>
 T TErrorAttributes::GetAndRemove(const TKey& key)
 {
     auto result = Get<T>(key);
@@ -45,14 +45,14 @@ T TErrorAttributes::GetAndRemove(const TKey& key)
 }
 
 template <class T>
-    requires CConvertsTo<T, TErrorAttributes::TValue>
+    requires CConvertibleFromAttributeValue<T>
 T TErrorAttributes::Get(TStringBuf key, const T& defaultValue) const
 {
     return Find<T>(key).value_or(defaultValue);
 }
 
 template <class T>
-    requires CConvertsTo<T, TErrorAttributes::TValue>
+    requires CConvertibleFromAttributeValue<T>
 T TErrorAttributes::GetAndRemove(const TKey& key, const T& defaultValue)
 {
     auto result = Find<T>(key);
@@ -65,7 +65,7 @@ T TErrorAttributes::GetAndRemove(const TKey& key, const T& defaultValue)
 }
 
 template <class T>
-    requires CConvertsTo<T, TErrorAttributes::TValue>
+    requires CConvertibleFromAttributeValue<T>
 typename TOptionalTraits<T>::TOptional TErrorAttributes::FindAndRemove(const TKey& key)
 {
     auto result = Find<T>(key);
@@ -78,23 +78,21 @@ typename TOptionalTraits<T>::TOptional TErrorAttributes::FindAndRemove(const TKe
 template <CMergeableDictionary TDictionary>
 void TErrorAttributes::MergeFrom(const TDictionary& dict)
 {
-    using TTraits = TMergeDictionariesTraits<TDictionary>;
-
-    for (const auto& [key, value] : TTraits::MakeIterableView(dict)) {
-        SetYson(key, value);
+    for (auto range = AsMergeableRange(dict); const auto& [key, value] : range) {
+        SetValue(key, value);
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <>
-struct TMergeDictionariesTraits<TErrorAttributes>
+namespace NMergeableRangeImpl {
+
+inline TMergeableRange TagInvoke(TTagInvokeTag<AsMergeableRange>, const TErrorAttributes& attributes)
 {
-    static auto MakeIterableView(const TErrorAttributes& attributes)
-    {
-        return attributes.ListPairs();
-    }
-};
+    return attributes.ListPairs();
+}
+
+} // namespace NMergeableRangeImpl
 
 static_assert(CMergeableDictionary<TErrorAttributes>);
 

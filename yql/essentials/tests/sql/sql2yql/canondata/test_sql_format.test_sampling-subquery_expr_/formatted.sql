@@ -6,9 +6,8 @@ $count = (
         COUNT(*)
     FROM
         plato.Input
-);
+); -- $count = 10
 
--- $count = 10
 SELECT
     *
 FROM (

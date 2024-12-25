@@ -6,9 +6,9 @@ LICENSE(BSL-1.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.86.0)
+VERSION(1.87.0)
 
-ORIGINAL_SOURCE(https://github.com/boostorg/context/archive/boost-1.86.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/boostorg/context/archive/boost-1.87.0.tar.gz)
 
 IF (SANITIZER_TYPE)
     PEERDIR(

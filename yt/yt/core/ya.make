@@ -27,6 +27,7 @@ SRCS(
     bus/tcp/dispatcher.cpp
     bus/tcp/dispatcher_impl.cpp
     bus/tcp/config.cpp
+    GLOBAL bus/tcp/configure_dispatcher.cpp
     bus/tcp/packet.cpp
     bus/tcp/client.cpp
     bus/tcp/server.cpp
@@ -53,6 +54,7 @@ SRCS(
     concurrency/async_stream_pipe.cpp
     concurrency/async_stream.cpp
     concurrency/config.cpp
+    GLOBAL concurrency/configure_fiber_manager.cpp
     concurrency/coroutine.cpp
     concurrency/delayed_executor.cpp
     concurrency/execution_stack.cpp
@@ -97,6 +99,7 @@ SRCS(
 
     logging/compression.cpp
     logging/config.cpp
+    GLOBAL logging/configure_log_manager.cpp
     logging/formatter.cpp
     logging/fluent_log.cpp
     GLOBAL logging/log.cpp
@@ -164,10 +167,12 @@ SRCS(
     misc/cache_config.cpp
     misc/utf8_decoder.cpp
     misc/zerocopy_output_writer.cpp
+    misc/configurable_singleton_def.cpp
 
     net/address.cpp
     net/connection.cpp
     net/config.cpp
+    GLOBAL net/configure_address_resolver.cpp
     net/dialer.cpp
     net/helpers.cpp
     net/listener.cpp
@@ -195,6 +200,7 @@ SRCS(
     rpc/channel_detail.cpp
     rpc/client.cpp
     rpc/config.cpp
+    GLOBAL rpc/configure_dispatcher.cpp
     rpc/dispatcher.cpp
     rpc/dynamic_channel_pool.cpp
     rpc/hedging_channel.cpp
@@ -244,6 +250,7 @@ SRCS(
     yson/async_writer.cpp
     yson/attribute_consumer.cpp
     yson/config.cpp
+    GLOBAL yson/configure_protobuf_interop.cpp
     yson/consumer.cpp
     yson/forwarding_consumer.cpp
     yson/lexer.cpp

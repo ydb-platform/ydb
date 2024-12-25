@@ -6243,7 +6243,7 @@ TRuntimeNode TProgramBuilder::MatchRecognizeCore(
         callableBuilder.Add(NewDataLiteral(static_cast<i32>(skipTo.To)));
         callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(skipTo.Var));
     }
-    if constexpr (RuntimeVersion >= 53U) {
+    if constexpr (RuntimeVersion >= 54U) {
         callableBuilder.Add(NewDataLiteral(static_cast<i32>(rowsPerMatch)));
         callableBuilder.Add(NewList(outputColumnEntryType, outputColumnOrder));
     }

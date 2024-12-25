@@ -29,21 +29,12 @@ TCheckPermissionResponse ParseCheckPermissionResponse(const TNode& node);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//
 // marks `batchRequest' as executed
 void ExecuteBatch(
     IRequestRetryPolicyPtr retryPolicy,
     const TClientContext& context,
     TRawBatchRequest& batchRequest,
     const TExecuteBatchOptions& options = {});
-
-// SkyShare
-
-TNode::TListType SkyShareTable(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const std::vector<TYPath>& tablePaths,
-    const TSkyShareTableOptions& options = {});
 
 // Misc
 

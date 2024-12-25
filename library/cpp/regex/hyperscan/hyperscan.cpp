@@ -6,8 +6,6 @@
 #include <contrib/libs/hyperscan/runtime_corei7/hs_runtime.h>
 #include <contrib/libs/hyperscan/runtime_avx2/hs_common.h>
 #include <contrib/libs/hyperscan/runtime_avx2/hs_runtime.h>
-#include <contrib/libs/hyperscan/runtime_avx512/hs_common.h>
-#include <contrib/libs/hyperscan/runtime_avx512/hs_runtime.h>
 
 #include <util/generic/singleton.h>
 #include <util/system/sanitizers.h>
@@ -19,10 +17,9 @@ namespace NHyperscan {
 
     namespace NPrivate {
         ERuntime DetectCurrentRuntime() {
-            // TODO: Remove MSanIsOn check upon DEVTOOLSSUPPORT-49258 resolution
-            if (NX86::HaveAVX512F() && NX86::HaveAVX512BW() && !NSan::MSanIsOn()) {
-                return ERuntime::AVX512;
-            } else if (NX86::HaveAVX() && NX86::HaveAVX2()) {
+            // NOTE: We explicitly disable AVX512 runtime, there are bugs with
+            // trivial string matching. See SPI-122953 & SPI-117618.
+            if (NX86::HaveAVX() && NX86::HaveAVX2()) {
                 return ERuntime::AVX2;
             } else if (NX86::HaveSSE42() && NX86::HavePOPCNT()) {
                 return ERuntime::Corei7;
@@ -41,8 +38,6 @@ namespace NHyperscan {
                     return 0;
                 case ERuntime::AVX2:
                     return CPU_FEATURES_AVX2;
-                case ERuntime::AVX512:
-                    return CPU_FEATURES_AVX512;
             }
         }
 
@@ -78,11 +73,6 @@ namespace NHyperscan {
                     SerializeDatabase = avx2_hs_serialize_database;
                     DeserializeDatabase = avx2_hs_deserialize_database;
                     break;
-                case ERuntime::AVX512:
-                    AllocScratch = avx512_hs_alloc_scratch;
-                    Scan = avx512_hs_scan;
-                    SerializeDatabase = avx512_hs_serialize_database;
-                    DeserializeDatabase = avx512_hs_deserialize_database;
             }
         }
 

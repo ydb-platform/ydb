@@ -5,8 +5,12 @@
 namespace NKikimr::NOlap {
 
 bool TPlanCompactionInfo::Finish() {
-    AFL_VERIFY(Count);
-    return --Count == 0;
+    if (Count > 0) {
+        return --Count == 0;
+    } else {
+        AFL_VERIFY(false);
+        return false;
+    }
 }
 
 }   // namespace NKikimr::NOlap

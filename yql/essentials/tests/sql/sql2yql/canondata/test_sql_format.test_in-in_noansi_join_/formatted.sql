@@ -66,9 +66,8 @@ WHERE
     optkey NOT IN $rp
 ORDER BY
     optkey
-;
+; -- [2,3,4,6,8,10]
 
--- [2,3,4,6,8,10]
 SELECT
     optkey
 FROM
@@ -77,9 +76,8 @@ WHERE
     optkey NOT IN $rp
 ORDER BY
     optkey
-;
+; -- [2,3,4,6,8,10]
 
--- [2,3,4,6,8,10]
 SELECT
     optkey
 FROM
@@ -88,9 +86,8 @@ WHERE
     optkey NOT IN $rp
 ORDER BY
     optkey
-;
+; -- [null,2,3,4,6,8,10]
 
--- [null,2,3,4,6,8,10]
 -- Right is O
 SELECT
     optkey
@@ -100,9 +97,8 @@ WHERE
     optkey NOT IN $ro
 ORDER BY
     optkey
-;
+; -- [2,3,4,6,8,10]
 
--- [2,3,4,6,8,10]
 SELECT
     optkey
 FROM
@@ -111,9 +107,8 @@ WHERE
     optkey NOT IN $ro
 ORDER BY
     optkey
-;
+; -- [2,3,4,6,8,10]
 
--- [2,3,4,6,8,10]
 SELECT
     optkey
 FROM
@@ -122,9 +117,8 @@ WHERE
     optkey NOT IN $ro
 ORDER BY
     optkey
-;
+; -- [null,2,3,4,6,8,10]
 
--- [null,2,3,4,6,8,10]
 -- Right is N
 SELECT
     optkey
@@ -134,9 +128,8 @@ WHERE
     optkey NOT IN $rn
 ORDER BY
     optkey
-;
+; -- [2,3,4,6,8,10]
 
--- [2,3,4,6,8,10]
 SELECT
     optkey
 FROM
@@ -145,9 +138,8 @@ WHERE
     optkey NOT IN $rn
 ORDER BY
     optkey
-;
+; -- [2,3,4,6,8,10]
 
--- [2,3,4,6,8,10]
 SELECT
     optkey
 FROM
@@ -156,9 +148,8 @@ WHERE
     optkey NOT IN $rn
 ORDER BY
     optkey
-;
+; -- [null,2,3,4,6,8,10]
 
--- [null,2,3,4,6,8,10]
 -- 2, 4, 6, null
 $extraDict = (
     SELECT
@@ -182,9 +173,8 @@ WHERE
     optkey != 10 AND optkey NOT IN $ro AND optkey IN $extraDict AND optkey != 4
 ORDER BY
     optkey
-;
+; -- [2,6]
 
--- [2,6]
 SELECT
     optkey
 FROM
@@ -193,9 +183,8 @@ WHERE
     optkey != 10 AND optkey NOT IN $rn AND optkey IN $extraDict AND optkey != 4
 ORDER BY
     optkey
-;
+; -- [2,6]
 
--- [2,6]
 -- Empty dict
 SELECT
     optkey
@@ -211,6 +200,4 @@ WHERE
     )
 ORDER BY
     optkey
-;
--- [1-10,null]
-
+; -- [1-10,null]

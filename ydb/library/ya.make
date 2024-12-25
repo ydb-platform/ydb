@@ -7,7 +7,6 @@ RECURSE(
     arrow_parquet
     backup
     benchmarks
-    breakpad
     chunks_limiter
     folder_service
     formats

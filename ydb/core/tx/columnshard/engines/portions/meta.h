@@ -68,6 +68,24 @@ public:
         CompactionLevel = level;
     }
 
+    std::optional<TBlobRangeLink16::TLinkId> GetBlobIdxOptional(const TUnifiedBlobId& blobId) const {
+        AFL_VERIFY(blobId.IsValid());
+        TBlobRangeLink16::TLinkId idx = 0;
+        for (auto&& i : BlobIds) {
+            if (i == blobId) {
+                return idx;
+            }
+            ++idx;
+        }
+        return std::nullopt;
+    }
+
+    TBlobRangeLink16::TLinkId GetBlobIdxVerified(const TUnifiedBlobId& blobId) const {
+        auto result = GetBlobIdxOptional(blobId);
+        AFL_VERIFY(result);
+        return *result;
+    }
+
     using EProduced = NPortion::EProduced;
 
     NArrow::TReplaceKey IndexKeyStart;

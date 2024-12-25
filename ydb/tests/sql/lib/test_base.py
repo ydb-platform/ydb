@@ -8,7 +8,6 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from typing import Callable, Any, List
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 
 
 class TestBase:
@@ -38,8 +37,8 @@ class TestBase:
     @classmethod
     def get_endpoint(self):
         return "%s:%s" % (
-                    self.cluster.nodes[1].host, self.cluster.nodes[1].port
-                )
+            self.cluster.nodes[1].host, self.cluster.nodes[1].port
+            )
 
     @classmethod
     def teardown_class(cls):
@@ -157,6 +156,3 @@ class TpchTestBaseH1(TestBase):
 
     def tcph_est_records_count(self):
         return 600_000_000
-
-
-

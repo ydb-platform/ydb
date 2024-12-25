@@ -34,9 +34,8 @@ class TestBase:
     def setup_method(self):
         current_test_full_name = os.environ.get("PYTEST_CURRENT_TEST")
         self.table_path = "insert_table_" + current_test_full_name.replace("::", ".").removesuffix(" (setup)")
-        print(self.table_path)
 
-    def query(self, text, tx: None|ydb.QueryTxContext = None):
+    def query(self, text, tx: ydb.QueryTxContext | None = None) -> List[Any]:
         results = []
         if tx is None:
             result_sets = self.pool.execute_with_retries(text)
@@ -49,15 +48,5 @@ class TestBase:
 
         return results
 
-    def transactional(self, fn: Callable[[ydb.QuerySession], List[Any]] ):
+    def transactional(self, fn: Callable[[ydb.QuerySession], List[Any]]):
         return self.pool.retry_operation_sync(lambda session: fn(session))
-
-    # class Transactional(object):
-    #     def __init__(self, test_base):
-    #         self.test_base = test_base
-
-    #     def __enter__(self):
-    #         return self
-
-    #     def __exit__(self):
-

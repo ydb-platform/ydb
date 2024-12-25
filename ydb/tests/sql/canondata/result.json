@@ -4021,6 +4021,11 @@
             "value": "unique_value"
         }
     ],
+    "test_inserts.TestYdbInsertsOperations.test_bulk_upsert_with_valid_and_invalid_data": [
+        {
+            "count": 0
+        }
+    ],
     "test_inserts.TestYdbInsertsOperations.test_concurrent_inserts": [
         {
             "count": 100

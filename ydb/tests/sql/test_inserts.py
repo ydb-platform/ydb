@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import ydb
-import random
+import pytest
 
 from concurrent.futures import ThreadPoolExecutor
 from .test_base import TestBase
@@ -114,11 +114,11 @@ class TestYdbInsertsOperations(TestBase):
         def process(session):
             tx = session.transaction().begin()
             self.query(
-                        f"""
-                        UPDATE `{table_name}` SET value = 'transactional_update' WHERE id = 1;
-                        """,
-                        tx
-                    )
+                f"""
+                UPDATE `{table_name}` SET value = 'transactional_update' WHERE id = 1;
+                """,
+                tx
+                )
             tx.commit()
 
             tx = session.transaction().begin()
@@ -127,7 +127,7 @@ class TestYdbInsertsOperations(TestBase):
                 UPDATE `{table_name}` SET value = 'transactional_update_2' WHERE id = 1;
                 """,
                 tx
-            )
+                )
             tx.rollback()
 
         # Transactional Update
@@ -174,9 +174,9 @@ class TestYdbInsertsOperations(TestBase):
         )
 
         return self.query(
-                f"""
-                SELECT * FROM `{table_name}` ORDER BY id asc;
-                """
+            f"""
+            SELECT * FROM `{table_name}` ORDER BY id asc;
+            """
             )
 
     def test_bulk_upsert_same_values(self):
@@ -266,3 +266,113 @@ class TestYdbInsertsOperations(TestBase):
             SELECT id, value FROM `{table_name}` ORDER BY id ASC;
             """
         )
+
+    def test_bulk_upsert_with_valid_and_invalid_data(self):
+        """
+        Test bulk upsert with a mix of valid and invalid data to ensure no data is inserted if any invalid data is present.
+        """
+        table_name = f"{self.table_path}_bulk_invalid"
+
+        # Create table
+        self.pool.execute_with_retries(
+            f"""
+            CREATE TABLE `{table_name}` (
+                id Int64 NOT NULL,
+                value Utf8 NOT NULL,
+                PRIMARY KEY (id)
+            );
+            """
+        )
+
+        # Prepare data with one invalid entry
+        valid_data = [
+            {'id': 1, 'value': 'valid_value_1'},
+            {'id': 2, 'value': 'valid_value_2'}
+        ]
+        invalid_data = [
+            {'id': 'invalid_id', 'value': 'invalid_value'}  # invalid 'id' type
+        ]
+
+        # Combine data
+        combined_data = valid_data + invalid_data
+
+        # Attempt Bulk Upsert
+        column_types = ydb.BulkUpsertColumns()
+        column_types.add_column("id", ydb.PrimitiveType.Int64)
+        column_types.add_column("value", ydb.PrimitiveType.Utf8)
+
+        with pytest.raises(TypeError):
+            self.driver.table_client.bulk_upsert(
+                f"{self.database}/{table_name}",
+                combined_data,
+                column_types
+            )
+
+        # Verify no data was inserted
+        return self.query(
+            f"""
+            SELECT COUNT(*) as count FROM `{table_name}`;
+            """
+        )
+
+    def test_bulk_upsert_parallel(self):
+        """
+        Test parallel insertion of 100,000 rows using bulk upsert and verify all data is inserted correctly.
+        """
+        table_name = f"{self.table_path}_bulk_parallel"
+
+        # Create table
+        self.pool.execute_with_retries(
+            f"""
+            CREATE TABLE `{table_name}` (
+                id Int64 NOT NULL,
+                value Utf8 NOT NULL,
+                PRIMARY KEY (id)
+            );
+            """
+        )
+
+        # Function to perform bulk upsert
+        def bulk_upsert_task(start, end):
+            data = [{'id': i, 'value': f'value_{i}'} for i in range(start, end)]
+
+            column_types = ydb.BulkUpsertColumns()
+            column_types.add_column("id", ydb.PrimitiveType.Int64)
+            column_types.add_column("value", ydb.PrimitiveType.Utf8)
+
+            self.driver.table_client.bulk_upsert(
+                f"{self.database}/{table_name}",
+                data,
+                column_types
+            )
+
+        # Number of rows and chunk size
+        total_rows = 100000
+        chunk_size = 10000  # Chunk size for each thread
+
+        # Parallel execution
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [
+                executor.submit(bulk_upsert_task, i, i + chunk_size)
+                for i in range(0, total_rows, chunk_size)
+            ]
+
+            # Ensure all threads complete
+            for future in futures:
+                future.result()
+
+        # Verify the total inserted rows
+        rows = self.query(
+            f"""
+            SELECT id, value FROM `{table_name}` ORDER BY id ASC;
+            """
+        )
+
+        assert len(rows) == total_rows, f"Expected {total_rows} rows, found: {len(rows)}"
+
+        # Verify each row
+        for i, row in enumerate(rows):
+            expected_id = i
+            expected_value = f"value_{i}"
+            assert row.id == expected_id, f"Expected id {expected_id}, found: {row.id}"
+            assert row.value == expected_value, f"Expected value {expected_value}, found: {row.value}"

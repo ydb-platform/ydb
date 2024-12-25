@@ -635,7 +635,7 @@ void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
                 if (RemovedTransactions.Remove(txId)) {
                     // Transaction was in a removed set and now it's committed
                     // This is not an error in some cases, but may be suspicious
-                    SuspiciousCommits++;
+                    RemovedCommittedTxs++;
                 }
             }
         }
@@ -652,7 +652,7 @@ void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
         } else {
             // Transaction is in a committed set but also removed
             // This is not an error in some cases, but may be suspicious
-            SuspiciousCommits++;
+            RemovedCommittedTxs++;
         }
         if (!TxRefs.contains(txId)) {
             CheckTransactions.insert(txId);
@@ -955,7 +955,7 @@ void TTable::CommitTx(ui64 txId, TRowVersion rowVersion)
             if (RemovedTransactions.Remove(txId)) {
                 // Transaction was in a removed set and now it's committed
                 // This is not an error in some cases, but may be suspicious
-                SuspiciousCommits++;
+                RemovedCommittedTxs++;
             }
         }
         if (auto it = OpenTxs.find(txId); it != OpenTxs.end()) {
@@ -997,7 +997,7 @@ void TTable::RemoveTx(ui64 txId)
     } else {
         // Transaction is in a committed set but also removed
         // This is not an error in some cases, but may be suspicious
-        SuspiciousCommits++;
+        RemovedCommittedTxs++;
     }
 }
 
@@ -1053,7 +1053,7 @@ TTableRuntimeStats TTable::RuntimeStats() const noexcept
         .TxsWithDataCount = TxRefs.size(),
         .CommittedTxCount = CommittedTransactions.Size(),
         .RemovedTxCount = RemovedTransactions.Size(),
-        .SuspiciousCommits = SuspiciousCommits,
+        .RemovedCommittedTxs = RemovedCommittedTxs,
     };
 }
 

@@ -69,7 +69,7 @@ namespace NTabletFlatExecutor {
     XX(DB_TXS_WITH_DATA_COUNT, "DbTxsWithDataCount") \
     XX(DB_COMMITTED_TX_COUNT, "DbCommittedTxCount") \
     XX(DB_REMOVED_TX_COUNT, "DbRemovedTxCount") \
-    XX(DB_SUSPICIOUS_COMMITS, "DbSuspiciousCommits") \
+    XX(DB_REMOVED_COMMITTED_TXS, "DbRemovedCommittedTxs") \
 
 // don't change order!
 #define FLAT_EXECUTOR_CUMULATIVE_COUNTERS_MAP(XX) \

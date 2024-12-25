@@ -67,7 +67,7 @@ namespace NKikimr::NDataShard {
                     } else if (txc.DB.HasRemovedTx(tid, commitTxId)) {
                         LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                             "Committing removed changes txId# " << commitTxId << " tid# " << tid << " shard# " << Self->TabletID());
-                        Self->IncCounter(COUNTER_SUSPICIOUS_COMMITS);
+                        Self->IncCounter(COUNTER_REMOVED_COMMITTED_TXS);
                     }
                 }
             }

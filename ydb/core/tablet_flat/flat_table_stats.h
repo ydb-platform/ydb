@@ -60,14 +60,14 @@ namespace NTable {
         ui64 TxsWithDataCount = 0;
         ui64 CommittedTxCount = 0;
         ui64 RemovedTxCount = 0;
-        ui64 SuspiciousCommits = 0;
+        ui64 RemovedCommittedTxs = 0;
 
         TTableRuntimeStats& operator+=(const TTableRuntimeStats& s) noexcept {
             OpenTxCount += s.OpenTxCount;
             TxsWithDataCount += s.TxsWithDataCount;
             CommittedTxCount += s.CommittedTxCount;
             RemovedTxCount += s.RemovedTxCount;
-            SuspiciousCommits += s.SuspiciousCommits;
+            RemovedCommittedTxs += s.RemovedCommittedTxs;
             return *this;
         }
 
@@ -76,7 +76,7 @@ namespace NTable {
             TxsWithDataCount -= s.TxsWithDataCount;
             CommittedTxCount -= s.CommittedTxCount;
             RemovedTxCount -= s.RemovedTxCount;
-            SuspiciousCommits -= s.SuspiciousCommits;
+            RemovedCommittedTxs -= s.RemovedCommittedTxs;
             return *this;
         }
     };

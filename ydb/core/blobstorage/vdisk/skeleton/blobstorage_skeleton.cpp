@@ -514,8 +514,8 @@ namespace NKikimr {
                 return {NKikimrProto::ERROR, "buffer size mismatch"};
             }
 
-            if (blobPartSize == 0) {
-                LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << evPrefix << ": part size cannot be 0;"
+            if (id.BlobSize() == 0) {
+                LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << evPrefix << ": blob size cannot be 0;"
                         << " id# " << id
                         << " Marker# BSVS44");
                 return {NKikimrProto::ERROR, "part size is 0"};

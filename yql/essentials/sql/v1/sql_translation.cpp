@@ -3887,7 +3887,7 @@ bool TSqlTranslation::RoleParameters(const std::vector<TRule_create_user_option>
     result = TRoleParameters{};
 
     if (isCreateUser) {
-        result.CanLogin = TRoleParameters::ETypeOfLogin::NoLogin;
+        result.CanLogin = TRoleParameters::ETypeOfLogin::Login;
     }
 
     for (const auto& option : optionsList) {

@@ -518,7 +518,7 @@ void TKafkaBalancerActor::HandleSyncGroupResponse(
 
             IsMaster = (masterId == MemberId);
             if (!IsMaster) {
-                CurrentStep = SYNC_TX0_4_COMMIT_TX;
+                CurrentStep = SYNC_TX0_4_COMMIT_TX; // savnik abort TX
                 HandleSyncGroupResponse(ev, ctx);
                 return;
             }

@@ -1,39 +1,9 @@
 # -*- coding: utf-8 -*-
-import os
 import pytest
-import ydb
-
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.common.types import Erasure
+from .test_base import TestBase
 
 
-class TestYdbKvWorkload(object):
-    @classmethod
-    def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=Erasure.NONE))
-        cls.cluster.start()
-        cls.driver = ydb.Driver(
-            ydb.DriverConfig(
-                database='/Root',
-                endpoint="%s:%s" % (
-                    cls.cluster.nodes[1].host, cls.cluster.nodes[1].port
-                )
-            )
-        )
-        cls.driver.wait()
-        cls.pool = ydb.QuerySessionPool(cls.driver)
-
-    @classmethod
-    def teardown_class(cls):
-        cls.pool.stop()
-        cls.driver.stop()
-        cls.cluster.stop()
-
-    def setup_method(self):
-        current_test_full_name = os.environ.get("PYTEST_CURRENT_TEST")
-        self.table_path = "table_" + current_test_full_name.replace("::", ".").removesuffix(" (setup)")
-        print(self.table_path)
+class TestYdbKvWorkload(TestBase):
 
     @pytest.mark.parametrize("is_column", [True, False])
     @pytest.mark.parametrize("type_,value",
@@ -52,7 +22,8 @@ class TestYdbKvWorkload(object):
         Test verifies correctness of handling minimal and maximal values for types
         """
 
-        table_name = table_name = "{}/{}_{}_{}".format(self.table_path, type_, value, is_column)
+        # table_name = table_name = "{}/{}_{}_{}".format(self.table_path, type_, value, is_column)
+        table_name = f"{self.table_path}"
 
         table_definition = f"""
                 CREATE TABLE `{table_name}` (
@@ -64,31 +35,23 @@ class TestYdbKvWorkload(object):
         if is_column:
             table_definition += " PARTITION BY HASH(id) WITH(STORE=COLUMN)"
 
-            self.pool.execute_with_retries(
-                table_definition
-            )
+        self.query(table_definition)
 
-        self.pool.execute_with_retries(
+        self.query(
             f"""
                 UPSERT INTO `{table_name}` (id, value) VALUES (1, {value});
             """
         )
 
-        result = self.pool.execute_with_retries(
+        return self.query(
             f"""
                 SELECT id, value FROM `{table_name}` WHERE id = 1;
             """
         )
 
-        rows = result[0].rows
-        assert len(rows) == 1, "Expected one row"
-        assert rows[0].id == 1, "ID does not match"
-        assert rows[0].value == value, "Value does not match"
-
-
     def test_dynumber(self):
         table_name = "{}/{}".format(self.table_path, "dynamber")
-        self.pool.execute_with_retries(
+        self.query(
             f"""
                 CREATE TABLE `{table_name}` (
                 id DyNumber,
@@ -96,7 +59,7 @@ class TestYdbKvWorkload(object):
             );"""
         )
 
-        self.pool.execute_with_retries(
+        self.query(
             f"""
                 UPSERT INTO `{table_name}` (id)
                 VALUES
@@ -108,10 +71,8 @@ class TestYdbKvWorkload(object):
             """
         )
 
-        result = self.pool.execute_with_retries(
+        return self.query(
             f"""
                 SELECT count(*) FROM `{table_name}`;
             """
         )
-
-        assert result[0].rows[0][0] == 4

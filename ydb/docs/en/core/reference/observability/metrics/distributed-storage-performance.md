@@ -2,7 +2,7 @@
 
 Distributed storage throughput is limited by the resources of physical devices in the cluster and can provide low response times if the load does not exceed this capacity. Performance metrics provide information about the amount of available resources of physical devices and allow assessing their consumption level. Tracking the values of performance metrics helps to determine whether the necessary conditions for low response time guarantees are met, specifically, that the average load does not exceed the available limit and that there are no short-term load bursts.
 
-### Request cost model
+## Request cost model
 
 The request cost is an estimate of the time that a physical device spends performing a given operation. The request cost is calculated using a simple physical device model. It assumes that the physical device can only handle one request for reading or writing at a time. The operation execution takes a certain amount of the device’s working time; therefore, the total time spent on requests over a certain period cannot exceed the duration of that period.
 
@@ -22,7 +22,7 @@ Operations are divided into three types: reads, writes, and huge-writes. The div
 
 In addition to user requests, the distributed storage is also loaded by the background processes of compaction, scrubbing, and defragmentation, as well as internal communication between VDisks. The compaction process can create particularly high loads when there is a substantial flow of small blob writes.
 
-### Available disk time {#diskTimeAvailable}
+## Available disk time {#diskTimeAvailable}
 
 The PDisk scheduler manages the execution order of requests from its client VDisks. PDisk fairly divides the device's time among its VDisks, ensuring that each of the $N$ VDisks is guaranteed $1/N$ seconds of the physical device's working time each second. We estimate the available time of the physical device that the PDisk scheduler allocates to the client VDisk based on the information about the number of neighboring VDisks for each VDisk, denoted as $N$, and the configurable parameter `DiskTimeAvailableScale`. This estimate is called DiskTimeAvailable and is calculated using the formula:
 
@@ -30,11 +30,11 @@ $$
     DiskTimeAvailable = \dfrac{1000000000}{N} \cdot \dfrac{DiskTimeAvailableScale}{1000}
 $$
 
-### Load burst detection {#burstDetection}
+## Load burst detection {#burstDetection}
 
 A burst is a sharp, short-term increase in the load on a VDisk, which may lead to higher response times of operations. The values of sensors on cluster nodes are collected at certain intervals, for example, every 15 seconds, making it impossible to reliably detect short-term events using only the metrics of request cost and available disk time. A modified [Token Bucket algorithm](https://en.wikipedia.org/wiki/Token_bucket) is used to address this issue. In this modification, the bucket can have a negative number of tokens and such a state is called underflow. Each VDisk is associated with a separate burst detector – a specialized object that monitors load bursts using the aforementioned algorithm. The minimum expected response time, at which an increase in load is considered a burst, is determined by the configurable parameter `BurstThresholdNs`. The bucket will underflow if the calculated time needed to process the requests in nanoseconds exceeds the `BurstThresholdNs` value.
 
-### Performance metrics
+## Performance metrics
 
 Performance metrics are calculated based on the following VDisk sensors:
 | Sensor Name           | Description                                                                                                                   | Units             |
@@ -51,14 +51,14 @@ Performance metrics are calculated based on the following VDisk sensors:
 
 Performance metrics are displayed on a [dedicated Grafana dashboard](grafana-dashboards.md#ds-performance).
 
-### Conditions for Distributed Storage guarantees {#requirements}
+## Conditions for Distributed Storage guarantees {#requirements}
 
 The {{ ydb-short-name }} distributed storage can ensure low response times only under the following conditions:
 
 1. $DiskTimeAvailable >= UserDiskCost + InternalDiskCost + CompactionDiskCost + DefragDiskCost + ScrubDiskCost$ — The average load does not exceed the maximum allowed load.
 2. $BurstDetector_redMs = 0$ — There are no short-term load bursts, which would lead to request queues on handlers.
 
-### Performance metrics configuration
+## Performance metrics configuration
 
 Since the coefficients for the request cost formula were measured on specific physical devices from development clusters, and the performance of other devices may vary, the metrics may require additional adjustments to be used as a source of Distributed Storage low response time guarantees. Performance metric parameters can be managed via [dynamic cluster configuration](../../../maintenance/manual/dynamic-config.md) and the Immediate Controls mechanism without restarting {{ ydb-short-name }} processes.
 
@@ -71,23 +71,23 @@ Since the coefficients for the request cost formula were measured on specific ph
 | `burst_threshold_ns_ssd`              | [`BurstThresholdNs` parameter](#burstDetection) for VDisks running on SSD devices.             | ns                | `50000000`    |
 | `burst_threshold_ns_nvme`             | [`BurstThresholdNs` parameter](#burstDetection) for VDisks running on NVMe devices.            | ns                | `32000000`    |
 
-#### Configuration examples
+### Configuration examples
 
 If a given {{ ydb-short-name }} cluster uses NVMe devices and delivers performance that is 10% higher than the baseline, add the following section to the `immediate_controls_config` in the dynamic configuration of the cluster:
 
-```
+```text
 vdisk_controls:
   disk_time_available_scale_nvme: 1100
 ```
 
 If a given {{ ydb-short-name }} cluster is using HDD devices and under its workload conditions, the maximum tolerable response time is 500 ms, add the following section to the `immediate_controls_config` in the dynamic configuration of the cluster:
 
-```
+```text
 vdisk_controls:
   burst_threshold_ns_hdd: 500000000
 ```
 
-### How to compare cluster performance with the baseline
+## How to compare cluster performance with the baseline
 
 To compare the performance of Distributed Storage in a cluster with the baseline, you need to load the distributed storage with requests to the point where the VDisks cannot process the incoming request flow. At this moment, requests start to queue up, and the response time of the VDisks increases sharply. Compute the value $D$ just before the overload:
 $$

@@ -795,6 +795,12 @@ public:
 
     void BeginTx(const Ydb::Table::TransactionSettings& settings) {
         QueryState->TxId.SetValue(UlidGen.Next());
+        if (QueryState->TxCtx) {
+            if (QueryState->TxCtx->BufferActorId) {
+                Send(QueryState->TxCtx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
+                QueryState->TxCtx->BufferActorId = {};
+            }
+        }
         QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
             AppData()->TimeProvider, AppData()->RandomProvider);
 
@@ -881,6 +887,12 @@ public:
                     break;
             }
         } else {
+            if (QueryState->TxCtx) {
+                if (QueryState->TxCtx->BufferActorId) {
+                    Send(QueryState->TxCtx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
+                    QueryState->TxCtx->BufferActorId = {};
+                }
+            }
             QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
                 AppData()->TimeProvider, AppData()->RandomProvider);
             QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
@@ -2233,6 +2245,10 @@ public:
             if (txCtx->IsInvalidated()) {
                 Transactions.AddToBeAborted(txCtx);
                 Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
+            }
+            if (txCtx->BufferActorId) {
+                Send(txCtx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
+                txCtx->BufferActorId = {};
             }
             DiscardPersistentSnapshot(txCtx->SnapshotHandle);
         }

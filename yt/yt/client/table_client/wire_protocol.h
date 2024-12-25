@@ -313,6 +313,7 @@ IWireProtocolRowsetReaderPtr CreateWireProtocolRowsetReader(
     NCompression::ECodec codecId,
     NTableClient::TTableSchemaPtr schema,
     bool schemaful,
+    IMemoryChunkProviderPtr memoryChunkProvider,
     const NLogging::TLogger& logger,
     TWireProtocolOptions options = {});
 

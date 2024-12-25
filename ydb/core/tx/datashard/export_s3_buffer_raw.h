@@ -42,7 +42,6 @@ protected:
     ui64 BytesRead;
     TBuffer Buffer;
 
-    bool EnableChecksums;
     IExportChecksum::TPtr Checksum;
 
     TString ErrorString;

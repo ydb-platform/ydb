@@ -68,7 +68,7 @@ public:
             return false;
         }
 
-        if (EnableChecksums) {
+        if (Checksum) {
             Checksum->AddData(BufferRaw);
         }
         BytesRaw += BufferRaw.size();

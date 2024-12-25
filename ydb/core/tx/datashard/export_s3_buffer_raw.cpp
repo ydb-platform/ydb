@@ -21,8 +21,7 @@ TS3BufferRaw::TS3BufferRaw(const TTagToColumn& columns, ui64 rowsLimit, ui64 byt
     , BytesLimit(bytesLimit)
     , Rows(0)
     , BytesRead(0)
-    , EnableChecksums(enableChecksums)
-    , Checksum(EnableChecksums ? CreateExportChecksum() : nullptr)
+    , Checksum(enableChecksums ? CreateExportChecksum() : nullptr)
 {
 }
 
@@ -162,7 +161,7 @@ bool TS3BufferRaw::Collect(const NTable::IScan::TRow& row) {
         return false;
     }
 
-    if (EnableChecksums) {
+    if (Checksum) {
         TStringBuf data(Buffer.Data(), Buffer.Size());
         Checksum->AddData(data.Tail(beforeSize));
     }
@@ -180,7 +179,7 @@ IEventBase* TS3BufferRaw::PrepareEvent(bool last, NExportScan::IBuffer::TStats& 
 
     stats.BytesSent = buffer->Size();
 
-    if (EnableChecksums && last) {
+    if (Checksum && last) {
         return new TEvExportScan::TEvBuffer<TBuffer>(std::move(*buffer), last, Checksum->Serialize());
     } else {
         return new TEvExportScan::TEvBuffer<TBuffer>(std::move(*buffer), last);

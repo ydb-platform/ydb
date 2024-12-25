@@ -252,7 +252,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             return;
         }
 
-        auto nextStep = [this](){
+        auto nextStep = [this]() {
             SchemeUploaded = true;
 
             if (Scanner) {
@@ -280,12 +280,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             return;
         }
 
-        auto nextStep = [this](){
-        PermissionsUploaded = true;
-        PermissionsUploaded = true;
-
+        auto nextStep = [this]() {
             PermissionsUploaded = true;
-
             UploadScheme();
         };
 
@@ -308,7 +304,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             return;
         }
 
-        auto nextStep = [this](){
+        auto nextStep = [this]() {
             MetadataUploaded = true;
             UploadPermissions();
         };
@@ -403,7 +399,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             return;
         }
 
-        auto nextStep = [this](){
+        auto nextStep = [this]() {
             Finish();
         };
 
@@ -497,7 +493,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         Parts.push_back(result.GetResult().GetETag().c_str());
 
         if (Last) {
-            auto nextStep = [this](){
+            auto nextStep = [this]() {
                 Finish();
             };
 

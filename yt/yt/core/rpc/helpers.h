@@ -23,6 +23,12 @@ namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void SetTimeoutOptions(
+    NRpc::TClientRequest& request,
+    const TTimeoutOptions& options);
+
+////////////////////////////////////////////////////////////////////////////////
+
 bool IsRetriableError(const TError& error);
 bool IsChannelFailureError(const TError& error);
 

@@ -1,7 +1,7 @@
 #include <yt/yt/core/test_framework/framework.h>
 
-#include <yt/yt/core/misc/error.h>
-#include <yt/yt/core/misc/error_code.h>
+#include <library/cpp/yt/error/error.h>
+#include <library/cpp/yt/error/error_code.h>
 
 #include <library/cpp/yt/string/format.h>
 

@@ -105,8 +105,8 @@ def pytest_generate_tests_for_run(metafunc, template='.sql', suites=None, curren
     )
 
 
-def pytest_generate_tests_for_part(metafunc, currentPart, partsCount):
-    return pytest_generate_tests_for_run(metafunc, currentPart=currentPart, partsCount=partsCount)
+def pytest_generate_tests_for_part(metafunc, currentPart, partsCount, data_path=None):
+    return pytest_generate_tests_for_run(metafunc, currentPart=currentPart, partsCount=partsCount, data_path=data_path)
 
 
 def get_cfg_file(cfg, case):

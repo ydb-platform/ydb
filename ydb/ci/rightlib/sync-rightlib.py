@@ -97,7 +97,7 @@ class RightlibSync:
         self.git_run("checkout", self.base_branch)
 
         try:
-            self.git_run("merge", "PR", "--no-edit")
+            self.git_run("merge", "PR", "-m", f"merge with {pr.head.ref}")
         except subprocess.CalledProcessError:
             self.add_failed_comment(pr, "Unable to merge PR.")
             self.add_pr_failed_label(pr)

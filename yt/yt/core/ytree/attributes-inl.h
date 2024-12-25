@@ -99,7 +99,17 @@ struct TMergeDictionariesTraits<NYTree::IAttributeDictionary>
 {
     static auto MakeIterableView(const NYTree::IAttributeDictionary& dict)
     {
-        return dict.ListPairs();
+        auto pairs = dict.ListPairs();
+
+        std::vector<TErrorAttributes::TKeyValuePair> ret = {};
+        ret.reserve(std::ssize(pairs));
+
+        for (const auto& [key, value] : pairs) {
+            ret.emplace_back(
+                key,
+                NYT::ToErrorAttributeValue(value));
+        }
+        return ret;
     }
 };
 

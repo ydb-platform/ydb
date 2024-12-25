@@ -24,7 +24,6 @@ SRCS(
     digest_ut.cpp
     ema_counter_ut.cpp
     enum_ut.cpp
-    error_code_ut.cpp
     error_ut.cpp
     fair_scheduler_ut.cpp
     fenwick_tree_ut.cpp

@@ -1,6 +1,5 @@
 #include "error.h"
 #include "serialize.h"
-#include "origin_attributes.h"
 
 #include <yt/yt/core/concurrency/public.h>
 
@@ -169,7 +168,7 @@ TString FormatOriginOverride(const TOriginAttributes& attributes)
         GetFid(attributes));
 }
 
-TOriginAttributes ExtractFromDictionaryOverride(const NYTree::IAttributeDictionaryPtr& attributes)
+TOriginAttributes ExtractFromDictionaryOverride(TErrorAttributes* attributes)
 {
     auto result = NYT::NDetail::ExtractFromDictionaryDefault(attributes);
 
@@ -627,7 +626,6 @@ void TErrorSerializer::Load(TStreamLoadContext& context, TError& error)
     auto code = Load<TErrorCode>(context);
     auto message = Load<TString>(context);
 
-    IAttributeDictionaryPtr attributes;
     if (Load<bool>(context)) {
         size_t size = TSizeSerializer::Load(context);
         for (size_t index = 0; index < size; ++index) {

@@ -1,7 +1,7 @@
 #ifndef STRIPPED_ERROR_INL_H_
-#error "Direct inclusion of this file is not allowed, include stripped_error.h"
+#error "Direct inclusion of this file is not allowed, include error.h"
 // For the sake of sane code completion.
-#include "stripped_error.h"
+#include "error.h"
 #endif
 
 #include <library/cpp/yt/error/error_attributes.h>
@@ -66,6 +66,8 @@ inline TString FormatErrorMessage(TStringBuf format)
 }
 
 } // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
 
 template <class... TArgs>
 TError::TErrorOr(TFormatString<TArgs...> format, TArgs&&... args)

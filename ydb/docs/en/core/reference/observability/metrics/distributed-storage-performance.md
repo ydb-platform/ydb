@@ -24,7 +24,7 @@ In addition to user requests, the distributed storage is also loaded by the back
 
 ### Available disk time {#diskTimeAvailable}
 
-The PDisk scheduler manages the requests execution order from its client VDisks. PDisk fairly divides the device's time among its VDisks, ensuring that each of the $N$ VDisks is guaranteed $1/N$ seconds of the physical device's working time each second. Based on the information about the number of neighboring VDisks for each VDisk, denoted as $N$, and the configurable parameter `DiskTimeAvailableScale` an estimate of the operation time with the physical device that the PDisk scheduler allocates to the client VDisk is calculated. This estimate is called DiskTimeAvailable and is calculated using the formula:
+The PDisk scheduler manages the execution order of requests from its client VDisks. PDisk fairly divides the device's time among its VDisks, ensuring that each of the $N$ VDisks is guaranteed $1/N$ seconds of the physical device's working time each second. We estimate the available time of the physical device that the PDisk scheduler allocates to the client VDisk based on the information about the number of neighboring VDisks for each VDisk, denoted as $N$, and the configurable parameter `DiskTimeAvailableScale`. This estimate is called DiskTimeAvailable and is calculated using the formula:
 
 $$
     DiskTimeAvailable = \dfrac{1000000000}{N} \cdot \dfrac{DiskTimeAvailableScale}{1000}
@@ -60,7 +60,7 @@ The {{ ydb-short-name }} distributed storage can ensure low response times only 
 
 ### Performance metrics configuration
 
-Since the coefficients for the request cost formula were measured on specific physical devices from development clusters, and the performance of other devices may vary, the metrics may require additional adjustments to be used as a source of guarantees for Distributed Storage. Performance metric parameters can be managed via [dynamic cluster configuration](../../../maintenance/manual/dynamic-config.md) and the Immediate Controls mechanism without restarting {{ ydb-short-name }} processes.
+Since the coefficients for the request cost formula were measured on specific physical devices from development clusters, and the performance of other devices may vary, the metrics may require additional adjustments to be used as a source of Distributed Storage low response time guarantees. Performance metric parameters can be managed via [dynamic cluster configuration](../../../maintenance/manual/dynamic-config.md) and the Immediate Controls mechanism without restarting {{ ydb-short-name }} processes.
 
 | Parameter Name                        | Description                                                                                   |  Units            | Default Value |
 |---------------------------------------|-----------------------------------------------------------------------------------------------|-------------------|---------------|
@@ -95,4 +95,8 @@ D = \frac{UserDiskCost + InternalDiskCost + CompactionDiskCost + DefragDiskCost 
 $$
 Set the `disk_time_available_scale_<used-device-type>` configuration parameter to the calculated rounded value of $D$, multiplied by 1000. We assume that the physical devices in the user cluster are comparable in performance to the baseline. So the `disk_time_available_scale_<used-device-type>` parameter is set to 1000 by default.
 
-Such a load can be created, for example, using [Storage LoadActor](../../../contributor/load-actors-storage.md).
+{% note tip %}
+
+You can use [Storage LoadActor](../../../contributor/load-actors-storage.md) to generate the load.
+
+{% endnote %}

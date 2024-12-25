@@ -864,7 +864,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;
-            toResolve.RequiredAccess = (IsSelfChangePasswordOperation(pbModifyScheme.GetAlterLogin()) ? NACLib::EAccessRights::NoAccess : NACLib::EAccessRights::AlterSchema | accessToUserAttrs);
+            toResolve.RequiredAccess = (IsSelfChangePasswordOperation(pbModifyScheme.GetAlterLogin()) ?
+                        NACLib::EAccessRights::NoAccess : 
+                        NACLib::EAccessRights::AlterSchema | accessToUserAttrs);
             ResolveForACL.push_back(toResolve);
             break;
         }

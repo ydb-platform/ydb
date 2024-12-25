@@ -82,25 +82,30 @@ private:
     template <class TAction>
     void BuildNGramms(const char* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, const ui32 nGrammSize,
         const TAction& pred) const {
+        TBuffer fakeString;
+        AFL_VERIFY(nGrammSize >= 3)("value", nGrammSize);
         if (!op || op == NRequest::TLikePart::EOperation::StartsWith) {
             for (ui32 c = 1; c <= nGrammSize; ++c) {
-                TBuffer fakeStart;
-                fakeStart.Fill('\0', nGrammSize - c);
-                fakeStart.Append(data, std::min(c, dataSize));
-                if (fakeStart.size() < nGrammSize) {
-                    fakeStart.Append(Zeros.data(), nGrammSize - fakeStart.size());
+                fakeString.Clear();
+                fakeString.Fill('\0', nGrammSize - c);
+                fakeString.Append(data, std::min(c, dataSize));
+                if (fakeString.size() < nGrammSize) {
+                    fakeString.Fill('\0', nGrammSize - fakeString.size());
                 }
-                BuildHashesSet(CalcHash(fakeStart.data(), nGrammSize), pred);
+                BuildHashesSet(CalcHash(fakeString.data(), nGrammSize), pred);
             }
         }
-        for (ui32 c = 0; c < dataSize; ++c) {
-            if (c + nGrammSize <= dataSize) {
-                pred(CalcHash(data + c, nGrammSize));
-            } else if (!op || op == NRequest::TLikePart::EOperation::EndsWith) {
-                TBuffer fakeStart;
-                fakeStart.Append(data + c, dataSize - c);
-                fakeStart.Append(Zeros.data(), nGrammSize - fakeStart.size());
-                BuildHashesSet(CalcHash(fakeStart.data(), nGrammSize), pred);
+        ui32 c = 0;
+        for (; c + nGrammSize <= dataSize; ++c) {
+            pred(CalcHash(data + c, nGrammSize));
+        }
+
+        if (!op || op == NRequest::TLikePart::EOperation::EndsWith) {
+            for (; c < dataSize; ++c) {
+                fakeString.Clear();
+                fakeString.Append(data + c, dataSize - c);
+                fakeString.Fill('\0', nGrammSize - fakeString.size());
+                BuildHashesSet(CalcHash(fakeString.data(), nGrammSize), pred);
             }
         }
     }

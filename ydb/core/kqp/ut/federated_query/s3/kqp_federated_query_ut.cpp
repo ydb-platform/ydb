@@ -2306,6 +2306,96 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "secret with name 'TestSecret' not found");
     }
+
+    Y_UNIT_TEST(TestOlapToS3Insert) {
+        const TString root = "/Root/";
+        const TString source = "source";
+        const TString table1 = "table1";
+        const TString table2 = "table2";
+        const TString bucket  = "bucket";
+
+        CreateBucket(bucket);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+
+        const TString olapTable = "DestinationOlap";
+
+        const TString query = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `{table1}` (
+                key Int64 NOT NULL,
+                value String NOT NULL,
+            ) WITH (
+                DATA_SOURCE="{source}",
+                LOCATION="/{location_table1}/",
+                FORMAT="csv_with_names"
+            );
+            CREATE EXTERNAL TABLE `{table2}` (
+                key Int64 NOT NULL,
+                value String NOT NULL,
+                year String NOT NULL
+            ) WITH (
+                DATA_SOURCE="{source}",
+                LOCATION="/{location_table2}/",
+                FORMAT="csv_with_names",
+                PARTITIONED_BY="['year']"
+            );
+            CREATE TABLE `{olap_table}` (
+                key Int64 NOT NULL,
+                value String NOT NULL,
+                PRIMARY KEY (key)
+            )
+            WITH (STORE = COLUMN);)",
+            "location"_a = GetBucketLocation(bucket),
+            "source"_a = root + source,
+            "table1"_a = root + table1,
+            "table2"_a = root + table2,
+            "location_table1"_a = table1,
+            "location_table2"_a = table2,
+            "olap_table"_a = olapTable
+        );
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto db = kikimr->GetQueryClient();
+
+        {
+            const TString sql = fmt::format(R"(
+                    INSERT INTO {destination}
+                        SELECT key, value FROM {source} LIMIT 1;)",
+                    "destination"_a = table1,
+                    "source"_a = olapTable);
+
+            auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+            UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+            NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+            UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
+        }
+
+        {
+            const TString sql = fmt::format(R"(
+                    INSERT INTO {destination}
+                        SELECT key, value, "2024" AS year FROM {source} LIMIT 1;)",
+                    "destination"_a = table2,
+                    "source"_a = olapTable);
+
+            auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+            UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+            NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+            UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

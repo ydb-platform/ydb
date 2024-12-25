@@ -710,18 +710,15 @@ def build_docker_image(build_args, docker_package, build_ydbd, image, force_rebu
         logger.debug('ydb image %s is not present on host, building', image)
         root = arcadia_root()
         ya_package_docker(root, build_args, docker_package, image)
-        if output_path is not None:
-            docker.docker_image_save(image, output_path, True)
+        docker.docker_image_save(image, output_path, True)
     elif force_rebuild:
         logger.debug('ydb image %s is already present on host, rebuilding', image)
         root = arcadia_root()
         ya_package_docker(root, build_args, docker_package, image)
-        if output_path is not None:
-            docker.docker_image_save(image, output_path, True)
+        docker.docker_image_save(image, output_path, True)
     else:
         logger.debug('ydb image %s is already present on host, using existing image', image)
-        if output_path is not None:
-            docker.docker_image_save(image, output_path, False)
+        docker.docker_image_save(image, output_path, False)
 
 
 def push_docker_image(image):

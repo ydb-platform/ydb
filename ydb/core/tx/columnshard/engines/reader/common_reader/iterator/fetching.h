@@ -56,7 +56,7 @@ private:
 
 public:
     TFetchingStepsSignalsCollection()
-        : TBase("scan_steps") {
+        : TBase("ScanSteps") {
     }
 
     static TFetchingStepSignals GetSignals(const TString& name) {

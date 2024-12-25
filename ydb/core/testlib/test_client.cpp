@@ -2768,7 +2768,7 @@ namespace Tests {
         if (result.operation().status() != Ydb::StatusIds::SUCCESS) {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(result.operation().issues(), issues);
-            ythrow yexception() << "Failed to create tenant " << path << ", " << result.operation().status() << ", reason:\n" << result.DebugString();
+            ythrow yexception() << "Failed to create tenant " << path << ", " << result.operation().status() << ", reason:\n" << issues.ToString();
         }
 
         // Run new tenant

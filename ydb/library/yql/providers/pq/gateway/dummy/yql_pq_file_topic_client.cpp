@@ -13,7 +13,7 @@ namespace NYql {
 template<typename TEvent>
 class TBlockingEQueue {
 public:
-    TBlockingEQueue(size_t maxSize)
+    explicit TBlockingEQueue(size_t maxSize)
         : MaxSize_(maxSize)
     {
     }
@@ -139,7 +139,7 @@ public:
 
     bool Close(TDuration timeout = TDuration::Max()) override {
         Y_UNUSED(timeout);
-        // TOOD send TSessionClosedEvent
+        // TODO send TSessionClosedEvent
         // XXX (... but if we stop queues, nobody will receive it, needs rethinking)
         EventsQ_.Stop();
         Pool_.Stop();
@@ -321,7 +321,7 @@ public:
 
     bool Close(TDuration timeout = TDuration::Max()) override {
         Y_UNUSED(timeout);
-        // TOOD send TSessionClosedEvent
+        // TODO send TSessionClosedEvent
         // XXX (... but if we stop queues, nobody will receive it, needs rethinking)
         EventsQ_.Stop();
         EventsMsgQ_.Stop();

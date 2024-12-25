@@ -324,7 +324,7 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId, const
         if (Db.HasRemovedTx(localTid, lockId)) {
             LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                 "Committing removed changes lockId# " << lockId << " tid# " << localTid << " shard# " << Self.TabletID());
-            Self.IncCounter(COUNTER_SUSPICIOUS_COMMITS);
+            Self.IncCounter(COUNTER_REMOVED_COMMITTED_TXS);
         }
         return;
     }

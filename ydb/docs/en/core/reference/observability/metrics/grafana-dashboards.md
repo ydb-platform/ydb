@@ -118,7 +118,7 @@ Performance metrics for Distributed Storage, read more in this article.
 |---|---|---|
 | DiskTimeAvailable and total Cost relation | The relation of the request flow total cost to the available disk time. If the TotalCost line is above the DiskTimeAvailable line, then the load flow exceeds the allowed limit | arbitrary units |
 | Cost by source | The total cost of the request flow by load source | arbitrary units |
-| Total burst duration | The total duration during which VDisks were in the underflow state. If the value is greater than 0, load bursts are present in the system | ms |
+| Total burst duration | The total duration during which VDisks were in the [underflow state](distributed-storage-performance.md#burstDetection). If the value is greater than 0, load bursts are present in the system | ms |
 
 For convenience, cost and available disk time metrics on the graphs are presented in nanoseconds.
 

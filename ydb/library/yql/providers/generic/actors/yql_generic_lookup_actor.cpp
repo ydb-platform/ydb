@@ -397,12 +397,12 @@ namespace NYql::NDq {
             return result;
         }
 
-        void AddClause(NConnector::NApi::TPredicate_TDisjunction &disjunction, 
+        void AddClause(NConnector::NApi::TPredicate::TDisjunction &disjunction, 
                        ui32 columnsCount, auto&& getter) {
-            NConnector::NApi::TPredicate_TConjunction& conjunction = *disjunction.mutable_operands()->Add()->mutable_conjunction();
+            NConnector::NApi::TPredicate::TConjunction& conjunction = *disjunction.mutable_operands()->Add()->mutable_conjunction();
             for (ui32 c = 0; c != columnsCount; ++c) {
-                NConnector::NApi::TPredicate_TComparison& eq = *conjunction.mutable_operands()->Add()->mutable_comparison();
-                eq.set_operation(NConnector::NApi::TPredicate_TComparison_EOperation::TPredicate_TComparison_EOperation_EQ);
+                NConnector::NApi::TPredicate::TComparison& eq = *conjunction.mutable_operands()->Add()->mutable_comparison();
+                eq.set_operation(NConnector::NApi::TPredicate::TComparison::EOperation::TPredicate_TComparison_EOperation_EQ);
                 eq.mutable_left_value()->set_column(TString(KeyType->GetMemberName(c)));
                 auto rightTypedValue = eq.mutable_right_value()->mutable_typed_value();
                 ExportTypeToProto(KeyType->GetMemberType(c), *rightTypedValue->mutable_type());
@@ -426,7 +426,7 @@ namespace NYql::NDq {
 
             select.mutable_from()->Settable(LookupSource.table());
 
-            NConnector::NApi::TPredicate_TDisjunction disjunction;
+            NConnector::NApi::TPredicate::TDisjunction disjunction;
             for (const auto& [k, _] : *Request) {
                 AddClause(disjunction, KeyType->GetMembersCount(), [&k = k](auto c) {
                     return k.GetElement(c);

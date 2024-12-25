@@ -153,8 +153,9 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
     TNGrammBuilder builder(HashesCount);
 
     std::vector<bool> bitsVector(FilterSizeBytes * 8, false);
+    bool* memAccessor = &bitsVector[0];
     const auto predSet = [&](const ui64 hashSecondary) {
-        bitsVector[hashSecondary % (FilterSizeBytes * 8)] = true;
+        memAccessor[hashSecondary % (FilterSizeBytes * 8)] = true;
     };
     for (reader.Start(); reader.IsCorrect();) {
         builder.FillNGrammHashes(NGrammSize, reader.begin()->GetCurrentChunk(), predSet);

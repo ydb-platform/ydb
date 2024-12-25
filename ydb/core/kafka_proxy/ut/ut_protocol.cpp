@@ -36,6 +36,8 @@ static constexpr const char DEFAULT_FOLDER_ID[] = "somefolder";
 static constexpr const ui64 FirstTopicOffset = -2;
 static constexpr const ui64 LastTopicOffset = -1;
 
+static constexpr const ui64 FAKE_SERVERLESS_KAFKA_PROXY_PORT = 19092;
+
 struct WithSslAndAuth: TKikimrTestSettings {
     static constexpr bool SSL = true;
     static constexpr bool AUTH = true;
@@ -69,7 +71,7 @@ class TTestServer {
 public:
     TIpPort Port;
 
-    TTestServer(const TString& kafkaApiMode = "1") {
+    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false) {
         TPortManager portManager;
         Port = portManager.GetTcpPort();
 
@@ -100,6 +102,10 @@ public:
         appConfig.MutableKafkaProxyConfig()->SetListeningPort(Port);
         appConfig.MutableKafkaProxyConfig()->SetMaxMessageSize(1024);
         appConfig.MutableKafkaProxyConfig()->SetMaxInflightSize(2048);
+        if (serverless) {
+            appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetHostname("localhost");
+            appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetPort(FAKE_SERVERLESS_KAFKA_PROXY_PORT);
+        }
 
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(true);
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
@@ -132,6 +138,7 @@ public:
 
         if (secure) {
             appConfig.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+            appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         }
         KikimrServer = std::unique_ptr<TKikimr>(new TKikimr(std::move(appConfig), {}, {}, false, nullptr, nullptr, 0));
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::KAFKA_PROXY, NActors::NLog::PRI_TRACE);
@@ -139,30 +146,23 @@ public:
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, NLog::PRI_TRACE);
 
+        TClient client(*(KikimrServer->ServerSettings));
+        if (secure) {
+            client.SetSecurityToken("root@builtin");
+        }
+
         ui16 grpc = KikimrServer->GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto driverConfig = TDriverConfig().SetEndpoint(location).SetLog(CreateLogBackend("cerr", TLOG_DEBUG));
         if (secure) {
             driverConfig.UseSecureConnection(TString(NYdbSslTestData::CaCrt));
+            driverConfig.SetAuthToken("root@builtin");
         } else {
             driverConfig.SetDatabase("/Root/");
         }
 
         Driver = std::make_unique<TDriver>(std::move(driverConfig));
 
-        {
-            NYdb::NScheme::TSchemeClient schemeClient(*Driver);
-            NYdb::NScheme::TPermissions permissions("user@builtin", {"ydb.generic.read", "ydb.generic.write"});
-
-            auto result = schemeClient
-                              .ModifyPermissions(
-                                  "/Root", NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions))
-                              .ExtractValueSync();
-            Cerr << result.GetIssues().ToString() << "\n";
-            UNIT_ASSERT(result.IsSuccess());
-        }
-
-        TClient client(*(KikimrServer->ServerSettings));
         UNIT_ASSERT_VALUES_EQUAL(
             NMsgBusProxy::MSTATUS_OK,
             client.AlterUserAttributes("/", "Root",
@@ -178,7 +178,7 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
 
             NYdb::NScheme::TSchemeClient schemeClient(*Driver);
-            NYdb::NScheme::TPermissions permissions("ouruser", {"ydb.generic.read", "ydb.generic.write"});
+            NYdb::NScheme::TPermissions permissions("ouruser", {"ydb.generic.read", "ydb.generic.write", "ydb.generic.full"});
 
             auto result = schemeClient
                               .ModifyPermissions(
@@ -205,8 +205,12 @@ public:
     std::unique_ptr<grpc::Server> AccessServer;
 };
 
-using TInsecureTestServer = TTestServer<TKikimrWithGrpcAndRootSchema, false>;
-using TSecureTestServer = TTestServer<TKikimrWithGrpcAndRootSchemaSecure, true>;
+class TInsecureTestServer : public TTestServer<TKikimrWithGrpcAndRootSchema, false> {
+    using TTestServer::TTestServer;
+};
+class TSecureTestServer : public TTestServer<TKikimrWithGrpcAndRootSchemaSecure, true> {
+    using TTestServer::TTestServer;
+};
 
 void Write(TSocketOutput& so, TApiMessage* request, TKafkaVersion version) {
     TWritableBuf sb(nullptr, request->Size(version) + 1000);
@@ -379,6 +383,22 @@ public:
         request.ClientSoftwareVersion = "3100.7.13";
 
         return WriteAndRead<TApiVersionsResponseData>(header, request);
+    }
+
+    TMessagePtr<TMetadataResponseData> Metadata(const TVector<TString>& topics = {}) {
+        Cerr << ">>>>> MetadataRequest\n";
+
+        TRequestHeaderData header = Header(NKafka::EApiKey::METADATA, 9);
+
+        TMetadataRequestData request;
+        request.Topics.reserve(topics.size());
+        for (auto topicName : topics) {
+            NKafka::TMetadataRequestData::TMetadataRequestTopic topic;
+            topic.Name = topicName;
+            request.Topics.push_back(topic);
+        }
+
+        return WriteAndRead<TMetadataResponseData>(header, request);
     }
 
     TMessagePtr<TSaslHandshakeResponseData> SaslHandshake(const TString& mechanism = "PLAIN") {
@@ -814,7 +834,8 @@ private:
     TString ClientName;
 };
 
-void RunFetchScenario(TInsecureTestServer& testServer, TTestClient& client) {
+template <class KikimrServer, bool secure>
+void RunFetchScenario(const TTestServer<KikimrServer, secure>& testServer, TTestClient& client) {
     TString topicName = "/Root/topic-0-test";
     TString shortTopicName = "topic-0-test";
     TString notExistsTopicName = "/Root/not-exists";
@@ -1002,7 +1023,7 @@ void RunFetchScenario(TInsecureTestServer& testServer, TTestClient& client) {
     // create table and init cdc for it
     {
         NYdb::NTable::TTableClient tableClient(*testServer.Driver);
-        tableClient.RetryOperationSync([&](TSession session)
+        auto createAndAlterTableStatus = tableClient.RetryOperationSync([&](TSession session)
             {
                 NYdb::NTable::TTableBuilder builder;
                 builder.AddNonNullableColumn("key", NYdb::EPrimitiveType::Int64).SetPrimaryKeyColumn("key");
@@ -1024,6 +1045,7 @@ void RunFetchScenario(TInsecureTestServer& testServer, TTestClient& client) {
                 return alterResult;
             }
         );
+        UNIT_ASSERT_VALUES_EQUAL(createAndAlterTableStatus.GetStatus(), EStatus::SUCCESS);
 
         TValueBuilder rows;
         rows.BeginList();
@@ -1054,6 +1076,7 @@ void RunFetchScenario(TInsecureTestServer& testServer, TTestClient& client) {
         UNIT_ASSERT_VALUES_EQUAL(dataStr, "{\"update\":{\"value\":2},\"key\":[1]}");
     }
 } // RunFetchScenario
+
 Y_UNIT_TEST_SUITE(KafkaProtocol) {
     // this test imitates kafka producer behaviour: 
     // 1. get api version, 
@@ -2256,5 +2279,35 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
 
         Sleep(TDuration::Seconds(1));
+    } // LoginWithApiKeyWithoutAt
+
+    Y_UNIT_TEST(MetadataScenario) {
+        TInsecureTestServer testServer;
+        TTestClient client(testServer.Port);
+
+        auto metadataResponse = client.Metadata({});
+
+        UNIT_ASSERT_VALUES_EQUAL(metadataResponse->ClusterId, "ydb-cluster");
+        UNIT_ASSERT_VALUES_EQUAL(metadataResponse->ControllerId, testServer.KikimrServer->GetRuntime()->GetFirstNodeId());
+        UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Topics.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].NodeId, testServer.KikimrServer->GetRuntime()->GetFirstNodeId());
+        UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].Host, "::1");
+        UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].Port, testServer.Port);
+    }
+
+    Y_UNIT_TEST(MetadataInServerlessScenario) {
+        TInsecureTestServer testServer("1", true);
+        TTestClient client(testServer.Port);
+
+        auto metadataResponse = client.Metadata({});
+
+        UNIT_ASSERT_VALUES_EQUAL(metadataResponse->ClusterId, "ydb-cluster");
+        UNIT_ASSERT_VALUES_EQUAL(metadataResponse->ControllerId, NKafka::ProxyNodeId);
+        UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Topics.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].NodeId, NKafka::ProxyNodeId);
+        UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].Host, "localhost");
+        UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].Port, FAKE_SERVERLESS_KAFKA_PROXY_PORT);
     }
 } // Y_UNIT_TEST_SUITE(KafkaProtocol)

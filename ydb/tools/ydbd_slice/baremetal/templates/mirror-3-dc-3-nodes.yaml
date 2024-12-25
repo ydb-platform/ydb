@@ -7,6 +7,7 @@ yaml_config_enabled: true
 
 log:
   cluster_name: "default_devslice" # Change cluster name in order to have better experience with logs searching in Monium.
+  sys_log: true
   uaclient_config:
     uri: "[fd53::1]:16400"
     grpc_max_message_size: 4194304

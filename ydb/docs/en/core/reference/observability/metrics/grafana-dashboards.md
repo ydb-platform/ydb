@@ -112,7 +112,7 @@ Download the [datashard.json](https://raw.githubusercontent.com/ydb-platform/ydb
 
 ## Distributed Storage performance metrics {#ds-performance}
 
-Performance metrics for Distributed Storage, read more in this article.
+Performance metrics for Distributed Storage. For more information, see [{#T}](distributed-storage-performance.md).
 
 | Name | Description | Units |
 |---|---|---|

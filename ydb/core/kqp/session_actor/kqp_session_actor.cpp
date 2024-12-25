@@ -795,12 +795,7 @@ public:
 
     void BeginTx(const Ydb::Table::TransactionSettings& settings) {
         QueryState->TxId.SetValue(UlidGen.Next());
-        if (QueryState->TxCtx) {
-            if (QueryState->TxCtx->BufferActorId) {
-                Send(QueryState->TxCtx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
-                QueryState->TxCtx->BufferActorId = {};
-            }
-        }
+        TerminateBufferActor()
         QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
             AppData()->TimeProvider, AppData()->RandomProvider);
 
@@ -887,12 +882,7 @@ public:
                     break;
             }
         } else {
-            if (QueryState->TxCtx) {
-                if (QueryState->TxCtx->BufferActorId) {
-                    Send(QueryState->TxCtx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
-                    QueryState->TxCtx->BufferActorId = {};
-                }
-            }
+            TerminateBufferActor()
             QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
                 AppData()->TimeProvider, AppData()->RandomProvider);
             QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
@@ -2223,12 +2213,7 @@ public:
             QueryState->TxCtx->ClearDeferredEffects();
             QueryState->TxCtx->Locks.Clear();
             QueryState->TxCtx->TxManager.reset();
-
-            if (QueryState->TxCtx->BufferActorId) {
-                Send(QueryState->TxCtx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
-                QueryState->TxCtx->BufferActorId = {};
-            }
-
+            TerminateBufferActor()
             QueryState->TxCtx->Finish();
         }
     }
@@ -2246,10 +2231,7 @@ public:
                 Transactions.AddToBeAborted(txCtx);
                 Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
             }
-            if (txCtx->BufferActorId) {
-                Send(txCtx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
-                txCtx->BufferActorId = {};
-            }
+            TerminateBufferActor();
             DiscardPersistentSnapshot(txCtx->SnapshotHandle);
         }
 
@@ -2720,6 +2702,13 @@ private:
 
     void SetTopicWriteId(NLongTxService::TLockHandle handle) {
         QueryState->TxCtx->TopicOperations.SetWriteId(std::move(handle));
+    }
+
+    void TerminateBufferActor() {
+        if (QueryState && QueryState->TxCtx && QueryState->TxCtx->BufferActorId) {
+            Send(QueryState->TxCtx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
+            QueryState->TxCtx->BufferActorId = {};
+        }
     }
 
 private:

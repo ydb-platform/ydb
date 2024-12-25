@@ -142,17 +142,6 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
             "writing_id", writeMeta.GetId())("status", putResult.GetPutStatus());
         Counters.GetWritesMonitor()->OnFinishWrite(aggr->GetSize(), 1);
 
-        if (!TablesManager.IsReadyForWrite(writeMeta.GetTableId())) {
-            ACFL_ERROR("event", "absent_pathId")("path_id", writeMeta.GetTableId())("has_index", TablesManager.HasPrimaryIndex());
-            Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
-
-            auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, NKikimrTxColumnShard::EResultStatus::ERROR);
-            ctx.Send(writeMeta.GetSource(), result.release());
-            Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::NoTable);
-            wBuffer.RemoveData(aggr, StoragesManager->GetInsertOperator());
-            continue;
-        }
-
         if (putResult.GetPutStatus() != NKikimrProto::OK) {
             Counters.GetCSCounters().OnWritePutBlobsFail(TMonotonic::Now() - writeMeta.GetWriteStartInstant());
             Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
@@ -238,7 +227,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::Disabled);
     }
 
-    if (!TablesManager.IsReadyForWrite(pathId)) {
+    if (!TablesManager.IsReadyForStartWrite(pathId, false)) {
         LOG_S_NOTICE("Write (fail) into pathId:" << writeMeta.GetTableId() << (TablesManager.HasPrimaryIndex() ? "" : " no index")
                                                  << " at tablet " << TabletID());
 
@@ -558,7 +547,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     const auto pathId = operation.GetTableId().GetTableId();
 
-    if (!TablesManager.IsReadyForWrite(pathId)) {
+    if (!TablesManager.IsReadyForStartWrite(pathId, false)) {
         sendError("table not writable", NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR);
         return;
     }

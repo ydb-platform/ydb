@@ -501,7 +501,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
                 // checksum is always calculated before compression
                 TString checksumKey = ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None));
                 TString dataKeySuffix = DataKeySuffix(ShardNum, DataFormat, ECompressionCodec::None);
-                UploadChecksum(std::move(DataChecksum), checksumKey, dataKeySuffix, nextStep);
+                return UploadChecksum(std::move(DataChecksum), checksumKey, dataKeySuffix, nextStep);
             } else {
                 return nextStep();
             }

@@ -106,7 +106,8 @@ public:
     }
 
     const NOlap::TSnapshot& GetDropVersionVerified() const {
-        return DropVersion;
+        AFL_VERIFY(DropVersion);
+        return *DropVersion;
     }
 
     void SetDropVersion(const NOlap::TSnapshot& version) {
@@ -144,7 +145,7 @@ private:
     THashMap<ui64, TTableInfo> Tables;
     THashSet<ui32> SchemaPresetsIds;
     THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
-    std::map<TSnapshot, THashSet<ui64>> PathsToDrop;
+    std::map<NOlap::TSnapshot, THashSet<ui64>> PathsToDrop;
     THashMap<ui64, NOlap::TTiering> Ttl;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
@@ -171,7 +172,7 @@ public:
         return Ttl;
     }
 
-    const std::map<TSnapshot, THashSet<ui64>>& GetPathsToDrop() const {
+    const std::map<NOlap::TSnapshot, THashSet<ui64>>& GetPathsToDrop() const {
         return PathsToDrop;
     }
 

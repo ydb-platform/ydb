@@ -81,7 +81,7 @@ class TJsonNodes : public TViewerPipeClient {
     std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> ResourceBoardInfoResponse;
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> PathNavigateResponse;
     std::unordered_map<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
-
+    bool HiveNodeStatsProcessed = false;
     std::vector<TTabletId> HivesToAsk;
     bool AskHiveAboutPaths = false;
     bool DatabaseNavigateProcessed = false;
@@ -1604,7 +1604,7 @@ public:
                 return false;
             }
         }
-        return !HiveNodeStats.empty();
+        return !HiveNodeStatsProcessed;
     }
 
     bool TimeToAskHive() {
@@ -1930,7 +1930,7 @@ public:
                     }
                 }
             }
-            HiveNodeStats.clear();
+            HiveNodeStatsProcessed = true;
         }
 
         if (FilterStorageStage == EFilterStorageStage::Pools && StoragePoolsResponse && StoragePoolsResponse->IsDone()) {

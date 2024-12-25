@@ -16,19 +16,19 @@ Release date: December 24, 2024.
 * [Implemented](https://github.com/ydb-platform/ydb/pull/7150) [Change Data Capture (CDC)](./concepts/cdc) for synchronous secondary indexes.
 * Added delivery of [Count-min sketch](https://en.wikipedia.org/wiki/Count%E2%80%93min_sketch) statistics for [columnar tables](./concepts/datamodel/table#column-oriented-tables) to the query analyzer.
 * Added audit logging for user login events in YDB, session termination events in the user interface, and backup/restore operations.
-* Initial version of the workload manager was implemented. It allows to create resource pools with CPU, memory and active queries count limits. Resource classifiers was implemented to assign queries to specific resource pool.
-* Added support for sessions view for databases. Now you can make a query to find out sessions that was established to the database.
-* Added support literal default values for tables. When inserting a new row in YDB Query default values will be assigned to the column if specified.
+* Initial version of the workload manager was implemented. It allows to create resource pools with CPU, memory and active queries count limits. Resource classifiers were implemented to assign queries to specific resource pool.
+* Added system view that allows you to get information about sessions installed from the database using a query.
+* Added support literal default values for row-oriented tables. When inserting a new row in YDB Query default values will be assigned to the column if specified.
 * Added support for returning clause in queries.
 * [Added](https://github.com/ydb-platform/ydb/pull/8708) start/end times and authors in the metadata for backup/restore operations from S3-compatible storage.
 * Added support for backup/restore of ACL for tables from/to S3-compatible storage.
 * Included paths and decompression methods in query plans for reading from S3.
 * Added new parsing options for timestamp/datetime fields when reading data from S3.
-* Added support for changing retention periods in CDC topics.
+* Added support for changing record retention periods in [CDC]((./concepts/cdc)) topics.
 * Added support for the Decimal type in [partitioning keys](./dev/primary-key/column-oriented#klyuch-particionirovaniya).
 * Improved diagnostics for storage issues in HealthCheck.
 * **_(Experimental)_** Added support for [views](./concepts/datamodel/view).
-* **_(Experimental)_** Added an [auto-partitioning mode](./concepts/topic#autopartitioning) for topics, where partitions can dynamically split based on load while preserving message read-order and exactly-once guarantees. [Instructions](./yql/reference/syntax/alter-topic#autopartitioning) are provided for managing this mode.
+* **_(Experimental)_** Added an [auto-partitioning mode](./concepts/topic#autopartitioning) for topics, where partitions can dynamically split based on load while preserving message read-order and exactly-once guarantees.
 * **_(Experimental)_** Added support for transactions involving [topics](./concepts/topic) and row-based tables, enabling transactional data transfer between tables and topics, or between topics, ensuring no data loss or duplication.
 * **_(Experimental)_** Implemented [automatic index selection](./dev/secondary-indexes#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) for queries, which can be enabled via the `index_auto_choose_mode setting` in `table_service_config`.
 * **_(Experimental)_** Added support for write operations to columnar tables.
@@ -50,7 +50,7 @@ Release date: December 24, 2024.
 * [Separated](https://github.com/ydb-platform/ydb-embedded-ui/pull/1422) donor disks from other disks in the UI.
 * [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1154) support for InterruptInheritance ACL and improved visualization of active ACLs.
 * [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/889) a display of the current UI version.
-* [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1229) a tab with experimental database features.
+* [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1229) a tab  with information about the status of settings for enabling experimental functionality.
 
 ### Performance
 

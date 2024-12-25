@@ -172,7 +172,7 @@ def is_statement_definition(line):
     return line.startswith("statement")
 
 
-def format_yql_statement(lines_or_statement, table_path_prefix):
+def patch_yql_statement(lines_or_statement, table_path_prefix):
     if not isinstance(lines_or_statement, list):
         lines_or_statement = [lines_or_statement]
     statement = "\n".join(
@@ -255,7 +255,6 @@ class BaseSuiteRunner(object):
         )
         cls.cluster.start()
         cls.table_path_prefix = None
-        cls.table_path_prefix_ne = None
         cls.driver = ydb.Driver(ydb.DriverConfig(
             database="/Root",
             endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port)))
@@ -279,7 +278,6 @@ class BaseSuiteRunner(object):
         self.plan = (kind == 'plan')
         self.query_id = itertools.count(start=1)
         self.table_path_prefix = "/Root/%s" % '_'.join(list(path_pieces) + [kind])
-        self.table_path_prefix_ne = self.table_path_prefix + "_ne"
         for parsed_statement in get_statements(get_source_path(*path_pieces), os.path.join(*path_pieces)):
             self.assert_statement(parsed_statement)
         return self.files
@@ -418,7 +416,7 @@ class BaseSuiteRunner(object):
         if self.plan:
             return
 
-        yql_text = format_yql_statement(statement.text, self.table_path_prefix)
+        yql_text = patch_yql_statement(statement.text, self.table_path_prefix)
         yql_text = "--!syntax_v1\n" + yql_text + "\n\n"
         result = self.execute_scan_query(yql_text)
         file_name = statement.suite_name.split('/')[1] + '.out'
@@ -445,7 +443,7 @@ class BaseSuiteRunner(object):
             self.execute_query(statement_text)
 
     def explain(self, query):
-        yql_text = format_yql_statement(query, self.table_path_prefix)
+        yql_text = patch_yql_statement(query, self.table_path_prefix)
         # seems explain not working with query service ?
         """
         result_sets = self.pool.execute_with_retries(yql_text, exec_mode=ydb.query.base.QueryExecMode.EXPLAIN)
@@ -458,14 +456,12 @@ class BaseSuiteRunner(object):
         return self.legacy_pool.retry_operation_sync(lambda s: s.explain(yql_text)).query_plan
 
     def execute_scheme(self, statement_text):
-        yql_text = format_yql_statement(statement_text, self.table_path_prefix)
-        self.pool.execute_with_retries(yql_text)
-        yql_text = format_yql_statement(statement_text, self.table_path_prefix_ne)
+        yql_text = patch_yql_statement(statement_text, self.table_path_prefix)
         self.pool.execute_with_retries(yql_text)
         return None
 
     def execute_query(self, statement_text):
-        yql_text = format_yql_statement(statement_text, self.table_path_prefix)
+        yql_text = patch_yql_statement(statement_text, self.table_path_prefix)
         result = self.pool.execute_with_retries(yql_text)
 
         if len(result) == 1:

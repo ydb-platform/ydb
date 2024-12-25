@@ -119,8 +119,14 @@ public:
         Versions.insert(snapshot);
     }
 
-    bool IsDropped() const {
-        return DropVersion.has_value();
+    bool IsDropped(const std::optional<NOlap::TSnapshot>& minReadSnapshot = std::nullopt) const {
+        if (!DropVersion) {
+            return false;
+        }
+        if (!minReadSnapshot) {
+            return true;
+        }
+        return *DropVersion < *minReadSnapshot;
     }
 
     TTableInfo() = default;
@@ -250,7 +256,9 @@ public:
     ui64 GetMemoryUsage() const;
 
     bool HasTable(const ui64 pathId, bool withDeleted = false) const;
+    bool HasTable(const ui64 pathId, const TSnapshot& minReadSnapshot) const;
     bool IsReadyForWrite(const ui64 pathId, bool withDeleted = false) const;
+    bool IsReadyForWrite(const ui64 pathId, const TSnapshot& minReadSnapshot) const;
     bool HasPreset(const ui32 presetId) const;
 
     void DropTable(const ui64 pathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);

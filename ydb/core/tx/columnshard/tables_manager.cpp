@@ -212,8 +212,23 @@ bool TTablesManager::HasTable(const ui64 pathId, bool withDeleted) const {
     return true;
 }
 
+bool TTablesManager::HasTable(const ui64 pathId, const NOlap::TSnapshot& minReadSnapshot) const {
+    auto it = Tables.find(pathId);
+    if (it == Tables.end()) {
+        return false;
+    }
+    if (it->second.IsDropped(minReadSnapshot)) {
+        return false;
+    }
+    return true;
+}
+
 bool TTablesManager::IsReadyForWrite(const ui64 pathId, const bool withDeleted) const {
     return HasPrimaryIndex() && HasTable(pathId, withDeleted);
+}
+
+bool TTablesManager::IsReadyForWrite(const ui64 pathId, const NOlap::TSnapshot& minReadSnapshot) const {
+    return HasPrimaryIndex() && HasTable(pathId, minReadSnapshot);
 }
 
 bool TTablesManager::HasPreset(const ui32 presetId) const {

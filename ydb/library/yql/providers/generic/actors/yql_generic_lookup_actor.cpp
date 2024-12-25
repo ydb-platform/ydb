@@ -398,9 +398,9 @@ namespace NYql::NDq {
         }
 
         void AddClause(NConnector::NApi::TPredicate_TDisjunction &disjunction, 
-                       ui32 columns, auto&& getter) {
+                       ui32 columnsCount, auto&& getter) {
             NConnector::NApi::TPredicate_TConjunction conjunction;
-            for (ui32 c = 0; c != columns; ++c) {
+            for (ui32 c = 0; c != columnsCount; ++c) {
                 NConnector::NApi::TPredicate_TComparison eq;
                 eq.Setoperation(NConnector::NApi::TPredicate_TComparison_EOperation::TPredicate_TComparison_EOperation_EQ);
                 eq.mutable_left_value()->Setcolumn(TString(KeyType->GetMemberName(c)));

@@ -1,0 +1,16 @@
+{
+    "test.test[compute_range-tuples_compare-default.txt-Debug]": [
+        {
+            "checksum": "501d11676cf33c61787adfa1afed5db6",
+            "size": 4621,
+            "uri": "https://{canondata_backend}/1942525/bff084eac8b2408f572d038b6b62ea00950a26c0/resource.tar.gz#test.test_compute_range-tuples_compare-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[compute_range-tuples_compare-default.txt-Results]": [
+        {
+            "checksum": "02e3f84696b07af203d99b540392eb88",
+            "size": 80850,
+            "uri": "https://{canondata_backend}/1942525/bff084eac8b2408f572d038b6b62ea00950a26c0/resource.tar.gz#test.test_compute_range-tuples_compare-default.txt-Results_/results.txt"
+        }
+    ]
+}

@@ -87,6 +87,11 @@ ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col2_COL1-kqprun]
 ydb/public/sdk/cpp/client/ydb_topic/ut [*/*] chunk chunk
 ydb/public/sdk/cpp/client/ydb_topic/ut [*/*]+chunk+chunk
+ydb/public/sdk/cpp/client/ydb_topic/ut TxUsage.Sinks_Oltp_WriteToTopic_1
+ydb/public/sdk/cpp/client/ydb_topic/ut TxUsage.Sinks_Oltp_WriteToTopic_2
+ydb/public/sdk/cpp/client/ydb_topic/ut TxUsage.Sinks_Oltp_WriteToTopic_3
+ydb/public/sdk/cpp/client/ydb_topic/ut TxUsage.Sinks_Oltp_WriteToTopic_4
+ydb/public/sdk/cpp/client/ydb_topic/ut TxUsage.Sinks_Oltp_WriteToTopics_3
 ydb/services/datastreams/ut DataStreams.TestPutRecordsCornerCases
 ydb/services/keyvalue/ut sole chunk chunk
 ydb/services/keyvalue/ut sole+chunk+chunk

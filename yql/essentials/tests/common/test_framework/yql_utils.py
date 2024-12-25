@@ -288,6 +288,8 @@ def normalize_yson(y):
         return [normalize_yson(i) for i in y]
     if isinstance(y, dict):
         return {normalize_yson(k): normalize_yson(v) for k, v in six.iteritems(y)}
+    if not isinstance(y, bytes):
+        return str(y).encode('ascii')
     return y
 
 
@@ -366,11 +368,11 @@ def prepare_program(program, program_file, yql_dir, ext='yql'):
     return program, program_file
 
 
-def get_program_cfg(suite, case, DATA_PATH):
+def get_program_cfg(suite, case, data_path):
     ret = []
-    config = os.path.join(DATA_PATH, suite if suite else '', case + '.cfg')
+    config = os.path.join(data_path, suite if suite else '', case + '.cfg')
     if not os.path.exists(config):
-        config = os.path.join(DATA_PATH, suite if suite else '', 'default.cfg')
+        config = os.path.join(data_path, suite if suite else '', 'default.cfg')
 
     if os.path.exists(config):
         for line in open(config, 'r'):
@@ -378,9 +380,9 @@ def get_program_cfg(suite, case, DATA_PATH):
                 ret.append(tuple(line.split()))
     else:
         in_filename = case + '.in'
-        in_path = os.path.join(DATA_PATH, in_filename)
+        in_path = os.path.join(data_path, in_filename)
         default_filename = 'default.in'
-        default_path = os.path.join(DATA_PATH, default_filename)
+        default_path = os.path.join(data_path, default_filename)
         for filepath in [in_path, in_filename, default_path, default_filename]:
             if os.path.exists(filepath):
                 try:
@@ -396,8 +398,8 @@ def get_program_cfg(suite, case, DATA_PATH):
     return ret
 
 
-def find_user_file(suite, path, DATA_PATH):
-    source_path = os.path.join(DATA_PATH, suite, path)
+def find_user_file(suite, path, data_path):
+    source_path = os.path.join(data_path, suite, path)
     if os.path.exists(source_path):
         return source_path
     else:
@@ -407,7 +409,7 @@ def find_user_file(suite, path, DATA_PATH):
             raise Exception('Can not find file ' + path)
 
 
-def get_input_tables(suite, cfg, DATA_PATH, def_attr=None):
+def get_input_tables(suite, cfg, data_path, def_attr=None):
     in_tables = []
     for item in cfg:
         if item[0] in ('in', 'out'):
@@ -415,7 +417,7 @@ def get_input_tables(suite, cfg, DATA_PATH, def_attr=None):
             if io == 'in':
                 in_tables.append(new_table(
                     full_name=table_name.replace('yamr.', '').replace('yt.', ''),
-                    yqlrun_file=os.path.join(DATA_PATH, suite if suite else '', file_name),
+                    yqlrun_file=os.path.join(data_path, suite if suite else '', file_name),
                     src_file_alternative=os.path.join(yql_work_path(), suite if suite else '', file_name),
                     def_attr=def_attr,
                     should_exist=True
@@ -423,10 +425,10 @@ def get_input_tables(suite, cfg, DATA_PATH, def_attr=None):
     return in_tables
 
 
-def get_tables(suite, cfg, DATA_PATH, def_attr=None):
+def get_tables(suite, cfg, data_path, def_attr=None):
     in_tables = []
     out_tables = []
-    suite_dir = os.path.join(DATA_PATH, suite)
+    suite_dir = os.path.join(data_path, suite)
     res_dir = get_yql_dir('table_')
 
     for splitted in cfg:
@@ -889,14 +891,14 @@ def normalize_source_code_path(s):
     return re.sub(r'(/lib/yql/[\w/]+(?:\.yql|\.yqls|\.sql)):(?:\d+):(?:\d+)', r'\1:xxx:yyy', s)
 
 
-def do_get_files(suite, config, DATA_PATH, config_key):
+def do_get_files(suite, config, data_path, config_key):
     files = dict()
-    suite_dir = os.path.join(DATA_PATH, suite)
+    suite_dir = os.path.join(data_path, suite)
     res_dir = None
     for line in config:
         if line[0] == config_key:
             _, name, path = line
-            userpath = find_user_file(suite, path, DATA_PATH)
+            userpath = find_user_file(suite, path, data_path)
             relpath = os.path.relpath(userpath, suite_dir)
             if os.path.exists(os.path.join('cwd', relpath)):
                 path = relpath
@@ -914,16 +916,16 @@ def do_get_files(suite, config, DATA_PATH, config_key):
     return files
 
 
-def get_files(suite, config, DATA_PATH):
-    return do_get_files(suite, config, DATA_PATH, 'file')
+def get_files(suite, config, data_path):
+    return do_get_files(suite, config, data_path, 'file')
 
 
-def get_http_files(suite, config, DATA_PATH):
-    return do_get_files(suite, config, DATA_PATH, 'http_file')
+def get_http_files(suite, config, data_path):
+    return do_get_files(suite, config, data_path, 'http_file')
 
 
-def get_yt_files(suite, config, DATA_PATH):
-    return do_get_files(suite, config, DATA_PATH, 'yt_file')
+def get_yt_files(suite, config, data_path):
+    return do_get_files(suite, config, data_path, 'yt_file')
 
 
 def get_syntax_version(program):

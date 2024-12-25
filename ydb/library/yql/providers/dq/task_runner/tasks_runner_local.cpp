@@ -261,7 +261,7 @@ public:
         }
         auto ctx = ExecutionContext;
         TLogFunc logger;
-        if (YQL_CLOG_ACTIVE(DEBUG, ProviderDq) ||  true) {
+        if (YQL_CLOG_ACTIVE(DEBUG, ProviderDq)) {
             logger = [taskId = ToString(task.GetId()), traceId = traceId](const TString& message) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(traceId, taskId);
                 YQL_CLOG(DEBUG, ProviderDq) << message;

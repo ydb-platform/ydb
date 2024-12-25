@@ -90,5 +90,14 @@ TMaybe<Ydb::Scheme::ModifyPermissionsRequest> GenYdbPermissions(const NKikimrSch
     return permissions;
 }
 
+Ydb::Topic::DescribeTopicResult GenYdbTopic(const NKikimrSchemeOp::TPersQueueGroupDescription& persQueue) {
+
+    Ydb::Topic::DescribeTopicResult topic;
+
+    //topic.mutable_retention_period() = persQueue.get_
+
+    return topic;
+}
+
 } // NDataShard
 } // NKikimr

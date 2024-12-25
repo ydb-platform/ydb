@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(Put) {
         TestBlobSize(10);
     }
 
-    Y_UNIT_TEST(TestSinglePutPartSize0) {
+    Y_UNIT_TEST(TestVPutBlobSize0) {
         TestCtx ctx;
         ctx.Initialize();
 
@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(Put) {
         UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrProto::ERROR);
     }
 
-    Y_UNIT_TEST(TestMultiPutPartSize0) {
+    Y_UNIT_TEST(TestVMultiPutBlobSize0) {
         TestCtx ctx;
         ctx.Initialize();
         auto ev = std::make_unique<TEvBlobStorage::TEvVMultiPut>(ctx.VDiskId, TInstant::Max(),

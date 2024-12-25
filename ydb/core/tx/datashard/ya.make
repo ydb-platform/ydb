@@ -309,6 +309,7 @@ RECURSE_FOR_TESTS(
     ut_change_exchange
     ut_column_stats
     ut_compaction
+    ut_data_cleanup
     ut_erase_rows
     ut_external_blobs
     ut_followers

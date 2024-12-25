@@ -1105,26 +1105,29 @@ namespace NKikimr::NYaml {
             bsConfig->MutableServiceSet()->AddAvailabilityDomains(1);
         }
 
-        if (bsConfig->HasAutoconfigSettings()) { // some syntactic sugar for distconf, when it's enabled
-            auto *autoconfigSettings = bsConfig->MutableAutoconfigSettings();
-
-            if (!autoconfigSettings->HasErasureSpecies()) {
-                autoconfigSettings->SetErasureSpecies(ephemeralConfig.GetStaticErasure());
-            }
-            if (!autoconfigSettings->PDiskFilterSize()) {
-                const TString defaultDiskType(ephemeralConfig.GetDefaultDiskType());
-                auto pdiskType = NKikimrConfig::TExtendedHostConfigDrive::TransformTypeToTypeForTHostConfigDrive<
-                    const TString, NKikimrBlobStorage::EPDiskType>(&defaultDiskType);
-                autoconfigSettings->AddPDiskFilter()->AddProperty()->SetType(pdiskType);
-            }
-            if (!autoconfigSettings->HasGeometry() && ephemeralConfig.HasFailDomainType() &&
-                    ephemeralConfig.GetFailDomainType() != NKikimrConfig::TEphemeralInputFields::Rack) {
-                auto* geometry = autoconfigSettings->MutableGeometry();
-                const auto& range = FailDomainGeometryRanges.at(ephemeralConfig.GetFailDomainType());
-                geometry->SetRealmLevelBegin(range.RealmLevelBegin);
-                geometry->SetRealmLevelEnd(range.RealmLevelEnd);
-                geometry->SetDomainLevelBegin(range.DomainLevelBegin);
-                geometry->SetDomainLevelEnd(range.DomainLevelEnd);
+        if (config.HasSelfManagementConfig()) {
+            auto *smConfig = config.MutableSelfManagementConfig();
+            Y_ENSURE_BT(smConfig->HasEnabled(), "Enabled field is mandatory");
+            Y_ENSURE_BT(!smConfig->HasInitialConfigYaml(), "InitialConfigYaml is not intended to be filled by user");
+            if (smConfig->GetEnabled()) {
+                if (!smConfig->HasErasureSpecies()) {
+                    smConfig->SetErasureSpecies(ephemeralConfig.GetStaticErasure());
+                }
+                if (!smConfig->PDiskFilterSize()) {
+                    const TString defaultDiskType(ephemeralConfig.GetDefaultDiskType());
+                    auto pdiskType = NKikimrConfig::TExtendedHostConfigDrive::TransformTypeToTypeForTHostConfigDrive<
+                        const TString, NKikimrBlobStorage::EPDiskType>(&defaultDiskType);
+                    smConfig->AddPDiskFilter()->AddProperty()->SetType(pdiskType);
+                }
+                if (!smConfig->HasGeometry() && ephemeralConfig.HasFailDomainType() &&
+                        ephemeralConfig.GetFailDomainType() != NKikimrConfig::TEphemeralInputFields::Rack) {
+                    auto* geometry = smConfig->MutableGeometry();
+                    const auto& range = FailDomainGeometryRanges.at(ephemeralConfig.GetFailDomainType());
+                    geometry->SetRealmLevelBegin(range.RealmLevelBegin);
+                    geometry->SetRealmLevelEnd(range.RealmLevelEnd);
+                    geometry->SetDomainLevelBegin(range.DomainLevelBegin);
+                    geometry->SetDomainLevelEnd(range.DomainLevelEnd);
+                }
             }
         }
 

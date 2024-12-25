@@ -41,6 +41,9 @@ private:
     TSnapshot RecordSnapshotMax;
 
     void FullValidation() const {
+        for (auto&& i : BlobIds) {
+            AFL_VERIFY(i.BlobSize());
+        }
         AFL_VERIFY(BlobIds.size());
         AFL_VERIFY(RecordsCount);
         AFL_VERIFY(ColumnRawBytes);
@@ -63,6 +66,24 @@ public:
 
     void ResetCompactionLevel(const ui32 level) {
         CompactionLevel = level;
+    }
+
+    std::optional<TBlobRangeLink16::TLinkId> GetBlobIdxOptional(const TUnifiedBlobId& blobId) const {
+        AFL_VERIFY(blobId.IsValid());
+        TBlobRangeLink16::TLinkId idx = 0;
+        for (auto&& i : BlobIds) {
+            if (i == blobId) {
+                return idx;
+            }
+            ++idx;
+        }
+        return std::nullopt;
+    }
+
+    TBlobRangeLink16::TLinkId GetBlobIdxVerified(const TUnifiedBlobId& blobId) const {
+        auto result = GetBlobIdxOptional(blobId);
+        AFL_VERIFY(result);
+        return *result;
     }
 
     using EProduced = NPortion::EProduced;

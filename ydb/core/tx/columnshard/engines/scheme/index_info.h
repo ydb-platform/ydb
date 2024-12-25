@@ -80,13 +80,7 @@ private:
         AFL_VERIFY(arrowType.ok());
         auto f = std::make_shared<arrow::Field>(column.Name, arrowType.ValueUnsafe(), !column.NotNull);
         if (cache) {
-            auto fFound = cache->GetField(f->ToString(true));
-            if (!fFound) {
-                cache->RegisterField(f->ToString(true), f);
-                return f;
-            } else {
-                return fFound;
-            }
+            return cache->GetOrInsertField(f);
         } else {
             return f;
         }

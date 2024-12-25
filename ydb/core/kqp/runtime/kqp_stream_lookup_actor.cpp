@@ -39,6 +39,7 @@ public:
         , AllowInconsistentReads(settings.GetAllowInconsistentReads())
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
         , NodeLockId(settings.HasLockNodeId() ? settings.GetLockNodeId() : TMaybe<ui32>())
+        , LockMode(settings.HasLockMode() ? settings.GetLockMode() : TMaybe<NKikimrDataEvents::ELockMode>())
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , LookupStrategy(settings.GetLookupStrategy())
         , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TypeEnv, args.HolderFactory, args.InputDesc))
@@ -498,6 +499,9 @@ private:
 
         if (LockTxId && BrokenLocks.empty()) {
             record.SetLockTxId(*LockTxId);
+            if (LockMode) {
+                record.SetLockMode(*LockMode);
+            }
         }
 
         if (NodeLockId) {
@@ -641,6 +645,7 @@ private:
     const bool AllowInconsistentReads;
     const TMaybe<ui64> LockTxId;
     const TMaybe<ui32> NodeLockId;
+    const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
     std::unordered_map<ui64, TReadState> Reads;
     std::unordered_map<ui64, TShardState> ReadsPerShard;
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;

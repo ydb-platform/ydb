@@ -454,7 +454,7 @@ TAnalyzedTable::TAnalyzedTable(const TPathId& pathId, const std::vector<ui32>& c
 {}
 
 void TAnalyzedTable::ToProto(NKikimrStat::TTable& tableProto) const {
-    PathIdFromPathId(PathId, tableProto.MutablePathId());
+    PathId.ToProto(tableProto.MutablePathId());
     tableProto.MutableColumnTags()->Add(ColumnTags.begin(), ColumnTags.end());
 }
 

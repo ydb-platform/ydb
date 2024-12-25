@@ -7,9 +7,8 @@ $i1 = (
         Input
     WHERE
         a > 'a'
-);
+); -- several publish consumers with same groups
 
--- several publish consumers with same groups
 $i2 = (
     SELECT
         *
@@ -17,9 +16,8 @@ $i2 = (
         Input
     WHERE
         a > 'a1'
-);
+); -- several publish consumers with different groups
 
--- several publish consumers with different groups
 $i3 = (
     SELECT
         *
@@ -27,9 +25,8 @@ $i3 = (
         Input
     WHERE
         a < 'a2'
-);
+); -- several consumers including publish
 
--- several consumers including publish
 $i4 = (
     SELECT
         *
@@ -37,9 +34,8 @@ $i4 = (
         Input
     WHERE
         a != 'a'
-);
+); -- several publish consumers with and without groups
 
--- several publish consumers with and without groups
 -- test column group spec normalization
 INSERT INTO Output1 WITH column_groups = '{g1=[a;b;c];def=#}'
 SELECT

@@ -152,6 +152,7 @@ SRCS(
     execution_unit.h
     execution_unit_ctors.h
     execution_unit_kind.h
+    export_checksum.cpp
     export_common.cpp
     export_iface.cpp
     export_iface.h

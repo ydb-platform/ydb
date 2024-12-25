@@ -3,8 +3,6 @@
 #include "common.h"
 #include "error_code.h"
 
-#include <library/cpp/yt/misc/concepts.h>
-
 // Google Protobuf forward declarations.
 namespace google::protobuf {
 
@@ -101,6 +99,9 @@ DECLARE_REFCOUNTED_CLASS(TAsyncExpiringCacheConfig)
 
 DECLARE_REFCOUNTED_CLASS(TLogDigestConfig)
 DECLARE_REFCOUNTED_CLASS(THistogramDigestConfig)
+
+DECLARE_REFCOUNTED_CLASS(TSingletonsConfig)
+DECLARE_REFCOUNTED_CLASS(TSingletonsDynamicConfig)
 
 class TSignalRegistry;
 

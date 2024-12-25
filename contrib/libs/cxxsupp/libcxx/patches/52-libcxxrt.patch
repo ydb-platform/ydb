@@ -1,5 +1,5 @@
 diff --git a/src/exception.cpp b/src/exception.cpp
-index e5d6b9e..915ab3f 100644
+index ddb186b..6fdf211 100644
 --- a/src/exception.cpp
 +++ b/src/exception.cpp
 @@ -10,7 +10,7 @@
@@ -8,27 +8,27 @@ index e5d6b9e..915ab3f 100644
  
 -#if defined(LIBCXXRT) || defined(LIBCXX_BUILDING_LIBCXXABI)
 +#if defined(LIBCXX_BUILDING_LIBCXXRT) || defined(LIBCXX_BUILDING_LIBCXXABI)
-   #include <cxxabi.h>
-   using namespace __cxxabiv1;
-   #define HAVE_DEPENDENT_EH_ABI 1
-@@ -22,14 +22,13 @@
+ #  include <cxxabi.h>
+ using namespace __cxxabiv1;
+ #  define HAVE_DEPENDENT_EH_ABI 1
+@@ -22,14 +22,13 @@ using namespace __cxxabiv1;
  #elif defined(_LIBCPPABI_VERSION)
- #include "support/runtime/exception_libcxxabi.ipp"
- #include "support/runtime/exception_pointer_cxxabi.ipp"
+ #  include "support/runtime/exception_libcxxabi.ipp"
+ #  include "support/runtime/exception_pointer_cxxabi.ipp"
 -#elif defined(LIBCXXRT)
 +#elif defined(LIBCXX_BUILDING_LIBCXXRT)
- #include "support/runtime/exception_libcxxrt.ipp"
- #include "support/runtime/exception_pointer_cxxabi.ipp"
+ #  include "support/runtime/exception_libcxxrt.ipp"
+ #  include "support/runtime/exception_pointer_cxxabi.ipp"
  #elif defined(__GLIBCXX__)
- #include "support/runtime/exception_glibcxx.ipp"
- #include "support/runtime/exception_pointer_glibcxx.ipp"
+ #  include "support/runtime/exception_glibcxx.ipp"
+ #  include "support/runtime/exception_pointer_glibcxx.ipp"
  #else
--#include "include/atomic_support.h"
- #include "support/runtime/exception_fallback.ipp"
- #include "support/runtime/exception_pointer_unimplemented.ipp"
+-#  include "include/atomic_support.h"
+ #  include "support/runtime/exception_fallback.ipp"
+ #  include "support/runtime/exception_pointer_unimplemented.ipp"
  #endif
 diff --git a/src/support/runtime/exception_libcxxrt.ipp b/src/support/runtime/exception_libcxxrt.ipp
-index 62aa322..4e428d2 100644
+index f17fecc..82f60f5 100644
 --- a/src/support/runtime/exception_libcxxrt.ipp
 +++ b/src/support/runtime/exception_libcxxrt.ipp
 @@ -7,7 +7,7 @@
@@ -37,32 +37,33 @@ index 62aa322..4e428d2 100644
  
 -#ifndef LIBCXXRT
 +#ifndef LIBCXX_BUILDING_LIBCXXRT
- #error this header may only be used when targeting libcxxrt
+ #  error this header may only be used when targeting libcxxrt
  #endif
  
 diff --git a/src/support/runtime/stdexcept_default.ipp b/src/support/runtime/stdexcept_default.ipp
-index 99d3045..d0218bf 100644
+index 1f47a03..f2bb2ea 100644
 --- a/src/support/runtime/stdexcept_default.ipp
 +++ b/src/support/runtime/stdexcept_default.ipp
-@@ -10,7 +10,7 @@
+@@ -9,7 +9,8 @@
+ #include "../../include/refstring.h"
  
  /* For _LIBCPPABI_VERSION */
- #if !defined(_LIBCPP_BUILDING_HAS_NO_ABI_LIBRARY) &&                           \
--    (defined(LIBCXX_BUILDING_LIBCXXABI) || defined(LIBCXXRT))
+-#if !defined(_LIBCPP_BUILDING_HAS_NO_ABI_LIBRARY) && (defined(LIBCXX_BUILDING_LIBCXXABI) || defined(LIBCXXRT))
++#if !defined(_LIBCPP_BUILDING_HAS_NO_ABI_LIBRARY) &&                                                                   \
 +    (defined(LIBCXX_BUILDING_LIBCXXABI) || defined(LIBCXX_BUILDING_LIBCXXRT))
- #include <cxxabi.h>
+ #  include <cxxabi.h>
  #endif
  
 diff --git a/src/typeinfo.cpp b/src/typeinfo.cpp
-index c7f0a70..a98ceb0 100644
+index e5f59da..60230a6 100644
 --- a/src/typeinfo.cpp
 +++ b/src/typeinfo.cpp
-@@ -48,7 +48,7 @@ size_t std::type_info::hash_code() const noexcept {
+@@ -47,7 +47,7 @@ size_t std::type_info::hash_code() const noexcept {
+ #endif // _LIBCPP_ABI_MICROSOFT
  
  // FIXME: Remove the _LIBCPP_BUILDING_HAS_NO_ABI_LIBRARY configuration.
- #if (!defined(LIBCXX_BUILDING_LIBCXXABI) &&               \
--     !defined(LIBCXXRT) &&                                \
-+     !defined(LIBCXX_BUILDING_LIBCXXRT) &&                \
-      !defined(__GLIBCXX__) &&                             \
-      !defined(_LIBCPP_ABI_VCRUNTIME)) ||                  \
+-#if (!defined(LIBCXX_BUILDING_LIBCXXABI) && !defined(LIBCXXRT) && !defined(__GLIBCXX__) &&                             \
++#if (!defined(LIBCXX_BUILDING_LIBCXXABI) && !defined(LIBCXX_BUILDING_LIBCXXRT) && !defined(__GLIBCXX__) &&             \
+      !defined(_LIBCPP_ABI_VCRUNTIME)) ||                                                                               \
      defined(_LIBCPP_BUILDING_HAS_NO_ABI_LIBRARY)
+ std::type_info::~type_info() {}

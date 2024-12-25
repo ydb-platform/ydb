@@ -93,6 +93,7 @@ YT_DEFINE_ERROR_ENUM(
     ((BundleIsBanned)                         (1739))
     ((TabletServantIsNotActive)               (1740))
     ((UniqueIndexConflict)                    (1741))
+    ((TabletReplicationEraMismatch)           (1742))
 );
 
 DEFINE_ENUM(EInMemoryMode,

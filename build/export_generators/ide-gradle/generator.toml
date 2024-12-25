@@ -32,6 +32,8 @@ jar_source_set="list"
 enable_preview="flag"
 use_annotation_processor="list"
 use_errorprone="flag"
+jdk_version="str"
+jdk_path="str"
 
 publish="flag"
 publish_group="str"
@@ -86,4 +88,5 @@ test=[
     "/src/test/java",
     "/src/test-integration",
     "/src/testFixtures",
+    "/src/intTest",
 ]

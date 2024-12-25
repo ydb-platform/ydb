@@ -10,6 +10,8 @@
 
 namespace NFq::NRowDispatcher::NTests {
 
+static constexpr TDuration WAIT_TIMEOUT = TDuration::Seconds(20);
+
 class TBaseFixture : public NUnitTest::TBaseFixture, public TTypeParser {
 public:
     // Helper classes for checking serialized rows in multi type format

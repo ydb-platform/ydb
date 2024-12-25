@@ -32,7 +32,7 @@
                                 "column3";
                                 [
                                     "DataType";
-                                    "Yson"
+                                    "Bool"
                                 ]
                             ];
                             [
@@ -118,12 +118,20 @@
                                     "DataType";
                                     "Yson"
                                 ]
+                            ];
+                            [
+                                "column16";
+                                [
+                                    "DataType";
+                                    "Yson"
+                                ]
                             ]
                         ]
                     ]
                 ];
                 "Data" = [
                     [
+                        %true;
                         %true;
                         %true;
                         %false;

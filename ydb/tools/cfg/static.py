@@ -394,9 +394,18 @@ class StaticConfigGenerator(object):
         if self.host_configs:
             normalized_config["host_configs"] = copy.deepcopy(self.host_configs)
             for host_config in normalized_config["host_configs"]:
+                if 'generation' in host_config:
+                    # inside config.yaml we do not use section generation in host_configs
+                    host_config.pop('generation')
                 if 'drives' in host_config:
                     # inside config.yaml we should use field drive in host_configs section
                     host_config['drive'] = host_config.pop('drives')
+                    for drive in host_config['drive']:
+                        if 'expected_slot_count' in drive:
+                            # inside config.yaml we should use pdisk_config section for expected_slot_count
+                            drive['pdisk_config'] = {
+                                'expected_slot_count': drive.pop('expected_slot_count')
+                            }
 
         if self.table_service_config:
             normalized_config["table_service_config"] = self.table_service_config
@@ -510,10 +519,14 @@ class StaticConfigGenerator(object):
                             if 'pdisk_config' in vdisk_location:
                                 if 'expected_slot_count' in vdisk_location['pdisk_config']:
                                     vdisk_location['pdisk_config']['expected_slot_count'] = int(vdisk_location['pdisk_config']['expected_slot_count'])
-        if 'channel_profile_config' in normalized_config:
-            for profile in normalized_config['channel_profile_config']['profile']:
-                for channel in profile['channel']:
-                    channel['pdisk_category'] = int(channel['pdisk_category'])
+        if self.__cluster_details.channel_profile_config is not None:
+            normalized_config["channel_profile_config"] = self.__cluster_details.channel_profile_config
+        else:
+            if 'channel_profile_config' in normalized_config:
+                for profile in normalized_config['channel_profile_config']['profile']:
+                    for channel in profile['channel']:
+                        print(channel)
+                        channel['pdisk_category'] = int(channel['pdisk_category'])
         if 'system_tablets' in normalized_config:
             for tablets in normalized_config['system_tablets'].values():
                 for tablet in tablets:
@@ -754,6 +767,8 @@ class StaticConfigGenerator(object):
         dc_enumeration = {}
 
         if not self.__cluster_details.get_service("static_groups"):
+            if self.__cluster_details.blob_storage_config:
+                return
             self.__proto_configs["bs.txt"] = self._read_generated_bs_config(
                 str(self.__cluster_details.static_erasure),
                 str(self.__cluster_details.min_fail_domains),
@@ -835,13 +850,17 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.nw_cache_file_path is not None:
             self.__proto_configs["bs.txt"].CacheFilePath = self.__cluster_details.nw_cache_file_path
 
-    def _read_generated_bs_config(self, static_erasure, min_fail_domains, static_pdisk_type, fail_domain_type, bs_format_config):
+    def _read_generated_bs_config(
+        self, static_erasure, min_fail_domains, static_pdisk_type, fail_domain_type, bs_format_config
+    ):
         result = config_pb2.TBlobStorageConfig()
 
-        with tempfile.NamedTemporaryFile(delete=True) as t_file:
+        with tempfile.NamedTemporaryFile(delete=False) as t_file:
             utils.write_proto_to_file(t_file.name, bs_format_config)
 
-            rx_begin, rx_end, dx_begin, dx_end = types.DistinctionLevels[types.FailDomainType.from_string(fail_domain_type)]
+            rx_begin, rx_end, dx_begin, dx_end = types.DistinctionLevels[
+                types.FailDomainType.from_string(fail_domain_type)
+            ]
 
             cmd_base = [
                 self.__local_binary_path,

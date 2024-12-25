@@ -1063,8 +1063,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
         CreateTopic(pqClient, topicName, minActivePartitions, {});
+        CreateTopic(pqClient, topicName, minActivePartitions, {});
 
         TTestClient client(testServer.Port);
+
+        client.AuthenticateToKafka();
 
         {
             // Check list offsets for empty topic
@@ -1951,9 +1954,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
         CreateTopic(pqClient, topic1Name, 10, {});
         CreateTopic(pqClient, topic2Name, 20, {});
+        CreateTopic(pqClient, topic1Name, 10, {});
+        CreateTopic(pqClient, topic2Name, 20, {});
 
         TTestClient client(testServer.Port);
 
+        client.AuthenticateToKafka();
         client.AuthenticateToKafka();
 
         auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);

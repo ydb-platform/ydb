@@ -141,7 +141,7 @@ public:
         CLOG_D(ctx, "Execute: " << PubEv->Get()->ToString());
 
         const auto& record = PubEv->Get()->Record;
-        const auto pathId = PathIdFromPathId(record.GetPathId());
+        const auto pathId = TPathId::FromProto(record.GetPathId());
 
         Replication = Self->Find(pathId);
         if (!Replication) {

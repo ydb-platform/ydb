@@ -42,7 +42,6 @@ public:
     virtual IHttpResponsePtr Finish() = 0;
 };
 
-
 class IHttpClient
 {
 public:
@@ -61,6 +60,34 @@ public:
     {
         return StartRequest(url, requestId, /*config*/ {}, header);
     }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class THttpResponseStream
+    : public IInputStream
+{
+public:
+    THttpResponseStream(IHttpResponsePtr response)
+        : Response_(std::move(response))
+    {
+        Underlying_ = Response_->GetResponseStream();
+    }
+
+private:
+    size_t DoRead(void *buf, size_t len) override
+    {
+        return Underlying_->Read(buf, len);
+    }
+
+    size_t DoSkip(size_t len) override
+    {
+        return Underlying_->Skip(len);
+    }
+
+private:
+    IHttpResponsePtr Response_;
+    IInputStream* Underlying_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

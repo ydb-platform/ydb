@@ -643,10 +643,12 @@ void TPortionDataAccessor::FullValidation() const {
     PortionInfo->FullValidation();
     std::set<ui32> blobIdxs;
     for (auto&& i : GetRecordsVerified()) {
+        TBlobRange::Validate(PortionInfo->GetMeta().GetBlobIds(), i.GetBlobRange()).Validate();
         blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
     }
     for (auto&& i : GetIndexesVerified()) {
         if (auto bRange = i.GetBlobRangeOptional()) {
+            TBlobRange::Validate(PortionInfo->GetMeta().GetBlobIds(), *bRange).Validate();
             blobIdxs.emplace(bRange->GetBlobIdxVerified());
         }
     }

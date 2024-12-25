@@ -68,6 +68,7 @@ public:
 
     void Validate(const NYql::NUdf::TUnboxedValue& parsedValue) const override {
         if (!parsedValue) {
+            UNIT_FAIL("Unexpected NULL value for optional cell");
             return;
         }
         Value->Validate(parsedValue.GetOptionalValue());
@@ -166,7 +167,7 @@ void TBaseFixture::SetUp(NUnitTest::TTestContext&) {
     TAutoPtr<NKikimr::TAppPrepare> app = new NKikimr::TAppPrepare();
     Runtime.SetLogBackend(NActors::CreateStderrBackend());
     Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NActors::NLog::PRI_TRACE);
-    Runtime.SetDispatchTimeout(TDuration::Seconds(5));
+    Runtime.SetDispatchTimeout(WAIT_TIMEOUT);
     Runtime.Initialize(app->Unwrap());
 
     // Init tls context

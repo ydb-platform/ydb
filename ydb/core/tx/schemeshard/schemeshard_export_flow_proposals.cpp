@@ -151,26 +151,20 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
                 ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
             FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
         }
-        auto forFiltered = [](const auto& list, NKikimrSchemeOp::EPathType type, auto func){
-            for (const auto& x : list) {
-                if (x.GetPathType() == type) {
-                    func(x);
+        auto cdcDesc = sourceDescription.GetTable().GetCdcStreams();
+        for (const auto& x : cdcDesc) {
+            TPathId pathId = {sourceDescription.GetTable().GetPathId().GetOwnerId(), x.GetPathId().GetLocalId()};
+            auto cdcPathDesc =  GetDescription(ss, pathId);
+            for (const auto& child : cdcPathDesc.GetChildren()) {
+                if (child.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
+                    TPathId pathId = {child.GetParentPathId(), child.GetPathId()};
+                    ::NKikimrSchemeOp::TPathDescription* newPersQueue = task.MutablePersQueue()->Add();
+                    *newPersQueue = GetDescription(ss, pathId);
                 }
             }
-        };
-        forFiltered(sourceDescription.GetChildren(), NKikimrSchemeOp::EPathTypeCdcStream, 
-            [&ss, &forFiltered, &task](auto x){
-                TPathId pathId = {x.GetSchemeshardId(), x.GetPathId()};
-                auto desc = GetDescription(ss, pathId);
-                forFiltered(desc.GetChildren(), NKikimrSchemeOp::EPathTypePersQueueGroup, 
-                    [&ss, &task](auto y){
-                        TPathId pathId = {y.GetSchemeshardId(), y.GetPathId()};
-                        ::NKikimrSchemeOp::TPathDescription* newPersQueue = task.MutablePersQueue()->Add();
-                        *newPersQueue = GetDescription(ss, pathId);
-                    }
-                );
-            }
-        );
+        }
+        
+        Cerr << "tsz: " << task.GetPersQueue().size() << Endl;
         task.MutableTable()->CopyFrom(sourceDescription);
     }
 

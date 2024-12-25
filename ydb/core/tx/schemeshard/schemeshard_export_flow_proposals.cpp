@@ -146,6 +146,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     const TPath exportItemPath = exportPath.Child(ToString(itemIdx));
     if (sourcePath.IsResolved() && exportItemPath.IsResolved()) {
         auto sourceDescription = GetDescription(ss, sourcePath.Base()->PathId);
+        Cerr << "srcD: " << sourceDescription.DebugString() << Endl;
         if (sourceDescription.HasTable()) {
             FillSetValForSequences(
                 ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
@@ -153,12 +154,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         }
         auto cdcDesc = sourceDescription.GetTable().GetCdcStreams();
         for (const auto& x : cdcDesc) {
-            TPathId pathId = {sourceDescription.GetTable().GetPathId().GetOwnerId(), x.GetPathId().GetLocalId()};
+            TPathId pathId = TPathId::FromProto(x.GetPathId());
             auto cdcPathDesc =  GetDescription(ss, pathId);
             for (const auto& child : cdcPathDesc.GetChildren()) {
                 if (child.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
-                    TPathId pathId = {child.GetParentPathId(), child.GetPathId()};
-                    ::NKikimrSchemeOp::TPathDescription* newPersQueue = task.MutablePersQueue()->Add();
+                    TPathId pathId = {child.GetSchemeshardId(), child.GetPathId()};
+                    ::NKikimrSchemeOp::TPathDescription* newPersQueue = task.AddPersQueue();
                     *newPersQueue = GetDescription(ss, pathId);
                 }
             }

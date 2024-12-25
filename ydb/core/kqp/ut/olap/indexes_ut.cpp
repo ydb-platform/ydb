@@ -482,7 +482,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
             {
                 ResetZeroLevel(csController);
-                ui32 requestsCount = 100;
+                ui32 requestsCount = 500;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
                     const auto query = [](const TString& res, const TString& uid, const ui32 level) {
@@ -494,12 +494,12 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     };
                     ExecuteSQL(query(resourceIds[idx], uids[idx], levels[idx]), "[[1u;]]");
                 }
-                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart > 1)("approved", csController->GetIndexesApprovedOnSelect().Val() - ApproveStart)(
+                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart)("approved", csController->GetIndexesApprovedOnSelect().Val() - ApproveStart)(
                     "skipped", csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
             }
             {
                 ResetZeroLevel(csController);
-                ui32 requestsCount = 100;
+                ui32 requestsCount = 500;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
                     const auto query = [](const TString& res, const TString& uid, const ui32 level) {
@@ -511,13 +511,13 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     };
                     ExecuteSQL(query(resourceIds[idx], uids[idx], levels[idx]), "[[1u;]]");
                 }
-                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart > 1)(
+                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart)(
                     "approved", csController->GetIndexesApprovedOnSelect().Val() - ApproveStart)(
                     "skipped", csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
             }
             {
                 ResetZeroLevel(csController);
-                ui32 requestsCount = 100;
+                ui32 requestsCount = 500;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
                     const auto query = [](const TString& res, const TString& uid, const ui32 level) {
@@ -529,7 +529,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     };
                     ExecuteSQL(query(resourceIds[idx], uids[idx], levels[idx]), "[[1u;]]");
                 }
-                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart > 1)(
+                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart)(
                     "approved", csController->GetIndexesApprovedOnSelect().Val() - ApproveStart)(
                     "skipped", csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
             }

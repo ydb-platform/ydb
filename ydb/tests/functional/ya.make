@@ -16,6 +16,7 @@ RECURSE(
     kv_workload
     large_serializable
     limits
+    minidumps
     postgresql
     query_cache
     rename

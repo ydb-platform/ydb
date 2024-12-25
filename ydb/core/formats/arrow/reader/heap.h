@@ -16,8 +16,14 @@ private:
 public:
     TSortingHeap() = default;
 
-    const TSortCursor& Current() const { return Cursors[Tree[0]]; }
-    TSortCursor& MutableCurrent() { return Cursors[Tree[0]]; }
+    const TSortCursor& Current() const { 
+        Y_ABORT_UNLESS(IsValid());
+        return Cursors[Tree[0]]; 
+    }
+    TSortCursor& MutableCurrent() { 
+        Y_ABORT_UNLESS(IsValid());
+        return Cursors[Tree[0]]; 
+    }
     size_t Size() const { return Capacity() - FreePos.size(); }
     bool Empty() const { return Size() == 0; }
 

@@ -435,7 +435,7 @@ bool TError::HasAttributes() const noexcept
 const TErrorAttributes& TError::Attributes() const
 {
     if (!Impl_) {
-        static TErrorAttributes empty = {};
+        static TErrorAttributes empty;
         return empty;
     }
     return Impl_->Attributes();
@@ -685,6 +685,12 @@ TError& TError::operator <<= (std::vector<TError>&& innerErrors) &
         MutableInnerErrors()->end(),
         std::make_move_iterator(innerErrors.begin()),
         std::make_move_iterator(innerErrors.end()));
+    return *this;
+}
+
+TError& TError::operator <<= (TAnyMergeableDictionaryRef attributes) &
+{
+    MutableAttributes()->MergeFrom(attributes);
     return *this;
 }
 

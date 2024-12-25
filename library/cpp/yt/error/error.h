@@ -202,8 +202,7 @@ public:
     TError& operator <<= (TError&& innerError) &;
     TError& operator <<= (const std::vector<TError>& innerErrors) &;
     TError& operator <<= (std::vector<TError>&& innerErrors) &;
-    template <CMergeableDictionary TDictionary>
-    TError& operator <<= (const TDictionary& attributes) &;
+    TError& operator <<= (TAnyMergeableDictionaryRef attributes) &;
 
     template <CErrorNestable TValue>
     TError&& operator << (TValue&& operand) &&;

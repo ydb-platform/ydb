@@ -78,23 +78,21 @@ typename TOptionalTraits<T>::TOptional TErrorAttributes::FindAndRemove(const TKe
 template <CMergeableDictionary TDictionary>
 void TErrorAttributes::MergeFrom(const TDictionary& dict)
 {
-    using TTraits = TMergeDictionariesTraits<TDictionary>;
-
-    for (const auto& [key, value] : TTraits::MakeIterableView(dict)) {
+    for (auto range = AsMergeableRange(dict); const auto& [key, value] : range) {
         SetValue(key, value);
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <>
-struct TMergeDictionariesTraits<TErrorAttributes>
+namespace NMergeableRangeImpl {
+
+inline TMergeableRange TagInvoke(TTagInvokeTag<AsMergeableRange>, const TErrorAttributes& attributes)
 {
-    static auto MakeIterableView(const TErrorAttributes& attributes)
-    {
-        return attributes.ListPairs();
-    }
-};
+    return attributes.ListPairs();
+}
+
+} // namespace NMergeableRangeImpl
 
 static_assert(CMergeableDictionary<TErrorAttributes>);
 

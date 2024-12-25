@@ -263,7 +263,7 @@ void TestProposeResultLost(TTestActorRuntime& runtime, TActorId client, const TS
     TActorId executer;
     ui32 droppedEvents = 0;
 
-    runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+    auto prev = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
         if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
             auto* fe = ev.Get()->Get<TEvPipeCache::TEvForward>();
             if (fe->Ev->Type() == TEvDataShard::TEvProposeTransaction::EventType) {
@@ -296,6 +296,8 @@ void TestProposeResultLost(TTestActorRuntime& runtime, TActorId client, const TS
     auto& record = ev->Get()->Record.GetRef();
     // Cerr << record.DebugString() << Endl;
     fn(record);
+
+    runtime.SetObserverFunc(prev);
 }
 
 Y_UNIT_TEST(ProposeResultLost_RwTx) {

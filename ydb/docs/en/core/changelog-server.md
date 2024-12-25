@@ -6,7 +6,7 @@ Release date: December 24, 2024.
 
 ### Functionality
 
-* Added a [cost-based optimizer](./concepts/optimizer#cost-based-query-optimizer) for complex queries on columnar tables. The cost-based optimizer considers a large number of alternative execution plans for each query and selects the best one based on the cost estimate for each option. Currently, this optimizer only works with plans that contain [JOIN](./yql/reference/syntax/join) operations.
+* Added a [cost-based optimizer](./concepts/optimizer#cost-based-query-optimizer) for complex queries on columnar tables. The cost-based optimizer considers a large number of alternative execution plans for each query and selects the best one based on the cost estimate for each option. For row-oriented tables, the optimizer can be enabled by [configuring it](./yql/reference/syntax/pragma#costbasedoptimizationlevel) in `table_service_config`. Currently, this optimizer only works with plans that contain [JOIN](./yql/reference/syntax/join) operations.
 * Introduced [query tracing](./reference/observability/tracing/setup), a tool that allows you to view the detailed path of a request through a distributed system.
 * Added support for [asynchronous replication](./concepts/async-replication), that allows synchronizing data between YDB databases in near real time. It can also be used for data migration between databases with minimal downtime for applications interacting with these databases.
 * Extended [federated query](./concepts/federated_query/) capabilities to support new external data sources: MySQL, Microsoft SQL Server, and Greenplum.
@@ -19,7 +19,7 @@ Release date: December 24, 2024.
 * Initial version of the [workload manager](./dev/resource-consumption-management) was implemented. It allows to create resource pools with CPU, memory and active queries count limits. Resource classifiers was implemented to assign queries to specific resource pool.
 * Added support for sessions view for databases. Now you can make a query to find out sessions that was established to the database.
 * Added support literal default values for tables. When inserting a new row in YDB Query default values will be assigned to the column if specified.
-* Added support for returning clause in SQL queries.
+* Added support for returning clause in queries.
 * [Added](https://github.com/ydb-platform/ydb/pull/8708) start/end times and authors in the metadata for backup/restore operations from S3-compatible storage.
 * Added support for backup/restore of ACL for tables from/to S3-compatible storage.
 * Included paths and decompression methods in query plans for reading from S3.
@@ -27,56 +27,56 @@ Release date: December 24, 2024.
 * Added support for changing retention periods in CDC topics.
 * Added support for the Decimal type in [partitioning keys](https://ydb.tech/docs/ru/dev/primary-key/column-oriented#klyuch-particionirovaniya).
 * Improved diagnostics for storage issues in HealthCheck.
-* **_(Experimental)_** Added support for [views](https://ydb.tech/docs/ru/concepts/datamodel/view).
-* **_(Experimental)_** Added an [auto-partitioning mode](./concepts/topic#autopartitioning) for topics, where partitions can dynamically split based on load while preserving message read-order and exactly-once guarantees. [Instructions](https://ydb.tech/docs/ru/yql/reference/syntax/alter-topic#autopartitioning) are provided for managing this mode.
-* **_(Experimental)_** Added support for transactions involving [topics](https://ydb.tech/docs/ru/concepts/topic) and row-based tables, enabling transactional data transfer between tables and topics, or between topics, ensuring no data loss or duplication.
-* **_(Experimental)_** Implemented [automatic index selection](https://ydb.tech/docs/ru/dev/secondary-indexes#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) for queries, which can be enabled via the `index_auto_choose_mode setting` in `table_service_config`.
+* **_(Experimental)_** Added support for [views](./concepts/datamodel/view).
+* **_(Experimental)_** Added an [auto-partitioning mode](./concepts/topic#autopartitioning) for topics, where partitions can dynamically split based on load while preserving message read-order and exactly-once guarantees. [Instructions](./yql/reference/syntax/alter-topic#autopartitioning) are provided for managing this mode.
+* **_(Experimental)_** Added support for transactions involving [topics](./concepts/topic) and row-based tables, enabling transactional data transfer between tables and topics, or between topics, ensuring no data loss or duplication.
+* **_(Experimental)_** Implemented [automatic index selection](./dev/secondary-indexes#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) for queries, which can be enabled via the `index_auto_choose_mode setting` in `table_service_config`.
 * **_(Experimental)_** Added support for write operations to columnar tables.
 
 ### YDB UI
 
 * Added support for creating and [viewing information on](https://github.com/ydb-platform/ydb-embedded-ui/issues/782) asynchronous replication instances.
 * [Added](https://github.com/ydb-platform/ydb-embedded-ui/issues/929) an indicator for [auto-increment columns](./yql/reference/types/serial).
-* [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1438) a page with information about [tablets](./concepts/glossary#tablet).
-* Added a page with details about [distributed storage groups](./concepts/glossary#storage-group).
+* [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1438) a tab with information about [tablets](./concepts/glossary#tablet).
+* [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1289) a tab with details about [distributed storage groups](./concepts/glossary#storage-group).
 * [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1218) a setting to trace all queries and display tracing results.
-* Enhanced the PDisk page with attributes, disk space consumption details, and a button to initiate [disk decommissioning](./devops/manual/decommissioning).
-* Added information about currently running queries.
+* Enhanced the PDisk page with [attributes](https://github.com/ydb-platform/ydb-embedded-ui/pull/1069), disk space consumption details, and a button to initiate [disk decommissioning](./devops/manual/decommissioning).
+* [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1313) information about currently running queries.
 * [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1291) a row limit setting for query editor output and a notification when results exceed the limit.
-* Added a tab to display top CPU-consuming queries over the last hour.
-* Added a control to search the history and saved queries pages.
-* Added the ability to cancel query execution.
+* [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1049) a tab to display top CPU-consuming queries over the last hour.
+* [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1127) a control to search the history and saved queries pages.
+* [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1117) the ability to cancel query execution.
 * [Added](https://github.com/ydb-platform/ydb-embedded-ui/issues/944) a shortcut to save queries in the editor.
-* Added a display of the number of rows retrieved for all queries.
 * [Separated](https://github.com/ydb-platform/ydb-embedded-ui/pull/1422) donor disks from other disks in the UI.
-* Added support for InterruptInheritance ACL and improved visualization of active ACLs.
+* [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1154) support for InterruptInheritance ACL and improved visualization of active ACLs.
 * [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/889) a display of the current UI version.
-* Added support for enabling/disabling experimental database features.
+* [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1229) a tab with experimental database features.
 
 ### Performance
 
+* [Accelerated](https://github.com/ydb-platform/ydb/pull/7589) recovery of tables with secondary indexes from backups up to 20% according to our tests.
+* [Optimized](https://github.com/ydb-platform/ydb/pull/9721) Interconnect throughput.
 * Improved the performance of CDC topics with thousands of partitions.
 * Enhanced the Hive tablet balancing algorithm.
-* Accelerated recovery of tables with secondary indexes from backups.
-* Optimized Interconnect throughput.
 
 ### Bug fixes
 
 * [Fixed](https://github.com/ydb-platform/ydb/pull/6850) an issue that caused databases with a large number of tables or partitions to become non-functional during restoration from a backup. Now, if database size limits are exceeded, the restoration operation will fail, but the database will remain operational.
-* Implemented a mechanism to forcibly trigger background [compaction](./concepts/glossary#compaction) when discrepancies between the data schema and stored data are detected in [DataShard](./concepts/glossary#data-shard). This resolves a rare issue with delays in schema changes.
+* [Implemented](https://github.com/ydb-platform/ydb/pull/11532) a mechanism to forcibly trigger background [compaction](./concepts/glossary#compaction) when discrepancies between the data schema and stored data are detected in [DataShard](./concepts/glossary#data-shard). This resolves a rare issue with delays in schema changes.
 * [Resolved](https://github.com/ydb-platform/ydb/pull/10447) duplication of authentication tickets, which led to an increased number of requests to authentication providers.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/9377) an invariant violation issue during the initial scan of CDC.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/9377) an invariant violation issue during the initial scan of CDC, leading to an abnormal termination of the `ydbd` server process.
 * [Prohibited](https://github.com/ydb-platform/ydb/pull/9446) schema changes for backup tables.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/9509) an issue with an initial scan freezing during CDC when the table is frequently updated.
 * [Excluded](https://github.com/ydb-platform/ydb/pull/9934) deleted indexes from the count against the [maximum index limit](https://ydb.tech/docs/ru/concepts/limits-ydb#schema-object).
 * Fixed a [bug](https://github.com/ydb-platform/ydb/issues/6985) in the display of the scheduled execution time for a set of transactions (planned step).
-* [Fixed](https://github.com/ydb-platform/ydb/pull/9161) a [problem](https://github.com/ydb-platform/ydb/issues/8942) with interruptions in [BGD](https://en.wikipedia.org/wiki/Blue%E2%80%93green_deployment) in large clusters caused by frequent updates to the node list.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/9161) a [problem](https://github.com/ydb-platform/ydb/issues/8942) with interruptions in blue–green deployment in large clusters caused by frequent updates to the node list.
 * [Resolved](https://github.com/ydb-platform/ydb/pull/8925) a rare issue that caused transaction order violations.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/9841) an [issue](https://github.com/ydb-platform/ydb/issues/9797) in the EvWrite API that resulted in incorrect memory deallocation.
 * [Resolved](https://github.com/ydb-platform/ydb/pull/10698) a [problem](https://github.com/ydb-platform/ydb/issues/10674) with volatile transactions hanging after a restart.
-* Eliminated read delays occurring during and after the splitting of certain partitions.
+* Fixed a bug in the CDC, which in some cases leads to increased CPU consumption, up to a core per CDC partition.
+* [Eliminated](https://github.com/ydb-platform/ydb/pull/11061) read delays occurring during and after the splitting of certain partitions.
 * Fixed issues when reading data from S3.
-* Corrected the calculation of the AWS signature for S3 requests.
+* [Corrected](https://github.com/ydb-platform/ydb/pull/4793) the calculation of the AWS signature for S3 requests.
 * Resolved false positives in the HealthCheck system during database backups involving a large number of shards.
 
 ## Version 24.2 {#24-2}

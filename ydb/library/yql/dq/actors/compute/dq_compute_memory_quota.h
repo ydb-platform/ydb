@@ -138,6 +138,9 @@ namespace NYql::NDq {
             memory = std::max(AlignMemorySizeToMbBoundary(memory), MemoryLimits.MinMemAllocSize);
 
             if (MemoryLimits.MkqlProgramHardMemoryLimit && MkqlMemoryLimit + memory > MemoryLimits.MkqlProgramHardMemoryLimit) {
+                auto bt = TBackTrace();
+                bt.Capture();
+                std::cerr << "Hard memory limit\n" << bt.PrintToString();
                 throw THardMemoryLimitException();
             }
 

@@ -290,12 +290,13 @@ public:
     void GrowStates() {
         try {
             States.CheckGrow();
-        } catch (...) {
+        } catch (const TMemoryLimitExceededException&) {
             std::cerr << std::format("[{}] - Exception. IsOutOfMemory = {}, AllowOutOfMemory = {}\n", (const void*)this, IsOutOfMemory, AllowOutOfMemory);
             YQL_LOG(INFO) << "State failed to grow";
             if (IsOutOfMemory || !AllowOutOfMemory) {
                 std::cerr << std::format("[{}] - Rethrowing. Exception\n", (const void*)this);
-                throw;
+                sleep(10);
+                // throw;
             } else {
                 std::cerr << std::format("[{}] - Handle. Exception\n", (const void*)this);
                 IsOutOfMemory = true;
@@ -873,6 +874,7 @@ private:
                     b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 5_MB);
                     b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 5_MB);
                     b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal, false);
+                    std::cerr << std::format("[{}]: Create bucket: {}\n", (const void*)this, (const void*)&b.InMemoryProcessingState);
                 }
                 break;
             }

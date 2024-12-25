@@ -4026,6 +4026,11 @@
             "count": 100
         }
     ],
+    "test_inserts.TestYdbInsertsOperations.test_transactional_update": [
+        {
+            "value": "transactional_update"
+        }
+    ],
     "test_sql.TestYdbKvWorkload.test_dynumber": [
         {
             "column0": 4

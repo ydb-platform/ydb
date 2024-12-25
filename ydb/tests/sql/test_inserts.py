@@ -86,59 +86,59 @@ class TestYdbInsertsOperations(TestBase):
 
         return rows
 
-    # def test_transactional_update(self):
-    #     """
-    #     Test updating data with transaction
-    #     """
-    #     table_name = f"{self.table_path}_transaction"
+    def test_transactional_update(self):
+        """
+        Test updating data with transaction
+        """
+        table_name = f"{self.table_path}_transaction"
 
-    #     self.pool.execute_with_retries(
-    #         f"""
-    #         CREATE TABLE `{table_name}` (
-    #             id Int64 NOT NULL,
-    #             value Utf8 NOT NULL,
-    #             PRIMARY KEY (id)
-    #         )
-    #         PARTITION BY HASH(id)
-    #         WITH(STORE=COLUMN)
-    #         """
-    #     )
+        self.pool.execute_with_retries(
+            f"""
+            CREATE TABLE `{table_name}` (
+                id Int64 NOT NULL,
+                value Utf8 NOT NULL,
+                PRIMARY KEY (id)
+            )
+            PARTITION BY HASH(id)
+            WITH(STORE=COLUMN)
+            """
+        )
 
-    #     # Insert initial data
-    #     self.pool.execute_with_retries(
-    #         f"""
-    #         UPSERT INTO `{table_name}` (id, value) VALUES (1, 'initial_value');
-    #         """
-    #     )
+        # Insert initial data
+        self.query(
+            f"""
+            UPSERT INTO `{table_name}` (id, value) VALUES (1, 'initial_value');
+            """
+        )
 
-    #     # Transactional Update
-    #     with self.driver.table_client.session().create() as session:
-    #         with session.transaction():
-    #             session.execute(
-    #                 f"""
-    #                 UPDATE `{table_name}` SET value = 'transactional_update' WHERE id = 1;
-    #                 """
-    #             )
-    #             session.commit()
+        def process(session):
+            tx = session.transaction().begin()
+            self.query(
+                        f"""
+                        UPDATE `{table_name}` SET value = 'transactional_update' WHERE id = 1;
+                        """,
+                        tx
+                    )
+            tx.commit()
 
-    #     with self.driver.table_client.session().create() as session:
-    #         with session.transaction():
-    #             session.execute(
-    #                 f"""
-    #                 UPDATE `{table_name}` SET value = 'transactional_update_2' WHERE id = 1;
-    #                 """
-    #             )
-    #             session.rollback()
+            tx = session.transaction().begin()
+            self.query(
+                f"""
+                UPDATE `{table_name}` SET value = 'transactional_update_2' WHERE id = 1;
+                """,
+                tx
+            )
+            tx.rollback()
 
-    #     # Verify the update
-    #     result = self.pool.execute_with_retries(
-    #         f"""
-    #         SELECT value FROM `{table_name}` WHERE id = 1;
-    #         """
-    #     )
-    #     rows = result[0].rows
-    #     assert len(rows) == 1, "Expected one row after transaction update"
-    #     assert rows[0].value == 'transactional_update', "Transaction update did not commit properly"
+        # Transactional Update
+        self.transactional(process)
+
+        # Verify the update
+        return self.query(
+            f"""
+            SELECT value FROM `{table_name}` WHERE id = 1;
+            """
+        )
 
     def test_bulk_upsert(self):
         """

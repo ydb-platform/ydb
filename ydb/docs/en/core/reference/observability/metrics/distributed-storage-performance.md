@@ -93,6 +93,6 @@ To compare the performance of Distributed Storage in a cluster with the baseline
 $$
 D = \frac{UserDiskCost + InternalDiskCost + CompactionDiskCost + DefragDiskCost + ScrubDiskCost}{DiskTimeAvailable}
 $$
-Set the `disk_time_available_scale_<used-device-type>` configuration parameter equal to the calculated value of $D$, multiplied by 1000 and rounded. We assume that the physical devices in the user cluster are comparable in performance to the baseline; hence, by default, the `disk_time_available_scale_<used-device-type>` parameter is set to 1000.
+Set the `disk_time_available_scale_<used-device-type>` configuration parameter to the calculated rounded value of $D$, multiplied by 1000. We assume that the physical devices in the user cluster are comparable in performance to the baseline. So the `disk_time_available_scale_<used-device-type>` parameter is set to 1000 by default.
 
 Such a load can be created, for example, using [Storage LoadActor](../../../contributor/load-actors-storage.md).

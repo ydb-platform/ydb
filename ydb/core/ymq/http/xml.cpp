@@ -786,6 +786,21 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
             break;
         }
 
+        case TSqsResponse::kTagQueue: {
+            HANDLE_ERROR(TagQueue);
+            XML_BUILDER() {
+                XML_DOC() {
+                    XML_ELEM("TagQueueResponse") {
+                        XML_ELEM("ResponseMetadata") {
+                            XML_ELEM_CONT("RequestId", resp.GetTagQueue().GetRequestId());
+                        }
+                    }
+                }
+            }
+            result << XML_RESULT();
+            break;
+        }
+
         case TSqsResponse::RESPONSE_NOT_SET: {
             return MakeErrorXmlResponse(NErrors::INTERNAL_FAILURE, nullptr, "Not implemented.");
         }

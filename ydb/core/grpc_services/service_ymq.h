@@ -27,5 +27,6 @@ void DoYmqDeleteMessageBatchRequest(std::unique_ptr<IRequestOpCtx> p, const IFac
 void DoYmqChangeMessageVisibilityBatchRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoYmqListDeadLetterSourceQueuesRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoYmqListQueueTagsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoYmqTagQueueRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 }
 }

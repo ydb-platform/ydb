@@ -563,6 +563,7 @@ message TSqsRequest {
         NKikimr.NSQS.TListDeadLetterSourceQueuesRequest ListDeadLetterSourceQueues = 23;
         NKikimr.NSQS.TCountQueuesRequest CountQueues = 24;
         NKikimr.NSQS.TListQueueTagsRequest ListQueueTags = 25;
+        NKikimr.NSQS.TTagQueueRequest TagQueue = 26;
     }
     optional string RequestId = 30;
     optional bool RequestRateLimit = 31 [default = true];
@@ -595,6 +596,7 @@ message TSqsResponse {
         NKikimr.NSQS.TListDeadLetterSourceQueuesResponse ListDeadLetterSourceQueues = 23;
         NKikimr.NSQS.TCountQueuesResponse CountQueues = 24;
         NKikimr.NSQS.TListQueueTagsResponse ListQueueTags = 25;
+        NKikimr.NSQS.TTagQueueResponse TagQueue = 26;
     }
     optional string RequestId = 30;
     optional string FolderId = 31;

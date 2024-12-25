@@ -1050,6 +1050,8 @@ namespace NKikimr::NHttpProxy {
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibilityBatch);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ListDeadLetterSourceQueues);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ListQueueTags);
+        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(TagQueue);
+        // DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ListQueueTags);
         #undef DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN
     }
 

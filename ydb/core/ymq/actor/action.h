@@ -352,6 +352,7 @@ protected:
                 RESPONSE_CASE(ListDeadLetterSourceQueues)
                 RESPONSE_CASE(CountQueues)
                 RESPONSE_CASE(ListQueueTags)
+                RESPONSE_CASE(TagQueue)
             case NKikimrClient::TSqsResponse::kDeleteQueueBatch:
             case NKikimrClient::TSqsResponse::kGetQueueAttributesBatch:
             case NKikimrClient::TSqsResponse::kPurgeQueueBatch:

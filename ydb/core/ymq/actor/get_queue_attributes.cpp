@@ -221,7 +221,7 @@ private:
                         result->SetRedrivePolicy(redrivePolicy.ToJson());
                     }
                 }
-                
+
                 --WaitCount_;
                 ReplyIfReady();
                 return;

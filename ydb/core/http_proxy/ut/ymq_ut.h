@@ -1139,6 +1139,25 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     Y_UNIT_TEST_F(TestTagQueue, THttpProxyTestMock) {
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
         auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+        auto setTags = NJson::TJsonMap{
+            {"key1", "value1"},
+            {"key2", "value2"},
+        };
+        TagQueue({{"QueueUrl", queueUrl}, {"Tags", setTags}});
+        json = ListQueueTags({{"QueueUrl", queueUrl}});
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMapSafe().size(), 1);
+        UNIT_ASSERT(json["Tags"] == setTags);
+
+        TagQueue({{"QueueUrl", queueUrl}, {"Tags", NJson::TJsonMap{
+            {"key3", "value3"},
+        }}});
+        json = ListQueueTags({{"QueueUrl", queueUrl}});
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMapSafe().size(), 1);
+        UNIT_ASSERT((json["Tags"] == NJson::TJsonMap{
+            {"key1", "value1"},
+            {"key2", "value2"},
+            {"key3", "value3"},
+        }));
     }
 
     Y_UNIT_TEST_F(TestUntagQueue, THttpProxyTestMock) {

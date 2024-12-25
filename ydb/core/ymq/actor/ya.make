@@ -46,6 +46,7 @@ SRCS(
     send_message.cpp
     service.cpp
     set_queue_attributes.cpp
+    tag_queue.cpp
     proxy_service.cpp
     queues_list_reader.cpp
     queue_schema.cpp

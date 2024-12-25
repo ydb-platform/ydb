@@ -584,6 +584,34 @@ const char* const InternalListQueueTagsQuery = R"__(
     )
 )__";
 
+const char* const TagQueueQuery = R"__(
+    (
+        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash          (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+
+        (let tags (Parameter 'TAGS
+            (ListType (StructType
+                '('Key (DataType 'Utf8))
+                '('Value (DataType 'Utf8))))))
+
+        (let tagsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Tags)
+
+        (let res
+            (MapParameter tags (lambda '(tag) (block '(
+                (let key (Member tag 'Key))
+                (let value (Member tag 'Value))
+                (let tagRow '(
+                    '('QueueIdNumberHash queueIdNumberHash)
+                    '('QueueIdNumber queueIdNumber)
+                    '('Key key)))
+                (let tagUpdate '(
+                    '('Value value)))
+                (return (UpdateRow tagsTable tagRow tagUpdate)))))))
+
+        (return (Extend (AsList (Void)) res))
+    )
+)__";
+
 const char* const ListQueuesQuery = R"__(
     (
         (let folderId (Parameter 'FOLDERID  (DataType 'Utf8String)))
@@ -1416,6 +1444,8 @@ const char* GetStdQueryById(size_t id) {
         return GetStateQuery;
     case INTERNAL_LIST_QUEUE_TAGS_ID:
         return InternalListQueueTagsQuery;
+    case TAG_QUEUE_ID:
+        return TagQueueQuery;
     }
     return nullptr;
 }

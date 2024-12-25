@@ -78,6 +78,7 @@ size_t ErrorsCount(const NKikimrClient::TSqsResponse& response, TAPIStatusesCoun
         RESPONSE_CASE(ListDeadLetterSourceQueues)
         RESPONSE_CASE(CountQueues)
         RESPONSE_CASE(ListQueueTags)
+        RESPONSE_CASE(TagQueue)
 
     case NKikimrClient::TSqsResponse::RESPONSE_NOT_SET:
         return 0;

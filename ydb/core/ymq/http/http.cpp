@@ -537,6 +537,7 @@ bool THttpRequest::SetupRequest() {
         HANDLE_SETUP_ACTION_CASE(SendMessageBatch);
         HANDLE_SETUP_ACTION_CASE(SetQueueAttributes);
         HANDLE_SETUP_ACTION_CASE(ListQueueTags);
+        HANDLE_SETUP_ACTION_CASE(TagQueue);
 
         HANDLE_SETUP_PRIVATE_ACTION_CASE(DeleteQueueBatch);
         HANDLE_SETUP_PRIVATE_ACTION_CASE(CountQueues);
@@ -948,6 +949,14 @@ void THttpRequest::SetupSetQueueAttributes(TSetQueueAttributesRequest* const req
 void THttpRequest::SetupListQueueTags(TListQueueTagsRequest* const req) {
     req->SetQueueName(QueueName_);
     req->MutableAuth()->SetUserName(UserName_);
+}
+
+void THttpRequest::SetupTagQueue(TTagQueueRequest* const req) {
+    req->SetQueueName(QueueName_);
+    req->MutableAuth()->SetUserName(UserName_);
+    for (const auto& tag : QueryParams_.Tags) {
+        req->AddTags()->CopyFrom(tag.second);
+    }
 }
 
 void THttpRequest::ExtractSourceAddressFromSocket() {

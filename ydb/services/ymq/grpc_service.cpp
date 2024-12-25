@@ -48,6 +48,7 @@ void TGRpcYmqService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
     ADD_REQUEST(ChangeMessageVisibilityBatch, DoYmqChangeMessageVisibilityBatchRequest, nullptr, Off)
     ADD_REQUEST(ListDeadLetterSourceQueues, DoYmqListDeadLetterSourceQueuesRequest, nullptr, Off)
     ADD_REQUEST(ListQueueTags, DoYmqListQueueTagsRequest, nullptr, Off)
+    ADD_REQUEST(TagQueue, DoYmqTagQueueRequest, nullptr, Off)
 
 #undef ADD_REQUEST
 }

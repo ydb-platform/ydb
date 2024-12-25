@@ -38,12 +38,6 @@ private:
         return Response_.MutableListQueueTags()->MutableError();
     }
 
-    void ReplyIfReady() {
-        if (WaitCount_ == 0) {
-            SendReplyAndDie();
-        }
-    }
-
     void DoAction() override {
         Become(&TThis::StateFunc);
 
@@ -58,11 +52,9 @@ private:
             .RetryOnTimeout()
             .Params()
                 .Uint64("QUEUE_ID_NUMBER", QueueVersion_.GetRef())
-                .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
-            .ParentBuilder().Start();
-        ++WaitCount_;
+                .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_));
 
-        ReplyIfReady();
+        builder.Start();
     }
 
     TString DoGetQueueName() const override {
@@ -73,7 +65,6 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWakeup, HandleWakeup);
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
-            hFunc(TSqsEvents::TEvQueueFolderIdAndCustomName, HandleQueueFolderIdAndCustomName);
         }
     }
 
@@ -83,46 +74,30 @@ private:
         auto* result = Response_.MutableListQueueTags();
         bool queueExists = true;
 
+        // TODO(qyryq) Handle case when the queue does not exist
+
         if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
-            // const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
+            const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
             // Cerr << "XXXXX " << val.DumpToString() << Endl;
-            --WaitCount_;
-            ReplyIfReady();
+            const auto tags = val["tags"];
+            for (size_t i = 0; i < tags.Size(); ++i) {
+                auto* tag = result->AddTags();
+                tag->SetKey(TString(tags[i]["Key"]));
+                tag->SetValue(TString(tags[i]["Value"]));
+            }
+            SendReplyAndDie();
             return;
         }
 
-        RLOG_SQS_ERROR("Get queue tags query failed, queue exists: " << queueExists << ", answer: " << record);
+        RLOG_SQS_ERROR("List queue tags query failed, queue exists: " << queueExists << ", answer: " << record);
         MakeError(result, queueExists ? NErrors::INTERNAL_FAILURE : NErrors::NON_EXISTENT_QUEUE);
         SendReplyAndDie();
-    }
-
-    void HandleQueueFolderIdAndCustomName(TSqsEvents::TEvQueueFolderIdAndCustomName::TPtr& ev) {
-        auto* result = Response_.MutableListQueueTags();
-
-        if (ev->Get()->Throttled) {
-            RLOG_SQS_DEBUG("Get queue folder id and custom name was throttled.");
-            MakeError(result, NErrors::THROTTLING_EXCEPTION);
-            SendReplyAndDie();
-            return;
-        }
-
-        if (ev->Get()->Failed || !ev->Get()->Exists) {
-            RLOG_SQS_DEBUG("Get queue folder id and custom name failed. Failed: " << ev->Get()->Failed << ". Exists: " << ev->Get()->Exists);
-            MakeError(result, NErrors::INTERNAL_FAILURE);
-            SendReplyAndDie();
-            return;
-        }
-
-        --WaitCount_;
-        ReplyIfReady();
     }
 
     const TListQueueTagsRequest& Request() const {
         return SourceSqsRequest_.GetListQueueTags();
     }
 
-private:
-    size_t WaitCount_ = 0;
 };
 
 IActor* CreateListQueueTagsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

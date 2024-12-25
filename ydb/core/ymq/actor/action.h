@@ -615,6 +615,7 @@ private:
         Shards_   = ev->Get()->Shards;
         IsFifo_ = ev->Get()->Fifo;
         QueueAttributes_ = std::move(ev->Get()->QueueAttributes);
+        QueueTags_ = std::move(ev->Get()->QueueTags);
         SchemeCache_ = ev->Get()->SchemeCache;
         SqsCoreCounters_ = std::move(ev->Get()->SqsCoreCounters);
         QueueCounters_ = std::move(ev->Get()->QueueCounters);
@@ -879,6 +880,7 @@ protected:
     TIntrusivePtr<TUserCounters> UserCounters_;
     TIntrusivePtr<TQueueCounters> QueueCounters_;
     TMaybe<TSqsEvents::TQueueAttributes> QueueAttributes_;
+    TMaybe<TSqsEvents::TQueueTags> QueueTags_;
     NKikimrClient::TSqsResponse Response_;
     TActorId SchemeCache_;
     TActorId QueueLeader_;

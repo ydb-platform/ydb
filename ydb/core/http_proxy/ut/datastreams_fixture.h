@@ -546,6 +546,7 @@ private:
         ActorRuntime->SetLogPriority(NKikimrServices::HTTP_PROXY, NLog::PRI_DEBUG);
         ActorRuntime->SetLogPriority(NActorsServices::EServiceCommon::HTTP, NLog::PRI_DEBUG);
         ActorRuntime->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+        ActorRuntime->SetLogPriority(NKikimrServices::SQS, NLog::PRI_TRACE);
 
         if (enableMetering) {
             ActorRuntime->RegisterService(
@@ -584,6 +585,7 @@ private:
            "Columns { Name: \"Version\"            Type: \"Uint64\"}"
            "Columns { Name: \"DlqName\"            Type: \"Utf8\"}"
            "Columns { Name: \"TablesFormat\"       Type: \"Uint32\"}"
+           "Columns { Name: \"Tags\"               Type: \"Utf8\"}"
            "KeyColumnNames: [\"Account\", \"QueueName\"]"
         );
 
@@ -713,15 +715,6 @@ private:
            "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\"]";
         client.CreateTable("/Root/SQS/.STD", attributesTable);
         client.CreateTable("/Root/SQS/.FIFO", attributesTable);
-
-        auto tagsTable = "Name: \"Tags\""
-           "Columns { Name: \"QueueIdNumberHash\"             Type: \"Uint64\"}"
-           "Columns { Name: \"QueueIdNumber\"                 Type: \"Uint64\"}"
-           "Columns { Name: \"Key\"                           Type: \"Utf8\"}"
-           "Columns { Name: \"Value\"                         Type: \"Utf8\"}"
-           "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"Key\"]";
-        client.CreateTable("/Root/SQS/.STD", tagsTable);
-        client.CreateTable("/Root/SQS/.FIFO", tagsTable);
 
         client.CreateTable("/Root/SQS",
            "Name: \".Events\""

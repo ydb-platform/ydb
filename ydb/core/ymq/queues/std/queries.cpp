@@ -538,6 +538,8 @@ const char* const InternalGetQueueAttributesQuery = R"__(
     (
         (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
         (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let name     (Parameter 'NAME (DataType 'Utf8String)))
+        (let userName (Parameter 'USER_NAME (DataType 'Utf8String)))
 
         (let attrsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Attributes)
 
@@ -558,9 +560,22 @@ const char* const InternalGetQueueAttributesQuery = R"__(
 
         (let attrsRead (SelectRow attrsTable attrsRow attrsSelect))
 
+        (let queuesTable ')__" ROOT_PARAM R"__(/.Queues)
+
+        (let queuesRow '(
+            '('Account userName)
+            '('QueueName (Utf8String '")__" QUEUE_NAME_PARAM R"__("))))
+
+        (let queuesRowSelect '(
+            'QueueName
+            'Tags))
+
+        (let queuesRowRead (SelectRow queuesTable queuesRow queuesRowSelect))
+
         (return (AsList
             (SetResult 'queueExists (Exists attrsRead))
-            (SetResult 'attrs attrsRead)))
+            (SetResult 'attrs attrsRead)
+            (SetResult 'tags (Member queuesRowRead 'Tags))))
     )
 )__";
 

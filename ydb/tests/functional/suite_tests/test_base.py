@@ -285,8 +285,6 @@ class BaseSuiteRunner(object):
 
     def assert_statement(self, parsed_statement):
         start_time = time.time()
-        print(f"qqqw_executing: {parsed_statement.s_type}, {parsed_statement.text}")
-
         from_type = {
             StatementDefinition.Type.Ok: self.assert_statement_ok,
             StatementDefinition.Type.Query: self.assert_statement_query,

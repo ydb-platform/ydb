@@ -399,17 +399,15 @@ namespace NYql::NDq {
 
         void AddClause(NConnector::NApi::TPredicate_TDisjunction &disjunction, 
                        ui32 columnsCount, auto&& getter) {
-            NConnector::NApi::TPredicate_TConjunction conjunction;
+            NConnector::NApi::TPredicate_TConjunction& conjunction = *disjunction.mutable_operands()->Add()->mutable_conjunction();
             for (ui32 c = 0; c != columnsCount; ++c) {
-                NConnector::NApi::TPredicate_TComparison eq;
+                NConnector::NApi::TPredicate_TComparison& eq = *conjunction.mutable_operands()->Add()->mutable_comparison();
                 eq.set_operation(NConnector::NApi::TPredicate_TComparison_EOperation::TPredicate_TComparison_EOperation_EQ);
                 eq.mutable_left_value()->set_column(TString(KeyType->GetMemberName(c)));
                 auto rightTypedValue = eq.mutable_right_value()->mutable_typed_value();
                 ExportTypeToProto(KeyType->GetMemberType(c), *rightTypedValue->mutable_type());
                 ExportValueToProto(KeyType->GetMemberType(c), getter(c), *rightTypedValue->mutable_value());
-                *conjunction.mutable_operands()->Add()->mutable_comparison() = eq;
             }
-            *disjunction.mutable_operands()->Add()->mutable_conjunction() = conjunction;
         }
 
         TString FillSelect(NConnector::NApi::TSelect& select) {

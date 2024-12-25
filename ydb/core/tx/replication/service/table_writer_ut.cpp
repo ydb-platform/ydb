@@ -181,6 +181,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
                 TRecord(order++, R"({"resolved":[10,0]})"),
             }));
             UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(ev->Get()->Record.GetVersion()), TRowVersion(10, 0));
+            env.GetRuntime().GrabEdgeEvent<TEvWorker::TEvPoll>(env.GetSender());
         }
 
         env.Send<TEvService::TEvGetTxId>(writer, new TEvWorker::TEvData("TestSource", {
@@ -206,6 +207,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         env.Send<TEvService::TEvHeartbeat>(writer, new TEvWorker::TEvData("TestSource", {
             TRecord(order++, R"({"resolved":[30,0]})"),
         }));
+        env.GetRuntime().GrabEdgeEvent<TEvWorker::TEvPoll>(env.GetSender());
     }
 }
 

@@ -31,5 +31,7 @@ namespace NTable {
         THashMap<ui64, TPartStats> PartsPerTablet;
     };
 
+    using TDbRuntimeStats = TTableRuntimeStats;
+
 }
 }

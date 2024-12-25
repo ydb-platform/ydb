@@ -64,6 +64,12 @@ namespace NTabletFlatExecutor {
     XX(COMPACTION_READ_IN_FLY, "CompactionReadInFly") \
     XX(DB_FLAT_INDEX_BYTES, "DbFlatIndexBytes") \
     XX(DB_B_TREE_INDEX_BYTES, "DbBTreeIndexBytes") \
+    XX(CACHE_TOTAL_USED, "CacheTotalUsed") \
+    XX(DB_OPEN_TX_COUNT, "DbOpenTxCount") \
+    XX(DB_TXS_WITH_DATA_COUNT, "DbTxsWithDataCount") \
+    XX(DB_COMMITTED_TX_COUNT, "DbCommittedTxCount") \
+    XX(DB_REMOVED_TX_COUNT, "DbRemovedTxCount") \
+    XX(DB_REMOVED_COMMITTED_TXS, "DbRemovedCommittedTxs") \
 
 // don't change order!
 #define FLAT_EXECUTOR_CUMULATIVE_COUNTERS_MAP(XX) \

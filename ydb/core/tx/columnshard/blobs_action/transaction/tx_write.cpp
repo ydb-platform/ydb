@@ -43,7 +43,7 @@ bool TTxWrite::DoExecute(TTransactionContext& txc, const TActorContext&) {
     const auto minReadSnapshot = Self->GetMinReadSnapshot();
     for (auto&& aggr : buffer.GetAggregations()) {
         const auto& writeMeta = aggr->GetWriteMeta();
-        Y_ABORT_UNLESS(Self->TablesManager.IsReadyForWrite(writeMeta.GetTableId(), minReadSnapshot));
+        Y_ABORT_UNLESS(Self->TablesManager.IsReadyForFinishWrite(writeMeta.GetTableId(), minReadSnapshot));
         txc.DB.NoMoreReadsForTx();
         TWriteOperation::TPtr operation;
         if (writeMeta.HasLongTxId()) {

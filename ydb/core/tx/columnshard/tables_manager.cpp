@@ -201,34 +201,23 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
     return true;
 }
 
-bool TTablesManager::HasTable(const ui64 pathId, bool withDeleted) const {
-    auto it = Tables.find(pathId);
-    if (it == Tables.end()) {
-        return false;
-    }
-    if (it->second.IsDropped()) {
-        return withDeleted;
-    }
-    return true;
-}
-
-bool TTablesManager::HasTable(const ui64 pathId, const NOlap::TSnapshot& minReadSnapshot) const {
+bool TTablesManager::HasTable(const ui64 pathId, const bool withDeleted, const std::optional<NOlap::TSnapshot> minReadSnapshot) const {
     auto it = Tables.find(pathId);
     if (it == Tables.end()) {
         return false;
     }
     if (it->second.IsDropped(minReadSnapshot)) {
-        return false;
+        return withDeleted;
     }
     return true;
 }
 
-bool TTablesManager::IsReadyForWrite(const ui64 pathId, const bool withDeleted) const {
+bool TTablesManager::IsReadyForStartWrite(const ui64 pathId, const bool withDeleted) const {
     return HasPrimaryIndex() && HasTable(pathId, withDeleted);
 }
 
-bool TTablesManager::IsReadyForWrite(const ui64 pathId, const NOlap::TSnapshot& minReadSnapshot) const {
-    return HasPrimaryIndex() && HasTable(pathId, minReadSnapshot);
+bool TTablesManager::IsReadyForFinishWrite(const ui64 pathId, const NOlap::TSnapshot& minReadSnapshot) const {
+    return HasPrimaryIndex() && HasTable(pathId, false, minReadSnapshot);
 }
 
 bool TTablesManager::HasPreset(const ui32 presetId) const {

@@ -255,10 +255,9 @@ public:
     const TTableInfo& GetTable(const ui64 pathId) const;
     ui64 GetMemoryUsage() const;
 
-    bool HasTable(const ui64 pathId, bool withDeleted = false) const;
-    bool HasTable(const ui64 pathId, const TSnapshot& minReadSnapshot) const;
-    bool IsReadyForWrite(const ui64 pathId, bool withDeleted = false) const;
-    bool IsReadyForWrite(const ui64 pathId, const TSnapshot& minReadSnapshot) const;
+    bool HasTable(const ui64 pathId, const bool withDeleted = false, const std::optional<NOlap::TSnapshot> minReadSnapshot = std::nullopt) const;
+    bool IsReadyForStartWrite(const ui64 pathId, const bool withDeleted) const;
+    bool IsReadyForFinishWrite(const ui64 pathId, const TSnapshot& minReadSnapshot) const;
     bool HasPreset(const ui32 presetId) const;
 
     void DropTable(const ui64 pathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);

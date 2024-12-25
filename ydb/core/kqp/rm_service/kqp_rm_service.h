@@ -187,7 +187,7 @@ public:
         ui64 maxAlloc = TxFailedAllocation.load();
         bool exchanged = false;
 
-        while(maxAlloc < memory && !exchanged) {
+        while(!exchanged) {
             exchanged = TxFailedAllocation.compare_exchange_weak(maxAlloc, memory);
         }
 

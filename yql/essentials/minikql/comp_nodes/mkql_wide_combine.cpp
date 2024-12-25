@@ -17,6 +17,7 @@
 
 #include <util/string/cast.h>
 
+#include <format>
 
 #include <contrib/libs/xxhash/xxhash.h>
 
@@ -244,11 +245,12 @@ private:
         return KeyWidth + StateWidth;
     }
 public:
-    TState(TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal, bool allowOutOfMemory = false)
+    TState(TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal, bool allowOutOfMemory = true)
         : TBase(memInfo), KeyWidth(keyWidth), StateWidth(stateWidth), AllowOutOfMemory(allowOutOfMemory), States(hash, equal, CountRowsOnPage) {
         CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
         CurrentPosition = 0;
         Tongue = CurrentPage->data();
+        // std::cerr << std::format("[{}] - CreateTState. AllowOutOfMemory = {}\n", (const void*)this, allowOutOfMemory);
     }
 
     ~TState() {
@@ -288,11 +290,15 @@ public:
     void GrowStates() {
         try {
             States.CheckGrow();
-        } catch (TMemoryLimitExceededException) {
+        } catch (const TMemoryLimitExceededException&) {
+            std::cerr << std::format("[{}] - Exception. IsOutOfMemory = {}, AllowOutOfMemory = {}\n", (const void*)this, IsOutOfMemory, AllowOutOfMemory);
             YQL_LOG(INFO) << "State failed to grow";
             if (IsOutOfMemory || !AllowOutOfMemory) {
-                throw;
+                std::cerr << std::format("[{}] - Rethrowing. Exception\n", (const void*)this);
+                sleep(10);
+                // throw;
             } else {
+                std::cerr << std::format("[{}] - Handle. Exception\n", (const void*)this);
                 IsOutOfMemory = true;
             }
         }
@@ -320,6 +326,7 @@ public:
         CurrentPosition = 0;
         Tongue = CurrentPage->data();
         StoredDataSize = 0;
+        IsOutOfMemory = 0;
 
         CleanupCurrentContext();
         return true;
@@ -353,12 +360,12 @@ public:
     NUdf::TUnboxedValuePod* Throat = nullptr;
     i64 StoredDataSize = 0;
     NYql::NUdf::TCounter CounterOutputRows_;
+    i64 IsOutOfMemory = 0;
 
 private:
     std::optional<TStorageIterator> ExtractIt;
     const ui32 KeyWidth, StateWidth;
     const bool AllowOutOfMemory;
-    bool IsOutOfMemory = false;
     ui64 CurrentPosition = 0;
     TRow* CurrentPage = nullptr;
     TStorage Storage;
@@ -435,6 +442,9 @@ public:
             TString id = TString(Operator_Aggregation) + "0";
             CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
         }
+        std::cerr << std::format("[{}] SpillingSupportState created. AllowSpilling: {}. InMemoryProcessingState: {}\n",
+                (const void*)this, (allowSpilling && ctx.SpillerFactory), (const void*)&InMemoryProcessingState);
+
     }
 
     EUpdateResult Update() {
@@ -850,23 +860,27 @@ private:
         switch(mode) {
             case EOperatingMode::InMemory: {
                 YQL_LOG(INFO) << "switching Memory mode to InMemory";
+                YQL_LOG(INFO) << "switching Memory mode to InMemory";
                 MKQL_ENSURE(false, "Internal logic error");
                 break;
             }
             case EOperatingMode::SplittingState: {
                 YQL_LOG(INFO) << "switching Memory mode to SplittingState";
+                std::cerr << std::format("[{}]: switching Memory mode to SplittingState\n", (const void*)this);
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 SpilledBuckets.resize(SpilledBucketCount);
                 auto spiller = Ctx.SpillerFactory->CreateSpiller();
                 for (auto &b: SpilledBuckets) {
                     b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 5_MB);
                     b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 5_MB);
-                    b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal);
+                    b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal, false);
+                    std::cerr << std::format("[{}]: Create bucket: {}\n", (const void*)this, (const void*)&b.InMemoryProcessingState);
                 }
                 break;
             }
             case EOperatingMode::Spilling: {
                 YQL_LOG(INFO) << "switching Memory mode to Spilling";
+                std::cerr << std::format("[{}]: switching Memory mode to Spilling\n", (const void*)this);
                 MKQL_ENSURE(EOperatingMode::SplittingState == Mode || EOperatingMode::InMemory == Mode, "Internal logic error");
 
                 Tongue = ViewForKeyAndState.data();
@@ -874,6 +888,7 @@ private:
             }
             case EOperatingMode::ProcessSpilled: {
                 YQL_LOG(INFO) << "switching Memory mode to ProcessSpilled";
+                std::cerr << std::format("[{}]: switching Memory mode to ProcessSpilled\n", (const void*)this);
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
 
@@ -951,6 +966,7 @@ public:
         result.emplace_back(PtrValueType); //tongue
         result.emplace_back(PtrValueType); //throat
         result.emplace_back(StoredType); //StoredDataSize
+        result.emplace_back(StoredType); //IsOutOfMemory
         result.emplace_back(Type::getInt32Ty(Context)); //size
         result.emplace_back(Type::getInt32Ty(Context)); //size
         return result;
@@ -970,6 +986,10 @@ public:
 
     llvm::Constant* GetStored() {
         return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 3);
+    }
+
+    llvm::Constant* GetIsOutOfMemory() {
+        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 4);
     }
 
     TLLVMFieldsStructureState(llvm::LLVMContext& context)
@@ -1003,6 +1023,7 @@ public:
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (state.IsInvalid()) {
             MakeState(ctx, state);
+            std::cerr << std::format("[{}] Non LLVM wide combiner\n", (const void*)this);
         }
 
         while (const auto ptr = static_cast<TState*>(state.AsBoxed().Get())) {
@@ -1048,7 +1069,7 @@ public:
 
                     Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
                     Nodes.ProcessItem(ctx, ptr->TasteIt() ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
-                } while (!ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage - ptr->StoredDataSize));
+                } while (!ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage - ptr->StoredDataSize) && !ptr->CheckIsOutOfMemory());
 
                 ptr->PushStat(ctx.Stats);
             }
@@ -1328,7 +1349,13 @@ public:
             }
 
             const auto check = CheckAdjustedMemLimit<TrackRss>(MemLimit, totalUsed, ctx, block);
-            BranchInst::Create(done, loop, check, block);
+
+            const auto isOutOfMemoryPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetIsOutOfMemory() }, "is_out_of_memory_ptr", block);
+            const auto isOutOfMemory = new LoadInst(storedType, isOutOfMemoryPtr, "is_out_of_memory", block);
+            const auto checkIsOutOfMemory = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, isOutOfMemory, ConstantInt::get(isOutOfMemory->getType(), 0), "check_is_out_of_memory", block);
+
+            const auto any = BinaryOperator::CreateOr(check, checkIsOutOfMemory, "any", block);
+            BranchInst::Create(done, loop, any, block);
 
             block = done;
 
@@ -1383,8 +1410,10 @@ public:
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
 #ifdef MKQL_DISABLE_CODEGEN
+        std::cerr << "DISABL CODEGEN\n";
         state = ctx.HolderFactory.Create<TState>(Nodes.KeyNodes.size(), Nodes.StateNodes.size(), TMyValueHasher(KeyTypes), TMyValueEqual(KeyTypes));
 #else
+        std::cerr << "Enable CODEGEN\n";
         state = ctx.HolderFactory.Create<TState>(Nodes.KeyNodes.size(), Nodes.StateNodes.size(),
             ctx.ExecuteLLVM && Hash ? THashFunc(std::ptr_fun(Hash)) : THashFunc(TMyValueHasher(KeyTypes)),
             ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TMyValueEqual(KeyTypes))
@@ -1396,6 +1425,7 @@ private:
             TString id = TString(Operator_Aggregation) + "0";
             ptr->CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
         }
+        std::cerr << std::format("[{}] MakeState. No spilling\n", (const void*)this);
     }
 
     void RegisterDependencies() const final {
@@ -1472,6 +1502,7 @@ public:
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (state.IsInvalid()) {
             MakeState(ctx, state);
+            std::cerr << std::format("[{}] Non LLVM wide last combiner\n", (const void*)this);
         }
 
         if (const auto ptr = static_cast<TSpillingSupportState*>(state.AsBoxed().Get())) {
@@ -1825,6 +1856,7 @@ private:
             AllowSpilling,
             ctx
         );
+        std::cerr << std::format("[{}] MakeState. AllowSpilling = {}, SpillerFactory = {}\n", (const void*)this, AllowSpilling, (bool)ctx.SpillerFactory);
     }
 
     void RegisterDependencies() const final {
@@ -1980,15 +2012,19 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
 }
 
 IComputationNode* WrapWideCombiner(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    std::cerr << "Create WideCombiner\n";
     return WrapWideCombinerT<false>(callable, ctx, false);
 }
 
 IComputationNode* WrapWideLastCombiner(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    std::cerr << "Create WideLastCombiner. No spilling\n";
     YQL_LOG(INFO) << "Found non-serializable type, spilling is disabled";
     return WrapWideCombinerT<true>(callable, ctx, false);
 }
 
 IComputationNode* WrapWideLastCombinerWithSpilling(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    std::cerr << "Create WideLastCombiner. With spilling\n";
+    YQL_LOG(INFO) << "MISHA WID COMBINER";
     return WrapWideCombinerT<true>(callable, ctx, true);
 }
 

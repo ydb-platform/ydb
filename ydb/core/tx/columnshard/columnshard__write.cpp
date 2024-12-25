@@ -227,7 +227,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::Disabled);
     }
 
-    if (!TablesManager.IsReadyForStartWrite(pathId)) {
+    if (!TablesManager.IsReadyForStartWrite(pathId, false)) {
         LOG_S_NOTICE("Write (fail) into pathId:" << writeMeta.GetTableId() << (TablesManager.HasPrimaryIndex() ? "" : " no index")
                                                  << " at tablet " << TabletID());
 
@@ -547,7 +547,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     const auto pathId = operation.GetTableId().GetTableId();
 
-    if (!TablesManager.IsReadyForStartWrite(pathId)) {
+    if (!TablesManager.IsReadyForStartWrite(pathId, false)) {
         sendError("table not writable", NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR);
         return;
     }

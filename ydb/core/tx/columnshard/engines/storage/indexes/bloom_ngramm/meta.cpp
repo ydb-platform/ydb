@@ -66,9 +66,14 @@ private:
 
     ui64 CalcHash(const char* data, const ui32 size) const {
         if (size == 3) {
-            return ((ui64)data[0]) | (((ui64)data[1]) << 8) | (((ui64)data[2]) << 16);
+            return (*(const ui32*)data) & 0x00FFFFFF;
+//             TStringBuilder sb;
+//             sb << res << "/" << (ui32)((ui8*)&res)[0] << "/" << (ui32)((ui8*)&res)[1] << "/" << (ui32)((ui8*)&res)[2] << "/"
+//                << (ui32)((ui8*)&res)[3] << " vs " << (ui64)data[0] << "/" << (((ui64)data[1])) << "/" << (((ui64)data[2])) << Endl;
+//             Cerr << sb;
+//             return (ui64(*(const ui32*)data)) >> 8;
         } else if (size == 4) {
-            return *(ui32*)&data[0];
+            return *(const ui32*)data;
         } else {
             uint64_t h = 2166136261;
             for (size_t i = 0; i < size; i++) {

@@ -23,26 +23,6 @@ private:
         AFL_VERIFY(NGrammSize > 2);
     }
 
-    static const ui64 HashesConstructorP = ((ui64)2 << 31) - 1;
-    static const ui64 HashesConstructorA = (ui64)2 << 16;
-
-    template <class TActor>
-    void BuildHashesSet(const ui64 originalHash, const TActor& actor) const {
-        AFL_VERIFY(HashesCount < HashesConstructorP);
-        for (ui32 b = 1; b <= HashesCount; ++b) {
-            const ui64 hash = (HashesConstructorA * originalHash + b) % HashesConstructorP;
-            actor(hash);
-        }
-    }
-
-    template <class TContainer, class TActor>
-    void BuildHashesSet(const TContainer& originalHashes, const TActor& actor) const {
-        AFL_VERIFY(HashesCount < HashesConstructorP);
-        for (auto&& hOriginal : originalHashes) {
-            BuildHashesSet(hOriginal, actor);
-        }
-    }
-
 protected:
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& /*newMeta*/) const override {
         return TConclusionStatus::Fail("not supported");

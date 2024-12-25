@@ -15,8 +15,70 @@ namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
 class TNGrammBuilder {
 private:
-    NArrow::NHash::NXX64::TStreamStringHashCalcer HashCalcer;
     TBuffer Zeros;
+    const ui32 HashesCount;
+
+    static const ui64 HashesConstructorP = 9223372036854775783;
+    static const ui64 HashesConstructorA = 1;
+
+    template <int HashIdx>
+    class THashesBuilder {
+    public:
+        template <class TActor>
+        static void Build(const ui64 originalHash, const TActor& actor) {
+            actor((HashesConstructorA * originalHash + HashIdx) % HashesConstructorP);
+        }
+    };
+
+    template <>
+    class THashesBuilder<0> {
+    public:
+        template <class TActor>
+        static void Build(const ui64 /*originalHash*/, const TActor& /*actor*/) {
+        }
+    };
+
+    template <class TActor>
+    void BuildHashesSet(const ui64 originalHash, const TActor& actor) const {
+        if (HashesCount == 1) {
+            THashesBuilder<1>::Build(originalHash, actor);
+        } else if (HashesCount == 2) {
+            THashesBuilder<2>::Build(originalHash, actor);
+        } else if (HashesCount == 3) {
+            THashesBuilder<3>::Build(originalHash, actor);
+        } else if (HashesCount == 4) {
+            THashesBuilder<4>::Build(originalHash, actor);
+        } else if (HashesCount == 5) {
+            THashesBuilder<5>::Build(originalHash, actor);
+        } else if (HashesCount == 6) {
+            THashesBuilder<6>::Build(originalHash, actor);
+        } else if (HashesCount == 7) {
+            THashesBuilder<7>::Build(originalHash, actor);
+        } else if (HashesCount == 8) {
+            THashesBuilder<8>::Build(originalHash, actor);
+        } else {
+            for (ui32 b = 1; b <= HashesCount; ++b) {
+                const ui64 hash = (HashesConstructorA * originalHash + b) % HashesConstructorP;
+                actor(hash);
+            }
+        }
+    }
+
+    ui64 CalcHash(const char* data, const ui32 size) const {
+        if (size == 3) {
+            return ((ui64)data[0]) | (((ui64)data[1]) << 8) | (((ui64)data[2]) << 16);
+        } else if (size == 4) {
+            return *(ui32*)&data[0];
+        } else {
+            uint64_t h = 2166136261;
+            for (size_t i = 0; i < size; i++) {
+                h = h ^ uint64_t(data[i]);
+                h = h * 16777619;
+            }
+            return h;
+        }
+    }
+
     template <class TAction>
     void BuildNGramms(const char* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, const ui32 nGrammSize,
         const TAction& pred) const {
@@ -28,24 +90,26 @@ private:
                 if (fakeStart.size() < nGrammSize) {
                     fakeStart.Append(Zeros.data(), nGrammSize - fakeStart.size());
                 }
-                pred(fakeStart.data());
+                BuildHashesSet(CalcHash(fakeStart.data(), nGrammSize), pred);
             }
         }
         for (ui32 c = 0; c < dataSize; ++c) {
             if (c + nGrammSize <= dataSize) {
-                pred(data + c);
+                pred(CalcHash(data + c, nGrammSize));
             } else if (!op || op == NRequest::TLikePart::EOperation::EndsWith) {
                 TBuffer fakeStart;
                 fakeStart.Append(data + c, dataSize - c);
                 fakeStart.Append(Zeros.data(), nGrammSize - fakeStart.size());
-                pred(fakeStart.data());
+                BuildHashesSet(CalcHash(fakeStart.data(), nGrammSize), pred);
             }
         }
     }
 
 public:
-    TNGrammBuilder()
-        : HashCalcer(0) {
+    TNGrammBuilder(const ui32 hashesCount)
+        : HashesCount(hashesCount)
+    {
+        AFL_VERIFY((ui64)HashesCount < HashesConstructorP);
         Zeros.Fill('\0', 1024);
     }
 
@@ -64,15 +128,7 @@ public:
                 }
                 if constexpr (arrow::has_string_view<T>()) {
                     auto value = typedArray.GetView(row);
-                    if (value.size() < nGrammSize) {
-                        continue;
-                    }
-                    const auto pred = [&](const char* data) {
-                        HashCalcer.Start();
-                        HashCalcer.Update((const ui8*)data, nGrammSize);
-                        fillData(HashCalcer.Finish());
-                    };
-                    BuildNGramms(value.data(), value.size(), {}, nGrammSize, pred);
+                    BuildNGramms(value.data(), value.size(), {}, nGrammSize, fillData);
                 } else {
                     AFL_VERIFY(false);
                 }
@@ -83,33 +139,23 @@ public:
 
     template <class TFiller>
     void FillNGrammHashes(const ui32 nGrammSize, const NRequest::TLikePart::EOperation op, const TString& userReq, const TFiller& fillData) {
-        const auto pred = [&](const char* value) {
-            HashCalcer.Start();
-            HashCalcer.Update((const ui8*)value, nGrammSize);
-            fillData(HashCalcer.Finish());
-        };
-        BuildNGramms(userReq.data(), userReq.size(), op, nGrammSize, pred);
+        BuildNGramms(userReq.data(), userReq.size(), op, nGrammSize, fillData);
     }
 };
 
 TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
-    TNGrammBuilder builder;
+    TNGrammBuilder builder(HashesCount);
 
-    TFixStringBitsStorage bits(FilterSizeBytes * 8);
-
-    const auto pred = [&](const ui64 hash) {
-        const auto predSet = [&](const ui64 hashSecondary) {
-            bits.Set(true, hashSecondary % bits.GetSizeBits());
-        };
-        BuildHashesSet(hash, predSet);
+    std::vector<bool> bitsVector(FilterSizeBytes * 8, false);
+    const auto predSet = [&](const ui64 hashSecondary) {
+        bitsVector[hashSecondary % (FilterSizeBytes * 8)] = true;
     };
     for (reader.Start(); reader.IsCorrect();) {
-        builder.FillNGrammHashes(NGrammSize, reader.begin()->GetCurrentChunk(), pred);
+        builder.FillNGrammHashes(NGrammSize, reader.begin()->GetCurrentChunk(), predSet);
         reader.ReadNext(reader.begin()->GetCurrentChunk()->length());
     }
-
-    return bits.GetData();
+    return TFixStringBitsStorage(bitsVector).GetData();
 }
 
 void TIndexMeta::DoFillIndexCheckers(
@@ -133,16 +179,13 @@ void TIndexMeta::DoFillIndexCheckers(
         }
 
         std::set<ui64> hashes;
-        const auto pred = [&](const ui64 hash) {
-            const auto predSet = [&](const ui64 hashSecondary) {
-                hashes.emplace(hashSecondary);
-            };
-            BuildHashesSet(hash, predSet);
+        const auto predSet = [&](const ui64 hashSecondary) {
+            hashes.emplace(hashSecondary);
         };
-        TNGrammBuilder builder;
+        TNGrammBuilder builder(HashesCount);
         for (auto&& c : foundColumns) {
             for (auto&& ls : c.second.GetLikeSequences()) {
-                builder.FillNGrammHashes(NGrammSize, ls.second.GetOperation(), ls.second.GetValue(), pred);
+                builder.FillNGrammHashes(NGrammSize, ls.second.GetOperation(), ls.second.GetValue(), predSet);
             }
         }
         branch->MutableIndexes().emplace_back(std::make_shared<TFilterChecker>(GetIndexId(), std::move(hashes)));

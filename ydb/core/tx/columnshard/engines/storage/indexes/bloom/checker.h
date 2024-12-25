@@ -11,6 +11,28 @@ public:
         : Data(data)
     {}
 
+    TFixStringBitsStorage(const std::vector<bool>& bitsVector)
+        : TFixStringBitsStorage(bitsVector.size()) {
+        ui32 byteIdx = 0;
+        ui8 byteCurrent = 0;
+        ui8 shiftCurrent = 0;
+        for (ui32 i = 0; i < bitsVector.size(); ++i) {
+            if (i && i % 8 == 0) {
+                Data[byteIdx] = (char)byteCurrent;
+                byteCurrent = 0;
+                shiftCurrent = 1;
+                ++byteIdx;
+            }
+            if (bitsVector[i]) {
+                byteCurrent += shiftCurrent;
+            }
+            shiftCurrent = (shiftCurrent << 1);
+        }
+        if (byteCurrent) {
+            Data[byteIdx] = (char)byteCurrent;
+        }
+    }
+
     ui32 GetSizeBits() const {
         return Data.size() * 8;
     }

@@ -1,6 +1,6 @@
 # Distributed Storage performance metrics
 
-Distributed storage has a specific throughput limited by the resources of physical devices in the cluster and can provide low response times if the load does not exceed this capacity. Performance metrics display the amount of available resources of physical devices and allow for assessing of their consumption level. Tracking the values of performance metrics allows to monitor whether the necessary conditions for low response time guarantees are met, specifically, that the average load does not exceed the available limit and that there are no short-term load bursts.
+Distributed storage throughput is limited by the resources of physical devices in the cluster and can provide low response times if the load does not exceed this capacity. Performance metrics provide information about the amount of available resources of physical devices and allow assessing their consumption level. Tracking the values of performance metrics helps to determine whether the necessary conditions for low response time guarantees are met, specifically, that the average load does not exceed the available limit and that there are no short-term load bursts.
 
 ### Request cost model
 

@@ -105,7 +105,12 @@ public:
         return PathId;
     }
 
+    const NOlap::TSnapshot& GetDropVersionVerified() const {
+        return DropVersion;
+    }
+
     void SetDropVersion(const NOlap::TSnapshot& version) {
+        AFL_VERIFY(!DropVersion)("exists", DropVersion->DebugString())("version", version.DebugString());
         DropVersion = version;
     }
 
@@ -139,7 +144,7 @@ private:
     THashMap<ui64, TTableInfo> Tables;
     THashSet<ui32> SchemaPresetsIds;
     THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
-    THashSet<ui64> PathsToDrop;
+    std::map<TSnapshot, THashSet<ui64>> PathsToDrop;
     THashMap<ui64, NOlap::TTiering> Ttl;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
@@ -166,12 +171,19 @@ public:
         return Ttl;
     }
 
-    const THashSet<ui64>& GetPathsToDrop() const {
+    const std::map<TSnapshot, THashSet<ui64>>& GetPathsToDrop() const {
         return PathsToDrop;
     }
 
-    THashSet<ui64>& MutablePathsToDrop() {
-        return PathsToDrop;
+    THashSet<ui64> GetPathsToDrop(const NOlap::TSnapshot& minReadSnapshot) const {
+        THashSet<ui64> result;
+        for (auto&& i : PathsToDrop) {
+            if (minReadSnapshot < i.first) {
+                break;
+            }
+            result.insert(i.second.begin(), i.second.end());
+        }
+        return result;
     }
 
     const THashMap<ui64, TTableInfo>& GetTables() const {
@@ -237,7 +249,7 @@ public:
     ui64 GetMemoryUsage() const;
 
     bool HasTable(const ui64 pathId, bool withDeleted = false) const;
-    bool IsReadyForWrite(const ui64 pathId) const;
+    bool IsReadyForWrite(const ui64 pathId, bool withDeleted = false) const;
     bool HasPreset(const ui32 presetId) const;
 
     void DropTable(const ui64 pathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);

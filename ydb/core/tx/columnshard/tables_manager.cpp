@@ -60,7 +60,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
                 return false;
             }
             if (table.IsDropped()) {
-                PathsToDrop.insert(table.GetPathId());
+                AFL_VERIFY(PathsToDrop[table.GetDropVersionVerified()].emplace(table.GetPathId()).second);
             }
 
             AFL_VERIFY(Tables.emplace(table.GetPathId(), std::move(table)).second);
@@ -212,8 +212,8 @@ bool TTablesManager::HasTable(const ui64 pathId, bool withDeleted) const {
     return true;
 }
 
-bool TTablesManager::IsReadyForWrite(const ui64 pathId) const {
-    return HasPrimaryIndex() && HasTable(pathId);
+bool TTablesManager::IsReadyForWrite(const ui64 pathId, const bool withDeleted) const {
+    return HasPrimaryIndex() && HasTable(pathId, withDeleted);
 }
 
 bool TTablesManager::HasPreset(const ui32 presetId) const {
@@ -237,7 +237,7 @@ void TTablesManager::DropTable(const ui64 pathId, const NOlap::TSnapshot& versio
     AFL_VERIFY(Tables.contains(pathId));
     auto& table = Tables[pathId];
     table.SetDropVersion(version);
-    PathsToDrop.insert(pathId);
+    AFL_VERIFY(PathsToDrop[version].emplace(pathId).second);
     Ttl.erase(pathId);
     Schema::SaveTableDropVersion(db, pathId, version.GetPlanStep(), version.GetTxId());
 }
@@ -363,13 +363,15 @@ TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& s
 }
 
 bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const ui64 pathId) const {
-    auto itDrop = PathsToDrop.find(pathId);
+    const auto& itTable = Tables.find(pathId);
+    AFL_VERIFY(itTable != Tables.end())("problem", "No schema for path")("path_id", pathId);
+    auto itDrop = PathsToDrop.find(itTable->second.GetDropVersionVerified());
     AFL_VERIFY(itDrop != PathsToDrop.end());
+    AFL_VERIFY(itDrop->second.contains(pathId));
+
     AFL_VERIFY(!GetPrimaryIndexSafe().HasDataInPathId(pathId));
     NIceDb::TNiceDb db(dbTable);
     NColumnShard::Schema::EraseTableInfo(db, pathId);
-    const auto& itTable = Tables.find(pathId);
-    AFL_VERIFY(itTable != Tables.end())("problem", "No schema for path")("path_id", pathId);
     for (auto&& tableVersion : itTable->second.GetVersions()) {
         NColumnShard::Schema::EraseTableVersionInfo(db, pathId, tableVersion);
     }
@@ -377,13 +379,18 @@ bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, co
 }
 
 bool TTablesManager::TryFinalizeDropPathOnComplete(const ui64 pathId) {
-    auto itDrop = PathsToDrop.find(pathId);
-    AFL_VERIFY(itDrop != PathsToDrop.end());
-    AFL_VERIFY(!GetPrimaryIndexSafe().HasDataInPathId(pathId));
-    AFL_VERIFY(MutablePrimaryIndex().ErasePathId(pathId));
-    PathsToDrop.erase(itDrop);
     const auto& itTable = Tables.find(pathId);
     AFL_VERIFY(itTable != Tables.end())("problem", "No schema for path")("path_id", pathId);
+    {
+        auto itDrop = PathsToDrop.find(itTable->second.GetDropVersionVerified());
+        AFL_VERIFY(itDrop != PathsToDrop.end());
+        AFL_VERIFY(itDrop->second.erase(pathId));
+        if (itDrop->second.empty()) {
+            PathsToDrop.erase(itDrop);
+        }
+    }
+    AFL_VERIFY(!GetPrimaryIndexSafe().HasDataInPathId(pathId));
+    AFL_VERIFY(MutablePrimaryIndex().ErasePathId(pathId));
     Tables.erase(itTable);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "TryFinalizeDropPathOnComplete")("path_id", pathId)("size", Tables.size());
     return true;

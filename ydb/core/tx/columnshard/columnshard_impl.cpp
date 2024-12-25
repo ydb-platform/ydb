@@ -1051,8 +1051,10 @@ void TColumnShard::SetupCleanupPortions() {
         return;
     }
 
-    auto changes =
-        TablesManager.MutablePrimaryIndex().StartCleanupPortions(GetMinReadSnapshot(), TablesManager.GetPathsToDrop(), DataLocksManager);
+    const NOlap::TSnapshot minReadSnapshot = GetMinReadSnapshot();
+    THashSet<ui64> pathsToDrop = TablesManager.GetPathsToDrop(minReadSnapshot);
+
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(minReadSnapshot, pathsToDrop, DataLocksManager);
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;
@@ -1077,7 +1079,7 @@ void TColumnShard::SetupCleanupTables() {
     }
 
     THashSet<ui64> pathIdsEmptyInInsertTable;
-    for (auto&& i : TablesManager.GetPathsToDrop()) {
+    for (auto&& i : TablesManager.GetPathsToDrop(GetMinReadSnapshot())) {
         if (InsertTable->HasPathIdData(i)) {
             continue;
         }

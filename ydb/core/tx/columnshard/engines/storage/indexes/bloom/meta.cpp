@@ -55,13 +55,11 @@ void TBloomIndexMeta::DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataF
             hashes.emplace(hash);
         };
         NArrow::NHash::NXX64::TStreamStringHashCalcer calcer(0);
-        for (ui32 i = 0; i < HashesCount; ++i) {
-            calcer.Start();
-            for (auto&& i : foundColumns) {
-                NArrow::NHash::TXX64::AppendField(i.second, calcer);
-            }
-            BuildHashesSet(calcer.Finish(), pred);
+        calcer.Start();
+        for (auto&& i : foundColumns) {
+            NArrow::NHash::TXX64::AppendField(i.second, calcer);
         }
+        BuildHashesSet(calcer.Finish(), pred);
         branch->MutableIndexes().emplace_back(std::make_shared<TBloomFilterChecker>(GetIndexId(), std::move(hashes)));
     }
 }

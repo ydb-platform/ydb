@@ -819,8 +819,8 @@ void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& confi
 void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
                                         const TActorContext& ctx)
 {
-    std::tie(ExecStep, ExecTxId) = TxQueue.front();
-    PQ_LOG_D("New ExecStep " << ExecStep << ", ExecTxId " << ExecTxId);
+//    std::tie(ExecStep, ExecTxId) = TxQueue.front();
+//    PQ_LOG_D("New ExecStep " << ExecStep << ", ExecTxId " << ExecTxId);
 
     switch (tx.Kind) {
     case NKikimrPQ::TTransaction::KIND_DATA:
@@ -999,9 +999,10 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
             Txs.emplace(tx.GetTxId(), tx);
 
             if (tx.HasStep()) {
-                if (std::make_pair(tx.GetStep(), tx.GetTxId()) >= std::make_pair(ExecStep, ExecTxId)) {
-                    PlannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
-                }
+//                if (std::make_pair(tx.GetStep(), tx.GetTxId()) >= std::make_pair(ExecStep, ExecTxId)) {
+//                    PlannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
+//                }
+                PlannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
             }
 
             if (tx.HasWriteId()) {
@@ -2891,7 +2892,10 @@ void TPersQueue::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TA
 
 void TPersQueue::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx)
 {
-    PQ_LOG_D("Handle TEvTabletPipe::TEvClientConnected");
+    PQ_LOG_D("Handle TEvTabletPipe::TEvClientConnected. " <<
+             "Status " << ev->Get()->Status <<
+             ", TabletId " << ev->Get()->TabletId <<
+             ", ClientId " << ev->Get()->ClientId);
 
     Y_ABORT_UNLESS(ev->Get()->Leader, "Unexpectedly connected to follower of tablet %" PRIu64, ev->Get()->TabletId);
 
@@ -2915,13 +2919,15 @@ void TPersQueue::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActo
 
 void TPersQueue::RestartPipe(ui64 tabletId, const TActorContext& ctx)
 {
-    for (auto& txId: GetBindedTxs(tabletId)) {
+    PQ_LOG_D("Restart pipe to tablet " << tabletId);
+    for (const ui64 txId : GetBindedTxs(tabletId)) {
         auto* tx = GetTransaction(ctx, txId);
         if (!tx) {
             continue;
         }
 
         for (auto& message : tx->GetBindedMsgs(tabletId)) {
+            PQ_LOG_D("Resend message " << message.Type << " to tablet " << tabletId);
             PipeClientCache->Send(ctx, tabletId, message.Type, message.Data);
         }
     }
@@ -3114,6 +3120,7 @@ void TPersQueue::SetTxCompleteLagCounter()
 
     if (!TxQueue.empty() && MediatorTimeCastEntry) {
         ui64 firstTxStep = TxQueue.front().first;
+        //ui64 txId = TxQueue.front().second;
         ui64 currentStep = MediatorTimeCastEntry->Get(TabletID());
 
         if (currentStep > firstTxStep) {
@@ -3343,7 +3350,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
     if (auto tx = GetTransaction(ctx, event.GetTxId()); tx && tx->PredicatesReceived.contains(event.GetTabletProducer())) {
         if (tx->State >= NKikimrPQ::TTransaction::EXECUTED) {
             if (ack) {
-                PQ_LOG_D("send TEvReadSetAck to " << event.GetTabletProducer());
+                PQ_LOG_D("TxId " << event.GetTxId() << ". Send TEvReadSetAck to " << event.GetTabletProducer());
                 ctx.Send(ev->Sender, ack.release());
                 return;
             }
@@ -3357,7 +3364,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
             TryWriteTxs(ctx);
         }
     } else if (ack) {
-        PQ_LOG_D("send TEvReadSetAck to " << event.GetTabletProducer());
+        PQ_LOG_D("TxId " << event.GetTxId() << ". Send TEvReadSetAck to " << event.GetTabletProducer());
         //
         // для неизвестных транзакций подтверждение отправляется сразу
         //
@@ -3678,6 +3685,9 @@ void TPersQueue::ProcessPlanStepQueue(const TActorContext& ctx)
                         TryExecuteTxs(ctx, tx);
 
                         TxQueue.emplace_back(step, txId);
+                        PQ_LOG_D("TxId " << tx.TxId << " planned");
+
+                        SetTxCompleteLagCounter();
                     } else {
                         PQ_LOG_W("Transaction already planned for step " << tx.Step <<
                                  ", Step: " << step <<
@@ -3866,7 +3876,7 @@ void TPersQueue::SendEvReadSetToReceivers(const TActorContext& ctx,
     TString body;
     Y_ABORT_UNLESS(data.SerializeToString(&body));
 
-    PQ_LOG_D("Send TEvTxProcessing::TEvReadSet to " << tx.PredicateRecipients.size() << " receivers. Wait TEvTxProcessing::TEvReadSet from " << tx.PredicatesReceived.size() << " senders.");
+    PQ_LOG_D("TxId " << tx.TxId << ". Send TEvReadSet to " << tx.PredicateRecipients.size() << " receivers. Wait TEvReadSet from " << tx.PredicatesReceived.size() << " senders.");
     for (auto& [receiverId, _] : tx.PredicateRecipients) {
         if (receiverId != TabletID()) {
             auto event = std::make_unique<TEvTxProcessing::TEvReadSet>(tx.Step,
@@ -3876,7 +3886,7 @@ void TPersQueue::SendEvReadSetToReceivers(const TActorContext& ctx,
                                                                        TabletID(),
                                                                        body,
                                                                        0);
-            PQ_LOG_D("Send TEvReadSet to tablet " << receiverId);
+            //PQ_LOG_D("Send TEvReadSet to tablet " << receiverId);
             SendToPipe(receiverId, tx, std::move(event), ctx);
         }
     }
@@ -3885,9 +3895,9 @@ void TPersQueue::SendEvReadSetToReceivers(const TActorContext& ctx,
 void TPersQueue::SendEvReadSetAckToSenders(const TActorContext& ctx,
                                            TDistributedTransaction& tx)
 {
-    PQ_LOG_D("TPersQueue::SendEvReadSetAckToSenders");
+    PQ_LOG_D("TxId " << tx.TxId << ". Send TEvReadSetAck to " << tx.ReadSetAcks.size() << " receivers.");
     for (auto& [target, event] : tx.ReadSetAcks) {
-        PQ_LOG_D("Send TEvTxProcessing::TEvReadSetAck " << event->ToString());
+        //PQ_LOG_D("Send TEvTxProcessing::TEvReadSetAck " << event->ToString());
         ctx.Send(target, event.release());
     }
 }
@@ -4387,7 +4397,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
         if (tx.PartitionRepliesCount == tx.PartitionRepliesExpected) {
             SendEvProposeTransactionResult(ctx, tx);
-            PQ_LOG_D("complete TxId " << tx.TxId);
+            PQ_LOG_D("TxId " << tx.TxId << " completed" <<
+                     ", FrontTxId " << TxQueue.front().second);
 
             switch (tx.Kind) {
             case NKikimrPQ::TTransaction::KIND_DATA:
@@ -4417,6 +4428,11 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         Y_ABORT_UNLESS(tx.TxId == TxsOrder[tx.State].front(),
                        "PQ %" PRIu64 ", TxId %" PRIu64 ", FrontTxId %" PRIu64,
                        TabletID(), tx.TxId, TxsOrder[tx.State].front());
+        Y_ABORT_UNLESS(tx.TxId == TxQueue.front().second,
+                       "PQ %" PRIu64 ", TxId %" PRIu64 ", FrontTxId %" PRIu64,
+                       TabletID(), tx.TxId, TxQueue.front().second);
+        TxQueue.pop_front();
+        SetTxCompleteLagCounter();
 
         SendEvReadSetAckToSenders(ctx, tx);
 
@@ -4436,10 +4452,6 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
     case NKikimrPQ::TTransaction::DELETING:
         // The PQ tablet has persisted its state. Now she can delete the transaction and take the next one.
-        if (!TxQueue.empty() && (TxQueue.front().second == tx.TxId)) {
-            TxQueue.pop_front();
-        }
-
         DeleteWriteId(tx.WriteId);
         PQ_LOG_D("delete TxId " << tx.TxId);
         Txs.erase(tx.TxId);

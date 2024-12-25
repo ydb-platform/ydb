@@ -230,6 +230,12 @@ protected:
     std::unique_ptr<TEvPersQueue::TEvRequest> MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
                                                                       const TActorId& pipe) const;
 
+    void TestMultiplePQTablets(const TString& consumer1, const TString& consumer2);
+    void TestParallelTransactions(const TString& consumer1, const TString& consumer2);
+
+    void StartPQCalcPredicateObserver(size_t& received);
+    void WaitForPQCalcPredicate(size_t& received, size_t expected);
+
     //
     // TODO(abcdef): для тестирования повторных вызовов нужны примитивы Send+Wait
     //
@@ -802,10 +808,16 @@ NHelpers::TPQTabletMock* TPQTabletFixture::CreatePQTabletMock(ui64 tabletId)
     return mock;
 }
 
-Y_UNIT_TEST_F(Multiple_PQTablets, TPQTabletFixture)
+void TPQTabletFixture::TestMultiplePQTablets(const TString& consumer1, const TString& consumer2)
 {
+    TVector<std::pair<TString, bool>> consumers;
+    consumers.emplace_back(consumer1, true);
+    if (consumer1 != consumer2) {
+        consumers.emplace_back(consumer2, true);
+    }
+
     NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
-    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    PQTabletPrepare({.partitions=1}, consumers, *Ctx);
 
     const ui64 txId_1 = 67890;
     const ui64 txId_2 = 67891;
@@ -813,7 +825,7 @@ Y_UNIT_TEST_F(Multiple_PQTablets, TPQTabletFixture)
     SendProposeTransactionRequest({.TxId=txId_1,
                                   .Senders={22222}, .Receivers={22222},
                                   .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  {.Partition=0, .Consumer=consumer1, .Begin=0, .End=0, .Path="/topic"},
                                   }});
     WaitProposeTransactionResponse({.TxId=txId_1,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
@@ -821,7 +833,7 @@ Y_UNIT_TEST_F(Multiple_PQTablets, TPQTabletFixture)
     SendProposeTransactionRequest({.TxId=txId_2,
                                   .Senders={22222}, .Receivers={22222},
                                   .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  {.Partition=0, .Consumer=consumer2, .Begin=0, .End=0, .Path="/topic"},
                                   }});
     WaitProposeTransactionResponse({.TxId=txId_2,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
@@ -829,36 +841,125 @@ Y_UNIT_TEST_F(Multiple_PQTablets, TPQTabletFixture)
     SendPlanStep({.Step=100, .TxIds={txId_2}});
     SendPlanStep({.Step=200, .TxIds={txId_1}});
 
-    //
-    // TODO(abcdef): проверить, что в команде CmdWrite есть информация о транзакции
-    //
-
-    WaitPlanStepAck({.Step=100, .TxIds={txId_2}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAck({.Step=100, .TxIds={txId_2}}); // TEvPlanStepAck for Coordinator
     WaitPlanStepAccepted({.Step=100});
 
-    WaitPlanStepAck({.Step=200, .TxIds={txId_1}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAck({.Step=200, .TxIds={txId_1}}); // TEvPlanStepAck for Coordinator
     WaitPlanStepAccepted({.Step=200});
 
-    //
-    // транзакция txId_2
-    //
     WaitReadSet(*tablet, {.Step=100, .TxId=txId_2, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
     tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId_2, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitReadSet(*tablet, {.Step=200, .TxId=txId_1, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=200, .TxId=txId_1, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
 
     WaitProposeTransactionResponse({.TxId=txId_2,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
 
-    tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId_2, .Source=Ctx->TabletId});
-    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId_2, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
+    WaitProposeTransactionResponse({.TxId=txId_1,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+}
 
-    //
-    // TODO(abcdef): проверить, что удалена информация о транзакции
-    //
+Y_UNIT_TEST_F(Multiple_PQTablets_1, TPQTabletFixture)
+{
+    TestMultiplePQTablets("consumer", "consumer");
+}
 
-    //
-    // транзакция txId_1
-    //
-    WaitReadSet(*tablet, {.Step=200, .TxId=txId_1, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+Y_UNIT_TEST_F(Multiple_PQTablets_2, TPQTabletFixture)
+{
+    TestMultiplePQTablets("consumer-1", "consumer-2");
+}
+
+void TPQTabletFixture::TestParallelTransactions(const TString& consumer1, const TString& consumer2)
+{
+    TVector<std::pair<TString, bool>> consumers;
+    consumers.emplace_back(consumer1, true);
+    if (consumer1 != consumer2) {
+        consumers.emplace_back(consumer2, true);
+    }
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
+    PQTabletPrepare({.partitions=1}, consumers, *Ctx);
+
+    const ui64 txId_1 = 67890;
+    const ui64 txId_2 = 67891;
+
+    SendProposeTransactionRequest({.TxId=txId_1,
+                                  .Senders={22222}, .Receivers={22222},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer=consumer1, .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId_1,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendProposeTransactionRequest({.TxId=txId_2,
+                                  .Senders={22222}, .Receivers={22222},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer=consumer2, .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId_2,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    size_t calcPredicateResultCount = 0;
+    StartPQCalcPredicateObserver(calcPredicateResultCount);
+
+    // Transactions are planned in reverse order
+    SendPlanStep({.Step=100, .TxIds={txId_2}});
+    SendPlanStep({.Step=200, .TxIds={txId_1}});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId_2}}); // TEvPlanStepAck for Coordinator
+    WaitPlanStepAccepted({.Step=100});
+
+    WaitPlanStepAck({.Step=200, .TxIds={txId_1}}); // TEvPlanStepAck for Coordinator
+    WaitPlanStepAccepted({.Step=200});
+
+    // The PQ tablet sends to the TEvTxCalcPredicate partition for both transactions
+    WaitForPQCalcPredicate(calcPredicateResultCount, 2);
+
+    // TEvReadSet messages arrive in any order
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=200, .TxId=txId_1, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId_2, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    // Transactions will be executed in the order they were planned
+    WaitProposeTransactionResponse({.TxId=txId_2,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    WaitProposeTransactionResponse({.TxId=txId_1,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+}
+
+void TPQTabletFixture::StartPQCalcPredicateObserver(size_t& received)
+{
+    received = 0;
+
+    auto observer = [&received](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvPQ::TEvTxCalcPredicate>()) {
+            ++received;
+        }
+
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+
+    Ctx->Runtime->SetObserverFunc(observer);
+}
+
+void TPQTabletFixture::WaitForPQCalcPredicate(size_t& received, size_t expected)
+{
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&received, expected]() {
+        return received >= expected;
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+}
+
+Y_UNIT_TEST_F(Parallel_Transactions_1, TPQTabletFixture)
+{
+    TestParallelTransactions("consumer", "consumer");
+}
+
+Y_UNIT_TEST_F(Parallel_Transactions_2, TPQTabletFixture)
+{
+    TestParallelTransactions("consumer-1", "consumer-2");
 }
 
 Y_UNIT_TEST_F(Single_PQTablet_And_Multiple_Partitions, TPQTabletFixture)

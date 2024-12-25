@@ -4279,6 +4279,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     exportInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Exports::StartTime>());
                     exportInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Exports::EndTime>());
+                    exportInfo->EnableChecksums = rowset.GetValueOrDefault<Schema::Exports::EnableChecksums>(false);
 
                     Self->Exports[id] = exportInfo;
                     if (uid) {

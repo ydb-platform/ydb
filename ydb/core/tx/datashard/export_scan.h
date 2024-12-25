@@ -2,6 +2,8 @@
 
 #include "defs.h"
 
+#include "export_checksum.h"
+
 #include <ydb/core/tablet_flat/flat_scan_iface.h>
 
 #include <util/generic/ptr.h>
@@ -32,18 +34,21 @@ struct TEvExportScan {
     struct TEvBuffer: public TEventLocal<TEvBuffer<TBuffer>, EvBuffer> {
         TBuffer Buffer;
         bool Last;
+        TString Checksum;
 
         TEvBuffer() = default;
 
-        explicit TEvBuffer(TBuffer&& buffer, bool last)
+        explicit TEvBuffer(TBuffer&& buffer, bool last, TString&& checksum = "")
             : Buffer(std::move(buffer))
             , Last(last)
+            , Checksum(std::move(checksum))
         {
         }
 
         TString ToString() const override {
             return TStringBuilder() << this->ToStringHeader() << " {"
                 << " Last: " << Last
+                << " Checksum:" << Checksum
             << " }";
         }
     };

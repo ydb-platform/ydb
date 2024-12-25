@@ -49,8 +49,9 @@ class TS3BufferZstd: public TS3BufferRaw {
 
 public:
     explicit TS3BufferZstd(int compressionLevel,
-            const IExport::TTableColumns& columns, ui64 maxRows, ui64 maxBytes, ui64 minBytes)
-        : TS3BufferRaw(columns, maxRows, maxBytes)
+            const IExport::TTableColumns& columns, ui64 maxRows, ui64 maxBytes, ui64 minBytes,
+            bool enableChecksums)
+        : TS3BufferRaw(columns, maxRows, maxBytes, enableChecksums)
         , CompressionLevel(compressionLevel)
         , MinBytes(minBytes)
         , Context(ZSTD_createCCtx())
@@ -67,6 +68,9 @@ public:
             return false;
         }
 
+        if (Checksum) {
+            Checksum->AddData(BufferRaw);
+        }
         BytesRaw += BufferRaw.size();
 
         auto input = ZSTD_inBuffer{BufferRaw.data(), BufferRaw.size(), 0};
@@ -122,9 +126,10 @@ private:
 }; // TS3BufferZstd
 
 NExportScan::IBuffer* CreateS3ExportBufferZstd(int compressionLevel,
-        const IExport::TTableColumns& columns, ui64 maxRows, ui64 maxBytes, ui64 minBytes)
+        const IExport::TTableColumns& columns, ui64 maxRows, ui64 maxBytes, ui64 minBytes,
+        bool enableChecksums)
 {
-    return new TS3BufferZstd(compressionLevel, columns, maxRows, maxBytes, minBytes);
+    return new TS3BufferZstd(compressionLevel, columns, maxRows, maxBytes, minBytes, enableChecksums);
 }
 
 } // NDataShard

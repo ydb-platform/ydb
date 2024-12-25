@@ -2362,7 +2362,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             "olap_table"_a = olapTable
         );
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto db = kikimr->GetQueryClient();
 

@@ -630,7 +630,11 @@ void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
         if (const auto* prev = CommittedTransactions.Find(txId); Y_LIKELY(!prev) || *prev > rowVersion) {
             CommittedTransactions.Add(txId, rowVersion);
             if (!prev) {
-                RemovedTransactions.Remove(txId);
+                if (RemovedTransactions.Remove(txId)) {
+                    // Transaction was in a removed set and now it's committed
+                    // This is not an error in some cases, but may be suspicious
+                    SuspiciousCommits++;
+                }
             }
         }
         if (!TxRefs.contains(txId)) {
@@ -643,6 +647,10 @@ void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
         const ui64 txId = item.GetTxId();
         if (const auto* prev = CommittedTransactions.Find(txId); Y_LIKELY(!prev)) {
             RemovedTransactions.Add(txId);
+        } else {
+            // Transaction is in a committed set but also removed
+            // This is not an error in some cases, but may be suspicious
+            SuspiciousCommits++;
         }
         if (!TxRefs.contains(txId)) {
             CheckTransactions.insert(txId);
@@ -942,7 +950,11 @@ void TTable::CommitTx(ui64 txId, TRowVersion rowVersion)
             if (RollbackState && RemovedTransactions.Contains(txId)) {
                 RollbackOps.emplace_back(TRollbackAddRemovedTx{ txId });
             }
-            RemovedTransactions.Remove(txId);
+            if (RemovedTransactions.Remove(txId)) {
+                // Transaction was in a removed set and now it's committed
+                // This is not an error in some cases, but may be suspicious
+                SuspiciousCommits++;
+            }
         }
         if (auto it = OpenTxs.find(txId); it != OpenTxs.end()) {
             if (RollbackState) {
@@ -980,6 +992,10 @@ void TTable::RemoveTx(ui64 txId)
             }
             OpenTxs.erase(it);
         }
+    } else {
+        // Transaction is in a committed set but also removed
+        // This is not an error in some cases, but may be suspicious
+        SuspiciousCommits++;
     }
 }
 
@@ -1011,6 +1027,32 @@ const absl::flat_hash_set<ui64>& TTable::GetOpenTxs() const
 size_t TTable::GetOpenTxCount() const
 {
     return OpenTxs.size();
+}
+
+size_t TTable::GetTxsWithDataCount() const
+{
+    return TxRefs.size();
+}
+
+size_t TTable::GetCommittedTxCount() const
+{
+    return CommittedTransactions.Size();
+}
+
+size_t TTable::GetRemovedTxCount() const
+{
+    return RemovedTransactions.Size();
+}
+
+TTableRuntimeStats TTable::RuntimeStats() const noexcept
+{
+    return TTableRuntimeStats{
+        .OpenTxCount = OpenTxs.size(),
+        .TxsWithDataCount = TxRefs.size(),
+        .CommittedTxCount = CommittedTransactions.Size(),
+        .RemovedTxCount = RemovedTransactions.Size(),
+        .SuspiciousCommits = SuspiciousCommits,
+    };
 }
 
 TMemTable& TTable::MemTable()

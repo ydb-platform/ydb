@@ -511,6 +511,11 @@ const TDbStats& TDatabase::Counters() const noexcept
     return DatabaseImpl->Stats;
 }
 
+TDbRuntimeStats TDatabase::RuntimeCounters() const noexcept
+{
+    return DatabaseImpl->GetRuntimeStats();
+}
+
 void TDatabase::SetTableObserver(ui32 table, TIntrusivePtr<ITableObserver> ptr) noexcept
 {
     Require(table)->SetTableObserver(std::move(ptr));

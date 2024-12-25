@@ -82,6 +82,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvService::TEvGetTxId, Handle);
         HFunc(TEvService::TEvHeartbeat, Handle);
         HFunc(TEvTxAllocatorClient::TEvAllocateResult, Handle);
+        HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
         HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
     default:
         HandleDefaultEvents(ev, SelfId());

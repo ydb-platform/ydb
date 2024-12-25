@@ -465,6 +465,9 @@ class TLocalTableWriter
 
         if (records) {
             EnqueueRecords(std::move(records));
+        } else if (PendingTxId.empty()) {
+            Y_ABORT_UNLESS(PendingRecords.empty());
+            Send(Worker, new TEvWorker::TEvPoll());
         }
     }
 

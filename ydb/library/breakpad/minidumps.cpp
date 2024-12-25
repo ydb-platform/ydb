@@ -22,7 +22,9 @@ private:
                 char* dumpSucceded = succeeded ? (char *)"true" : (char *)"false";  
                 char* descriptorPath = succeeded ? (char *)descriptor.path() : (char *)"\0";  
                 char* cmd[] = {script, dumpSucceded, descriptorPath, NULL};  
-                execve(cmd[0], &cmd[0], NULL);
+                if (execve(cmd[0], &cmd[0], NULL)) {
+                    fprintf(stderr, "Error while process BREAKPAD MINIDUMPS SCRIPT: execve(%s '%s' '%s' '%s'): %s\n", cmd[0], cmd[1], cmd[2], strerror(errno));
+                }
             }
         }
         return succeeded;

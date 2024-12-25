@@ -287,8 +287,12 @@ private:
 
         RegisterPgTablesSystemViews();
 
-        RegisterSystemView<Schema::Sids>(SidsName);
-        RegisterSystemView<Schema::GroupMembers>(GroupMembersName);
+        {
+            using namespace NAuth;
+            RegisterSystemView<Schema::AuthUsers>(UsersName);
+            RegisterSystemView<Schema::AuthGroups>(NAuth::GroupsName);
+            RegisterSystemView<Schema::AuthGroupMembers>(GroupMembersName);
+        }
     }
 
 private:

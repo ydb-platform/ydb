@@ -14,12 +14,12 @@ namespace NKikimr::NSysView::NAuth {
 using namespace NSchemeShard;
 using namespace NActors;
 
-class TGroupMembersScan : public TAuthScan<TGroupMembersScan> {
+class TGroupsScan : public TAuthScan<TGroupsScan> {
 public:
-    using TScanBase = TScanActorBase<TGroupMembersScan>;
-    using TAuthBase = TAuthScan<TGroupMembersScan>;
+    using TScanBase = TScanActorBase<TGroupsScan>;
+    using TAuthBase = TAuthScan<TGroupsScan>;
 
-    TGroupMembersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TGroupsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
         : TAuthBase(ownerId, scanId, tableId, tableRange, columns)
     {
@@ -36,34 +36,30 @@ protected:
             if (sid.GetType() != NLoginProto::ESidType_SidType_GROUP) {
                 continue;
             }
-            for (const auto& member : sid.GetMembers()) {
-                for (auto& column : Columns) {
-                    switch (column.Tag) {
-                    case Schema::AuthGroupMembers::GroupSid::ColumnId:
-                        cells.push_back(TCell(sid.GetName().data(), sid.GetName().size()));
-                        break;
-                    case Schema::AuthGroupMembers::MemberSid::ColumnId:
-                        cells.push_back(TCell(member.data(), member.size()));
-                        break;
-                    default:
-                        cells.emplace_back();
-                    }
-                }
 
-                TArrayRef<const TCell> ref(cells);
-                batch.Rows.emplace_back(TOwnedCellVec::Make(ref));
-                cells.clear();
+            for (auto& column : Columns) {
+                switch (column.Tag) {
+                case Schema::AuthGroups::Name::ColumnId:
+                    cells.push_back(TCell(sid.GetName().data(), sid.GetName().size()));
+                    break;
+                default:
+                    cells.emplace_back();
+                }
             }
+
+            TArrayRef<const TCell> ref(cells);
+            batch.Rows.emplace_back(TOwnedCellVec::Make(ref));
+            cells.clear();
         }
 
         batch.Finished = true;
     }
 };
 
-THolder<NActors::IActor> CreateGroupMembersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreateGroupsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TGroupMembersScan>(ownerId, scanId, tableId, tableRange, columns);
+    return MakeHolder<TGroupsScan>(ownerId, scanId, tableId, tableRange, columns);
 }
 
 }

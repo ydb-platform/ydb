@@ -1730,7 +1730,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 25);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 26);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -1748,7 +1748,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 19);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 20);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -2135,9 +2135,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
         ])", ysonString);
     }
 
-    Y_UNIT_TEST(Sids) {
+    Y_UNIT_TEST(Users) {
         TTestEnv env;
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
         CreateTenantsAndTables(env, true);
         TTableClient client(env.GetDriver());
 
@@ -2155,12 +2156,11 @@ Y_UNIT_TEST_SUITE(SystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/.sys/sids`
+                FROM `Root/.sys/auth_users`
             )").GetValueSync();
 
             auto expected = R"([
-                [["group"];["group1"]];
-                [["user"];["user1"]];
+                [["user1"]];
             ])";
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
@@ -2169,12 +2169,11 @@ Y_UNIT_TEST_SUITE(SystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/Tenant1/.sys/sids`
+                FROM `Root/Tenant1/.sys/auth_users`
             )").GetValueSync();
 
             auto expected = R"([
-                [["group"];["group2"]];
-                [["user"];["user2"]]
+                [["user2"]]
             ])";
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
@@ -2183,23 +2182,83 @@ Y_UNIT_TEST_SUITE(SystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/Tenant2/.sys/sids`
+                FROM `Root/Tenant2/.sys/auth_users`
             )").GetValueSync();
 
             auto expected = R"([
-                [["group"];["group4"]];
-                [["group"];["group3"]];
-                [["user"];["user4"]];
-                [["user"];["user3"]];
+                [["user4"]];
+                [["user3"]];
             ])";
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
     }
 
+    Y_UNIT_TEST(Sids) {
+        TTestEnv env;
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
+        CreateTenantsAndTables(env, true);
+        TTableClient client(env.GetDriver());
+
+        env.GetClient().CreateUser("/Root", "user1", "password1");
+        env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
+        env.GetClient().CreateUser("/Root/Tenant2", "user3", "password3");
+        env.GetClient().CreateUser("/Root/Tenant2", "user4", "password4");
+        env.GetClient().CreateGroup("/Root", "group1");
+        env.GetClient().CreateGroup("/Root/Tenant1", "group2");
+        env.GetClient().CreateGroup("/Root/Tenant2", "group3");
+        env.GetClient().CreateGroup("/Root/Tenant2", "group4");
+
+        // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/.sys/auth_groups`
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["group1"]];
+            ])";
+
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/Tenant1/.sys/auth_groups`
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["group2"]];
+            ])";
+
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/Tenant2/.sys/auth_groups`
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["group4"]];
+                [["group3"]];
+            ])";
+
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+    }
+
+    
+
     Y_UNIT_TEST(GroupMembers) {
         TTestEnv env;
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
         CreateTenantsAndTables(env, true);
         TTableClient client(env.GetDriver());
 
@@ -2227,7 +2286,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/.sys/group_members`
+                FROM `Root/.sys/auth_group_members`
             )").GetValueSync();
 
             auto expected = R"([
@@ -2240,7 +2299,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/Tenant1/.sys/group_members`
+                FROM `Root/Tenant1/.sys/auth_group_members`
             )").GetValueSync();
 
             auto expected = R"([
@@ -2253,7 +2312,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/Tenant2/.sys/group_members`
+                FROM `Root/Tenant2/.sys/auth_group_members`
             )").GetValueSync();
 
             auto expected = R"([

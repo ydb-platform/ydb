@@ -49,8 +49,11 @@ constexpr TStringBuf PgTablesName = "pg_tables";
 constexpr TStringBuf InformationSchemaTablesName = "tables";
 constexpr TStringBuf PgClassName = "pg_class";
 
-constexpr TStringBuf SidsName = "sids";
-constexpr TStringBuf GroupMembersName = "group_members";
+namespace NAuth {
+    constexpr TStringBuf UsersName = "auth_users";
+    constexpr TStringBuf GroupsName = "auth_groups";
+    constexpr TStringBuf GroupMembersName = "auth_group_members";
+}
 
 
 struct Schema : NIceDb::Schema {
@@ -614,18 +617,25 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct Sids : Table<15> {
+    struct AuthUsers : Table<15> {
         struct Name: Column<1, NScheme::NTypeIds::Utf8> {};
-        struct Kind: Column<2, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Name>;
         using TColumns = TableColumns<
-            Name,
-            Kind
+            Name
         >;
     };
 
-    struct GroupMembers : Table<16> {
+    struct AuthGroups : Table<16> {
+        struct Name: Column<1, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Name>;
+        using TColumns = TableColumns<
+            Name
+        >;
+    };
+
+    struct AuthGroupMembers : Table<17> {
         struct GroupSid: Column<1, NScheme::NTypeIds::Utf8> {};
         struct MemberSid: Column<2, NScheme::NTypeIds::Utf8> {};
 

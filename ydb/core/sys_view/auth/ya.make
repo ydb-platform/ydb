@@ -3,8 +3,10 @@ LIBRARY()
 SRCS(
     group_members.h
     group_members.cpp
-    sids.h
-    sids.cpp
+    users.h
+    users.cpp
+    groups.h
+    groups.cpp
 )
 
 PEERDIR(

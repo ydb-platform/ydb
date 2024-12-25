@@ -76,7 +76,7 @@ class TestHttpApi(TestBase):
             assert len(query_id) == 20
 
             status = client.get_query_status(query_id)
-            assert status in ["FAILED", "STARTING", "RUNNING", "COMPLETED"]
+            assert status in ["STARTING", "RUNNING", "COMPLETED", "COMPLETING"]
 
             wait_for_query_status(client, query_id, ["COMPLETED"])
             query_json = client.get_query(query_id)

@@ -56,6 +56,14 @@ class StatementDefinition:
         self.s_type = type
         self.text = text
 
+    def __str__(self):
+        return f'''StatementDefinition:
+    suite: {self.suite_name}
+    line: {self.at_line}
+    type: {self.s_type}
+    text:
+''' + '\n'.join([f'        {row}' for row in self.text.split('\n')])
+
     @staticmethod
     def _parse_statement_type(statement_line: str) -> Type:
         for t in list(StatementDefinition.Type):
@@ -114,23 +122,26 @@ def get_test_suites(directory):
     return suites
 
 
-def split_by_empty_lines(lines):
+def split_by_statement(lines):
     statement_lines = []
     statement_start_line_idx = 0
     for line_idx, line in lines:
         if line:
-            if not statement_lines:
+            if line.startswith("statement "):
                 statement_start_line_idx = line_idx
-            statement_lines.append(line)
-        elif statement_lines:
-            yield (statement_start_line_idx, statement_lines)
-            statement_lines = []
+                statement_lines = [line]
+            elif statement_lines:
+                statement_lines.append(line)
+        else:
+            if statement_lines:
+                yield (statement_start_line_idx, statement_lines)
+                statement_lines = []
     if statement_lines:
         yield (statement_start_line_idx, statement_lines)
 
 
 def get_statements(suite_path, suite_name):
-    for statement_start_line_idx, statement_lines in split_by_empty_lines(get_lines(suite_path)):
+    for statement_start_line_idx, statement_lines in split_by_statement(get_lines(suite_path)):
         yield StatementDefinition.parse(
             suite_name,
             statement_start_line_idx,

@@ -357,12 +357,12 @@ public:
         Y_UNUSED(status);
         auto* typedResponse = static_cast<TGrpcProtoResponseType*>(resp);
         if (!typedResponse->operation().result().template Is<TGrpcProtoResultType>()) {
-            TStringStream json;                                                                             
-            auto* httpResult = google::protobuf::Arena::CreateMessage<FQHttp::Error>(resp->GetArena());     
-            FqConvert(typedResponse->operation(), *httpResult);                                             
-            FqPackToJson(json, *httpResult, jsonSettings);                                                  
-            requestContext.ResponseBadRequestJson(typedResponse->operation().status(), json.Str());         
-            return;                                                                                         
+            TStringStream json;
+            auto* httpResult = google::protobuf::Arena::CreateMessage<FQHttp::Error>(resp->GetArena());
+            FqConvert(typedResponse->operation(), *httpResult);
+            FqPackToJson(json, *httpResult, jsonSettings);
+            requestContext.ResponseBadRequestJson(typedResponse->operation().status(), json.Str());
+            return;
         }
 
         auto* grpcResult = google::protobuf::Arena::CreateMessage<TGrpcProtoResultType>(resp->GetArena());

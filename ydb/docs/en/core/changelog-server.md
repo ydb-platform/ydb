@@ -6,17 +6,17 @@ Release date: December 24, 2024.
 
 ### Functionality
 
-* Added a [cost-based optimizer](./concepts/optimizer#cost-based-query-optimizer) for complex queries on columnar tables. The cost-based optimizer considers a large number of alternative execution plans for each query and selects the best one based on the cost estimate for each option. For row-oriented tables, the optimizer can be enabled by [configuring it](./yql/reference/syntax/pragma#costbasedoptimizationlevel) in `table_service_config`. Currently, this optimizer only works with plans that contain [JOIN](./yql/reference/syntax/join) operations.
+* Added a [cost-based optimizer](./concepts/optimizer#cost-based-query-optimizer) for complex queries on columnar tables. The cost-based optimizer considers a large number of alternative execution plans for each query and selects the best one based on the cost estimate for each option. For row-oriented tables, the optimizer can be enabled by configuring it in `table_service_config`. Currently, this optimizer only works with plans that contain [JOIN](./yql/reference/syntax/join) operations.
 * Introduced [query tracing](./reference/observability/tracing/setup), a tool that allows you to view the detailed path of a request through a distributed system.
 * Added support for [asynchronous replication](./concepts/async-replication), that allows synchronizing data between YDB databases in near real time. It can also be used for data migration between databases with minimal downtime for applications interacting with these databases.
 * Extended [federated query](./concepts/federated_query/) capabilities to support new external data sources: MySQL, Microsoft SQL Server, and Greenplum.
 * Published [documentation](./devops/manual/federated-queries/connector-deployment) on deploying YDB with [federated query](./concepts/federated_query/) functionality (manual setup).
 * Added a new launch parameter `FQ_CONNECTOR_ENDPOINT` for YDB Docker containers that specifies an external data source connector address. Added support for TLS encryption for connections to the connector and the ability to expose the connector service port locally on the same host as the dynamic YDB node.
-* Added support for [auto-increment](./yql/reference/types/serial) columns as part of a table's primary key.
+* Added support for auto-increment columns as part of a table's primary key.
 * [Implemented](https://github.com/ydb-platform/ydb/pull/7150) [Change Data Capture (CDC)](./concepts/cdc) for synchronous secondary indexes.
 * Added delivery of [Count-min sketch](https://en.wikipedia.org/wiki/Count%E2%80%93min_sketch) statistics for [columnar tables](./concepts/datamodel/table#column-oriented-tables) to the query analyzer.
 * Added audit logging for user login events in YDB, session termination events in the user interface, and backup/restore operations.
-* Initial version of the [workload manager](./dev/resource-consumption-management) was implemented. It allows to create resource pools with CPU, memory and active queries count limits. Resource classifiers was implemented to assign queries to specific resource pool.
+* Initial version of the workload manager was implemented. It allows to create resource pools with CPU, memory and active queries count limits. Resource classifiers was implemented to assign queries to specific resource pool.
 * Added support for sessions view for databases. Now you can make a query to find out sessions that was established to the database.
 * Added support literal default values for tables. When inserting a new row in YDB Query default values will be assigned to the column if specified.
 * Added support for returning clause in queries.
@@ -25,7 +25,7 @@ Release date: December 24, 2024.
 * Included paths and decompression methods in query plans for reading from S3.
 * Added new parsing options for timestamp/datetime fields when reading data from S3.
 * Added support for changing retention periods in CDC topics.
-* Added support for the Decimal type in [partitioning keys](https://ydb.tech/docs/ru/dev/primary-key/column-oriented#klyuch-particionirovaniya).
+* Added support for the Decimal type in [partitioning keys](./dev/primary-key/column-oriented#klyuch-particionirovaniya).
 * Improved diagnostics for storage issues in HealthCheck.
 * **_(Experimental)_** Added support for [views](./concepts/datamodel/view).
 * **_(Experimental)_** Added an [auto-partitioning mode](./concepts/topic#autopartitioning) for topics, where partitions can dynamically split based on load while preserving message read-order and exactly-once guarantees. [Instructions](./yql/reference/syntax/alter-topic#autopartitioning) are provided for managing this mode.
@@ -36,7 +36,7 @@ Release date: December 24, 2024.
 ### YDB UI
 
 * Added support for creating and [viewing information on](https://github.com/ydb-platform/ydb-embedded-ui/issues/782) asynchronous replication instances.
-* [Added](https://github.com/ydb-platform/ydb-embedded-ui/issues/929) an indicator for [auto-increment columns](./yql/reference/types/serial).
+* [Added](https://github.com/ydb-platform/ydb-embedded-ui/issues/929) an indicator for auto-increment columns.
 * [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1438) a tab with information about [tablets](./concepts/glossary#tablet).
 * [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1289) a tab with details about [distributed storage groups](./concepts/glossary#storage-group).
 * [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1218) a setting to trace all queries and display tracing results.
@@ -67,7 +67,7 @@ Release date: December 24, 2024.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/9377) an invariant violation issue during the initial scan of CDC, leading to an abnormal termination of the `ydbd` server process.
 * [Prohibited](https://github.com/ydb-platform/ydb/pull/9446) schema changes for backup tables.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/9509) an issue with an initial scan freezing during CDC when the table is frequently updated.
-* [Excluded](https://github.com/ydb-platform/ydb/pull/9934) deleted indexes from the count against the [maximum index limit](https://ydb.tech/docs/ru/concepts/limits-ydb#schema-object).
+* [Excluded](https://github.com/ydb-platform/ydb/pull/9934) deleted indexes from the count against the [maximum index limit](./concepts/limits-ydb#schema-object).
 * Fixed a [bug](https://github.com/ydb-platform/ydb/issues/6985) in the display of the scheduled execution time for a set of transactions (planned step).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/9161) a [problem](https://github.com/ydb-platform/ydb/issues/8942) with interruptions in blue–green deployment in large clusters caused by frequent updates to the node list.
 * [Resolved](https://github.com/ydb-platform/ydb/pull/8925) a rare issue that caused transaction order violations.

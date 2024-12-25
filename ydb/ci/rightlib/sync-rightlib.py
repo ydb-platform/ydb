@@ -96,8 +96,9 @@ class RightlibSync:
         self.git_run("fetch", "origin", f"pull/{pr.number}/head:PR")
         self.git_run("checkout", self.base_branch)
 
+        commit_msg = f"Merge pull request #{pr.number} from {pr.head.user.login}/{pr.head.ref}"
         try:
-            self.git_run("merge", "PR", "-m", f"merge with {pr.head.ref}")
+            self.git_run("merge", "PR", "-m", commit_msg)
         except subprocess.CalledProcessError:
             self.add_failed_comment(pr, "Unable to merge PR.")
             self.add_pr_failed_label(pr)

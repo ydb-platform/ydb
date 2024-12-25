@@ -3,7 +3,7 @@ import ydb
 import pytest
 
 from concurrent.futures import ThreadPoolExecutor
-from .test_base import TestBase
+from ydb.tests.sql.lib.test_base import TestBase
 
 
 class TestYdbInsertsOperations(TestBase):

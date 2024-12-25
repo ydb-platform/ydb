@@ -69,7 +69,7 @@
 
 ## Distributed Storage performance metrics {#ds-performance}
 
-Метрики производительности Distributed Storage, подробнее читайте в [этой статье](distributed-storage-performance.md).
+Подробнее о метриках производительности Distributed Storage читайте в [этой статье](distributed-storage-performance.md).
 
 | Имя | Описание | Единицы измерения |
 |---|---|---|

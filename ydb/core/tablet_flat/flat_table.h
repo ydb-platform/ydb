@@ -369,7 +369,7 @@ private:
     TTransactionSet DecidedTransactions;
     TIntrusivePtr<ITableObserver> TableObserver;
 
-    ui64 SuspiciousCommits = 0;
+    ui64 RemovedCommittedTxs = 0;
 
 private:
     struct TRollbackRemoveTxRef {

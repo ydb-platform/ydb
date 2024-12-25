@@ -1759,7 +1759,11 @@ public:
 
             ActorIdToProto(SelfId(), ev->Record.MutableSourceActor());
             ev->Record.MutableData()->Swap(&transaction);
-            ev->Record.SetTxId(*TxId);
+
+            if (!isImmediateCommit) {
+                YQL_ENSURE(TxId);
+                ev->Record.SetTxId(*TxId);
+            }
 
             SendTime[tabletId] = TInstant::Now();
             auto traceId = BufferWriteActor.GetTraceId();

@@ -14,13 +14,13 @@ $$
 
 The physical rationale behind the linear dependency is as follows: coefficient $A$ is the time needed for the physical device to access the data, and coefficient $B$ is the time required to read or write one byte of data.
 
-The coefficients $A$ and $B$ depend on the request request and device type. These coefficients were measured experimentally for each device type and each request type.
+The coefficients $A$ and $B$ depend on the request and device types. These coefficients were measured experimentally for each device type and each request type.
 
-In {{ ydb-short-name }}, all physical devices are divided into three types: HDD, SATA SSD (further referred to as SSD), and NVMe SSD (further referred to as NVMe). HDDs are rotating hard drives characterized by high data access time. SSD and NVMe types differ in their interfaces: NVMe provides a higher operation speed.
+In {{ ydb-short-name }}, all physical devices are divided into three types: HDD, SATA SSD (further referred to as SSD), and NVMe SSD (further referred to as NVMe). HDDs are rotating hard drives characterized by high data access time. SSD and NVMe types differ in their interfaces: NVMe provides higher operation speed.
 
 Operations are divided into three types: reads, writes, and huge-writes. The division of writes into regular and huge-writes is due to the specifics of handling write requests on VDisks.
 
-In addition to user requests, the load on distributed storage is created by background processes of compaction, scrubbing, and defragmentation, as well as internal communication between VDisks. The compaction process can create particularly high loads when there is a substantial flow of small blob writes.
+In addition to user requests, the distributed storage is also loaded by the background processes of compaction, scrubbing, and defragmentation, as well as internal communication between VDisks. The compaction process can create particularly high loads when there is a substantial flow of small blob writes.
 
 ### Available disk time {#diskTimeAvailable}
 
@@ -32,7 +32,7 @@ $$
 
 ### Load burst detection {#burstDetection}
 
-A burst is a sharp, short-term increase in the load on a VDisk, which can lead to degradation in the response time of operations. The values of sensors on cluster nodes are collected at certain intervals, for example, every 15 seconds, making it impossible to reliably detect short-term events using only the metrics of request cost and available disk time. A modified [Token Bucket algorithm](https://en.wikipedia.org/wiki/Token_bucket) is used to address this issue. In this modification, the bucket can have a negative number of tokens and such a state is called underflow. Each VDisk is associated with a separate burst detector – a specialized object that monitors load bursts using the aforementioned algorithm. The minimum expected response time, at which an increase in load is considered a burst, is determined by the configurable parameter `BurstThresholdNs`. The bucket will underflow if the calculated time needed to process the requests in nanoseconds exceeds the `BurstThresholdNs` value.
+A burst is a sharp, short-term increase in the load on a VDisk, which may lead to higher response times of operations. The values of sensors on cluster nodes are collected at certain intervals, for example, every 15 seconds, making it impossible to reliably detect short-term events using only the metrics of request cost and available disk time. A modified [Token Bucket algorithm](https://en.wikipedia.org/wiki/Token_bucket) is used to address this issue. In this modification, the bucket can have a negative number of tokens and such a state is called underflow. Each VDisk is associated with a separate burst detector – a specialized object that monitors load bursts using the aforementioned algorithm. The minimum expected response time, at which an increase in load is considered a burst, is determined by the configurable parameter `BurstThresholdNs`. The bucket will underflow if the calculated time needed to process the requests in nanoseconds exceeds the `BurstThresholdNs` value.
 
 ### Performance metrics
 
@@ -45,9 +45,9 @@ Performance metrics are calculated based on the following VDisk sensors:
 | `CompactionDiskCost`  | Total cost of requests the VDisk sends as part of the compaction process.                                                     | arbitrary units   |
 | `DefragDiskCost`      | Total cost of requests the VDisk sends as part of the defragmentation process.                                                | arbitrary units   |
 | `ScrubDiskCost`       | Total cost of requests the VDisk sends as part of the scrubbing process.                                                      | arbitrary units   |
-| `BurstDetector_redMs` | The duration in milliseconds during which the Token Bucket was in the underflow state.                                         | ms                |
+| `BurstDetector_redMs` | Period of time, during which the Token Bucket was in the underflow state.                                         | ms                |
 
-`DiskTimeAvailable` and the request cost are estimates of available and consumed bandwidth, respectively, and not actually measured time. Therefore, both of these values are measured in arbitrary units that, in terms of their physical meaning, are close to nanoseconds.
+`DiskTimeAvailable` and the request cost are estimates of available and consumed bandwidth, respectively, and are not actually measured. Therefore, both of these values are provided in arbitrary units that, in terms of their physical meaning, are close to nanoseconds.
 
 Performance metrics are displayed on a [dedicated Grafana dashboard](grafana-dashboards.md#ds-performance).
 
@@ -55,7 +55,7 @@ Performance metrics are displayed on a [dedicated Grafana dashboard](grafana-das
 
 The {{ ydb-short-name }} distributed storage can ensure low response times only under the following conditions:
 
-1. $DiskTimeAvailable >= UserDiskCost + InternalDiskCost + CompactionDiskCost + DefragDiskCost + ScrubDiskCost$ — The average load does not exceed the maximum allowed.
+1. $DiskTimeAvailable >= UserDiskCost + InternalDiskCost + CompactionDiskCost + DefragDiskCost + ScrubDiskCost$ — The average load does not exceed the maximum allowed load.
 2. $BurstDetector_redMs = 0$ — There are no short-term load bursts, which would lead to request queues on handlers.
 
 ### Performance metrics configuration
@@ -87,7 +87,7 @@ vdisk_controls:
   burst_threshold_ns_hdd: 500000000
 ```
 
-### How to compare the performance of a cluster with the baseline
+### How to compare cluster performance with the baseline
 
 To compare the performance of Distributed Storage in a cluster with the baseline, you need to load the distributed storage with requests to the point where the VDisks cannot process the incoming request flow. At this moment, requests start to queue up, and the response time of the VDisks increases sharply. Compute the value $D$ just before the overload:
 $$

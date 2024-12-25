@@ -69,8 +69,30 @@ TStatus KqpBuildPureExprStagesResult(const TExprNode::TPtr& input, TExprNode::TP
             break;
         }
     }
+
+    std::function<bool(TExprBase)> hasReturning = [&] (TExprBase node) {
+        if (auto effect = node.Maybe<TKqlUpsertRows>()) {
+            return !effect.ReturningColumns().Cast().Empty();
+        }
+        if (auto effect = node.Maybe<TKqlDeleteRows>()) {
+            return !effect.ReturningColumns().Cast().Empty();
+        }
+        if (auto effect = node.Maybe<TExprList>()) {
+            for (auto item : effect.Cast()) {
+                if (hasReturning(item)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
     for (const auto& effect : query.Effects()) {
         if (!hasPrecomputes(effect)) {
+            omitResultPrecomputes = false;
+            break;
+        }
+        if (hasReturning(effect)) {
             omitResultPrecomputes = false;
             break;
         }

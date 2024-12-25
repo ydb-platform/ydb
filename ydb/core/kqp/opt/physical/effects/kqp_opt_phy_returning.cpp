@@ -156,9 +156,9 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         auto inputExpr = Build<TCoExtractMembers>(ctx, pos)
             .Input(input.Cast())
             .Members(returning.Columns())
-            .Done().Ptr();
+            .Done();
 
-        return TExprBase(ctx.ChangeChild(*returning.Raw(), TKqlReturningList::idx_Update, std::move(inputExpr)));
+        return TExprBase(ctx.ChangeChild(*returning.Raw(), TKqlReturningList::idx_Update, inputExpr.Ptr()));
     };
 
     if (auto maybeList = returning.Update().Maybe<TExprList>()) {
@@ -200,9 +200,6 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimiz
 
 TExprBase KqpRewriteReturningUpsert(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext&) {
     auto upsert = node.Cast<TKqlUpsertRows>();
-    if (upsert.ReturningColumns().Empty()) {
-        return node;
-    }
 
     if (upsert.Input().Maybe<TDqPrecompute>() || upsert.Input().Maybe<TDqPhyPrecompute>()) {
         return node;
@@ -216,15 +213,12 @@ TExprBase KqpRewriteReturningUpsert(TExprBase node, TExprContext& ctx, const TKq
             .Table(upsert.Table())
             .Columns(upsert.Columns())
             .Settings(upsert.Settings())
-            .ReturningColumns<TCoAtomList>().Build()
+            .ReturningColumns(upsert.ReturningColumns())
             .Done();
 }
 
 TExprBase KqpRewriteReturningDelete(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext&) {
     auto del = node.Cast<TKqlDeleteRows>();
-    if (del.ReturningColumns().Empty()) {
-        return node;
-    }
 
     if (del.Input().Maybe<TDqPrecompute>() || del.Input().Maybe<TDqPhyPrecompute>()) {
         return node;
@@ -236,7 +230,7 @@ TExprBase KqpRewriteReturningDelete(TExprBase node, TExprContext& ctx, const TKq
                 .Input(del.Input())
                 .Build()
             .Table(del.Table())
-            .ReturningColumns<TCoAtomList>().Build()
+            .ReturningColumns(del.ReturningColumns())
             .Done();
 }
 

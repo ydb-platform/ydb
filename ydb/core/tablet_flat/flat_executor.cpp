@@ -3615,7 +3615,7 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
                 Counters->Simple()[TExecutorCounters::DB_TXS_WITH_DATA_COUNT].Set(runtimeCounters.TxsWithDataCount);
                 Counters->Simple()[TExecutorCounters::DB_COMMITTED_TX_COUNT].Set(runtimeCounters.CommittedTxCount);
                 Counters->Simple()[TExecutorCounters::DB_REMOVED_TX_COUNT].Set(runtimeCounters.RemovedTxCount);
-                Counters->Simple()[TExecutorCounters::DB_SUSPICIOUS_COMMITS].Set(runtimeCounters.SuspiciousCommits);
+                Counters->Simple()[TExecutorCounters::DB_REMOVED_COMMITTED_TXS].Set(runtimeCounters.RemovedCommittedTxs);
             }
 
             if (CommitManager) /* exists only on leader, mostly storage usage data */ {

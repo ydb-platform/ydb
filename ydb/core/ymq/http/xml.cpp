@@ -801,6 +801,21 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
             break;
         }
 
+        case TSqsResponse::kUntagQueue: {
+            HANDLE_ERROR(UntagQueue);
+            XML_BUILDER() {
+                XML_DOC() {
+                    XML_ELEM("UntagQueueResponse") {
+                        XML_ELEM("ResponseMetadata") {
+                            XML_ELEM_CONT("RequestId", resp.GetUntagQueue().GetRequestId());
+                        }
+                    }
+                }
+            }
+            result << XML_RESULT();
+            break;
+        }
+
         case TSqsResponse::RESPONSE_NOT_SET: {
             return MakeErrorXmlResponse(NErrors::INTERNAL_FAILURE, nullptr, "Not implemented.");
         }

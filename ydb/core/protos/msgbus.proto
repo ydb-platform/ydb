@@ -564,6 +564,7 @@ message TSqsRequest {
         NKikimr.NSQS.TCountQueuesRequest CountQueues = 24;
         NKikimr.NSQS.TListQueueTagsRequest ListQueueTags = 25;
         NKikimr.NSQS.TTagQueueRequest TagQueue = 26;
+        NKikimr.NSQS.TUntagQueueRequest UntagQueue = 27;
     }
     optional string RequestId = 30;
     optional bool RequestRateLimit = 31 [default = true];
@@ -597,6 +598,7 @@ message TSqsResponse {
         NKikimr.NSQS.TCountQueuesResponse CountQueues = 24;
         NKikimr.NSQS.TListQueueTagsResponse ListQueueTags = 25;
         NKikimr.NSQS.TTagQueueResponse TagQueue = 26;
+        NKikimr.NSQS.TUntagQueueResponse UntagQueue = 27;
     }
     optional string RequestId = 30;
     optional string FolderId = 31;

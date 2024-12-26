@@ -141,9 +141,6 @@ struct TSqsEvents {
         EvActionCounterChanged,
         EvLocalCounterChanged,
 
-        // EvListQueueTags,
-        // EvListQueueTagsResponse,
-
         EvEnd,
     };
 

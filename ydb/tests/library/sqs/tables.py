@@ -321,7 +321,6 @@ def create_all_tables(root, driver, session):
         create_message_table(root, session, queue_type)
         create_state_table(root, session, queue_type)
         create_attibutes_table(root, session, queue_type)
-        create_tags_table(root, session, queue_type)
 
     # only STD
     create_infly_table(root, session)

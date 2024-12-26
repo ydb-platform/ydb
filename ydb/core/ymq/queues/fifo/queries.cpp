@@ -562,23 +562,6 @@ const char* const InternalGetQueueAttributesQuery = R"__(
     )
 )__";
 
-
-const char* const InternalListQueueTagsQuery = R"__(
-    (
-        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
-        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
-        (let tagsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Tags)
-        (let tagsRange '(
-            )__" TAGS_KEYS_PARAM R"__(
-            '('Key (Utf8String '"") (Void))
-            ))
-        (let tagsSelect '('Key 'Value))
-        (let tags (Member (SelectRange tagsTable tagsRange tagsSelect '()) 'List))
-        (return (AsList
-            (SetResult 'tags tags)))
-    )
-)__";
-
 const char* const TagQueueQuery = R"__(
     (
         (let name     (Parameter 'NAME (DataType 'Utf8)))
@@ -1620,8 +1603,6 @@ const char* GetFifoQueryById(size_t id) {
         return ReadOrRedriveMessageQuery;
     case GET_STATE_ID:
         return GetStateQuery;
-    case INTERNAL_LIST_QUEUE_TAGS_ID:
-        return InternalListQueueTagsQuery;
     case TAG_QUEUE_ID:
         return TagQueueQuery;
     }

@@ -30,7 +30,7 @@ using TEvYmqChangeMessageVisibilityBatchRequest = TGrpcRequestOperationCall<Ydb:
 using TEvYmqListDeadLetterSourceQueuesRequest = TGrpcRequestOperationCall<Ydb::Ymq::V1::ListDeadLetterSourceQueuesRequest, Ydb::Ymq::V1::ListDeadLetterSourceQueuesResponse>;
 using TEvYmqListQueueTagsRequest = TGrpcRequestOperationCall<Ydb::Ymq::V1::ListQueueTagsRequest, Ydb::Ymq::V1::ListQueueTagsResponse>;
 using TEvYmqTagQueueRequest = TGrpcRequestOperationCall<Ydb::Ymq::V1::TagQueueRequest, Ydb::Ymq::V1::TagQueueResponse>;
-// using TEvYmqUntagQueueRequest = TGrpcRequestOperationCall<Ydb::Ymq::V1::UntagQueueRequest, Ydb::Ymq::V1::UntagQueueResponse>;
+using TEvYmqUntagQueueRequest = TGrpcRequestOperationCall<Ydb::Ymq::V1::UntagQueueRequest, Ydb::Ymq::V1::UntagQueueResponse>;
 
 
 }

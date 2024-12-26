@@ -53,6 +53,7 @@ static const TActionProps ActionProps[] = {
     {"CountQueues",                  "count_queues",                    EAction::CountQueues,                   FOR_USER | FAST | PRIVATE,              EAction::CountQueues},
     {"ListQueueTags",                "list_queue_tags",                 EAction::ListQueueTags,                 FOR_QUEUE | YMQ_FOR_QUEUE | FAST,       EAction::ListQueueTags},
     {"TagQueue",                     "tag_queue",                       EAction::TagQueue,                      FOR_QUEUE | YMQ_FOR_QUEUE | FAST,       EAction::TagQueue},
+    {"UntagQueue",                   "untag_queue",                     EAction::UntagQueue,                    FOR_QUEUE | YMQ_FOR_QUEUE | FAST,       EAction::UntagQueue},
 };
 
 static_assert(Y_ARRAY_SIZE(ActionProps) == EAction::ActionsArraySize);

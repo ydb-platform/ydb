@@ -60,6 +60,7 @@ public:
             {"DeleteQueue", {EACLSourceType::QueueDir, deleteQueue}},
             {"ListQueueTags", {EACLSourceType::QueueDir, describePath}},
             {"TagQueue", {EACLSourceType::QueueDir, alterQueue}},
+            {"UntagQueue", {EACLSourceType::QueueDir, alterQueue}},
         };
 
         for (const auto& pair : ACE2AccessIndex) {

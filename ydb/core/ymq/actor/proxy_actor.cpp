@@ -44,7 +44,8 @@ TString SecurityPrint(const NKikimrClient::TSqsResponse& resp) {
         case NKikimrClient::TSqsResponse::kListDeadLetterSourceQueues:
         case NKikimrClient::TSqsResponse::kCountQueues:
         case NKikimrClient::TSqsResponse::kListQueueTags:
-        case NKikimrClient::TSqsResponse::kTagQueue: {
+        case NKikimrClient::TSqsResponse::kTagQueue:
+        case NKikimrClient::TSqsResponse::kUntagQueue: {
             return TStringBuilder() << resp;
         }
         case NKikimrClient::TSqsResponse::kReceiveMessage: {

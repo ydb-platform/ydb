@@ -95,6 +95,7 @@ private:
     void SetupSetQueueAttributes(TSetQueueAttributesRequest* const req);
     void SetupListQueueTags(TListQueueTagsRequest* const req);
     void SetupTagQueue(TTagQueueRequest* const req);
+    void SetupUntagQueue(TUntagQueueRequest* const req);
 
     void ExtractSourceAddressFromSocket();
 

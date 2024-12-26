@@ -1027,7 +1027,7 @@ namespace NKikimr::NYmq::V1 {
         NKikimr::NSQS::TTagQueueRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableTagQueue();
             result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
-            for (auto& [key, value]: GetProtoRequest()->Gettags()) {
+            for (const auto& [key, value]: GetProtoRequest()->Gettags()) {
                 auto tag = requestHolder.MutableTagQueue()->MutableTags()->Add();
                 tag->SetKey(key);
                 tag->SetValue(value);
@@ -1037,6 +1037,51 @@ namespace NKikimr::NYmq::V1 {
 
         THolder<TTagQueueReplyCallback> CreateReplyCallback() override {
             return MakeHolder<TTagQueueReplyCallback>(Request_);
+        }
+    };
+
+    class TUntagQueueReplyCallback : public TReplyCallback<
+            NKikimr::NSQS::TUntagQueueResponse,
+            Ydb::Ymq::V1::UntagQueueResult> {
+    public:
+        TUntagQueueReplyCallback (
+                std::shared_ptr<NKikimr::NGRpcService::IRequestOpCtx> request)
+            : TReplyCallback<
+                NKikimr::NSQS::TUntagQueueResponse,
+                Ydb::Ymq::V1::UntagQueueResult>(request)
+        {
+        }
+
+    private:
+        const NKikimr::NSQS::TUntagQueueResponse& GetResponse(const NKikimrClient::TSqsResponse& resp) override {
+            return resp.GetUntagQueue();
+        }
+
+        Ydb::Ymq::V1::UntagQueueResult GetResult(const NKikimrClient::TSqsResponse& resp) override {
+            Ydb::Ymq::V1::UntagQueueResult result;
+            return result;
+        }
+    };
+
+    class TUntagQueueActor : public TBaseRpcRequestActor<
+            TEvYmqUntagQueueRequest,
+            NKikimr::NSQS::TUntagQueueRequest,
+            TUntagQueueReplyCallback> {
+    public:
+        using TBaseRpcRequestActor::TBaseRpcRequestActor;
+
+    private:
+        NKikimr::NSQS::TUntagQueueRequest* GetRequest(TSqsRequest& requestHolder) override {
+            auto result = requestHolder.MutableUntagQueue();
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
+            for (const auto& key: GetProtoRequest()->Gettag_keys()) {
+                requestHolder.MutableUntagQueue()->AddTagKeys(key);
+            }
+            return result;
+        }
+
+        THolder<TUntagQueueReplyCallback> CreateReplyCallback() override {
+            return MakeHolder<TUntagQueueReplyCallback>(Request_);
         }
     };
 
@@ -1072,6 +1117,6 @@ DECLARE_RPC(ChangeMessageVisibilityBatch);
 DECLARE_RPC(ListDeadLetterSourceQueues);
 DECLARE_RPC(ListQueueTags);
 DECLARE_RPC(TagQueue);
-// DECLARE_RPC(UntagQueue);
+DECLARE_RPC(UntagQueue);
 
 }

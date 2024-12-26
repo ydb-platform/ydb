@@ -50,6 +50,7 @@ SRCS(
     proxy_service.cpp
     queues_list_reader.cpp
     queue_schema.cpp
+    untag_queue.cpp
     user_settings_names.cpp
     user_settings_reader.cpp
 )

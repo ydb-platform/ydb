@@ -200,8 +200,6 @@ private:
     TMaybe<TSqsEvents::TQueueAttributes> QueueAttributes_;
 
     // tags cache
-    TDuration QueueTagsCacheTime_ = TDuration::Zero();
-    TInstant TagsUpdateTime_ = TInstant::Zero();
     TMaybe<TSqsEvents::TQueueTags> QueueTags_;
 
     // counters

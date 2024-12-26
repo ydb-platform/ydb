@@ -71,9 +71,7 @@ namespace NKikimr::NSQS {
             GetDlqIdKeys(),                         // 16
             GetDlqIdAndShardKeys(),                 // 17
             GetShardColumnType(DlqTablesFormat_),   // 18
-            GetDlqStateKeys(),                      // 19
-
-            GetTagKeys()                            // 20
+            GetDlqStateKeys()                       // 19
         );
     }
 

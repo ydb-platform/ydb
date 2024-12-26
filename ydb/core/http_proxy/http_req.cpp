@@ -1051,7 +1051,7 @@ namespace NKikimr::NHttpProxy {
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ListDeadLetterSourceQueues);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ListQueueTags);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(TagQueue);
-        // DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ListQueueTags);
+        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(UntagQueue);
         #undef DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN
     }
 

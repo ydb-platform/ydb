@@ -34,6 +34,7 @@ enum EAction {
     CountQueues,
     ListQueueTags,
     TagQueue,
+    UntagQueue,
 
     ActionsArraySize,
 };
@@ -89,7 +90,8 @@ EAction GetNonBatchAction(EAction action);
         macro(ListDeadLetterSourceQueues)   \
         macro(SetQueueAttributes)           \
         macro(ListQueueTags)                \
-        macro(TagQueue)
+        macro(TagQueue)                     \
+        macro(UntagQueue)
 
 
 // All actions
@@ -119,6 +121,7 @@ EAction GetNonBatchAction(EAction action);
     macro(CountQueues)                   \
     macro(ListDeadLetterSourceQueues)    \
     macro(ListQueueTags)                 \
-    macro(TagQueue)
+    macro(TagQueue)                      \
+    macro(UntagQueue)
 
 } // namespace NKikimr::NSQS

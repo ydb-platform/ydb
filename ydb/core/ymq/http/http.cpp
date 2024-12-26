@@ -538,6 +538,7 @@ bool THttpRequest::SetupRequest() {
         HANDLE_SETUP_ACTION_CASE(SetQueueAttributes);
         HANDLE_SETUP_ACTION_CASE(ListQueueTags);
         HANDLE_SETUP_ACTION_CASE(TagQueue);
+        HANDLE_SETUP_ACTION_CASE(UntagQueue);
 
         HANDLE_SETUP_PRIVATE_ACTION_CASE(DeleteQueueBatch);
         HANDLE_SETUP_PRIVATE_ACTION_CASE(CountQueues);
@@ -956,6 +957,14 @@ void THttpRequest::SetupTagQueue(TTagQueueRequest* const req) {
     req->MutableAuth()->SetUserName(UserName_);
     for (const auto& tag : QueryParams_.Tags) {
         req->AddTags()->CopyFrom(tag.second);
+    }
+}
+
+void THttpRequest::SetupUntagQueue(TUntagQueueRequest* const req) {
+    req->SetQueueName(QueueName_);
+    req->MutableAuth()->SetUserName(UserName_);
+    for (const auto& key : QueryParams_.TagKeys) {
+        req->AddTagKeys(key.second);
     }
 }
 

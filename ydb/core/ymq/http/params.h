@@ -39,6 +39,7 @@ struct TParameters {
     TMap<int, TMessageAttribute> MessageAttributes;
     TMap<int, TParameters> BatchEntries;
     TMap<int, TQueueTag> Tags;
+    TMap<int, TString> TagKeys;
 };
 
 class TParametersParser {

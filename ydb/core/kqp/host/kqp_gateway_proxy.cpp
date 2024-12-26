@@ -2668,6 +2668,9 @@ public:
 
             auto& op = *tx.MutableAlterReplication();
             op.SetName(pathPair.second);
+            if (!settings.TranformLambda.empty()) {
+                op.SetTransferTransformLambda(settings.TranformLambda);
+            }
 
             if (const auto& done = settings.Settings.StateDone) {
                 auto& state = *op.MutableState();

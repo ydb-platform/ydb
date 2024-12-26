@@ -1544,7 +1544,7 @@ namespace NSQLTranslationV1 {
         const TString&& transformLambda,
         std::map<TString, TNodePtr>&& settings,
         const TObjectOperatorContext& context);
-    TNodePtr BuildAlterTransfer(TPosition pos, const TString& id,
+    TNodePtr BuildAlterTransfer(TPosition pos, const TString& id, std::optional<TString>&& transformLambda,
         std::map<TString, TNodePtr>&& settings,
         const TObjectOperatorContext& context);
     TNodePtr BuildDropTransfer(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context);

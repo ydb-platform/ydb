@@ -2726,16 +2726,19 @@ TNodePtr BuildDropTransfer(TPosition pos, const TString& id, bool cascade, const
 
 class TAlterTransfer final: public TTransfer {
 public:
-    explicit TAlterTransfer(TPosition pos, const TString& id,
+    explicit TAlterTransfer(TPosition pos, const TString& id, std::optional<TString>&& transformLambda,
             std::map<TString, TNodePtr>&& settings,
             const TObjectOperatorContext& context)
         : TTransfer(pos, id, "alter", context)
+        , TransformLambda(std::move(transformLambda))
         , Settings(std::move(settings))
     {
     }
 
 protected:
     INode::TPtr FillOptions(INode::TPtr options) const override {
+        options = L(options, Q(Y(Q("transformLambda"), Q(TransformLambda ? TransformLambda.value() : ""))));
+
         if (!Settings.empty()) {
             auto settings = Y();
             for (auto&& [k, v] : Settings) {
@@ -2752,15 +2755,16 @@ protected:
     }
 
 private:
+    const std::optional<TString> TransformLambda;
     std::map<TString, TNodePtr> Settings;
 
 }; // TAlterTransfer
 
-TNodePtr BuildAlterTransfer(TPosition pos, const TString& id,
+TNodePtr BuildAlterTransfer(TPosition pos, const TString& id, std::optional<TString>&& transformLambda,
         std::map<TString, TNodePtr>&& settings,
         const TObjectOperatorContext& context)
 {
-    return new TAlterTransfer(pos, id, std::move(settings), context);
+    return new TAlterTransfer(pos, id, std::move(transformLambda), std::move(settings), context);
 }
 
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapMR {

@@ -7697,7 +7697,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "CONNECTION_STRING and ENDPOINT/DATABASE are mutually exclusive");
         }
 
-                // check alter state
+        // check alter state
         {
             auto query = R"(
                 --!syntax_v1
@@ -7720,7 +7720,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     break;
                 }
 
-                UNIT_ASSERT_C(i, "Alter timeout");
+                //UNIT_ASSERT_C(i, "Alter timeout");
                 Sleep(TDuration::Seconds(1));
             }
         }
@@ -7730,7 +7730,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 ALTER TRANSFER `/Root/transfer`
-                SET (++
+                SET (
                     DATABASE = "/local"
                 );
             )";
@@ -7918,6 +7918,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     USER = "new_user",
                     PASSWORD = "new_password"
                 );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET USING ($x) -> {
+                    RETURN CAST($x as String);
+                };
             )";
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();

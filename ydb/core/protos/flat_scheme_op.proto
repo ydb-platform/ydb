@@ -1495,6 +1495,7 @@ message TReplicationDescription {
     optional uint64 Version = 4;
     optional uint64 ControllerId = 5; // replication controller's tablet id
     optional NKikimrReplication.TReplicationState State = 6;
+    optional string TransferTransformLambda = 7;
 }
 
 message TBlobDepotDescription {

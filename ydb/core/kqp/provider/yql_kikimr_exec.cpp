@@ -2393,6 +2393,7 @@ public:
 
             TAlterTransferSettings settings;
             settings.Name = TString(alterTransfer.Transfer());
+            settings.TranformLambda = alterTransfer.TransformLambda();
 
             if (!ParseTransferSettings(settings.Settings, alterTransfer.TransferSettings(), ctx, alterTransfer.Pos())) {
                 return SyncError();

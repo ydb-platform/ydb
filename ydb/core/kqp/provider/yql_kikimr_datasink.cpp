@@ -1563,6 +1563,7 @@ public:
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Transfer().Build(key.GetTransferPath())
+                        .TransformLambda(settings.TransformLambda.Cast())
                         .TransferSettings(settings.TransferSettings.Cast())
                         .Settings(settings.Other)
                         .Done()

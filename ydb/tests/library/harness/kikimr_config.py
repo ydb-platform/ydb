@@ -283,11 +283,8 @@ class KikimrConfigGenerator(object):
             self.yaml_config['pqconfig']['require_credentials_in_new_protocol'] = False
             self.yaml_config['pqconfig']['root'] = '/Root/PQ'
             self.yaml_config['pqconfig']['quoting_config']['enable_quoting'] = False
-
         if column_shard_config:
             self.yaml_config["column_shard_config"] = column_shard_config
-
-
         if pq_client_service_types:
             self.yaml_config['pqconfig']['client_service_type'] = []
             for service_type in pq_client_service_types:

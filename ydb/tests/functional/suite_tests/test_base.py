@@ -11,7 +11,7 @@ import six
 import enum
 from concurrent import futures
 
-from hamcrest import assert_that, is_, equal_to, raises, none
+from hamcrest import assert_that, equal_to, raises
 import yatest
 from yatest.common import source_path, test_source_path
 
@@ -298,10 +298,10 @@ class BaseSuiteRunner(object):
             parsed_statement.at_line, parsed_statement.suite_name, end_time - start_time))
 
     def assert_statement_ok(self, statement):
-        actual = safe_execute(lambda: self.execute_ydb_ok(statement.text), statement)
+        actual = safe_execute(lambda: self.execute_query(statement.text))
         assert_that(
-            actual,
-            is_(none()),
+            len(actual),
+            1,
             str(statement),
         )
 
@@ -407,16 +407,6 @@ class BaseSuiteRunner(object):
             universal_lines=True,
         )
 
-    def is_probably_scheme(self, yql_text):
-        lwr = yql_text.lower()
-        return 'create table' in lwr or 'drop table' in lwr
-
-    def execute_ydb_ok(self, statement_text):
-        if self.is_probably_scheme(statement_text):
-            self.execute_scheme(statement_text)
-        else:
-            self.execute_query(statement_text)
-
     def explain(self, query):
         yql_text = patch_yql_statement(query, self.table_path_prefix)
         # seems explain not working with query service ?
@@ -429,11 +419,6 @@ class BaseSuiteRunner(object):
         """
 
         return self.legacy_pool.retry_operation_sync(lambda s: s.explain(yql_text)).query_plan
-
-    def execute_scheme(self, statement_text):
-        yql_text = patch_yql_statement(statement_text, self.table_path_prefix)
-        self.pool.execute_with_retries(yql_text)
-        return None
 
     def execute_query(self, statement_text):
         yql_text = patch_yql_statement(statement_text, self.table_path_prefix)

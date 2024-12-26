@@ -121,7 +121,7 @@ using TClientOptions = NAuth::TAuthenticationOptions;
 
 struct TTransactionParticipantOptions;
 
-struct TTimeoutOptions;
+using TTimeoutOptions = NRpc::TTimeoutOptions;
 struct TTransactionalOptions;
 struct TPrerequisiteOptions;
 struct TMasterReadOptions;
@@ -241,4 +241,3 @@ using TMaintenanceCountsPerTarget = TCompactFlatMap<std::string, TMaintenanceCou
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

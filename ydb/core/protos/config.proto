@@ -1291,11 +1291,9 @@ message TImmediateControlsConfig {
             MinValue: 65536,
             MaxValue: 4294967296,
             DefaultValue: 4294967296 }];
-        optional uint64 MemoryLimit = 3 [(ControlOptions) = {
-            Description: "Make a best effort attempt to prevent more than limit bytes of memory from being allocated by the system.",
-            MinValue: 0,
-            MaxValue: 9223372036854775807,
-            DefaultValue: 0 }];
+
+        reserved 3; // was MemoryLimit
+
         optional uint64 PageCacheTargetSize = 4 [(ControlOptions) = {
             Description: "Page Cache Target Size.",
             MinValue: 0,

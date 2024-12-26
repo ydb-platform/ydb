@@ -1,5 +1,8 @@
 #pragma once
 
+#include "public.h"
+
+#include <library/cpp/yt/misc/guid.h>
 #include <library/cpp/yt/misc/tag_invoke_cpo.h>
 
 // TODO(arkady-e1ppa): Eliminate.
@@ -9,43 +12,72 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NToAttributeValueImpl {
-
-struct TFn
-    : public TTagInvokeCpoBase<TFn>
-{ };
-
-} // namespace NToAttributeValueImpl
+template <class T>
+concept CPrimitiveConvertible =
+    std::same_as<T, i8> ||
+    std::same_as<T, i32> ||
+    std::same_as<T, i64> ||
+    std::same_as<T, ui8> ||
+    std::same_as<T, ui32> ||
+    std::same_as<T, ui64> ||
+    std::same_as<T, float> ||
+    std::same_as<T, double> ||
+    std::constructible_from<TStringBuf, const T&> ||
+    std::same_as<T, TDuration> ||
+    std::same_as<T, TInstant> ||
+    std::same_as<T, bool> ||
+    std::same_as<T, TGuid>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline constexpr NToAttributeValueImpl::TFn ToAttributeValue = {};
+namespace NAttributeValueConversionImpl {
+
+struct TTo
+    : public TTagInvokeCpoBase<TTo>
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class U>
+struct TFrom
+    : public TTagInvokeCpoBase<TFrom<U>>
+{ };
+
+} // namespace NAttributeValueConversionImpl
+
+////////////////////////////////////////////////////////////////////////////////
+
+inline constexpr NAttributeValueConversionImpl::TTo ToErrorAttributeValue = {};
+template <class U>
+inline constexpr NAttributeValueConversionImpl::TFrom<U> FromErrorAttributeValue = {};
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-concept CConvertibleToAttributeValue = CTagInvocableS<
-    TTagInvokeTag<ToAttributeValue>,
-    NYson::TYsonString(const T&)>;
+concept CConvertibleToAttributeValue = requires (const T& value) {
+    { NYT::ToErrorAttributeValue(value) } -> std::same_as<NYson::TYsonString>;
+};
+
+template <class T>
+concept CConvertibleFromAttributeValue = requires (const NYson::TYsonString& value) {
+    { NYT::FromErrorAttributeValue<T>(value) } -> std::same_as<T>;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TErrorAttribute
 {
-    // NB(arkady-e1ppa): Switch to std::string is quite possible
+    // TODO(arkady-e1ppa): Switch to std::string is quite possible
     // however it requires patching IAttributeDictionary or
     // switching it to the std::string first for interop reasons.
     // Do that later.
     using TKey = TString;
-    // TODO(arkady-e1ppa): Use ConvertToYsonString(value, Format::Text)
-    // here for complex values. Write manual implementations as ToString
-    // for primitive types (e.g. integral types, guid, string, time).
     using TValue = NYson::TYsonString;
 
     template <CConvertibleToAttributeValue T>
     TErrorAttribute(const TKey& key, const T& value)
         : Key(key)
-        , Value(NYT::ToAttributeValue(value))
+        , Value(NYT::ToErrorAttributeValue(value))
     { }
 
     TKey Key;
@@ -55,3 +87,7 @@ struct TErrorAttribute
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
+
+#define ERROR_ATTRIBUTE_INL_H_
+#include "error_attribute-inl.h"
+#undef ERROR_ATTRIBUTE_INL_H_

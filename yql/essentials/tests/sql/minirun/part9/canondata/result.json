@@ -1,0 +1,44 @@
+{
+    "test.test[compute_range-decimal-default.txt-Debug]": [
+        {
+            "checksum": "228d623d782a9f7e31d98bdb46570af9",
+            "size": 537,
+            "uri": "https://{canondata_backend}/1936842/1a95fb8259f12b9abef4aeca613b4d2163ce4b69/resource.tar.gz#test.test_compute_range-decimal-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[compute_range-decimal-default.txt-Results]": [
+        {
+            "checksum": "11783215b1cd57c19d698498ddce9b51",
+            "size": 5771,
+            "uri": "https://{canondata_backend}/1936842/1a95fb8259f12b9abef4aeca613b4d2163ce4b69/resource.tar.gz#test.test_compute_range-decimal-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[compute_range-merge_adjacent-default.txt-Debug]": [
+        {
+            "checksum": "2d61c161e6ec8f149bf0504b5368082b",
+            "size": 3465,
+            "uri": "https://{canondata_backend}/1936842/1a95fb8259f12b9abef4aeca613b4d2163ce4b69/resource.tar.gz#test.test_compute_range-merge_adjacent-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[compute_range-merge_adjacent-default.txt-Results]": [
+        {
+            "checksum": "a91c71a84b5e629f140e2939d90f8dcd",
+            "size": 25533,
+            "uri": "https://{canondata_backend}/1936842/1a95fb8259f12b9abef4aeca613b4d2163ce4b69/resource.tar.gz#test.test_compute_range-merge_adjacent-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[compute_range-multiply_limit_with_nulls-default.txt-Debug]": [
+        {
+            "checksum": "e9a01608755bbc6870a0688de6b0f4e5",
+            "size": 1033,
+            "uri": "https://{canondata_backend}/1936842/1a95fb8259f12b9abef4aeca613b4d2163ce4b69/resource.tar.gz#test.test_compute_range-multiply_limit_with_nulls-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[compute_range-multiply_limit_with_nulls-default.txt-Results]": [
+        {
+            "checksum": "f6500e7243d193c711d0f8e70040bd51",
+            "size": 4787,
+            "uri": "https://{canondata_backend}/1936842/1a95fb8259f12b9abef4aeca613b4d2163ce4b69/resource.tar.gz#test.test_compute_range-multiply_limit_with_nulls-default.txt-Results_/results.txt"
+        }
+    ]
+}

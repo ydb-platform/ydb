@@ -54,6 +54,8 @@ struct TEvHttpProxy {
         EvResolveHostResponse,
         EvReportSensors,
         EvHttpOutgoingDataChunk,
+        EvSubscribeForCancel,
+        EvRequestCancelled,
         EvEnd
     };
 
@@ -106,6 +108,7 @@ struct TEvHttpProxy {
 
     struct TEvHttpIncomingRequest : NActors::TEventLocal<TEvHttpIncomingRequest, EvHttpIncomingRequest> {
         THttpIncomingRequestPtr Request;
+        TString UserToken; // built and serialized
 
         TEvHttpIncomingRequest(THttpIncomingRequestPtr request)
             : Request(std::move(request))
@@ -173,9 +176,14 @@ struct TEvHttpProxy {
 
     struct TEvHttpOutgoingDataChunk : NActors::TEventLocal<TEvHttpOutgoingDataChunk, EvHttpOutgoingDataChunk> {
         THttpOutgoingDataChunkPtr DataChunk;
+        TString Error;
 
         TEvHttpOutgoingDataChunk(THttpOutgoingDataChunkPtr dataChunk)
             : DataChunk(std::move(dataChunk))
+        {}
+
+        TEvHttpOutgoingDataChunk(const TString& error)
+            : Error(error)
         {}
     };
 
@@ -247,6 +255,9 @@ struct TEvHttpProxy {
             : TSensors(sensors)
         {}
     };
+
+    struct TEvSubscribeForCancel : NActors::TEventLocal<TEvSubscribeForCancel, EvSubscribeForCancel> {};
+    struct TEvRequestCancelled : NActors::TEventLocal<TEvRequestCancelled, EvRequestCancelled> {};
 };
 
 struct TRateLimiter {

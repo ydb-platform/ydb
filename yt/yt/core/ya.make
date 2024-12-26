@@ -129,7 +129,6 @@ SRCS(
     misc/crash_handler.cpp
     misc/digest.cpp
     misc/error.cpp
-    misc/error_code.cpp
     misc/fs.cpp
     # NB: it is necessary to prevent linker optimization of
     # REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION macros for TGuid.
@@ -142,7 +141,6 @@ SRCS(
     misc/linear_probe.cpp
     misc/memory_usage_tracker.cpp
     misc/relaxed_mpsc_queue.cpp
-    misc/origin_attributes.cpp
     misc/parser_helpers.cpp
     misc/pattern_formatter.cpp
     misc/phoenix.cpp
@@ -162,8 +160,6 @@ SRCS(
     misc/slab_allocator.cpp
     misc/statistic_path.cpp
     misc/statistics.cpp
-    misc/string_helpers.cpp
-    misc/stripped_error.cpp
     misc/cache_config.cpp
     misc/utf8_decoder.cpp
     misc/zerocopy_output_writer.cpp

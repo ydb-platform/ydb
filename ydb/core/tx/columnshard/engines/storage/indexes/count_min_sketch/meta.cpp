@@ -11,7 +11,7 @@
 
 namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
 
-TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
+TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
     auto sketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::Create());
 
     for (auto& colReader : reader) {

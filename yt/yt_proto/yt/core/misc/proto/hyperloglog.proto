@@ -7,7 +7,7 @@ option go_package = "a.yandex-team.ru/yt/go/proto/core/misc";
 
 ////////////////////////////////////////////////////////////////////////////////
 
-message THyperLogLog
+message THyperLogLogDigest
 {
     required bytes data = 1;
 }

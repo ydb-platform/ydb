@@ -161,6 +161,7 @@ bool TYqlRowSpecInfo::Parse(const NYT::TNode& rowSpecAttr, TExprContext& ctx, co
         if (!ParseType(rowSpecAttr, ctx, pos) || !ParseSort(rowSpecAttr, ctx, pos)) {
             return false;
         }
+        ParseColumnOrder(rowSpecAttr);
         ParseFlags(rowSpecAttr);
         ParseDefValues(rowSpecAttr);
         ParseConstraints(rowSpecAttr);
@@ -279,6 +280,7 @@ bool TYqlRowSpecInfo::ParsePatched(const NYT::TNode& rowSpecAttr, const THashMap
         return false;
     }
 
+    ParseColumnOrder(rowSpecAttr);
     ParseFlags(rowSpecAttr);
     ParseDefValues(rowSpecAttr);
     ParseConstraints(rowSpecAttr);
@@ -290,6 +292,7 @@ bool TYqlRowSpecInfo::ParseFull(const NYT::TNode& rowSpecAttr, const THashMap<TS
     if (!ParseType(rowSpecAttr, ctx, pos) || !ParseSort(rowSpecAttr, ctx, pos)) {
         return false;
     }
+    ParseColumnOrder(rowSpecAttr);
     ParseFlags(rowSpecAttr);
     ParseDefValues(rowSpecAttr);
     ParseConstraints(rowSpecAttr);
@@ -400,15 +403,34 @@ bool TYqlRowSpecInfo::Parse(const THashMap<TString, TString>& attrs, TExprContex
     return Validate(ctx, pos);
 }
 
+void TYqlRowSpecInfo::ParseColumnOrder(const NYT::TNode& rowSpecAttr) {
+    if (rowSpecAttr.HasKey(RowSpecAttrColumnOrder)) {
+        TColumnOrder columns;
+        auto columnOrderAttr = rowSpecAttr[RowSpecAttrColumnOrder];
+        if (!columnOrderAttr.IsList()) {
+            YQL_LOG_CTX_THROW yexception() << "Row spec has invalid column order";
+        }
+        for (const auto& name: columnOrderAttr.AsList()) {
+            if (!name.IsString()) {
+                YQL_LOG_CTX_THROW yexception() << "Row spec has invalid column order";
+            }
+            columns.AddColumn(name.AsString());
+        }
+        Columns = columns;
+    }
+}
+
 bool TYqlRowSpecInfo::ParseType(const NYT::TNode& rowSpecAttr, TExprContext& ctx, const TPositionHandle& pos) {
     if (!rowSpecAttr.HasKey(RowSpecAttrType)) {
         YQL_LOG_CTX_THROW yexception() << "Row spec doesn't have mandatory Type attribute";
     }
     TColumnOrder columns;
+
     auto type = NCommon::ParseOrderAwareTypeFromYson(rowSpecAttr[RowSpecAttrType], columns, ctx, ctx.GetPosition(pos));
     if (!type) {
         return false;
     }
+
     if (type->GetKind() != ETypeAnnotationKind::Struct) {
         YQL_LOG_CTX_THROW yexception() << "Row spec defines not a struct type";
     }
@@ -694,6 +716,19 @@ bool TYqlRowSpecInfo::Validate(const TExprNode& node, TExprContext& ctx, const T
                 return false;
             }
             type = rawType->Cast<TStructExprType>();
+        } else if (name->Content() == RowSpecAttrColumnOrder) {
+            if (!EnsureTuple(*value, ctx)) {
+                return false;
+            }
+            TColumnOrder order;
+            for (const TExprNode::TPtr& item: value->Children()) {
+                if (!EnsureAtom(*item, ctx)) {
+                    return false;
+                }
+                order.AddColumn(TString(item->Content()));
+            }
+            columnOrder = order;
+
         } else if (name->Content() == RowSpecAttrSortedBy) {
             if (!EnsureTuple(*value, ctx)) {
                 return false;
@@ -782,6 +817,18 @@ bool TYqlRowSpecInfo::Validate(const TExprNode& node, TExprContext& ctx, const T
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << TString{RowSpecAttrType}.Quote()
             << " option is mandatory for " << TYqlRowSpec::CallableName()));
         return false;
+    }
+    if (columnOrder) {
+        if (columnOrder->Size() != type->GetSize()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Column order size " << columnOrder->Size()
+                << " != " << type->GetSize() << " (type size)"));
+        }
+        for (auto& [_, name]: *columnOrder) {
+            if (!type->FindItem(name)) {
+                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Column " << name.Quote()
+                    << " from column order isn't present in type"));
+            }
+        }
     }
     if (sortedBy.size() != sortDirectionsCount) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << TString{RowSpecAttrSortDirections}.Quote()
@@ -911,6 +958,13 @@ void TYqlRowSpecInfo::Parse(NNodes::TExprBase node, bool withTypes) {
                 }
                 Type = node.Ref().GetTypeAnn()->Cast<TStructExprType>();
             }
+        } else if (setting.Name().Value() == RowSpecAttrColumnOrder) {
+            auto& val = setting.Value().Cast().Ref();
+            TColumnOrder order;
+            for (const TExprNode::TPtr& item: val.Children()) {
+                order.AddColumn(TString(item->Content()));
+            }
+            Columns = order;
         } else if (setting.Name().Value() == RowSpecAttrConstraints) {
             ConstraintsNode = NYT::NodeFromYsonString(setting.Value().Cast().Ref().Content());
         } else if (setting.Name().Value() == RowSpecAttrSortedBy) {
@@ -989,6 +1043,17 @@ void TYqlRowSpecInfo::SetColumnOrder(const TMaybe<TColumnOrder>& columns) {
     Columns = columns;
 }
 
+void TYqlRowSpecInfo::FillColumnOrder(NYT::TNode& attrs) const {
+    if (!Columns || !Columns->HasDuplicates()) {
+        return;
+    }
+    NYT::TNode order = NYT::TNode::CreateList();
+    for (const auto &name: Columns->GetLogicalNames()) {
+        order.Add(name);
+    }
+    attrs[RowSpecAttrColumnOrder] = order;
+}
+
 TString TYqlRowSpecInfo::ToYsonString() const {
     NYT::TNode attrs = NYT::TNode::CreateMap();
     FillCodecNode(attrs[YqlRowSpecAttribute]);
@@ -1023,14 +1088,14 @@ void TYqlRowSpecInfo::CopyTypeOrders(const NYT::TNode& typeNode) {
         if (!StrictSchema && name == YqlOthersColumnName) {
             continue;
         }
-        auto origType = Type->FindItemType(name);
+        auto origType = Type->FindItemType(gen_name);
         YQL_ENSURE(origType);
         auto origTypeNode = NCommon::TypeToYsonNode(origType);
-        auto it = fromMembers.find(name);
+        auto it = fromMembers.find(gen_name);
         if (it == fromMembers.end() || !NCommon::EqualsYsonTypesIgnoreStructOrder(origTypeNode, it->second)) {
-            members.Add(NYT::TNode::CreateList().Add(name).Add(origTypeNode));
+            members.Add(NYT::TNode::CreateList().Add(gen_name).Add(origTypeNode));
         } else {
-            members.Add(NYT::TNode::CreateList().Add(name).Add(it->second));
+            members.Add(NYT::TNode::CreateList().Add(gen_name).Add(it->second));
         }
     }
 
@@ -1098,6 +1163,7 @@ void TYqlRowSpecInfo::FillSort(NYT::TNode& attrs, const NCommon::TStructMemberMa
             }
         }
     }
+
     if (!curSortedBy->empty()) {
         attrs[RowSpecAttrUniqueKeys] = curUniqueKeys;
     }
@@ -1191,6 +1257,7 @@ void TYqlRowSpecInfo::FillCodecNode(NYT::TNode& attrs, const NCommon::TStructMem
     FillDefValues(attrs, mapper);
     FillFlags(attrs);
     FillExplicitYson(attrs, mapper);
+    FillColumnOrder(attrs);
 }
 
 void TYqlRowSpecInfo::FillAttrNode(NYT::TNode& attrs, ui64 nativeTypeCompatibility, bool useCompactForm) const {
@@ -1230,6 +1297,7 @@ void TYqlRowSpecInfo::FillAttrNode(NYT::TNode& attrs, ui64 nativeTypeCompatibili
     if (!useCompactForm || HasAuxColumns() || AnyOf(SortedBy, [&patchedFields](const auto& name) { return patchedFields.contains(name); } )) {
         FillSort(attrs);
     }
+    FillColumnOrder(attrs);
     FillDefValues(attrs);
     FillFlags(attrs);
     FillConstraints(attrs);
@@ -1327,6 +1395,9 @@ NNodes::TExprBase TYqlRowSpecInfo::ToExprNode(TExprContext& ctx, const TPosition
 
     saveColumnList(RowSpecAttrSortMembers, SortMembers);
     saveColumnList(RowSpecAttrSortedBy, SortedBy);
+    if (Columns && Columns->HasDuplicates()) {
+        saveColumnList(RowSpecAttrColumnOrder, Columns->GetLogicalNames());
+    }
 
     if (!SortedByTypes.empty()) {
         auto listBuilder = Build<TExprList>(ctx, pos);

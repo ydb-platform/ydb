@@ -32,10 +32,10 @@ namespace {
     }
 } // namespace
 
-THolder<TSimpleServer> CreateSimpleHttpServer()
+std::unique_ptr<TSimpleServer> CreateSimpleHttpServer()
 {
     auto port = NTesting::GetFreePort();
-    return MakeHolder<TSimpleServer>(
+    return std::make_unique<TSimpleServer>(
         port,
         [] (IInputStream* input, IOutputStream* output) {
             try {
@@ -57,10 +57,10 @@ THolder<TSimpleServer> CreateSimpleHttpServer()
         });
 }
 
-THolder<TSimpleServer> CreateProxyHttpServer()
+std::unique_ptr<TSimpleServer> CreateProxyHttpServer()
 {
     auto port = NTesting::GetFreePort();
-    return MakeHolder<TSimpleServer>(
+    return std::make_unique<TSimpleServer>(
         port,
         [] (IInputStream* input, IOutputStream* output) {
             try {
@@ -182,9 +182,9 @@ TEST(TConnectionPool, TestConcurrency)
         }
     };
 
-    TVector<THolder<TFuncThread>> threads;
+    TVector<std::unique_ptr<TFuncThread>> threads;
     for (int i = 0; i != 10; ++i) {
-        threads.push_back(MakeHolder<TFuncThread>(func));
+        threads.push_back(std::make_unique<TFuncThread>(func));
     };
 
     for (auto& t : threads) {

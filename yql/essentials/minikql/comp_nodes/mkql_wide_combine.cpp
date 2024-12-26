@@ -20,6 +20,8 @@
 
 #include <contrib/libs/xxhash/xxhash.h>
 
+#include <format>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -290,9 +292,12 @@ public:
             States.CheckGrow();
         } catch (TMemoryLimitExceededException) {
             YQL_LOG(INFO) << "State failed to grow";
+            std::cerr << std::format("[{}] - Exception. IsOutOfMemory = {}, AllowOutOfMemory = {}\n", (const void*)this, IsOutOfMemory, AllowOutOfMemory);
             if (IsOutOfMemory || !AllowOutOfMemory) {
+                std::cerr << std::format("[{}] - Rethrow. Exception\n", (const void*)this);
                 throw;
             } else {
+                std::cerr << std::format("[{}] - Handle. Exception\n", (const void*)this);
                 IsOutOfMemory = true;
             }
         }
@@ -859,6 +864,7 @@ private:
                 break;
             }
             case EOperatingMode::SplittingState: {
+                std::cerr << std::format("[{}]: switching Memory mode to Splitting\n", (const void*)this);
                 YQL_LOG(INFO) << "switching Memory mode to SplittingState";
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 SpilledBuckets.resize(SpilledBucketCount);
@@ -867,10 +873,12 @@ private:
                     b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 5_MB);
                     b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 5_MB);
                     b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal, false);
+                    std::cerr << std::format("[{}]: Create bucket: {}\n", (const void*)this, (const void*)&b.InMemoryProcessingState);
                 }
                 break;
             }
             case EOperatingMode::Spilling: {
+                std::cerr << std::format("[{}]: switching Memory mode to Spilling\n", (const void*)this);
                 YQL_LOG(INFO) << "switching Memory mode to Spilling";
                 MKQL_ENSURE(EOperatingMode::SplittingState == Mode || EOperatingMode::InMemory == Mode, "Internal logic error");
 
@@ -878,6 +886,7 @@ private:
                 break;
             }
             case EOperatingMode::ProcessSpilled: {
+                std::cerr << std::format("[{}]: switching Memory mode to ProcessSpilled\n", (const void*)this);
                 YQL_LOG(INFO) << "switching Memory mode to ProcessSpilled";
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");

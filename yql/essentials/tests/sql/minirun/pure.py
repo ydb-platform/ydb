@@ -13,7 +13,7 @@ from yql_utils import execute, get_tables, get_files, get_http_files, \
 from yqlrun import YQLRun
 
 from test_utils import get_config, get_parameters_json, DATA_PATH
-from test_file_common import run_file, run_file_no_cache, get_gateways_config
+from test_file_common import run_file, run_file_no_cache, get_gateways_config, get_sql_query
 
 ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
 MINIRUN_PATH = yql_binary_path('yql/essentials/tools/minirun/minirun')
@@ -22,9 +22,6 @@ MINIRUN_PATH = yql_binary_path('yql/essentials/tools/minirun/minirun')
 def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if get_gateway_cfg_suffix() != '' and what not in ('Results','LLVM'):
         pytest.skip('non-trivial gateways.conf')
-
-    if suite != "compute_range":
-        pytest.skip('TODO:' + suite)
 
     config = get_config(suite, case, cfg)
 
@@ -64,7 +61,8 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
         files = get_files(suite, config, DATA_PATH)
         http_files = get_http_files(suite, config, DATA_PATH)
         http_files_urls = yql_http_file_server.register_files({}, http_files)
-        parameters = get_parameters_json(suite, config)
+        parameters = get_parameters_json(suite, config, DATA_PATH)
+        query_sql = get_sql_query('pure', suite, case, config, DATA_PATH) if is_llvm else None
 
         yqlrun = YQLRun(
             prov='pure',
@@ -76,8 +74,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
 
         opt_res, opt_tables_res = execute(
             yqlrun,
-            program=res.opt if not is_llvm else None,
-            program_file=program_sql if is_llvm else None,
+            program=res.opt if not is_llvm else query_sql,
             run_sql=is_llvm,
             files=files,
             urls=http_files_urls,

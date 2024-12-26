@@ -14,7 +14,7 @@ TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui3
     const ui32 bitsCount = TFixStringBitsStorage::GrowBitsCountToByte(HashesCount * recordsCount / std::log(2));
     std::vector<bool> filterBits(bitsCount, false);
     for (ui32 i = 0; i < HashesCount; ++i) {
-        NArrow::NHash::NXX64::TStreamStringHashCalcer hashCalcer(i);
+        NArrow::NHash::NXX64::TStreamStringHashCalcer_H3 hashCalcer(i);
         for (reader.Start(); reader.IsCorrect(); reader.ReadNext()) {
             hashCalcer.Start();
             for (auto&& i : reader) {
@@ -47,7 +47,7 @@ void TBloomIndexMeta::DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataF
         }
         std::set<ui64> hashes;
         for (ui32 i = 0; i < HashesCount; ++i) {
-            NArrow::NHash::NXX64::TStreamStringHashCalcer calcer(i);
+            NArrow::NHash::NXX64::TStreamStringHashCalcer_H3 calcer(i);
             calcer.Start();
             for (auto&& i : foundColumns) {
                 NArrow::NHash::TXX64::AppendField(i.second, calcer);

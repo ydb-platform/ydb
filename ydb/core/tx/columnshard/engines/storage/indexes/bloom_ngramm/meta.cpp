@@ -40,7 +40,7 @@ private:
     class THashesCountSelector {
     public:
         template <class TActor>
-        static void BuildHashes(const ui8* data, const TActor& actor) {
+        static void BuildHashes(const ui8* data, TActor& actor) {
             ui64 hash = (ui64)2166136261 * (ui64)HashIdx;
             actor(THashesBuilder<CharsCount>::Build(data, hash));
             THashesCountSelector<HashIdx - 1, CharsCount>::BuildHashes(data, actor);
@@ -51,7 +51,7 @@ private:
     class THashesCountSelector<0, CharsCount> {
     public:
         template <class TActor>
-        static void BuildHashes(const ui8* /*data*/, const TActor& /*actor*/) {
+        static void BuildHashes(const ui8* /*data*/, TActor& /*actor*/) {
         }
     };
 
@@ -60,7 +60,7 @@ private:
     private:
         template <class TActor>
         static void BuildHashesImpl(
-            const ui8* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, const TActor& actor) {
+            const ui8* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, TActor& actor) {
             TBuffer fakeString;
             if (!op || op == NRequest::TLikePart::EOperation::StartsWith) {
                 for (ui32 c = 1; c <= CharsCount; ++c) {
@@ -90,7 +90,7 @@ private:
     public:
         template <class TActor>
         static void BuildHashes(const ui8* data, const ui32 dataSize, const ui32 hashesCount, const ui32 nGrammSize,
-            const std::optional<NRequest::TLikePart::EOperation> op, const TActor& actor) {
+            const std::optional<NRequest::TLikePart::EOperation> op, TActor& actor) {
             if (HashesCount == hashesCount && CharsCount == nGrammSize) {
                 BuildHashesImpl(data, dataSize, op, actor);
             } else if (HashesCount > hashesCount && CharsCount > nGrammSize) {
@@ -105,13 +105,12 @@ private:
         }
     };
 
-    
     template <ui32 CharsCount>
     class THashesSelector<0, CharsCount> {
     public:
         template <class TActor>
         static void BuildHashes(const ui8* /*data*/, const ui32 /*dataSize*/, const ui32 /*hashesCount*/, const ui32 /*nGrammSize*/,
-            const std::optional<NRequest::TLikePart::EOperation> /*op*/, const TActor& /*actor*/) {
+            const std::optional<NRequest::TLikePart::EOperation> /*op*/, TActor& /*actor*/) {
             AFL_VERIFY(false);
         }
     };
@@ -121,7 +120,7 @@ private:
     public:
         template <class TActor>
         static void BuildHashes(const ui8* /*data*/, const ui32 /*dataSize*/, const ui32 /*hashesCount*/, const ui32 /*nGrammSize*/,
-            const std::optional<NRequest::TLikePart::EOperation> /*op*/, const TActor& /*actor*/) {
+            const std::optional<NRequest::TLikePart::EOperation> /*op*/, TActor& /*actor*/) {
             AFL_VERIFY(false);
         }
     };
@@ -131,14 +130,14 @@ private:
     public:
         template <class TActor>
         static void BuildHashes(const ui8* /*data*/, const ui32 /*dataSize*/, const ui32 /*hashesCount*/, const ui32 /*nGrammSize*/,
-            const std::optional<NRequest::TLikePart::EOperation> /*op*/, const TActor& /*actor*/) {
+            const std::optional<NRequest::TLikePart::EOperation> /*op*/, TActor& /*actor*/) {
             AFL_VERIFY(false);
         }
     };
 
     template <class TAction>
-    void BuildNGramms(const char* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, const ui32 nGrammSize,
-        const TAction& pred) {
+    void BuildNGramms(
+        const char* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, const ui32 nGrammSize, TAction& pred) {
         THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
             (const ui8*)data, dataSize, HashesCount, nGrammSize, op, pred);
     }
@@ -149,7 +148,7 @@ public:
     }
 
     template <class TFiller>
-    void FillNGrammHashes(const ui32 nGrammSize, const std::shared_ptr<arrow::Array>& array, const TFiller& fillData) {
+    void FillNGrammHashes(const ui32 nGrammSize, const std::shared_ptr<arrow::Array>& array, TFiller& fillData) {
         AFL_VERIFY(array->type_id() == arrow::utf8()->id())("id", array->type()->ToString());
         NArrow::SwitchType(array->type_id(), [&](const auto& type) {
             using TWrap = std::decay_t<decltype(type)>;
@@ -173,8 +172,24 @@ public:
     }
 
     template <class TFiller>
-    void FillNGrammHashes(const ui32 nGrammSize, const NRequest::TLikePart::EOperation op, const TString& userReq, const TFiller& fillData) {
+    void FillNGrammHashes(const ui32 nGrammSize, const NRequest::TLikePart::EOperation op, const TString& userReq, TFiller& fillData) {
         BuildNGramms(userReq.data(), userReq.size(), op, nGrammSize, fillData);
+    }
+};
+
+class TVectorInserter {
+private:
+    bool* Values;
+    const ui32 Size;
+
+public:
+    TVectorInserter(std::vector<bool>& values)
+        : Values(&values[0])
+        , Size(values.size()) {
+    }
+
+    void operator()(const ui64 hash) {
+        Values[hash % Size] = true;
     }
 };
 
@@ -183,12 +198,9 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
     TNGrammBuilder builder(HashesCount);
 
     std::vector<bool> bitsVector(FilterSizeBytes * 8, false);
-    bool* memAccessor = &bitsVector[0];
-    const auto predSet = [&](const ui64 hashSecondary) {
-        memAccessor[hashSecondary % (FilterSizeBytes * 8)] = true;
-    };
+    TVectorInserter inserter(bitsVector);
     for (reader.Start(); reader.IsCorrect();) {
-        builder.FillNGrammHashes(NGrammSize, reader.begin()->GetCurrentChunk(), predSet);
+        builder.FillNGrammHashes(NGrammSize, reader.begin()->GetCurrentChunk(), inserter);
         reader.ReadNext(reader.begin()->GetCurrentChunk()->length());
     }
     return TFixStringBitsStorage(bitsVector).GetData();

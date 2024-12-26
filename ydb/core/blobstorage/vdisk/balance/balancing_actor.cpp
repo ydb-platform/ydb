@@ -88,6 +88,9 @@ namespace NBalancing {
         TInstant StartTime;
         bool AquiredReplToken = false;
 
+        bool ShuttingDown = false;
+        TDuration NextLaunchTimeout;
+
         ///////////////////////////////////////////////////////////////////////////////////////////
         //  Init logic
         ///////////////////////////////////////////////////////////////////////////////////////////
@@ -254,6 +257,15 @@ namespace NBalancing {
             STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "TEvCompleted"), (Type, ev->Type));
             BatchManager.Handle(ev);
 
+            if (ShuttingDown) {
+                if (BatchManager.IsBatchCompleted()) {
+                    TlsActivationContext->Schedule(NextLaunchTimeout, new IEventHandle(Ctx->SkeletonId, SelfId(), new TEvStartBalancing()));
+                    STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB32, VDISKP(Ctx->VCtx, "TBalancingActor::PassAway1"), (SelfId, SelfId()), (SenderId, BatchManager.SenderId), (DeleterId, BatchManager.DeleterId), (Finished, BatchManager.IsBatchCompleted()));
+                    PassAway();
+                    return;
+                }
+            }
+
             if (StartTime + Ctx->Cfg.EpochTimeout < TlsActivationContext->Now()) {
                 Ctx->MonGroup.EpochTimeouts()++;
                 STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "Epoch timeout"));
@@ -335,6 +347,10 @@ namespace NBalancing {
         }
 
         void Stop(TDuration timeoutBeforeNextLaunch) {
+            if (ShuttingDown) {
+                return;
+            }
+
             STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB12, VDISKP(Ctx->VCtx, "Stop balancing"), (SendOnMainParts, SendOnMainParts.Data.size()), (TryDeleteParts, TryDeleteParts.Data.size()), (SecondsBeforeNextLaunch, timeoutBeforeNextLaunch.Seconds()));
 
             if (AquiredReplToken) {
@@ -346,9 +362,17 @@ namespace NBalancing {
             for (const auto& kv : *QueueActorMapPtr) {
                 Send(kv.second, new TEvents::TEvPoison);
             }
-            TlsActivationContext->Schedule(timeoutBeforeNextLaunch, new IEventHandle(Ctx->SkeletonId, SelfId(), new TEvStartBalancing()));
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB32, VDISKP(Ctx->VCtx, "TBalancingActor::PassAway1"), (SelfId, SelfId()), (SenderId, BatchManager.SenderId), (DeleterId, BatchManager.DeleterId), (Finished, BatchManager.IsBatchCompleted()));
-            PassAway();
+
+            if (!BatchManager || BatchManager.IsBatchCompleted()) {
+                TlsActivationContext->Schedule(timeoutBeforeNextLaunch, new IEventHandle(Ctx->SkeletonId, SelfId(), new TEvStartBalancing()));
+                STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB32, VDISKP(Ctx->VCtx, "TBalancingActor::PassAway1"), (SelfId, SelfId()), (SenderId, BatchManager.SenderId), (DeleterId, BatchManager.DeleterId), (Finished, BatchManager.IsBatchCompleted()));
+                PassAway();
+            } else {
+                // We started TDeleter and TSender, but they are not finished yet.
+                // Wait until they send TEvCompleted and then pass away.
+                ShuttingDown = true;
+                NextLaunchTimeout = timeoutBeforeNextLaunch;
+            }
         }
 
         void HandlePoison() {

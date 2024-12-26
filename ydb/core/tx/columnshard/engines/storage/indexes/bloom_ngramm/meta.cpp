@@ -1,4 +1,5 @@
 #include "checker.h"
+#include "const.h"
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/hash/calcer.h>
@@ -17,80 +18,129 @@ class TNGrammBuilder {
 private:
     const ui32 HashesCount;
 
-    template <int HashIdx>
+    template <ui32 CharsRemained>
     class THashesBuilder {
     public:
-        template <class TActor>
-        static void Build(const ui8* data, ui64& h, const TActor& actor) {
+        static ui64 Build(const ui8* data, ui64& h) {
             h = h ^ uint64_t(*data);
             h = h * 16777619;
-            THashesBuilder<HashIdx - 1>::Build(data + 1, h, actor);
+            return THashesBuilder<CharsRemained - 1>::Build(data + 1, h);
         }
     };
 
     template <>
     class THashesBuilder<0> {
     public:
-        template <class TActor>
-        static void Build(const ui8* /*data*/, ui64& hash, const TActor& actor) {
-            actor(hash);
+        static ui64 Build(const ui8* /*data*/, ui64& hash) {
+            return hash;
         }
     };
 
-    template <class TActor>
-    void BuildHashesSet(const ui8* data, const ui32 dataSize, const TActor& actor) {
-        for (ui32 i = 1; i <= HashesCount; ++i) {
-            ui64 hash = 2166136261 * i;
-            if (dataSize == 3) {
-                THashesBuilder<3>::Build(data, hash, actor);
-            } else if (dataSize == 4) {
-                THashesBuilder<4>::Build(data, hash, actor);
-            } else if (dataSize == 5) {
-                THashesBuilder<5>::Build(data, hash, actor);
-            } else if (dataSize == 6) {
-                THashesBuilder<6>::Build(data, hash, actor);
-            } else if (dataSize == 7) {
-                THashesBuilder<7>::Build(data, hash, actor);
-            } else if (dataSize == 8) {
-                THashesBuilder<8>::Build(data, hash, actor);
-            } else {
-                NArrow::NHash::NXX64::TStreamStringHashCalcer calcer(i);
-                calcer.Start();
-                calcer.Update(data, dataSize);
-                actor(calcer.Finish());
+    template <ui32 HashIdx, ui32 CharsCount>
+    class THashesCountSelector {
+    public:
+        template <class TActor>
+        static void BuildHashes(const ui8* data, const TActor& actor) {
+            ui64 hash = (ui64)2166136261 * (ui64)HashIdx;
+            actor(THashesBuilder<CharsCount>::Build(data, hash));
+            THashesCountSelector<HashIdx - 1, CharsCount>::BuildHashes(data, actor);
+        }
+    };
+
+    template <ui32 CharsCount>
+    class THashesCountSelector<0, CharsCount> {
+    public:
+        template <class TActor>
+        static void BuildHashes(const ui8* /*data*/, const TActor& /*actor*/) {
+        }
+    };
+
+    template <ui32 HashesCount, ui32 CharsCount>
+    class THashesSelector {
+    private:
+        template <class TActor>
+        static void BuildHashesImpl(
+            const ui8* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, const TActor& actor) {
+            TBuffer fakeString;
+            if (!op || op == NRequest::TLikePart::EOperation::StartsWith) {
+                for (ui32 c = 1; c <= CharsCount; ++c) {
+                    fakeString.Clear();
+                    fakeString.Fill('\0', CharsCount - c);
+                    fakeString.Append((const char*)data, std::min((ui32)c, dataSize));
+                    if (fakeString.size() < CharsCount) {
+                        fakeString.Fill('\0', CharsCount - fakeString.size());
+                    }
+                    THashesCountSelector<HashesCount, CharsCount>::BuildHashes((const ui8*)fakeString.data(), actor);
+                }
+            }
+            ui32 c = 0;
+            for (; c + CharsCount <= dataSize; ++c) {
+                THashesCountSelector<HashesCount, CharsCount>::BuildHashes(data + c, actor);
+            }
+            if (!op || op == NRequest::TLikePart::EOperation::EndsWith) {
+                for (; c < dataSize; ++c) {
+                    fakeString.Clear();
+                    fakeString.Append((const char*)data + c, dataSize - c);
+                    fakeString.Fill('\0', CharsCount - fakeString.size());
+                    THashesCountSelector<HashesCount, CharsCount>::BuildHashes((const ui8*)fakeString.data(), actor);
+                }
             }
         }
-    }
+
+    public:
+        template <class TActor>
+        static void BuildHashes(const ui8* data, const ui32 dataSize, const ui32 hashesCount, const ui32 nGrammSize,
+            const std::optional<NRequest::TLikePart::EOperation> op, const TActor& actor) {
+            if (HashesCount == hashesCount && CharsCount == nGrammSize) {
+                BuildHashesImpl(data, dataSize, op, actor);
+            } else if (HashesCount > hashesCount && CharsCount > nGrammSize) {
+                THashesSelector<HashesCount - 1, CharsCount - 1>::BuildHashes(data, dataSize, hashesCount, nGrammSize, op, actor);
+            } else if (HashesCount > hashesCount) {
+                THashesSelector<HashesCount - 1, CharsCount>::BuildHashes(data, dataSize, hashesCount, nGrammSize, op, actor);
+            } else if (CharsCount > nGrammSize) {
+                THashesSelector<HashesCount, CharsCount - 1>::BuildHashes(data, dataSize, hashesCount, nGrammSize, op, actor);
+            } else {
+                AFL_VERIFY(false);
+            }
+        }
+    };
+
+    
+    template <ui32 CharsCount>
+    class THashesSelector<0, CharsCount> {
+    public:
+        template <class TActor>
+        static void BuildHashes(const ui8* /*data*/, const ui32 /*dataSize*/, const ui32 /*hashesCount*/, const ui32 /*nGrammSize*/,
+            const std::optional<NRequest::TLikePart::EOperation> /*op*/, const TActor& /*actor*/) {
+            AFL_VERIFY(false);
+        }
+    };
+
+    template <ui32 HashesCount>
+    class THashesSelector<HashesCount, 0> {
+    public:
+        template <class TActor>
+        static void BuildHashes(const ui8* /*data*/, const ui32 /*dataSize*/, const ui32 /*hashesCount*/, const ui32 /*nGrammSize*/,
+            const std::optional<NRequest::TLikePart::EOperation> /*op*/, const TActor& /*actor*/) {
+            AFL_VERIFY(false);
+        }
+    };
+
+    template <>
+    class THashesSelector<0, 0> {
+    public:
+        template <class TActor>
+        static void BuildHashes(const ui8* /*data*/, const ui32 /*dataSize*/, const ui32 /*hashesCount*/, const ui32 /*nGrammSize*/,
+            const std::optional<NRequest::TLikePart::EOperation> /*op*/, const TActor& /*actor*/) {
+            AFL_VERIFY(false);
+        }
+    };
 
     template <class TAction>
     void BuildNGramms(const char* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, const ui32 nGrammSize,
         const TAction& pred) {
-        TBuffer fakeString;
-        AFL_VERIFY(nGrammSize >= 3)("value", nGrammSize);
-        if (!op || op == NRequest::TLikePart::EOperation::StartsWith) {
-            for (ui32 c = 1; c <= nGrammSize; ++c) {
-                fakeString.Clear();
-                fakeString.Fill('\0', nGrammSize - c);
-                fakeString.Append(data, std::min(c, dataSize));
-                if (fakeString.size() < nGrammSize) {
-                    fakeString.Fill('\0', nGrammSize - fakeString.size());
-                }
-                BuildHashesSet((const ui8*)fakeString.data(), nGrammSize, pred);
-            }
-        }
-        ui32 c = 0;
-        for (; c + nGrammSize <= dataSize; ++c) {
-            BuildHashesSet((const ui8*)(data + c), nGrammSize, pred);
-        }
-
-        if (!op || op == NRequest::TLikePart::EOperation::EndsWith) {
-            for (; c < dataSize; ++c) {
-                fakeString.Clear();
-                fakeString.Append(data + c, dataSize - c);
-                fakeString.Fill('\0', nGrammSize - fakeString.size());
-                BuildHashesSet((const ui8*)fakeString.data(), nGrammSize, pred);
-            }
-        }
+        THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
+            (const ui8*)data, dataSize, HashesCount, nGrammSize, op, pred);
     }
 
 public:

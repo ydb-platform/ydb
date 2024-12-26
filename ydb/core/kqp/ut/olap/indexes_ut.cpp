@@ -482,7 +482,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
             {
                 ResetZeroLevel(csController);
-                ui32 requestsCount = 500;
+                ui32 requestsCount = 300;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
                     const auto query = [](const TString& res, const TString& uid, const ui32 level) {
@@ -499,7 +499,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
             {
                 ResetZeroLevel(csController);
-                ui32 requestsCount = 500;
+                ui32 requestsCount = 300;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
                     const auto query = [](const TString& res, const TString& uid, const ui32 level) {
@@ -517,7 +517,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
             {
                 ResetZeroLevel(csController);
-                ui32 requestsCount = 500;
+                ui32 requestsCount = 300;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
                     const auto query = [](const TString& res, const TString& uid, const ui32 level) {

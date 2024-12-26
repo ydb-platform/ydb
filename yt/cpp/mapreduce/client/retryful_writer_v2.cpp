@@ -176,7 +176,7 @@ private:
 
     void ThreadMain(TRichYPath path, const THeavyRequestRetrier::TParameters& parameters)
     {
-        THolder<THeavyRequestRetrier> retrier;
+        std::unique_ptr<THeavyRequestRetrier> retrier;
 
         auto firstRequestParameters = parameters;
         auto restRequestParameters = parameters;
@@ -218,14 +218,14 @@ private:
 
             try {
                 if (!retrier) {
-                    retrier = MakeHolder<THeavyRequestRetrier>(*currentParameters);
+                    retrier = std::make_unique<THeavyRequestRetrier>(*currentParameters);
                 }
                 retrier->Update([task=task] {
-                    return MakeHolder<TMemoryInput>(task.Data->data(), task.Size);
+                    return std::make_unique<TMemoryInput>(task.Data->data(), task.Size);
                 });
                 if (task.BufferComplete) {
                     retrier->Finish();
-                    retrier.Reset();
+                    retrier.reset();
                 }
             } catch (const std::exception& ex) {
                 task.SendingComplete.SetException(std::current_exception());
@@ -235,7 +235,7 @@ private:
             }
 
             if (task.BufferComplete) {
-                retrier.Reset();
+                retrier.reset();
                 task.SendingComplete.SetValue();
                 currentParameters = &restRequestParameters;
 
@@ -303,15 +303,15 @@ TRetryfulWriterV2::TRetryfulWriterV2(
     ssize_t bufferSize,
     bool createTransaction)
     : BufferSize_(bufferSize)
-    , Current_(MakeHolder<TSendTask>())
-    , Previous_(MakeHolder<TSendTask>())
+    , Current_(std::make_unique<TSendTask>())
+    , Previous_(std::make_unique<TSendTask>())
 {
     THttpHeader httpHeader("PUT", command);
     httpHeader.SetInputFormat(format);
     httpHeader.MergeParameters(serializedWriterOptions);
 
     if (createTransaction) {
-        WriteTransaction_ = MakeHolder<TPingableTransaction>(
+        WriteTransaction_ = std::make_unique<TPingableTransaction>(
             rawClient,
             clientRetryPolicy,
             context,
@@ -337,7 +337,7 @@ TRetryfulWriterV2::TRetryfulWriterV2(
         .Header = std::move(httpHeader),
     };
 
-    Sender_ = MakeHolder<TSender>(path, parameters);
+    Sender_ = std::make_unique<TSender>(path, parameters);
 
     DoStartBatch();
 }

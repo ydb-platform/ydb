@@ -1,0 +1,44 @@
+{
+    "test.test[compute_range-norange-default.txt-Debug]": [
+        {
+            "checksum": "e9bcea49fb8c7f9c47bb470bb745c057",
+            "size": 381,
+            "uri": "https://{canondata_backend}/1925842/4728690604955c4954b686e25a953fed04aa8521/resource.tar.gz#test.test_compute_range-norange-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[compute_range-norange-default.txt-Results]": [
+        {
+            "checksum": "66eca1ced2fe4f8d29dc70632c4fcf0d",
+            "size": 1287,
+            "uri": "https://{canondata_backend}/1925842/4728690604955c4954b686e25a953fed04aa8521/resource.tar.gz#test.test_compute_range-norange-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[compute_range-pg_equal-default.txt-Debug]": [
+        {
+            "checksum": "9b93782bc546d740e2444d459824ec45",
+            "size": 819,
+            "uri": "https://{canondata_backend}/1925842/4728690604955c4954b686e25a953fed04aa8521/resource.tar.gz#test.test_compute_range-pg_equal-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[compute_range-pg_equal-default.txt-Results]": [
+        {
+            "checksum": "9ac4c6ce9a6fdab0eba801300d39aa9d",
+            "size": 10526,
+            "uri": "https://{canondata_backend}/1925842/4728690604955c4954b686e25a953fed04aa8521/resource.tar.gz#test.test_compute_range-pg_equal-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[compute_range-pg_exists-default.txt-Debug]": [
+        {
+            "checksum": "ee374bb436483e9c88338e94ec67b409",
+            "size": 774,
+            "uri": "https://{canondata_backend}/1925842/4728690604955c4954b686e25a953fed04aa8521/resource.tar.gz#test.test_compute_range-pg_exists-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[compute_range-pg_exists-default.txt-Results]": [
+        {
+            "checksum": "7fabe5122903e7973848d25692efbcc1",
+            "size": 9886,
+            "uri": "https://{canondata_backend}/1925842/4728690604955c4954b686e25a953fed04aa8521/resource.tar.gz#test.test_compute_range-pg_exists-default.txt-Results_/results.txt"
+        }
+    ]
+}

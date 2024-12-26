@@ -30,6 +30,11 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
     , DefaultHugeGarbagePerMille(300, 1, 1000)
     , HugeDefragFreeSpaceBorderPerMille(260, 1, 1000)
+    , ThrottlingDeviceSpeed(50 << 20, 1 << 20, 10ull << 30)
+    , ThrottlingMinSstCount(100, 1, 1000)
+    , ThrottlingMaxSstCount(250, 1, 1000)
+    , ThrottlingMinInplacedSize(20ull << 30, 1 << 20, 500ull < 30)
+    , ThrottlingMaxInplacedSize(60ull << 30, 1 << 20, 500ull < 30)
     , MaxCommonLogChunksHDD(200, 1, 1'000'000)
     , MaxCommonLogChunksSSD(200, 1, 1'000'000)
     , CostMetricsParametersByMedia({
@@ -336,6 +341,13 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(MaxSyncLogChunksInFlightSSD, "VDiskControls.MaxSyncLogChunksInFlightSSD");
         icb->RegisterSharedControl(DefaultHugeGarbagePerMille, "VDiskControls.DefaultHugeGarbagePerMille");
         icb->RegisterSharedControl(HugeDefragFreeSpaceBorderPerMille, "VDiskControls.HugeDefragFreeSpaceBorderPerMille");
+
+        icb->RegisterSharedControl(ThrottlingDeviceSpeed, "VDiskControls.ThrottlingDeviceSpeed");
+        icb->RegisterSharedControl(ThrottlingMinSstCount, "VDiskControls.ThrottlingMinSstCount");
+        icb->RegisterSharedControl(ThrottlingMaxSstCount, "VDiskControls.ThrottlingMaxSstCount");
+        icb->RegisterSharedControl(ThrottlingMinInplacedSize, "VDiskControls.ThrottlingMinInplacedSize");
+        icb->RegisterSharedControl(ThrottlingMaxInplacedSize, "VDiskControls.ThrottlingMaxInplacedSize");
+
         icb->RegisterSharedControl(MaxCommonLogChunksHDD, "PDiskControls.MaxCommonLogChunksHDD");
         icb->RegisterSharedControl(MaxCommonLogChunksSSD, "PDiskControls.MaxCommonLogChunksSSD");
 

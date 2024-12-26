@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
 
         for (const auto& [version, txId] : result) {
             auto& item = *ev->Record.AddVersionTxIds();
-            version.Serialize(*item.MutableVersion());
+            version.ToProto(item.MutableVersion());
             item.SetTxId(txId);
         }
 
@@ -168,7 +168,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
             UNIT_ASSERT_VALUES_EQUAL(versions.size(), 3);
 
             for (int i = 0; i < versions.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(TRowVersion::Parse(versions[i]), TRowVersion(i + 1, 0));
+                UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(versions[i]), TRowVersion(i + 1, 0));
             }
         }
         {
@@ -180,7 +180,8 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
             auto ev = env.Send<TEvService::TEvHeartbeat>(writer, new TEvWorker::TEvData("TestSource", {
                 TRecord(order++, R"({"resolved":[10,0]})"),
             }));
-            UNIT_ASSERT_VALUES_EQUAL(TRowVersion::Parse(ev->Get()->Record.GetVersion()), TRowVersion(10, 0));
+            UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(ev->Get()->Record.GetVersion()), TRowVersion(10, 0));
+            env.GetRuntime().GrabEdgeEvent<TEvWorker::TEvPoll>(env.GetSender());
         }
 
         env.Send<TEvService::TEvGetTxId>(writer, new TEvWorker::TEvData("TestSource", {
@@ -206,6 +207,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         env.Send<TEvService::TEvHeartbeat>(writer, new TEvWorker::TEvData("TestSource", {
             TRecord(order++, R"({"resolved":[30,0]})"),
         }));
+        env.GetRuntime().GrabEdgeEvent<TEvWorker::TEvPoll>(env.GetSender());
     }
 }
 

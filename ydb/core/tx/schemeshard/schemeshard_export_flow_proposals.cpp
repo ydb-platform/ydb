@@ -193,6 +193,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             if (const auto compression = exportSettings.compression()) {
                 Y_ABORT_UNLESS(FillCompression(*task.MutableCompression(), compression));
             }
+
+            task.SetEnableChecksums(exportInfo->EnableChecksums);
         }
         break;
     }

@@ -2,8 +2,6 @@
 
 #include <yt/yt/core/misc/public.h>
 
-#include <library/cpp/yt/stockpile/stockpile.h>
-
 #include <library/cpp/getopt/last_getopt.h>
 
 #include <yt/yt/core/yson/string.h>

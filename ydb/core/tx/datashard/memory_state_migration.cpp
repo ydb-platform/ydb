@@ -144,13 +144,13 @@ private:
                     Vars.emplace();
                 }
                 if (protoVars.HasImmediateWriteEdge()) {
-                    Vars->ImmediateWriteEdge = TRowVersion::Parse(protoVars.GetImmediateWriteEdge());
+                    Vars->ImmediateWriteEdge = TRowVersion::FromProto(protoVars.GetImmediateWriteEdge());
                 }
                 if (protoVars.HasImmediateWriteEdgeReplied()) {
-                    Vars->ImmediateWriteEdgeReplied = TRowVersion::Parse(protoVars.GetImmediateWriteEdgeReplied());
+                    Vars->ImmediateWriteEdgeReplied = TRowVersion::FromProto(protoVars.GetImmediateWriteEdgeReplied());
                 }
                 if (protoVars.HasUnprotectedReadEdge()) {
-                    Vars->UnprotectedReadEdge = TRowVersion::Parse(protoVars.GetUnprotectedReadEdge());
+                    Vars->UnprotectedReadEdge = TRowVersion::FromProto(protoVars.GetUnprotectedReadEdge());
                 }
             }
             for (const auto& protoLock : state->GetLocks()) {
@@ -162,13 +162,13 @@ private:
                 row.CreateTs = protoLock.GetCreateTs();
                 row.Flags = protoLock.GetFlags();
                 if (protoLock.HasBreakVersion()) {
-                    row.BreakVersion = TRowVersion::Parse(protoLock.GetBreakVersion());
+                    row.BreakVersion = TRowVersion::FromProto(protoLock.GetBreakVersion());
                 }
                 for (const auto& protoPathId : protoLock.GetReadTables()) {
-                    row.ReadTables.push_back(PathIdFromPathId(protoPathId));
+                    row.ReadTables.push_back(TPathId::FromProto(protoPathId));
                 }
                 for (const auto& protoPathId : protoLock.GetWriteTables()) {
-                    row.WriteTables.push_back(PathIdFromPathId(protoPathId));
+                    row.WriteTables.push_back(TPathId::FromProto(protoPathId));
                 }
             }
             for (const auto& protoRange : state->GetLockRanges()) {
@@ -180,7 +180,7 @@ private:
                     return;
                 }
                 auto& range = row->Ranges.emplace_back();
-                range.TableId = PathIdFromPathId(protoRange.GetTableId());
+                range.TableId = TPathId::FromProto(protoRange.GetTableId());
                 range.Flags = protoRange.GetFlags();
                 range.Data = protoRange.GetData();
             }
@@ -562,9 +562,9 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
     // Serialize important in-memory vars
     {
         auto* vars = state->MutableVars();
-        SnapshotManager.GetImmediateWriteEdge().Serialize(*vars->MutableImmediateWriteEdge());
-        SnapshotManager.GetImmediateWriteEdgeReplied().Serialize(*vars->MutableImmediateWriteEdgeReplied());
-        SnapshotManager.GetUnprotectedReadEdge().Serialize(*vars->MutableUnprotectedReadEdge());
+        SnapshotManager.GetImmediateWriteEdge().ToProto(vars->MutableImmediateWriteEdge());
+        SnapshotManager.GetImmediateWriteEdgeReplied().ToProto(vars->MutableImmediateWriteEdgeReplied());
+        SnapshotManager.GetUnprotectedReadEdge().ToProto(vars->MutableUnprotectedReadEdge());
         addedMessage(vars->ByteSizeLong());
         maybeCheckpoint();
 
@@ -588,20 +588,20 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
         protoLockInfo->SetCreateTs(lockInfo.GetCreationTime().MicroSeconds());
         protoLockInfo->SetFlags((ui64)lockInfo.GetFlags());
         if (const auto& version = lockInfo.GetBreakVersion()) {
-            version->Serialize(*protoLockInfo->MutableBreakVersion());
+            version->ToProto(protoLockInfo->MutableBreakVersion());
         }
         for (const auto& pathId : lockInfo.GetReadTables()) {
-            PathIdFromPathId(pathId, protoLockInfo->AddReadTables());
+            pathId.ToProto(protoLockInfo->AddReadTables());
         }
         for (const auto& pathId : lockInfo.GetWriteTables()) {
-            PathIdFromPathId(pathId, protoLockInfo->AddWriteTables());
+            pathId.ToProto(protoLockInfo->AddWriteTables());
         }
         addedMessage(protoLockInfo->ByteSizeLong());
         for (const auto& point : lockInfo.GetPoints()) {
             auto serialized = point.ToSerializedLockRange();
             auto* protoRange = state->AddLockRanges();
             protoRange->SetLockId(lockInfo.GetLockId());
-            PathIdFromPathId(serialized.TableId, protoRange->MutableTableId());
+            serialized.TableId.ToProto(protoRange->MutableTableId());
             protoRange->SetFlags(serialized.Flags);
             protoRange->SetData(std::move(serialized.Data));
             addedMessage(protoRange->ByteSizeLong());
@@ -610,7 +610,7 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
             auto serialized = range.ToSerializedLockRange();
             auto* protoRange = state->AddLockRanges();
             protoRange->SetLockId(lockInfo.GetLockId());
-            PathIdFromPathId(serialized.TableId, protoRange->MutableTableId());
+            serialized.TableId.ToProto(protoRange->MutableTableId());
             protoRange->SetFlags(serialized.Flags);
             protoRange->SetData(std::move(serialized.Data));
             addedMessage(protoRange->ByteSizeLong());

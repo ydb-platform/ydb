@@ -3818,19 +3818,82 @@ bool TSqlTranslation::RoleNameClause(const TRule_role_name& node, TDeferredAtom&
     return true;
 }
 
-bool TSqlTranslation::RoleParameters(const TRule_create_user_option& node, TRoleParameters& result) {
-    // create_user_option: ENCRYPTED? PASSWORD expr;
+bool TSqlTranslation::RoleParameters(const std::vector<TRule_create_user_option>& optionsList, TRoleParameters& result, bool isCreateUser) {
+    enum class ECreateUserOption {
+        Login,
+        Password
+    };
+
+    std::set<ECreateUserOption> used = {};
+
+    auto ParseCreateUserOption = [&used, this](const TRule_create_user_option& option, TRoleParameters& result) -> bool {
+        // create_user_option: password_option | login_option;
+        // password_option: ENCRYPTED? PASSWORD expr;
+        // login_option: LOGIN | NOLOGIN;
+
+        switch (option.Alt_case()) {
+            case TRule_create_user_option::kAltCreateUserOption1:
+            {
+                TSqlExpression expr(Ctx, Mode);
+                TNodePtr password = expr.Build(option.GetAlt_create_user_option1().GetRule_password_option1().GetRule_expr3());
+                if (!password) {
+                    Error() << "Couldn't parse the password";
+                    return false;
+                }
+
+                result.IsPasswordEncrypted = option.GetAlt_create_user_option1().GetRule_password_option1().HasBlock1();
+                if (!password->IsNull()) {
+                    result.Password = MakeAtomFromExpression(Ctx.Pos(), Ctx, password);
+                }
+
+                if (used.contains(ECreateUserOption::Password)) {
+                    Error() << "Conflicting or redundant options";
+                    return false;
+                }
+
+                used.insert(ECreateUserOption::Password);
+
+                break;
+            }
+            case TRule_create_user_option::kAltCreateUserOption2:
+            {
+                if (used.contains(ECreateUserOption::Login)) {
+                    Error() << "Conflicting or redundant options";
+                    return false;
+                }
+
+                used.insert(ECreateUserOption::Login);
+
+                const auto token = option.GetAlt_create_user_option2().GetRule_login_option1().GetToken1().GetId();
+                if (IS_TOKEN(token, LOGIN)) {
+                    result.CanLogin = TRoleParameters::ETypeOfLogin::Login;
+                } else if (IS_TOKEN(token, NOLOGIN)) {
+                    result.CanLogin = TRoleParameters::ETypeOfLogin::NoLogin;
+                } else {
+                    Y_ABORT("You should change implementation according to grammar changes");
+                }
+
+                break;
+            }
+            case TRule_create_user_option::ALT_NOT_SET:
+            {
+                Y_ABORT("You should change implementation according to grammar changes");
+            }
+        }
+
+        return true;
+    };
+
     result = TRoleParameters{};
 
-    TSqlExpression expr(Ctx, Mode);
-    TNodePtr password = expr.Build(node.GetRule_expr3());
-    if (!password) {
-        return false;
+    if (isCreateUser) {
+        result.CanLogin = TRoleParameters::ETypeOfLogin::NoLogin;
     }
 
-    result.IsPasswordEncrypted = node.HasBlock1();
-    if (!password->IsNull()) {
-        result.Password = MakeAtomFromExpression(Ctx.Pos(), Ctx, password);
+    for (const auto& option : optionsList) {
+        if (!ParseCreateUserOption(option, result)) {
+            return false;
+        }
     }
 
     return true;

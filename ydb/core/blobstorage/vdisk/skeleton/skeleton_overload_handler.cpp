@@ -180,31 +180,7 @@ namespace NKikimr {
     class TThrottlingController {
     private:
         NMonGroup::TSkeletonOverloadGroup& Mon;
-
-        struct TControls {
-            TControlWrapper DeviceSpeed;
-            TControlWrapper MinSstCount;
-            TControlWrapper MaxSstCount;
-            TControlWrapper MinInplacedSize;
-            TControlWrapper MaxInplacedSize;
-
-            TControls()
-                : DeviceSpeed(50 << 20, 1 << 20, 1 << 30)
-                , MinSstCount(100, 1, 1000)
-                , MaxSstCount(250, 1, 1000)
-                , MinInplacedSize(20ull << 30, 0, 500ull < 30)
-                , MaxInplacedSize(60ull << 30, 0, 500ull < 30)
-            {}
-
-            void Register(TIntrusivePtr<TControlBoard> icb) {
-                icb->RegisterSharedControl(DeviceSpeed, "VDiskControls.ThrottlingDeviceSpeed");
-                icb->RegisterSharedControl(MinSstCount, "VDiskControls.ThrottlingMinSstCount");
-                icb->RegisterSharedControl(MaxSstCount, "VDiskControls.ThrottlingMaxSstCount");
-                icb->RegisterSharedControl(MinInplacedSize, "VDiskControls.ThrottlingMinInplacedSize");
-                icb->RegisterSharedControl(MaxInplacedSize, "VDiskControls.ThrottlingMaxInplacedSize");
-            }
-        };
-        TControls Controls;
+        TIntrusivePtr<TVDiskConfig> VCfg;
 
         ui64 CurrentSstCount = 0;
         ui64 CurrentInplacedSize = 0;
@@ -228,17 +204,17 @@ namespace NKikimr {
         }
 
         ui64 CalcSstCountSpeedLimit() const {
-            ui64 deviceSpeed = (ui64)Controls.DeviceSpeed;
-            ui64 minSstCount = (ui64)Controls.MinSstCount;
-            ui64 maxSstCount = (ui64)Controls.MaxSstCount;
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            ui64 minSstCount = (ui64)VCfg->ThrottlingMinSstCount;
+            ui64 maxSstCount = (ui64)VCfg->ThrottlingMaxSstCount;
 
             return LinearInterpolation(CurrentSstCount, minSstCount, maxSstCount, deviceSpeed);
         }
 
         ui64 CalcInplacedSizeSpeedLimit() const {
-            ui64 deviceSpeed = (ui64)Controls.DeviceSpeed;
-            ui64 minInplacedSize = (ui64)Controls.MinInplacedSize;
-            ui64 maxInplacedSize = (ui64)Controls.MaxInplacedSize;
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            ui64 minInplacedSize = (ui64)VCfg->ThrottlingMinInplacedSize;
+            ui64 maxInplacedSize = (ui64)VCfg->ThrottlingMaxInplacedSize;
 
             return LinearInterpolation(CurrentInplacedSize, minInplacedSize, maxInplacedSize, deviceSpeed);
         }
@@ -250,17 +226,16 @@ namespace NKikimr {
         }
 
     public:
-        explicit TThrottlingController(NMonGroup::TSkeletonOverloadGroup& mon)
+        explicit TThrottlingController(
+            const TIntrusivePtr<TVDiskConfig> &vcfg,
+            NMonGroup::TSkeletonOverloadGroup& mon)
             : Mon(mon)
+            , VCfg(vcfg)
         {}
 
-        void RegisterIcbControls(TIntrusivePtr<TControlBoard> icb) {
-            Controls.Register(icb);
-        }
-
         bool IsActive() const {
-            ui64 minSstCount = (ui64)Controls.MinSstCount;
-            ui64 minInplacedSize = (ui64)Controls.MinInplacedSize;
+            ui64 minSstCount = (ui64)VCfg->ThrottlingMinSstCount;
+            ui64 minInplacedSize = (ui64)VCfg->ThrottlingMinInplacedSize;
 
             return CurrentSstCount > minSstCount ||
                 CurrentInplacedSize > minInplacedSize;
@@ -297,7 +272,7 @@ namespace NKikimr {
             if (!IsActive()) {
                 CurrentTime = {};
                 AvailableBytes = 0;
-                CurrentSpeedLimit = (ui64)Controls.DeviceSpeed;
+                CurrentSpeedLimit = (ui64)VCfg->ThrottlingDeviceSpeed;
             } else {
                 if (!prevActive) {
                     CurrentTime = now;
@@ -315,7 +290,7 @@ namespace NKikimr {
             }
             auto us = (now - CurrentTime).MicroSeconds();
             AvailableBytes += CurrentSpeedLimit * us / 1000000;
-            ui64 deviceSpeed = (ui64)Controls.DeviceSpeed;
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
             AvailableBytes = Min(AvailableBytes, deviceSpeed);
             CurrentTime = now;
         }
@@ -325,6 +300,7 @@ namespace NKikimr {
     // TOverloadHandler
     ///////////////////////////////////////////////////////////////////////////////////////////////////
     TOverloadHandler::TOverloadHandler(
+            const TIntrusivePtr<TVDiskConfig> &vcfg,
             const TIntrusivePtr<TVDiskContext> &vctx,
             const TPDiskCtxPtr &pdiskCtx,
             std::shared_ptr<THull> hull,
@@ -340,7 +316,7 @@ namespace NKikimr {
         , EmergencyQueue(new TEmergencyQueue(Mon, std::move(vMovedPatch), std::move(vPatchStart), std::move(vput),
                 std::move(vMultiPut), std::move(loc), std::move(aoput)))
         , DynamicPDiskWeightsManager(std::make_shared<TDynamicPDiskWeightsManager>(vctx, pdiskCtx))
-        , ThrottlingController(new TThrottlingController(Mon))
+        , ThrottlingController(new TThrottlingController(vcfg, Mon))
     {}
 
     TOverloadHandler::~TOverloadHandler() {}
@@ -460,10 +436,6 @@ namespace NKikimr {
 
     void TOverloadHandler::OnKickEmergencyPutQueue() {
         KickInFlight = false;
-    }
-
-    void TOverloadHandler::RegisterIcbControls(TIntrusivePtr<TControlBoard> icb) {
-        ThrottlingController->RegisterIcbControls(icb);
     }
 
     template <class TEv>

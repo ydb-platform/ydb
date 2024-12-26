@@ -4,6 +4,7 @@ import allure
 import json
 import yatest
 import os
+import logging
 from allure_commons._core import plugin_manager
 from allure_pytest.listener import AllureListener
 from copy import deepcopy
@@ -110,9 +111,15 @@ class LoadSuiteBase:
             ssh_cmd += ['-i', ssh_key_file]
         for host in hosts:
             for c in exec_kikimr.keys():
-                exec_kikimr[c][host] = yatest.common.execute(ssh_cmd + [host, cmd.format(storage='kikimr', container=c)], wait=False)
+                try:
+                    exec_kikimr[c][host] = yatest.common.execute(ssh_cmd + [host, cmd.format(storage='kikimr', container=c)], wait=False)
+                except BaseException as e:
+                    logging.error(e)
             for c in exec_start.keys():
-                exec_start[c][host] = yatest.common.execute(ssh_cmd + [host, cmd.format(storage='kikimr-start', container=c)], wait=False)
+                try:
+                    exec_start[c][host] = yatest.common.execute(ssh_cmd + [host, cmd.format(storage='kikimr-start', container=c)], wait=False)
+                except BaseException as e:
+                    logging.error(e)
 
         error_log = ''
         for c, execs in exec_start.items():
@@ -200,8 +207,6 @@ class LoadSuiteBase:
         for p in ['Mean']:
             if p in stats:
                 allure.dynamic.parameter(p, _duration_text(stats[p] / 1000.))
-        if os.getenv('NO_KUBER_LOGS') is None:
-            cls._attach_logs(start_time=result.start_time, attach_name='kikimr')
         error_message = ''
         success = True
         if not result.success:
@@ -210,6 +215,8 @@ class LoadSuiteBase:
         elif stats.get('FailsCount', 0) != 0:
             success = False
             error_message = 'There are fail attemps'
+        if os.getenv('NO_KUBER_LOGS') is None and not success:
+            cls._attach_logs(start_time=result.start_time, attach_name='kikimr')
         if upload:
             ResultsProcessor.upload_results(
                 kind='Load',
@@ -250,7 +257,7 @@ class LoadSuiteBase:
             timestamp=start_time,
             is_successful=(error is None)
         )
-        if os.getenv('NO_KUBER_LOGS') is None:
+        if os.getenv('NO_KUBER_LOGS') is None and error is not None:
             cls._attach_logs(start_time=max(start_time - 600, first_node_start_time), attach_name='kikimr_start')
         if error is not None:
             exc = pytest.fail.Exception(error)

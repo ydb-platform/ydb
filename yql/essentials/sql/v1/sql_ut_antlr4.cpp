@@ -476,6 +476,82 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["EquiJoin"]);
     }
 
+    Y_UNIT_TEST(CreateAlterUserWithLoginNoLogin) {
+        auto reqCreateUser = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1;
+        )");
+
+        UNIT_ASSERT(reqCreateUser.IsOk());
+        UNIT_ASSERT(reqCreateUser.Root);
+
+        auto reqAlterUser = SqlToYql(R"(
+            USE plato;
+            ALTER USER user1;
+        )");
+
+        UNIT_ASSERT(!reqAlterUser.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(reqAlterUser.Issues.ToString(), "Error: mismatched input ';' expecting {ENCRYPTED, LOGIN, NOLOGIN, PASSWORD, RENAME, WITH}");
+
+        auto reqPasswordAndLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 LOgin;
+        )");
+
+        UNIT_ASSERT(reqPasswordAndLogin.IsOk());
+        UNIT_ASSERT(reqPasswordAndLogin.Root);
+
+        auto reqPasswordAndNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 PASSWORD '123' NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqPasswordAndNoLogin.IsOk());
+        UNIT_ASSERT(reqPasswordAndNoLogin.Root);
+
+        auto reqLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 LOGIN;
+        )");
+
+        UNIT_ASSERT(reqLogin.IsOk());
+        UNIT_ASSERT(reqLogin.Root);
+
+        auto reqNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqNoLogin.IsOk());
+        UNIT_ASSERT(reqNoLogin.Root);
+
+        auto reqLoginNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 LOGIN NOLOGIN;
+        )");
+
+        UNIT_ASSERT(!reqLoginNoLogin.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(reqLoginNoLogin.Issues.ToString(), "Error: Conflicting or redundant options");
+
+        auto reqAlterLoginNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 LOGIN;
+            ALTER USER user1 NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqAlterLoginNoLogin.IsOk());
+        UNIT_ASSERT(reqAlterLoginNoLogin.Root);
+
+        auto reqAlterLoginNoLoginWithPassword = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 LOGIN;
+            ALTER USER user1 PASSWORD '321' NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqAlterLoginNoLoginWithPassword.IsOk());
+        UNIT_ASSERT(reqAlterLoginNoLoginWithPassword.Root);
+    }
+
     Y_UNIT_TEST(JoinWithoutConcreteColumns) {
         NYql::TAstParseResult res = SqlToYql(
             " use plato;"

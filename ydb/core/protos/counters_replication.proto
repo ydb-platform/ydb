@@ -47,4 +47,5 @@ enum ETxTypes {
     TXTYPE_WORKER_ERROR = 14 [(TxTypeOpts) = {Name: "TxWorkerError"}];
     TXTYPE_ASSIGN_TX_ID = 15 [(TxTypeOpts) = {Name: "TxAssignTxId"}];
     TXTYPE_HEARTBEAT = 16 [(TxTypeOpts) = {Name: "TxHeartbeat"}];
+    TXTYPE_COMMIT_CHANGES = 17 [(TxTypeOpts) = {Name: "TxCommitChanges"}];
 }

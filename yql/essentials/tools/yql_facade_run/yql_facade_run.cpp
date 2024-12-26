@@ -565,7 +565,7 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
         TModulesTable modules;
         FillUserDataTableFromFileSystem(*RunOptions_.MountConfig, RunOptions_.DataTable);
 
-        if (!CompileLibraries(RunOptions_.DataTable, ctx, modules)) {
+        if (!CompileLibraries(RunOptions_.DataTable, ctx, modules, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate)) {
             *RunOptions_.ErrStream << "Errors on compile libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
             return -1;
@@ -573,7 +573,7 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
 
         moduleResolver = std::make_shared<TModuleResolver>(std::move(modules), ctx.NextUniqueId, ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate);
     } else {
-        if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, ClusterMapping_, RunOptions_.Mode >= ERunMode::Validate)) {
+        if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, ClusterMapping_, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate)) {
             *RunOptions_.ErrStream << "Errors loading default YQL libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
             return -1;

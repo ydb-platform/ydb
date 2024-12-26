@@ -104,6 +104,9 @@ private:
             case Ydb::Query::TransactionSettings::kSnapshotReadOnly:
                 ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_snapshot_read_only();
                 break;
+            case Ydb::Query::TransactionSettings::kSnapshotReadWrite:
+                ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_snapshot_read_write();
+                break;
         }
 
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_BEGIN_TX);

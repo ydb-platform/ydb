@@ -356,4 +356,6 @@ message TTableServiceConfig {
     // This value used for `arrow::Array`s built inside TDqOutputHashPartitionConsumerBlock -
     // if the underlying array buffer is filled less than this value, then the buffer's capacity gets shrunk to actual size.
     // Otherwise, we potentially don't track the real buffer capacity and it may lead to OOM situations inside DqOutputChannel's.
+
+    optional bool EnableSnapshotIsolationRW = 76 [default = false];
 };

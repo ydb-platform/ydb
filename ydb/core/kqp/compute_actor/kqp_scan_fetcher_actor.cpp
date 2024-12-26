@@ -23,7 +23,8 @@ static constexpr ui64 MAX_SHARD_RESOLVES = 3;
 
 
 TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snapshot,
-    const TComputeRuntimeSettings& settings, std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId,
+    const TComputeRuntimeSettings& settings, std::vector<NActors::TActorId>&& computeActors,
+    const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId, const TMaybe<NKikimrDataEvents::ELockMode> lockMode,
     const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, const TShardsScanningPolicy& shardsScanningPolicy,
     TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId)
     : Meta(meta)
@@ -32,6 +33,7 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     , TxId(txId)
     , LockTxId(lockTxId)
     , LockNodeId(lockNodeId)
+    , LockMode(lockMode)
     , ComputeActorIds(std::move(computeActors))
     , Snapshot(snapshot)
     , ShardsScanningPolicy(shardsScanningPolicy)
@@ -449,6 +451,9 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
     ev->Record.SetTxId(std::get<ui64>(TxId));
     if (LockTxId) {
         ev->Record.SetLockTxId(*LockTxId);
+        if (LockMode) {
+            ev->Record.SetLockMode(*LockMode);
+        }
     }
     ev->Record.SetLockNodeId(LockNodeId);
     ev->Record.SetTablePath(ScanDataMeta.TablePath);
@@ -499,8 +504,6 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
     state->LastKey = std::move(msg.LastKey);
     state->LastCursorProto = std::move(msg.LastCursorProto);
     const ui64 rowsCount = msg.GetRowsCount();
-    AFL_ENSURE(!LockTxId || !msg.LocksInfo.Locks.empty() || !msg.LocksInfo.BrokenLocks.empty());
-    AFL_ENSURE(LockTxId || (msg.LocksInfo.Locks.empty() && msg.LocksInfo.BrokenLocks.empty()));
     AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("action", "got EvScanData")("rows", rowsCount)("finished", msg.Finished)("exceeded", msg.RequestedBytesLimitReached)
         ("scan", ScanId)("packs_to_send", InFlightComputes.GetPacksToSendCount())
         ("from", ev->Sender)("shards remain", PendingShards.size())

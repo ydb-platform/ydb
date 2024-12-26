@@ -1375,6 +1375,32 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 260 }];
+
+        optional uint64 ThrottlingDeviceSpeed = 14 [(ControlOptions) = {
+            Description: "Maximum allowed speed when throttling is active",
+            MinValue: 1048576,
+            MaxValue: 10737418240,
+            DefaultValue: 52428800 }];
+        optional uint64 ThrottlingMinSstCount = 15 [(ControlOptions) = {
+            Description: "Minimum level 0 SST count - throttling is turned on",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 100 }];
+        optional uint64 ThrottlingMaxSstCount = 16 [(ControlOptions) = {
+            Description: "Maximum level 0 SST count - throttling speed is zero",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 250 }];
+        optional uint64 ThrottlingMinInplacedSize = 17 [(ControlOptions) = {
+            Description: "Minimum size of all inplaced blobs - throttling is turned on",
+            MinValue: 1048576,
+            MaxValue: 536870912000,
+            DefaultValue: 21474836480 }];
+        optional uint64 ThrottlingMaxInplacedSize = 18 [(ControlOptions) = {
+            Description: "Maximum size of all inplaced blobs - throttling speed is zero",
+            MinValue: 1048576,
+            MaxValue: 536870912000,
+            DefaultValue: 64424509440 }];
     }
 
     message TTabletControls {
@@ -1738,6 +1764,7 @@ message TColumnShardConfig {
     optional bool AllowNullableColumnsInPK = 29 [default = false];
     optional uint32 RestoreDataOnWriteTimeoutSeconds = 30;
     optional bool UseSlicesFilter = 31 [default = true];
+    optional uint32 LimitForPortionsMetadataAsk = 32 [default = 1000];
 }
 
 message TSchemeShardConfig {

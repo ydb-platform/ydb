@@ -1,0 +1,30 @@
+name: Rightlib sync
+on:
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: install packages
+        run: |
+          pip install PyGithub==2.5.0
+      - name: checkout main
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            ydb/ci/rightlib
+      - name: configure
+        run: |
+          git config --global user.email "alex@ydb.tech"
+          git config --global user.name "Alexander Smirnov"
+          
+      - name: run sync
+        env:
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+        run: |
+          cd ./ydb/ci/rightlib
+          ./sync-rightlib.py

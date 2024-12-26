@@ -10,6 +10,8 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/public_http/protos/fq.pb.h>
 
+#include <type_traits>
+
 namespace NKikimr::NPublicHttp {
 
 using namespace NActors;
@@ -249,6 +251,7 @@ void SetIdempotencyKey(T& dst, const TString& key) {
 
 template <typename GrpcProtoRequestType, typename HttpProtoRequestType, typename GrpcProtoResultType, typename HttpProtoResultType, typename GrpcProtoResponseType>
 class TGrpcCallWrapper : public TActorBootstrapped<TGrpcCallWrapper<GrpcProtoRequestType, HttpProtoRequestType, GrpcProtoResultType, HttpProtoResultType, GrpcProtoResponseType>> {
+protected:
     THttpRequestContext RequestContext;
 
     typedef std::function<std::unique_ptr<NGRpcService::TEvProxyRuntimeEvent>(TIntrusivePtr<NYdbGrpc::IRequestContextBase> ctx)> TGrpcProxyEventFactory;
@@ -278,6 +281,10 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
+        BootstrapWrapper(ctx);
+    }
+
+    virtual void BootstrapWrapper(const TActorContext& ctx) {
         auto grpcRequest = std::make_unique<TGrpcProtoRequestType>();
         if (Parse(*grpcRequest)) {
             TIntrusivePtr<TGrpcRequestContextWrapper> requestContext = new TGrpcRequestContextWrapper(RequestContext, std::move(grpcRequest), &SendReply);
@@ -354,7 +361,6 @@ public:
             auto* httpResult = google::protobuf::Arena::CreateMessage<FQHttp::Error>(resp->GetArena());
             FqConvert(typedResponse->operation(), *httpResult);
             FqPackToJson(json, *httpResult, jsonSettings);
-
             requestContext.ResponseBadRequestJson(typedResponse->operation().status(), json.Str());
             return;
         }
@@ -395,5 +401,73 @@ DECLARE_YQ_GRPC_ACTOR(GetQuery, DescribeQuery);
 DECLARE_YQ_GRPC_ACTOR(GetQueryStatus, GetQueryStatus);
 DECLARE_YQ_GRPC_ACTOR_WIHT_EMPTY_RESULT(StopQuery, ControlQuery);
 DECLARE_YQ_GRPC_ACTOR(GetResultData, GetResultData);
+
+class TJsonStartQuery : public TGrpcCallWrapper<FederatedQuery::DescribeQueryRequest, FQHttp::GetQueryRequest, FederatedQuery::ModifyQueryResult, google::protobuf::Empty, FederatedQuery::ModifyQueryResponse> {
+public:
+    typedef TGrpcCallWrapper<FederatedQuery::DescribeQueryRequest, FQHttp::GetQueryRequest, FederatedQuery::ModifyQueryResult, google::protobuf::Empty, FederatedQuery::ModifyQueryResponse> TGrpcCallWrapperBase;
+    
+    TJsonStartQuery(const THttpRequestContext& ctx)
+    : TGrpcCallWrapperBase(ctx, &NGRpcService::CreateFederatedQueryDescribeQueryRequestOperationCall)
+    {}
+
+    void BootstrapWrapper(const TActorContext& ctx) override {
+
+        auto describeRequest = std::make_unique<FederatedQuery::DescribeQueryRequest>();
+        if (!Parse(*describeRequest)) {
+            this->Die(ctx);
+            return;
+        }
+
+        TProtoStringType queryId =  describeRequest->Getquery_id();
+        TIntrusivePtr<TGrpcRequestContextWrapper> requestContext = MakeIntrusive<TGrpcRequestContextWrapper>(
+            RequestContext,
+            std::move(describeRequest),
+            [query_id = std::move(queryId), actorSystem = TActivationContext::ActorSystem()](const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 status) {
+
+            Y_ABORT_UNLESS(resp);
+            Y_ABORT_UNLESS(resp->GetArena());
+
+            auto* typedResponse = static_cast<FederatedQuery::DescribeQueryResponse*>(resp);
+            if (!typedResponse->operation().result().template Is<FederatedQuery::DescribeQueryResult>()) {                                   
+                TStringStream json;                                                                             
+                auto httpResult = std::unique_ptr<FQHttp::Error>(new FQHttp::Error());     
+                FqConvert(typedResponse->operation(), *httpResult);                                             
+                FqPackToJson(json, *httpResult, jsonSettings);                                                  
+                requestContext.ResponseBadRequestJson(typedResponse->operation().status(), json.Str());     
+                return;                                                                                         
+            }
+
+            std::unique_ptr<FederatedQuery::DescribeQueryResult> describeResult = std::unique_ptr<FederatedQuery::DescribeQueryResult>(new FederatedQuery::DescribeQueryResult());
+            if (!typedResponse->operation().result().UnpackTo(&*describeResult)) {
+                requestContext.ResponseBadRequest(Ydb::StatusIds::INTERNAL_ERROR, "Error in response unpack");
+                return;
+            }
+
+            // modify
+            auto modifyRequest = std::unique_ptr<FederatedQuery::ModifyQueryRequest>(new FederatedQuery::ModifyQueryRequest());
+
+            modifyRequest->set_query_id(query_id);
+            *modifyRequest->mutable_content() = describeResult->query().content();
+            modifyRequest->set_execute_mode(::FederatedQuery::ExecuteMode::RUN);
+            modifyRequest->set_state_load_mode(::FederatedQuery::StateLoadMode::STATE_LOAD_MODE_UNSPECIFIED);
+            modifyRequest->set_previous_revision(describeResult->query().meta().Getlast_job_query_revision());
+            modifyRequest->set_idempotency_key(requestContext.GetIdempotencyKey());
+
+            TIntrusivePtr<TGrpcRequestContextWrapper> requestContextModify = new TGrpcRequestContextWrapper(
+                requestContext,
+                std::move(modifyRequest),
+                TGrpcCallWrapper<FederatedQuery::ModifyQueryRequest, int, FederatedQuery::ModifyQueryResult, google::protobuf::Empty, FederatedQuery::ModifyQueryResponse>::SendReply
+            );
+
+            // new event -> new EventFactory
+            actorSystem->Send(NGRpcService::CreateGRpcRequestProxyId(), NGRpcService::CreateFederatedQueryModifyQueryRequestOperationCall(std::move(requestContextModify)).release());
+        });
+
+        ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(std::move(requestContext)).release());
+        this->Die(ctx);
+    }
+};
+
+#undef TGrpcCallWrapperBase
 
 } // namespace NKikimr::NPublicHttp

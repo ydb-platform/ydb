@@ -1869,6 +1869,10 @@ public:
             return false;
         }
 
+        if (!ctx.SimpleColumns && Columns.QualifiedAll && !columnName.Contains('.')) {
+            return false;
+        }
+
         if (!Columns.IsColumnPossible(ctx, columnName)) {
             return true;
         }

@@ -15,9 +15,8 @@ FROM
     Input1 WITH SCHEMA Struct<key: String?, subkey: String>
 ORDER BY
     key
-;
+; -- should reset sort
 
--- should reset sort
 SELECT
     *
 FROM

@@ -70,7 +70,7 @@ protected:
         auto& op = *tx.MutableCreateIncrementalRestoreSrc();
         op.MutableSrcPathId()->CopyFrom(RestoreOp.GetSrcPathIds(LoopStep));
         op.SetSrcTablePath(RestoreOp.GetSrcTablePaths(LoopStep));
-        PathIdFromPathId(pathId, op.MutableDstPathId());
+        pathId.ToProto(op.MutableDstPathId());
         op.SetDstTablePath(RestoreOp.GetDstTablePath());
     }
 
@@ -263,10 +263,10 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(IsExpectedTxType(txState->TxType));
         Y_ABORT_UNLESS(txState->LoopStep == RestoreOp.SrcPathIdsSize());
-        Y_ABORT_UNLESS(txState->TargetPathId == PathIdFromPathId(RestoreOp.GetSrcPathIds(RestoreOp.SrcPathIdsSize() - 1)));
+        Y_ABORT_UNLESS(txState->TargetPathId == TPathId::FromProto(RestoreOp.GetSrcPathIds(RestoreOp.SrcPathIdsSize() - 1)));
 
         for (const auto& pathId : RestoreOp.GetSrcPathIds()) {
-            context.OnComplete.ReleasePathState(OperationId, PathIdFromPathId(pathId), TPathElement::EPathState::EPathStateNoChanges);
+            context.OnComplete.ReleasePathState(OperationId, TPathId::FromProto(pathId), TPathElement::EPathState::EPathStateNoChanges);
         }
 
         context.OnComplete.DoneOperation(OperationId);
@@ -355,7 +355,7 @@ class TNewRestoreFromAtTable : public TSubOperation {
             Y_ABORT_UNLESS(txState);
             ++(txState->LoopStep);
             if (txState->LoopStep < Transaction.GetRestoreMultipleIncrementalBackups().SrcPathIdsSize()) {
-                txState->TargetPathId = PathIdFromPathId(Transaction.GetRestoreMultipleIncrementalBackups().GetSrcPathIds(txState->LoopStep));
+                txState->TargetPathId = TPathId::FromProto(Transaction.GetRestoreMultipleIncrementalBackups().GetSrcPathIds(txState->LoopStep));
                 txState->TxShardsListFinalized = false;
                 // TODO preserve TxState
                 return TTxState::ConfigureParts;
@@ -655,7 +655,7 @@ bool CreateRestoreMultipleIncrementalBackups(
 
         for (const auto& srcTablePath : srcPaths) {
             restoreOp.AddSrcTablePaths(srcTablePath.PathString());
-            PathIdFromPathId(srcTablePath.Base()->PathId, restoreOp.AddSrcPathIds());
+            srcTablePath.Base()->PathId.ToProto(restoreOp.AddSrcPathIds());
         }
 
         result.push_back(CreateRestoreIncrementalBackupAtTable(NextPartId(opId, result), outTx));

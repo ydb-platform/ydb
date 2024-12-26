@@ -103,6 +103,39 @@ class WorkloadBase:
             t.join()
 
 
+supported_pk_types = [
+    # Bool https://github.com/ydb-platform/ydb/issues/13037
+    "Int8",
+    "Int16",
+    "Int32",
+    "Int64",
+    "Uint8",
+    "Uint16",
+    "Uint32",
+    "Uint64",
+    "Decimal(22,9)",
+    # "DyNumber", https://github.com/ydb-platform/ydb/issues/13048
+
+    "String",
+    "Utf8",
+    # Uuid", https://github.com/ydb-platform/ydb/issues/13047
+
+    "Date",
+    "Datetime",
+    "Datetime64",
+    "Timestamp",
+    # "Interval", https://github.com/ydb-platform/ydb/issues/13050
+]
+
+supported_types = supported_pk_types + [
+    "Float",
+    "Double",
+    "Json",
+    "JsonDocument",
+    "Yson"
+]
+
+
 class WorkloadTablesCreateDrop(WorkloadBase):
     def __init__(self, client, prefix, stop):
         super().__init__(client, prefix, "create_drop", stop)
@@ -130,13 +163,17 @@ class WorkloadTablesCreateDrop(WorkloadBase):
 
     def create_table(self, table):
         path = self.get_table_path(table)
+        column_n = random.randint(1, 10000)
+        primary_key_column_n = random.randint(1, column_n)
+        partition_key_column_n = random.randint(1, primary_key_column_n)
+        columns = [random.choice(supported_pk_types) for _ in range(primary_key_column_n)] + [random.choice(supported_types) for _ in range(column_n - primary_key_column_n)]
+
         stmt = f"""
                 CREATE TABLE `{path}` (
-                id Int64 NOT NULL,
-                i64Val Int64,
-                PRIMARY KEY(id)
+                    {", ".join(["c" + str(i) + " " + columns[i] + " NOT NULL" for i in range(column_n)])},
+                    PRIMARY KEY({", ".join(["c" + str(i) for i in range(primary_key_column_n)])})
                 )
-                PARTITION BY HASH(id)
+                PARTITION BY HASH({", ".join(["c" + str(i) for i in range(partition_key_column_n)])})
                 WITH (
                     STORE = COLUMN
                 )

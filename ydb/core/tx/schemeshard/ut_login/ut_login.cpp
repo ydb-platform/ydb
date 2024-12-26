@@ -311,7 +311,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
         CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 0});
     }
-    
+
     Y_UNIT_TEST(AddAccess_NonExisting) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -331,7 +331,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", NACLib::TDiffACL{}.SerializeAsString(), "user1");
             TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "Owner SID user1 not found"}});
         }
-        
+
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
@@ -871,6 +871,52 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             accountLockout->SetAttemptResetDuration("blablabla");
         });
         CheckUserIsLockedOutPermanently(runtime);
+    }
+
+    Y_UNIT_TEST(CheckTimeOfUserCreating) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
+        }
+
+
+        {
+            std::chrono::time_point<std::chrono::system_clock> timeBeforCreateUser = std::chrono::system_clock::now();
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+            auto describeResult = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describeResult, {.PublicKeysSize = 0, .SidsSize = 1});
+
+            NLogin::TLoginProvider tmpLoginProvider;
+            tmpLoginProvider.UpdateSecurityState(describeResult.GetPathDescription().GetDomainDescription().GetSecurityState());
+            const auto& sid = tmpLoginProvider.Sids["user1"];
+            UNIT_ASSERT(sid.CreatedAt > timeBeforCreateUser);
+        }
+
+        {
+            std::chrono::time_point<std::chrono::system_clock> timeBeforCreateUser = std::chrono::system_clock::now();
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
+            auto describeResult = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describeResult, {.PublicKeysSize = 0, .SidsSize = 2});
+
+            NLogin::TLoginProvider tmpLoginProvider;
+            tmpLoginProvider.UpdateSecurityState(describeResult.GetPathDescription().GetDomainDescription().GetSecurityState());
+            const auto& sid = tmpLoginProvider.Sids["user2"];
+            UNIT_ASSERT(sid.CreatedAt > timeBeforCreateUser);
+        }
+
+        {
+            auto describeResult = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            NLogin::TLoginProvider tmpLoginProvider;
+            tmpLoginProvider.UpdateSecurityState(describeResult.GetPathDescription().GetDomainDescription().GetSecurityState());
+            const auto& sid1 = tmpLoginProvider.Sids["user1"];
+            const auto& sid2 = tmpLoginProvider.Sids["user2"];
+
+            UNIT_ASSERT(sid1.CreatedAt < sid2.CreatedAt);
+        }
     }
 }
 

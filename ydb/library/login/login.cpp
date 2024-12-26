@@ -79,6 +79,7 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
     TSidRecord& user = itUserCreate.first->second;
     user.Name = request.User;
     user.Hash = Impl->GenerateHash(request.Password);
+    user.CreatedAt = std::chrono::system_clock::now();
 
     return response;
 }
@@ -158,6 +159,7 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateGroup(const TCreateGroupReq
 
     TSidRecord& group = itGroupCreate.first->second;
     group.Name = request.Group;
+    group.CreatedAt = std::chrono::system_clock::now();
 
     return response;
 }
@@ -630,6 +632,7 @@ NLoginProto::TSecurityState TLoginProvider::GetSecurityState() const {
             for (const auto& subSid : sidInfo.Members) {
                 sid.AddMembers(subSid);
             }
+            sid.SetCreatedAt(std::chrono::duration_cast<std::chrono::milliseconds>(sidInfo.CreatedAt.time_since_epoch()).count());
             // no user hash here
         }
     }
@@ -670,6 +673,7 @@ void TLoginProvider::UpdateSecurityState(const NLoginProto::TSecurityState& stat
                 sid.Members.emplace(pbSubSid);
                 ChildToParentIndex[pbSubSid].emplace(sid.Name);
             }
+            sid.CreatedAt = std::chrono::system_clock::time_point(std::chrono::milliseconds(pbSid.GetCreatedAt()));
         }
     }
 }

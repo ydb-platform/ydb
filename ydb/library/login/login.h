@@ -145,6 +145,7 @@ public:
         TString Name;
         TString Hash;
         std::unordered_set<TString> Members;
+        std::chrono::system_clock::time_point CreatedAt;
     };
 
     // our current audience (database name)

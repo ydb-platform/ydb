@@ -303,7 +303,7 @@ private: //IDqComputeActorAsyncInput
         if (batch.empty()) {
             // Use non-zero value to signal presence of pending request
             // (value is NOT used for used space accounting)
-            return AwaitingQueue.size();
+            return !AwaitingQueue.empty();
         } else {
             // Attempt to estimate actual byte size;
             // May be over-estimated for shared strings;

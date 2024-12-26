@@ -1,5 +1,8 @@
 name: Rightlib sync
 on:
+  schedule:
+    - cron: "0 0 * * *"  # At 00:00 -- for PR creation
+    - cron: "0 5 * * *"  # At 05:00 -- for PR completion
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}

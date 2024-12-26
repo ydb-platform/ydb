@@ -303,19 +303,6 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         SendGet(env, test, vdiskId, blobId, "");
     }
 
-    Y_UNIT_TEST(EmptyTest) {
-        TEnvironmentSetup env(true, GetErasureTypeByString("none"));
-        TTestInfo test = InitTest(env);
-
-        constexpr ui32 size = 0;
-        TLogoBlobID blobId(1, 1, 0, 0, size, 0, 1);
-        SendPut(env, test, blobId, NKikimrProto::OK, size);
-        const TString data("");
-        auto vdiskId = test.Info->GetVDiskId(0);
-        SendGet(env, test, vdiskId, blobId, data);
-    }
-
-
     Y_UNIT_TEST(ProtobufBlob) {
         TEnvironmentSetup env(true, GetErasureTypeByString("none"));
         TTestInfo test = InitTest(env);

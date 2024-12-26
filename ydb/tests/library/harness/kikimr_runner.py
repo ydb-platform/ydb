@@ -434,11 +434,12 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
     def stop(self, kill=False):
         saved_exceptions_queue = Queue()
+
         def stop_node(node, kill):
             exception = self.__stop_node(node, kill)
             if exception is not None:
                 saved_exceptions_queue.put(exception)
-        
+
         # do in parallel to faster stopping (important for tests)
         threads = []
         for node in list(self.slots.values()) + list(self.nodes.values()):

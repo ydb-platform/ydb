@@ -1,15 +1,15 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 
-Y_UNIT_TEST_SUITE(Put) {
+Y_UNIT_TEST_SUITE(RequestValidation) {
     struct TestCtx {
-        TestCtx()
-            : Env(new TEnvironmentSetup({
-                .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
-            }))
-        {}
-    
         void Initialize() {
+            TFeatureFlags ff;
+            ff.SetEnableVPatch(true);
+            Env.reset(new TEnvironmentSetup(TEnvironmentSetup::TSettings{
+                .FeatureFlags = std::move(ff),
+            }));
+        
             Env->CreateBoxAndPool(1, 1);
             Env->Sim(TDuration::Minutes(1));
 
@@ -94,5 +94,36 @@ Y_UNIT_TEST_SUITE(Put) {
         for (ui32 i = 0; i < vputsCount; ++i) {
             UNIT_ASSERT(res->Get()->Record.GetItems(i).GetStatus() == NKikimrProto::ERROR);
         }
+    }
+
+    Y_UNIT_TEST(TestVMovedPatchSize0) {
+        TestCtx ctx;
+        ctx.Initialize();
+        TLogoBlobID oldId(100, 1, 1, 0, /*blobSize=*/100, 0, /*partId=*/1);
+        TLogoBlobID newId(100, 1, 1, 0, /*blobSize=*/0, 1, /*partId=*/1);
+
+        auto ev = std::make_unique<TEvBlobStorage::TEvVMovedPatch>(ctx.GroupId.GetRawId(), ctx.GroupId.GetRawId(),
+                oldId, newId, ctx.VDiskId, false, 0, TInstant::Max());
+        
+        ctx.Env->Runtime->Send(new IEventHandle(ctx.VDiskActorId, ctx.Edge, ev.release()), ctx.VDiskActorId.NodeId());
+
+        auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVMovedPatchResult>(ctx.Edge, false, TInstant::Max());
+        UNIT_ASSERT(res);
+        UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrProto::ERROR);
+    }
+
+    Y_UNIT_TEST(TestVPatchSize0) {
+        TestCtx ctx;
+        ctx.Initialize();
+        TLogoBlobID oldId(100, 1, 1, 0, /*blobSize=*/100, 0, /*partId=*/1);
+        TLogoBlobID newId(100, 1, 1, 0, /*blobSize=*/0, 1, /*partId=*/1);
+
+        auto ev = std::make_unique<TEvBlobStorage::TEvVPatchStart>(oldId, newId, ctx.VDiskId, TInstant::Max(), 0, false);
+        
+        ctx.Env->Runtime->Send(new IEventHandle(ctx.VDiskActorId, ctx.Edge, ev.release()), ctx.VDiskActorId.NodeId());
+
+        auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVPatchResult>(ctx.Edge, false, TInstant::Max());
+        UNIT_ASSERT(res);
+        UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrProto::ERROR);
     }
 }

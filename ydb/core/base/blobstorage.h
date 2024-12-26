@@ -1545,6 +1545,10 @@ struct TEvBlobStorage {
             Y_VERIFY_S(originalId != patchedId, "EvPatch invalid: OriginalId and PatchedId mustn't be equal"
                     << " OriginalId# " << originalId
                     << " PatchedId# " << patchedId);
+            Y_VERIFY_S(patchedId.BlobSize(),
+                    "EvPatch invalid: LogoBlobId must have non-zero size field,"
+                    << " OriginalId# " << originalId
+                    << " PatchedId# " << patchedId);
             Y_VERIFY_S(originalId.BlobSize() == patchedId.BlobSize(),
                     "EvPatch invalid: original and patched size must be equal,"
                     << " OriginalId# " << originalId

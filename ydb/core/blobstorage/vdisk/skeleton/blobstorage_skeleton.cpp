@@ -243,6 +243,13 @@ namespace NKikimr {
         void Handle(TEvBlobStorage::TEvVMovedPatch::TPtr &ev, const TActorContext &ctx) {
             LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVMovedPatch: receive request;"
                     << " Event# " << ev->Get()->ToString());
+
+            TLogoBlobID patchedBlobId = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetPatchedBlobId());
+            if (patchedBlobId.BlobSize() == 0) {
+                ReplyError(NKikimrProto::ERROR, "Blob size must be non-zero", ev, ctx, TAppData::TimeProvider->Now());
+                return;
+            }
+
             if (!CheckIfWriteAllowed(ev, ctx)) {
                 LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVMovedPatch: is not allowed;"
                         << " Event# " << ev->Get()->ToString());

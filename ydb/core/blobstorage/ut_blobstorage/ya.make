@@ -38,7 +38,6 @@ SRCS(
     monitoring.cpp
     multiget.cpp
     patch.cpp
-    put.cpp
     recovery.cpp
     sanitize_groups.cpp
     scrub_fast.cpp
@@ -46,6 +45,7 @@ SRCS(
     space_check.cpp
     sync.cpp
     ut_helpers.cpp
+    validation.cpp
 )
 
 PEERDIR(

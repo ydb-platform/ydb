@@ -35,6 +35,7 @@ struct TEvPrivate {
         EvCanMoveTablets,
         EvRefreshScaleRecommendation,
         EvUpdateDataCenterFollowers,
+        EvUpdateFollowers,
         EvEnd
     };
 
@@ -129,6 +130,9 @@ struct TEvPrivate {
         TDataCenterId DataCenter;
 
         TEvUpdateDataCenterFollowers(TDataCenterId dataCenter) : DataCenter(dataCenter) {};
+    };
+
+    struct TEvUpdateFollowers : TEventLocal<TEvUpdateFollowers, EvUpdateFollowers> {
     };
 };
 

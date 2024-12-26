@@ -885,27 +885,29 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
 
         {
-            std::chrono::time_point<std::chrono::system_clock> timeBeforCreateUser = std::chrono::system_clock::now();
+            std::chrono::time_point<std::chrono::system_clock> start = std::chrono::system_clock::now();
             CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+            std::chrono::time_point<std::chrono::system_clock> finish = std::chrono::system_clock::now();
             auto describeResult = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             CheckSecurityState(describeResult, {.PublicKeysSize = 0, .SidsSize = 1});
 
             NLogin::TLoginProvider tmpLoginProvider;
             tmpLoginProvider.UpdateSecurityState(describeResult.GetPathDescription().GetDomainDescription().GetSecurityState());
             const auto& sid = tmpLoginProvider.Sids["user1"];
-            UNIT_ASSERT(sid.CreatedAt > timeBeforCreateUser);
+            UNIT_ASSERT(sid.CreatedAt >= start && sid.CreatedAt <= finish);
         }
 
         {
-            std::chrono::time_point<std::chrono::system_clock> timeBeforCreateUser = std::chrono::system_clock::now();
+            std::chrono::time_point<std::chrono::system_clock> start = std::chrono::system_clock::now();
             CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
+            std::chrono::time_point<std::chrono::system_clock> finish = std::chrono::system_clock::now();
             auto describeResult = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             CheckSecurityState(describeResult, {.PublicKeysSize = 0, .SidsSize = 2});
 
             NLogin::TLoginProvider tmpLoginProvider;
             tmpLoginProvider.UpdateSecurityState(describeResult.GetPathDescription().GetDomainDescription().GetSecurityState());
             const auto& sid = tmpLoginProvider.Sids["user2"];
-            UNIT_ASSERT(sid.CreatedAt > timeBeforCreateUser);
+            UNIT_ASSERT(sid.CreatedAt >= start && sid.CreatedAt <= finish);
         }
 
         {

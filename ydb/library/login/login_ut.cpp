@@ -363,27 +363,28 @@ Y_UNIT_TEST_SUITE(Login) {
         provider.RotateKeys();
 
         {
-            std::chrono::time_point<std::chrono::system_clock> timeBeforCreateUser = std::chrono::system_clock::now();
+            std::chrono::time_point<std::chrono::system_clock> start = std::chrono::system_clock::now();
             TLoginProvider::TCreateUserRequest request {
                 .User = "user1",
                 .Password = "password1"
             };
             auto response = provider.CreateUser(request);
+            std::chrono::time_point<std::chrono::system_clock> finish = std::chrono::system_clock::now();
             UNIT_ASSERT(!response.Error);
             const auto& sid = provider.Sids["user1"];
-            UNIT_ASSERT(sid.CreatedAt > timeBeforCreateUser);
+            UNIT_ASSERT(sid.CreatedAt >= start && sid.CreatedAt <= finish);
         }
-
         {
-            std::chrono::time_point<std::chrono::system_clock> timeBeforCreateUser = std::chrono::system_clock::now();
+            std::chrono::time_point<std::chrono::system_clock> start = std::chrono::system_clock::now();
             TLoginProvider::TCreateUserRequest request {
                 .User = "user2",
                 .Password = "password2"
             };
             auto response = provider.CreateUser(request);
+            std::chrono::time_point<std::chrono::system_clock> finish = std::chrono::system_clock::now();
             UNIT_ASSERT(!response.Error);
-            const auto& user2Sid = provider.Sids["user2"];
-            UNIT_ASSERT(user2Sid.CreatedAt > timeBeforCreateUser);
+            const auto& sid = provider.Sids["user2"];
+            UNIT_ASSERT(sid.CreatedAt >= start && sid.CreatedAt <= finish);
         }
 
         {

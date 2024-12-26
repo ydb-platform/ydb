@@ -56,6 +56,10 @@ public:
         return false;
     }
 
+    static constexpr bool NeedQueueTags() { // override it in TDerived if needed
+        return false;
+    }
+
     // For queue requests
     static constexpr bool NeedExistingQueue() {
         return true;
@@ -73,6 +77,9 @@ public:
         ui64 configurationFlags = 0;
         if (TDerived::NeedQueueAttributes()) {
             configurationFlags |= TSqsEvents::TEvGetConfiguration::EFlags::NeedQueueAttributes;
+        }
+        if (TDerived::NeedQueueTags()) {
+            configurationFlags |= TSqsEvents::TEvGetConfiguration::EFlags::NeedQueueTags;
         }
         if (TProxyActor::NeedCreateProxyActor(Action_)) {
             configurationFlags |= TSqsEvents::TEvGetConfiguration::EFlags::NeedQueueLeader;

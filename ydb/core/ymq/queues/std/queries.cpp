@@ -538,8 +538,8 @@ const char* const InternalGetQueueAttributesQuery = R"__(
     (
         (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
         (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
-        (let name     (Parameter 'NAME (DataType 'Utf8String)))
-        (let userName (Parameter 'USER_NAME (DataType 'Utf8String)))
+        (let name     (Parameter 'NAME (DataType 'Utf8)))
+        (let userName (Parameter 'USER_NAME (DataType 'Utf8)))
 
         (let attrsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Attributes)
 
@@ -572,10 +572,12 @@ const char* const InternalGetQueueAttributesQuery = R"__(
 
         (let queuesRowRead (SelectRow queuesTable queuesRow queuesRowSelect))
 
+        (let tags (Coalesce (Member queuesRowRead 'Tags) (Utf8 '"{}")))
+
         (return (AsList
             (SetResult 'queueExists (Exists attrsRead))
             (SetResult 'attrs attrsRead)
-            (SetResult 'tags (Member queuesRowRead 'Tags))))
+            (SetResult 'tags tags)))
     )
 )__";
 
@@ -601,29 +603,20 @@ const char* const InternalListQueueTagsQuery = R"__(
 
 const char* const TagQueueQuery = R"__(
     (
-        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
-        (let queueIdNumberHash          (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let name     (Parameter 'NAME (DataType 'Utf8)))
+        (let userName (Parameter 'USER_NAME (DataType 'Utf8)))
+        (let tags  (Parameter 'TAGS (DataType 'Utf8)))
 
-        (let tags (Parameter 'TAGS
-            (ListType (StructType
-                '('Key (DataType 'Utf8))
-                '('Value (DataType 'Utf8))))))
+        (let queuesTable ')__" ROOT_PARAM R"__(/.Queues)
 
-        (let tagsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Tags)
+        (let queuesRow '(
+            '('Account userName)
+            '('QueueName (Utf8 '")__" QUEUE_NAME_PARAM R"__("))))
 
-        (let res
-            (MapParameter tags (lambda '(tag) (block '(
-                (let key (Member tag 'Key))
-                (let value (Member tag 'Value))
-                (let tagRow '(
-                    '('QueueIdNumberHash queueIdNumberHash)
-                    '('QueueIdNumber queueIdNumber)
-                    '('Key key)))
-                (let tagUpdate '(
-                    '('Value value)))
-                (return (UpdateRow tagsTable tagRow tagUpdate)))))))
+        (let queuesRowUpdate '(
+            '('Tags tags)))
 
-        (return (Extend (AsList (Void)) res))
+        (return (AsList (UpdateRow queuesTable queuesRow queuesRowUpdate)))
     )
 )__";
 

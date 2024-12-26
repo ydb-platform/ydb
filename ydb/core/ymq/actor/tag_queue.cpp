@@ -19,6 +19,13 @@ class TTagQueueActor
     : public TActionActor<TTagQueueActor>
 {
 public:
+    static constexpr bool NeedQueueAttributes() {
+        return true;
+    }
+    static constexpr bool NeedQueueTags() {
+        return true;
+    }
+
     TTagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::TagQueue, std::move(cb))
     {
@@ -46,6 +53,18 @@ private:
     void DoAction() override {
         Become(&TThis::StateFunc);
 
+        NJson::TJsonValue tagsJson;
+        TStringStream tagsStr;
+        if (QueueTags_.Defined()) {
+            for (const auto& [k, v] : *QueueTags_) {
+                tagsJson[k] = v;
+            }
+        }
+        for (const auto& [k, v] : Tags_) {
+            tagsJson[k] = v;
+        }
+        WriteJson(&tagsStr, &tagsJson);
+
         TExecutorBuilder builder(SelfId(), RequestId_);
         builder
             .User(UserName_)
@@ -56,19 +75,11 @@ private:
             .Counters(QueueCounters_)
             .RetryOnTimeout()
             .Params()
-                .Uint64("QUEUE_ID_NUMBER", QueueVersion_.GetRef())
-                .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_));
-
-        NClient::TWriteValue params = builder.ParamsValue();
-        for (const auto& [key, value] : Tags_) {
-            auto tag = params["TAGS"].AddListItem();
-            tag["Key"] = key;
-            tag["Value"] = value;
-        }
+                .Utf8("NAME", GetQueueName())
+                .Utf8("USER_NAME", UserName_)
+                .Utf8("TAGS", tagsStr.Str());
 
         builder.Start();
-
-        SendReplyAndDie();
     }
 
     TString DoGetQueueName() const override {

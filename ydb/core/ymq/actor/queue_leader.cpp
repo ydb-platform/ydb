@@ -1505,6 +1505,11 @@ void TQueueLeader::AnswerGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr&
         resp->QueueAttributes = QueueAttributes_;
     }
 
+    if (req->Get()->NeedQueueTags) {
+        Y_ABORT_UNLESS(QueueTags_);
+        resp->QueueTags = QueueTags_;
+    }
+
     Send(req->Sender, std::move(resp));
 }
 
@@ -1675,10 +1680,13 @@ void TQueueLeader::OnQueueAttributes(const TSqsEvents::TEvExecuted::TRecord& ev)
 
         queueExists = val["queueExists"];
         if (queueExists) {
-            const auto& tags = val["tags"];
-            for (size_t i = 0; i < tags.Size(); ++i) {
-                QueueTags_->emplace(tags[i]["Key"], tags[i]["Value"]);
+            NJson::TJsonValue tagsJson;
+            NJson::ReadJsonTree(TString(val["tags"]), &tagsJson);
+            TSqsEvents::TQueueTags tags;
+            for (const auto& [k, v] : tagsJson.GetMapSafe()) {
+                tags.emplace(k, v.GetString());
             }
+            QueueTags_ = tags;
 
             const TValue& attrs(val["attrs"]);
 

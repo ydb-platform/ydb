@@ -1139,6 +1139,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     Y_UNIT_TEST_F(TestTagQueue, THttpProxyTestMock) {
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
         auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
         auto setTags = NJson::TJsonMap{
             {"key1", "value1"},
             {"key2", "value2"},

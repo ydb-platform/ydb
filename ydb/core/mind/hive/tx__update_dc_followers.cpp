@@ -7,7 +7,7 @@ namespace NHive {
 class TTxProcessUpdateFollowers : public TTransactionBase<THive> {
     TSideEffects SideEffects;
 
-    static constexpr size_t MAX_UPDATES_PROCESSED = 1;
+    static constexpr size_t MAX_UPDATES_PROCESSED = 1000;
 public:
     TTxProcessUpdateFollowers(THive* hive)
         : TBase(hive)

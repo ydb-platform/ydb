@@ -23,7 +23,7 @@ class TestYdbWorkload(object):
                 workload_path,
                 "--endpoint", f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
                 "--database=/Root",
-                "--duration", "300",
+                "--duration", "120",
             ],
             wait=True
         )

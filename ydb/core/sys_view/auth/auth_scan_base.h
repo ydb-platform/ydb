@@ -13,6 +13,7 @@ namespace NKikimr::NSysView::NAuth {
 using namespace NSchemeShard;
 using namespace NActors;
 using namespace NSchemeCache;
+using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 template <typename TDerived>
 class TAuthScanBase : public TScanActorBase<TDerived> {
@@ -66,37 +67,27 @@ protected:
             return;
         }
 
-        DescribePath(TBase::TenantName);
+        NavigatePath(TBase::TenantName);
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-
         THolder<NSchemeCache::TSchemeCacheNavigate> request(ev->Get()->Request.Release());
         Y_ABORT_UNLESS(request->ResultSet.size() == 1);
         
-        auto& entry = request->ResultSet.back();
-        auto entryPath = CanonizePath(entry.Path);
-        if (entry.Status != TNavigate::EStatus::Ok) {
-            TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << 
-                "Failed to navigate " << entryPath << ": " << entry.Status);
-            return;
+        for (const auto& entry : request->ResultSet) {
+            if (entry.Status != TNavigate::EStatus::Ok) {
+                TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << 
+                    "Failed to navigate " << CanonizePath(entry.Path) << ": " << entry.Status);
+                return;
+            }
         }
 
-        if (entryPath != CurrentNavigatePath) {
-            LOG_WARN_S(ctx, NKikimrServices::SYSTEM_VIEWS,
-                "Requested " << CurrentNavigatePath << " navigate but got " << entryPath);
-            return;
-        }
         LOG_TRACE_S(ctx, NKikimrServices::SYSTEM_VIEWS,
-            "Got " << entryPath << " navigate: " << entry.ToString());
-        CurrentNavigatePath = {};
+            "Got navigate: " << request->ToString(*AppData()->TypeRegistry));
         
-        // const auto& description = record.GetPathDescription();
-
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
 
-        // FillBatch(*batch, description);
+        FillBatch(*batch, request->ResultSet);
 
         TBase::SendBatch(std::move(batch));
     }
@@ -109,7 +100,7 @@ protected:
         TBase::PassAway();
     }
 
-    void DescribePath(TString path) {
+    void NavigatePath(TString path) {
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
 
         auto& entry = request->ResultSet.emplace_back();
@@ -118,18 +109,13 @@ protected:
         entry.Operation = TSchemeCacheNavigate::OpPath;
         entry.RedirectRequired = false;
 
-        CurrentNavigatePath = path;
-
         LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
             "Navigate " << path << ": " << request->ToString(*AppData()->TypeRegistry));
 
         TBase::Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
     }
 
-    virtual void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const ::NKikimrSchemeOp::TPathDescription& description) = 0;
-
-private:
-    TString CurrentNavigatePath;
+    virtual void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TNavigate::TResultSet& resultSet) = 0;
 
 };
 

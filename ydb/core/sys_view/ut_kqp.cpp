@@ -2135,7 +2135,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         ])", ysonString);
     }
 
-    Y_UNIT_TEST(Users) {
+    Y_UNIT_TEST(AuthUsers) {
         TTestEnv env;
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
@@ -2194,7 +2194,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
-    Y_UNIT_TEST(Sids) {
+    Y_UNIT_TEST(AuthSids) {
         TTestEnv env;
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
@@ -2255,7 +2255,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
     
 
-    Y_UNIT_TEST(GroupMembers) {
+    Y_UNIT_TEST(AuthGroupMembers) {
         TTestEnv env;
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);

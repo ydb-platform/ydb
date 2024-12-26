@@ -20,12 +20,58 @@ TSchemeCacheConfig::TSchemeCacheConfig(const TAppData* appData, ::NMonitoring::T
 }
 
 TString TDomainInfo::ToString() const {
-    return TStringBuilder() << "{"
+    auto result = TStringBuilder() << "{"
         << " DomainKey: " << DomainKey
         << " ResourcesDomainKey: " << ResourcesDomainKey
         << " Params { " << Params.ShortDebugString() << " }"
-        << " ServerlessComputeResourcesMode: " << ServerlessComputeResourcesMode
+        << " ServerlessComputeResourcesMode: " << ServerlessComputeResourcesMode;
+
+    result << " Users: [";
+    for (ui32 i = 0; i < Users.size(); ++i) {
+        if (i) {
+            result << ",";
+        }
+
+        result << Users.at(i).ToString();
+    }
+    result << "]";
+
+    result << " Groups: [";
+    for (ui32 i = 0; i < Groups.size(); ++i) {
+        if (i) {
+            result << ",";
+        }
+
+        result << Groups.at(i).ToString();
+    }
+    result << "]";
+
+    result << " }";
+    return result;
+}
+
+TString TDomainInfo::TUser::ToString() const {
+    return TStringBuilder() << "{"
+        << " Sid: " << Sid
     << " }";
+}
+
+TString TDomainInfo::TGroup::ToString() const {
+    auto result = TStringBuilder() << "{"
+        << " Sid: " << Sid;
+
+    result << " Members: [";
+    for (ui32 i = 0; i < Members.size(); ++i) {
+        if (i) {
+            result << ",";
+        }
+
+        result << Members.at(i);
+    }
+    result << "]";
+
+    result << " }";
+    return result;
 }
 
 TString TSchemeCacheNavigate::TEntry::ToString() const {

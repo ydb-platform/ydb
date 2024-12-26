@@ -26,21 +26,21 @@ public:
     }
 
 protected:
-    void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const ::NKikimrSchemeOp::TPathDescription& description) override {
+    void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TNavigate::TResultSet& resultSet) override {
+        Y_ABORT_UNLESS(resultSet.size() == 1);
+        auto& entry = resultSet.back();
+        Y_ABORT_UNLESS(entry.Status == TNavigate::EStatus::Ok);
+        Y_ABORT_UNLESS(CanonizePath(entry.Path) == TBase::TenantName);
+        
         TVector<TCell> cells(::Reserve(Columns.size()));
 
         // TODO: add rows according to request's sender user rights
 
-        const auto& sids = description.GetDomainDescription().GetSecurityState().GetSids();
-        for (const auto& sid : sids) {
-            if (sid.GetType() != NLoginProto::ESidType_SidType_USER) {
-                continue;
-            }
-
+        for (const auto& user : entry.DomainInfo->Users) {
             for (auto& column : Columns) {
                 switch (column.Tag) {
                 case Schema::AuthUsers::Name::ColumnId:
-                    cells.push_back(TCell(sid.GetName().data(), sid.GetName().size()));
+                    cells.push_back(TCell(user.Sid.data(), user.Sid.size()));
                     break;
                 default:
                     cells.emplace_back();

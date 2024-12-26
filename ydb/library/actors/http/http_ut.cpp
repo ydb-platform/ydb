@@ -308,7 +308,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
     }
 
     Y_UNIT_TEST(BasicRunning4) {
-        NActors::TTestActorRuntimeBase actorSystem;
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
         TPortManager portManager;
         TIpPort port = portManager.GetTcpPort();
         TAutoPtr<NActors::IEventHandle> handle;
@@ -341,7 +341,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
     }
 
     Y_UNIT_TEST(BasicRunning6) {
-        NActors::TTestActorRuntimeBase actorSystem;
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
         TPortManager portManager;
         TIpPort port = portManager.GetTcpPort();
         TAutoPtr<NActors::IEventHandle> handle;
@@ -374,7 +374,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
     }
 
     Y_UNIT_TEST(TlsRunning) {
-        NActors::TTestActorRuntimeBase actorSystem;
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
         TPortManager portManager;
         TIpPort port = portManager.GetTcpPort();
         TAutoPtr<NActors::IEventHandle> handle;
@@ -492,12 +492,14 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
     }*/
 
     Y_UNIT_TEST(TooLongHeader) {
-        NActors::TTestActorRuntimeBase actorSystem;
-        actorSystem.SetUseRealInterconnect();
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
         TPortManager portManager;
         TIpPort port = portManager.GetTcpPort();
         TAutoPtr<NActors::IEventHandle> handle;
         actorSystem.Initialize();
+#ifndef NDEBUG
+        actorSystem.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_TRACE);
+#endif
 
         NActors::IActor* proxy = NHttp::CreateHttpProxy();
         NActors::TActorId proxyId = actorSystem.Register(proxy);
@@ -522,7 +524,7 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
     }
 
     Y_UNIT_TEST(HeaderWithoutAColon) {
-        NActors::TTestActorRuntimeBase actorSystem;
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
         actorSystem.SetUseRealInterconnect();
         TPortManager portManager;
         TIpPort port = portManager.GetTcpPort();
@@ -615,7 +617,7 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
     }
 
     Y_UNIT_TEST(ChunkedResponse1) {
-        NActors::TTestActorRuntimeBase actorSystem;
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
         TPortManager portManager;
         TIpPort port = portManager.GetTcpPort();
         TAutoPtr<NActors::IEventHandle> handle;
@@ -660,7 +662,7 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
     }
 
     Y_UNIT_TEST(ChunkedResponse2) {
-        NActors::TTestActorRuntimeBase actorSystem;
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
         TPortManager portManager;
         TIpPort port = portManager.GetTcpPort();
         TAutoPtr<NActors::IEventHandle> handle;
@@ -703,13 +705,15 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
     }
 
     Y_UNIT_TEST(ChunkedResponse3) {
-        NActors::TTestActorRuntimeBase actorSystem;
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
         TPortManager portManager;
         TIpPort port = portManager.GetTcpPort();
         TAutoPtr<NActors::IEventHandle> handle;
         actorSystem.Initialize();
 #ifndef NDEBUG
         actorSystem.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_DEBUG);
+#else
+        actorSystem.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_CRIT);
 #endif
 
         NActors::IActor* proxy = NHttp::CreateHttpProxy();
@@ -746,12 +750,14 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
     }
 
     Y_UNIT_TEST(RequestAfter307) {
-        NActors::TTestActorRuntimeBase actorSystem;
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
         TPortManager portManager;
         TIpPort port = portManager.GetTcpPort();
         TAutoPtr<NActors::IEventHandle> handle;
         actorSystem.Initialize();
+#ifndef NDEBUG
         actorSystem.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_TRACE);
+#endif
 
         NActors::IActor* proxy = NHttp::CreateHttpProxy();
         NActors::TActorId proxyId = actorSystem.Register(proxy);

@@ -263,6 +263,9 @@ class KikimrConfigGenerator(object):
             self.yaml_config["table_service_config"]["enable_kqp_data_query_stream_lookup"] = False
 
         self.yaml_config["feature_flags"]["enable_public_api_external_blobs"] = enable_public_api_external_blobs
+
+        # for faster shutdown: there is no reason to wait while tablets are drained before whole cluster is stopping
+        self.yaml_config["feature_flags"]["enable_drain_on_shutdown"] = False
         for extra_feature_flag in extra_feature_flags:
             self.yaml_config["feature_flags"][extra_feature_flag] = True
         if enable_alter_database_create_hive_first:

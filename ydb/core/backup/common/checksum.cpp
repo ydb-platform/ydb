@@ -27,7 +27,7 @@ private:
 };
 
 TString ComputeChecksum(TStringBuf data) {
-    IChecksum::TPtr checksum(CreateExportChecksum());
+    IChecksum::TPtr checksum(CreateChecksum());
     checksum->AddData(data);
     return checksum->Serialize();
 }

@@ -336,7 +336,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
 
     void StartValidatingChecksum(const TString& key, const TString& object, std::function<void()> checksumValidatedCallback) {
         ChecksumKey = key + ".sha256";
-        Checksum = NBackup::IChecksum::Compute(object);
+        Checksum = NBackup::ComputeChecksum(object);
         ChecksumValidatedCallback = checksumValidatedCallback;
 
         ResetRetries();

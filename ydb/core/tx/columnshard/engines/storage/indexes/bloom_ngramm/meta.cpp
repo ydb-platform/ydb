@@ -15,18 +15,16 @@ namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
 class TNGrammBuilder {
 private:
-    TBuffer Zeros;
     const ui32 HashesCount;
-
-    static const ui64 HashesConstructorP = 9223372036854775783;
-    static const ui64 HashesConstructorA = 1;
 
     template <int HashIdx>
     class THashesBuilder {
     public:
         template <class TActor>
-        static void Build(const ui64 originalHash, const TActor& actor) {
-            actor((HashesConstructorA * originalHash + HashIdx) % HashesConstructorP);
+        static void Build(const ui8* data, ui64& h, const TActor& actor) {
+            h = h ^ uint64_t(*data);
+            h = h * 16777619;
+            THashesBuilder<HashIdx - 1>::Build(data + 1, h, actor);
         }
     };
 
@@ -34,59 +32,39 @@ private:
     class THashesBuilder<0> {
     public:
         template <class TActor>
-        static void Build(const ui64 /*originalHash*/, const TActor& /*actor*/) {
+        static void Build(const ui8* /*data*/, ui64& hash, const TActor& actor) {
+            actor(hash);
         }
     };
 
     template <class TActor>
-    void BuildHashesSet(const ui64 originalHash, const TActor& actor) const {
-        if (HashesCount == 1) {
-            THashesBuilder<1>::Build(originalHash, actor);
-        } else if (HashesCount == 2) {
-            THashesBuilder<2>::Build(originalHash, actor);
-        } else if (HashesCount == 3) {
-            THashesBuilder<3>::Build(originalHash, actor);
-        } else if (HashesCount == 4) {
-            THashesBuilder<4>::Build(originalHash, actor);
-        } else if (HashesCount == 5) {
-            THashesBuilder<5>::Build(originalHash, actor);
-        } else if (HashesCount == 6) {
-            THashesBuilder<6>::Build(originalHash, actor);
-        } else if (HashesCount == 7) {
-            THashesBuilder<7>::Build(originalHash, actor);
-        } else if (HashesCount == 8) {
-            THashesBuilder<8>::Build(originalHash, actor);
-        } else {
-            for (ui32 b = 1; b <= HashesCount; ++b) {
-                const ui64 hash = (HashesConstructorA * originalHash + b) % HashesConstructorP;
-                actor(hash);
+    void BuildHashesSet(const ui8* data, const ui32 dataSize, const TActor& actor) {
+        for (ui32 i = 1; i <= HashesCount; ++i) {
+            ui64 hash = 2166136261 * i;
+            if (dataSize == 3) {
+                THashesBuilder<3>::Build(data, hash, actor);
+            } else if (dataSize == 4) {
+                THashesBuilder<4>::Build(data, hash, actor);
+            } else if (dataSize == 5) {
+                THashesBuilder<5>::Build(data, hash, actor);
+            } else if (dataSize == 6) {
+                THashesBuilder<6>::Build(data, hash, actor);
+            } else if (dataSize == 7) {
+                THashesBuilder<7>::Build(data, hash, actor);
+            } else if (dataSize == 8) {
+                THashesBuilder<8>::Build(data, hash, actor);
+            } else {
+                NArrow::NHash::NXX64::TStreamStringHashCalcer calcer(i);
+                calcer.Start();
+                calcer.Update(data, dataSize);
+                actor(calcer.Finish());
             }
-        }
-    }
-
-    ui64 CalcHash(const char* data, const ui32 size) const {
-        if (size == 3) {
-            return (*(const ui32*)data) & 0x00FFFFFF;
-//             TStringBuilder sb;
-//             sb << res << "/" << (ui32)((ui8*)&res)[0] << "/" << (ui32)((ui8*)&res)[1] << "/" << (ui32)((ui8*)&res)[2] << "/"
-//                << (ui32)((ui8*)&res)[3] << " vs " << (ui64)data[0] << "/" << (((ui64)data[1])) << "/" << (((ui64)data[2])) << Endl;
-//             Cerr << sb;
-//             return (ui64(*(const ui32*)data)) >> 8;
-        } else if (size == 4) {
-            return *(const ui32*)data;
-        } else {
-            uint64_t h = 2166136261;
-            for (size_t i = 0; i < size; i++) {
-                h = h ^ uint64_t(data[i]);
-                h = h * 16777619;
-            }
-            return h;
         }
     }
 
     template <class TAction>
     void BuildNGramms(const char* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, const ui32 nGrammSize,
-        const TAction& pred) const {
+        const TAction& pred) {
         TBuffer fakeString;
         AFL_VERIFY(nGrammSize >= 3)("value", nGrammSize);
         if (!op || op == NRequest::TLikePart::EOperation::StartsWith) {
@@ -97,12 +75,12 @@ private:
                 if (fakeString.size() < nGrammSize) {
                     fakeString.Fill('\0', nGrammSize - fakeString.size());
                 }
-                BuildHashesSet(CalcHash(fakeString.data(), nGrammSize), pred);
+                BuildHashesSet((const ui8*)fakeString.data(), nGrammSize, pred);
             }
         }
         ui32 c = 0;
         for (; c + nGrammSize <= dataSize; ++c) {
-            pred(CalcHash(data + c, nGrammSize));
+            BuildHashesSet((const ui8*)(data + c), nGrammSize, pred);
         }
 
         if (!op || op == NRequest::TLikePart::EOperation::EndsWith) {
@@ -110,17 +88,14 @@ private:
                 fakeString.Clear();
                 fakeString.Append(data + c, dataSize - c);
                 fakeString.Fill('\0', nGrammSize - fakeString.size());
-                BuildHashesSet(CalcHash(fakeString.data(), nGrammSize), pred);
+                BuildHashesSet((const ui8*)fakeString.data(), nGrammSize, pred);
             }
         }
     }
 
 public:
     TNGrammBuilder(const ui32 hashesCount)
-        : HashesCount(hashesCount)
-    {
-        AFL_VERIFY((ui64)HashesCount < HashesConstructorP);
-        Zeros.Fill('\0', 1024);
+        : HashesCount(hashesCount) {
     }
 
     template <class TFiller>
@@ -153,7 +128,7 @@ public:
     }
 };
 
-TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
+TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     TNGrammBuilder builder(HashesCount);
 

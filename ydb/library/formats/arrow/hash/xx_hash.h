@@ -10,7 +10,7 @@ namespace NKikimr::NArrow::NHash::NXX64 {
 class TStreamStringHashCalcer {
 private:
     const ui64 Seed;
-    XXH64_state_t HashState;
+    XXH3_state_t HashState;
 public:
     TStreamStringHashCalcer(const ui64 seed)
         : Seed(seed) {

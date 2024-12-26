@@ -11,6 +11,11 @@ public:
         : Data(data)
     {}
 
+    static ui32 GrowBitsCountToByte(const ui32 bitsCount) {
+        const ui32 bytesCount = bitsCount / 8;
+        return (bytesCount + ((bitsCount % 8) ? 1 : 0)) * 8;
+    }
+
     TFixStringBitsStorage(const std::vector<bool>& bitsVector)
         : TFixStringBitsStorage(bitsVector.size()) {
         ui32 byteIdx = 0;
@@ -38,7 +43,7 @@ public:
     }
 
     TFixStringBitsStorage(const ui32 sizeBits)
-        : Data(sizeBits / 8 + ((sizeBits % 8) ? 1 : 0), '\0') {
+        : Data(GrowBitsCountToByte(sizeBits) / 8, '\0') {
     }
 
     void Set(const bool val, const ui32 idx) {

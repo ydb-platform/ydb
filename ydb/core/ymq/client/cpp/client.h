@@ -64,15 +64,7 @@ public:
      TQueueClient(const TClientOptions& options = TClientOptions());
     ~TQueueClient();
 
-    TChangeMessageVisibilityResponse ChangeMessageVisibility(const TChangeMessageVisibilityRequest& req);
-
-    TCreateQueueResponse CreateQueue(const TCreateQueueRequest& req);
-
     TCreateUserResponse CreateUser(const TCreateUserRequest& req);
-
-    /// Deletes message from a specified persistent queue.
-    TDeleteMessageResponse DeleteMessage(const TDeleteMessageRequest& req);
-    TDeleteMessageBatchResponse DeleteMessageBatch(const TDeleteMessageBatchRequest& req);
 
     TDeleteQueueResponse DeleteQueue(const TString& name);
 
@@ -80,21 +72,9 @@ public:
 
     TDeleteUserResponse DeleteUser(const TDeleteUserRequest& req);
 
-    TListQueuesResponse ListQueues(const TListQueuesRequest& req);
-
     TListUsersResponse ListUsers(const TListUsersRequest& req);
 
-    TPurgeQueueResponse PurgeQueue(const TPurgeQueueRequest& req);
-
-    TReceiveMessageResponse ReceiveMessage(const TReceiveMessageRequest& req);
-
-    TSendMessageResponse SendMessage(const TSendMessageRequest& req);
-
     TModifyPermissionsResponse ModifyPermissions(const TModifyPermissionsRequest& req);
-
-    TGetQueueAttributesResponse GetQueueAttributes(const TGetQueueAttributesRequest& req);
-
-    TSetQueueAttributesResponse SetQueueAttributes(const TSetQueueAttributesRequest& req);
 
     TListPermissionsResponse ListPermissions(const TListPermissionsRequest& req);
 

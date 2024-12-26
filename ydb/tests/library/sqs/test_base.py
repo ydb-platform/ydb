@@ -417,26 +417,13 @@ class KikimrSqsTestBase(object):
         self.queue_url = None
         if attributes is None:
             attributes = dict()
-        logging.debug('Create queue. Attributes: {}. Use http: {}. Is fifo: {}'.format(attributes, use_http, is_fifo))
+        logging.debug('Create queue. Name: {}. Attributes: {}. Use http: {}. Is fifo: {}'.format(queue_name, attributes, use_http, is_fifo))
         assert (len(attributes.keys()) == 0 or use_http), 'Attributes are supported only for http queue creation'
         assert (shards is None or not use_http), 'Custom shards number is only supported in non-http mode'
         while retries:
             retries -= 1
             try:
-                if use_http:
-                    self.queue_url = self._sqs_api.create_queue(queue_name, is_fifo=is_fifo, attributes=attributes)
-                else:
-                    cmd = [
-                        get_sqs_client_path(),
-                        'create',  # create queue command
-                        '-u', self._username,
-                        '--shards', str(shards) if shards is not None else '2',
-                        '--partitions', '1',
-                        '--queue-name', queue_name,
-                    ] + self._sqs_server_opts
-                    execute = yatest.common.execute(cmd)
-                    self.queue_url = execute.std_out
-                    self.queue_url = self.queue_url.strip()
+                self.queue_url = self._sqs_api.create_queue(queue_name, is_fifo=is_fifo, attributes=attributes)
             except (RuntimeError, yatest.common.ExecutionError) as ex:
                 logging.debug("Got error: {}. Retrying creation request".format(ex))
                 if retries:

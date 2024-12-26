@@ -5,8 +5,7 @@
 #include <library/cpp/yt/misc/guid.h>
 #include <library/cpp/yt/misc/tag_invoke_cpo.h>
 
-// TODO(arkady-e1ppa): Eliminate.
-#include <library/cpp/yt/yson_string/string.h>
+#include <string>
 
 namespace NYT {
 
@@ -55,11 +54,11 @@ inline constexpr NAttributeValueConversionImpl::TFrom<U> FromErrorAttributeValue
 
 template <class T>
 concept CConvertibleToAttributeValue = requires (const T& value) {
-    { NYT::ToErrorAttributeValue(value) } -> std::same_as<NYson::TYsonString>;
+    { NYT::ToErrorAttributeValue(value) } -> std::same_as<std::string>;
 };
 
 template <class T>
-concept CConvertibleFromAttributeValue = requires (const NYson::TYsonString& value) {
+concept CConvertibleFromAttributeValue = requires (TStringBuf value) {
     { NYT::FromErrorAttributeValue<T>(value) } -> std::same_as<T>;
 };
 
@@ -67,12 +66,8 @@ concept CConvertibleFromAttributeValue = requires (const NYson::TYsonString& val
 
 struct TErrorAttribute
 {
-    // TODO(arkady-e1ppa): Switch to std::string is quite possible
-    // however it requires patching IAttributeDictionary or
-    // switching it to the std::string first for interop reasons.
-    // Do that later.
-    using TKey = TString;
-    using TValue = NYson::TYsonString;
+    using TKey = std::string;
+    using TValue = std::string;
 
     template <CConvertibleToAttributeValue T>
     TErrorAttribute(const TKey& key, const T& value)

@@ -240,7 +240,7 @@ protected:
     friend class TTxUpdateTabletGroups;
     friend class TTxMonEvent_TabletAvailability;
     friend class TLoggedMonTransaction;
-    friend class TTxUpdateDcFollowers;
+    friend class TTxProcessUpdateFollowers;
 
     friend class TDeleteTabletActor;
 
@@ -303,7 +303,7 @@ protected:
     ITransaction* CreateRequestTabletOwners(TEvHive::TEvRequestTabletOwners::TPtr event);
     ITransaction* CreateUpdateTabletsObject(TEvHive::TEvUpdateTabletsObject::TPtr event);
     ITransaction* CreateUpdateDomain(TSubDomainKey subdomainKey, TEvHive::TEvUpdateDomain::TPtr event = {});
-    ITransaction* CreateUpdateDcFollowers(const TDataCenterId& dc);
+    ITransaction* CreateProcessUpdateFollowers();
     ITransaction* CreateGenerateTestData(uint64_t seed);
     ITransaction* CreateDeleteNode(TNodeId nodeId);
     ITransaction* CreateConfigureScaleRecommender(TEvHive::TEvConfigureScaleRecommender::TPtr event);
@@ -404,6 +404,7 @@ protected:
     bool ProcessPendingOperationsScheduled = false;
     bool LogTabletMovesScheduled = false;
     bool ProcessStorageBalancerScheduled = false;
+    bool ProcessFollowerUpdatesScheduled = false;
     TResourceRawValues TotalRawResourceValues = {};
     TResourceNormalizedValues TotalNormalizedResourceValues = {};
     TInstant LastResourceChangeReaction;
@@ -421,6 +422,7 @@ protected:
     std::vector<TActorId> ActorsWaitingToMoveTablets;
     std::queue<TActorId> NodePingQueue;
     std::unordered_set<TNodeId> NodePingsInProgress;
+    TFollowerUpdates PendingFollowerUpdates;
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;
@@ -585,6 +587,7 @@ protected:
     void Handle(TEvPrivate::TEvGenerateTestData::TPtr& ev);
     void Handle(TEvPrivate::TEvRefreshScaleRecommendation::TPtr& ev);
     void Handle(TEvHive::TEvConfigureScaleRecommender::TPtr& ev);
+    void Handle(TEvPrivate::TEvUpdateFollowers::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);

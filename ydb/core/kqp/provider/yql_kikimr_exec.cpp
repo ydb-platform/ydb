@@ -112,6 +112,10 @@ namespace {
                 // Default value
             } else if (name == "passwordEncrypted") {
                 createUserSettings.PasswordEncrypted = true;
+            } else if (name == "login") {
+                createUserSettings.CanLogin = TCreateUserSettings::ETypeOfLogin::Login;
+            } else if (name == "noLogin") {
+                createUserSettings.CanLogin = TCreateUserSettings::ETypeOfLogin::NoLogin;
             }
         }
         return createUserSettings;
@@ -129,6 +133,10 @@ namespace {
                 // Default value
             } else if (name == "passwordEncrypted") {
                 alterUserSettings.PasswordEncrypted = true;
+            } else if (name == "login") {
+                alterUserSettings.CanLogin = TAlterUserSettings::ETypeOfLogin::Login;
+            } else if (name == "noLogin") {
+                alterUserSettings.CanLogin = TAlterUserSettings::ETypeOfLogin::NoLogin;
             }
         }
         return alterUserSettings;

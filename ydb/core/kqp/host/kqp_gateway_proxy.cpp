@@ -1502,6 +1502,23 @@ public:
                 createUser.SetPassword(settings.Password);
             }
 
+            switch (settings.CanLogin) {
+                case TCreateUserSettings::ETypeOfLogin::Login:
+                {
+                    createUser.SetIsEnabled(true);
+                    break;
+                }
+                case TCreateUserSettings::ETypeOfLogin::NoLogin:
+                {
+                    createUser.SetIsEnabled(false);
+                    break;
+                }
+                case TCreateUserSettings::ETypeOfLogin::Undefined:
+                {
+                    break;
+                }
+            }
+
             auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
             auto& phyTx = *phyQuery.AddTransactions();
             phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
@@ -1535,6 +1552,23 @@ public:
             alterUser.SetUser(settings.UserName);
             if (settings.Password) {
                 alterUser.SetPassword(settings.Password);
+            }
+
+            switch (settings.CanLogin) {
+                case TAlterUserSettings::ETypeOfLogin::Login:
+                {
+                    alterUser.SetIsEnabled(true);
+                    break;
+                }
+                case TAlterUserSettings::ETypeOfLogin::NoLogin:
+                {
+                    alterUser.SetIsEnabled(false);
+                    break;
+                }
+                case TAlterUserSettings::ETypeOfLogin::Undefined:
+                {
+                    break;
+                }
             }
 
             auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();

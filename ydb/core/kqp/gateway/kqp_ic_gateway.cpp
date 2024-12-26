@@ -1371,6 +1371,23 @@ public:
                 createUser.SetPassword(settings.Password);
             }
 
+            switch (settings.CanLogin) {
+                case NYql::TCreateUserSettings::ETypeOfLogin::Login:
+                {
+                    createUser.SetIsEnabled(true);
+                    break;
+                }
+                case NYql::TCreateUserSettings::ETypeOfLogin::NoLogin:
+                {
+                    createUser.SetIsEnabled(false);
+                    break;
+                }
+                case NYql::TCreateUserSettings::ETypeOfLogin::Undefined:
+                {
+                    break;
+                }
+            }
+
             SendSchemeRequest(ev.Release()).Apply(
                 [createUserPromise](const TFuture<TGenericResult>& future) mutable {
                     createUserPromise.SetValue(future.GetValue());
@@ -1412,6 +1429,23 @@ public:
             alterUser.SetUser(settings.UserName);
             if (settings.Password) {
                 alterUser.SetPassword(settings.Password);
+            }
+
+            switch (settings.CanLogin) {
+                case NYql::TAlterUserSettings::ETypeOfLogin::Login:
+                {
+                    alterUser.SetIsEnabled(true);
+                    break;
+                }
+                case NYql::TAlterUserSettings::ETypeOfLogin::NoLogin:
+                {
+                    alterUser.SetIsEnabled(false);
+                    break;
+                }
+                case NYql::TAlterUserSettings::ETypeOfLogin::Undefined:
+                {
+                    break;
+                }
             }
 
             SendSchemeRequest(ev.Release()).Apply(

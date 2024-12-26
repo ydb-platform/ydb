@@ -662,6 +662,14 @@ struct TCreateUserSettings {
     TString UserName;
     TString Password;
     bool PasswordEncrypted = false;
+
+    enum class ETypeOfLogin {
+        Undefined,
+        Login,
+        NoLogin
+    };
+
+    ETypeOfLogin CanLogin = ETypeOfLogin::Undefined;
 };
 
 struct TModifyPermissionsSettings {
@@ -681,6 +689,14 @@ struct TAlterUserSettings {
     TString UserName;
     TString Password;
     bool PasswordEncrypted = false;
+
+    enum class ETypeOfLogin {
+        Undefined,
+        Login,
+        NoLogin
+    };
+
+    ETypeOfLogin CanLogin = ETypeOfLogin::Undefined;
 };
 
 struct TDropUserSettings {

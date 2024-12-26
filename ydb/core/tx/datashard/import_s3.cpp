@@ -412,8 +412,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         ETag = result.GetResult().GetETag();
         ContentLength = result.GetResult().GetContentLength();
 
-        if (ValidateChecksum) {
-            HeadObject(ChecksumKey(Settings.GetDataKey(DataFormat, CompressionCodec)));
+        if (Checksum) {
+            HeadObject(ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None)));
             Become(&TThis::StateDownloadChecksum);
         } else {
             Send(DataShard, new TEvDataShard::TEvGetS3DownloadInfo(TxId));
@@ -448,10 +448,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         WrittenRows = info.WrittenRows;
 
         if (!ContentLength || ProcessedBytes >= ContentLength) {
-            if (ValidateChecksum && !CheckChecksum()) {
-                return;
+            if (CheckChecksum()) {
+                return Finish();
             }
-            return Finish();
         }
 
         Process();
@@ -533,7 +532,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
                 << ": " << error);
         }
 
-        if (ValidateChecksum) {
+        if (Checksum) {
             Checksum->AddData(data);
         }
 
@@ -699,6 +698,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
     }
 
     bool CheckChecksum() {
+        if (!Checksum) {
+            return true;
+        }
+
         TString gotChecksum = Checksum->Serialize();
         if (gotChecksum == ExpectedChecksum) {
             return true;
@@ -797,8 +800,7 @@ public:
         , Retries(task.GetNumberOfRetries())
         , ReadBatchSize(task.GetS3Settings().GetLimits().GetReadBatchSize())
         , ReadBufferSizeLimit(AppData()->DataShardConfig.GetRestoreReadBufferSizeLimit())
-        , ValidateChecksum(task.GetValidateChecksums())
-        , Checksum(ValidateChecksum ? NBackup::CreateChecksum() : nullptr)
+        , Checksum(task.GetValidateChecksums() ? NBackup::CreateChecksum() : nullptr)
     {
     }
 
@@ -876,7 +878,6 @@ private:
     THolder<TReadController> Reader;
     TUploadRowsRequestBuilder RequestBuilder;
 
-    const bool ValidateChecksum = false;
     NBackup::IChecksum::TPtr Checksum;
     TString ExpectedChecksum;
 }; // TS3Downloader

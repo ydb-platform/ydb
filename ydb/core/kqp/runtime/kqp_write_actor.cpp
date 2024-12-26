@@ -1583,7 +1583,7 @@ public:
             if (GetTotalFreeSpace() >= item.DataSize) {
                 auto result = std::make_unique<TEvBufferWriteResult>();
                 result->Token = AckQueue.front().Token;
-                Send(AckQueue.front().ForwardActorId, result.release());
+                Send<ESendingType::Tail>(AckQueue.front().ForwardActorId, result.release());
                 AckQueue.pop();
             } else {
                 YQL_ENSURE(false);
@@ -2008,7 +2008,7 @@ public:
         if (!TxManager->NeedCommit()) {
             Rollback();
             State = EState::FINISHED;
-            Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
+            Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
         } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && (!WriteInfos.empty() || TxManager->HasTopics())) {
             TxManager->StartExecute();
             ImmediateCommit();
@@ -2022,7 +2022,7 @@ public:
         ExecuterActorId = ev->Get()->ExecuterActorId;
         Rollback();
         State = EState::FINISHED;
-        Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
+        Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
     }
 
     void Handle(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -2301,7 +2301,7 @@ public:
         if (TxManager->ConsumeCommitResult(shardId)) {
             CA_LOG_D("Committed");
             State = EState::FINISHED;
-            Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{
+            Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
                 BuildStats()
             });
             ExecuterActorId = {};
@@ -2320,7 +2320,7 @@ public:
             "BufferWriteActorState::Writing", NWilson::EFlags::AUTO_END);
         CA_LOG_D("Flushed");
         State = EState::WRITING;
-        Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{
+        Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
             BuildStats()
         });
         ExecuterActorId = {};
@@ -2523,7 +2523,7 @@ private:
         SendTime = TInstant::Now();
 
         CA_LOG_D("Send data=" << DataSize << ", closed=" << Closed << ", bufferActorId=" << BufferActorId);
-        AFL_ENSURE(Send(BufferActorId, ev.release()));
+        AFL_ENSURE(Send<ESendingType::Tail>(BufferActorId, ev.release()));
     }
 
     void CommitState(const NYql::NDqProto::TCheckpoint&) final {};

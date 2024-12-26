@@ -2564,7 +2564,7 @@ partitioning_settings {
             )",
         });
 
-        auto* persqueue = s3Mock.GetData().FindPtr("/update_feed/persqueue_description.pb");
+        auto* persqueue = s3Mock.GetData().FindPtr("/update_feed/topic_description.pb");
         UNIT_ASSERT(persqueue);
     }
 }

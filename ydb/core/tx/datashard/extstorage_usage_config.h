@@ -46,6 +46,14 @@ public:
         return ObjectKeyPattern + '/' + NBackupRestoreTraits::PermissionsKeySuffix();
     }
 
+    inline TString GetTopicKey() const {
+        return ObjectKeyPattern + '/' + NBackupRestoreTraits::TopicKeySuffix();
+    }
+
+     inline TString GetChangefeedKey() const {
+        return ObjectKeyPattern + '/' + NBackupRestoreTraits::ChangefeedKeySuffix();
+    }
+
     inline TString GetMetadataKey() const {
         return ObjectKeyPattern + '/' + NBackupRestoreTraits::MetadataKeySuffix();
     }

@@ -199,34 +199,22 @@ public:
             }
         }
 
-        if (!TDqCnUnionAll::Match(input.Raw())) {
-            return Nothing();
-        }
-
-        const TParentsMap* parentsMap = getParents();
-        const auto dqUnion = input.Cast<TDqCnUnionAll>();
-        if (!NDq::IsSingleConsumerConnection(dqUnion, *parentsMap)) {
-            return Nothing();
-        }
-
-        const auto inputStage = dqUnion.Output().Stage().Cast<TDqStage>();
-
-        if (!FindNode(input.Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable(TCoDataSource::CallableName()); })) {
+        if (!FindNode(input.Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable(TDqCnUnionAll::CallableName()); })) {
             YQL_CLOG(INFO, ProviderS3) << "Rewrite pure S3WriteObject `" << cluster << "`.`" << target.Path().StringValue() << "` as stage with sink.";
-
-            if (keys.empty()) {
-                const auto outputBuilder = Build<TS3SinkOutput>(ctx, target.Pos())
-                    .Input<TCoToFlow>()
-                        .Input(inputStage.Program().Body().Ptr())
+            return keys.empty() ?
+                Build<TDqStage>(ctx, writePos)
+                    .Inputs().Build()
+                    .Program<TCoLambda>()
+                        .Args({})
+                        .Body<TS3SinkOutput>()
+                            .Input<TCoToFlow>()
+                                .Input(input)
+                                .Build()
+                            .Format(target.Format())
+                            .KeyColumns().Build()
+                            .Settings(sinkOutputSettingsBuilder.Done())
+                            .Build()
                         .Build()
-                    .Format(target.Format())
-                    .KeyColumns().Build()
-                    .Settings(sinkOutputSettingsBuilder.Done())
-                    .Done();
-
-                return Build<TDqStage>(ctx, writePos)
-                    .InitFrom(inputStage)
-                    .Program(ctx.DeepCopyLambda(inputStage.Program().Ref(), outputBuilder.Ptr()))
                     .Outputs<TDqStageOutputsList>()
                         .Add<TDqSink>()
                             .DataSink(dataSink)
@@ -242,56 +230,67 @@ public:
                             .Build()
                         .Build()
                     .Settings().Build()
-                    .Done();
-            } else {
-                const auto outputBuilder = Build<TCoToFlow>(ctx, target.Pos())
-                    .Input(inputStage.Program().Body().Ptr())
-                    .Done();
-
-                return Build<TDqStage>(ctx, writePos)
-                    .Inputs()
-                        .Add<TDqCnHashShuffle>()
-                            .Output<TDqOutput>()
-                                .Stage<TDqStage>()
-                                    .InitFrom(inputStage)
-                                    .Program(ctx.DeepCopyLambda(inputStage.Program().Ref(), outputBuilder.Ptr()))
-                                    .Settings().Build()
+                    .Done()
+                    :
+                    Build<TDqStage>(ctx, writePos)
+                        .Inputs()
+                            .Add<TDqCnHashShuffle>()
+                                .Output<TDqOutput>()
+                                    .Stage<TDqStage>()
+                                        .Inputs().Build()
+                                        .Program<TCoLambda>()
+                                            .Args({})
+                                            .Body<TCoToFlow>()
+                                                .Input(input)
+                                                .Build()
+                                            .Build()
+                                        .Settings().Build()
+                                        .Build()
+                                    .Index().Value("0", TNodeFlags::Default).Build()
                                     .Build()
+                                .KeyColumns().Add(keys).Build()
+                                .Build()
+                            .Build()
+                        .Program<TCoLambda>()
+                            .Args({"in"})
+                            .Body<TS3SinkOutput>()
+                                .Input("in")
+                                .Format(target.Format())
+                                .KeyColumns().Add(keys).Build()
+                                .Settings(sinkOutputSettingsBuilder.Done())
+                                .Build()
+                            .Build()
+                        .Outputs<TDqStageOutputsList>()
+                            .Add<TDqSink>()
+                                .DataSink(dataSink)
                                 .Index().Value("0", TNodeFlags::Default).Build()
-                                .Build()
-                            .KeyColumns().Add(keys).Build()
-                            .Build()
-                        .Build()
-                    .Program<TCoLambda>()
-                        .Args({"in"})
-                        .Body<TS3SinkOutput>()
-                            .Input("in")
-                            .Format(target.Format())
-                            .KeyColumns().Add(keys).Build()
-                            .Settings(sinkOutputSettingsBuilder.Done())
-                            .Build()
-                        .Build()
-                    .Outputs<TDqStageOutputsList>()
-                        .Add<TDqSink>()
-                            .DataSink(dataSink)
-                            .Index().Value("0", TNodeFlags::Default).Build()
-                            .Settings<TS3SinkSettings>()
-                                .Path(target.Path())
-                                .Settings(sinkSettingsBuilder.Done())
-                                .Token<TCoSecureParam>()
-                                    .Name().Build(token)
+                                .Settings<TS3SinkSettings>()
+                                    .Path(target.Path())
+                                    .Settings(sinkSettingsBuilder.Done())
+                                    .Token<TCoSecureParam>()
+                                        .Name().Build(token)
+                                        .Build()
+                                    .Extension().Value(extension).Build()
                                     .Build()
-                                .Extension().Value(extension).Build()
                                 .Build()
                             .Build()
-                        .Build()
-                    .Settings().Build()
-                    .Done();
-            }
+                        .Settings().Build()
+                        .Done();
+        }
 
+        if (!TDqCnUnionAll::Match(input.Raw())) {
+            return Nothing();
+        }
+
+        const TParentsMap* parentsMap = getParents();
+        const auto dqUnion = input.Cast<TDqCnUnionAll>();
+        if (!NDq::IsSingleConsumerConnection(dqUnion, *parentsMap)) {
+            return Nothing();
         }
 
         YQL_CLOG(INFO, ProviderS3) << "Rewrite S3WriteObject `" << cluster << "`.`" << target.Path().StringValue() << "` as sink.";
+
+        const auto inputStage = dqUnion.Output().Stage().Cast<TDqStage>();
 
         const auto sink = Build<TDqSink>(ctx, writePos)
             .DataSink(dataSink)

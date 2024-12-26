@@ -22,6 +22,20 @@
 namespace NKikimr::NReplication::NService {
 
 class TSessionInfo {
+    struct TWorkerInfo {
+        const TActorId ActorId;
+        TRowVersion Heartbeat;
+
+        explicit TWorkerInfo(const TActorId& actorId)
+            : ActorId(actorId)
+        {
+        }
+
+        operator TActorId() const {
+            return ActorId;
+        }
+    };
+
 public:
     explicit TSessionInfo(const TActorId& actorId)
         : ActorId(actorId)
@@ -180,7 +194,36 @@ public:
     }
 
     void Handle(IActorOps* ops, TEvService::TEvHeartbeat::TPtr& ev) {
-        GetWorkerId(ev->Sender).Serialize(*ev->Get()->Record.MutableWorker());
+        const auto id = GetWorkerId(ev->Sender);
+        if (!Workers.contains(id)) {
+            return;
+        }
+
+        auto& worker = Workers.at(id);
+        auto& record = ev->Get()->Record;
+        const auto version = TRowVersion::FromProto(record.GetVersion());
+
+        if (const auto& prevVersion = worker.Heartbeat) {
+            if (version <= prevVersion) {
+                return;
+            }
+
+            auto it = WorkersByHeartbeat.find(prevVersion);
+            if (it != WorkersByHeartbeat.end()) {
+                it->second.erase(id);
+                if (it->second.empty()) {
+                    WorkersByHeartbeat.erase(it);
+                }
+            }
+        }
+
+        worker.Heartbeat = version;
+        WorkersByHeartbeat[version].insert(id);
+        while (!TxIds.empty() && WorkersByHeartbeat.begin()->first < TxIds.begin()->first) {
+            TxIds.erase(TxIds.begin());
+        }
+
+        id.Serialize(*record.MutableWorker());
         ops->Send(ActorId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
     }
 
@@ -206,11 +249,12 @@ private:
 private:
     TActorId ActorId;
     ui64 Generation;
-    THashMap<TWorkerId, TActorId> Workers;
+    THashMap<TWorkerId, TWorkerInfo> Workers;
     THashMap<TActorId, TWorkerId> ActorIdToWorkerId;
 
     TMap<TRowVersion, ui64> TxIds;
     TMap<TRowVersion, THashSet<TActorId>> PendingTxId;
+    TMap<TRowVersion, THashSet<TWorkerId>> WorkersByHeartbeat;
 
 }; // TSessionInfo
 

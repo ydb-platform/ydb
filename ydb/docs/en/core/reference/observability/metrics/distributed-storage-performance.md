@@ -22,7 +22,7 @@ Operations are divided into three types: reads, writes, and huge-writes. The div
 
 In addition to user requests, the distributed storage is also loaded by the background processes of compaction, scrubbing, and defragmentation, as well as internal communication between VDisks. The compaction process can create particularly high loads when there is a substantial flow of small blob writes.
 
-## Available disk time {#diskTimeAvailable}
+## Available disk time {#disk-time-available}
 
 The PDisk scheduler manages the execution order of requests from its client VDisks. PDisk fairly divides the device's time among its VDisks, ensuring that each of the $N$ VDisks is guaranteed $1/N$ seconds of the physical device's working time each second. We estimate the available time of the physical device that the PDisk scheduler allocates to the client VDisk based on the information about the number of neighboring VDisks for each VDisk, denoted as $N$, and the configurable parameter `DiskTimeAvailableScale`. This estimate is called DiskTimeAvailable and is calculated using the formula:
 
@@ -30,7 +30,7 @@ $$
     DiskTimeAvailable = \dfrac{1000000000}{N} \cdot \dfrac{DiskTimeAvailableScale}{1000}
 $$
 
-## Load burst detection {#burstDetection}
+## Load burst detection {#burst-detection}
 
 A burst is a sharp, short-term increase in the load on a VDisk, which may lead to higher response times of operations. The values of sensors on cluster nodes are collected at certain intervals, for example, every 15 seconds, making it impossible to reliably detect short-term events using only the metrics of request cost and available disk time. A modified [Token Bucket algorithm](https://en.wikipedia.org/wiki/Token_bucket) is used to address this issue. In this modification, the bucket can have a negative number of tokens and such a state is called underflow. Each VDisk is associated with a separate burst detector – a specialized object that monitors load bursts using the aforementioned algorithm. The minimum expected response time, at which an increase in load is considered a burst, is determined by the configurable parameter `BurstThresholdNs`. The bucket will underflow if the calculated time needed to process the requests in nanoseconds exceeds the `BurstThresholdNs` value.
 
@@ -64,12 +64,12 @@ Since the coefficients for the request cost formula were measured on specific ph
 
 | Parameter Name                        | Description                                                                                   |  Units            | Default Value |
 |---------------------------------------|-----------------------------------------------------------------------------------------------|-------------------|---------------|
-| `disk_time_available_scale_hdd`       | [`DiskTimeAvailableScale` parameter](#diskTimeAvailable) for VDisks running on HDD devices.   | arbitrary units   | `1000`        |
-| `disk_time_available_scale_ssd`       | [`DiskTimeAvailableScale` parameter](#diskTimeAvailable) for VDisks running on SSD devices.   | arbitrary units   | `1000`        |
-| `disk_time_available_partition_nvme`  | [`DiskTimeAvailableScale` parameter](#diskTimeAvailable) for VDisks running on NVMe devices.  | arbitrary units   | `1000`        |
-| `burst_threshold_ns_hdd`              | [`BurstThresholdNs` parameter](#burstDetection) for VDisks running on HDD devices.             | ns                | `200000000`   |
-| `burst_threshold_ns_ssd`              | [`BurstThresholdNs` parameter](#burstDetection) for VDisks running on SSD devices.             | ns                | `50000000`    |
-| `burst_threshold_ns_nvme`             | [`BurstThresholdNs` parameter](#burstDetection) for VDisks running on NVMe devices.            | ns                | `32000000`    |
+| `disk_time_available_scale_hdd`       | [`DiskTimeAvailableScale` parameter](#disk-time-available) for VDisks running on HDD devices.   | arbitrary units   | `1000`        |
+| `disk_time_available_scale_ssd`       | [`DiskTimeAvailableScale` parameter](#disk-time-available) for VDisks running on SSD devices.   | arbitrary units   | `1000`        |
+| `disk_time_available_partition_nvme`  | [`DiskTimeAvailableScale` parameter](#disk-time-available) for VDisks running on NVMe devices.  | arbitrary units   | `1000`        |
+| `burst_threshold_ns_hdd`              | [`BurstThresholdNs` parameter](#burst-detection) for VDisks running on HDD devices.             | ns                | `200000000`   |
+| `burst_threshold_ns_ssd`              | [`BurstThresholdNs` parameter](#burst-detection) for VDisks running on SSD devices.             | ns                | `50000000`    |
+| `burst_threshold_ns_nvme`             | [`BurstThresholdNs` parameter](#burst-detection) for VDisks running on NVMe devices.            | ns                | `32000000`    |
 
 ### Configuration examples
 

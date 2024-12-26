@@ -1622,7 +1622,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             { "folder_id", "test_folder_id" },
             { "database_id", "test_database_id" },
         });
-        UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);        
+        UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
     }
 
     TString PostQuery(TKeepAliveHttpClient& httpClient, TString query, TString action = "", TString transactionMode = "") {
@@ -1662,9 +1662,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         client.InitRootScheme();
-        
+
         GrantConnect(client);
-        
+
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
 
@@ -1698,9 +1698,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         client.InitRootScheme();
-        
+
         GrantConnect(client);
-        
+
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
 
@@ -1797,7 +1797,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
-        
+
         GrantConnect(client);
 
         TTestActorRuntime& runtime = *server.GetRuntime();

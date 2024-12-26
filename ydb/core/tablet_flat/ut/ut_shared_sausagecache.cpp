@@ -114,7 +114,7 @@ THolder<TSharedPageCacheCounters> GetSharedPageCounters(TMyEnvBase& env) {
 };
 
 void LogCounters(THolder<TSharedPageCacheCounters>& counters) {
-    Cerr << "Counters: Active:" << counters->ActiveBytes->Val() << "/" << counters->ActiveLimitBytes->Val() 
+    Cerr << "Counters2: Active:" << counters->ActiveBytes->Val() << "/" << counters->ActiveLimitBytes->Val() 
         << ", Passive:" << counters->PassiveBytes->Val() 
         << ", MemLimit:" << counters->MemLimitBytes->Val()
         << Endl;

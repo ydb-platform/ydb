@@ -1826,6 +1826,23 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             }
         };
 
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE USER user1 PASSWORD 'password1';
+            CREATE USER user2 PASSWORD 'password2';
+            CREATE USER user3 PASSWORD 'password3';
+            CREATE USER user4 PASSWORD 'password4';
+            CREATE USER user5 PASSWORD 'password5';
+            CREATE USER user6 PASSWORD 'password6';
+            CREATE USER user7 PASSWORD 'password7';
+            CREATE USER user8 PASSWORD 'password8';
+            CREATE USER user9 PASSWORD 'password9';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
         auto result = db.ExecuteQuery(R"(
             GRANT ROW SELECT ON `/Root` TO user1;
         )", TTxControl::NoTx()).ExtractValueSync();

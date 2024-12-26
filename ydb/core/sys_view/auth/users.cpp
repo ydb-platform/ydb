@@ -1,4 +1,4 @@
-#include "auth_scan.h"
+#include "auth_scan_base.h"
 #include "users.h"
 
 #include <ydb/core/sys_view/common/events.h>
@@ -14,10 +14,10 @@ namespace NKikimr::NSysView::NAuth {
 using namespace NSchemeShard;
 using namespace NActors;
 
-class TUsersScan : public TAuthScan<TUsersScan> {
+class TUsersScan : public TAuthScanBase<TUsersScan> {
 public:
     using TScanBase = TScanActorBase<TUsersScan>;
-    using TAuthBase = TAuthScan<TUsersScan>;
+    using TAuthBase = TAuthScanBase<TUsersScan>;
 
     TUsersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)

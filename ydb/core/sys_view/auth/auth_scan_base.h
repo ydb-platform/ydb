@@ -12,9 +12,10 @@ namespace NKikimr::NSysView::NAuth {
 
 using namespace NSchemeShard;
 using namespace NActors;
+using namespace NSchemeCache;
 
 template <typename TDerived>
-class TAuthScan : public TScanActorBase<TDerived> {
+class TAuthScanBase : public TScanActorBase<TDerived> {
 public:
     using TBase = TScanActorBase<TDerived>;
 
@@ -22,7 +23,7 @@ public:
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 
-    TAuthScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TAuthScanBase(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
         : TBase(ownerId, scanId, tableId, tableRange, columns)
     {
@@ -32,7 +33,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-            HFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, TBase::HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, TBase::HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
@@ -44,7 +45,7 @@ public:
 
 protected:
     void ProceedToScan() override {
-        TBase::Become(&TAuthScan::StateScan);
+        TBase::Become(&TAuthScanBase::StateScan);
         if (TBase::AckReceived) {
             StartScan();
         }
@@ -68,28 +69,34 @@ protected:
         DescribePath(TBase::TenantName);
     }
 
-    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->GetRecord();
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
+        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+
+        THolder<NSchemeCache::TSchemeCacheNavigate> request(ev->Get()->Request.Release());
+        Y_ABORT_UNLESS(request->ResultSet.size() == 1);
         
-        if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
-            TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Failed to request domain info " << record.GetStatus());
+        auto& entry = request->ResultSet.back();
+        auto entryPath = CanonizePath(entry.Path);
+        if (entry.Status != TNavigate::EStatus::Ok) {
+            TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << 
+                "Failed to navigate " << entryPath << ": " << entry.Status);
             return;
         }
 
-        if (record.GetPath() != CurrentDescribePath) {
+        if (entryPath != CurrentNavigatePath) {
             LOG_WARN_S(ctx, NKikimrServices::SYSTEM_VIEWS,
-                "Request " << CurrentDescribePath << " describe but got " << record.GetPath());
+                "Requested " << CurrentNavigatePath << " navigate but got " << entryPath);
             return;
         }
         LOG_TRACE_S(ctx, NKikimrServices::SYSTEM_VIEWS,
-            "Got " << record.GetPath() << " describe: " << record.ShortUtf8DebugString());
-        CurrentDescribePath = {};
+            "Got " << entryPath << " navigate: " << entry.ToString());
+        CurrentNavigatePath = {};
         
-        const auto& description = record.GetPathDescription();
+        // const auto& description = record.GetPathDescription();
 
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
 
-        FillBatch(*batch, description);
+        // FillBatch(*batch, description);
 
         TBase::SendBatch(std::move(batch));
     }
@@ -103,22 +110,26 @@ protected:
     }
 
     void DescribePath(TString path) {
-        Y_ABORT_UNLESS(!CurrentDescribePath);
-        CurrentDescribePath = path;
+        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
 
-        auto request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(path);
+        auto& entry = request->ResultSet.emplace_back();
+        entry.RequestType = TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
+        entry.Path = SplitPath(path);
+        entry.Operation = TSchemeCacheNavigate::OpPath;
+        entry.RedirectRequired = false;
 
-        request->Record.MutableOptions()->SetReturnPartitioningInfo(false);
-        request->Record.MutableOptions()->SetReturnPartitionConfig(false);
-        request->Record.MutableOptions()->SetReturnChildren(false);
+        CurrentNavigatePath = path;
 
-        TBase::SendThroughPipeCache(request.Release(), TBase::SchemeShardId);
+        LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
+            "Navigate " << path << ": " << request->ToString(*AppData()->TypeRegistry));
+
+        TBase::Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
     }
 
     virtual void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const ::NKikimrSchemeOp::TPathDescription& description) = 0;
 
 private:
-    TString CurrentDescribePath;
+    TString CurrentNavigatePath;
 
 };
 

@@ -1,5 +1,5 @@
-#include "auth_scan.h"
-#include "users.h"
+#include "auth_scan_base.h"
+#include "groups.h"
 
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/schema.h>
@@ -14,10 +14,10 @@ namespace NKikimr::NSysView::NAuth {
 using namespace NSchemeShard;
 using namespace NActors;
 
-class TGroupsScan : public TAuthScan<TGroupsScan> {
+class TGroupsScan : public TAuthScanBase<TGroupsScan> {
 public:
     using TScanBase = TScanActorBase<TGroupsScan>;
-    using TAuthBase = TAuthScan<TGroupsScan>;
+    using TAuthBase = TAuthScanBase<TGroupsScan>;
 
     TGroupsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)

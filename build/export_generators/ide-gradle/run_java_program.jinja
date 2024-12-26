@@ -26,25 +26,31 @@ val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
     )
 {%         endif -%}
 
-{%-        if run.in_dir %}
-{%             for in_dir in run.in_dir -%}
+{%-        if run.in_dir -%}
+{%-            for in_dir in run.in_dir %}
     inputs.files(fileTree("{{ in_dir }}"))
 {%             endfor -%}
 {%-        endif -%}
-{%-        if run.in %}
-{%             for in_file in run.in -%}
+
+{%-        if run.in -%}
+{%-            for in_file in run.in %}
     inputs.files("{{ in_file }}")
 {%             endfor -%}
 {%-        endif -%}
 
-{{         OutDirs(run, '    outputs.dir("', '")') }}
-{#
+{%-        if run.out_dir|length -%}
+{%-            for out_dir in run.out_dir|unique %}
+    outputs.dir("{{ out_dir }}")
+{%-            endfor -%}
+{%-        endif -%}
+{#-
     Не использованы аттрибуты
+    run-out="list"
     run-cwd="str"
     run-in_dirs_inputs="list"
     run-in_noparse="list"
     run-tool="list"
--#}
+#}
 }
 
 tasks.getByName("sourcesJar").dependsOn(runJav{{ loop.index }})
@@ -52,5 +58,11 @@ tasks.getByName("sourcesJar").dependsOn(runJav{{ loop.index }})
 tasks.compileJava.configure {
     dependsOn(runJav{{ loop.index }})
 }
+{%-        if with_kotlin %}
+
+tasks.compileKotlin.configure {
+    dependsOn(runJav{{ loop.index }})
+}
+{%-        endif %}
 {%     endfor -%}
 {% endif -%}

@@ -1,18 +1,17 @@
 #include "manager.h"
 
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+
 namespace NKikimr::NOlap::NDataAccessorControl {
 
 void TLocalManager::DrainQueue() {
-    THashMap<ui64, std::vector<TPortionInfo::TConstPtr>> portionsToAsk;
     std::optional<ui64> lastPathId;
     IGranuleDataAccessor* lastDataAccessor = nullptr;
     ui32 countToFlight = 0;
-    while (PortionsAskInFlight + countToFlight < 1000 && PortionsAsk.size()) {
+    while (PortionsAskInFlight + countToFlight < NYDBTest::TControllers::GetColumnShardController()->GetLimitForPortionsMetadataAsk() &&
+           PortionsAsk.size()) {
+        THashMap<ui64, std::vector<TPortionInfo::TConstPtr>> portionsToAsk;
         while (PortionsAskInFlight + countToFlight < 1000 && PortionsAsk.size()) {
-            if (PortionsAsk.front().GetAbortionFlag() && PortionsAsk.front().GetAbortionFlag()->Val()) {
-                PortionsAsk.pop_front();
-                continue;
-            }
             auto p = PortionsAsk.front().ExtractPortion();
             PortionsAsk.pop_front();
             if (!lastPathId || *lastPathId != p->GetPathId()) {
@@ -24,18 +23,30 @@ void TLocalManager::DrainQueue() {
                     lastDataAccessor = it->second.get();
                 }
             }
+            auto it = RequestsByPortion.find(p->GetPortionId());
+            if (it == RequestsByPortion.end()) {
+                continue;
+            }
             if (!lastDataAccessor) {
-                auto it = RequestsByPortion.find(p->GetPortionId());
-                AFL_VERIFY(it != RequestsByPortion.end());
                 for (auto&& i : it->second) {
-                    if (!i->IsFetched()) {
+                    if (!i->IsFetched() && !i->IsAborted()) {
                         i->AddError(p->GetPathId(), "path id absent");
                     }
                 }
                 RequestsByPortion.erase(it);
             } else {
-                portionsToAsk[p->GetPathId()].emplace_back(p);
-                ++countToFlight;
+                bool toAsk = false;
+                for (auto&& i : it->second) {
+                    if (!i->IsFetched() && !i->IsAborted()) {
+                        toAsk = true;
+                    }
+                }
+                if (!toAsk) {
+                    RequestsByPortion.erase(it);
+                } else {
+                    portionsToAsk[p->GetPathId()].emplace_back(p);
+                    ++countToFlight;
+                }
             }
         }
         for (auto&& i : portionsToAsk) {
@@ -46,7 +57,7 @@ void TLocalManager::DrainQueue() {
                 auto it = RequestsByPortion.find(accessor.GetPortionInfo().GetPortionId());
                 AFL_VERIFY(it != RequestsByPortion.end());
                 for (auto&& i : it->second) {
-                    if (!i->IsFetched()) {
+                    if (!i->IsFetched() && !i->IsAborted()) {
                         i->AddAccessor(accessor);
                     }
                 }
@@ -110,4 +121,4 @@ void TLocalManager::DoAddPortion(const TPortionDataAccessor& accessor) {
     DrainQueue();
 }
 
-}   // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap::NDataAccessorControl

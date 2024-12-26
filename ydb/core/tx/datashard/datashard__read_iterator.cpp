@@ -712,7 +712,7 @@ public:
         record.SetSeqNo(State.SeqNo + 1);
 
         if (!State.IsHeadRead) {
-            State.ReadVersion.Serialize(*record.MutableSnapshot());
+            State.ReadVersion.ToProto(record.MutableSnapshot());
         }
 
         return useful;

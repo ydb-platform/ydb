@@ -8,6 +8,13 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NHttpClient {
+    class IHttpResponse;
+    using IHttpResponsePtr = std::unique_ptr<IHttpResponse>;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class IRawClient
     : public virtual TThrRefBase
 {
@@ -132,6 +139,12 @@ public:
 
     // Operations
 
+    virtual TOperationId StartOperation(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        EOperationType type,
+        const TNode& spec) = 0;
+
     virtual TOperationAttributes GetOperation(
         const TOperationId& operationId,
         const TGetOperationOptions& options = {}) = 0;
@@ -195,6 +208,18 @@ public:
     virtual std::vector<TJobTraceEvent> GetJobTrace(
         const TOperationId& operationId,
         const TGetJobTraceOptions& options = {}) = 0;
+
+    // SkyShare
+
+    virtual NHttpClient::IHttpResponsePtr SkyShareTable(
+        const std::vector<TYPath>& tablePaths,
+        const TSkyShareTableOptions& options = {}) = 0;
+
+    // Files
+    virtual std::unique_ptr<IInputStream> ReadFile(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TFileReaderOptions& options = {}) = 0;
 
     // File cache
 
@@ -265,6 +290,18 @@ public:
         const TTransactionId& transactionId,
         const TYPath& path,
         const TAlterTableOptions& options = {}) = 0;
+
+    virtual std::unique_ptr<IInputStream> ReadTable(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TMaybe<TFormat>& format,
+        const TTableReaderOptions& options = {}) = 0;
+
+    virtual std::unique_ptr<IInputStream> ReadBlobTable(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TKey& key,
+        const TBlobTableReaderOptions& options = {}) = 0;
 
     virtual void AlterTableReplica(
         TMutationId& mutationId,

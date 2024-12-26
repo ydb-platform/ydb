@@ -301,50 +301,6 @@ TCheckPermissionResponse ParseCheckPermissionResponse(const TNode& node)
     return result;
 }
 
-TNode::TListType SkyShareTable(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const std::vector<TYPath>& tablePaths,
-    const TSkyShareTableOptions& options)
-{
-    THttpHeader header("POST", "api/v1/share", /*IsApi*/ false);
-
-    auto proxyName = context.ServerName.substr(0,  context.ServerName.find('.'));
-
-    auto host = context.Config->SkynetApiHost;
-    if (host == "") {
-        host = "skynet." + proxyName + ".yt.yandex.net";
-    }
-
-    TSkyShareTableOptions patchedOptions = options;
-
-    if (context.Config->Pool && !patchedOptions.Pool_) {
-        patchedOptions.Pool(context.Config->Pool);
-    }
-
-    header.MergeParameters(NRawClient::SerializeParamsForSkyShareTable(proxyName, context.Config->Prefix, tablePaths, patchedOptions));
-    TClientContext skyApiHost({ .ServerName = host, .HttpClient = NHttpClient::CreateDefaultHttpClient() });
-    TResponseInfo response = {};
-
-    // As documented at https://wiki.yandex-team.ru/yt/userdoc/blob_tables/#shag3.sozdajomrazdachu
-    // first request returns HTTP status code 202 (Accepted). And we need retrying until we have 200 (OK).
-    while (response.HttpCode != 200) {
-        response = RetryRequestWithPolicy(retryPolicy, skyApiHost, header, "");
-        TWaitProxy::Get()->Sleep(TDuration::Seconds(5));
-    }
-
-    if (options.KeyColumns_) {
-        return NodeFromJsonString(response.Response)["torrents"].AsList();
-    } else {
-        TNode torrent;
-
-        torrent["key"] = TNode::CreateList();
-        torrent["rbtorrent"] = response.Response;
-
-        return TNode::TListType{ torrent };
-    }
-}
-
 TRichYPath CanonizeYPath(
     const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,

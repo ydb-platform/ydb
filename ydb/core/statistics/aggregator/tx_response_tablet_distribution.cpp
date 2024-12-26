@@ -37,7 +37,7 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
         AggregateStatisticsRequest = std::make_unique<TEvStatistics::TEvAggregateStatistics>(); 
         auto& outRecord = AggregateStatisticsRequest->Record;
         outRecord.SetRound(Self->GlobalTraversalRound);
-        PathIdFromPathId(Self->TraversalPathId, outRecord.MutablePathId());
+        Self->TraversalPathId.ToProto(outRecord.MutablePathId());
 
         const auto forceTraversalTable = Self->CurrentForceTraversalTable();
         if (forceTraversalTable) {

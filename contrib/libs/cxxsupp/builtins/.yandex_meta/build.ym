@@ -90,6 +90,14 @@ sset = frozenset([name(x) for x in special])
 scrt = frozenset(['crtbegin', 'crtend'])
 # x86_80_BIT_SOURCES
 x86_not_win = frozenset(['divxc3', 'extendxftf2', 'fixxfdi', 'fixxfti', 'fixunsxfdi', 'fixunsxfsi', 'fixunsxfti', 'floatdixf', 'floattixf', 'floatundixf', 'floatuntixf', 'mulxc3', 'powixf2', 'trunctfxf2'])
+other_not_emscripten = frozenset([
+    'clear_cache',
+    'emutls',
+    'enable_execute_stack',
+    'eprintf',
+    'truncdfbf2',
+    'truncsfbf2',
+])
 
 def it_srcs():
     for x in common:
@@ -99,6 +107,10 @@ def it_srcs():
         if arch != 'x86_64_not_win' and n in x86_not_win:
             continue
         if arch == 'x86_64_not_win' and (not n in x86_not_win or n in ['floatdixf', 'floatundixf']):
+            continue
+        if arch == 'other' and n in other_not_emscripten:
+            continue
+        if arch == 'other_not_emscripten' and (n not in other_not_emscripten):
             continue
         if n not in sset:
             yield x
@@ -130,6 +142,11 @@ echo 'SRCS('
 echo '' > special
 python3 join.py common special other
 echo ')'
+echo 'IF (NOT OS_EMSCRIPTEN)'
+echo 'SRCS('
+python3 join.py common special other_not_emscripten
+echo ')'
+echo 'ENDIF()'
 echo 'ENDIF()'
 echo 'IF(OS_LINUX AND NOT WITH_MAPKIT)'
 echo 'SRCS(crtbegin.c crtend.c)'

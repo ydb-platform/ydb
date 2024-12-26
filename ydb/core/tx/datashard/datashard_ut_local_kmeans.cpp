@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
                 rec.SetTabletId(tid);
             }
             if (!rec.HasPathId()) {
-                PathIdFromPathId(tableId.PathId, rec.MutablePathId());
+                tableId.PathId.ToProto(rec.MutablePathId());
             }
 
             rec.SetSnapshotTxId(snapshot.TxId);
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
                 rec.SetSeqNoRound(1);
 
                 rec.SetTabletId(tid);
-                PathIdFromPathId(tableId.PathId, rec.MutablePathId());
+                tableId.PathId.ToProto(rec.MutablePathId());
 
                 rec.SetSnapshotTxId(snapshot.TxId);
                 rec.SetSnapshotStep(snapshot.Step);
@@ -261,7 +261,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
             auto ev = std::make_unique<TEvDataShard::TEvLocalKMeansRequest>();
             auto& rec = ev->Record;
 
-            PathIdFromPathId({0, 0}, rec.MutablePathId());
+            TPathId(0, 0).ToProto(rec.MutablePathId());
             DoBadRequest(server, sender, ev);
         }
         {

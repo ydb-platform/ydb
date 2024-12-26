@@ -1,0 +1,16 @@
+{
+    "test.test[compute_range-yql-12941-default.txt-Debug]": [
+        {
+            "checksum": "6481aaf7fea66b125b864cb9afecaa1f",
+            "size": 871,
+            "uri": "https://{canondata_backend}/1936842/98f279a8c97d83ae7e3740bf0c10b4e1b823d89e/resource.tar.gz#test.test_compute_range-yql-12941-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[compute_range-yql-12941-default.txt-Results]": [
+        {
+            "checksum": "c3ad050fc08649e1fc126e3e9a548e28",
+            "size": 17026,
+            "uri": "https://{canondata_backend}/1936842/98f279a8c97d83ae7e3740bf0c10b4e1b823d89e/resource.tar.gz#test.test_compute_range-yql-12941-default.txt-Results_/results.txt"
+        }
+    ]
+}

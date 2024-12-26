@@ -176,7 +176,7 @@ inline size_t EstimateSize(TCellsRef cells) {
     for (auto& cell : cells) {
         if (!cell.IsNull() && !cell.IsInline()) {
             const size_t cellSize = cell.Size();
-            size += AlignUp(cellSize);
+            size += AlignUp(cellSize, size_t(4));
         }
     }
 
@@ -420,24 +420,28 @@ private:
 
     class TData : public TAtomicRefCount<TData> {
     public:
-        TData() = default;
+        const size_t DataSize;
 
-        void operator delete(void* mem) noexcept;
+        explicit TData(size_t size)
+            : DataSize(size)
+        {}
+
+        void operator delete(TData* data, std::destroying_delete_t) noexcept;
     };
 
     struct TInit {
         TCellVec Cells;
         TIntrusivePtr<TData> Data;
-        size_t DataSize;
     };
 
     TOwnedCellVec(TInit init) noexcept
         : TCellVec(std::move(init.Cells))
         , Data(std::move(init.Data))
-        , DataSize_(init.DataSize)
     { }
 
     static TInit Allocate(TCellVec cells);
+
+    static TInit AllocateFromSerialized(std::string_view data);
 
     TCellVec& CellVec() {
         return static_cast<TCellVec&>(*this);
@@ -446,7 +450,6 @@ private:
 public:
     TOwnedCellVec() noexcept
         : TCellVec()
-        , DataSize_(0)
     { }
 
     explicit TOwnedCellVec(TCellVec cells)
@@ -457,25 +460,25 @@ public:
         return TOwnedCellVec(Allocate(cells));
     }
 
+    static TOwnedCellVec FromSerialized(std::string_view data) {
+        return TOwnedCellVec(AllocateFromSerialized(data));
+    }
+
     TOwnedCellVec(const TOwnedCellVec& rhs) noexcept
         : TCellVec(rhs)
         , Data(rhs.Data)
-        , DataSize_(rhs.DataSize_)
     { }
 
     TOwnedCellVec(TOwnedCellVec&& rhs) noexcept
         : TCellVec(rhs)
         , Data(std::move(rhs.Data))
-        , DataSize_(rhs.DataSize_)
     {
         rhs.CellVec() = { };
-        rhs.DataSize_ = 0;
     }
 
     TOwnedCellVec& operator=(const TOwnedCellVec& rhs) noexcept {
         if (Y_LIKELY(this != &rhs)) {
             Data = rhs.Data;
-            DataSize_ = rhs.DataSize_;
             CellVec() = rhs;
         }
 
@@ -485,22 +488,19 @@ public:
     TOwnedCellVec& operator=(TOwnedCellVec&& rhs) noexcept {
         if (Y_LIKELY(this != &rhs)) {
             Data = std::move(rhs.Data);
-            DataSize_ = rhs.DataSize_;
             CellVec() = rhs;
             rhs.CellVec() = { };
-            rhs.DataSize_ = 0;
         }
 
         return *this;
     }
 
     size_t DataSize() const {
-        return DataSize_;
+        return Data ? Data->DataSize : 0;
     }
 
 private:
     TIntrusivePtr<TData> Data;
-    size_t DataSize_;
 };
 
 static_assert(std::is_nothrow_destructible_v<TOwnedCellVec>, "Expected TOwnedCellVec to be nothrow destructible");

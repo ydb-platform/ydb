@@ -87,7 +87,7 @@ public:
             context.SS->FillSeqNo(tx, seqNo);
 
             auto notice = tx.MutableMoveIndex();
-            PathIdFromPathId(pathId, notice->MutablePathId());
+            pathId.ToProto(notice->MutablePathId());
             notice->SetTableSchemaVersion(table->AlterVersion + 1);
 
             auto remap = notice->MutableReMapIndex();
@@ -116,8 +116,8 @@ public:
                                  << ", type: " << (int)txState->TxType
                                  << ", parent pathId: " << pathId);
                     if (pathId == parent.Base()->PathId) {
-                        PathIdFromPathId(txState->SourcePathId, remap->MutableSrcPathId());
-                        PathIdFromPathId(txState->TargetPathId, remap->MutableDstPathId());
+                        txState->SourcePathId.ToProto(remap->MutableSrcPathId());
+                        txState->TargetPathId.ToProto(remap->MutableDstPathId());
                         auto targetIndexName = context.SS->PathsById.at(txState->TargetPathId);
 
                         for (const auto& [_, childPathId] : path->GetChildren()) {
@@ -125,7 +125,7 @@ public:
                             auto childPath = context.SS->PathsById.at(childPathId);
 
                             if (childPath->Name == targetIndexName->Name) {
-                                PathIdFromPathId(childPathId, remap->MutableReplacedPathId());
+                                childPathId.ToProto(remap->MutableReplacedPathId());
                                 remap->SetDstName(childPath->Name);
                             }
                         }

@@ -80,13 +80,7 @@ private:
         AFL_VERIFY(arrowType.ok());
         auto f = std::make_shared<arrow::Field>(column.Name, arrowType.ValueUnsafe(), !column.NotNull);
         if (cache) {
-            auto fFound = cache->GetField(f->ToString(true));
-            if (!fFound) {
-                cache->RegisterField(f->ToString(true), f);
-                return f;
-            } else {
-                return fFound;
-            }
+            return cache->GetOrInsertField(f);
         } else {
             return f;
         }
@@ -319,11 +313,11 @@ public:
     };
 
     [[nodiscard]] TConclusion<TSecondaryData> AppendIndexes(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& primaryData,
-        const std::shared_ptr<IStoragesManager>& operators) const {
+        const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount) const {
         TSecondaryData result;
         result.MutableExternalData() = primaryData;
         for (auto&& i : Indexes) {
-            auto conclusion = AppendIndex(primaryData, i.first, operators, result);
+            auto conclusion = AppendIndex(primaryData, i.first, operators, recordsCount, result);
             if (conclusion.IsFail()) {
                 return conclusion;
             }
@@ -335,7 +329,7 @@ public:
     std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> GetIndexMetaCountMinSketch(const std::set<ui32>& columnIds) const;
 
     [[nodiscard]] TConclusionStatus AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData,
-        const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, TSecondaryData& result) const;
+        const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, TSecondaryData& result) const;
 
     /// Returns an id of the column located by name. The name should exists in the schema.
     ui32 GetColumnIdVerified(const std::string& name) const;

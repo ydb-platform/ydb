@@ -20,7 +20,7 @@ namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static TResponseInfo Request(
+static NHttpClient::IHttpResponsePtr Request(
     const TClientContext& context,
     THttpHeader& header,
     TMaybe<TStringBuf> body,
@@ -38,16 +38,10 @@ static TResponseInfo Request(
 
     auto url = GetFullUrlForProxy(hostName, context, header);
 
-    auto response = context.HttpClient->Request(url, requestId, config.HttpConfig, header, body);
-
-    TResponseInfo result;
-    result.RequestId = requestId;
-    result.Response = response->GetResponse();
-    result.HttpCode = response->GetStatusCode();
-    return result;
+    return context.HttpClient->Request(url, requestId, config.HttpConfig, header, body);
 }
 
-TResponseInfo RequestWithoutRetry(
+NHttpClient::IHttpResponsePtr RequestWithoutRetry(
     const TClientContext& context,
     TMutationId& mutationId,
     THttpHeader& header,
@@ -118,7 +112,12 @@ TResponseInfo RetryRequestWithPolicy(
                 }
             }
 
-            return Request(context, header, body, requestId, config);
+            auto response = Request(context, header, body, requestId, config);
+            return TResponseInfo{
+                .RequestId = response->GetRequestId(),
+                .Response = response->GetResponse(),
+                .HttpCode = response->GetStatusCode(),
+            };
         } catch (const TErrorResponse& e) {
             LogRequestError(requestId, header, e.what(), retryPolicy->GetAttemptDescription());
             retryWithSameMutationId = e.IsTransportError();

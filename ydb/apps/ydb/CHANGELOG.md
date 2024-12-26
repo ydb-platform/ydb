@@ -1,15 +1,19 @@
-* Fixed a bug where `ydb workload * run` command could crash in `--dry-run` mode.
-* Added support for views in local backups: `ydb tools dump` and `ydb tools restore`. Views are backed up as `CREATE VIEW` queries saved in the `create_view.sql` files, which can be executed to recreate the original views.
-* Replaced option `--query-settings` by `--query-prefix` one in `ydb workload <workload> run`.
-* Added new options to `ydb workload topic`: --tx-commit-interval and --tx-commit-messages, allowing you to specify commit interval either in milliseconds or in number of messages written. 
-Also now you can load test YDB topics, using wide transactions that span over all partitions in the topic. This works both in write and in end-to-end workload scenarios. 
 
 ## 2.18.0 ##
 
+* Query plan and statistics improvements:
+  * Expression and attributes added to various operator properties (i.e. GroupBy)
+  * Per operator statistics (Rows)
+  * Statistics from Column Shards (Rows and Bytes)
+* Fixed a bug where `ydb workload * run` command could crash in `--dry-run` mode.
+* Added support for views in local backups: `ydb tools dump` and `ydb tools restore`. Views are backed up as `CREATE VIEW` queries saved in the `create_view.sql` files, which can be executed to recreate the original views.
+* Replaced option `--query-settings` by `--query-prefix` one in `ydb workload <workload> run`.
+* Added new options to `ydb workload topic`: --tx-commit-interval and --tx-commit-messages, allowing you to specify commit interval either in milliseconds or in number of messages written.
+Also now you can load test YDB topics, using wide transactions that span over all partitions in the topic. This works both in write and in end-to-end workload scenarios.
 * `ydb import file csv` command now saves import progress. Relaunching import command will continue from the line it was interrupted on
 * Use QueryService by default (`--executer generic`) in `ydb workload kv` and `ydb workload stock` commands
 * Use parquet format instead of CSV to fill tables in `ydb workload` benchmarks
-* Made `--consumer` flag in `ydb topic read` command optional. Now if this flag is not specified, reading is performed in no-consumer mode. In this mode partition IDs should be specified with `--partition-ids` option. 
+* Made `--consumer` flag in `ydb topic read` command optional. Now if this flag is not specified, reading is performed in no-consumer mode. In this mode partition IDs should be specified with `--partition-ids` option.
 * Fixed a bug in `ydb import file csv` where multiple columns with escaped quotes in the same row were parsed incorrectly
 * Truncate query results output in benchmarks
 * Added `ydb admin cluster bootstrap` command to bootstrap automatically configured cluster

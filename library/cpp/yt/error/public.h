@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/yt/yson_string/string.h>
+#include "error_code.h"
 
 namespace NYT {
 
@@ -9,10 +9,22 @@ namespace NYT {
 template <class T>
 class TErrorOr;
 
+using TError = TErrorOr<void>;
 
 struct TErrorAttribute;
 class TErrorAttributes;
 struct TOriginAttributes;
+
+////////////////////////////////////////////////////////////////////////////////
+
+YT_DEFINE_ERROR_ENUM(
+    ((OK)                    (0))
+    ((Generic)               (1))
+    ((Canceled)              (2))
+    ((Timeout)               (3))
+    ((FutureCombinerFailure) (4))
+    ((FutureCombinerShortcut)(5))
+);
 
 ////////////////////////////////////////////////////////////////////////////////
 

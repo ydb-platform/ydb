@@ -15,9 +15,10 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "execute");
     ACFL_DEBUG("event", "start_execute");
     auto& index = Self->MutableIndexAs<NOlap::TColumnEngineForLogs>();
+    const auto minReadSnapshot = Self->GetMinReadSnapshot();
     for (auto&& pack : Packs) {
         const auto& writeMeta = pack.GetWriteMeta();
-        AFL_VERIFY(Self->TablesManager.IsReadyForWrite(writeMeta.GetTableId()));
+        AFL_VERIFY(Self->TablesManager.IsReadyForFinishWrite(writeMeta.GetTableId(), minReadSnapshot));
         AFL_VERIFY(!writeMeta.HasLongTxId());
         auto operation = Self->OperationsManager->GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         Y_ABORT_UNLESS(operation->GetStatus() == EOperationStatus::Started);

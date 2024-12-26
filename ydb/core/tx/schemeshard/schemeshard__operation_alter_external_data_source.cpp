@@ -244,7 +244,7 @@ public:
         {
             bool isTieredStorage = false;
             for (const auto& referrer : externalDataSourceInfo->ExternalTableReferences.GetReferences()) {
-                if (TPath::Init(PathIdFromPathId(referrer.GetPathId()), context.SS)->PathType ==
+                if (TPath::Init(TPathId::FromProto(referrer.GetPathId()), context.SS)->PathType ==
                     NKikimrSchemeOp::EPathType::EPathTypeColumnTable) {
                     isTieredStorage = true;
                     break;

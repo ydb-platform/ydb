@@ -92,6 +92,9 @@ protected:
     virtual TDuration DoGetUsedSnapshotLivetime(const TDuration defaultValue) const {
         return defaultValue;
     }
+    virtual ui64 DoGetLimitForPortionsMetadataAsk(const ui64 defaultValue) const {
+        return defaultValue;
+    }
     virtual TDuration DoGetOverridenGCPeriod(const TDuration defaultValue) const {
         return defaultValue;
     }
@@ -187,6 +190,11 @@ public:
     }
 
     virtual void OnSelectShardingFilter() {
+    }
+
+    ui64 GetLimitForPortionsMetadataAsk() const {
+        const ui64 defaultValue = GetConfig().GetLimitForPortionsMetadataAsk();
+        return DoGetLimitForPortionsMetadataAsk(defaultValue);
     }
 
     TDuration GetCompactionActualizationLag() const {

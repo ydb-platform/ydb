@@ -432,6 +432,7 @@ private:
             }
         }
 #undef DUMP
+#undef DUMP_PREFIXED
 
         Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(html.Str()));
     }

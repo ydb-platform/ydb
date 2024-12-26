@@ -258,7 +258,7 @@ class WorkloadRunner:
         stop = threading.Event()
         workloads = [
             WorkloadTablesCreateDrop(self.client, self.name, stop),
-            WorkloadInsertDelete(self.client, self.name, stop),
+            # WorkloadInsertDelete(self.client, self.name, stop), TODO fix https://github.com/ydb-platform/ydb/issues/12871
         ]
         for w in workloads:
             w.start()

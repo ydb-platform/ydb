@@ -2070,7 +2070,7 @@ message TColumnarStatistics
     optional int64 legacy_chunk_row_count = 13;
 
     // Per-column hyperloglog digest to approximate number of unique values
-    repeated NYT.NProto.THyperLogLog column_hyperloglog_digests = 14;
+    repeated NYT.NProto.THyperLogLogDigest column_hyperloglog_digests = 14;
 }
 
 message TRspGetColumnarStatistics

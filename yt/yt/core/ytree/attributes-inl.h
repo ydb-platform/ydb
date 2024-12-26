@@ -94,14 +94,24 @@ void IAttributeDictionary::Set(const TString& key, const T& value)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <>
-struct TMergeDictionariesTraits<NYTree::IAttributeDictionary>
+namespace NMergeableRangeImpl {
+
+inline TMergeableRange TagInvoke(TTagInvokeTag<AsMergeableRange>, const NYTree::IAttributeDictionary& dict)
 {
-    static auto MakeIterableView(const NYTree::IAttributeDictionary& dict)
-    {
-        return dict.ListPairs();
+    auto pairs = dict.ListPairs();
+
+    std::vector<TErrorAttributes::TKeyValuePair> ret;
+    ret.reserve(std::ssize(pairs));
+
+    for (const auto& [key, value] : pairs) {
+        ret.emplace_back(
+            key,
+            NYT::ToErrorAttributeValue(value));
     }
-};
+    return ret;
+}
+
+} // namespace NMergeableRangeImpl
 
 ////////////////////////////////////////////////////////////////////////////////
 

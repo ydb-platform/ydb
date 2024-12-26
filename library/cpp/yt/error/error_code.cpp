@@ -1,6 +1,6 @@
 #include "error_code.h"
 
-#include <yt/yt/core/logging/log.h>
+#include <library/cpp/yt/logging/logger.h>
 
 #include <library/cpp/yt/misc/global.h>
 

@@ -54,7 +54,10 @@ def check_provider(provider, config):
         pytest.skip('%s provider is not supported here' % provider)
 
 
-def get_sql_query(provider, suite, case, config):
+def get_sql_query(provider, suite, case, config, data_path=None):
+    if data_path is None:
+        data_path = DATA_PATH
+
     pragmas = get_pragmas(config)
 
     if get_param('TARGET_PLATFORM'):
@@ -64,7 +67,7 @@ def get_sql_query(provider, suite, case, config):
     if get_param('TARGET_PLATFORM') and is_xfail(config):
         pytest.skip('xfail is not supported on non-default target platform')
 
-    program_sql = os.path.join(DATA_PATH, suite, '%s.sql' % case)
+    program_sql = os.path.join(data_path, suite, '%s.sql' % case)
 
     with codecs.open(program_sql, encoding='utf-8') as program_file_descr:
         sql_query = program_file_descr.read()
@@ -85,26 +88,29 @@ def get_sql_query(provider, suite, case, config):
 
 
 def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
-                      yqlrun_binary=None, extra_args=[], force_blocks=False, allow_llvm=True):
+                      yqlrun_binary=None, extra_args=[], force_blocks=False, allow_llvm=True, data_path=None):
     check_provider(provider, config)
+    if data_path is None:
+        data_path = DATA_PATH
 
-    sql_query = get_sql_query(provider, suite, case, config)
+    sql_query = get_sql_query(provider, suite, case, config, data_path)
     sql_query = replace_vars(sql_query, "yqlrun_var")
 
     xfail = is_xfail(config)
 
-    in_tables, out_tables = get_tables(suite, config, DATA_PATH, def_attr=KSV_ATTR)
-    files = get_files(suite, config, DATA_PATH)
-    http_files = get_http_files(suite, config, DATA_PATH)
+    in_tables, out_tables = get_tables(suite, config, data_path, def_attr=KSV_ATTR) if provider != 'pure' else (None, None)
+    files = get_files(suite, config, data_path)
+    http_files = get_http_files(suite, config, data_path)
     http_files_urls = yql_http_file_server.register_files({}, http_files)
 
-    for table in in_tables:
-        if cyson.loads(table.attr).get("type") == "document":
-            content = table.content
-        else:
-            content = table.attr
-        if provider != 'yt' and 'Javascript' in content:
-            pytest.skip('ScriptUdf')
+    if in_tables is not None:
+        for table in in_tables:
+            if cyson.loads(table.attr).get("type") == "document":
+                content = table.content
+            else:
+                content = table.attr
+            if provider != 'yt' and 'Javascript' in content:
+                pytest.skip('ScriptUdf')
 
     parameters = get_parameters_json(suite, config)
 
@@ -150,11 +156,12 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
 
 
 def run_file(provider, suite, case, cfg, config, yql_http_file_server, yqlrun_binary=None,
-             extra_args=[], force_blocks=False, allow_llvm=True):
+             extra_args=[], force_blocks=False, allow_llvm=True, data_path=None):
     if (suite, case, cfg) not in run_file.cache:
         run_file.cache[(suite, case, cfg)] = \
             run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
-                              yqlrun_binary, extra_args, force_blocks=force_blocks, allow_llvm=allow_llvm)
+                              yqlrun_binary, extra_args, force_blocks=force_blocks, allow_llvm=allow_llvm,
+                              data_path=data_path)
 
     return run_file.cache[(suite, case, cfg)]
 

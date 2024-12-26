@@ -7,7 +7,6 @@
 #include <library/cpp/yson/detail.h>
 #include <library/cpp/yson/varint.h>
 
-
 namespace NYql {
 
 using namespace NYson::NDetail;
@@ -91,39 +90,11 @@ private:
 };
 
 
-template<bool Native>
 class IYsonComplexTypeReader {
 public:
-    using TIReaderPtr = std::unique_ptr<IYsonComplexTypeReader<Native>>;
+    using TPtr = std::unique_ptr<IYsonComplexTypeReader>;
     virtual ~IYsonComplexTypeReader() = default;
     virtual NUdf::TBlockItem GetItem(TYsonBuffer& buf) = 0;
-    virtual NUdf::TBlockItem GetNotNull(TYsonBuffer&) = 0;
-    NUdf::TBlockItem GetNullableItem(TYsonBuffer& buf) {
-        char prev = buf.Current();
-        if constexpr (Native) {
-            if (prev == EntitySymbol) {
-                buf.Next();
-                return NUdf::TBlockItem();
-            }
-            return GetNotNull(buf).MakeOptional();
-        }
-        buf.Next();
-        if (prev == EntitySymbol) {
-            return NUdf::TBlockItem();
-        }
-        YQL_ENSURE(prev == BeginListSymbol);
-        if (buf.Current() == EndListSymbol) {
-            buf.Next();
-            return NUdf::TBlockItem();
-        }
-        auto result = GetNotNull(buf);
-        if (buf.Current() == ListItemSeparatorSymbol) {
-            buf.Next();
-        }
-        YQL_ENSURE(buf.Current() == EndListSymbol);
-        buf.Next();
-        return result.MakeOptional();
-    }
 };
 
 }

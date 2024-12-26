@@ -17,7 +17,7 @@ Release date: December 24, 2024.
 * Added delivery of [Count-min sketch](https://en.wikipedia.org/wiki/Count%E2%80%93min_sketch) statistics for [columnar tables](./concepts/datamodel/table#column-oriented-tables) to the query analyzer.
 * Added audit logging for user login events in YDB, session termination events in the user interface, and backup/restore operations.
 * Initial version of the workload manager was implemented. It allows to create resource pools with CPU, memory and active queries count limits. Resource classifiers were implemented to assign queries to specific resource pool.
-* Added system view that allows you to get information about sessions installed from the database using a query.
+* Added a system view with information about sessions installed from the database using a query.
 * Added support literal default values for row-oriented tables. When inserting a new row in YDB Query default values will be assigned to the column if specified.
 * Added support for returning clause in queries.
 * [Added](https://github.com/ydb-platform/ydb/pull/8708) start/end times and authors in the metadata for backup/restore operations from S3-compatible storage.

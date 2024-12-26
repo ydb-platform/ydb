@@ -399,7 +399,7 @@ void Deserialize(TError& error, const NYTree::INodePtr& node)
 
     for (const auto& [key, value] : children) {
         // NB(arkady-e1ppa): Serialization may add some attributes in normal yson
-        // format (in legacy versions) thus we have to recovert them into the
+        // format (in legacy versions) thus we have to reconvert them into the
         // text ones in order to make sure that everything is in the text format.
         error <<= TErrorAttribute(key, ConvertToYsonString(value));
     }
@@ -505,7 +505,7 @@ void FromProto(TError* error, const NYT::NProto::TError& protoError)
     error->SetMessage(FromProto<TString>(protoError.message()));
     if (protoError.has_attributes()) {
         for (const auto& protoAttribute : protoError.attributes().attributes()) {
-            // NB(arkady-e1ppa): Again for compatibility reasons we have to recovert stuff
+            // NB(arkady-e1ppa): Again for compatibility reasons we have to reconvert stuff
             // here as well.
             auto key = FromProto<TString>(protoAttribute.key());
             auto value = FromProto<TString>(protoAttribute.value());

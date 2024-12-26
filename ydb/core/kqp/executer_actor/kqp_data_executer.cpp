@@ -2006,8 +2006,8 @@ private:
                         case NKqpProto::TKqpSource::kReadRangesSource:
                             if (auto partitionsCount = BuildScanTasksFromSource(
                                     stageInfo,
-                                    /* shardsResolved */ StreamResult,
-                                    /* limitTasksPerNode */ StreamResult)) {
+                                    /* shardsResolved */ StreamResult || EnableReadsMerge,
+                                    /* limitTasksPerNode */ StreamResult || EnableReadsMerge)) {
                                 sourceScanPartitionsCount += *partitionsCount;
                             } else {
                                 UnknownAffectedShardCount = true;
@@ -2176,7 +2176,7 @@ private:
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
 
-        if (StreamResult || AllowOlapDataQuery) {
+        if (StreamResult || EnableReadsMerge || AllowOlapDataQuery) {
             TSet<ui64> shardIds;
             for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
                 if (stageInfo.Meta.IsOlap()) {

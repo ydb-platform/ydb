@@ -60,10 +60,14 @@ namespace NBalancing {
         }
 
         TBatchManager() = default;
-        TBatchManager(IActor* sender, IActor* deleter)
-            : SenderId(TlsActivationContext->Register(sender))
-            , DeleterId(TlsActivationContext->Register(deleter))
+        TBatchManager(const TActorId& sender, const TActorId& deleter)
+            : SenderId(sender)
+            , DeleterId(deleter)
         {}
+        
+        operator bool() const {
+            return SenderId && DeleterId;
+        }
     };
 
     class TBalancingActor : public TActorBootstrapped<TBalancingActor> {
@@ -204,12 +208,13 @@ namespace NBalancing {
         ///////////////////////////////////////////////////////////////////////////////////////////
 
         void ContinueBalancing() {
-            Ctx->MonGroup.PlannedToSendOnMain() = SendOnMainParts.Data.size();
-            Ctx->MonGroup.CandidatesToDelete() = TryDeleteParts.Data.size();
+            Ctx->MonGroup.PlannedToSendOnMain() = SendOnMainParts.Size();
+            Ctx->MonGroup.CandidatesToDelete() = TryDeleteParts.Size();
 
             if (SendOnMainParts.Empty() && TryDeleteParts.Empty()) {
                 // no more parts to send or delete
                 STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB03, VDISKP(Ctx->VCtx, "Balancing completed"));
+                // TODO: bool hasSomeWorkForNextEpoch = SendOnMainParts.Size() >= Ctx->Cfg.MaxToSendPerEpoch || TryDeleteParts.Size() >= Ctx->Cfg.MaxToDeletePerEpoch;
                 bool hasSomeWorkForNextEpoch = SendOnMainParts.Data.size() >= Ctx->Cfg.MaxToSendPerEpoch || TryDeleteParts.Data.size() >= Ctx->Cfg.MaxToDeletePerEpoch;
                 Stop(hasSomeWorkForNextEpoch ? TDuration::Seconds(0) : Ctx->Cfg.TimeToSleepIfNothingToDo);
                 return;
@@ -231,9 +236,17 @@ namespace NBalancing {
                 (ConnectedVDisks, ConnectedVDisks.size()), (TotalVDisks, GInfo->GetTotalVDisksNum()));
 
             // register sender and deleter actors
+            IActor* sender = CreateSenderActor(SelfId(), SendOnMainParts.GetNextBatch(), QueueActorMapPtr, Ctx);
+            IActor* deleter = CreateDeleterActor(SelfId(), TryDeleteParts.GetNextBatch(), QueueActorMapPtr, Ctx);
+
+            // BatchManager = TBatchManager(
+            //     RegisterWithSameMailbox(sender),
+            //     RegisterWithSameMailbox(deleter)
+            // );
+
             BatchManager = TBatchManager(
-                CreateSenderActor(SelfId(), SendOnMainParts.GetNextBatch(), QueueActorMapPtr, Ctx),
-                CreateDeleterActor(SelfId(), TryDeleteParts.GetNextBatch(), QueueActorMapPtr, Ctx)
+                TlsActivationContext->Register(sender),
+                TlsActivationContext->Register(deleter)
             );
         }
 
@@ -334,6 +347,13 @@ namespace NBalancing {
                 Send(kv.second, new TEvents::TEvPoison);
             }
             TlsActivationContext->Schedule(timeoutBeforeNextLaunch, new IEventHandle(Ctx->SkeletonId, SelfId(), new TEvStartBalancing()));
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB32, VDISKP(Ctx->VCtx, "TBalancingActor::PassAway1"), (SelfId, SelfId()), (SenderId, BatchManager.SenderId), (DeleterId, BatchManager.DeleterId), (Finished, BatchManager.IsBatchCompleted()));
+            PassAway();
+        }
+
+        void HandlePoison() {
+            Y_ABORT_UNLESS(!BatchManager || BatchManager.IsBatchCompleted(), "Killing BalancingActor while Sender and Deleter are alive");
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB32, VDISKP(Ctx->VCtx, "TBalancingActor::PassAway2"), (SelfId, SelfId()), (SenderId, BatchManager.SenderId), (DeleterId, BatchManager.DeleterId));
             PassAway();
         }
 
@@ -349,7 +369,7 @@ namespace NBalancing {
 
             // System events
             hFunc(NActors::TEvents::TEvUndelivered, Handle)
-            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
+            cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison)
 
             // BSQueue specific events
             hFunc(TEvProxyQueueState, Handle)

@@ -270,8 +270,13 @@ namespace {
 
         void PassAway() override {
             Send(NotifyId, new NActors::TEvents::TEvCompleted());
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB32, VDISKP(Ctx->VCtx, "TDeleter::PassAway"));
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB32, VDISKP(Ctx->VCtx, "TDeleter::PassAway1"), (SelfId, SelfId()));
             TActorBootstrapped::PassAway();
+        }
+
+        void HandlePoison() {
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB32, VDISKP(Ctx->VCtx, "TDeleter::PassAway2"), (SelfId, SelfId()));
+            PassAway();
         }
 
         STRICT_STFUNC(DeleteState,
@@ -279,7 +284,7 @@ namespace {
             hFunc(NActors::TEvents::TEvWakeup, TimeoutDelete)
 
             hFunc(TEvVGenerationChange, Handle)
-            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
+            cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison)
         );
 
         ///////////////////////////////////////////////////////////////////////////////////////////

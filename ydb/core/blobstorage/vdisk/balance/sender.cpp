@@ -318,8 +318,13 @@ namespace {
 
         void PassAway() override {
             Send(NotifyId, new NActors::TEvents::TEvCompleted());
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB28, VDISKP(Ctx->VCtx, "TSender::PassAway"));
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB28, VDISKP(Ctx->VCtx, "TSender::PassAway1"), (SelfId, SelfId()));
             TActorBootstrapped::PassAway();
+        }
+
+        void HandlePoison() {
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB28, VDISKP(Ctx->VCtx, "TSender::PassAway2"), (SelfId, SelfId()));
+            PassAway();
         }
 
         STRICT_STFUNC(StateSend,
@@ -330,7 +335,7 @@ namespace {
             cFunc(NPDisk::TEvChunkReadResult::EventType, [](){})  // read results received after timeout
 
             hFunc(TEvVGenerationChange, Handle)
-            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
+            cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison)
         );
 
         ///////////////////////////////////////////////////////////////////////////////////////////

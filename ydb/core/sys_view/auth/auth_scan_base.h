@@ -40,7 +40,7 @@ public:
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TAuthScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                    "NSysView::NAuth::TAuthScanBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
     }
 
@@ -72,7 +72,6 @@ protected:
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         THolder<NSchemeCache::TSchemeCacheNavigate> request(ev->Get()->Request.Release());
-        Y_ABORT_UNLESS(request->ResultSet.size() == 1);
         
         for (const auto& entry : request->ResultSet) {
             if (entry.Status != TNavigate::EStatus::Ok) {
@@ -93,7 +92,7 @@ protected:
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
-        TBase::ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "Failed to request domain info");
+        TBase::ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "Failed to request path info");
     }
 
     void PassAway() override {

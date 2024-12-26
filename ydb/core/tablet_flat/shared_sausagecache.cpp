@@ -297,6 +297,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // we may have some passive bytes, so if we fully fill this Cache we may exceed the limit
         // because of that DoGC should be called to ensure limits
         Cache.UpdateLimit(limitBytes);
+        
+        if (auto logl = Logger->Log(ELnLev::Debug)) {
+            logl << "[DEBUG-CACHE] UpdateLimit " << limitBytes;
+        }
+
         Counters.ActiveLimitBytes->Set(limitBytes);
     }
 
@@ -310,6 +315,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             * Config.GetActivePagesReservationPercent() / 100;
 
         THashSet<TCollection*> recheck;
+        TVector<ui32> evicted;
         while (GetStatAllBytes() > MemLimitBytes
             || GetStatAllBytes() > (Config.HasMemoryLimit() ? Config.GetMemoryLimit() : Max<ui64>()) && StatActiveBytes > configActiveReservedBytes)
         {
@@ -319,8 +325,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             }
             while (!pages.Empty()) {
                 TPage* page = pages.PopFront();
+                evicted.push_back(page->PageId);
                 EvictNow(page, recheck);
             }
+        }
+        if (auto logl = Logger->Log(ELnLev::Debug)) {
+            logl << "[DEBUG-CACHE] DoGC " << evicted;
         }
         if (recheck) {
             CheckExpiredCollections(std::move(recheck));
@@ -410,7 +420,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         collection.MetaId = metaId;
         collection.PageMap.resize(pageCollection.Total());
 
+        TVector<ui32> compacted;
+
         for (auto &page : msg->Pages) {
+            compacted.push_back(page->PageId);
             Y_ABORT_UNLESS(page->PageId < collection.PageMap.size());
 
             auto emplaced = collection.PageMap.emplace(page->PageId, page);
@@ -419,6 +432,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             page->Collection = &collection;
             BodyProvided(collection, page.Get());
             Evict(Cache.Touch(page.Get()));
+        }
+
+        if (auto logl = Logger->Log(ELnLev::Debug)) {
+            logl << "[DEBUG-CACHE] TEvSaveCompactedPages " << compacted;
         }
 
         DoGC();
@@ -454,8 +471,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 break;
         }
 
+        TVector<ui32> requested;
         for (const ui32 reqIdx : xrange(msg->Fetch->Pages.size())) {
             const ui32 pageId = msg->Fetch->Pages[reqIdx];
+            requested.push_back(pageId);
             Y_ABORT_UNLESS(pageId < collection.PageMap.size(),
                 "Page collection %s requested page %" PRIu32 " out of %" PRISZT " pages",
                 metaId.ToString().c_str(), pageId, collection.PageMap.size());
@@ -494,6 +513,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 pendingPages.emplace_back(pageId, reqIdx);
                 break;
             }
+        }
+
+        if (auto logl = Logger->Log(ELnLev::Debug)) {
+            logl << "[DEBUG-CACHE] TEvRequest " << requested;
         }
 
         auto waitingRequest = MakeIntrusive<TRequest>(std::move(msg->Fetch->PageCollection), std::move(msg->Fetch->TraceId));
@@ -709,6 +732,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
     void Handle(NSharedCache::TEvTouch::TPtr &ev) {
         NSharedCache::TEvTouch *msg = ev->Get();
+        TVector<ui32> touched;
 
         for (auto &[metaId, touchedPages] : msg->Touched) {
             auto collection = Collections.FindPtr(metaId);
@@ -742,6 +766,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     Y_ABORT("unknown load state");
                 }
             }
+        }
+
+        if (auto logl = Logger->Log(ELnLev::Debug)) {
+            logl << "[DEBUG-CACHE] TEvTouch " << touched;
         }
 
         DoGC();
@@ -816,6 +844,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (collectionIt == Collections.end())
             return;
 
+        TVector<ui32> loaded;
+        
         if (msg->Status != NKikimrProto::OK) {
             DropCollection(collectionIt, msg->Status);
         } else {
@@ -827,10 +857,15 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     continue;
                 }
 
+                loaded.push_back(page->PageId);
                 page->Initialize(std::move(paged.Data));
                 BodyProvided(collection, page);
                 Evict(Cache.Touch(page));
             }
+        }
+
+        if (auto logl = Logger->Log(ELnLev::Debug)) {
+            logl << "[DEBUG-CACHE] TEvData " << loaded;
         }
 
         DoGC();
@@ -979,9 +1014,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         bool haveValidPages = false;
         size_t droppedPagesCount = 0;
+        TVector<ui32> dropped;
         for (const auto &kv : collection.PageMap) {
             auto* page = kv.second.Get();
 
+            dropped.push_back(page->PageId);
             Cache.Erase(page);
             page->EnsureNoCacheFlags();
 
@@ -1002,6 +1039,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
             page->Collection = nullptr;
             ++droppedPagesCount;
+        }
+
+        if (auto logl = Logger->Log(ELnLev::Debug)) {
+            logl << "[DEBUG-CACHE] DropCollection " << dropped;
         }
 
         if (haveValidPages) {
@@ -1130,6 +1171,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (currentReplacementPolicy != Config.GetReplacementPolicy()) {
             if (auto logl = Logger->Log(ELnLev::Info)) {
                 logl << "Replacement policy switch from " << currentReplacementPolicy << " to " << Config.GetReplacementPolicy();
+            }
+            if (auto logl = Logger->Log(ELnLev::Debug)) {
+                logl << "[DEBUG-CACHE] Switch";
             }
             Evict(Cache.Switch(CreateCache(), Counters.ReplacementPolicySize(Config.GetReplacementPolicy())));
             DoGC();

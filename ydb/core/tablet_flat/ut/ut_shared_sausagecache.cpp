@@ -148,6 +148,7 @@ void SetupSharedCache(TMyEnvBase& env, NKikimrSharedCache::TReplacementPolicy po
 
 Y_UNIT_TEST(Limits) {
     TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
     bool bTreeIndex = env->GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
@@ -213,6 +214,7 @@ Y_UNIT_TEST(Limits) {
 
 Y_UNIT_TEST(Limits_Config) {
     TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
     bool bTreeIndex = env->GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
@@ -277,6 +279,7 @@ Y_UNIT_TEST(Limits_Config) {
 
 Y_UNIT_TEST(ThreeLeveledLRU) {
     TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -375,6 +378,7 @@ Y_UNIT_TEST(ThreeLeveledLRU) {
 
 Y_UNIT_TEST(S3FIFO) {
     TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -473,6 +477,7 @@ Y_UNIT_TEST(S3FIFO) {
 
 Y_UNIT_TEST(ClockPro) {
     TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -585,6 +590,7 @@ Y_UNIT_TEST(ClockPro) {
 
 Y_UNIT_TEST(ReplacementPolicySwitch) {
     TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -634,6 +640,7 @@ Y_UNIT_TEST(ReplacementPolicySwitch) {
 
 Y_UNIT_TEST(Compaction_BTreeIndex) {
     TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
@@ -681,6 +688,7 @@ Y_UNIT_TEST(Compaction_BTreeIndex) {
 
 Y_UNIT_TEST(Compaction_FlatIndex) {
     TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
@@ -728,6 +736,7 @@ Y_UNIT_TEST(Compaction_FlatIndex) {
 
 Y_UNIT_TEST(Compaction_ZeroCache_BTreeIndex) {
     TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
@@ -775,6 +784,7 @@ Y_UNIT_TEST(Compaction_ZeroCache_BTreeIndex) {
 
 Y_UNIT_TEST(Compaction_ZeroCache_FlatIndex) {
     TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);

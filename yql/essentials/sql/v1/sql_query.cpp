@@ -606,7 +606,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             TMaybe<TRoleParameters> roleParams;
             const auto& options = node.GetBlock4();
 
-            if (options.size() > 0) {
+            {
                 roleParams.ConstructInPlace();
                 std::vector<TRule_create_user_option> opts;
                 opts.reserve(options.size());

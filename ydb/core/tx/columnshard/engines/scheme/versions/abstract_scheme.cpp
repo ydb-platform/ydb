@@ -92,7 +92,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
             return TConclusionStatus::Success();
         }
         const std::optional<i32> pkFieldIdx = GetIndexInfo().GetPKColumnIndexByIndexVerified(targetIdx);
-        if (!NArrow::HasNulls(incomingBatch->column(incomingIdx))) {
+        if (pkFieldIdx || !NArrow::HasNulls(incomingBatch->column(incomingIdx))) {
             if (pkFieldIdx) {
                 AFL_VERIFY(*pkFieldIdx < (i32)pkColumns.size());
                 AFL_VERIFY(!pkColumns[*pkFieldIdx]);
@@ -101,9 +101,9 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
             }
             return TConclusionStatus::Success();
         }
-        if (pkFieldIdx) {
-            return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema.field(targetIdx)->name() + "'");
-        }
+        // if (pkFieldIdx) {
+        //     return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema.field(targetIdx)->name() + "'");
+        // }
         switch (mType) {
             case NEvWrite::EModificationType::Replace:
             case NEvWrite::EModificationType::Insert:

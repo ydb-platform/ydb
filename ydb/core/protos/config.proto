@@ -1761,7 +1761,7 @@ message TColumnShardConfig {
     optional bool ColumnChunksV1Usage = 26 [default = true];
     optional uint64 MemoryLimitScanPortion = 27 [default = 100000000];
     optional string ReaderClassName = 28;
-    optional bool AllowNullableColumnsInPK = 29 [default = false];
+    optional bool AllowNullableColumnsInPK = 29 [default = true];
     optional uint32 RestoreDataOnWriteTimeoutSeconds = 30;
     optional bool UseSlicesFilter = 31 [default = true];
     optional uint32 LimitForPortionsMetadataAsk = 32 [default = 1000];

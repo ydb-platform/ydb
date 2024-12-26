@@ -13,6 +13,7 @@
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/events/common.h>
+#include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http_proxy.h>
@@ -688,7 +689,7 @@ public:
             const TActorId& dataShard, ui64 txId,
             const NKikimrSchemeOp::TBackupTask& task,
             TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
-            ::google::protobuf::RepeatedPtrField<::NKikimrSchemeOp::TPersQueueGroupDescription> persQueues,
+            TVector<TChangefeedExportDescriptions> changefeedsExportDescs,
             TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
             TString&& metadata)
         : ExternalStorageConfig(new TS3ExternalStorageConfig(task.GetS3Settings()))
@@ -700,7 +701,7 @@ public:
         , DataShard(dataShard)
         , TxId(txId)
         , Scheme(std::move(scheme))
-        , PersQueues(std::move(persQueues))
+        , ChangefeedsExportDescs(std::move(changefeedsExportDescs))
         , Metadata(std::move(metadata))
         , Permissions(std::move(permissions))
         , Retries(task.GetNumberOfRetries())
@@ -804,7 +805,7 @@ private:
     const TActorId DataShard;
     const ui64 TxId;
     const TMaybe<Ydb::Table::CreateTableRequest> Scheme;
-    const ::google::protobuf::RepeatedPtrField<::NKikimrSchemeOp::TPersQueueGroupDescription> PersQueues;
+    const TVector<TChangefeedExportDescriptions> ChangefeedsExportDescs;
     const TString Metadata;
     const TMaybe<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
 
@@ -844,11 +845,19 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         : Nothing();
 
     const auto& persQueuesTPathDesc = Task.GetPersQueue();
-    ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TPersQueueGroupDescription> persQueues;
 
-    std::transform(persQueuesTPathDesc.begin(), persQueuesTPathDesc.end(), persQueues.begin(), [](const auto& x) {
-        return x.GetPersQueueGroup();
-    });
+    Ydb::Table::DescribeTableResult descTableResult;
+    FillChangefeedDescription(descTableResult, Task.GetTable().GetTable());
+
+    const auto& changefeeds = descTableResult.Getchangefeeds();
+    const int changefeedsCount = changefeeds.SpaceUsedExcludingSelf();
+    TVector <TChangefeedExportDescriptions> changefeedsExportDescs(changefeedsCount);
+
+    for (int i = 0; i < changefeedsCount; ++i) {
+        changefeedsExportDescs[i].ChangefeedDescription = changefeeds[i];
+        changefeedsExportDescs[i].Topic = GenYdbDescribeTopicResult( persQueuesTPathDesc[i].GetPersQueueGroup() );
+
+    }
 
     auto permissions = (Task.GetShardNum() == 0)
         ? GenYdbPermissions(Task.GetTable())
@@ -865,7 +874,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     metadata.AddFullBackup(backup);
 
     return new TS3Uploader(
-        dataShard, txId, Task, std::move(scheme), std::move(persQueues), std::move(permissions), metadata.Serialize());
+        dataShard, txId, Task, std::move(scheme), std::move(changefeedsExportDescs), std::move(permissions), metadata.Serialize());
 }
 
 } // NDataShard

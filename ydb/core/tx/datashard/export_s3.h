@@ -7,6 +7,9 @@
 #include "export_iface.h"
 #include "export_s3_buffer.h"
 
+#include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -46,6 +49,11 @@ protected:
     const TTask Task;
     const TTableColumns Columns;
 };
+
+struct TChangefeedExportDescriptions {
+    Ydb::Table::ChangefeedDescription ChangefeedDescription;
+    Ydb::Topic::DescribeTopicResult Topic;
+}
 
 } // NDataShard
 } // NKikimr

@@ -218,9 +218,13 @@ public:
         }
 
         worker.Heartbeat = version;
+        WorkersWithHeartbeat.insert(id);
         WorkersByHeartbeat[version].insert(id);
-        while (!TxIds.empty() && WorkersByHeartbeat.begin()->first < TxIds.begin()->first) {
-            TxIds.erase(TxIds.begin());
+
+        if (Workers.size() == WorkersWithHeartbeat.size()) {
+            while (!TxIds.empty() && WorkersByHeartbeat.begin()->first < TxIds.begin()->first) {
+                TxIds.erase(TxIds.begin());
+            }
         }
 
         id.Serialize(*record.MutableWorker());
@@ -254,6 +258,7 @@ private:
 
     TMap<TRowVersion, ui64> TxIds;
     TMap<TRowVersion, THashSet<TActorId>> PendingTxId;
+    THashSet<TWorkerId> WorkersWithHeartbeat;
     TMap<TRowVersion, THashSet<TWorkerId>> WorkersByHeartbeat;
 
 }; // TSessionInfo

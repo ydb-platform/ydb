@@ -35,6 +35,7 @@ ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_3_2_1_clean
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit3_1
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.ChangeSchemaAndSplit
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.HugeSchemeHistory
+ydb/core/kqp/ut/olap KqpOlap.ManyColumnShardsWithRestarts
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleMerge
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleMergesWithRestartsAfterWait
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleMergesWithRestartsWhenWait

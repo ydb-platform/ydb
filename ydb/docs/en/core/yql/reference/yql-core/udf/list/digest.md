@@ -34,6 +34,8 @@ A set of commonly used hash functions.
 * `Digest::XXH3(String{Flags:AutoMap}) -> Uint64`
 * `Digest::XXH3_128(String{Flags:AutoMap}) -> Tuple<Uint64,Uint64>`
 
+The functions for the hashes which support init/seed parameter, accept its value in the optional named argument `Init`.
+
 ### Examples
 
 ```yql

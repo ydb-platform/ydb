@@ -57,6 +57,7 @@ void TLocalManager::DrainQueue() {
                 auto it = RequestsByPortion.find(accessor.GetPortionInfo().GetPortionId());
                 AFL_VERIFY(it != RequestsByPortion.end());
                 for (auto&& i : it->second) {
+                    Counters.ResultFromCache->Add(1);
                     if (!i->IsFetched() && !i->IsAborted()) {
                         i->AddAccessor(accessor);
                     }
@@ -66,11 +67,14 @@ void TLocalManager::DrainQueue() {
                 --countToFlight;
             }
             if (dataAnalyzed.GetPortionsToAsk().size()) {
+                Counters.ResultAskDirectly->Add(dataAnalyzed.GetPortionsToAsk().size());
                 it->second->AskData(dataAnalyzed.GetPortionsToAsk(), AccessorCallback, "ANALYZE");
             }
         }
     }
     PortionsAskInFlight += countToFlight;
+    Counters.FetchingCount->Set(PortionsAskInFlight);
+    Counters.QueueSize->Set(PortionsAsk.size());
 }
 
 void TLocalManager::DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) {
@@ -82,8 +86,10 @@ void TLocalManager::DoAskData(const std::shared_ptr<TDataAccessorsRequest>& requ
             if (itRequest == RequestsByPortion.end()) {
                 AFL_VERIFY(RequestsByPortion.emplace(i->GetPortionId(), std::vector<std::shared_ptr<TDataAccessorsRequest>>({request})).second);
                 PortionsAsk.emplace_back(i, request->GetAbortionFlag());
+                Counters.AskNew->Add(1);
             } else {
                 itRequest->second.emplace_back(request);
+                Counters.AskDuplication->Add(1);
             }
         }
     }

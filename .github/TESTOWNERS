@@ -109,3 +109,5 @@ ydb/tests/functional/tpc @ydb-platform/engineering
 #@ydb-platform/ui-backend
 /ydb/core/viewer @ydb-platform/ui-backend
 /ydb/core/protos/node_whiteboard.proto @ydb-platform/ui-backend
+
+/ydb/tests/sql @slonnn

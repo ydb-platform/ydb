@@ -2,10 +2,9 @@ PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 REQUIREMENTS(ram:48)
-TIMEOUT(1800)
 
 TEST_SRCS(
-    test_inserts_tpch.py
+    test_bulkupserts_tpch.py
     test_insertinto_selectfrom.py
     test_insert_delete_duplicate_records.py
 )

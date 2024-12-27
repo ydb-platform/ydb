@@ -5,20 +5,21 @@ import ydb
 from ydb.tests.sql.lib.test_base import TpchTestBaseH1, TestBase
 
 
-class TestYdbInsertsOperations(TpchTestBaseH1):
+class TestTpchBulkUpsertsOperations(TpchTestBaseH1):
 
-    def test_parallel_bulk_upsert_lineitem(self):
+    def test_bulk_upsert_lineitem_with_overlapping_keys(self):
         """
-        Test parallel bulk upsert into the lineitem table with overlapping keys
+        Test bulk upsert into the lineitem table with overlapping keys.
+        Data are inserted by overlapping chunks
         """
         table_name = f"{self.tpch_default_path()}/lineitem"
 
         self.query(f"DELETE FROM `{table_name}` WHERE l_suppkey=9999")  # Special value for verification
 
         # Parameters for data generation
-        total_records = 1_00
-        num_workers = 2
-        records_per_worker = total_records // num_workers
+        total_records = 100_000
+        num_chunks = 100
+        records_per_chunk = total_records // num_chunks
 
         self.query(f"DELETE FROM `{table_name}` WHERE l_orderkey <= {2*total_records}")  # Remove possible duplicated keys
 
@@ -29,21 +30,22 @@ class TestYdbInsertsOperations(TpchTestBaseH1):
         def generate_lineitem_data(offset):
             data = [self.create_lineitem({
                 'l_orderkey': i + offset,
+                'l_linenumber': i + offset,
                 'l_suppkey': 9999,  # Special value for verification
                 'l_quantity': i + offset  # The "l_quantity" indicates the order, acting as a new "value"
-                }) for i in range(records_per_worker)
+                }) for i in range(records_per_chunk)
             ]
             inserted_data.extend(data)
             return data
 
-        # records_per_worker // 2 requred to make intervals overlapping
-        worker_data = [generate_lineitem_data(worker_id * (records_per_worker // 2)) for worker_id in range(num_workers)]
+        # records_per_chunk // 2 requred to make intervals overlapping
+        data = [generate_lineitem_data(chunk_id * (records_per_chunk // 2)) for chunk_id in range(num_chunks)]
 
         # Execute bulk upserts in parallel
-        for data in worker_data:
+        for chunk in data:
             self.driver.table_client.bulk_upsert(
                 f"{self.database}/{table_name}",
-                data,
+                chunk,
                 self.tpch_bulk_upsert_col_types()
             )
 
@@ -71,12 +73,13 @@ class TestYdbInsertsOperations(TpchTestBaseH1):
 
     def test_repeated_bulk_upsert_lineitem(self):
         """
-        Test that repeatedly upserting records in the lineitem table with the same keys results in only the latest record being stored.
+        Test that repeatedly upserting records in the lineitem table with the same keys results,
+        checking that only the latest record with the same key being stored.
         """
         table_name = f"{self.tpch_default_path()}/lineitem"
 
         # Cleanup overlapping data
-        max_lineitem = self.query(f"SELECT max(l_orderkey) FROM `{table_name}`")[0][0] or self.tcph_est_records_count()
+        max_lineitem = self.query(f"SELECT max(l_orderkey) FROM `{table_name}`")[0][0] or self.tpch_est_records_count()
         self.query(f"DELETE FROM `{table_name}` WHERE l_suppkey=9999")  # Special value for verification
 
         # Create table to store generated ids. Thats ids must be deleted before test starts
@@ -93,7 +96,7 @@ class TestYdbInsertsOperations(TpchTestBaseH1):
         )
 
         # Parameters for data generation
-        num_keys = 1_000
+        num_keys = 1000
         upserts_per_key = 100
 
         # Generate data for repeated upserts with the same keys
@@ -115,12 +118,14 @@ class TestYdbInsertsOperations(TpchTestBaseH1):
                 for version in range(upserts_per_key):
                     key_data.append(self.create_lineitem({
                         'l_orderkey': key_index,
+                        'l_linenumber': key_index,
                         'l_suppkey': 9999,  # Special value to filter for comparison
                         'l_quantity': version  # The "version" indicates the order, acting as a new "value"
                     }))
                 random.shuffle(key_data)  # Shuffle to mix updates
                 key_data.append(self.create_lineitem({
                     'l_orderkey': key_index,
+                    'l_linenumber': key_index,
                     'l_suppkey': 9999,  # Special value to filter for comparison
                     'l_quantity': upserts_per_key  # The "version" indicates the order, acting as a new "value"
                 }))

@@ -9,16 +9,17 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from typing import Callable, Any, List
+from .test_lib import TestLib
 
 
 logger = logging.getLogger(__name__)
 
 
-class TestBase:
+class TestBase(TestLib):
 
     @classmethod
     def setup_class(cls):
-        ydb_path = yatest.common.build_path("ydb/apps/ydbd/ydbd")
+        ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY", "ydb/apps/ydbd/ydbd"))
         logger.error(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("ascii"))
 
         cls.database = "/Root"
@@ -72,11 +73,6 @@ class TestBase:
 
     def transactional(self, fn: Callable[[ydb.QuerySession], List[Any]]):
         return self.pool.retry_operation_sync(lambda session: fn(session))
-
-    def split_data_into_fixed_size_chunks(data, chunk_size):
-        """Splits data to N chunks of chunk_size size"""
-        for i in range(0, len(data), chunk_size):
-            yield data[i:i + chunk_size]
 
 
 class TpchTestBaseH1(TestBase):
@@ -163,10 +159,10 @@ class TpchTestBaseH1(TestBase):
 
     def tpch_empty_lineitem(self):
         return {
-            'l_orderkey': random.randint(1, 1000),
+            # do not generated 'l_orderkey', 'l_linenumber' because they are primary keys
+            # and must be explicitly specified
             'l_partkey': random.randint(1, 1000),
             'l_suppkey': random.randint(1, 1000),
-            'l_linenumber': random.randint(1, 10),
             'l_quantity': random.randint(1, 1000),
             'l_discount': random.uniform(1.0, 100.0),
             'l_extendedprice': random.uniform(1.0, 100.0),
@@ -188,5 +184,5 @@ class TpchTestBaseH1(TestBase):
             base_lineitem[key] = value
         return base_lineitem
 
-    def tcph_est_records_count(self):
+    def tpch_est_records_count(self):
         return 600_000_000

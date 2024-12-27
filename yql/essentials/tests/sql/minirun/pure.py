@@ -40,18 +40,20 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
                                  extra_args=extra_final_args, allow_llvm=False)
 
     to_canonize = []
-    assert os.path.exists(res.results_file)
+    assert xfail or os.path.exists(res.results_file)
     assert not tables_res
 
     if what == 'Results':
-        if not xfail:
-            if do_custom_query_check(res, sql_query):
-                return None
+        if xfail:
+            return None
 
-            stable_result_file(res)
-            to_canonize.append(yatest.common.canonical_file(res.results_file))
-            if res.std_err:
-                to_canonize.append(normalize_source_code_path(res.std_err))
+        if do_custom_query_check(res, sql_query):
+            return None
+
+        stable_result_file(res)
+        to_canonize.append(yatest.common.canonical_file(res.results_file))
+        if res.std_err:
+            to_canonize.append(normalize_source_code_path(res.std_err))
 
     if what == 'Debug':
         to_canonize = [yatest.common.canonical_file(res.opt_file, diff_tool=ASTDIFF_PATH)]

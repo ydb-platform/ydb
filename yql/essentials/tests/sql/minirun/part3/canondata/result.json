@@ -13,6 +13,20 @@
             "uri": "https://{canondata_backend}/1937367/1f0ee14f32ab7a31f3f909e73d6e3255fcfef245/resource.tar.gz#test.test_action-eval_type-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[agg_apply-sum_decimal_null-default.txt-Debug]": [
+        {
+            "checksum": "c9482778cd7fdc9ae428de1751756bd1",
+            "size": 593,
+            "uri": "https://{canondata_backend}/1775059/4af50849d42a7d75d874177b9acc7129d95b1179/resource.tar.gz#test.test_agg_apply-sum_decimal_null-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[agg_apply-sum_decimal_null-default.txt-Results]": [
+        {
+            "checksum": "985a158ef2ca710c0c4b31d14e40cda0",
+            "size": 980,
+            "uri": "https://{canondata_backend}/1775059/4af50849d42a7d75d874177b9acc7129d95b1179/resource.tar.gz#test.test_agg_apply-sum_decimal_null-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[agg_phases-avg_null-default.txt-Debug]": [
         {
             "checksum": "b786715cda93aded32d2bd3396ddfc88",
@@ -922,6 +936,20 @@
             "checksum": "2f1d8d45d6548f1ca62cf3141b258531",
             "size": 3542,
             "uri": "https://{canondata_backend}/937458/bf15689286911fda9591f86e9c6447c3a9d69468/resource.tar.gz#test.test_pg-select_win_min-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[pg-select_win_min_null-default.txt-Debug]": [
+        {
+            "checksum": "1d1918c1860eef4795e58105a0347306",
+            "size": 1593,
+            "uri": "https://{canondata_backend}/1775059/4af50849d42a7d75d874177b9acc7129d95b1179/resource.tar.gz#test.test_pg-select_win_min_null-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg-select_win_min_null-default.txt-Results]": [
+        {
+            "checksum": "26fd505f4da47c770c8eb61956e43f32",
+            "size": 3538,
+            "uri": "https://{canondata_backend}/1775059/4af50849d42a7d75d874177b9acc7129d95b1179/resource.tar.gz#test.test_pg-select_win_min_null-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg-set_of_as_records--Debug]": [

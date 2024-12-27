@@ -1256,13 +1256,6 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
     return true;
 }
 
-void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
-        const NKikimrSchemeOp::TCdcStreamDescription& in) {
-    Ydb::Topic::DescribeTopicResult topic;
-
-
-}
-
 void FillTableStats(Ydb::Table::DescribeTableResult& out,
         const NKikimrSchemeOp::TPathDescription& in, bool withPartitionStatistic, const TMap<ui64, ui64>& nodeMap) {
 

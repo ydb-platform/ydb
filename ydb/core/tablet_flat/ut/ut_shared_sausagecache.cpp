@@ -379,6 +379,8 @@ Y_UNIT_TEST(ThreeLeveledLRU) {
 Y_UNIT_TEST(S3FIFO) {
     TMyEnvBase env;
     env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -399,6 +401,7 @@ Y_UNIT_TEST(S3FIFO) {
 
     TRetriedCounters retried;
     for (i64 key = 99; key >= 0; --key) {
+        Cerr << "READ KEY " << key << Endl;
         env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
     }
     LogCounters(counters);

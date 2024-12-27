@@ -674,7 +674,7 @@ public:
                             --cnt;
                             allowedDc = {dc};
                             Self->DataCenters[dc].Followers[{tabletId, groupId}].push_back(followerIt);
-                            db.Table<Schema::TabletFollowerTablet>().Key(tabletId, followerIt->Id).Update<Schema::TabletFollowerTablet::DataCenter>(dc);
+                            Self->PendingFollowerUpdates.Update({tabletId, followerIt->Id}, dc);
                             ok = true;
                         }
                     }
@@ -692,7 +692,7 @@ public:
                     }
                     follower->NodeFilter.AllowedDataCenters = {dcIt->first};
                     Self->DataCenters[dcIt->first].Followers[{tabletId, groupId}].push_back(follower);
-                    db.Table<Schema::TabletFollowerTablet>().Key(follower->GetFullTabletId()).Update<Schema::TabletFollowerTablet::DataCenter>(dcIt->first);
+                    Self->PendingFollowerUpdates.Update(follower->GetFullTabletId(), dcIt->first);
                     --dcIt->second;
                 }
             }
@@ -858,6 +858,11 @@ public:
         Self->UpdateCounterTabletChannelHistorySize();
         Self->MigrationState = NKikimrHive::EMigrationState::MIGRATION_READY;
         ctx.Send(Self->SelfId(), new TEvPrivate::TEvBootTablets());
+
+        if (!Self->PendingFollowerUpdates.Empty()) {
+            ctx.Send(Self->SelfId(), new TEvPrivate::TEvUpdateFollowers);
+            Self->ProcessFollowerUpdatesScheduled = true;
+        }
 
         for (auto it = Self->Nodes.begin(); it != Self->Nodes.end(); ++it) {
             Self->ScheduleUnlockTabletExecution(it->second);

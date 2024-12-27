@@ -68,6 +68,8 @@ class TestQueueTags(KikimrSqsTestBase):
         def get_tags():
             return self._sqs_api.list_queue_tags(queue_url)
 
+        self._sqs_api._SqsHttpApi__raise_on_error = False
+
         add_tags({'': ''})
         assert get_tags() == {}
 
@@ -95,7 +97,6 @@ class TestQueueTags(KikimrSqsTestBase):
         # Too many tags:
         add_tags({f'k{i}': 'v' for i in range(80)})
         assert get_tags() == {}
-
 
     def test_untag_queue(self):
         self._init_with_params()

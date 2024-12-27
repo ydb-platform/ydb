@@ -106,10 +106,10 @@ private:
             tagsJson[k] = v;
         }
 
-        if (QueueTags_->size() > 50) {
+        if (tagsJson.GetMapSafe().size() > 50) {
             RLOG_SQS_ERROR("Tag queue query failed: Too many tags added for queue: " << GetQueueName());
             auto* result = Response_.MutableTagQueue();
-            MakeError(result, NErrors::INVALID_PARAMETER_VALUE);
+            MakeError(result, NErrors::INVALID_PARAMETER_VALUE, "Too many tags added for queue");
             SendReplyAndDie();
             return;
         }

@@ -62,6 +62,7 @@ private:
     private:
         using TBase = NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard>;
         const ui64 TxId;
+        bool NeedContinueFlag = false;
 
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& ctx) override {
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, true);
@@ -74,12 +75,15 @@ private:
                 }
                 Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
                 if (!op->NeedReceiveBroken) {
-                    Self->EnqueueProgressTx(ctx, TxId);
+                    NeedContinueFlag = true;
                 }
             }
             return true;
         }
-        virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
+        virtual void DoComplete(const NActors::TActorContext& ctx) override {
+            if (NeedContinueFlag) {
+                Self->EnqueueProgressTx(ctx, TxId);
+            }
         }
 
     public:
@@ -111,7 +115,6 @@ private:
                 if (BrokenFlag) {
                     Self->GetProgressTxController().ExecuteOnCancel(TxId, txc);
                 }
-                Self->EnqueueProgressTx(ctx, TxId);
             }
             return true;
         }
@@ -124,6 +127,7 @@ private:
                 if (BrokenFlag) {
                     Self->GetProgressTxController().CompleteOnCancel(TxId, ctx);
                 }
+                Self->EnqueueProgressTx(ctx, TxId);
             }
         }
 

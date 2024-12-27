@@ -3093,6 +3093,7 @@ void TPersQueue::HandleWakeup(const TActorContext& ctx) {
     MeteringSink.MayFlush(ctx.Now());
     DeleteExpiredTransactions(ctx);
     SetTxCompleteLagCounter();
+    SetTxInFlyCounter();
     ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
 }
 

@@ -243,7 +243,6 @@ namespace NKikimr::NBsController {
                     MakeRetrySession();
                     return;
                 }
-                Y_VERIFY_DEBUG_S(generation == blockedGeneration + 1, "BlockedGeneration#" << blockedGeneration << " Tablet generation#" << generation);
                 break;
             case NKikimrProto::BLOCKED:
                 Self.PassAway();

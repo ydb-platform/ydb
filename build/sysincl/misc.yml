@@ -206,10 +206,6 @@
   includes:
     - process.h
 
-- source_filter: "^contrib/libs/authparser"
-  includes:
-    - settings.h
-
 - source_filter: "^contrib/libs/ceres-solver"
   includes:
     - tbb/tbb_stddef.h

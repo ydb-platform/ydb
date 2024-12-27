@@ -1938,17 +1938,25 @@ public:
 
 
         auto options = Y(Q(Y(Q("mode"), Q(IsUser ? "createUser" : "createGroup"))));
-        if (Params) {
+        {
             if (Params->IsPasswordEncrypted) {
                 options = L(options, Q(Y(Q("passwordEncrypted"))));
             }
+
             if (Params->Password) {
                 options = L(options, Q(Y(Q("password"), password)));
             } else {
                 options = L(options, Q(Y(Q("nullPassword"))));
             }
+
             if (!Params->Roles.empty()) {
                 options = L(options, Q(Y(Q("roles"), Q(new TAstListNodeImpl(Pos, std::move(roles))))));
+            }
+
+            if (Params->CanLogin == TRoleParameters::ETypeOfLogin::Login) {
+                options = L(options, Q(Y(Q("login"))));
+            } else if (Params->CanLogin == TRoleParameters::ETypeOfLogin::NoLogin) {
+                options = L(options, Q(Y(Q("noLogin"))));
             }
         }
 
@@ -2018,10 +2026,17 @@ public:
         if (Params.IsPasswordEncrypted) {
             options = L(options, Q(Y(Q("passwordEncrypted"))));
         }
+
         if (Params.Password) {
             options = L(options, Q(Y(Q("password"), password)));
         } else {
             options = L(options, Q(Y(Q("nullPassword"))));
+        }
+
+        if (Params.CanLogin == TRoleParameters::ETypeOfLogin::Login) {
+            options = L(options, Q(Y(Q("login"))));
+        } else if (Params.CanLogin == TRoleParameters::ETypeOfLogin::NoLogin) {
+            options = L(options, Q(Y(Q("noLogin"))));
         }
 
         Add("block", Q(Y(

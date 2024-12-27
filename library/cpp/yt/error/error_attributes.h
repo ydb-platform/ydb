@@ -74,7 +74,7 @@ public:
     void MergeFrom(const TDictionary& dict);
 
 private:
-    THashMap<TKey, TValue> Map_;
+    THashMap<TKey, TValue, THash<TStringBuf>, TEqualTo<TStringBuf>> Map_;
 
     friend class TErrorOr<void>;
     TErrorAttributes() = default;
@@ -86,7 +86,7 @@ private:
     TErrorAttributes& operator= (TErrorAttributes&& other) = default;
 
     //! Returns the value of the attribute (null indicates that the attribute is not found).
-    TValue FindValue(TStringBuf key) const;
+    std::optional<TValue> FindValue(TStringBuf key) const;
 
     //! Returns the value of the attribute (throws an exception if the attribute is not found).
     TValue GetValue(TStringBuf key) const;

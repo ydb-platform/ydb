@@ -1,1 +1,0 @@
-select key, subkey, cast(true as varchar) as value from plato.Input;

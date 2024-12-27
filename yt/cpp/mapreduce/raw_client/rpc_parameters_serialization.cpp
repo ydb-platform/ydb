@@ -663,8 +663,6 @@ TNode SerializeParametersForTrimRows(
 
 TNode SerializeParamsForReadTable(
     const TTransactionId& transactionId,
-    const TString& pathPrefix,
-    const TRichYPath& path,
     const TTableReaderOptions& options)
 {
     TNode result;

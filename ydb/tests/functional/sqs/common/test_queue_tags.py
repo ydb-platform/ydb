@@ -55,6 +55,48 @@ class TestQueueTags(KikimrSqsTestBase):
         add_tags({'key4': 'value4', 'key5': 'value5'})
         assert get_tags() == {'key1': 'value1', 'key2': 'value2', 'key3': 'value3', 'key4': 'value4', 'key5': 'value5'}
 
+    def test_invalid_tag_queue(self):
+        # Test invalid key/values
+
+        self._init_with_params()
+
+        queue_url = self._create_queue_and_assert(self.queue_name, use_http=True)
+
+        def add_tags(tags):
+            return self._sqs_api.tag_queue(queue_url, tags)
+
+        def get_tags():
+            return self._sqs_api.list_queue_tags(queue_url)
+
+        add_tags({'': ''})
+        assert get_tags() == {}
+
+        add_tags({'a': ''})
+        assert get_tags() == {}
+
+        add_tags({'': 'a'})
+        assert get_tags() == {}
+
+        add_tags({'^': 'a'})
+        assert get_tags() == {}
+
+        add_tags({'4': 'a'})
+        assert get_tags() == {}
+
+        add_tags({'a': '^'})
+        assert get_tags() == {}
+
+        add_tags({'a'*100: 'a'})
+        assert get_tags() == {}
+
+        add_tags({'a': 'a'*100})
+        assert get_tags() == {}
+
+        # Too many tags:
+        add_tags({f'k{i}': 'v' for i in range(80)})
+        assert get_tags() == {}
+
+
     def test_untag_queue(self):
         self._init_with_params()
 

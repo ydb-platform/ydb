@@ -35,12 +35,54 @@ public:
     }
 
 private:
-    bool DoValidate() override {
-        // TODO(qyryq) Tag validation
+    bool ValidString(const TStringBuf str, const bool key = false) {
+        if (str.empty()) {
+            MakeError(Response_.MutableTagQueue(), NErrors::INVALID_PARAMETER_VALUE,
+                key ? "Tag key must not be empty."
+                    : "Tag value must not be empty.");
+            return false;
+        }
 
+        if (key && !IsAsciiLower(str[0])) {
+            MakeError(Response_.MutableTagQueue(), NErrors::INVALID_PARAMETER_VALUE,
+                key ? "Tag key must start with a lowercase letter (a-z)."
+                    : "Tag value must start with a lowercase letter (a-z).");
+            return false;
+        }
+
+        constexpr size_t maxSize = 63;
+        if (str.size() > maxSize) {
+            MakeError(
+                Response_.MutableTagQueue(), NErrors::INVALID_PARAMETER_VALUE,
+                key ? "Tag key must not be longer than 63 characters."
+                    : "Tag value must not be longer than 63 characters.");
+            return false;
+        }
+
+        for (char c : str) {
+            bool ok = IsAsciiLower(c) || IsAsciiDigit(c) || c == '-' || c == '_';
+            if (!ok) {
+                MakeError(
+                    Response_.MutableTagQueue(), NErrors::INVALID_PARAMETER_VALUE,
+                    key ? "Tag key can only consist of ASCII lowercase letters, digits, dashes and underscores."
+                        : "Tag value can only consist of ASCII lowercase letters, digits, dashes and underscores.");
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool DoValidate() override {
         if (!GetQueueName()) {
             MakeError(Response_.MutableTagQueue(), NErrors::MISSING_PARAMETER, "No QueueName parameter.");
             return false;
+        }
+
+        for (const auto& [k, v] : Tags_) {
+            if (!ValidString(k, true) || !ValidString(v)) {
+                return false;
+            }
         }
 
         return true;
@@ -63,6 +105,15 @@ private:
         for (const auto& [k, v] : Tags_) {
             tagsJson[k] = v;
         }
+
+        if (QueueTags_->size() > 50) {
+            RLOG_SQS_ERROR("Tag queue query failed: Too many tags added for queue: " << GetQueueName());
+            auto* result = Response_.MutableTagQueue();
+            MakeError(result, NErrors::INVALID_PARAMETER_VALUE);
+            SendReplyAndDie();
+            return;
+        }
+
         WriteJson(&tagsStr, &tagsJson);
 
         TExecutorBuilder builder(SelfId(), RequestId_);

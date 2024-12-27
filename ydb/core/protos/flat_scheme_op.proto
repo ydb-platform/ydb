@@ -845,16 +845,23 @@ message TReshardColumnTable {
     optional bool Increase = 1;
 }
 
+enum ETypeOfLogin {
+    Undefined = 1;
+    Login = 2;
+    NoLogin = 3;
+}
+
 message TLoginCreateUser {
     optional string User = 1;
     optional string Password = 2;
-    optional bool IsEnabled = 3;
+    optional ETypeOfLogin CanLogin = 3;
 }
 
 message TLoginModifyUser {
     optional string User = 1;
     optional string Password = 2;
-    optional bool IsEnabled = 3;
+    optional ETypeOfLogin CanLogin = 3;
+    optional bool NoPassword = 4 [default = true];
 }
 
 message TLoginRemoveUser {

@@ -67,7 +67,7 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "skip_switch_to_work")("reason", "db_reading_not_finished");
         return;
     }
-
+    AFL_VERIFY(TabletActivityImpl->Inc() == 1);
     ProgressTxController->OnTabletInit();
     {
         const TLogContextGuard gLogging =

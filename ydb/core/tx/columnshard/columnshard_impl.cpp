@@ -895,6 +895,7 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
     }
 
     auto compaction = dynamic_pointer_cast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>(indexChanges);
+    compaction->SetActivityFlag(GetTabletActivity());
     compaction->SetQueueGuard(guard);
     compaction->Start(*this);
 
@@ -1148,6 +1149,7 @@ void TColumnShard::SetupCleanupInsertTable() {
 }
 
 void TColumnShard::Die(const TActorContext& ctx) {
+    AFL_VERIFY(TabletActivityImpl->Dec() == 0);
     CleanupActors(ctx);
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
     UnregisterMediatorTimeCast();

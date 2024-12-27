@@ -214,6 +214,7 @@ private:
     std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
     TString AbortedReason;
     const TString TaskIdentifier = TGUID::CreateTimebased().AsGuidString();
+    std::shared_ptr<const TAtomicCounter> ActivityFlag;
 
 protected:
     std::optional<TDataAccessorsResult> FetchedDataAccessors;
@@ -246,6 +247,15 @@ protected:
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) = 0;
 
 public:
+    bool IsActive() const {
+        return !ActivityFlag || ActivityFlag->Val();
+    }
+
+    void SetActivityFlag(const std::shared_ptr<const TAtomicCounter>& flag) {
+        AFL_VERIFY(!ActivityFlag);
+        ActivityFlag = flag;
+    }
+
     std::shared_ptr<TDataAccessorsRequest> ExtractDataAccessorsRequest() const {
         AFL_VERIFY(!!PortionsToAccess);
         return std::move(PortionsToAccess);

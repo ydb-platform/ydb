@@ -172,5 +172,38 @@
                 ]
             }
         ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "DeserializedList";
+                                [
+                                    "ListType";
+                                    [
+                                        "DataType";
+                                        "Uint32"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "10";
+                            "42";
+                            "567"
+                        ]
+                    ]
+                ]
+            }
+        ]
     }
 ]

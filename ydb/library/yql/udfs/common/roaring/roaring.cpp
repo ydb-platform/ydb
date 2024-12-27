@@ -7,6 +7,7 @@
 #include <contrib/libs/croaring/include/roaring/memory.h>
 #include <contrib/libs/croaring/include/roaring/roaring.h>
 
+#include <util/generic/array_ref.h>
 #include <util/generic/vector.h>
 #include <util/string/builder.h>
 #include <util/system/yassert.h>
@@ -27,6 +28,11 @@ namespace {
     struct TRoaringWrapper: public TBoxedValue {
         TRoaringWrapper(TStringRef binaryString)
             : Roaring(DeserializePortable(binaryString))
+        {
+        }
+
+        TRoaringWrapper(roaring_bitmap_t* bitmap)
+            : Roaring(bitmap)
         {
         }
 
@@ -223,6 +229,46 @@ namespace {
         TSourcePosition Pos_;
     };
 
+    class TRoaringFromUint32List: public TBoxedValue {
+    public:
+        TRoaringFromUint32List(TSourcePosition pos)
+            : Pos_(pos)
+        {
+        }
+
+        static TStringRef Name() {
+            return TStringRef::Of("FromUint32List");
+        }
+
+    private:
+        TUnboxedValue Run(const IValueBuilder* valueBuilder,
+                          const TUnboxedValuePod* args) const override {
+            Y_UNUSED(valueBuilder);
+            try {
+                auto *b = roaring_bitmap_create();
+
+                const auto vector = args[0];
+                const auto* elements = vector.GetElements();
+                if (elements) {
+                    for (auto& value : TArrayRef{elements, vector.GetListLength()}) {
+                        roaring_bitmap_add(b, value.Get<ui32>());
+                    }
+                } else {
+                    TUnboxedValue value;
+                    const auto it = vector.GetListIterator();
+                    while (it.Next(value)) {
+                        roaring_bitmap_add(b, value.Get<ui32>());
+                    }
+                }
+              
+                return TUnboxedValuePod(new TRoaringWrapper(b));
+            } catch (const std::exception& e) {
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            }
+        }
+        TSourcePosition Pos_;
+    };
+
     class TRoaringSerialize: public TBoxedValue {
     public:
         TRoaringSerialize() {
@@ -282,6 +328,7 @@ namespace {
         void GetAllFunctions(IFunctionsSink& sink) const final {
             sink.Add(TRoaringSerialize::Name());
             sink.Add(TRoaringDeserialize::Name());
+            sink.Add(TRoaringFromUint32List::Name());
 
             sink.Add(TRoaringCardinality::Name());
 
@@ -311,6 +358,12 @@ namespace {
 
                     if (!typesOnly) {
                         builder.Implementation(new TRoaringDeserialize(builder.GetSourcePosition()));
+                    }
+                } else if (TRoaringFromUint32List::Name() == name) {
+                    builder.Returns<TResource<RoaringResourceName>>().Args()->Add<TListType<ui32>>();
+
+                    if (!typesOnly) {
+                        builder.Implementation(new TRoaringFromUint32List(builder.GetSourcePosition()));
                     }
                 } else if (TRoaringSerialize::Name() == name) {
                     builder.Returns(builder.SimpleType<char*>())

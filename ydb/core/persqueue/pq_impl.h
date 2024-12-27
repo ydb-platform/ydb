@@ -444,6 +444,7 @@ private:
     void Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
 
     void SetTxCompleteLagCounter();
+    void SetTxInFlyCounter();
 
     bool CanProcessProposeTransactionQueue() const;
     bool CanProcessPlanStepQueue() const;

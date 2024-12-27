@@ -997,6 +997,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
             }
 
             Txs.emplace(tx.GetTxId(), tx);
+            SetTxInFlyCounter();
 
             if (tx.HasStep()) {
 //                if (std::make_pair(tx.GetStep(), tx.GetTxId()) >= std::make_pair(ExecStep, ExecTxId)) {
@@ -1014,6 +1015,9 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
     EndInitTransactions();
     EndReadConfig(ctx);
+
+    SetTxCompleteLagCounter();
+    SetTxInFlyCounter();
 }
 
 void TPersQueue::EndReadConfig(const TActorContext& ctx)
@@ -3131,6 +3135,11 @@ void TPersQueue::SetTxCompleteLagCounter()
     Counters->Simple()[COUNTER_PQ_TABLET_TX_COMPLETE_LAG] = lag;
 }
 
+void TPersQueue::SetTxInFlyCounter()
+{
+    Counters->Simple()[COUNTER_PQ_TABLET_TX_IN_FLY] = Txs.size();
+}
+
 void TPersQueue::Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx)
 {
     PQ_LOG_D("Handle TEvPersQueue::TEvCancelTransactionProposal");
@@ -3604,6 +3613,7 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
 
         const NKikimrPQ::TEvProposeTransaction& event = front->GetRecord();
         TDistributedTransaction& tx = Txs[event.GetTxId()];
+        SetTxInFlyCounter();
 
         switch (tx.State) {
         case NKikimrPQ::TTransaction::UNKNOWN:
@@ -4455,6 +4465,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         DeleteWriteId(tx.WriteId);
         PQ_LOG_D("delete TxId " << tx.TxId);
         Txs.erase(tx.TxId);
+        SetTxInFlyCounter();
 
         // If this was the last transaction, then you need to send responses to messages about changes
         // in the status of the PQ tablet (if they came)

@@ -11,6 +11,7 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
+#include <util/generic/bitmap.h>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
@@ -179,17 +180,35 @@ public:
 
 class TVectorInserter {
 private:
-    bool* Values;
+    TDynBitMap& Values;
     const ui32 Size;
 
 public:
-    TVectorInserter(std::vector<bool>& values)
-        : Values(&values[0])
-        , Size(values.size()) {
+    TVectorInserter(TDynBitMap& values)
+        : Values(values)
+        , Size(values.Size()) {
+        AFL_VERIFY(values.Size());
     }
 
     void operator()(const ui64 hash) {
-        Values[hash % Size] = true;
+        Values.Set(hash % Size);
+    }
+};
+
+class TVectorInserterPower2 {
+private:
+    TDynBitMap& Values;
+    const ui32 SizeMask;
+
+public:
+    TVectorInserterPower2(TDynBitMap& values)
+        : Values(values)
+        , SizeMask(values.Size() - 1) {
+        AFL_VERIFY(values.Size());
+    }
+
+    void operator()(const ui64 hash) {
+        Values.Set(hash & SizeMask);
     }
 };
 
@@ -197,13 +216,25 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     TNGrammBuilder builder(HashesCount);
 
-    std::vector<bool> bitsVector(FilterSizeBytes * 8, false);
-    TVectorInserter inserter(bitsVector);
-    for (reader.Start(); reader.IsCorrect();) {
-        builder.FillNGrammHashes(NGrammSize, reader.begin()->GetCurrentChunk(), inserter);
-        reader.ReadNext(reader.begin()->GetCurrentChunk()->length());
+    TDynBitMap bitMap;
+    const ui32 size = FilterSizeBytes * 8;
+    bitMap.Reserve(FilterSizeBytes * 8);
+
+    const auto doFillFilter = [&](auto& inserter) {
+        for (reader.Start(); reader.IsCorrect();) {
+            builder.FillNGrammHashes(NGrammSize, reader.begin()->GetCurrentChunk(), inserter);
+            reader.ReadNext(reader.begin()->GetCurrentChunk()->length());
+        }
+    };
+
+    if ((size & (size - 1)) == 0) {
+        TVectorInserterPower2 inserter(bitMap);
+        doFillFilter(inserter);
+    } else {
+        TVectorInserter inserter(bitMap);
+        doFillFilter(inserter);
     }
-    return TFixStringBitsStorage(bitsVector).GetData();
+    return TFixStringBitsStorage(bitMap).GetData();
 }
 
 void TIndexMeta::DoFillIndexCheckers(

@@ -34,21 +34,16 @@ public:
         : BucketSize(bucketSize)
         , LeakDurationMs(leakDurationMs)
         , LeakRate(leakRate)
-    {
-        for (auto& permission : ReportPutPermissions) {
-            permission.Level.store(BucketSize);
-        }
-        for (auto& permission : ReportGetPermissions) {
-            permission.Level.store(BucketSize);
-        }
-    }
+    {}
 
     void Bootstrap(const TActorContext &ctx) {
+        TInstant now = ctx.Now();
+        i64 bucketSize = BucketSize.Update(now);
         for (auto& permission : ReportPutPermissions) {
-            permission.LastUpdate = ctx.Now();
+            InitPermission(permission, now, bucketSize);
         }
         for (auto& permission : ReportGetPermissions) {
-            permission.LastUpdate = ctx.Now();
+            InitPermission(permission, now, bucketSize);
         }
         Become(&TThis::StateFunc);
         HandleWakeup(ctx);
@@ -59,6 +54,12 @@ public:
     )
 
 private:
+    void InitPermission(TReportLeakBucket& permission, const TInstant& now, i64 bucketSize) {
+        permission.Level.store(bucketSize);
+        permission.LastUpdate = now;
+
+    }
+
     void Update(const TInstant& now, TInstant& lastUpdate, std::atomic<i64>& bucketLevel) {
         i64 bucketSize = BucketSize.Update(now);
         i64 leakRate = LeakRate.Update(now);

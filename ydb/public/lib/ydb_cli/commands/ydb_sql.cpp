@@ -1,6 +1,8 @@
 #include "ydb_sql.h"
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/json_prettifier.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
@@ -9,7 +11,6 @@
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/common/waiting_bar.h>
 #include <ydb-cpp-sdk/client/proto/accessor.h>
-#include <util/generic/guid.h>
 #include <util/generic/queue.h>
 #include <google/protobuf/text_format.h>
 
@@ -41,11 +42,11 @@ void TCommandSql::Config(TConfig& config) {
         .StoreTrue(&ExplainAnalyzeMode);
     config.Opts->AddLongOption("stats", "Execution statistics collection mode [none, basic, full, profile]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
+    config.Opts->AddLongOption("diagnostics-file", "Path to file where the diagnostics will be saved.")
+        .RequiredArgument("[String]").StoreResult(&DiagnosticsFile);
     config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
         .RequiredArgument("[String]").DefaultValue("yql").StoreResult(&Syntax)
         .Hidden();
-    config.Opts->AddLongOption("collect-diagnostics", "Collects diagnostics and saves it to file")
-        .StoreTrue(&CollectFullDiagnostics);
 
     AddOutputFormats(config, {
         EDataFormat::Pretty,
@@ -149,10 +150,6 @@ int TCommandSql::RunCommand(TConfig& config) {
         throw TMisuseException() << "Unknow syntax option \"" << Syntax << "\"";
     }
 
-    if (CollectFullDiagnostics) {
-        settings.CollectFullDiagnostics(true);
-    }
-
     if (!Parameters.empty() || InputParamStream) {
         // Execute query with parameters
         THolder<TParamsBuilder> paramBuilder;
@@ -190,7 +187,7 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
     std::optional<std::string> stats;
     std::optional<std::string> plan;
     std::optional<std::string> ast;
-    TString diagnostics;
+    TMaybe<TString> meta;
     {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
@@ -212,9 +209,8 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
                 if (queryStats.GetPlan()) {
                     plan = queryStats.GetPlan();
                 }
+                diagnostics = queryStats.GetDiagnostics();
             }
-
-            diagnostics = streamPart.GetDiagnostics();
         }
     } // TResultSetPrinter destructor should be called before printing stats
 
@@ -232,6 +228,10 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
         Cout << Endl << "Statistics:" << Endl << *stats;
     }
 
+    if (diagnostics) {
+        Cout << Endl << "Diagnostics:" << Endl << NJson::PrettifyJson(*diagnostics, true) << Endl;;
+    }
+
     if (plan) {
         if (!ExplainMode && !ExplainAnalyzeMode
                 && (OutputFormat == EDataFormat::Default || OutputFormat == EDataFormat::Pretty)) {
@@ -245,9 +245,28 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
         queryPlanPrinter.Print(TString{*plan});
     }
 
-    if (CollectFullDiagnostics) {
-        TFileOutput file(TStringBuilder() << "diagnostics_" << TGUID::Create().AsGuidString() << ".txt");
-        file << diagnostics;
+    if (!DiagnosticsFile.empty()) {
+        TFileOutput file(DiagnosticsFile);
+
+        NJson::TJsonValue diagnosticsJson(NJson::JSON_MAP);
+
+        if (stats) {
+            diagnosticsJson.InsertValue("stats", *stats);
+        }
+        if (ast) {
+            diagnosticsJson.InsertValue("ast", *ast);
+        }
+        if (plan) {
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*plan, &planJson, true);
+            diagnosticsJson.InsertValue("plan", planJson);
+        }
+        if (diagnostics) {
+            NJson::TJsonValue metaJson;
+            NJson::ReadJsonTree(*diagnostics, &metaJson, true);
+            diagnosticsJson.InsertValue("meta", metaJson);
+        }
+        file << NJson::PrettifyJson(NJson::WriteJson(diagnosticsJson, true), false);
     }
 
     if (IsInterrupted()) {

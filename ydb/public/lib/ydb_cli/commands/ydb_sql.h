@@ -28,13 +28,13 @@ private:
     int PrintResponse(NQuery::TExecuteQueryIterator& result);
 
     TString CollectStatsMode;
+    TString DiagnosticsFile;
     TString Query;
     TString QueryFile;
     TString Syntax;
     bool ExplainMode = false;
     bool ExplainAnalyzeMode = false;
     bool ExplainAst = false;
-    bool CollectFullDiagnostics = false;
 };
 
 }

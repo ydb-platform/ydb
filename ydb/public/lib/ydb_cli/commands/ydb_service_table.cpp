@@ -365,8 +365,6 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     config.Opts->AddLongOption('q', "query", "Text of query to execute").RequiredArgument("[String]").StoreResult(&Query);
     config.Opts->AddLongOption('f', "file", "Path to file with query text to execute")
         .RequiredArgument("PATH").StoreResult(&QueryFile);
-    config.Opts->AddLongOption("collect-diagnostics", "Collects diagnostics and saves it to file")
-        .StoreTrue(&CollectFullDiagnostics);
 
     AddOutputFormats(config, {
         EDataFormat::Pretty,
@@ -434,9 +432,6 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
     NTable::TExecDataQuerySettings settings;
     settings.KeepInQueryCache(true);
     settings.CollectQueryStats(ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode));
-    if (CollectFullDiagnostics) {
-        settings.CollectFullDiagnostics(true);
-    }
 
     NTable::TTxSettings txSettings;
     if (TxMode) {
@@ -521,11 +516,6 @@ void TCommandExecuteQuery::PrintDataQueryResponse(NTable::TDataQueryResult& resu
     {
         Cout << Endl << "Flame graph is available for full or profile stats only" << Endl;
     }
-    if (CollectFullDiagnostics)
-    {
-        TFileOutput file(TStringBuilder() << "diagnostics_" << TGUID::Create().AsGuidString() << ".txt");
-        file << result.GetDiagnostics();
-    }
 }
 
 int TCommandExecuteQuery::ExecuteSchemeQuery(TConfig& config) {
@@ -558,7 +548,7 @@ namespace {
         NQuery::TExecuteQuerySettings>;
 
     template <typename TClient>
-    auto GetSettings(const TString& collectStatsMode, const bool basicStats, std::optional<TDuration> timeout, bool collectFullDiagnostics) {
+    auto GetSettings(const TString& collectStatsMode, const bool basicStats, std::optional<TDuration> timeout) {
         if constexpr (std::is_same_v<TClient, NTable::TTableClient>) {
             const auto defaultStatsMode = basicStats
                 ? NTable::ECollectQueryStatsMode::Basic
@@ -567,9 +557,6 @@ namespace {
             settings.CollectQueryStats(ParseQueryStatsModeOrThrow(collectStatsMode, defaultStatsMode));
             if (timeout.has_value()) {
                 settings.ClientTimeout(*timeout);
-            }
-            if (collectFullDiagnostics) {
-                settings.CollectFullDiagnostics(true);
             }
             return settings;
         } else if constexpr (std::is_same_v<TClient, NQuery::TQueryClient>) {
@@ -580,9 +567,6 @@ namespace {
             settings.StatsMode(ParseQueryStatsModeOrThrow(collectStatsMode, defaultStatsMode));
             if (timeout.has_value()) {
                 settings.ClientTimeout(*timeout);
-            }
-            if (collectFullDiagnostics) {
-                settings.CollectFullDiagnostics(true);
             }
             return settings;
         }
@@ -690,7 +674,7 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
     if (OperationTimeout) {
         optTimeout = TDuration::MilliSeconds(FromString<ui64>(OperationTimeout));
     }
-    const auto settings = GetSettings<TClient>(CollectStatsMode, BasicStats, optTimeout, CollectFullDiagnostics);
+    const auto settings = GetSettings<TClient>(CollectStatsMode, BasicStats, optTimeout);
 
     TAsyncPartIterator<TClient> asyncResult;
     SetInterruptHandlers();
@@ -770,8 +754,6 @@ bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
                     fullStats = queryStats.GetPlan();
                 }
             }
-
-            diagnostics = streamPart.GetDiagnostics();
         }
     } // TResultSetPrinter destructor should be called before printing stats
 
@@ -784,12 +766,6 @@ bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
 
         TQueryPlanPrinter queryPlanPrinter(OutputFormat, /* analyzeMode */ true);
         queryPlanPrinter.Print(TString{*fullStats});
-    }
-
-    if (CollectFullDiagnostics)
-    {
-        TFileOutput file(TStringBuilder() << "diagnostics_" << TGUID::Create().AsGuidString() << ".txt");
-        file << diagnostics;
     }
 
     PrintFlameGraph(fullStats);
@@ -897,10 +873,6 @@ int TCommandExplain::Run(TConfig& config) {
             settings.Explain(true);
         }
 
-        if (CollectFullDiagnostics) {
-            settings.CollectFullDiagnostics(true);
-        }
-
         auto result = client.StreamExecuteScanQuery(Query, settings).GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
@@ -917,13 +889,6 @@ int TCommandExplain::Run(TConfig& config) {
                 planJson = proto.query_plan();
                 ast = proto.query_ast();
             }
-            if (tablePart.HasDiagnostics()) {
-                diagnostics = tablePart.ExtractDiagnostics();
-            }
-        }
-
-        if (CollectFullDiagnostics) {
-            SaveDiagnosticsToFile(diagnostics);
         }
 
         if (IsInterrupted()) {

@@ -663,10 +663,11 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_C(!result.GetDiagnostics().empty(), "Query result diagnostics is empty");
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_C(!stats.query_diagnostics().empty(), "Query result diagnostics is empty");
 
             TStringStream in;
-            in << result.GetDiagnostics();
+            in << stats.query_diagnostics();
             NJson::TJsonValue value;
             ReadJsonTree(&in, &value);
 
@@ -681,7 +682,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(value.Has("query_syntax"), "Incorrect Diagnostics");
             UNIT_ASSERT_C(value.Has("query_database"), "Incorrect Diagnostics");
             UNIT_ASSERT_C(value.Has("query_cluster"), "Incorrect Diagnostics");
-            UNIT_ASSERT_C(value.Has("query_plan"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(!value.Has("query_plan"), "Incorrect Diagnostics");
             UNIT_ASSERT_C(value.Has("query_type"), "Incorrect Diagnostics");
         }
 
@@ -695,7 +696,86 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
 
-            UNIT_ASSERT_C(result.GetDiagnostics().empty(), "Query result diagnostics should be empty, but it's not");
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_C(stats.query_diagnostics().empty(), "Query result diagnostics should be empty, but it's not");
+        }
+    }
+
+    Y_UNIT_TEST(StreamExecuteCollectFullDiagnostics) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        {
+            TExecuteQuerySettings settings;
+            settings.StatsMode(EStatsMode::Full);
+
+            auto it = db.StreamExecuteQuery(R"(
+                SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+            TString statsString;
+            for (;;) {
+                auto streamPart = it.ReadNext().GetValueSync();
+                if (!streamPart.IsSuccess()) {
+                    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                    break;
+                }
+
+                const auto& execStats = streamPart.GetStats();
+                if (execStats.Defined()) {
+                    auto& stats = NYdb::TProtoAccessor::GetProto(*execStats);
+                    statsString = stats.query_diagnostics();
+                }
+            }
+
+            UNIT_ASSERT_C(!statsString.empty(), "Query result diagnostics is empty");
+
+            TStringStream in;
+            in << statsString;
+            NJson::TJsonValue value;
+            ReadJsonTree(&in, &value);
+
+            UNIT_ASSERT_C(value.IsMap(), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value.Has("query_id"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value.Has("version"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value.Has("query_text"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value.Has("query_parameter_types"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value.Has("table_metadata"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value["table_metadata"].IsArray(), "Incorrect Diagnostics: table_metadata type should be an array");
+            UNIT_ASSERT_C(value.Has("created_at"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value.Has("query_syntax"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value.Has("query_database"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value.Has("query_cluster"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(!value.Has("query_plan"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value.Has("query_type"), "Incorrect Diagnostics");
+        }
+
+        {
+            TExecuteQuerySettings settings;
+            settings.StatsMode(EStatsMode::Basic);
+
+            auto it = db.StreamExecuteQuery(R"(
+                SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+            TString statsString;
+            for (;;) {
+                auto streamPart = it.ReadNext().GetValueSync();
+                if (!streamPart.IsSuccess()) {
+                    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                    break;
+                }
+
+                const auto& execStats = streamPart.GetStats();
+                if (execStats.Defined()) {
+                    auto& stats = NYdb::TProtoAccessor::GetProto(*execStats);
+                    statsString = stats.query_diagnostics();
+                }
+            }
+
+            UNIT_ASSERT_C(statsString.empty(), "Query result diagnostics should be empty, but it's not");
         }
     }
 

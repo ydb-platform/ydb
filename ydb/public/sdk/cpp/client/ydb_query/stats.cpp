@@ -29,6 +29,7 @@ TString TExecStats::ToString(bool withPlan) const {
     if (!withPlan) {
         proto.clear_query_plan();
         proto.clear_query_ast();
+        proto.clear_query_diagnostics();
     }
 
     TString res;

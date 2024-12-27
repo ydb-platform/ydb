@@ -12,9 +12,9 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(fetch)
 add_subdirectory(log)
 add_subdirectory(backtrace)
+add_subdirectory(fetch)
 add_subdirectory(memory_profiling)
 add_subdirectory(failure_injector)
 add_subdirectory(threading)

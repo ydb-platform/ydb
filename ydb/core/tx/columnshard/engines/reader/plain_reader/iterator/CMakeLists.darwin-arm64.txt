@@ -27,7 +27,6 @@ target_link_libraries(reader-plain_reader-iterator PUBLIC
 
 target_sources(reader-plain_reader-iterator PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/iterator/scanner.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/iterator/constructor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/iterator/source.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/iterator/interval.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/iterator/fetched_data.cpp

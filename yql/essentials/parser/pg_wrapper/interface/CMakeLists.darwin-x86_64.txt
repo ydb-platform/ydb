@@ -27,6 +27,7 @@ target_link_libraries(parser-pg_wrapper-interface PUBLIC
   public-udf-arrow
   essentials-core-cbo
   library-cpp-disjoint_sets
+  common-codec-yt_arrow_converter_interface
 )
 
 target_sources(parser-pg_wrapper-interface PRIVATE

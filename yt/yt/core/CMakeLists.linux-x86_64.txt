@@ -15,8 +15,6 @@
 add_subdirectory(misc)
 add_subdirectory(http)
 add_subdirectory(https)
-add_subdirectory(service_discovery)
-add_subdirectory(rpc)
 
 add_library(yt-yt-core)
 
@@ -180,7 +178,6 @@ target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/crash_handler.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/digest.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/error.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/error_code.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/fs.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/hazard_ptr.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/hedging_manager.cpp
@@ -190,7 +187,6 @@ target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/linear_probe.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/memory_usage_tracker.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/relaxed_mpsc_queue.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/origin_attributes.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/parser_helpers.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/pattern_formatter.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/phoenix.cpp
@@ -209,11 +205,10 @@ target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/slab_allocator.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/statistic_path.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/statistics.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/string_helpers.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/stripped_error.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/cache_config.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/utf8_decoder.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/zerocopy_output_writer.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/configurable_singleton_def.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/net/address.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/net/connection.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/net/config.cpp
@@ -404,12 +399,18 @@ target_link_libraries(yt-yt-core.global PUBLIC
 )
 
 target_sources(yt-yt-core.global PRIVATE
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/bus/tcp/configure_dispatcher.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/configure_fiber_manager.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/logging/configure_log_manager.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/logging/log.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/logging/log_manager.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/assert.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/guid.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/ref_tracked.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/net/configure_address_resolver.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/configure_dispatcher.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/tracing/trace_context.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/yson/configure_protobuf_interop.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/tracing/allocation_tags_hooks.cpp
 )
 

@@ -16,6 +16,7 @@ add_subdirectory(defaults)
 add_subdirectory(indexes)
 add_subdirectory(abstract)
 add_subdirectory(versions)
+add_subdirectory(common)
 add_subdirectory(tiering)
 add_subdirectory(column)
 
@@ -37,6 +38,7 @@ target_link_libraries(columnshard-engines-scheme PUBLIC
   engines-scheme-versions
   engines-scheme-tiering
   engines-scheme-column
+  engines-scheme-common
   engines-scheme-defaults
   formats-arrow-accessor
   columnshard-blobs_action-abstract

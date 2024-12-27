@@ -19,6 +19,7 @@ get_built_tool_path(
   enum_parser
 )
 
+add_subdirectory(yt_arrow_converter_interface)
 add_subdirectory(arrow)
 
 add_library(providers-common-codec)

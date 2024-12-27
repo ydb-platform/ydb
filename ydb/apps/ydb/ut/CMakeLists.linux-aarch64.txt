@@ -22,6 +22,7 @@ target_link_libraries(ydb-apps-ydb-ut PUBLIC
   cpp-testing-unittest_main
   cpp-client-ydb_topic
   cpp-client-ydb_table
+  topic_workload
 )
 
 target_allocator(ydb-apps-ydb-ut

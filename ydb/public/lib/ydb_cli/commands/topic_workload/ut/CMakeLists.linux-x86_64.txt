@@ -26,6 +26,7 @@ target_link_libraries(ydb-public-lib-ydb_cli-commands-topic_workload-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   topic_workload
+  cpp-testing-gmock_in_unittest
   cpp-regex-pcre
   cpp-getopt-small
 )
@@ -48,6 +49,7 @@ target_link_options(ydb-public-lib-ydb_cli-commands-topic_workload-ut PRIVATE
 
 target_sources(ydb-public-lib-ydb_cli-commands-topic_workload-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_params_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_workload/ut/topic_workload_writer_producer_ut.cpp
 )
 
 

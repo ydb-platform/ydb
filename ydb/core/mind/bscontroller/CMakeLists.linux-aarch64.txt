@@ -29,6 +29,7 @@ target_link_libraries(core-mind-bscontroller PUBLIC
   ydb-core-blobstorage
   core-blobstorage-base
   core-blobstorage-groupinfo
+  core-blobstorage-nodewarden
   ydb-core-blob_depot
   core-engine-minikql
   ydb-core-protos
@@ -44,10 +45,12 @@ target_sources(core-mind-bscontroller PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/cmds_drive_status.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/cmds_host_config.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/cmds_storage_pool.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/commit_config.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/config_cmd.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/config.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/config_fit_groups.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/config_fit_pdisks.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/console_interaction.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/disk_metrics.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/drop_donor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/get_group.cpp
@@ -76,6 +79,7 @@ target_sources(core-mind-bscontroller PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/virtual_group.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/bsc.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/config.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/console_interaction.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/defs.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/diff.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/error.h

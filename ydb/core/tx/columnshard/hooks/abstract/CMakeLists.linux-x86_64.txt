@@ -19,7 +19,10 @@ target_link_libraries(columnshard-hooks-abstract PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  core-tx-tiering
+  tx-tiering-tier
+  columnshard-blobs_action-protos
+  columnshard-data_sharing-protos
+  essentials-core-expr_nodes
 )
 
 target_sources(columnshard-hooks-abstract PRIVATE

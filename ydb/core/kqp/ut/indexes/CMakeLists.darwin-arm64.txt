@@ -31,6 +31,7 @@ target_link_libraries(ydb-core-kqp-ut-indexes PUBLIC
   cpp-threading-local_executor
   kqp-ut-common
   providers-common-http_gateway
+  knn_udf
   essentials-sql-pg_dummy
 )
 

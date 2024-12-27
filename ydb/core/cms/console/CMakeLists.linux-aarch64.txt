@@ -57,6 +57,7 @@ target_sources(core-cms-console PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/configs_dispatcher.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_audit.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_handshake.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_configs_manager.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_configs_provider.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_configs_subscriber.cpp

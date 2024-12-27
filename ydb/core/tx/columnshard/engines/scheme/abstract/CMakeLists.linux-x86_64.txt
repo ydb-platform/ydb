@@ -29,5 +29,7 @@ target_link_libraries(engines-scheme-abstract PUBLIC
 
 target_sources(engines-scheme-abstract PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/abstract/index_info.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/abstract/column_ids.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/abstract/schema_version.cpp
 )
 

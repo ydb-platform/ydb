@@ -49,6 +49,7 @@ target_link_libraries(fq-libs-actors PUBLIC
   fq-libs-db_schema
   fq-libs-events
   fq-libs-grpc
+  fq-libs-metrics
   fq-libs-private_client
   libs-rate_limiter-utils
   fq-libs-result_formatter

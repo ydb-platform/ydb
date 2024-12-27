@@ -123,6 +123,7 @@ target_sources(minikql-comp_nodes-no_llvm PRIVATE
   ${PROJECT_BINARY_DIR}/yql/essentials/minikql/comp_nodes/no_llvm/mkql_mapnext.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/minikql/comp_nodes/no_llvm/mkql_map_join.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/minikql/comp_nodes/no_llvm/mkql_match_recognize.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/comp_nodes/no_llvm/mkql_match_recognize_rows_formatter.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/minikql/comp_nodes/no_llvm/mkql_multihopping.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/minikql/comp_nodes/no_llvm/mkql_multimap.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/minikql/comp_nodes/no_llvm/mkql_next_value.cpp
@@ -559,6 +560,11 @@ copy_file(
 copy_file(
   ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/comp_nodes/mkql_match_recognize.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/minikql/comp_nodes/no_llvm/mkql_match_recognize.cpp
+)
+
+copy_file(
+  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/comp_nodes/mkql_match_recognize_rows_formatter.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/comp_nodes/no_llvm/mkql_match_recognize_rows_formatter.cpp
 )
 
 copy_file(

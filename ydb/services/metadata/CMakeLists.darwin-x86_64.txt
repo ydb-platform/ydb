@@ -13,10 +13,10 @@
 # changes in this file.
 
 add_subdirectory(abstract)
+add_subdirectory(secret)
 add_subdirectory(manager)
 add_subdirectory(initializer)
 add_subdirectory(request)
-add_subdirectory(secret)
 add_subdirectory(ds_table)
 add_subdirectory(common)
 

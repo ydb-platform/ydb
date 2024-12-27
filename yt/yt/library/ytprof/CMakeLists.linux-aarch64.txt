@@ -14,7 +14,6 @@
 
 add_subdirectory(api)
 add_subdirectory(proto)
-add_subdirectory(http)
 
 add_library(yt-library-ytprof)
 

@@ -13,7 +13,6 @@
 # changes in this file.
 
 add_subdirectory(resource_tracker)
-add_subdirectory(solomon)
 add_subdirectory(tcmalloc)
 add_subdirectory(perf)
 

@@ -51,6 +51,7 @@ add_subdirectory(ut_index)
 add_subdirectory(ut_index_build)
 add_subdirectory(ut_index_build_reboots)
 add_subdirectory(ut_login)
+add_subdirectory(ut_login_large)
 add_subdirectory(ut_move)
 add_subdirectory(ut_move_reboots)
 add_subdirectory(ut_olap)
@@ -137,6 +138,7 @@ target_link_libraries(core-tx-schemeshard PUBLIC
   providers-common-proto
   ydb-services-bg_tasks
   columnshard-bg_tasks-manager
+  tx-tiering-tier
 )
 
 target_sources(core-tx-schemeshard PRIVATE

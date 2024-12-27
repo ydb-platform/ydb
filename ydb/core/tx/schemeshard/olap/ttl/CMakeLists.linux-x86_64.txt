@@ -25,6 +25,7 @@ target_link_libraries(schemeshard-olap-ttl PUBLIC
   yutil
   ydb-core-base
   ydb-core-protos
+  tx-tiering-tier
 )
 
 target_sources(schemeshard-olap-ttl PRIVATE

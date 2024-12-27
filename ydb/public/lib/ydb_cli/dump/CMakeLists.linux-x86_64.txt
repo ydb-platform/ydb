@@ -29,6 +29,7 @@ target_link_libraries(lib-ydb_cli-dump PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  contrib-libs-re2
   library-cpp-bucket_quoter
   library-cpp-logger
   cpp-regex-pcre
@@ -39,6 +40,8 @@ target_link_libraries(lib-ydb_cli-dump PUBLIC
   ydb_cli-dump-files
   ydb_cli-dump-util
   cpp-client-ydb_proto
+  cpp-client-ydb_query
+  cpp-client-ydb_topic
   tools-enum_parser-enum_serialization_runtime
 )
 

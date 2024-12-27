@@ -48,6 +48,7 @@ target_link_options(ydb-core-fq-libs-metrics-ut PRIVATE
 
 target_sources(ydb-core-fq-libs-metrics-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/metrics/ut/metrics_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/metrics/ut/sanitize_label_ut.cpp
 )
 
 
@@ -56,7 +57,7 @@ set_property(
   ydb-core-fq-libs-metrics-ut
   PROPERTY
   SPLIT_FACTOR
-  10
+  1
 )
 
 add_yunittest(

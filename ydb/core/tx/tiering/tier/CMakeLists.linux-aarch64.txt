@@ -23,42 +23,11 @@ target_link_libraries(tx-tiering-tier PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  services-bg_tasks-abstract
-  services-metadata-initializer
-  services-metadata-abstract
-  services-metadata-secret
-  core-tx-schemeshard
+  ydb-library-conclusion
+  metadata-secret-accessor
 )
 
 target_sources(tx-tiering-tier PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/tier/manager.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/tier/object.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/tier/initializer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/tier/checker.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/tier/ss_checker.cpp
-)
-
-
-add_global_library_for(tx-tiering-tier.global
-  tx-tiering-tier)
-
-
-target_compile_options(tx-tiering-tier.global PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(tx-tiering-tier.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  services-bg_tasks-abstract
-  services-metadata-initializer
-  services-metadata-abstract
-  services-metadata-secret
-  core-tx-schemeshard
-)
-
-target_sources(tx-tiering-tier.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/tier/behaviour.cpp
 )
 

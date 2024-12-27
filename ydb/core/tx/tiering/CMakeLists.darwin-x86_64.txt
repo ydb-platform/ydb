@@ -19,6 +19,10 @@ add_subdirectory(ut)
 add_library(core-tx-tiering)
 
 
+target_compile_options(core-tx-tiering PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
 target_link_libraries(core-tx-tiering PUBLIC
   contrib-libs-cxxsupp
   yutil
@@ -26,6 +30,7 @@ target_link_libraries(core-tx-tiering PUBLIC
   cpp-json-writer
   ydb-core-blobstorage
   ydb-core-protos
+  columnshard-hooks-abstract
   core-tx-schemeshard
   tx-tiering-tier
   core-tablet_flat-protos
@@ -38,31 +43,6 @@ target_link_libraries(core-tx-tiering PUBLIC
 target_sources(core-tx-tiering PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/common.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/snapshot.cpp
-)
-
-
-add_global_library_for(core-tx-tiering.global
-  core-tx-tiering)
-
-
-target_link_libraries(core-tx-tiering.global PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  cpp-json-writer
-  ydb-core-blobstorage
-  ydb-core-protos
-  core-tx-schemeshard
-  tx-tiering-tier
-  core-tablet_flat-protos
-  ydb-core-wrappers
-  api-protos
-  services-bg_tasks-abstract
-  ydb-services-metadata
-)
-
-target_sources(core-tx-tiering.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/external_data.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/fetcher.cpp
 )
 

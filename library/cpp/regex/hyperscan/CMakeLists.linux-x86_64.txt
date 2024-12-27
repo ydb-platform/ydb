@@ -23,7 +23,6 @@ target_link_libraries(cpp-regex-hyperscan PUBLIC
   libs-hyperscan-runtime_core2
   libs-hyperscan-runtime_corei7
   libs-hyperscan-runtime_avx2
-  libs-hyperscan-runtime_avx512
 )
 
 target_sources(cpp-regex-hyperscan PRIVATE

@@ -25,6 +25,7 @@ add_subdirectory(ut_replication)
 add_subdirectory(ut_scrub)
 add_subdirectory(ut_vdisk_restart)
 add_subdirectory(ut_restart_pdisk)
+add_subdirectory(ut_read_only_pdisk)
 
 add_executable(ydb-core-blobstorage-ut_blobstorage)
 

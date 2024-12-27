@@ -20,6 +20,7 @@ target_link_libraries(engines-scheme-versions PUBLIC
   contrib-libs-cxxsupp
   yutil
   engines-scheme-abstract
+  engines-scheme-common
 )
 
 target_sources(engines-scheme-versions PRIVATE

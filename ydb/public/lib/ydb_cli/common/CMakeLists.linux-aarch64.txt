@@ -38,6 +38,7 @@ target_link_libraries(common PUBLIC
   public-lib-operation_id
   public-lib-yson_value
   cpp-client-draft
+  cpp-client-ydb_query
   cpp-client-ydb_result
   cpp-client-ydb_scheme
   cpp-client-ydb_table

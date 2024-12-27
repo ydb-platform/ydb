@@ -143,6 +143,7 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/counters_tx_allocator.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/counters_tx_proxy.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/data_events.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/protos/data_integrity_trails.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/database_basic_sausage_metainfo.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/datashard_config.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/datashard_load.proto
@@ -395,6 +396,9 @@ target_sources(ydb-core-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/protos/data_events.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/data_events.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/data_events.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/data_integrity_trails.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/data_integrity_trails.deps.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/data_integrity_trails.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/database_basic_sausage_metainfo.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/database_basic_sausage_metainfo.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/database_basic_sausage_metainfo.grpc.pb.h

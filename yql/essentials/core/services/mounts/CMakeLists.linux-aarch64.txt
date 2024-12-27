@@ -33,6 +33,7 @@ target_link_libraries(core-services-mounts PUBLIC
   library-cpp-resource
   essentials-core-user_data
   yql-essentials-core
+  essentials-utils-log
 )
 
 target_sources(core-services-mounts PRIVATE
@@ -56,28 +57,29 @@ target_link_libraries(core-services-mounts.global PUBLIC
   library-cpp-resource
   essentials-core-user_data
   yql-essentials-core
+  essentials-utils-log
 )
 
 target_sources(core-services-mounts.global PRIVATE
-  ${PROJECT_BINARY_DIR}/yql/essentials/core/services/mounts/f253d269a1028d424f19edbdd1ca9eaf.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/core/services/mounts/419e424418ae5263d43ef93bd9d62762.cpp
 )
 
 
 resources(core-services-mounts.global
-  ${PROJECT_BINARY_DIR}/yql/essentials/core/services/mounts/f253d269a1028d424f19edbdd1ca9eaf.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/core/services/mounts/419e424418ae5263d43ef93bd9d62762.cpp
   INPUTS
-  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/aggregate.yql
-  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/window.yql
-  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/id.yql
-  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/sqr.yql
-  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/core.yql
-  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/walk_folders.yql
+  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/aggregate.yqls
+  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/window.yqls
+  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/id.yqls
+  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/sqr.yqls
+  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/core.yqls
+  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/walk_folders.yqls
   KEYS
-  /lib/yql/aggregate.yql
-  /lib/yql/window.yql
-  /lib/yql/id.yql
-  /lib/yql/sqr.yql
-  /lib/yql/core.yql
-  /lib/yql/walk_folders.yql
+  /lib/yql/aggregate.yqls
+  /lib/yql/window.yqls
+  /lib/yql/id.yqls
+  /lib/yql/sqr.yqls
+  /lib/yql/core.yqls
+  /lib/yql/walk_folders.yqls
   OPTS
 )

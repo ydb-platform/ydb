@@ -35,3 +35,27 @@ target_sources(yt-library-tcmalloc PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/library/tcmalloc/tcmalloc_manager.cpp
 )
 
+
+add_global_library_for(yt-library-tcmalloc.global
+  yt-library-tcmalloc)
+
+
+target_compile_options(yt-library-tcmalloc.global PRIVATE
+  -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
+)
+
+target_link_libraries(yt-library-tcmalloc.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  yt-yt-core
+  yt-library-ytprof
+  library-profiling-resource_tracker
+  libs-tcmalloc-malloc_extension
+)
+
+target_sources(yt-library-tcmalloc.global PRIVATE
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/tcmalloc/configure_tcmalloc_manager.cpp
+)
+

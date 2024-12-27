@@ -25,19 +25,12 @@ target_link_libraries(yt-library-program PUBLIC
   contrib-libs-cxxsupp
   yutil
   yt-yt-core
-  core-service_discovery-yp
-  yt-library-monitoring
-  yt-library-oom
-  library-profiling-solomon
   library-profiling-tcmalloc
   library-profiling-perf
-  yt-library-stockpile
   yt-library-ytprof
   yt-library-tcmalloc
-  library-tracing-jaeger
-  cpp-yt-mlock
-  cpp-yt-stockpile
   cpp-yt-string
+  cpp-yt-system
   yt-backtrace-absl_unwinder
   cpp-getopt-small
 )

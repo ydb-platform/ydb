@@ -30,10 +30,14 @@ target_link_libraries(reader-common_reader-iterator PUBLIC
 )
 
 target_sources(reader-common_reader-iterator PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetched_data.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/iterator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/context.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetched_data.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetching.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/iterator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.cpp
 )
 
 

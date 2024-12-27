@@ -27,7 +27,7 @@ target_link_libraries(yt-client-arrow PUBLIC
   contrib-libs-cxxsupp
   yutil
   yt-yt-client
-  client-arrow-fbs
+  yt-library-formats
 )
 
 target_sources(yt-client-arrow PRIVATE

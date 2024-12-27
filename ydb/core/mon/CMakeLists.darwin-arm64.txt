@@ -33,13 +33,9 @@ target_link_libraries(ydb-core-mon PUBLIC
 )
 
 target_sources(ydb-core-mon PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/mon/async_http_mon.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mon/mon.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/mon/sync_http_mon.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mon/crossref.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/mon/async_http_mon.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mon/mon.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/mon/sync_http_mon.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mon/crossref.h
 )
 

@@ -23,13 +23,13 @@ target_link_libraries(gateway-behaviour-external_data_source PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  services-metadata-initializer
-  services-metadata-abstract
-  services-metadata-secret
-  kqp-gateway-actors
   core-kqp-federated_query
+  kqp-gateway-actors
   kqp-gateway-utils
-  behaviour-tablestore-operations
+  ydb-library-conclusion
+  services-metadata-abstract
+  services-metadata-initializer
+  services-metadata-secret
 )
 
 target_sources(gateway-behaviour-external_data_source PRIVATE
@@ -49,13 +49,13 @@ target_link_libraries(gateway-behaviour-external_data_source.global PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  services-metadata-initializer
-  services-metadata-abstract
-  services-metadata-secret
-  kqp-gateway-actors
   core-kqp-federated_query
+  kqp-gateway-actors
   kqp-gateway-utils
-  behaviour-tablestore-operations
+  ydb-library-conclusion
+  services-metadata-abstract
+  services-metadata-initializer
+  services-metadata-secret
 )
 
 target_sources(gateway-behaviour-external_data_source.global PRIVATE

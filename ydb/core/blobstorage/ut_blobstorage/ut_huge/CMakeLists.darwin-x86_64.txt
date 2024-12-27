@@ -80,14 +80,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-blobstorage-ut_blobstorage-ut_huge
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-core-blobstorage-ut_blobstorage-ut_huge)
 
 set_yunittest_property(

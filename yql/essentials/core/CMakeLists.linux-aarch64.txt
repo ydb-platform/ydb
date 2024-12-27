@@ -69,7 +69,7 @@ target_link_libraries(yql-essentials-core PUBLIC
   core-url_lister-interface
   core-url_preprocessing-interface
   yql-essentials-minikql
-  essentials-minikql-jsonpath
+  minikql-jsonpath-parser
   essentials-core-minsketch
   yql-essentials-protos
   essentials-public-udf

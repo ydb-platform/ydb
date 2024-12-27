@@ -27,6 +27,7 @@ target_link_libraries(core-persqueue-writer PUBLIC
   grpc_services-cancelation-protos
   kqp-common-simple
   ydb-core-protos
+  ydb-library-wilson_ids
   public-lib-base
   lib-deprecated-kicli
   cpp-client-ydb_params

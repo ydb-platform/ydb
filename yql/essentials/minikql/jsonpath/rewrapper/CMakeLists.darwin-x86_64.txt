@@ -12,9 +12,9 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(hyperscan)
 add_subdirectory(proto)
 add_subdirectory(re2)
+add_subdirectory(hyperscan)
 
 add_library(minikql-jsonpath-rewrapper)
 

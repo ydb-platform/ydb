@@ -61,6 +61,7 @@ target_link_libraries(core-kqp-common PUBLIC
 )
 
 target_sources(core-kqp-common PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/control.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_event_impl.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_lwtrace_probes.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_resolve.cpp

@@ -12,15 +12,34 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_library(contrib-libs-yaml)
+
+
+target_compile_options(contrib-libs-yaml PRIVATE
+  -DHAVE_CONFIG_H
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
+)
+
+target_include_directories(contrib-libs-yaml PUBLIC
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml/include
+)
+
+target_include_directories(contrib-libs-yaml PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml/src
+)
+
+target_link_libraries(contrib-libs-yaml PUBLIC
+  contrib-libs-linux-headers
+)
+
+target_sources(contrib-libs-yaml PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml/src/api.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml/src/dumper.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml/src/emitter.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml/src/loader.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml/src/parser.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml/src/reader.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml/src/scanner.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml/src/writer.c
+)
 

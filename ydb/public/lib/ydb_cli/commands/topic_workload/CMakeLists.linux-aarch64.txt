@@ -35,6 +35,8 @@ target_link_libraries(topic_workload PUBLIC
   cpp-client-ydb_topic
   client-ydb_types-operation
   client-ydb_types-status
+  library-cpp-unified_agent_client
+  cpp-histogram-hdr
 )
 
 target_sources(topic_workload PRIVATE
@@ -48,6 +50,7 @@ target_sources(topic_workload PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_stats.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_stats_collector.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_writer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_writer_producer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_reader.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_reader_transaction_support.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload.cpp

@@ -53,6 +53,7 @@ target_sources(ydb-core-kqp-ut-tx PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/tx/kqp_sink_locks_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/tx/kqp_sink_mvcc_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/tx/kqp_sink_tx_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/tx/kqp_snapshot_isolation_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/tx/kqp_tx_ut.cpp
 )
 

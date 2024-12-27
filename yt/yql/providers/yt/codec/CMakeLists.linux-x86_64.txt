@@ -31,9 +31,12 @@ target_link_libraries(providers-yt-codec PUBLIC
   cpp-mapreduce-interface
   cpp-mapreduce-io
   libs-apache-arrow
+  yql-essentials-core
   yql-essentials-minikql
+  essentials-minikql-computation
   essentials-public-udf
   yql-essentials-utils
+  parser-pg_wrapper-interface
   essentials-public-result_format
   public-udf-arrow
   providers-common-codec
@@ -43,10 +46,12 @@ target_link_libraries(providers-yt-codec PUBLIC
   providers-yt-common
   yt-lib-mkql_helpers
   yt-lib-skiff
+  common-codec-yt_arrow_converter_interface
 )
 
 target_sources(providers-yt-codec PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/codec/yt_arrow_converter.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/codec/yt_arrow_output_converter.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/codec/yt_codec_io.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/codec/yt_codec_job.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/codec/yt_codec.cpp

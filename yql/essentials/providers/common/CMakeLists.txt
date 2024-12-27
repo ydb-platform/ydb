@@ -13,8 +13,8 @@
 # changes in this file.
 
 add_subdirectory(proto)
-add_subdirectory(provider)
 add_subdirectory(codec)
+add_subdirectory(provider)
 add_subdirectory(mkql)
 add_subdirectory(schema)
 add_subdirectory(config)
@@ -27,3 +27,4 @@ add_subdirectory(transform)
 add_subdirectory(structured_token)
 add_subdirectory(comp_nodes)
 add_subdirectory(dq)
+add_subdirectory(mkql_simple_file)

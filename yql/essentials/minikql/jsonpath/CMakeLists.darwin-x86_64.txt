@@ -12,20 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
-
+add_subdirectory(parser)
 add_subdirectory(rewrapper)
 
 add_library(essentials-minikql-jsonpath)
 
 
 target_compile_options(essentials-minikql-jsonpath PRIVATE
-  -DYDB_REWRAPPER_LIB_ID=kHyperscan
   -DUDF_ABI_VERSION_MAJOR=2
   -DUDF_ABI_VERSION_MINOR=27
   -DUDF_ABI_VERSION_PATCH=0
@@ -35,10 +28,10 @@ target_link_libraries(essentials-minikql-jsonpath PUBLIC
   contrib-libs-cxxsupp
   yutil
   jsonpath-rewrapper-hyperscan
-  contrib-libs-double-conversion
   library-cpp-json
   jsonpath-rewrapper-re2
   minikql-jsonpath-rewrapper
+  minikql-jsonpath-parser
   essentials-types-binary_json
   essentials-minikql-dom
   essentials-public-issue
@@ -46,25 +39,11 @@ target_link_libraries(essentials-minikql-jsonpath PUBLIC
   yql-essentials-ast
   yql-essentials-utils
   core-issue-protos
-  parser-proto_ast-antlr3
-  proto_ast-gen-jsonpath
-  tools-enum_parser-enum_serialization_runtime
 )
 
 target_sources(essentials-minikql-jsonpath PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/jsonpath/ast_builder.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/jsonpath/ast_nodes.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/jsonpath/binary.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/jsonpath/executor.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/jsonpath/jsonpath.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/jsonpath/parse_double.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/jsonpath/type_check.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/jsonpath/value.cpp
 )
 
-
-generate_enum_serilization(essentials-minikql-jsonpath
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/jsonpath/ast_nodes.h
-  INCLUDE_HEADERS
-  yql/essentials/minikql/jsonpath/ast_nodes.h
-)

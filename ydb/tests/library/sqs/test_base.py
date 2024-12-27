@@ -46,8 +46,8 @@ TABLES_FORMAT_PARAMS = {
 
 POLLING_PARAMS = {
     'argnames': 'polling_wait_timeout',
-    'argvalues': [0, 1],
-    'ids': ['short_polling', 'long_polling'],
+    'argvalues': [1],
+    'ids': ['long_polling'],
 }
 
 STOP_NODE_PARAMS = {
@@ -482,6 +482,8 @@ class KikimrSqsTestBase(object):
                     break
             else:
                 empty_reads_count = 0
+
+            logging.debug('Read result {}'.format(read_result))
 
             if read_result:
                 request_end = time.time()

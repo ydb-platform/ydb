@@ -4,27 +4,36 @@
 
 #include <library/cpp/yt/misc/source_location.h>
 
-#include <library/cpp/yt/yson_string/convert.h>
+#include <library/cpp/yt/error/text_yson.h>
 
 namespace NYT::NYTree {
 namespace {
 
 using namespace NYson;
+using namespace NYT::NDetail;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
 void CheckEqualConversionToTextYson(const T& value, const TSourceLocation& loc = YT_CURRENT_SOURCE_LOCATION)
 {
-    EXPECT_EQ(ConvertToTextYsonString(value).AsStringBuf(), ConvertToYsonString(value, EYsonFormat::Text).AsStringBuf())
+    auto smartConvert = [] (const auto& value) {
+        if constexpr (std::constructible_from<TStringBuf, const std::remove_cvref_t<decltype(value)>>) {
+            return ConvertToTextYsonString(TStringBuf(value));
+        } else {
+            return ConvertToTextYsonString(value);
+        }
+    };
+    EXPECT_EQ(smartConvert(value), ConvertToYsonString(value, EYsonFormat::Text).AsStringBuf())
         << NYT::Format("At %v", loc);
 }
 
 template <class T, class U>
 void CheckEqualConversionToFromTextYson(const U& value, const TSourceLocation& loc = YT_CURRENT_SOURCE_LOCATION)
 {
-    auto yson = ConvertToTextYsonString(value);
-    EXPECT_EQ(ConvertFromTextYsonString<T>(yson), ConvertTo<T>(yson))
+    auto str = ConvertToTextYsonString(value);
+    auto yson = TYsonString(str);
+    EXPECT_EQ(ConvertFromTextYsonString<T>(str), ConvertTo<T>(yson))
         << NYT::Format("At %v", loc);
 }
 
@@ -32,7 +41,7 @@ template <class T>
 void CheckEqualConversionFromTextYson(TStringBuf value, const TSourceLocation& loc = YT_CURRENT_SOURCE_LOCATION)
 {
     NYson::TYsonString yson(value);
-    EXPECT_EQ(ConvertTo<T>(yson), ConvertTo<T>(yson))
+    EXPECT_EQ(ConvertFromTextYsonString<T>(value), ConvertTo<T>(yson))
         << NYT::Format("At %v", loc);
 }
 
@@ -203,66 +212,66 @@ TEST(TTextYsonConvertTest, ConvertFromTextTypeMissmatch)
     CheckEqualConversionFromTextYson<bool>("1u");
     CheckEqualConversionFromTextYson<bool>("0u");
 
-    CheckEqualConversionFromTextYson<bool>(ConvertToTextYsonString("true").AsStringBuf());
-    CheckEqualConversionFromTextYson<bool>(ConvertToTextYsonString("false").AsStringBuf());
-    CheckEqualConversionFromTextYson<bool>(ConvertToTextYsonString("1").AsStringBuf());
-    CheckEqualConversionFromTextYson<bool>(ConvertToTextYsonString("0").AsStringBuf());
+    CheckEqualConversionFromTextYson<bool>(ConvertToTextYsonString(TStringBuf("true")));
+    CheckEqualConversionFromTextYson<bool>(ConvertToTextYsonString(TStringBuf("false")));
+    CheckEqualConversionFromTextYson<bool>(ConvertToTextYsonString(TStringBuf("1")));
+    CheckEqualConversionFromTextYson<bool>(ConvertToTextYsonString(TStringBuf("0")));
 }
 
 TEST(TTextYsonConvertTest, ConvertFromTextYsonStringThrowBasicCases)
 {
     auto fromPayload = [] (const auto& value) {
-        return NYson::TYsonString(TString(value));
+        return TYsonString(TString(value));
     };
 
     // Overflow.
-    EXPECT_ANY_THROW(ConvertFromTextYsonString<i8>(fromPayload("123123123213")));
+    EXPECT_ANY_THROW(ConvertFromTextYsonString<i8>("123123123213"));
     EXPECT_ANY_THROW(ConvertTo<i8>(fromPayload("123123123213")));
 
     // Negative.
-    EXPECT_ANY_THROW(ConvertFromTextYsonString<ui64>(fromPayload("-123")));
+    EXPECT_ANY_THROW(ConvertFromTextYsonString<ui64>("-123"));
     EXPECT_ANY_THROW(ConvertTo<ui64>(fromPayload("-123")));
 
     // Non-numeric.
-    EXPECT_ANY_THROW(ConvertFromTextYsonString<i64>(fromPayload("haha")));
-    EXPECT_ANY_THROW(ConvertFromTextYsonString<i64>(fromPayload("123qq")));
-    EXPECT_ANY_THROW(ConvertFromTextYsonString<i64>(fromPayload("-123u")));
+    EXPECT_ANY_THROW(ConvertFromTextYsonString<i64>("haha"));
+    EXPECT_ANY_THROW(ConvertFromTextYsonString<i64>("123qq"));
+    EXPECT_ANY_THROW(ConvertFromTextYsonString<i64>("-123u"));
     EXPECT_ANY_THROW(ConvertTo<i64>(fromPayload("haha")));
     EXPECT_ANY_THROW(ConvertTo<i64>(fromPayload("123qq")));
     EXPECT_ANY_THROW(ConvertTo<i64>(fromPayload("-123u")));
 
     // Big positive to bool
-    EXPECT_ANY_THROW(ConvertFromTextYsonString<bool>(fromPayload("42")));
+    EXPECT_ANY_THROW(ConvertFromTextYsonString<bool>("42"));
     EXPECT_ANY_THROW(ConvertTo<bool>(fromPayload("42")));
 
     // Garbage to bool
-    EXPECT_ANY_THROW(ConvertFromTextYsonString<bool>(fromPayload("%falsse")));
+    EXPECT_ANY_THROW(ConvertFromTextYsonString<bool>("%falsse"));
     EXPECT_ANY_THROW(ConvertTo<bool>(fromPayload("%falsse")));
 
     // Wrong string to bool
-    EXPECT_ANY_THROW(ConvertFromTextYsonString<bool>(fromPayload("\"True\"")));
-    EXPECT_ANY_THROW(ConvertFromTextYsonString<bool>(fromPayload("\"False\"")));
-    EXPECT_ANY_THROW(ConvertFromTextYsonString<bool>(fromPayload("\"1u\"")));
-    EXPECT_ANY_THROW(ConvertFromTextYsonString<bool>(fromPayload("\"0u\"")));
+    EXPECT_ANY_THROW(ConvertFromTextYsonString<bool>("\"True\""));
+    EXPECT_ANY_THROW(ConvertFromTextYsonString<bool>("\"False\""));
+    EXPECT_ANY_THROW(ConvertFromTextYsonString<bool>("\"1u\""));
+    EXPECT_ANY_THROW(ConvertFromTextYsonString<bool>("\"0u\""));
     EXPECT_ANY_THROW(ConvertTo<bool>(fromPayload("\"True\"")));
     EXPECT_ANY_THROW(ConvertTo<bool>(fromPayload("\"False\"")));
     EXPECT_ANY_THROW(ConvertTo<bool>(fromPayload("\"1u\"")));
     EXPECT_ANY_THROW(ConvertTo<bool>(fromPayload("\"0u\"")));
 
     // Wrong string to string
-    EXPECT_ANY_THROW(ConvertFromTextYsonString<std::string>(fromPayload("")));
-    EXPECT_ANY_THROW(ConvertFromTextYsonString<std::string>(fromPayload("\"")));
-    EXPECT_ANY_THROW(ConvertFromTextYsonString<std::string>(fromPayload("haha\"")));
-    EXPECT_ANY_THROW(ConvertFromTextYsonString<std::string>(fromPayload("\'oops\'")));
+    EXPECT_ANY_THROW(ConvertFromTextYsonString<std::string>(""));
+    EXPECT_ANY_THROW(ConvertFromTextYsonString<std::string>("\""));
+    EXPECT_ANY_THROW(ConvertFromTextYsonString<std::string>("haha\""));
+    EXPECT_ANY_THROW(ConvertFromTextYsonString<std::string>("\'oops\'"));
     EXPECT_ANY_THROW(ConvertTo<std::string>(fromPayload("")));
     EXPECT_ANY_THROW(ConvertTo<std::string>(fromPayload("\"")));
     EXPECT_ANY_THROW(ConvertTo<std::string>(fromPayload("haha\"")));
     EXPECT_ANY_THROW(ConvertTo<std::string>(fromPayload("\'oops\'")));
 
     // Wrong literal to double
-    EXPECT_ANY_THROW(ConvertFromTextYsonString<double>(fromPayload("%%")));
-    EXPECT_ANY_THROW(ConvertFromTextYsonString<std::string>(fromPayload("%42inf")));
-    EXPECT_ANY_THROW(ConvertFromTextYsonString<std::string>(fromPayload("%NaaN")));
+    EXPECT_ANY_THROW(ConvertFromTextYsonString<double>("%%"));
+    EXPECT_ANY_THROW(ConvertFromTextYsonString<std::string>("%42inf"));
+    EXPECT_ANY_THROW(ConvertFromTextYsonString<std::string>("%NaaN"));
     EXPECT_ANY_THROW(ConvertTo<double>(fromPayload("%%")));
     EXPECT_ANY_THROW(ConvertTo<std::string>(fromPayload("%42inf")));
     EXPECT_ANY_THROW(ConvertTo<std::string>(fromPayload("%NaaN")));

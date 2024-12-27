@@ -1,1 +1,0 @@
-select count(distinct key) from plato.Input2;

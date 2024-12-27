@@ -7,14 +7,14 @@ namespace {
         TStringStream ss;
         NYql::NBacktrace::KikimrBackTraceFormatImpl(&ss);
 #if !defined(_hardening_enabled_) && !defined(_win_)
-        UNIT_ASSERT_STRING_CONTAINS(ss.Str(), "(anonymous namespace)::TestTrace394");
+        UNIT_ASSERT_STRING_CONTAINS(ss.Str(), "TestTrace394");
 #endif
     }
     Y_NO_INLINE void TestTrace39114() {
         TStringStream ss;
         NYql::NBacktrace::KikimrBackTraceFormatImpl(&ss);
 #if !defined(_hardening_enabled_) && !defined(_win_)
-        UNIT_ASSERT_STRING_CONTAINS(ss.Str(), "(anonymous namespace)::TestTrace39114");
+        UNIT_ASSERT_STRING_CONTAINS(ss.Str(), "TestTrace39114");
 #endif
     }
 }

@@ -7,9 +7,6 @@
 #include "export_iface.h"
 #include "export_s3_buffer.h"
 
-#include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/public/api/protos/ydb_topic.pb.h>
-
 namespace NKikimr {
 namespace NDataShard {
 

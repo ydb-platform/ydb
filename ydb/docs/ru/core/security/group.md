@@ -38,3 +38,5 @@
 Ниже показано, как группы наследуют разрешения друг друга. Например, в `DATA-WRITERS` входят все разрешения `DATA-READERS`:
 
 ![groups](../_assets/groups.svg)
+
+ Например, в `DATA-WRITERS` входят все разрешения `DATA-READERS`

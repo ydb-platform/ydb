@@ -10,7 +10,7 @@ The following authentication modes are supported:
 
 ## Anonymous authentication
 
-Anonymous authentication allows you to connect to YDB without specifying a username and password. This type of access should be used only for informational purposes for internal local databases that cannot be accessed over the network.
+Anonymous authentication allows you to connect to {{ ydb-short-name }} without specifying any credentials like username and password. This type of access should be used only for educational purposes in local databases that cannot be accessed over the network.
 
 To enable anonymous authentication, use `false` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../reference/configuration/index.md#auth).
 
@@ -44,11 +44,11 @@ When using modes in which the {{ ydb-short-name }} client accesses the IAM syste
 ## Authenticating by username and password {#static-credentials}
 
 This type of access implies that each database user has a username and password.
-You can only use lower case Latin letters and digits in usernames. No restrictions apply to passwords (empty passwords can be used).
+Only digits and lowercase Latin letters can be used in usernames. Passwords are not restricted; even empty passwords can be used.
 
-The username and hashed password are stored in the table inside the authentication component. The password is hashed by the [Argon2]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Argon2){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Argon2){% endif %} method. In authentication mode, only the system administrator can use a username/password pair to access the table.
+The username and hashed password are stored in a table inside the authentication component. The password is hashed using the [Argon2](https://en.wikipedia.org/wiki/Argon2) method. In authentication mode, only the system administrator can use a username and password pair to access the table.
 
-A token is returned in response to the username and password.  Tokens have a default lifetime of 12 hours. To rotate tokens, the client, for example, the SDK, independently accesses the authentication service. Tokens accelerate authentication and strengthen security.
+A token is returned in response to the username and password. Tokens have a default lifetime of 12 hours. To rotate tokens, the client, such as the [SDK](../reference/ydb-sdk/index.md), independently accesses the authentication service. Tokens accelerate authentication and enhance security.
 
 Authentication by username and password includes the following steps:
 

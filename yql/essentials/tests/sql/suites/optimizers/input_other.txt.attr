@@ -1,8 +1,0 @@
-{
-    "_read_schema" =
-         <"strict" = "false";>
-         [
-            {"name"="key"; "type"="string"};
-            {"name"="subkey"; "type"="string"};
-         ]
-}

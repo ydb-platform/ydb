@@ -57,7 +57,7 @@ def do_custom_error_check(res, sql_query):
         err_string = custom_error.group(1).strip()
     assert err_string, 'Expected custom error check in test.\nTest error: %s' % res.std_err
     log('Custom error: ' + err_string)
-    assert err_string in res.std_err
+    assert err_string in res.std_err, '"' + err_string + '" is not found'
 
 
 def get_gateway_cfg_suffix():
@@ -1005,7 +1005,7 @@ def stable_result_file(res):
     for r in res:
         for data in r[b'Write']:
             if b'Unordered' in r and b'Data' in data:
-                data[b'Data'] = sorted(data[b'Data'])
+                data[b'Data'] = sorted(data[b'Data'], key=cyson.dumps)
     with open(path, 'wb') as f:
         writer = cyson.Writer(stream=cyson.OutputStream.from_file(f), format='pretty', mode='node')
         writer.begin_stream()
@@ -1027,7 +1027,7 @@ def stable_table_file(table):
     if not is_sorted:
         with open(path, 'rb') as f:
             r = cyson.Reader(cyson.InputStream.from_file(f), mode='list_fragment')
-            lst = sorted(list(r.list_fragments()))
+            lst = sorted(list(r.list_fragments()), key=cyson.dumps)
         with open(path, 'wb') as f:
             writer = cyson.Writer(stream=cyson.OutputStream.from_file(f), format='pretty', mode='list_fragment')
             writer.begin_stream()

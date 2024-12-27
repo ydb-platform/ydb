@@ -165,19 +165,22 @@ def load_json_file_strip_comments(path):
         return '\n'.join([line for line in file.readlines() if not line.startswith('#')])
 
 
-def get_parameters_files(suite, config):
+def get_parameters_files(suite, config, data_path=None):
+    if data_path is None:
+        data_path = DATA_PATH
+
     result = []
     for line in config:
         if len(line) != 3 or not line[0] == "param":
             continue
 
-        result.append((line[1], os.path.join(DATA_PATH, suite, line[2])))
+        result.append((line[1], os.path.join(data_path, suite, line[2])))
 
     return result
 
 
-def get_parameters_json(suite, config):
-    parameters_files = get_parameters_files(suite, config)
+def get_parameters_json(suite, config, data_path=None):
+    parameters_files = get_parameters_files(suite, config, data_path)
     data = {}
     for p in parameters_files:
         value_json = json.loads(load_json_file_strip_comments(p[1]))

@@ -840,7 +840,7 @@ std::unique_ptr<IInputStream> THttpRawClient::ReadTable(
     THttpHeader header("GET", GetReadTableCommand(Context_.Config->ApiVersion));
     header.SetOutputFormat(format);
     header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
-    header.MergeParameters(NRawClient::SerializeParamsForReadTable(transactionId, Context_.Config->Prefix, path, options));
+    header.MergeParameters(NRawClient::SerializeParamsForReadTable(transactionId, options));
     header.MergeParameters(FormIORequestParameters(path, options));
 
     TRequestConfig config;

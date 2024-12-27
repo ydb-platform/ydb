@@ -147,7 +147,7 @@ public:
         const NKikimr::NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder*) const = 0;
+        TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* pgBuilder) const = 0;
 
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const = 0;
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const = 0;
@@ -164,7 +164,7 @@ public:
         const NKikimr::NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder*) const override;
+        TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* pgBuilder) const override;
 };
 
 class TDqTaskRunnerExecutionContextDefault : public TDqTaskRunnerExecutionContextBase {

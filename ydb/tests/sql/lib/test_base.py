@@ -2,18 +2,25 @@ import ydb
 import os
 import yatest.common
 import random
-from datetime import date
+import logging
 
+from datetime import date
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from typing import Callable, Any, List
 
 
+logger = logging.getLogger(__name__)
+
+
 class TestBase:
 
     @classmethod
     def setup_class(cls):
+        ydb_path = yatest.common.build_path("ydb/apps/ydbd/ydbd")
+        logger.error(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("ascii"))
+
         cls.database = "/Root"
         cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=cls.get_cluster_configuration()))
         cls.cluster.start()
@@ -107,6 +114,33 @@ class TpchTestBaseH1(TestBase):
     def tpch_default_path(self):
         return 'tpch/s1'
 
+    def build_lineitem_upsert_query(self, table_name, lineitem):
+        return f"""
+            UPSERT INTO `{table_name}`(
+            l_orderkey, l_partkey, l_suppkey, l_linenumber,
+            l_quantity, l_discount, l_extendedprice, l_shipdate,
+            l_returnflag, l_tax, l_shipinstruct, l_commitdate,
+            l_receiptdate, l_linestatus, l_shipmode, l_comment)
+            values(
+            {lineitem["l_orderkey"]},
+            {lineitem["l_partkey"]},
+            {lineitem["l_suppkey"]},
+            {lineitem["l_linenumber"]},
+            {lineitem["l_quantity"]},
+            {lineitem["l_discount"]},
+            {lineitem["l_extendedprice"]},
+            Date('{lineitem["l_shipdate"]}'),
+            '{lineitem["l_returnflag"].decode('utf-8')}',
+            {lineitem["l_tax"]},
+            '{lineitem["l_shipinstruct"].decode('utf-8')}',
+            Date('{lineitem["l_commitdate"]}'),
+            Date('{lineitem["l_receiptdate"]}'),
+            '{lineitem["l_linestatus"].decode('utf-8')}',
+            '{lineitem["l_shipmode"].decode('utf-8')}',
+            '{lineitem["l_comment"].decode('utf-8')}'
+            )
+        """
+
     def tpch_bulk_upsert_col_types(self):
         column_types = ydb.BulkUpsertColumns()
         column_types.add_column("l_orderkey", ydb.PrimitiveType.Int64)
@@ -136,7 +170,7 @@ class TpchTestBaseH1(TestBase):
             'l_quantity': random.randint(1, 1000),
             'l_discount': random.uniform(1.0, 100.0),
             'l_extendedprice': random.uniform(1.0, 100.0),
-            'l_comment': b'',
+            'l_comment': b' ', # important! CS does not work with empty strings
             'l_shipdate': date(year=2012, month=2, day=9),
             'l_returnflag': b'',
             'l_tax': 0.0,

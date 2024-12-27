@@ -376,3 +376,37 @@ class TestYdbInsertsOperations(TestBase):
             expected_value = f"value_{i}"
             assert row.id == expected_id, f"Expected id {expected_id}, found: {row.id}"
             assert row.value == expected_value, f"Expected value {expected_value}, found: {row.value}"
+
+    def test_insert_multiple_empty_rows(self):
+        """
+        Test inserting multiple rows and verify all are present
+        """
+        table_name = f"{self.table_path}_multiple"
+
+        self.query(
+            f"""
+            CREATE TABLE `{table_name}` (
+                id Int64 NOT NULL,
+                value Utf8 NOT NULL,
+                PRIMARY KEY (id)
+            )
+            PARTITION BY HASH(id)
+            WITH(STORE=COLUMN)
+            """
+        )
+
+        # Insert multiple rows
+        for i in range(100):
+            self.query(
+                f"""
+                UPSERT INTO `{table_name}` (id, value) VALUES ({i}, '');
+                """
+            )
+
+        # Verify all rows are inserted
+        rows = self.query(
+            f"""
+            SELECT COUNT(*) as count FROM `{table_name}`;
+            """
+        )
+        assert len(rows) == 1 and rows[0].count == 100, f"Expected 100 rows, found: {rows[0].count}"

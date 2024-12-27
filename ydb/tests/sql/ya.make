@@ -1,9 +1,6 @@
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
-REQUIREMENTS(ram:16)
-ENV(TIMEOUT=1800)
-
 TEST_SRCS(
     test_sql.py
     test_crud.py

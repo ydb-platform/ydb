@@ -1000,10 +1000,9 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
             SetTxInFlyCounter();
 
             if (tx.HasStep()) {
-//                if (std::make_pair(tx.GetStep(), tx.GetTxId()) >= std::make_pair(ExecStep, ExecTxId)) {
-//                    PlannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
-//                }
-                PlannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
+                if (std::make_pair(tx.GetStep(), tx.GetTxId()) >= std::make_pair(ExecStep, ExecTxId)) {
+                    PlannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
+                }
             }
 
             if (tx.HasWriteId()) {
@@ -2920,7 +2919,7 @@ void TPersQueue::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActo
 
 void TPersQueue::RestartPipe(ui64 tabletId, const TActorContext& ctx)
 {
-    for (const ui64 txId: GetBindedTxs(tabletId)) {
+    for (auto& txId: GetBindedTxs(tabletId)) {
         auto* tx = GetTransaction(ctx, txId);
         if (!tx) {
             continue;

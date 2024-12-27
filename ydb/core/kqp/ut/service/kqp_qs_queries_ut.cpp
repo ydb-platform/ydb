@@ -1854,7 +1854,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             GRANT `ydb.database.connect` ON `/Root` TO user1;
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unexpected token '`ydb.database.connect`'");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Unexpected token '`ydb.database.connect`'", result.GetIssues().ToString());
         checkPermissions(session, {{.Path = "/Root", .Permissions = {}}});
 
         result = db.ExecuteQuery(R"(

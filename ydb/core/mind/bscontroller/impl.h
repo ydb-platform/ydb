@@ -1765,7 +1765,7 @@ private:
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev);
     void Handle(TEvents::TEvUndelivered::TPtr ev);
-    void ApplyStorageConfig();
+    void ApplyStorageConfig(bool ignoreDistconf = false);
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;

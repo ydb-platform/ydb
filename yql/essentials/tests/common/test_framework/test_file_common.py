@@ -79,7 +79,7 @@ def get_sql_query(provider, suite, case, config, data_path=None):
 
     pragmas.append(sql_query)
     sql_query = ';\n'.join(pragmas)
-    if provider != 'yt' and 'Javascript' in sql_query:
+    if provider != 'yt' and provider != 'pure' and 'Javascript' in sql_query:
         pytest.skip('ScriptUdf')
 
     assert 'UseBlocks' not in sql_query, 'UseBlocks should not be used directly, only via ForceBlocks'
@@ -112,7 +112,7 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
             if provider != 'yt' and 'Javascript' in content:
                 pytest.skip('ScriptUdf')
 
-    parameters = get_parameters_json(suite, config)
+    parameters = get_parameters_json(suite, config, data_path)
 
     yqlrun = YQLRun(
         prov=provider,

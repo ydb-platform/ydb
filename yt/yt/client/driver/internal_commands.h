@@ -175,4 +175,21 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TForsakeChaosCoordinator
+    : public TTypedCommand<NApi::TForsakeChaosCoordinatorOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TForsakeChaosCoordinator);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NHydra::TCellId ChaosCellId_;
+    NHydra::TCellId CoordinatorCellId_;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

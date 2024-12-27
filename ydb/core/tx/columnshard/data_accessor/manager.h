@@ -8,6 +8,29 @@
 
 namespace NKikimr::NOlap::NDataAccessorControl {
 
+class TAccessorSignals: public NColumnShard::TCommonCountersOwner {
+private:
+    using TBase = NColumnShard::TCommonCountersOwner;
+
+public:
+    const NMonitoring::TDynamicCounters::TCounterPtr QueueSize;
+    const NMonitoring::TDynamicCounters::TCounterPtr FetchingCount;
+    const NMonitoring::TDynamicCounters::TCounterPtr AskNew;
+    const NMonitoring::TDynamicCounters::TCounterPtr AskDuplication;
+    const NMonitoring::TDynamicCounters::TCounterPtr ResultFromCache;
+    const NMonitoring::TDynamicCounters::TCounterPtr ResultAskDirectly;
+
+    TAccessorSignals()
+        : TBase("AccessorsFetching")
+        , QueueSize(TBase::GetValue("Queue/Count"))
+        , FetchingCount(TBase::GetValue("Fetching/Count"))
+        , AskNew(TBase::GetDeriviative("Ask/Fault/Count"))
+        , AskDuplication(TBase::GetDeriviative("Ask/Duplication/Count"))
+        , ResultFromCache(TBase::GetDeriviative("ResultFromCache/Count"))
+        , ResultAskDirectly(TBase::GetDeriviative("ResultAskDirectly/Count")) {
+    }
+};
+
 class IDataAccessorsManager {
 private:
     virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) = 0;
@@ -80,10 +103,8 @@ private:
 public:
     TActorAccessorsManager(const NActors::TActorId& actorId, const NActors::TActorId& tabletActorId)
         : TBase(tabletActorId)
-        , ActorId(actorId) 
-        , AccessorsCallback(std::make_shared<TActorAccessorsCallback>(ActorId))
-    {
-
+        , ActorId(actorId)
+        , AccessorsCallback(std::make_shared<TActorAccessorsCallback>(ActorId)) {
         AFL_VERIFY(!!tabletActorId);
     }
 };
@@ -93,6 +114,7 @@ private:
     using TBase = IDataAccessorsManager;
     THashMap<ui64, std::unique_ptr<IGranuleDataAccessor>> Managers;
     THashMap<ui64, std::vector<std::shared_ptr<TDataAccessorsRequest>>> RequestsByPortion;
+    TAccessorSignals Counters;
     const std::shared_ptr<IAccessorCallback> AccessorCallback;
 
     class TPortionToAsk {
@@ -157,8 +179,7 @@ public:
 
     TLocalManager(const std::shared_ptr<IAccessorCallback>& callback)
         : TBase(NActors::TActorId())
-        , AccessorCallback(callback)
-    {
+        , AccessorCallback(callback) {
     }
 };
 

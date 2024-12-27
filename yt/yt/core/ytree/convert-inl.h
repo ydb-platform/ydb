@@ -332,9 +332,9 @@ namespace NYT::NAttributeValueConversionImpl {
 
 template <class T>
     requires (!CPrimitiveConvertible<T>)
-T TagInvoke(TFrom<T>, const NYson::TYsonString& value)
+T TagInvoke(TFrom<T>, TStringBuf value)
 {
-    return NYTree::ConvertTo<T>(value);
+    return NYTree::ConvertTo<T>(NYson::TYsonString(value));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

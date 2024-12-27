@@ -224,4 +224,18 @@ void TUnreferenceLeaseCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TForsakeChaosCoordinator::Register(TRegistrar registrar)
+{
+    registrar.Parameter("chaos_cell_id", &TThis::ChaosCellId_);
+    registrar.Parameter("coordinator_cell_id", &TThis::CoordinatorCellId_);
+}
+
+void TForsakeChaosCoordinator::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetInternalClientOrThrow()->ForsakeChaosCoordinator(ChaosCellId_, CoordinatorCellId_))
+        .ThrowOnError();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

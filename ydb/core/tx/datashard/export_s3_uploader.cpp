@@ -168,7 +168,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         } else if (!SchemeUploaded) {
             UploadScheme();
         } else if (!ChangefeedsUploaded) {
-            UploadChangefeeds();
+            UploadOneChangefeed(0);
         } else {
             this->Become(&TThis::StateUploadData);
 

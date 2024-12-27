@@ -1028,7 +1028,7 @@ bool FillConsumerProto(Ydb::Topic::Consumer* rr, const NKikimrPQ::TPQTabletConfi
 {
     const auto& pqConfig = AppData(ctx)->PQConfig;
 
-    FillConsumerProto(*rr, consumer);
+    NKikimr::FillConsumerProto(*rr, consumer);
 
     if (!consumer.HasServiceType()) {
         if (pqConfig.GetDisallowDefaultClientServiceType()) {

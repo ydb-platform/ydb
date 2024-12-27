@@ -133,7 +133,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         if (!success) {
             item.Issue = error;
         }
-        Send(SchemeShard->SelfId(), new TEvSchemeShard::TEvNotifyTxCompletionResult(ui64(TxId)));
+        Send(SchemeShard->SelfId(), new TEvPrivate::TEvExportSchemeUploadResult(ExportInfo->Id, ItemIdx, success, error));
 
         PassAway();
     }
@@ -183,15 +183,11 @@ public:
     }
 
     void Bootstrap() {
-        auto* uploadingResult = new TEvSchemeShard::TEvModifySchemeTransactionResult(
-            TEvSchemeShard::EStatus::StatusAccepted,
-            ui64(TxId),
-            ui64(SchemeShard->SelfTabletId())
-        );
+        auto* uploadingResult = new TEvPrivate::TEvExportSchemeUploadResult(ExportInfo->Id, ItemIdx, true, "");
 
         auto describeResult = DescribePath(SchemeShard, ActorContext(), ExportInfo->Items[ItemIdx].SourcePathId)->GetRecord();
         if (describeResult.GetStatus() != TEvSchemeShard::EStatus::StatusSuccess) {
-            uploadingResult->SetError(describeResult.GetStatus(), describeResult.GetReason());
+            uploadingResult->SetError(describeResult.GetReason());
             Send(SchemeShard->SelfId(), uploadingResult);
             return;
         }
@@ -201,21 +197,19 @@ public:
         const auto backupRoot = TStringBuilder() << '/' << JoinSeq('/', SchemeShard->RootPathElements);
         Scheme = NYdb::NDump::BuildCreateViewQuery(viewDescription.GetName(), describeResult.GetPath(), viewDescription.GetQueryText(), backupRoot, issues);
         if (Scheme.empty()) {
-            uploadingResult->SetError(TEvSchemeShard::EStatus::StatusSchemeError, issues.ToString());
+            uploadingResult->SetError(issues.ToString());
             Send(SchemeShard->SelfId(), uploadingResult);
             return;
         }
 
         if (auto permissions = NDataShard::GenYdbPermissions(describeResult.GetPathDescription()); !permissions.Defined()) {
-            uploadingResult->SetError(TEvSchemeShard::EStatus::StatusSchemeError, "cannot infer permissions");
+            uploadingResult->SetError("cannot infer permissions");
             Send(SchemeShard->SelfId(), uploadingResult);
             return;
         } else {
             google::protobuf::TextFormat::PrintToString(permissions.GetRef(), &Permissions);
         }
 
-        // uploading issues will be reported in the final TEvNotifyTxCompletionResult message
-        Send(SchemeShard->SelfId(), uploadingResult);
         Restart();
     }
 

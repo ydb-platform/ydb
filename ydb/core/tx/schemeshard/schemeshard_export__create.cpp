@@ -231,6 +231,7 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     ui64 Id;
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult = nullptr;
     TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
+    TEvPrivate::TEvExportSchemeUploadResult::TPtr SchemeUploadResult = nullptr;
     TTxId CompletedTxId = InvalidTxId;
 
     explicit TTxProgress(TSelf* self, ui64 id)
@@ -251,6 +252,12 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     {
     }
 
+    explicit TTxProgress(TSelf* self, TEvPrivate::TEvExportSchemeUploadResult::TPtr& ev)
+        : TXxport::TTxBase(self)
+        , SchemeUploadResult(ev)
+    {
+    }
+
     explicit TTxProgress(TSelf* self, TTxId completedTxId)
         : TXxport::TTxBase(self)
         , CompletedTxId(completedTxId)
@@ -268,6 +275,8 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
             OnAllocateResult(txc, ctx);
         } else if (ModifyResult) {
             OnModifyResult(txc, ctx);
+        } else if (SchemeUploadResult) {
+            OnSchemeUploadResult(txc, ctx);
         } else if (CompletedTxId) {
             OnNotifyResult(txc, ctx);
         } else {
@@ -887,6 +896,69 @@ private:
         SubscribeTx(txId);
     }
 
+    void OnSchemeUploadResult(TTransactionContext& txc, const TActorContext& ctx) {
+        Y_ABORT_UNLESS(SchemeUploadResult);
+
+        LOG_D("TExport::TTxProgress: OnSchemeUploadResult"
+            << ": success# " << SchemeUploadResult->Get()->Success
+            << ", error# " << SchemeUploadResult->Get()->Error
+        );
+
+        const auto exportId = SchemeUploadResult->Get()->ExportId;
+        auto exportInfo = Self->Exports.Value(exportId, nullptr);
+        if (!exportInfo) {
+            LOG_E("TExport::TTxProgress: OnSchemeUploadResult received unknown export id"
+                << ": id# " << exportId
+            );
+            return;
+        }
+
+        ui32 itemIdx = SchemeUploadResult->Get()->ItemIdx;
+        if (itemIdx >= exportInfo->Items.size()) {
+            LOG_E("TExport::TTxProgress: OnSchemeUploadResult item index out of range"
+                << ": id# " << exportId
+                << ", itemIdx# " << itemIdx
+                << ", items size# " << exportInfo->Items.size()
+            );
+            return;
+        }
+
+        auto& item = exportInfo->Items[itemIdx];
+        NIceDb::TNiceDb db(txc.DB);
+
+        if (!SchemeUploadResult->Get()->Success) {
+            item.State = EState::Cancelled;
+            item.Issue = SchemeUploadResult->Get()->Error;
+            Self->PersistExportItemState(db, exportInfo, itemIdx);
+
+            if (!exportInfo->IsInProgress()) {
+                return;
+            }
+
+            Cancel(exportInfo, itemIdx, "unsuccessful scheme upload");
+
+            Self->PersistExportState(db, exportInfo);
+            return SendNotificationsIfFinished(exportInfo);
+        }
+
+        if (exportInfo->State == EState::Transferring) {
+            item.State = EState::Done;
+            Self->PersistExportItemState(db, exportInfo, itemIdx);
+
+            if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
+                exportInfo->State = EState::Done;
+                exportInfo->EndTime = TAppData::TimeProvider->Now();
+
+                Self->PersistExportState(db, exportInfo);
+                SendNotificationsIfFinished(exportInfo);
+
+                if (exportInfo->IsFinished()) {
+                    AuditLogExportEnd(*exportInfo.Get(), Self);
+                }
+            }
+        }
+    }
+
     void OnNotifyResult(TTransactionContext& txc, const TActorContext&) {
         Y_ABORT_UNLESS(CompletedTxId);
         LOG_D("TExport::TTxProgress: OnNotifyResult"
@@ -1033,6 +1105,10 @@ ITransaction* TSchemeShard::CreateTxProgressExport(TEvTxAllocatorClient::TEvAllo
 }
 
 ITransaction* TSchemeShard::CreateTxProgressExport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+    return new TExport::TTxProgress(this, ev);
+}
+
+ITransaction* TSchemeShard::CreateTxProgressExport(TEvPrivate::TEvExportSchemeUploadResult::TPtr& ev) {
     return new TExport::TTxProgress(this, ev);
 }
 

@@ -15,6 +15,7 @@ namespace TEvPrivate {
         EvRunConditionalErase,
         EvIndexBuildBilling,
         EvImportSchemeReady,
+        EvExportSchemeUploadResult,
         EvServerlessStorageBilling,
         EvCleanDroppedPaths,
         EvCleanDroppedSubDomains,
@@ -93,6 +94,25 @@ namespace TEvPrivate {
             , Success(success)
             , Error(error)
         {}
+    };
+
+    struct TEvExportSchemeUploadResult: public TEventLocal<TEvExportSchemeUploadResult, EvExportSchemeUploadResult> {
+        ui64 ExportId;
+        ui32 ItemIdx;
+        bool Success;
+        TString Error;
+
+        TEvExportSchemeUploadResult(ui64 id, ui32 itemIdx, bool success, const TString& error)
+            : ExportId(id)
+            , ItemIdx(itemIdx)
+            , Success(success)
+            , Error(error)
+        {}
+
+        void SetError(const TString& error) {
+            Success = false;
+            Error = error;
+        }
     };
 
     struct TEvServerlessStorageBilling: public TEventLocal<TEvServerlessStorageBilling, EvServerlessStorageBilling> {

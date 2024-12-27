@@ -37,6 +37,11 @@ namespace NDataShard {
 using namespace NBackup;
 using namespace NBackupRestoreTraits;
 
+struct TChangefeedExportDescriptions {
+    Ydb::Table::ChangefeedDescription ChangefeedDescription;
+    Ydb::Topic::DescribeTopicResult Topic;
+};
+
 class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     using TS3ExternalStorageConfig = NWrappers::NExternalStorage::TS3ExternalStorageConfig;
     using THttpResolverConfig = NKikimrConfig::TS3ProxyResolverConfig::THttpResolverConfig;
@@ -243,26 +248,26 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     void UploadOneChangefeed(ui64 index) {
-        if (index >= ChangefeedsExportDescs.size()) {
+        if (index >= Changefeeds.size()) {
             //Error!
             return;
         }
-        if (index == ChangefeedsExportDescs.size()) {
+        if (index == Changefeeds.size()) {
             ChangefeedsUploaded = true;
             this->Become(&TThis::StateUploadData);
             return;
         }
-        const auto& changefeed = ChangefeedsExportDescs[index].ChangefeedDescription;
+        const auto& changefeed = Changefeeds[index].ChangefeedDescription;
         const auto changefeedKeyPattern = TStringBuilder() << Settings.ObjectKeyPattern << "/" << changefeed.Getname();
         PutChangefeedDescription(changefeed, changefeedKeyPattern, index);
     }
 
     void UploadOneTopic(ui64 index) {
-        if (index >= ChangefeedsExportDescs.size()) {
+        if (index >= Changefeeds.size()) {
             //Error!
             return;
         }
-        auto& descs = ChangefeedsExportDescs[index];
+        auto& descs = Changefeeds[index];
         const auto changefeedKeyPattern = TStringBuilder() << Settings.ObjectKeyPattern << "/" 
             << descs.ChangefeedDescription.Getname();
         PutTopicDescription(descs.Topic, changefeedKeyPattern, index);
@@ -777,7 +782,7 @@ public:
         , DataShard(dataShard)
         , TxId(txId)
         , Scheme(std::move(scheme))
-        , ChangefeedsExportDescs(std::move(changefeedsExportDescs))
+        , Changefeeds(std::move(changefeedsExportDescs))
         , Metadata(std::move(metadata))
         , Permissions(std::move(permissions))
         , Retries(task.GetNumberOfRetries())
@@ -901,7 +906,11 @@ private:
     const TActorId DataShard;
     const ui64 TxId;
     const TMaybe<Ydb::Table::CreateTableRequest> Scheme;
+<<<<<<< HEAD
     TVector<TChangefeedExportDescriptions> ChangefeedsExportDescs;
+=======
+    const TVector<TChangefeedExportDescriptions> Changefeeds;
+>>>>>>> fix after review
     const TString Metadata;
     const TMaybe<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
 
@@ -940,15 +949,19 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         ? GenYdbScheme(Columns, Task.GetTable())
         : Nothing();
 
-    const auto& persQueuesTPathDesc = Task.GetPersQueue();
+    const auto& persQueuesTPathDesc = Task.GetChangefeedUnderlyingTopics();
 
     const auto& cdcStreams = Task.GetTable().GetTable().GetCdcStreams();
     const int changefeedsCount = cdcStreams.size();
-    TVector <TChangefeedExportDescriptions> changefeedsExportDescs(changefeedsCount);
+    TVector <TChangefeedExportDescriptions> changefeedsExportDescs;
+    changefeedsExportDescs.reserve(changefeedsCount);
 
     for (int i = 0; i < changefeedsCount; ++i) {
-        FillChangefeedDescription(changefeedsExportDescs[i].ChangefeedDescription, cdcStreams[i]);
-        FillTopicDescription(changefeedsExportDescs[i].Topic, persQueuesTPathDesc[i].GetPersQueueGroup());
+        Ydb::Table::ChangefeedDescription changefeedDesc;
+        Ydb::Topic::DescribeTopicResult topic;
+        FillChangefeedDescription(changefeedDesc, cdcStreams[i]);
+        FillTopicDescription(topic, persQueuesTPathDesc[i].GetPersQueueGroup());
+        changefeedsExportDescs.emplace_back(changefeedDesc, topic);
     }
 
     auto permissions = (Task.GetShardNum() == 0)

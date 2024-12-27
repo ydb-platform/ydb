@@ -150,22 +150,15 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         if (sourceDescription.HasTable()) {
             FillSetValForSequences(
                 ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
-            FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
-        }
-        auto cdcDesc = sourceDescription.GetTable().GetCdcStreams();
-        for (const auto& x : cdcDesc) {
-            TPathId pathId = TPathId::FromProto(x.GetPathId());
-            auto cdcPathDesc =  GetDescription(ss, pathId);
-            for (const auto& child : cdcPathDesc.GetChildren()) {
-                if (child.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
-                    TPathId pathId = {child.GetSchemeshardId(), child.GetPathId()};
-                    ::NKikimrSchemeOp::TPathDescription* newPersQueue = task.AddPersQueue();
-                    *newPersQueue = GetDescription(ss, pathId);
+            for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
+                auto cdcPathDesc =  GetDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
+                for (const auto& child : cdcPathDesc.GetChildren()) {
+                    if (child.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
+                        *task.AddChangefeedUnderlyingTopics() = GetDescription(ss, TPathId(child.GetSchemeshardId(), child.GetPathId()));
+                    }
                 }
             }
         }
-        
-        Cerr << "tsz: " << task.GetPersQueue().size() << Endl;
         task.MutableTable()->CopyFrom(sourceDescription);
     }
 

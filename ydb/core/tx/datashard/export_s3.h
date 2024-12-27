@@ -50,11 +50,6 @@ protected:
     const TTableColumns Columns;
 };
 
-struct TChangefeedExportDescriptions {
-    Ydb::Table::ChangefeedDescription ChangefeedDescription;
-    Ydb::Topic::DescribeTopicResult Topic;
-}
-
 } // NDataShard
 } // NKikimr
 

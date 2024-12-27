@@ -2006,9 +2006,7 @@ public:
         }
 
         if (!TxManager->NeedCommit()) {
-            Rollback();
-            State = EState::FINISHED;
-            Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
+            RollbackAndDie();
         } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && (!WriteInfos.empty() || TxManager->HasTopics())) {
             TxManager->StartExecute();
             ImmediateCommit();
@@ -2020,9 +2018,14 @@ public:
 
     void Handle(TEvKqpBuffer::TEvRollback::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
+        RollbackAndDie();
+    }
+
+    void RollbackAndDie() {
         Rollback();
         State = EState::FINISHED;
         Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
+        PassAway();
     }
 
     void Handle(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -2306,6 +2309,7 @@ public:
             });
             ExecuterActorId = {};
             Y_ABORT_UNLESS(GetTotalMemory() == 0);
+            PassAway();
             return;
         }
     }

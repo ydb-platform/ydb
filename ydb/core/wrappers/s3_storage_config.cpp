@@ -8,46 +8,6 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 namespace NKikimr::NWrappers::NExternalStorage {
 
-namespace {
-
-namespace NPrivate {
-
-template <class TSettings>
-Aws::Client::ClientConfiguration ConfigFromSettings(const TSettings& settings) {
-    Aws::Client::ClientConfiguration config;
-
-    // get default value from proto
-    auto threadsCount = NKikimrSchemeOp::TS3Settings::default_instance().GetExecutorThreadsCount();
-
-    config.endpointOverride = settings.endpoint();
-    config.executor = std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(threadsCount);
-    config.verifySSL = false;
-    config.connectTimeoutMs = 10000;
-    config.maxConnections = threadsCount;
-
-    switch (settings.scheme()) {
-        case TSettings::HTTP:
-            config.scheme = Aws::Http::Scheme::HTTP;
-            break;
-        case TSettings::HTTPS:
-            config.scheme = Aws::Http::Scheme::HTTPS;
-            break;
-        default:
-            Y_ABORT("Unknown scheme");
-    }
-
-    return config;
-}
-
-template <class TSettings>
-Aws::Auth::AWSCredentials CredentialsFromSettings(const TSettings& settings) {
-    return Aws::Auth::AWSCredentials(settings.access_key(), settings.secret_key());
-}
-
-} // namespace NPrivate
-
-} // anonymous
-
 class TS3ThreadsPoolByEndpoint {
 private:
 
@@ -82,6 +42,47 @@ public:
         return Singleton<TS3ThreadsPoolByEndpoint>()->GetPoolImpl(endpoint, threadsCount);
     }
 };
+
+namespace {
+
+namespace NPrivate {
+
+template <typename TSettings>
+Aws::Client::ClientConfiguration ConfigFromSettings(const TSettings& settings) {
+    Aws::Client::ClientConfiguration config;
+
+    // get default value from proto
+    auto threadsCount = NKikimrSchemeOp::TS3Settings::default_instance().GetExecutorThreadsCount();
+
+    config.endpointOverride = settings.endpoint();
+    config.executor = TS3ThreadsPoolByEndpoint::GetPool(settings.endpoint(), threadsCount);
+    config.enableTcpKeepAlive = true;
+    config.verifySSL = false;
+    config.connectTimeoutMs = 10000;
+    config.maxConnections = threadsCount;
+
+    switch (settings.scheme()) {
+        case TSettings::HTTP:
+            config.scheme = Aws::Http::Scheme::HTTP;
+            break;
+        case TSettings::HTTPS:
+            config.scheme = Aws::Http::Scheme::HTTPS;
+            break;
+        default:
+            Y_ABORT("Unknown scheme");
+    }
+
+    return config;
+}
+
+template <typename TSettings>
+Aws::Auth::AWSCredentials CredentialsFromSettings(const TSettings& settings) {
+    return Aws::Auth::AWSCredentials(settings.access_key(), settings.secret_key());
+}
+
+} // namespace NPrivate
+
+} // anonymous
 
 Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(const NKikimrSchemeOp::TS3Settings& settings) {
     Aws::Client::ClientConfiguration config;

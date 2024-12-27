@@ -1,13 +1,13 @@
 diff --git a/include/__random/binomial_distribution.h b/include/__random/binomial_distribution.h
-index 03661b1..11ce151 100644
+index e8774bb..54f321a 100644
 --- a/include/__random/binomial_distribution.h
 +++ b/include/__random/binomial_distribution.h
-@@ -114,10 +114,6 @@ public:
-         {return !(__x == __y);}
+@@ -97,10 +97,6 @@ public:
+   }
  };
  
 -#ifndef _LIBCPP_MSVCRT_LIKE
--extern "C" double lgamma_r(double, int *);
+-extern "C" double lgamma_r(double, int*);
 -#endif
 -
  inline _LIBCPP_HIDE_FROM_ABI double __libcpp_lgamma(double __d) {

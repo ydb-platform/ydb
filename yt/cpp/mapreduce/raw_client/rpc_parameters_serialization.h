@@ -1,7 +1,10 @@
 #pragma once
 
-#include <yt/cpp/mapreduce/interface/fwd.h>
+#include <yt/cpp/mapreduce/common/helpers.h>
+
 #include <yt/cpp/mapreduce/interface/client_method_options.h>
+#include <yt/cpp/mapreduce/interface/fwd.h>
+#include <yt/cpp/mapreduce/interface/operation.h>
 
 namespace NYT::NDetail::NRawClient {
 
@@ -94,7 +97,14 @@ TNode SerializeParamsForConcatenate(
 TNode SerializeParamsForPingTx(
     const TTransactionId& transactionId);
 
-TNode SerializeParamsForGetOperation(const std::variant<TString, TOperationId>& aliasOrOperationId, const TGetOperationOptions& options);
+TNode SerializeParamsForStartOperation(
+    const TTransactionId& transactionId,
+    EOperationType type,
+    const TNode& spec);
+
+TNode SerializeParamsForGetOperation(
+    const std::variant<TString, TOperationId>& aliasOrOperationId,
+    const TGetOperationOptions& options);
 
 TNode SerializeParamsForAbortOperation(
     const TOperationId& operationId);
@@ -144,6 +154,18 @@ TNode SerializeParametersForTrimRows(
     const TString& pathPrefix,
     const TYPath& path,
     const TTrimRowsOptions& options);
+
+TNode SerializeParamsForReadTable(
+    const TTransactionId& transactionId,
+    const TString& pathPrefix,
+    const TRichYPath& path,
+    const TTableReaderOptions& options);
+
+TNode SerializeParamsForReadBlobTable(
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TKey& key,
+    const TBlobTableReaderOptions& options);
 
 TNode SerializeParamsForParseYPath(
     const TRichYPath& path);
@@ -227,6 +249,23 @@ TNode SerializeParamsForStartTransaction(
     const TTransactionId& parentTransactionId,
     TDuration txTimeout,
     const TStartTransactionOptions& options);
+
+template <typename TOptions>
+TNode SerializeTabletParams(
+    const TString& pathPrefix,
+    const TYPath& path,
+    const TOptions& options)
+{
+    TNode result;
+    result["path"] = AddPathPrefix(path, pathPrefix);
+    if (options.FirstTabletIndex_) {
+        result["first_tablet_index"] = *options.FirstTabletIndex_;
+    }
+    if (options.LastTabletIndex_) {
+        result["last_tablet_index"] = *options.LastTabletIndex_;
+    }
+    return result;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

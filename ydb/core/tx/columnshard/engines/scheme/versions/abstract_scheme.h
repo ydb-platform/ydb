@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/counters/splitter.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/column_ids.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 
 #include <string>
@@ -29,7 +30,7 @@ public:
     std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoaderVerified(const std::string& columnName) const;
 
     bool IsSpecialColumnId(const ui32 columnId) const;
-    virtual const std::vector<ui32>& GetColumnIds() const = 0;
+    virtual TColumnIdsView GetColumnIds() const = 0;
 
     virtual NArrow::NAccessor::TColumnSaver GetColumnSaver(const ui32 columnId) const = 0;
     NArrow::NAccessor::TColumnSaver GetColumnSaver(const TString& columnName) const {
@@ -45,7 +46,7 @@ public:
     std::shared_ptr<arrow::Scalar> GetExternalDefaultValueVerified(const ui32 columnId) const;
 
     TConclusion<std::shared_ptr<arrow::RecordBatch>> BuildDefaultBatch(
-        const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount, const bool force) const;
+        const NArrow::TSchemaLiteView& schema, const ui32 rowsCount, const bool force) const;
     TConclusionStatus CheckColumnsDefault(const std::vector<std::shared_ptr<arrow::Field>>& fields) const;
 
     std::vector<std::string> GetPKColumnNames() const;

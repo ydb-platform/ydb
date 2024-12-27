@@ -127,7 +127,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggApply(const TExprNode::TPtr& node)
         return ExpandPgAggregationTraits(node->Pos(), *aggDescPtr, false, node->ChildPtr(2), argTypes, itemType, Ctx);
     }
 
-    const TString modulePath = "/lib/yql/aggregate.yql";
+    const TString modulePath = "/lib/yql/aggregate.yqls";
     auto exportsPtr = TypesCtx.Modules->GetModule(modulePath);
     YQL_ENSURE(exportsPtr, "Failed to get module " << modulePath);
     const auto& exports = exportsPtr->Symbols();
@@ -145,7 +145,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggApply(const TExprNode::TPtr& node)
         });
 
     Ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-    auto status = ExpandApply(traits, traits, Ctx);
+    auto status = ExpandApplyNoRepeat(traits, traits, Ctx);
     YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
     return traits;
 }
@@ -708,6 +708,15 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
 
     TExprNode::TPtr aggWideFlow;
     if (hashed) {
+
+        // Static assert to ensure backward compatible change: if the
+        // constant below is true, both input and output types of
+        // WideFromBlocks callable have to be WideStream; otherwise,
+        // both input and output types have to be WideFlow.
+        // FIXME: When all spots using WideFromBlocks are adjusted
+        // to work with WideStream, drop the assertion below.
+        static_assert(!NYql::NBlockStreamIO::WideFromBlocks);
+
         aggWideFlow = Ctx.Builder(Node->Pos())
             .Callable("WideFromBlocks")
                 .Callable(0, "ToFlow")
@@ -2929,6 +2938,14 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
             .Seal()
             .Build();
     }
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // WideFromBlocks callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using WideFromBlocks are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::WideFromBlocks);
 
     auto aggWideFlow = Ctx.NewCallable(Node->Pos(), "WideFromBlocks", { aggBlocks });
     auto finalFlow = MakeNarrowMap(Node->Pos(), outputColumns, aggWideFlow, Ctx);

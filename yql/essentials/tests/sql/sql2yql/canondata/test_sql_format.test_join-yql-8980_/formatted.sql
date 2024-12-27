@@ -4,7 +4,7 @@ $foo = (
     SELECT
         key,
         subkey,
-        value IN ("wat", "bar") AS value
+        value IN ('wat', 'bar') AS value
     FROM
         Input
 );

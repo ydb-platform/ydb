@@ -16,7 +16,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 VERSION(2023-12-18)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/3b0705827dbe711788c6b6bec3afa94205db1ce8.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/9783f28cbb155e4a8d49c12e1c60ce14dcfaf0c7.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/libcxx/include
@@ -170,6 +170,7 @@ ELSEIF (CXX_RT == "glibcxx_dynamic")
     ENABLE(NEED_CXX_RT_ADDINCL)
 ELSEIF (CXX_RT == "libcxxabi")
     PEERDIR(
+        contrib/libs/cxxsupp/builtins
         contrib/libs/cxxsupp/libcxxabi
     )
     ADDINCL(

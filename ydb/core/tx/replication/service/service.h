@@ -88,7 +88,7 @@ struct TEvService {
         explicit TEvGetTxId(const TContainer& container) {
             Record.MutableVersions()->Reserve(container.size());
             for (const auto& v : container) {
-                v.Serialize(*Record.AddVersions());
+                v.ToProto(Record.AddVersions());
             }
         }
     };
@@ -106,7 +106,7 @@ struct TEvService {
         TEvHeartbeat() = default;
 
         explicit TEvHeartbeat(const TRowVersion& version) {
-            version.Serialize(*Record.MutableVersion());
+            version.ToProto(Record.MutableVersion());
         }
     };
 };

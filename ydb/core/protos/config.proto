@@ -12,6 +12,7 @@ import "ydb/core/protos/bootstrap.proto";
 import "ydb/core/protos/cms.proto";
 import "ydb/core/protos/config_units.proto";
 import "ydb/core/protos/counters_schemeshard.proto";
+import "ydb/core/protos/data_integrity_trails.proto";
 import "ydb/core/protos/datashard_config.proto";
 import "ydb/core/protos/drivemodel.proto";
 import "ydb/core/protos/feature_flags.proto";
@@ -276,31 +277,7 @@ message TBlobStorageConfig {
     optional bool CachePDisks = 4 [default = true];
     optional bool CacheVDisks = 5 [default = true];
 
-    // Automatic configuration: when not filled in, then the autoconfig feature is disabled. When multiple nodes are
-    // negotiating about this feature, the disabled one overrides others.
-    message TAutoconfigSettings {
-        // subset of DefineStoragePool command
-        optional string ErasureSpecies = 1;
-        optional NKikimrBlobStorage.TGroupGeometry Geometry = 2;
-        repeated NKikimrBlobStorage.TPDiskFilter PDiskFilter = 3;
-        optional NKikimrBlobStorage.EPDiskType PDiskType = 7;
-
-        // some extra settings
-        optional bool AutomaticBoxManagement = 4; // invoke BSC DefineHostConfig/DefineBox automatically (true when unset)
-        optional bool AutomaticBootstrap = 9; // whether bootstrap should be performed automatically; PROHIBITED for production
-
-        // filled in by config parser, not by user; required for automatic static group creation
-        repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 5;
-        optional NKikimrBlobStorage.TDefineBox DefineBox = 6;
-
-        // generation of the distconf section; when set, one can automatically apply in-filesystem config
-        optional uint64 Generation = 8;
-
-        // internally-used field with initial config.yaml loaded on the start
-        optional bytes InitialConfigYaml = 10;
-    }
-
-    optional TAutoconfigSettings AutoconfigSettings = 6;
+    reserved 6; // AutoconfigSettings previously here
 
     message TVDiskPerformanceConfig {
         optional NKikimrBlobStorage.EPDiskType PDiskType = 1;
@@ -334,7 +311,32 @@ message TBlobStorageConfig {
     reserved 7;  // TCostMetricsSettings, moved to ICB
     optional TVDiskPerformanceSettings VDiskPerformanceSettings = 8;
     optional TVDiskBalancingConfig VDiskBalancingConfig = 9;
+
+    // filled in by config parser, not by user; required for correct distconf operation
+    repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 10;
+    optional NKikimrBlobStorage.TDefineBox DefineBox = 11;
  }
+
+message TSelfManagementConfig {
+    // whether the self management is enabled (through distconf)? (mandatory field)
+    optional bool Enabled = 1;
+
+    // generation of the config; when set, one can automatically apply in-filesystem config
+    optional uint64 Generation = 2;
+
+    // internally-used field with initial config.yaml loaded on the start (for the bootstrap process); not filled by the user
+    optional bytes InitialConfigYaml = 3;
+
+    // subset of DefineStoragePool command
+    optional string ErasureSpecies = 11;
+    optional NKikimrBlobStorage.TGroupGeometry Geometry = 12;
+    repeated NKikimrBlobStorage.TPDiskFilter PDiskFilter = 13;
+    optional NKikimrBlobStorage.EPDiskType PDiskType = 14;
+
+    // some extra settings
+    optional bool AutomaticBoxManagement = 21 [default = true]; // invoke BSC DefineHostConfig/DefineBox automatically
+    optional bool AutomaticBootstrap = 22; // whether bootstrap should be performed automatically; PROHIBITED for production
+}
 
 message TBlobStorageFormatConfig {
     message TDrive {
@@ -1289,11 +1291,9 @@ message TImmediateControlsConfig {
             MinValue: 65536,
             MaxValue: 4294967296,
             DefaultValue: 4294967296 }];
-        optional uint64 MemoryLimit = 3 [(ControlOptions) = {
-            Description: "Make a best effort attempt to prevent more than limit bytes of memory from being allocated by the system.",
-            MinValue: 0,
-            MaxValue: 9223372036854775807,
-            DefaultValue: 0 }];
+
+        reserved 3; // was MemoryLimit
+
         optional uint64 PageCacheTargetSize = 4 [(ControlOptions) = {
             Description: "Page Cache Target Size.",
             MinValue: 0,
@@ -1373,6 +1373,32 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 260 }];
+
+        optional uint64 ThrottlingDeviceSpeed = 14 [(ControlOptions) = {
+            Description: "Maximum allowed speed when throttling is active",
+            MinValue: 1048576,
+            MaxValue: 10737418240,
+            DefaultValue: 52428800 }];
+        optional uint64 ThrottlingMinSstCount = 15 [(ControlOptions) = {
+            Description: "Minimum level 0 SST count - throttling is turned on",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 100 }];
+        optional uint64 ThrottlingMaxSstCount = 16 [(ControlOptions) = {
+            Description: "Maximum level 0 SST count - throttling speed is zero",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 250 }];
+        optional uint64 ThrottlingMinInplacedSize = 17 [(ControlOptions) = {
+            Description: "Minimum size of all inplaced blobs - throttling is turned on",
+            MinValue: 1048576,
+            MaxValue: 536870912000,
+            DefaultValue: 21474836480 }];
+        optional uint64 ThrottlingMaxInplacedSize = 18 [(ControlOptions) = {
+            Description: "Maximum size of all inplaced blobs - throttling speed is zero",
+            MinValue: 1048576,
+            MaxValue: 536870912000,
+            DefaultValue: 64424509440 }];
     }
 
     message TTabletControls {
@@ -1475,6 +1501,14 @@ message TImmediateControlsConfig {
             DefaultValue: 0 }];
     }
 
+    message TTableServiceControls {
+        optional uint64 EnableMergeDatashardReads = 1 [(ControlOptions) = {
+            Description: "Merge reading tasks on the same node",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1486,6 +1520,7 @@ message TImmediateControlsConfig {
     optional TDSProxyControls DSProxyControls = 9;
     optional TPDiskControls PDiskControls = 10;
     optional TBlobStorageControllerControls BlobStorageControllerControls = 11;
+    optional TTableServiceControls TableServiceControls = 12;
 };
 
 message TMeteringConfig {
@@ -1617,14 +1652,14 @@ message THiveConfig {
     optional bool ContinueAutoBalancer = 31 [default = true];
     optional double MinNodeUsageToBalance = 32 [default = 0.1];
     optional double MinPeriodBetweenReassign = 33 [default = 300.0]; // seconds
-    optional double TabletRestartWatchPeriod = 34 [default = 3600.0]; // seconds
+    optional double TabletRestartWatchPeriod = 34 [default = 3600.0]; // seconds, period used for statistics, not to be confused with TabletRestartsPeriod
     optional double NodeRestartWatchPeriod = 35 [default = 3600.0]; // seconds
     optional uint64 NodeDeletePeriod = 36 [default = 3600]; // seconds
     repeated THiveTabletLimit DefaultTabletLimit = 37;
     repeated THiveTabletPreference DefaultTabletPreference = 38;
     optional uint64 SystemTabletCategoryId = 39 [default = 1];
     optional bool EnableFastTabletMove = 40 [default = true];
-    optional uint64 TabletRestartsPeriod = 42 [default = 1000]; // milliseconds
+    optional uint64 TabletRestartsPeriod = 42 [default = 1000]; // milliseconds, period checked for penalties - not to be confused with TabletRestartWatchPeriod
     optional uint64 TabletRestarsMaxCount = 43 [default = 2]; // deprecated, use TabletRestartsMaxCount instead
     optional uint64 PostponeStartPeriod = 44 [default = 1000]; // milliseconds
     optional EHiveNodeSelectStrategy NodeSelectStrategy = 45 [default = HIVE_NODE_SELECT_STRATEGY_RANDOM_MIN_7P];
@@ -1725,6 +1760,9 @@ message TColumnShardConfig {
     optional uint64 MemoryLimitScanPortion = 27 [default = 100000000];
     optional string ReaderClassName = 28;
     optional bool AllowNullableColumnsInPK = 29 [default = false];
+    optional uint32 RestoreDataOnWriteTimeoutSeconds = 30;
+    optional bool UseSlicesFilter = 31 [default = true];
+    optional uint32 LimitForPortionsMetadataAsk = 32 [default = 1000];
 }
 
 message TSchemeShardConfig {
@@ -1911,6 +1949,7 @@ message TTracingConfig {
     // field meaning is the same as in TSamplingRule
     message TExternalThrottlingRule {
         optional TSelectors Scope = 1;
+        optional uint32 Level = 4;
         optional uint64 MaxTracesPerMinute = 2;
         optional uint64 MaxTracesBurst = 3;
     }
@@ -2119,6 +2158,8 @@ message TAppConfig {
     optional NKikimrReplication.TReplicationDefaults ReplicationConfig = 83;
     optional TShutdownConfig ShutdownConfig = 84;
     optional TPrioritiesQueueConfig CompPrioritiesConfig = 85;
+    optional TSelfManagementConfig SelfManagementConfig = 86;
+    optional NKikimrProto.TDataIntegrityTrailsConfig DataIntegrityTrailsConfig = 87;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

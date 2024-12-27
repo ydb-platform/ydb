@@ -9,6 +9,7 @@
 #include <yt/yt/core/actions/current_invoker.h>
 
 #include <yt/yt/core/misc/finally.h>
+#include <yt/yt/core/misc/hazard_ptr.h>
 #include <yt/yt/core/misc/heap.h>
 #include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
@@ -714,7 +715,9 @@ public:
         while (true) {
             auto cookie = GetEventCount()->PrepareWait();
 
-            auto hasAction = ThreadStates_[index].Action.BucketHolder;
+            auto& threadState = ThreadStates_[index];
+
+            auto hasAction = threadState.Action.BucketHolder;
             int activeThreadDelta = hasAction ? -1 : 0;
 
             auto callback = DoOnExecute(index, fetchNext);
@@ -738,6 +741,7 @@ public:
             }
 
             YT_VERIFY(fetchNext);
+            MaybeRunMaintenance(&threadState, GetCpuInstant(), /*flush*/ true);
             Wait(cookie, isStopping);
         }
     }
@@ -806,6 +810,7 @@ private:
         int LastActionsInQueue;
         TDuration TimeFromStart;
         TDuration TimeFromEnqueue;
+        TCpuInstant LastMaintenanceInstant = {};
     };
 
     static_assert(sizeof(TThreadState) >= CacheLineSize);
@@ -1189,6 +1194,8 @@ private:
                 ReportWaitTime(waitTime);
             }
 
+            MaybeRunMaintenance(&threadState, action.StartedAt, /*flush*/ false);
+
             CumulativeSchedulingTimeCounter_.Add(CpuDurationToDuration(GetCpuInstant() - cpuInstant));
 
             if (!fetchNext) {
@@ -1238,6 +1245,17 @@ private:
     {
         if (IsWaitTimeObserverSet_.load()) {
             WaitTimeObserver_(waitTime);
+        }
+    }
+
+    static void MaybeRunMaintenance(TThreadState* threadState, TCpuInstant now, bool flush)
+    {
+        YT_ASSERT(threadState);
+
+        constexpr i64 MaintenancePeriod = 1'000'000'000;
+        if (flush || now > threadState->LastMaintenanceInstant + MaintenancePeriod) {
+            ReclaimHazardPointers(false);
+            threadState->LastMaintenanceInstant  = now;
         }
     }
 };

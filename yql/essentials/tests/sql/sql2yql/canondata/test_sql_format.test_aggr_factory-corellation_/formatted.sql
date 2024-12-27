@@ -1,13 +1,13 @@
 /* syntax version 1 */
 /* postgres can not */
 $t = AsList(AsStruct(1 AS a), AsStruct(2 AS a));
-$f = AGGREGATION_FACTORY("correlation");
+$f = AGGREGATION_FACTORY('correlation');
 
 SELECT
     Yql::Aggregate(
         $t, AsTuple(), AsTuple(
             AsTuple(
-                AsAtom("res"), $f(
+                AsAtom('res'), $f(
                     ListItemType(TypeOf($t)), ($z) -> {
                         RETURN AsTuple($z.a, -$z.a);
                     }

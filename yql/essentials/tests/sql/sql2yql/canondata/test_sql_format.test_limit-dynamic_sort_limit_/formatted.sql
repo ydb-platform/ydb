@@ -8,7 +8,7 @@ def f(s):
 @@;
 
 $callable = Python::f(Callable<(String) -> Uint64?>, $script);
-$i = unwrap($callable("2"));
+$i = unwrap($callable('2'));
 
 SELECT
     key,

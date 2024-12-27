@@ -24,6 +24,7 @@
 #include <ydb/core/protos/kesus.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/protos/console_tenant.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/security/ticket_parser.h>
@@ -229,6 +230,18 @@ namespace Tests {
         }
         TServerSettings& SetEnableOltpSink(bool withOltpSink) {
             AppConfig->MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);
+            return *this;
+        }
+        TServerSettings& SetEnableOlapSink(bool withOlapSink) {
+            AppConfig->MutableTableServiceConfig()->SetEnableOlapSink(withOlapSink);
+            return *this;
+        }
+        TServerSettings& SetEnableHtapTx(bool withHtapTx) {
+            AppConfig->MutableTableServiceConfig()->SetEnableHtapTx(withHtapTx);
+            return *this;
+        }
+        TServerSettings& SetAllowOlapDataQuery(bool withAllowOlapDataQuery) {
+            AppConfig->MutableTableServiceConfig()->SetAllowOlapDataQuery(withAllowOlapDataQuery);
             return *this;
         }
 
@@ -444,7 +457,9 @@ namespace Tests {
         NMsgBusProxy::EResponseStatus DeleteSubdomain(const TString& parent, const TString &name);
         NMsgBusProxy::EResponseStatus ForceDeleteSubdomain(const TString& parent, const TString &name);
         NMsgBusProxy::EResponseStatus ForceDeleteUnsafe(const TString& parent, const TString &name);
-        NMsgBusProxy::EResponseStatus CreateUser(const TString& parent, const TString& user, const TString& password);
+        NMsgBusProxy::EResponseStatus CreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken = "");
+        NMsgBusProxy::EResponseStatus ModifyUser(const TString& parent, const TString& user, const TString& password, const TString& userToken = "");
+        NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password);
 
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const TString& scheme, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout = TDuration::Seconds(5000));
@@ -504,7 +519,7 @@ namespace Tests {
 
         void Grant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights);
         void GrantConnect(const TString& subject);
-        
+
         TAutoPtr<NMsgBusProxy::TBusResponse> HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type,
                 const TVector<ui32>& allowed_node_ids, const TVector<TSubDomainKey>& allowed_domains = {}, const TChannelsBindings& binding = {});
 

@@ -1,10 +1,10 @@
 /* syntax version 1 */
 /* postgres can not */
-PRAGMA yt.MapJoinLimit = "1m";
+PRAGMA yt.MapJoinLimit = '1m';
 
 USE plato;
 
-$t = [<|"x": "150", "y": 1, "z": NULL|>, <|"x": "150", "y": 2, "z": NULL|>];
+$t = [<|'x': '150', 'y': 1, 'z': NULL|>, <|'x': '150', 'y': 2, 'z': NULL|>];
 
 SELECT
     *

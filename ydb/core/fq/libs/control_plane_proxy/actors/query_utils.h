@@ -11,9 +11,10 @@ namespace NPrivate {
 TMaybe<TString> CreateSecretObjectQuery(const FederatedQuery::ConnectionSetting& setting,
                                         const TString& name,
                                         const TSigner::TPtr& signer,
-                                        const TString& folderId);
+                                        const TString& folderId,
+                                        const TVector<TString>& externalSourcesAccessSIDs);
 
-TMaybe<TString> DropSecretObjectQuery(const TString& name, const TString& folderId);
+TMaybe<TString> DropSecretObjectQuery(const TString& name, const TString& folderId, const TVector<TString>& externalSourcesAccessSIDs);
 
 TString MakeCreateExternalDataSourceQuery(
     const FederatedQuery::ConnectionContent& connectionContent,

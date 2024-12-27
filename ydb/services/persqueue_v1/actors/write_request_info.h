@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/library/wilson_ids/wilson.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -10,12 +11,21 @@ struct TWriteRequestInfoImpl : public TSimpleRefCount<TWriteRequestInfoImpl<TEvW
         THolder<TEvWrite> Write;
     };
 
-    explicit TWriteRequestInfoImpl(ui64 cookie)
+    explicit TWriteRequestInfoImpl(ui64 cookie, NWilson::TSpan span)
         : PartitionWriteRequest(new NPQ::TEvPartitionWriter::TEvWriteRequest(cookie))
         , Cookie(cookie)
         , ByteSize(0)
         , RequiredQuota(0)
+        , Span(std::move(span))
     {
+    }
+
+    void StartQuotaSpan() {
+        QuotaSpan = NWilson::TSpan(TWilsonTopic::TopicDetailed, Span.GetTraceId(), "RequestQuota");
+    }
+
+    void SetSpanParamRequestedQuota() {
+        QuotaSpan.Attribute("quota", static_cast<i64>(RequiredQuota));
     }
 
     std::pair<TString, TString> GetTransactionId() const;
@@ -34,6 +44,9 @@ struct TWriteRequestInfoImpl : public TSimpleRefCount<TWriteRequestInfoImpl<TEvW
 
     // Quota in term of RUs
     ui64 RequiredQuota;
+
+    NWilson::TSpan QuotaSpan;
+    NWilson::TSpan Span;
 };
 
 template<class TEvWrite>

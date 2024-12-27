@@ -53,15 +53,9 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
         measures = ParseMeasures(measuresClause.GetRule_row_pattern_measure_list2());
     }
 
-    TPosition rowsPerMatchPos = pos;
-    ERowsPerMatch rowsPerMatch = ERowsPerMatch::OneRow;
+    auto rowsPerMatch = std::pair {pos, NYql::NMatchRecognize::ERowsPerMatch::OneRow};
     if (matchRecognizeClause.HasBlock6()) {
-        std::tie(rowsPerMatchPos, rowsPerMatch) = ParseRowsPerMatch(matchRecognizeClause.GetBlock6().GetRule_row_pattern_rows_per_match1());
-        if (ERowsPerMatch::AllRows == rowsPerMatch) {
-            //https://st.yandex-team.ru/YQL-16213
-            Ctx.Error(pos, TIssuesIds::CORE) << "ALL ROWS PER MATCH is not supported yet";
-            return {};
-        }
+        rowsPerMatch = ParseRowsPerMatch(matchRecognizeClause.GetBlock6().GetRule_row_pattern_rows_per_match1());
     }
 
     const auto& commonSyntax = matchRecognizeClause.GetRule_row_pattern_common_syntax7();
@@ -126,7 +120,7 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
         std::pair{partitionsPos, std::move(partitioners)},
         std::pair{orderByPos, std::move(sortSpecs)},
         std::pair{measuresPos, measures},
-        std::pair{rowsPerMatchPos, rowsPerMatch},
+        std::move(rowsPerMatch),
         std::move(skipTo),
         std::pair{patternPos, std::move(pattern)},
         std::pair{subsetPos, std::move(subset)},
@@ -159,7 +153,6 @@ TNamedFunction TSqlMatchRecognizeClause::ParseOneMeasure(const TRule_row_pattern
     TColumnRefScope scope(Ctx, EColumnRefState::MatchRecognize);
     const auto& expr = TSqlExpression(Ctx, Mode).Build(node.GetRule_expr1());
     const auto& name = Id(node.GetRule_an_id3(), *this);
-    //TODO https://st.yandex-team.ru/YQL-16186
     //Each measure must be a lambda, that accepts 2 args:
     // - List<InputTableColumns + _yql_Classifier, _yql_MatchNumber>
     // - Struct that maps row pattern variables to ranges in the queue
@@ -174,18 +167,18 @@ TVector<TNamedFunction> TSqlMatchRecognizeClause::ParseMeasures(const TRule_row_
     return result;
 }
 
-std::pair<TPosition, ERowsPerMatch> TSqlMatchRecognizeClause::ParseRowsPerMatch(const TRule_row_pattern_rows_per_match& rowsPerMatchClause) {
+std::pair<TPosition, NYql::NMatchRecognize::ERowsPerMatch> TSqlMatchRecognizeClause::ParseRowsPerMatch(const TRule_row_pattern_rows_per_match& rowsPerMatchClause) {
 
     switch(rowsPerMatchClause.GetAltCase()) {
         case TRule_row_pattern_rows_per_match::kAltRowPatternRowsPerMatch1:
             return std::pair {
                     TokenPosition(rowsPerMatchClause.GetAlt_row_pattern_rows_per_match1().GetToken1()),
-                    ERowsPerMatch::OneRow
+                    NYql::NMatchRecognize::ERowsPerMatch::OneRow
             };
         case TRule_row_pattern_rows_per_match::kAltRowPatternRowsPerMatch2:
             return std::pair {
                     TokenPosition(rowsPerMatchClause.GetAlt_row_pattern_rows_per_match2().GetToken1()),
-                    ERowsPerMatch::AllRows
+                    NYql::NMatchRecognize::ERowsPerMatch::AllRows
             };
         case TRule_row_pattern_rows_per_match::ALT_NOT_SET:
             Y_ABORT("You should change implementation according to grammar changes");
@@ -233,13 +226,13 @@ std::pair<TPosition, NYql::NMatchRecognize::TAfterMatchSkipTo> TSqlMatchRecogniz
     }
 }
 
-NYql::NMatchRecognize::TRowPatternTerm TSqlMatchRecognizeClause::ParsePatternTerm(const TRule_row_pattern_term& node){
+NYql::NMatchRecognize::TRowPatternTerm TSqlMatchRecognizeClause::ParsePatternTerm(const TRule_row_pattern_term& node, size_t patternNestingLevel, bool outputArg) {
     NYql::NMatchRecognize::TRowPatternTerm term;
     TPosition pos;
     for (const auto& factor: node.GetBlock1()) {
         const auto& primaryVar = factor.GetRule_row_pattern_factor1().GetRule_row_pattern_primary1();
         NYql::NMatchRecognize::TRowPatternPrimary primary;
-        bool output = true;
+        bool output = outputArg;
         switch (primaryVar.GetAltCase()) {
             case TRule_row_pattern_primary::kAltRowPatternPrimary1:
                 primary = PatternVar(primaryVar.GetAlt_row_pattern_primary1().GetRule_row_pattern_primary_variable_name1().GetRule_row_pattern_variable_name1(), *this);
@@ -253,9 +246,8 @@ NYql::NMatchRecognize::TRowPatternTerm TSqlMatchRecognizeClause::ParsePatternTer
                 Y_ENSURE("^" == std::get<0>(primary));
                 break;
             case TRule_row_pattern_primary::kAltRowPatternPrimary4: {
-                if (++PatternNestingLevel <= NYql::NMatchRecognize::MaxPatternNesting) {
-                    primary = ParsePattern(primaryVar.GetAlt_row_pattern_primary4().GetBlock2().GetRule_row_pattern1());
-                    --PatternNestingLevel;
+                if (patternNestingLevel <= NYql::NMatchRecognize::MaxPatternNesting) {
+                    primary = ParsePattern(primaryVar.GetAlt_row_pattern_primary4().GetBlock2().GetRule_row_pattern1(), patternNestingLevel + 1, output);
                 } else {
                     Ctx.Error(TokenPosition(primaryVar.GetAlt_row_pattern_primary4().GetToken1()))
                             << "To big nesting level in the pattern";
@@ -265,15 +257,14 @@ NYql::NMatchRecognize::TRowPatternTerm TSqlMatchRecognizeClause::ParsePatternTer
             }
             case TRule_row_pattern_primary::kAltRowPatternPrimary5:
                 output = false;
-                Ctx.Error(TokenPosition(primaryVar.GetAlt_row_pattern_primary4().GetToken1()))
-                        << "ALL ROWS PER MATCH and {- -} are not supported yet"; //https://st.yandex-team.ru/YQL-16227
+                primary = ParsePattern(primaryVar.GetAlt_row_pattern_primary5().GetRule_row_pattern3(), patternNestingLevel + 1, output);
                 break;
             case TRule_row_pattern_primary::kAltRowPatternPrimary6: {
                 std::vector<NYql::NMatchRecognize::TRowPatternPrimary> items{ParsePattern(
-                    primaryVar.GetAlt_row_pattern_primary6().GetRule_row_pattern_permute1().GetRule_row_pattern3())
+                    primaryVar.GetAlt_row_pattern_primary6().GetRule_row_pattern_permute1().GetRule_row_pattern3(), patternNestingLevel + 1, output)
                 };
                 for (const auto& p: primaryVar.GetAlt_row_pattern_primary6().GetRule_row_pattern_permute1().GetBlock4()) {
-                    items.push_back(ParsePattern(p.GetRule_row_pattern2()));
+                    items.push_back(ParsePattern(p.GetRule_row_pattern2(), patternNestingLevel + 1, output));
                 }
                 //Permutations now is a syntactic sugar and converted to all possible alternatives
                 if (items.size() > NYql::NMatchRecognize::MaxPermutedItems) {
@@ -346,11 +337,11 @@ NYql::NMatchRecognize::TRowPatternTerm TSqlMatchRecognizeClause::ParsePatternTer
     return term;
 }
 
-NYql::NMatchRecognize::TRowPattern TSqlMatchRecognizeClause::ParsePattern(const TRule_row_pattern& node){
+NYql::NMatchRecognize::TRowPattern TSqlMatchRecognizeClause::ParsePattern(const TRule_row_pattern& node, size_t patternNestingLevel, bool output){
     TVector<NYql::NMatchRecognize::TRowPatternTerm> result;
-    result.push_back(ParsePatternTerm(node.GetRule_row_pattern_term1()));
+    result.push_back(ParsePatternTerm(node.GetRule_row_pattern_term1(), patternNestingLevel, output));
     for (const auto& term: node.GetBlock2())
-        result.push_back(ParsePatternTerm(term.GetRule_row_pattern_term2()));
+        result.push_back(ParsePatternTerm(term.GetRule_row_pattern_term2(), patternNestingLevel, output));
     return result;
 }
 
@@ -364,7 +355,6 @@ TNamedFunction TSqlMatchRecognizeClause::ParseOneDefinition(const TRule_row_patt
 TVector<TNamedFunction> TSqlMatchRecognizeClause::ParseDefinitions(const TRule_row_pattern_definition_list& node) {
     TVector<TNamedFunction> result { ParseOneDefinition(node.GetRule_row_pattern_definition1())};
     for (const auto& d: node.GetBlock2()) {
-        //TODO https://st.yandex-team.ru/YQL-16186
         //Each define must be a predicate lambda, that accepts 3 args:
         // - List<input table rows>
         // - A struct that maps row pattern variables to ranges in the queue

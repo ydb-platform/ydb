@@ -459,7 +459,7 @@ row_pattern_primary:
     | DOLLAR
     | CARET
     | LPAREN row_pattern? RPAREN
-    | LBRACE_CURLY MINUS row_pattern MINUS RBRACE_CURLY //TODO This rule accepts spaces between brace and minus sign, i.e: {   -  S2 - } that is not supposed to. Handle this case in https://st.yandex-team.ru/YQL-16227
+    | LBRACE_CURLY MINUS row_pattern MINUS RBRACE_CURLY
     | row_pattern_permute
 ;
 
@@ -824,8 +824,8 @@ alter_table_alter_index_action:
 
 drop_table_stmt: DROP (TABLE | TABLESTORE | EXTERNAL TABLE) (IF EXISTS)? simple_table_ref;
 
-create_user_stmt: CREATE USER role_name create_user_option?;
-alter_user_stmt: ALTER USER role_name (WITH? create_user_option | RENAME TO role_name);
+create_user_stmt: CREATE USER role_name create_user_option*;
+alter_user_stmt: ALTER USER role_name (WITH? create_user_option+ | RENAME TO role_name);
 
 create_group_stmt: CREATE GROUP role_name (WITH USER role_name (COMMA role_name)* COMMA?)?;
 alter_group_stmt: ALTER GROUP role_name ((ADD|DROP) USER role_name (COMMA role_name)* COMMA? | RENAME TO role_name);
@@ -833,7 +833,9 @@ alter_group_stmt: ALTER GROUP role_name ((ADD|DROP) USER role_name (COMMA role_n
 drop_role_stmt: DROP (USER|GROUP) (IF EXISTS)? role_name (COMMA role_name)* COMMA?;
 
 role_name: an_id_or_type | bind_parameter;
-create_user_option: ENCRYPTED? PASSWORD expr;
+create_user_option: password_option | login_option;
+password_option: ENCRYPTED? PASSWORD expr;
+login_option: LOGIN | NOLOGIN;
 
 grant_permissions_stmt: GRANT permission_name_target ON an_id_schema (COMMA an_id_schema)* TO role_name (COMMA role_name)* COMMA? (WITH GRANT OPTION)?;
 revoke_permissions_stmt: REVOKE (GRANT OPTION FOR)? permission_name_target ON an_id_schema (COMMA an_id_schema)* FROM role_name (COMMA role_name)*;
@@ -1367,6 +1369,7 @@ keyword_as_compat:
   | LEGACY
   | LIKE
   | LOCAL
+  | LOGIN
   | MANAGE
   | MATCH
   | MATCHES
@@ -1379,6 +1382,7 @@ keyword_as_compat:
   // | NATURAL
   | NEXT
   | NO
+  | NOLOGIN
   // | NOTNULL
   | NULLS
   | OBJECT
@@ -1591,6 +1595,7 @@ keyword_compat: (
   | LEGACY
   | LIKE
   | LOCAL
+  | LOGIN
   | MANAGE
   | MATCH
   | MATCHES
@@ -1603,6 +1608,7 @@ keyword_compat: (
   | NATURAL
   | NEXT
   | NO
+  | NOLOGIN
   | NOTNULL
   | NULLS
   | OBJECT
@@ -1948,6 +1954,7 @@ LIKE: L I K E;
 LIMIT: L I M I T;
 LIST: L I S T;
 LOCAL: L O C A L;
+LOGIN: L O G I N;
 MANAGE: M A N A G E;
 MATCH: M A T C H;
 MATCHES: M A T C H E S;
@@ -1960,6 +1967,7 @@ NANOSECONDS: N A N O S E C O N D S;
 NATURAL: N A T U R A L;
 NEXT: N E X T;
 NO: N O;
+NOLOGIN: N O L O G I N;
 NOT: N O T;
 NOTNULL: N O T N U L L;
 NULL: N U L L;

@@ -3,56 +3,14 @@
 namespace NKikimr::NSchemeShard {
 
 void TTablesStorage::OnAddObject(const TPathId& pathId, TColumnTableInfo::TPtr object) {
-    for (const auto& tier : object->Description.GetTtlSettings().GetEnabled().GetTiers()) {
-        std::optional<TString> usedExternalStorage;
-        switch (tier.GetActionCase()) {
-            case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
-                usedExternalStorage = tier.GetEvictToExternalStorage().GetStorageName();
-                break;
-            case NKikimrSchemeOp::TTTLSettings_TTier::kDelete:
-            case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:
-                break;
-        }
-        if (usedExternalStorage) {
-            AFL_VERIFY(PathsByTier[*usedExternalStorage].emplace(pathId).second);
-        }
-    }
     for (auto&& s : object->GetColumnShards()) {
         AFL_VERIFY(TablesByShard[s].AddId(pathId));
     }
 }
 
 void TTablesStorage::OnRemoveObject(const TPathId& pathId, TColumnTableInfo::TPtr object) {
-    for (const auto& tier : object->Description.GetTtlSettings().GetEnabled().GetTiers()) {
-        std::optional<TString> usedExternalStorage;
-        switch (tier.GetActionCase()) {
-            case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
-                usedExternalStorage = tier.GetEvictToExternalStorage().GetStorageName();
-                break;
-            case NKikimrSchemeOp::TTTLSettings_TTier::kDelete:
-            case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:
-                break;
-        }
-        if (usedExternalStorage) {
-            auto findTier = PathsByTier.find(*usedExternalStorage);
-            AFL_VERIFY(findTier);
-            AFL_VERIFY(findTier->second.erase(pathId));
-            if (findTier->second.empty()) {
-                PathsByTier.erase(findTier);
-            }
-        }
-    }
     for (auto&& s : object->GetColumnShards()) {
         TablesByShard[s].RemoveId(pathId);
-    }
-}
-
-const THashSet<TPathId>& TTablesStorage::GetTablesWithTier(const TString& storageId) const {
-    auto it = PathsByTier.find(storageId);
-    if (it != PathsByTier.end()) {
-        return it->second;
-    } else {
-        return Default<THashSet<TPathId>>();
     }
 }
 

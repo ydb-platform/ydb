@@ -9,7 +9,7 @@
 #include <ydb/services/persqueue_v1/ut/functions_executor_wrapper.h>
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
@@ -4012,7 +4012,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             const auto monPort = TPortManager().GetPort();
             auto Counters = server.CleverServer->GetGRpcServerRootCounters();
-            NActors::TSyncHttpMon Monitoring({
+            NActors::TMon Monitoring({
                 .Port = monPort,
                 .Address = "localhost",
                 .Threads = 3,
@@ -4020,7 +4020,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 .Host = "localhost",
             });
             Monitoring.RegisterCountersPage("counters", "Counters", Counters);
-            Monitoring.Start();
+            Monitoring.Start(server.CleverServer->GetRuntime()->SingleSys());
 
             server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::NET_CLASSIFIER });
             server.EnableLogs({ NKikimrServices::PERSQUEUE }, NActors::NLog::PRI_ERROR);
@@ -4189,6 +4189,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
                 checkUserAgentCounters(monPort, "BytesReadByUserAgent", "pqv1", userAgent, "", consumerPath);
             }
+            Monitoring.Stop();
         };
 
         testWriteStat("some@random@consumer", "some@random@consumer", "some/random/consumer");

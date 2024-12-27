@@ -10,6 +10,7 @@
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
@@ -411,8 +412,9 @@ void TMkqlIOSpecs::InitInput(NCommon::TCodecContext& codecCtx,
     bool useCommonColumns = true;
     THashMap<TString, ui32> structColumns;
     if (columns.Defined()) {
+        TColumnOrder order(*columns);
         for (size_t i = 0; i < columns->size(); ++i) {
-            structColumns.insert({columns->at(i), (ui32)i});
+            structColumns.insert({order.at(i).PhysicalName, (ui32)i});
         }
     }
     else if (itemType && InputGroups.empty()) {
@@ -548,6 +550,10 @@ void TMkqlIOSpecs::InitOutput(NCommon::TCodecContext& codecCtx, const NYT::TNode
 }
 
 NYT::TFormat TMkqlIOSpecs::MakeOutputFormat() const {
+    if (UseBlockOutput_) {
+        return NYT::TFormat(NYT::TNode("arrow"));
+    }
+
     if (!UseSkiff_ || Outputs.empty()) {
         return NYT::TFormat::YsonBinary();
     }
@@ -559,6 +565,11 @@ NYT::TFormat TMkqlIOSpecs::MakeOutputFormat() const {
 
 NYT::TFormat TMkqlIOSpecs::MakeOutputFormat(size_t tableIndex) const {
     Y_ENSURE(tableIndex < Outputs.size(), "Invalid output table index: " << tableIndex);
+
+    if (UseBlockOutput_) {
+        YQL_ENSURE(tableIndex == 0);
+        return NYT::TFormat(NYT::TNode("arrow"));
+    }
 
     if (!UseSkiff_) {
         return NYT::TFormat::YsonBinary();

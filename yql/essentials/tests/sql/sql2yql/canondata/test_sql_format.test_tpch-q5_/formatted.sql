@@ -87,7 +87,7 @@ $join5 = (
         j.n_regionkey == r.r_regionkey
 );
 
-$border = Date("1995-01-01");
+$border = Date('1995-01-01');
 
 SELECT
     n_name,
@@ -97,7 +97,7 @@ FROM
 WHERE
     r_name == 'AFRICA'
     AND CAST(o_orderdate AS Timestamp) >= $border
-    AND CAST(o_orderdate AS Timestamp) < ($border + Interval("P365D"))
+    AND CAST(o_orderdate AS Timestamp) < ($border + Interval('P365D'))
 GROUP BY
     n_name
 ORDER BY

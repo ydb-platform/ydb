@@ -2,7 +2,7 @@
 -- TPC-H/TPC-R Top Supplier Query (Q15)
 -- TPC TPC-H Parameter Substitution (Version 2.17.2 build 0)
 -- using 1680793381 as a seed to the RNG
-$border = Date("1997-03-01");
+$border = Date('1997-03-01');
 
 $revenue0 = (
     SELECT
@@ -13,7 +13,7 @@ $revenue0 = (
         plato.lineitem
     WHERE
         CAST(l_shipdate AS timestamp) >= $border
-        AND CAST(l_shipdate AS timestamp) < ($border + Interval("P92D"))
+        AND CAST(l_shipdate AS timestamp) < ($border + Interval('P92D'))
     GROUP BY
         l_suppkey
 );

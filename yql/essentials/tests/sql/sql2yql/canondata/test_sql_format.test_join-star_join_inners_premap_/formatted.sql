@@ -1,10 +1,10 @@
 /* syntax version 1 */
 USE plato;
 
-PRAGMA yt.JoinEnableStarJoin = "true";
+PRAGMA yt.JoinEnableStarJoin = 'true';
 PRAGMA DisablePullUpFlatMapOverJoin;
 
-$a =
+$a = (
     SELECT
         k1,
         v1,
@@ -12,9 +12,9 @@ $a =
         1 AS t1
     FROM
         Input1
-;
+);
 
-$c =
+$c = (
     SELECT
         k3,
         v3,
@@ -22,7 +22,7 @@ $c =
         3 AS t3
     FROM
         Input3
-;
+);
 
 FROM ANY
     Input2 AS b

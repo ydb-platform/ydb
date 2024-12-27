@@ -1,16 +1,14 @@
 /* ytfile can not */
 USE plato;
 
-PRAGMA warning("disable", "8001");
-
--- CBO_MISSING_TABLE_STATS
-PRAGMA CostBasedOptimizer = "native";
-PRAGMA yt.MapJoinLimit = "1000";
-PRAGMA yt.LookupJoinLimit = "1000";
-PRAGMA yt.LookupJoinMaxRows = "100";
-PRAGMA yt.ExtendedStatsMaxChunkCount = "0";
-PRAGMA yt.JoinMergeTablesLimit = "100";
-PRAGMA yt.JoinMergeForce = "true";
+PRAGMA warning('disable', '8001'); -- CBO_MISSING_TABLE_STATS
+PRAGMA CostBasedOptimizer = 'native';
+PRAGMA yt.MapJoinLimit = '1000';
+PRAGMA yt.LookupJoinLimit = '1000';
+PRAGMA yt.LookupJoinMaxRows = '100';
+PRAGMA yt.ExtendedStatsMaxChunkCount = '0';
+PRAGMA yt.JoinMergeTablesLimit = '100';
+PRAGMA yt.JoinMergeForce = 'true';
 
 SELECT
     InputA.Key1,

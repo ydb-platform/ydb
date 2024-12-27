@@ -1,8 +1,8 @@
 USE plato;
 
 PRAGMA DisableSimpleColumns;
-PRAGMA yt.LookupJoinLimit = "64k";
-PRAGMA yt.LookupJoinMaxRows = "100";
+PRAGMA yt.LookupJoinLimit = '64k';
+PRAGMA yt.LookupJoinMaxRows = '100';
 
 $campaigns_data = AsList(
     AsStruct(Just(1) AS id),

@@ -117,15 +117,15 @@ struct TRefreshTokenTypeForRequest<TEvStreamTopicWriteRequest> {
 // RefreshToken Send/Reply interface hides lowlevel details.
 // Used to avoid unwanted compile time dependencies.
 //
-void RefreshTokenSendRequest(const TActorContext& ctx, IEventBase* refreshTokenRequest);
+void RefreshTokenSendRequest(const TActorContext& ctx, IEventBase* refreshTokenRequest, NWilson::TTraceId traceId);
 void RefreshTokenReplyUnauthenticated(TActorId recipient, TActorId sender, NYql::TIssues&& issues);
 void RefreshTokenReplyUnavailable(TActorId recipient, NYql::TIssues&& issues);
 
 template <ui32 TRpcId, typename TReq, typename TResp>
-void TGRpcRequestBiStreamWrapper<TRpcId, TReq, TResp>::RefreshToken(const TString& token, const TActorContext& ctx, TActorId id) {
+void TGRpcRequestBiStreamWrapper<TRpcId, TReq, TResp>::RefreshToken(const TString& token, const TActorContext& ctx, TActorId id, NWilson::TTraceId traceId) {
     using TSelf = typename std::remove_pointer<decltype(this)>::type;
     using TRefreshToken = typename TRefreshTokenTypeForRequest<TSelf>::type;
-    RefreshTokenSendRequest(ctx, new TRefreshToken(token, GetDatabaseName().GetOrElse(""), id));
+    RefreshTokenSendRequest(ctx, new TRefreshToken(token, GetDatabaseName().GetOrElse(""), id), std::move(traceId));
 }
 
 template <ui32 TRpcId>

@@ -13,7 +13,7 @@ $filtered = (
     FROM
         $data
     WHERE
-        Name != "BadName"
+        Name != 'BadName'
     LIMIT 10
 );
 

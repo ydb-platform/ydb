@@ -25,12 +25,13 @@ using ::ToString;
 ////////////////////////////////////////////////////////////////////////////////
 
 void RetryHeavyWriteRequest(
+    const IRawClientPtr& rawClient,
     const IClientRetryPolicyPtr& clientRetryPolicy,
     const ITransactionPingerPtr& transactionPinger,
     const TClientContext& context,
     const TTransactionId& parentId,
     THttpHeader& header,
-    std::function<THolder<IInputStream>()> streamMaker)
+    std::function<std::unique_ptr<IInputStream>()> streamMaker)
 {
     int retryCount = context.Config->RetryCount;
     if (context.ServiceTicketAuth) {
@@ -44,7 +45,7 @@ void RetryHeavyWriteRequest(
     }
 
     for (int attempt = 0; attempt < retryCount; ++attempt) {
-        TPingableTransaction attemptTx(clientRetryPolicy, context, parentId, transactionPinger->GetChildTxPinger(), TStartTransactionOptions());
+        TPingableTransaction attemptTx(rawClient, clientRetryPolicy, context, parentId, transactionPinger->GetChildTxPinger(), TStartTransactionOptions());
 
         auto input = streamMaker();
         TString requestId;
@@ -62,7 +63,7 @@ void RetryHeavyWriteRequest(
                 GetFullUrlForProxy(hostName, context, header),
                 requestId,
                 header);
-            TransferData(input.Get(), request->GetStream());
+            TransferData(input.get(), request->GetStream());
             request->Finish()->GetResponse();
         } catch (TErrorResponse& e) {
             YT_LOG_ERROR("RSP %v - attempt %v failed",
@@ -99,7 +100,7 @@ THeavyRequestRetrier::THeavyRequestRetrier(TParameters parameters)
     : Parameters_(std::move(parameters))
     , RequestRetryPolicy_(Parameters_.ClientRetryPolicy->CreatePolicyForGenericRequest())
     , StreamFactory_([] {
-        return MakeHolder<TNullInput>();
+        return std::make_unique<TNullInput>();
     })
 {
     Retry([] { });
@@ -167,6 +168,7 @@ void THeavyRequestRetrier::TryStartAttempt()
 {
     Attempt_ = std::make_unique<TAttempt>();
     Attempt_->Transaction = std::make_unique<TPingableTransaction>(
+        Parameters_.RawClientPtr,
         Parameters_.ClientRetryPolicy, Parameters_.Context,
         Parameters_.TransactionId,
         Parameters_.TransactionPinger->GetChildTxPinger(),

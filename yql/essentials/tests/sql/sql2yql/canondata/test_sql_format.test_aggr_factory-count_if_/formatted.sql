@@ -1,13 +1,13 @@
 /* syntax version 1 */
 /* postgres can not */
 $t = AsList(AsStruct(TRUE AS a), AsStruct(FALSE AS a));
-$f = AGGREGATION_FACTORY("countif");
+$f = AGGREGATION_FACTORY('countif');
 
 SELECT
     Yql::Aggregate(
         $t, AsTuple(), AsTuple(
             AsTuple(
-                AsAtom("res"), $f(
+                AsAtom('res'), $f(
                     ListItemType(TypeOf($t)), ($z) -> {
                         RETURN $z.a;
                     }

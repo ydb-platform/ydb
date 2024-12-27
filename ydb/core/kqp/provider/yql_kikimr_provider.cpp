@@ -843,13 +843,14 @@ void TableDescriptionToTableInfoImpl(const TKikimrTableDescription& desc, TYdbOp
                 continue;
             }
 
-            const auto& idxTableDesc = desc.Metadata->SecondaryGlobalIndexMetadata[idxNo];
+            const auto& implTable = *desc.Metadata->ImplTables[idxNo];
+            YQL_ENSURE(!implTable.Next);
 
             auto info = NKqpProto::TKqpTableInfo();
-            info.SetTableName(idxTableDesc->Name);
-            info.MutableTableId()->SetOwnerId(idxTableDesc->PathId.OwnerId());
-            info.MutableTableId()->SetTableId(idxTableDesc->PathId.TableId());
-            info.SetSchemaVersion(idxTableDesc->SchemaVersion);
+            info.SetTableName(implTable.Name);
+            info.MutableTableId()->SetOwnerId(implTable.PathId.OwnerId());
+            info.MutableTableId()->SetTableId(implTable.PathId.TableId());
+            info.SetSchemaVersion(implTable.SchemaVersion);
 
             back_inserter = std::move(info);
             ++back_inserter;

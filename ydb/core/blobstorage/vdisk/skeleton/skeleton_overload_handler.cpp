@@ -14,13 +14,15 @@ namespace NKikimr {
     class TEmergencyQueue {
         struct TItem {
             std::unique_ptr<IEventHandle> Ev;
+            ui64 Size = 0;
             NWilson::TSpan Span;
 
             TItem() = default;
 
             template<typename T>
-            TItem(TAutoPtr<TEventHandle<T>> ev)
+            TItem(TAutoPtr<TEventHandle<T>> ev, ui64 size)
                 : Ev(ev.Release())
+                , Size(size)
                 , Span(TWilson::VDiskInternals, std::move(Ev->TraceId), "VDisk.Skeleton.EmergencyQueue")
             {
                 Ev->TraceId = Span.GetTraceId();
@@ -65,47 +67,59 @@ namespace NKikimr {
 
         void Push(TEvBlobStorage::TEvVMovedPatch::TPtr ev) {
             ++Mon.EmergencyMovedPatchQueueItems();
-            Mon.EmergencyMovedPatchQueueBytes() += ev->Get()->Record.ByteSize();
-            Queue.Push(TItem(ev));
+            auto size = ev->GetSize();
+            Mon.EmergencyMovedPatchQueueBytes() += size;
+            Queue.Push(TItem(ev, size));
         }
 
         void Push(TEvBlobStorage::TEvVPatchStart::TPtr ev) {
             ++Mon.EmergencyPatchStartQueueItems();
-            Mon.EmergencyPatchStartQueueBytes() += ev->Get()->Record.ByteSize();
-            Queue.Push(TItem(ev));
+            auto size = ev->GetSize();
+            Mon.EmergencyPatchStartQueueBytes() += size;
+            Queue.Push(TItem(ev, size));
         }
 
         void Push(TEvBlobStorage::TEvVPut::TPtr ev) {
             ++Mon.EmergencyPutQueueItems();
-            Mon.EmergencyPutQueueBytes() += ev->Get()->Record.ByteSize();
-            Queue.Push(TItem(ev));
+            auto size = ev->GetSize();
+            Mon.EmergencyPutQueueBytes() += size;
+            Queue.Push(TItem(ev, size));
         }
 
         void Push(TEvBlobStorage::TEvVMultiPut::TPtr ev) {
             ++Mon.EmergencyMultiPutQueueItems();
-            Mon.EmergencyMultiPutQueueBytes() += ev->Get()->Record.ByteSize();
-            Queue.Push(TItem(ev));
+            auto size = ev->GetSize();
+            Mon.EmergencyMultiPutQueueBytes() += size;
+            Queue.Push(TItem(ev, size));
         }
 
         void Push(TEvLocalSyncData::TPtr ev) {
             ++Mon.EmergencyLocalSyncDataQueueItems();
-            Mon.EmergencyLocalSyncDataQueueBytes() += ev->Get()->ByteSize();
-            Queue.Push(TItem(ev));
+            auto size = ev->Get()->ByteSize();
+            Mon.EmergencyLocalSyncDataQueueBytes() += size;
+            Queue.Push(TItem(ev, size));
         }
 
         void Push(TEvAnubisOsirisPut::TPtr ev) {
             ++Mon.EmergencyAnubisOsirisPutQueueItems();
-            Mon.EmergencyAnubisOsirisPutQueueBytes() += ev->Get()->ByteSize();
-            Queue.Push(TItem(ev));
+            auto size = ev->Get()->ByteSize();
+            Mon.EmergencyAnubisOsirisPutQueueBytes() += size;
+            Queue.Push(TItem(ev, size));
         }
 
         bool Empty() {
             return !Queue.Head();
         }
 
-        void Process(const TActorContext &ctx) {
+        ui64 GetHeadEventSize() {
+            Y_ABORT_UNLESS(Queue.Head());
+            return Queue.Head()->Size;
+        }
+
+        ui64 Process(const TActorContext &ctx) {
             auto item = Queue.Head();
             Y_ABORT_UNLESS(item);
+            auto size = item->Size;
             TAutoPtr<IEventHandle> ev = item->Ev.release();
             item->Span.EndOk();
             Queue.Pop();
@@ -113,48 +127,172 @@ namespace NKikimr {
                 case TEvBlobStorage::EvVMovedPatch: {
                     auto *evMovedPatch = reinterpret_cast<TEvBlobStorage::TEvVMovedPatch::TPtr*>(&ev);
                     --Mon.EmergencyMovedPatchQueueItems();
-                    Mon.EmergencyMovedPatchQueueBytes() -= (*evMovedPatch)->Get()->Record.ByteSize();
+                    Mon.EmergencyMovedPatchQueueBytes() -= size;
                     VMovedPatchHandler(ctx, *evMovedPatch);
                     break;
                 }
                 case TEvBlobStorage::EvVPatchStart: {
                     auto *evPatchStart = reinterpret_cast<TEvBlobStorage::TEvVPatchStart::TPtr*>(&ev);
                     --Mon.EmergencyPatchStartQueueItems();
-                    Mon.EmergencyPatchStartQueueBytes() -= (*evPatchStart)->Get()->Record.ByteSize();
+                    Mon.EmergencyPatchStartQueueBytes() -= size;
                     VPatchStartHandler(ctx, *evPatchStart);
                     break;
                 }
                 case TEvBlobStorage::EvVPut: {
                     auto *evPut = reinterpret_cast<TEvBlobStorage::TEvVPut::TPtr*>(&ev);
                     --Mon.EmergencyPutQueueItems();
-                    Mon.EmergencyPutQueueBytes() -= (*evPut)->Get()->Record.ByteSize();
+                    Mon.EmergencyPutQueueBytes() -= size;
                     VPutHandler(ctx, *evPut);
                     break;
                 }
                 case TEvBlobStorage::EvVMultiPut: {
                     auto *evMultiPut = reinterpret_cast<TEvBlobStorage::TEvVMultiPut::TPtr*>(&ev);
                     --Mon.EmergencyMultiPutQueueItems();
-                    Mon.EmergencyMultiPutQueueBytes() -= (*evMultiPut)->Get()->Record.ByteSize();
+                    Mon.EmergencyMultiPutQueueBytes() -= size;
                     VMultiPutHandler(ctx, *evMultiPut);
                     break;
                 }
                 case TEvBlobStorage::EvLocalSyncData: {
                     auto *evLocalSyncData = reinterpret_cast<TEvLocalSyncData::TPtr*>(&ev);
                     --Mon.EmergencyLocalSyncDataQueueItems();
-                    Mon.EmergencyLocalSyncDataQueueBytes() -= (*evLocalSyncData)->Get()->ByteSize();
+                    Mon.EmergencyLocalSyncDataQueueBytes() -= size;
                     LocalSyncDataHandler(ctx,*evLocalSyncData);
                     break;
                 }
                 case TEvBlobStorage::EvAnubisOsirisPut: {
                     auto *evAnubisOsirisPut = reinterpret_cast<TEvAnubisOsirisPut::TPtr*>(&ev);
                     --Mon.EmergencyAnubisOsirisPutQueueItems();
-                    Mon.EmergencyAnubisOsirisPutQueueBytes() -= (*evAnubisOsirisPut)->Get()->ByteSize();
+                    Mon.EmergencyAnubisOsirisPutQueueBytes() -= size;
                     AnubisOsirisPutHandler(ctx, *evAnubisOsirisPut);
                     break;
                 }
                 default:
                     Y_ABORT("unexpected event type in emergency queue(%" PRIu64 ")", (ui64)ev->GetTypeRewrite());
             }
+            return size;
+        }
+    };
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    // TThrottlingController
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+    class TThrottlingController {
+    private:
+        NMonGroup::TSkeletonOverloadGroup& Mon;
+        TIntrusivePtr<TVDiskConfig> VCfg;
+
+        ui64 CurrentSstCount = 0;
+        ui64 CurrentInplacedSize = 0;
+
+        TInstant CurrentTime;
+        ui64 CurrentSpeedLimit = 0;
+        ui64 AvailableBytes = 0;
+
+    private:
+        static ui64 LinearInterpolation(ui64 curX, ui64 minX, ui64 maxX, ui64 fromY) {
+            if (maxX <= minX) {
+                return fromY;
+            }
+            if (curX <= minX) {
+                return fromY;
+            }
+            if (curX >= maxX) {
+                return 0;
+            }
+            return (double)(maxX - curX) * fromY / (maxX - minX);
+        }
+
+        ui64 CalcSstCountSpeedLimit() const {
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            ui64 minSstCount = (ui64)VCfg->ThrottlingMinSstCount;
+            ui64 maxSstCount = (ui64)VCfg->ThrottlingMaxSstCount;
+
+            return LinearInterpolation(CurrentSstCount, minSstCount, maxSstCount, deviceSpeed);
+        }
+
+        ui64 CalcInplacedSizeSpeedLimit() const {
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            ui64 minInplacedSize = (ui64)VCfg->ThrottlingMinInplacedSize;
+            ui64 maxInplacedSize = (ui64)VCfg->ThrottlingMaxInplacedSize;
+
+            return LinearInterpolation(CurrentInplacedSize, minInplacedSize, maxInplacedSize, deviceSpeed);
+        }
+
+        ui64 CalcCurrentSpeedLimit() const {
+            ui64 sstCountSpeedLimit = CalcSstCountSpeedLimit();
+            ui64 inplacedSizeSpeedLimit = CalcInplacedSizeSpeedLimit();
+            return std::min(sstCountSpeedLimit, inplacedSizeSpeedLimit);
+        }
+
+    public:
+        explicit TThrottlingController(
+            const TIntrusivePtr<TVDiskConfig> &vcfg,
+            NMonGroup::TSkeletonOverloadGroup& mon)
+            : Mon(mon)
+            , VCfg(vcfg)
+        {}
+
+        bool IsActive() const {
+            ui64 minSstCount = (ui64)VCfg->ThrottlingMinSstCount;
+            ui64 minInplacedSize = (ui64)VCfg->ThrottlingMinInplacedSize;
+
+            return CurrentSstCount > minSstCount ||
+                CurrentInplacedSize > minInplacedSize;
+        }
+
+        TDuration BytesToDuration(ui64 bytes) const {
+            auto limit = CurrentSpeedLimit;
+            if (limit == 0) {
+                return TDuration::Seconds(1);
+            }
+            return TDuration::Seconds((double)bytes / limit);
+        }
+
+        ui64 GetAvailableBytes() const {
+            return AvailableBytes;
+        }
+
+        ui64 Consume(ui64 bytes) {
+            AvailableBytes -= bytes;
+            return AvailableBytes;
+        }
+
+        void UpdateState(TInstant now, ui64 sstCount, ui64 inplacedSize) {
+            bool prevActive = IsActive();
+
+            CurrentSstCount = sstCount;
+            Mon.ThrottlingLevel0SstCount() = sstCount;
+
+            CurrentInplacedSize = inplacedSize;
+            Mon.ThrottlingAllLevelsInplacedSize() = inplacedSize;
+
+            Mon.ThrottlingIsActive() = (ui64)IsActive();
+
+            if (!IsActive()) {
+                CurrentTime = {};
+                AvailableBytes = 0;
+                CurrentSpeedLimit = (ui64)VCfg->ThrottlingDeviceSpeed;
+            } else {
+                if (!prevActive) {
+                    CurrentTime = now;
+                    AvailableBytes = 0;
+                }
+                CurrentSpeedLimit = CalcCurrentSpeedLimit();
+            }
+
+            Mon.ThrottlingCurrentSpeedLimit() = CurrentSpeedLimit;
+        }
+
+        void UpdateTime(TInstant now) {
+            if (now <= CurrentTime) {
+                return;
+            }
+            auto us = (now - CurrentTime).MicroSeconds();
+            AvailableBytes += CurrentSpeedLimit * us / 1000000;
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            AvailableBytes = Min(AvailableBytes, deviceSpeed);
+            CurrentTime = now;
         }
     };
 
@@ -162,6 +300,7 @@ namespace NKikimr {
     // TOverloadHandler
     ///////////////////////////////////////////////////////////////////////////////////////////////////
     TOverloadHandler::TOverloadHandler(
+            const TIntrusivePtr<TVDiskConfig> &vcfg,
             const TIntrusivePtr<TVDiskContext> &vctx,
             const TPDiskCtxPtr &pdiskCtx,
             std::shared_ptr<THull> hull,
@@ -177,6 +316,7 @@ namespace NKikimr {
         , EmergencyQueue(new TEmergencyQueue(Mon, std::move(vMovedPatch), std::move(vPatchStart), std::move(vput),
                 std::move(vMultiPut), std::move(loc), std::move(aoput)))
         , DynamicPDiskWeightsManager(std::make_shared<TDynamicPDiskWeightsManager>(vctx, pdiskCtx))
+        , ThrottlingController(new TThrottlingController(vcfg, Mon))
     {}
 
     TOverloadHandler::~TOverloadHandler() {}
@@ -209,12 +349,61 @@ namespace NKikimr {
     bool TOverloadHandler::ProcessPostponedEvents(const TActorContext &ctx, int batchSize, bool actualizeLevels) {
         ActualizeWeights(ctx, AllEHullDbTypes, actualizeLevels);
 
+        if (DynamicPDiskWeightsManager->StopPuts()) {
+            return false;
+        }
+
+        if (AppData()->FeatureFlags.GetEnableVDiskThrottling()) {
+            auto snapshot = Hull->GetSnapshot(); // THullDsSnap
+            auto& logoBlobsSnap = snapshot.LogoBlobsSnap; // TLogoBlobsSnapshot
+            auto& sliceSnap = logoBlobsSnap.SliceSnap; // TLevelSliceSnapshot
+
+            auto sstCount = sliceSnap.GetLevel0SstsNum();
+            auto dataInplacedSize = logoBlobsSnap.AllLevelsDataInplaced;
+
+            auto now = ctx.Now();
+            ThrottlingController->UpdateState(now, sstCount, dataInplacedSize);
+
+            if (ThrottlingController->IsActive()) {
+                ThrottlingController->UpdateTime(now);
+
+                int count = batchSize;
+                auto bytes = ThrottlingController->GetAvailableBytes();
+
+                while (count > 0 &&
+                    !EmergencyQueue->Empty() &&
+                    bytes >= EmergencyQueue->GetHeadEventSize())
+                {
+                    auto size = EmergencyQueue->Process(ctx);
+                    bytes = ThrottlingController->Consume(size);
+                    --count;
+                }
+
+                if (EmergencyQueue->Empty()) {
+                    return false;
+                }
+
+                if (bytes >= EmergencyQueue->GetHeadEventSize()) {
+                    return true;
+                }
+
+                if (!KickInFlight) {
+                    auto left = EmergencyQueue->GetHeadEventSize() - bytes;
+                    auto duration = ThrottlingController->BytesToDuration(left);
+                    duration += TDuration::MilliSeconds(1);
+                    ctx.Schedule(duration, new TEvKickEmergencyPutQueue);
+                    KickInFlight = true;
+                }
+
+                return false;
+            }
+        }
+
         // process batchSize events maximum and once
         int count = batchSize;
         while (count > 0 && !DynamicPDiskWeightsManager->StopPuts() && !EmergencyQueue->Empty()) {
             // process single event from the emergency queue
             EmergencyQueue->Process(ctx);
-
             --count;
         }
 
@@ -245,9 +434,16 @@ namespace NKikimr {
         DynamicPDiskWeightsManager->RenderHtml(str);
     }
 
+    void TOverloadHandler::OnKickEmergencyPutQueue() {
+        KickInFlight = false;
+    }
+
     template <class TEv>
     inline bool TOverloadHandler::PostponeEvent(TAutoPtr<TEventHandle<TEv>> &ev) {
-        if (DynamicPDiskWeightsManager->StopPuts() || !EmergencyQueue->Empty()) {
+        if (DynamicPDiskWeightsManager->StopPuts() ||
+            ThrottlingController->IsActive() ||
+            !EmergencyQueue->Empty())
+        {
             EmergencyQueue->Push(ev);
             return true;
         } else {

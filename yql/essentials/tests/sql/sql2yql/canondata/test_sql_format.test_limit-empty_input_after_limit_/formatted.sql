@@ -5,14 +5,14 @@ $in = (
     FROM
         plato.Input
     WHERE
-        key == "150"
+        key == '150'
     UNION ALL
     SELECT
         *
     FROM
         plato.Input
     WHERE
-        key == "075"
+        key == '075'
 );
 
 SELECT

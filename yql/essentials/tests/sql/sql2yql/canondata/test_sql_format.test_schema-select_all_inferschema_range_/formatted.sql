@@ -1,4 +1,4 @@
-PRAGMA yt.InferSchemaTableCountThreshold = "0";
+PRAGMA yt.InferSchemaTableCountThreshold = '0';
 
 SELECT
     *

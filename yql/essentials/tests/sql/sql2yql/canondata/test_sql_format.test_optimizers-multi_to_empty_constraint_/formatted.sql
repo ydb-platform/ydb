@@ -10,7 +10,7 @@ FROM (
     FROM
         Input
     WHERE
-        key > "010" AND value IN []
+        key > '010' AND value IN []
 )
 GROUP BY
     key
@@ -24,7 +24,7 @@ FROM (
     FROM
         Input
     WHERE
-        key > "020" AND value IN []
+        key > '020' AND value IN []
 )
 GROUP BY
     key

@@ -16,7 +16,7 @@ FROM (
     SELECT
         key,
         value,
-        "" AS path,
+        '' AS path,
         TableRecordIndex() AS record
     FROM
         Input

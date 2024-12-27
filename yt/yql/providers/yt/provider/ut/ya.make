@@ -17,7 +17,7 @@ PEERDIR(
     yt/yql/providers/yt/gateway/file
     yt/yql/providers/yt/codec/codegen
     yt/yql/providers/yt/comp_nodes/llvm14
-    yql/essentials/core/ut_common
+    yt/yql/providers/yt/lib/ut_common
     yql/essentials/ast
     yql/essentials/public/udf/service/terminate_policy
     yql/essentials/core/services
@@ -38,3 +38,4 @@ YQL_LAST_ABI_VERSION()
 END()
 
 ENDIF()
+

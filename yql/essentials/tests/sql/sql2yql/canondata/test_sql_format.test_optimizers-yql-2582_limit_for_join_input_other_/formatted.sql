@@ -13,7 +13,7 @@ $data = (
 SELECT
     key,
     subkey,
-    _other["value"]
+    _other['value']
 FROM
     $data
 LIMIT 100;

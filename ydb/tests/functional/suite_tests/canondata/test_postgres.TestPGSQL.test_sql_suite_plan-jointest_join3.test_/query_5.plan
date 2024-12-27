@@ -64,6 +64,7 @@
                                                                     "k"
                                                                 ],
                                                                 "Node Type": "TableLookupJoin",
+                                                                "Path": "/Root/postgres_jointest/join3.test_plan/parent",
                                                                 "PlanNodeId": 7,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
@@ -91,6 +92,7 @@
                                                                                                     "k"
                                                                                                 ],
                                                                                                 "Node Type": "TableLookupJoin",
+                                                                                                "Path": "/Root/postgres_jointest/join3.test_plan/child",
                                                                                                 "PlanNodeId": 3,
                                                                                                 "PlanNodeType": "Connection",
                                                                                                 "Plans": [
@@ -104,6 +106,7 @@
                                                                                                                     {
                                                                                                                         "Inputs": [],
                                                                                                                         "Name": "TableRangeScan",
+                                                                                                                        "Path": "/Root/postgres_jointest/join3.test_plan/parent",
                                                                                                                         "ReadColumns": [
                                                                                                                             "k",
                                                                                                                             "pd"

@@ -18,7 +18,7 @@ SELECT
     utc_order_dttm,
     order_id,
     LEAD(
-        <|"order_id": order_id, "order_dttm": utc_order_dttm|>,
+        <|'order_id': order_id, 'order_dttm': utc_order_dttm|>,
         1
     ) OVER (
         PARTITION BY
@@ -27,7 +27,7 @@ SELECT
             utc_order_dttm
     ) AS next_user_order,
     LEAD(
-        <|"order_id": order_id|>,
+        <|'order_id': order_id|>,
         1
     ) OVER (
         PARTITION BY

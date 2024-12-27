@@ -1,5 +1,5 @@
 /* custom error:Persistable required*/
-PRAGMA Warning("error", '1104');
+PRAGMA Warning('error', '1104');
 
 USE plato;
 
@@ -8,5 +8,5 @@ INSERT INTO Output (
     value
 )
 VALUES
-    ("foo", YQL::NewMTRand(1))
+    ('foo', YQL::NewMTRand(1))
 ;

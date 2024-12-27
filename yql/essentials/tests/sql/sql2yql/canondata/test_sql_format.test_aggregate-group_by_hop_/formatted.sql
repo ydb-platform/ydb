@@ -2,7 +2,7 @@
 /* postgres can not */
 /* ytfile can not */
 /* yt can not */
-PRAGMA dq.AnalyticsHopping = "true";
+PRAGMA dq.AnalyticsHopping = 'true';
 
 SELECT
     user,
@@ -11,6 +11,6 @@ SELECT
 FROM
     plato.Input
 GROUP BY
-    HOP (DateTime::FromSeconds(CAST(ts AS Uint32)), "PT10S", "PT10S", "PT10S"),
+    HOP (DateTime::FromSeconds(CAST(ts AS Uint32)), 'PT10S', 'PT10S', 'PT10S'),
     user
 ;

@@ -3,7 +3,7 @@
 USE plato;
 
 PRAGMA EmitAggApply;
-PRAGMA yt.UseAggPhases = "1";
+PRAGMA yt.UseAggPhases = '1';
 
 SELECT
     key,

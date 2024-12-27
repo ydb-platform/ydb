@@ -1,10 +1,10 @@
 #pragma once
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
-#include <ydb/core/tx/tiering/snapshot.h>
-#include <ydb/core/tx/columnshard/common/limits.h>
+#include <ydb/core/tx/tiering/tier/object.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/services/metadata/abstract/fetcher.h>
@@ -90,6 +90,9 @@ protected:
     }
 
     virtual TDuration DoGetUsedSnapshotLivetime(const TDuration defaultValue) const {
+        return defaultValue;
+    }
+    virtual ui64 DoGetLimitForPortionsMetadataAsk(const ui64 defaultValue) const {
         return defaultValue;
     }
     virtual TDuration DoGetOverridenGCPeriod(const TDuration defaultValue) const {
@@ -187,6 +190,11 @@ public:
     }
 
     virtual void OnSelectShardingFilter() {
+    }
+
+    ui64 GetLimitForPortionsMetadataAsk() const {
+        const ui64 defaultValue = GetConfig().GetLimitForPortionsMetadataAsk();
+        return DoGetLimitForPortionsMetadataAsk(defaultValue);
     }
 
     TDuration GetCompactionActualizationLag() const {
@@ -308,10 +316,8 @@ public:
         return nullptr;
     }
 
-    virtual NMetadata::NFetcher::ISnapshot::TPtr GetFallbackTiersSnapshot() const {
-        static std::shared_ptr<NColumnShard::NTiers::TTiersSnapshot> result =
-            std::make_shared<NColumnShard::NTiers::TTiersSnapshot>(TInstant::Now());
-        return result;
+    virtual THashMap<TString, NColumnShard::NTiers::TTierConfig> GetOverrideTierConfigs() const {
+        return {};
     }
 
     virtual void OnSwitchToWork(const ui64 tabletId) {

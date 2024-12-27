@@ -1,7 +1,7 @@
 -- TPC-H/TPC-R Returned Item Reporting Query (Q10)
 -- TPC TPC-H Parameter Substitution (Version 2.17.2 build 0)
 -- using 1680793381 as a seed to the RNG
-$border = Date("1993-12-01");
+$border = Date('1993-12-01');
 
 $join1 = (
     SELECT
@@ -21,7 +21,7 @@ $join1 = (
         c.c_custkey == o.o_custkey
     WHERE
         CAST(o.o_orderdate AS timestamp) >= $border
-        AND CAST(o.o_orderdate AS timestamp) < ($border + Interval("P90D"))
+        AND CAST(o.o_orderdate AS timestamp) < ($border + Interval('P90D'))
 );
 
 $join2 = (

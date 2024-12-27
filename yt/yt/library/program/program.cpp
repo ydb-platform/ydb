@@ -18,8 +18,6 @@
 
 #include <yt/yt/library/profiling/tcmalloc/profiler.h>
 
-#include <library/cpp/yt/stockpile/stockpile.h>
-
 #include <library/cpp/yt/system/exit.h>
 
 #include <library/cpp/yt/backtrace/absl_unwinder/absl_unwinder.h>
@@ -80,6 +78,8 @@ private:
     TProgram* const Owner_;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
 TProgram::TProgram()
 {
     Opts_.AddHelpOption();
@@ -99,6 +99,8 @@ TProgram::TProgram()
 
     ConfigureCoverageOutput();
 }
+
+TProgram::~TProgram() = default;
 
 void TProgram::SetCrashOnError()
 {
@@ -122,13 +124,12 @@ int TProgram::Run(int argc, const char** argv)
 {
     ::srand(time(nullptr));
 
+    Argv0_ = TString(argv[0]);
+    OptsParseResult_ = std::make_unique<TOptsParseResult>(this, argc, argv);
+
     auto run = [&] {
-        Argv0_ = TString(argv[0]);
-        TOptsParseResult result(this, argc, argv);
-
         HandleVersionAndBuild();
-
-        DoRun(result);
+        DoRun();
     };
 
     if (!CrashOnError_) {
@@ -210,6 +211,11 @@ void TProgram::PrintBuildAndExit()
 void TProgram::PrintVersionAndExit()
 {
     PrintYTVersionAndExit();
+}
+
+const NLastGetopt::TOptsParseResult& TProgram::GetOptsParseResult() const
+{
+    return *OptsParseResult_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

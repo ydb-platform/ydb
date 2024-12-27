@@ -1,10 +1,10 @@
 /* syntax version 1 */
 /* postgres can not */
-PRAGMA warning("disable", "4510");
+PRAGMA warning('disable', '4510');
 
 USE plato;
 
-$foo =
+$foo = (
     SELECT
         subkey,
         key,
@@ -15,11 +15,11 @@ $foo =
         subkey ASC,
         key DESC
     LIMIT 0
-;
+);
 
-$x =
+$x = (
     PROCESS $foo
-;
+);
 
 SELECT
     YQL::ConstraintsOf($x) AS constraints

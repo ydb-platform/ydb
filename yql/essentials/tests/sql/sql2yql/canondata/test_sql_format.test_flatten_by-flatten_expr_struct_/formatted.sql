@@ -2,7 +2,7 @@
 /* postgres can not */
 USE plato;
 
-$data =
+$data = (
     SELECT
         1 AS n,
         AsList(4, 5, 6) AS l,
@@ -12,7 +12,7 @@ $data =
         2 AS n,
         AsList(4, 5) AS l,
         AsStruct(20 AS n, AsList(1, 2) AS l) AS s
-;
+);
 
 SELECT
     n,

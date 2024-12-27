@@ -92,6 +92,7 @@ public:
     void RegisterPackage(const TString& package) override;
     bool SetPackageDefaultVersion(const TString& package, ui32 version) override;
     const TExportTable* GetModule(const TString& module) const override;
+    void WriteStatistics(NYson::TYsonWriter& writer) override;
     bool AddFromFile(const std::string_view& file, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos) final;
     bool AddFromUrl(const std::string_view& file, const std::string_view& url, const std::string_view& tokenName, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos) final;
     bool AddFromMemory(const std::string_view& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos) final;
@@ -127,6 +128,7 @@ private:
     const bool OptimizeLibraries;
     THolder<TExprContext::TFreezeGuard> FreezeGuard;
     TString FileAliasPrefix;
+    TSet<TString> UsedSuffixes;
 };
 
 bool SplitUdfName(TStringBuf name, TStringBuf& moduleName, TStringBuf& funcName);
@@ -209,6 +211,33 @@ public:
 
     const TOrderedItem& back() const {
         return Order_.back();
+    }
+
+    TVector<TString> GetLogicalNames() const {
+        TVector<TString> res;
+        res.reserve(Order_.size());
+        for (const auto &[name, _]: Order_) {
+            res.emplace_back(name);
+        }
+        return res;
+    }
+
+    TVector<TString> GetPhysicalNames() const {
+        TVector<TString> res;
+        res.reserve(Order_.size());
+        for (const auto &[_, name]: Order_) {
+            res.emplace_back(name);
+        }
+        return res;
+    }
+
+    bool HasDuplicates() const {
+        for (const auto& e: Order_) {
+            if (e.PhysicalName != e.LogicalName) {
+                return true;
+            }
+        }
+        return false;
     }
 private:
     THashMap<TString, TString> GeneratedToOriginal_;

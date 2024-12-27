@@ -1175,6 +1175,8 @@ struct Schema : NIceDb::Schema {
         struct EndTime : Column<15, NScheme::NTypeIds::Uint64> {};
         struct PeerName : Column<16, NScheme::NTypeIds::Utf8> {};
 
+        struct EnableChecksums : Column<17, NScheme::NTypeIds::Bool> {};
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1192,7 +1194,8 @@ struct Schema : NIceDb::Schema {
             UserSID,
             StartTime,
             EndTime,
-            PeerName
+            PeerName,
+            EnableChecksums
         >;
     };
 
@@ -1628,9 +1631,19 @@ struct Schema : NIceDb::Schema {
         struct SidName : Column<1, NScheme::NTypeIds::String> {};
         struct SidType : Column<2, NScheme::NTypeIds::Uint64> { using Type = NLoginProto::ESidType::SidType; };
         struct SidHash : Column<3, NScheme::NTypeIds::String> {};
+        struct LastSuccessfulAttempt : Column<4, NScheme::NTypeIds::Timestamp> {};
+        struct LastFailedAttempt : Column<5, NScheme::NTypeIds::Timestamp> {};
+        struct FailedAttemptCount : Column<6, NScheme::NTypeIds::Uint32> {using Type = ui32; static constexpr Type Default = 0;};
 
         using TKey = TableKey<SidName>;
-        using TColumns = TableColumns<SidName, SidType, SidHash>;
+        using TColumns = TableColumns<
+            SidName,
+            SidType,
+            SidHash,
+            LastSuccessfulAttempt,
+            LastFailedAttempt,
+            FailedAttemptCount
+        >;
     };
 
     struct LoginSidMembers : Table<94> {
@@ -1779,7 +1792,7 @@ struct Schema : NIceDb::Schema {
         struct Location : Column<5, NScheme::NTypeIds::Utf8> {};
         struct Installation : Column<6, NScheme::NTypeIds::Utf8> {};
         struct Auth : Column<7, NScheme::NTypeIds::String> {};
-        struct ExternalTableReferences : Column<8, NScheme::NTypeIds::String> {};
+        struct ExternalTableReferences : Column<8, NScheme::NTypeIds::String> {};  // references from any scheme objects
         struct Properties : Column<9, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;

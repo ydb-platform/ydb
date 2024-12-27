@@ -2,8 +2,8 @@ PRAGMA DisableSimpleColumns;
 
 USE plato;
 
-PRAGMA yt.LookupJoinLimit = "64k";
-PRAGMA yt.LookupJoinMaxRows = "100";
+PRAGMA yt.LookupJoinLimit = '64k';
+PRAGMA yt.LookupJoinMaxRows = '100';
 
 -- prefix of sort keys
 SELECT

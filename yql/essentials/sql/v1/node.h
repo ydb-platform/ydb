@@ -1235,7 +1235,7 @@ namespace NSQLTranslationV1 {
         TNodePtr Format;
         TNodePtr InitialScan;
         TNodePtr VirtualTimestamps;
-        TNodePtr ResolvedTimestamps;
+        TNodePtr BarriersInterval;
         TNodePtr RetentionPeriod;
         TNodePtr TopicAutoPartitioning;
         TNodePtr TopicPartitions;
@@ -1305,6 +1305,14 @@ namespace NSQLTranslationV1 {
         TMaybe<TDeferredAtom> Password;
         bool IsPasswordEncrypted = false;
         TVector<TDeferredAtom> Roles;
+
+        enum class ETypeOfLogin {
+            Undefined,
+            Login,
+            NoLogin
+        };
+
+        ETypeOfLogin CanLogin = ETypeOfLogin::Undefined;
     };
 
     struct TSequenceParameters {

@@ -224,13 +224,13 @@ namespace NKikimr {
         bool UseActorSystemTimeInBSQueue = false;
 
         ///////////// BALANCING SETTINGS ////////////////////
-        bool BalancingEnableSend;
-        bool BalancingEnableDelete;
+        bool BalancingEnableSend = false;
+        bool BalancingEnableDelete = false;
         TDuration BalancingJobGranularity;
-        bool BalancingBalanceOnlyHugeBlobs;
-        ui64 BalancingBatchSize;
-        ui64 BalancingMaxToSendPerEpoch;
-        ui64 BalancingMaxToDeletePerEpoch;
+        bool BalancingBalanceOnlyHugeBlobs = false;
+        ui64 BalancingBatchSize = 0;
+        ui64 BalancingMaxToSendPerEpoch = 0;
+        ui64 BalancingMaxToDeletePerEpoch = 0;
         TDuration BalancingReadBatchTimeout;
         TDuration BalancingSendBatchTimeout;
         TDuration BalancingRequestBlobsOnMainTimeout;
@@ -241,6 +241,13 @@ namespace NKikimr {
         ///////////// COST METRICS SETTINGS ////////////////
         bool UseCostTracker = true;
         TCostMetricsParametersByMedia CostMetricsParametersByMedia;
+
+        ///////////// THROTTLING SETTINGS //////////////////
+        TControlWrapper ThrottlingDeviceSpeed;
+        TControlWrapper ThrottlingMinSstCount;
+        TControlWrapper ThrottlingMaxSstCount;
+        TControlWrapper ThrottlingMinInplacedSize;
+        TControlWrapper ThrottlingMaxInplacedSize;
 
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;

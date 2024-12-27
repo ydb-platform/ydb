@@ -224,4 +224,24 @@ bool TCommandPing::PingKqpSelect1(NQuery::TQueryClient& client, const TString& q
     return false;
 }
 
+bool TCommandPing::PingKqpSelect1(NQuery::TSession& session, const TString& query) {
+    NQuery::TExecuteQuerySettings settings;
+
+    // Execute query
+    settings.ExecMode(NQuery::EExecMode::Execute);
+    settings.StatsMode(NQuery::EStatsMode::None);
+
+    settings.Syntax(NQuery::ESyntax::YqlV1);
+
+    // Execute query without parameters
+    auto asyncResult = session.ExecuteQuery(
+        query,
+        NQuery::TTxControl::NoTx(),
+        settings
+    );
+
+    auto result = asyncResult.GetValueSync();
+    return result.IsSuccess();
+}
+
 } // NYdb::NConsoleClient

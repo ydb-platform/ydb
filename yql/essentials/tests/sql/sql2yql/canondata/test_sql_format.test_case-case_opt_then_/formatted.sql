@@ -1,6 +1,6 @@
 SELECT
     CASE
-        WHEN TRUE THEN CAST("123" AS int)
+        WHEN TRUE THEN CAST('123' AS int)
         ELSE 100501
     END
 UNION ALL

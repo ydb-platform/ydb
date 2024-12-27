@@ -5,8 +5,8 @@ USE plato;
 
 SELECT
     key,
-    min(WeakField(subkey, "Int64")),
-    max(WeakField(value, "String"))
+    min(WeakField(subkey, 'Int64')),
+    max(WeakField(value, 'String'))
 FROM
     Input
 GROUP BY

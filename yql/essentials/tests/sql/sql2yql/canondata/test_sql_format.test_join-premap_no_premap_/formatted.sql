@@ -27,7 +27,7 @@ ORDER BY
 FROM (
     SELECT
         key,
-        "aaa" AS subkey,
+        'aaa' AS subkey,
         value
     FROM
         Input1

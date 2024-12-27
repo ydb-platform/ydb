@@ -1,13 +1,13 @@
 /* syntax version 1 */
 /* postgres can not */
-$input =
+$input = (
     SELECT
         *
     FROM
         as_table([<|key: 1|>, <|key: 1|>])
-;
+);
 
-$src =
+$src = (
     SELECT
         key,
         MIN(key) OVER w AS curr_min
@@ -18,7 +18,7 @@ $src =
             ORDER BY
                 key
         )
-;
+);
 
 SELECT
     *

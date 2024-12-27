@@ -579,7 +579,7 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus FailMeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus FailMeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& /* output */, TContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -5930,6 +5930,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr); status != IGraphTransformer::TStatus::Ok)
                 return status;
 
+            if (warn) {
+                return IGraphTransformer::TStatus::Repeat;
+            }
             const auto dictType = IsSet ?
                 ctx.Expr.MakeType<TDictExprType>(commonType, ctx.Expr.MakeType<TVoidExprType>()):
                 ctx.Expr.MakeType<TDictExprType>(commonType->Cast<TTupleExprType>()->GetItems().front(), commonType->Cast<TTupleExprType>()->GetItems().back());
@@ -5943,7 +5946,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        return warn ? IGraphTransformer::TStatus::Repeat : IGraphTransformer::TStatus::Ok;
+        return IGraphTransformer::TStatus::Ok;
     }
 
     IGraphTransformer::TStatus DictFromKeysWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -6245,11 +6248,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         TExprNode::TPtr mergeLambda = nullptr;
         if (input->ChildrenSize() == 3) {
-            mergeLambda = input->ChildPtr(2);
-            auto status = ConvertToLambda(mergeLambda, ctx.Expr, 3);
+            auto status = ConvertToLambda(input->ChildRef(2), ctx.Expr, 3);
             if (status.Level != IGraphTransformer::TStatus::Ok) {
                 return status;
             }
+            mergeLambda = input->ChildPtr(2);
         } else {
             mergeLambda = ctx.Expr.Builder(input->Pos())
                 .Lambda()
@@ -6540,17 +6543,16 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         TExprNode::TPtr result = nullptr;
         TExprNode::TPtr initFunc = nullptr;
         if (input->Content() == "StaticFold1") {
-            initFunc = input->ChildPtr(1);
-
-            auto status = ConvertToLambda(initFunc, ctx.Expr, 1);
+            auto status = ConvertToLambda(input->ChildRef(1), ctx.Expr, 1);
             if (status.Level != IGraphTransformer::TStatus::Ok) {
                 return status;
             }
+            initFunc = input->ChildPtr(1);
         } else {
             result = input->ChildPtr(1);
         }
 
-        auto reduceFunc = input->ChildPtr(2);
+        auto& reduceFunc = input->ChildRef(2);
         auto status = ConvertToLambda(reduceFunc, ctx.Expr, 2);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;

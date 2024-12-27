@@ -4,7 +4,7 @@
 /* kikimr can not */
 USE plato;
 
-PRAGMA yt.UseNativeYtTypes = "1";
+PRAGMA yt.UseNativeYtTypes = '1';
 
 INSERT INTO @a WITH truncate
 SELECT

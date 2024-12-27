@@ -5,7 +5,7 @@ PRAGMA yt.InferSchema;
 /* postgres can not */
 USE plato;
 
-$x = "Input";
+$x = 'Input';
 
 SELECT
     count(*)

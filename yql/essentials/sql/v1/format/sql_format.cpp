@@ -54,26 +54,47 @@ void SkipForValidate(
     TTokenIterator& in,
     TTokenIterator& out,
     const TParsedTokenList& query,
-    const TParsedTokenList& formattedQuery
+    const TParsedTokenList& formattedQuery,
+    i32& parenthesesBalance
 ) {
     in = SkipWS(in, query.end());
     out = SkipWS(out, formattedQuery.end());
 
-    while (
-        in != query.end() && in->Name == "SEMICOLON" &&
-        (out == formattedQuery.end() || out->Name != "SEMICOLON") &&
-        in != query.begin() && IsIn({"SEMICOLON", "LBRACE_CURLY", "AS", "BEGIN"}, SkipWSOrCommentBackward(in - 1, query.begin())->Name)
-    ) {
-        in = SkipWS(++in, query.end());
-    }
-
     auto inSkippedComments = SkipWSOrComment(in, query.end());
-    if (
-        out != formattedQuery.end() && out->Name == "SEMICOLON" &&
-        inSkippedComments != query.end() && IsIn({"RBRACE_CURLY", "END"}, inSkippedComments->Name)
-    ) {
-        out = SkipWS(++out, formattedQuery.end());
-    }
+
+    auto skipAddedToken = [&](const TString& addedToken, const TVector<TString>& beforeTokens, const TVector<TString>& afterTokens) {
+        if (
+            out != formattedQuery.end() && out->Name == addedToken &&
+            (in == query.end() || in->Name != addedToken) &&
+            (beforeTokens.empty() || (inSkippedComments != query.end() && IsIn(beforeTokens, inSkippedComments->Name))) &&
+            (afterTokens.empty() || (in != query.begin() && IsIn(afterTokens, SkipWSOrCommentBackward(in - 1, query.begin())->Name)))
+        ) {
+            out = SkipWS(++out, formattedQuery.end());
+            if (addedToken == "LPAREN") {
+                ++parenthesesBalance;
+            } else if (addedToken == "RPAREN") {
+                --parenthesesBalance;
+            }
+        }
+    };
+
+    skipAddedToken("LPAREN", {}, {"EQUALS"});
+    skipAddedToken("RPAREN", {"END", "EOF", "SEMICOLON"}, {});
+    skipAddedToken("SEMICOLON", {"END", "RBRACE_CURLY"}, {});
+
+    auto skipDeletedToken = [&](const TString& deletedToken, const TVector<TString>& afterTokens) {
+        if (
+            in != query.end() && in->Name == deletedToken &&
+            (out == formattedQuery.end() || out->Name != deletedToken) &&
+            in != query.begin() && IsIn(afterTokens, SkipWSOrCommentBackward(in - 1, query.begin())->Name)
+        ) {
+            in = SkipWS(++in, query.end());
+            return true;
+        }
+        return false;
+    };
+
+    while (skipDeletedToken("SEMICOLON", {"AS", "BEGIN", "LBRACE_CURLY", "SEMICOLON"})) {}
 }
 
 TParsedToken TransformTokenForValidate(TParsedToken token) {
@@ -87,14 +108,31 @@ TParsedToken TransformTokenForValidate(TParsedToken token) {
     return token;
 }
 
+TStringBuf SkipQuotes(const TString& content) {
+    TStringBuf str = content;
+    str.SkipPrefix("\"");
+    str.ChopSuffix("\"");
+    str.SkipPrefix("'");
+    str.ChopSuffix("'");
+    return str;
+}
+
+TStringBuf SkipNewline(const TString& content) {
+    TStringBuf str = content;
+    str.ChopSuffix("\n");
+    return str;
+}
+
 bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQuery) {
     auto in = query.begin();
     auto out = formattedQuery.begin();
     auto inEnd = query.end();
     auto outEnd = formattedQuery.end();
 
+    i32 parenthesesBalance = 0;
+
     while (in != inEnd && out != outEnd) {
-        SkipForValidate(in, out, query, formattedQuery);
+        SkipForValidate(in, out, query, formattedQuery, parenthesesBalance);
         if (in != inEnd && out != outEnd) {
             auto inToken = TransformTokenForValidate(*in);
             auto outToken = TransformTokenForValidate(*out);
@@ -103,6 +141,14 @@ bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQu
             }
             if (IsProbablyKeyword(inToken)) {
                 if (!AsciiEqualsIgnoreCase(inToken.Content, outToken.Content)) {
+                    return false;
+                }
+            } else if (inToken.Name == "STRING_VALUE") {
+                if (SkipQuotes(inToken.Content) != SkipQuotes(outToken.Content)) {
+                    return false;
+                }
+            } else if (inToken.Name == "COMMENT") {
+                if (SkipNewline(inToken.Content) != SkipNewline(outToken.Content)) {
                     return false;
                 }
             } else {
@@ -114,8 +160,9 @@ bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQu
             ++out;
         }
     }
-    SkipForValidate(in, out, query, formattedQuery);
-    return in == inEnd && out == outEnd;
+    SkipForValidate(in, out, query, formattedQuery, parenthesesBalance);
+
+    return in == inEnd && out == outEnd && parenthesesBalance == 0;
 }
 
 enum EParenType {
@@ -229,6 +276,11 @@ TTokenIterator GetNextStatementBegin(TTokenIterator begin, TTokenIterator end) {
             continue;
         }
         if (curr->Name == "SEMICOLON") {
+            auto next = SkipWS(curr + 1, end);
+            while (next != end && next->Name == "COMMENT" && curr->Line == next->Line) {
+                curr = next;
+                next = SkipWS(next + 1, end);
+            }
             ++curr;
             break;
         }
@@ -487,10 +539,11 @@ private:
 class TPrettyVisitor {
 friend struct TStaticData;
 public:
-    TPrettyVisitor(const TParsedTokenList& parsedTokens, const TParsedTokenList& comments)
+    TPrettyVisitor(const TParsedTokenList& parsedTokens, const TParsedTokenList& comments, bool ansiLexer)
         : StaticData(TStaticData::GetInstance())
         , ParsedTokens(parsedTokens)
         , Comments(comments)
+        , AnsiLexer(ansiLexer)
     {
     }
 
@@ -562,10 +615,6 @@ private:
             WriteComments(true);
         }
 
-        if (AfterComment && Comments[LastComment - 1].Content.StartsWith("--")) {
-            return;
-        }
-
         if (OutColumn) {
             Out('\n');
         }
@@ -586,6 +635,10 @@ private:
         }
 
         Out(text);
+
+        if (text.StartsWith("--") && !text.EndsWith("\n")) {
+            Out('\n');
+        }
 
         if (!text.StartsWith("--") &&
             TokenIndex < ParsedTokens.size() &&
@@ -919,11 +972,13 @@ private:
 
             case TRule_subselect_stmt::TBlock1::kAlt2: {
                 const auto& alt = subselect.GetBlock1().GetAlt2();
+                Out(" (");
                 NewLine();
                 PushCurrentIndent();
                 Visit(alt);
                 PopCurrentIndent();
                 NewLine();
+                Out(')');
                 break;
             }
 
@@ -1695,6 +1750,13 @@ private:
                 str = "==";
             } else if (str == "<>") {
                 str = "!=";
+            }
+        }
+
+        if (!AnsiLexer && ParsedTokens[TokenIndex].Name == "STRING_VALUE") {
+            TStringBuf checkStr = str;
+            if (checkStr.SkipPrefix("\"") && checkStr.ChopSuffix("\"") && !checkStr.Contains("'")) {
+                str = TStringBuilder() << '\'' << checkStr << '\'';
             }
         }
 
@@ -2883,6 +2945,7 @@ private:
     const TStaticData& StaticData;
     const TParsedTokenList& ParsedTokens;
     const TParsedTokenList& Comments;
+    const bool AnsiLexer;
     TStringBuilder SB;
     ui32 OutColumn = 0;
     ui32 OutLine = 1;
@@ -3163,15 +3226,12 @@ public:
 
             TVector<NSQLTranslation::TParsedToken> comments;
             TParsedTokenList parsedTokens, stmtTokens;
-            bool hasTrailingComments = false;
             auto onNextRawToken = [&](NSQLTranslation::TParsedToken&& token) {
                 stmtTokens.push_back(token);
                 if (token.Name == "COMMENT") {
                     comments.emplace_back(std::move(token));
-                    hasTrailingComments = true;
                 } else if (token.Name != "WS" && token.Name != "EOF") {
                     parsedTokens.emplace_back(std::move(token));
-                    hasTrailingComments = false;
                 }
             };
 
@@ -3190,7 +3250,7 @@ public:
                 continue;
             }
 
-            TPrettyVisitor visitor(parsedTokens, comments);
+            TPrettyVisitor visitor(parsedTokens, comments, parsedSettings.AnsiLexer);
             bool addLineBefore = false;
             bool addLineAfter = false;
             TMaybe<ui32> stmtCoreAltCase;
@@ -3219,11 +3279,6 @@ public:
 
             finalFormattedQuery << currentFormattedQuery;
             if (parsedTokens.back().Name != "SEMICOLON") {
-                if (hasTrailingComments
-                     && !comments.back().Content.EndsWith("\n")
-                     && comments.back().Content.StartsWith("--")) {
-                    finalFormattedQuery << "\n";
-                }
                 finalFormattedQuery << ";\n";
             }
         }

@@ -16,7 +16,7 @@ $join = (
         o.o_orderkey == l.l_orderkey
 );
 
-$border = Date("1994-01-01");
+$border = Date('1994-01-01');
 
 SELECT
     l_shipmode,
@@ -41,7 +41,7 @@ WHERE
     AND l_commitdate < l_receiptdate
     AND l_shipdate < l_commitdate
     AND CAST(l_receiptdate AS timestamp) >= $border
-    AND CAST(l_receiptdate AS timestamp) < ($border + Interval("P365D"))
+    AND CAST(l_receiptdate AS timestamp) < ($border + Interval('P365D'))
 GROUP BY
     l_shipmode
 ORDER BY

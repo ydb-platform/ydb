@@ -24,7 +24,6 @@ SRCS(
     digest_ut.cpp
     ema_counter_ut.cpp
     enum_ut.cpp
-    error_code_ut.cpp
     error_ut.cpp
     fair_scheduler_ut.cpp
     fenwick_tree_ut.cpp
@@ -72,6 +71,7 @@ SRCS(
     yverify_ut.cpp
     zerocopy_output_writer_ut.cpp
     hedging_manager_ut.cpp
+    configurable_singleton_ut.cpp
 
     proto/ref_counted_tracker_ut.proto
 )

@@ -825,7 +825,7 @@ public:
         YQL_CLOG(INFO, ProviderYt) << "DQ annotate: adding yt.write=" << param;
     }
 
-    bool PrepareFullResultTableParams(const TExprNode& root, TExprContext& ctx, THashMap<TString, TString>& params, THashMap<TString, TString>& secureParams) override {
+    bool PrepareFullResultTableParams(const TExprNode& root, TExprContext& ctx, THashMap<TString, TString>& params, THashMap<TString, TString>& secureParams, const TMaybe<TColumnOrder>& order) override {
         const auto resOrPull = TResOrPullBase(&root);
 
         if (FromString<bool>(resOrPull.Discard().Value())) {
@@ -853,8 +853,9 @@ public:
         }
 
         const auto type = GetSequenceItemType(input->Pos(), input->GetTypeAnn(), false, ctx);
+
         YQL_ENSURE(type);
-        TYtOutTableInfo outTableInfo(type->Cast<TStructExprType>(), State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+        TYtOutTableInfo outTableInfo(type->Cast<TStructExprType>(), State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE, order);
 
         const auto res = State_->Gateway->PrepareFullResultTable(
             IYtGateway::TFullResultTableOptions(State_->SessionId)

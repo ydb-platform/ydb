@@ -1,7 +1,7 @@
 -- TPC-H/TPC-R Potential Part Promotion Query (Q20)
 -- TPC TPC-H Parameter Substitution (Version 2.17.2 build 0)
 -- using 1680793381 as a seed to the RNG
-$border = Date("1993-01-01");
+$border = Date('1993-01-01');
 
 $threshold = (
     SELECT
@@ -12,7 +12,7 @@ $threshold = (
         plato.lineitem
     WHERE
         CAST(l_shipdate AS timestamp) >= $border
-        AND CAST(l_shipdate AS timestamp) < ($border + Interval("P365D"))
+        AND CAST(l_shipdate AS timestamp) < ($border + Interval('P365D'))
     GROUP BY
         l_partkey,
         l_suppkey

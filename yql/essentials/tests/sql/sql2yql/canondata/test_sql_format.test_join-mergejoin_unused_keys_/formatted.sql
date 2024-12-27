@@ -1,7 +1,7 @@
 /* syntax version 1 */
 USE plato;
 
-PRAGMA yt.JoinMergeTablesLimit = "10";
+PRAGMA yt.JoinMergeTablesLimit = '10';
 
 SELECT
     v3

@@ -1,6 +1,6 @@
 /* postgres can not */
 /* kikimr can not */
-PRAGMA yt.MaxInputTables = "3";
+PRAGMA yt.MaxInputTables = '3';
 
 SELECT
     *

@@ -1,8 +1,11 @@
 #include "yt_codec_io.h"
 
+#include <yql/essentials/public/result_format/yql_restricted_yson.h>
 #include <yql/essentials/public/udf/arrow/args_dechunker.h>
 #include <yql/essentials/providers/common/codec/arrow/yql_codec_buf_input_stream.h>
+#include <yql/essentials/providers/common/codec/arrow/yql_codec_buf_output_stream.h>
 #include <yt/yql/providers/yt/codec/yt_arrow_converter.h>
+#include <yt/yql/providers/yt/codec/yt_arrow_output_converter.h>
 #include <yql/essentials/public/result_format/yql_restricted_yson.h>
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
@@ -16,6 +19,7 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/aligned_page_pool.h>
+#include <yql/essentials/minikql/computation/mkql_block_impl.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/utils/swap_bytes.h>
 #include <yql/essentials/utils/log/log.h>
@@ -38,6 +42,9 @@
 #include <util/system/thread.h>
 #include <util/stream/file.h>
 
+#include <arrow/ipc/writer.h>
+#include <arrow/ipc/reader.h>
+#include <arrow/record_batch.h>
 #include <arrow/util/key_value_metadata.h>
 
 #include <functional>
@@ -2116,6 +2123,59 @@ private:
     TRowFlatWriter RowFlatWriter_;
 };
 
+class TArrowEncoder: public TMkqlWriterImpl::TEncoder {
+public:
+    TArrowEncoder(TOutputBuf& buf, const TMkqlIOSpecs& specs, size_t tableIndex, arrow::MemoryPool* pool)
+        : TMkqlWriterImpl::TEncoder(buf, specs)
+    {
+        PrepareSchemaAndColumnConverters(Specs_.Outputs[tableIndex].RowType, pool);
+
+        OutputStream_ = std::make_unique<TOutputBufArrowOutputStream>(buf);
+        StreamWriter_ = ARROW_RESULT(arrow::ipc::MakeStreamWriter(OutputStream_.get(), Schema_));
+    }
+
+    void EncodeNext(const NUdf::TUnboxedValuePod) final {
+        Y_ABORT("Unreachable");
+    }
+
+    void EncodeNext(const NUdf::TUnboxedValuePod* row) final {
+        auto blockSize = GetBlockCount(row[Schema_->num_fields()]);
+
+        std::vector<std::shared_ptr<arrow::ArrayData>> columns;
+        for (int i = 0; i < Schema_->num_fields(); i++) {
+            auto& datum = NKikimr::NMiniKQL::TArrowBlock::From(row[i]).GetDatum();
+            auto convertedArray = ColumnConverters_[i]->Convert(datum.array());
+            columns.emplace_back(std::move(convertedArray));
+        }
+
+        auto recordBatch = arrow::RecordBatch::Make(Schema_, blockSize, std::move(columns));
+        ARROW_OK(StreamWriter_->WriteRecordBatch(*recordBatch));
+    }
+
+private:
+    void PrepareSchemaAndColumnConverters(TStructType* rowType, arrow::MemoryPool* pool) {
+        std::vector<std::shared_ptr<arrow::Field>> arrowFields;
+        for (size_t i = 0; i < rowType->GetMembersCount(); i++) {
+            auto name = rowType->GetMemberName(i);
+            auto fieldType = rowType->GetMemberType(i);
+
+            auto columnConverter = MakeYtOutputColumnConverter(fieldType, pool);
+            arrowFields.emplace_back(arrow::field(static_cast<std::string>(name), columnConverter->GetOutputType(), fieldType->IsOptional()));
+            ColumnConverters_.emplace_back(std::move(columnConverter));
+        }
+
+        Schema_ = arrow::schema(std::move(arrowFields));
+    }
+
+private:
+    std::shared_ptr<arrow::Schema> Schema_;
+
+    std::vector<IYtOutputColumnConverter::TPtr> ColumnConverters_;
+
+    std::unique_ptr<TOutputBufArrowOutputStream> OutputStream_;
+    std::shared_ptr<arrow::ipc::RecordBatchWriter> StreamWriter_;
+};
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TMkqlWriterImpl::TOutput::TOutput(IOutputStream& stream, size_t blockCount, size_t blockSize, TStatTimer& timerWrite)
@@ -2215,7 +2275,10 @@ void TMkqlWriterImpl::SetSpecs(const TMkqlIOSpecs& specs, const TVector<TString>
     for (size_t i: xrange(Outputs_.size())) {
         auto& out = Outputs_[i];
         out->Buf_.SetStats(JobStats_);
-        if (Specs_->UseSkiff_) {
+        if (Specs_->UseBlockOutput_) {
+            YQL_ENSURE(columns.empty());
+            Encoders_.emplace_back(new TArrowEncoder(out->Buf_, *Specs_, i, NUdf::GetYqlMemoryPool()));
+        } else if (Specs_->UseSkiff_) {
             if (Specs_->Outputs[i].RowType->GetMembersCount() == 0) {
                 YQL_ENSURE(columns.empty());
                 Encoders_.emplace_back(new TSkiffEmptySchemaEncoder(out->Buf_, *Specs_));

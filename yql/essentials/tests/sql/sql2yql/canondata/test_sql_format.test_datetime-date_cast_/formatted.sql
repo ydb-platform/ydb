@@ -1,82 +1,82 @@
 /* postgres can not */
 SELECT
-    CAST(Yql::Date(AsAtom("1")) AS Uint8)
+    CAST(Yql::Date(AsAtom('1')) AS Uint8)
 ;
 
 SELECT
-    CAST(Yql::Date(AsAtom("1")) AS Uint32)
+    CAST(Yql::Date(AsAtom('1')) AS Uint32)
 ;
 
 SELECT
-    CAST(Yql::Date(AsAtom("1")) AS Int32)
+    CAST(Yql::Date(AsAtom('1')) AS Int32)
 ;
 
 SELECT
-    CAST(Yql::Date(AsAtom("1")) AS Uint64)
+    CAST(Yql::Date(AsAtom('1')) AS Uint64)
 ;
 
 SELECT
-    CAST(Yql::Date(AsAtom("1")) AS Int64)
+    CAST(Yql::Date(AsAtom('1')) AS Int64)
 ;
 
 SELECT
-    CAST(Yql::Datetime(AsAtom("1")) AS Uint8)
+    CAST(Yql::Datetime(AsAtom('1')) AS Uint8)
 ;
 
 SELECT
-    CAST(Yql::Datetime(AsAtom("1")) AS Uint32)
+    CAST(Yql::Datetime(AsAtom('1')) AS Uint32)
 ;
 
 SELECT
-    CAST(Yql::Datetime(AsAtom("1")) AS Int32)
+    CAST(Yql::Datetime(AsAtom('1')) AS Int32)
 ;
 
 SELECT
-    CAST(Yql::Datetime(AsAtom("1")) AS Uint64)
+    CAST(Yql::Datetime(AsAtom('1')) AS Uint64)
 ;
 
 SELECT
-    CAST(Yql::Datetime(AsAtom("1")) AS Int64)
+    CAST(Yql::Datetime(AsAtom('1')) AS Int64)
 ;
 
 SELECT
-    CAST(Yql::Timestamp(AsAtom("1")) AS Uint8)
+    CAST(Yql::Timestamp(AsAtom('1')) AS Uint8)
 ;
 
 SELECT
-    CAST(Yql::Timestamp(AsAtom("1")) AS Uint32)
+    CAST(Yql::Timestamp(AsAtom('1')) AS Uint32)
 ;
 
 SELECT
-    CAST(Yql::Timestamp(AsAtom("1")) AS Int32)
+    CAST(Yql::Timestamp(AsAtom('1')) AS Int32)
 ;
 
 SELECT
-    CAST(Yql::Timestamp(AsAtom("1")) AS Uint64)
+    CAST(Yql::Timestamp(AsAtom('1')) AS Uint64)
 ;
 
 SELECT
-    CAST(Yql::Timestamp(AsAtom("1")) AS Int64)
+    CAST(Yql::Timestamp(AsAtom('1')) AS Int64)
 ;
 
 SELECT
-    CAST(Yql::Interval(AsAtom("1")) AS Uint8)
+    CAST(Yql::Interval(AsAtom('1')) AS Uint8)
 ;
 
 SELECT
-    CAST(Yql::Interval(AsAtom("1")) AS Uint32)
+    CAST(Yql::Interval(AsAtom('1')) AS Uint32)
 ;
 
 SELECT
-    CAST(Yql::Interval(AsAtom("1")) AS Int32)
+    CAST(Yql::Interval(AsAtom('1')) AS Int32)
 ;
 
 SELECT
-    CAST(Yql::Interval(AsAtom("1")) AS Uint64)
+    CAST(Yql::Interval(AsAtom('1')) AS Uint64)
 ;
 
 SELECT
-    CAST(Yql::Interval(AsAtom("1")) AS Int64)
+    CAST(Yql::Interval(AsAtom('1')) AS Int64)
 ;
 
 SELECT
@@ -113,83 +113,83 @@ SELECT
 
 /* postgres can not */
 SELECT
-    CAST(Yql::Date(AsAtom("1")) AS Uint8)
+    CAST(Yql::Date(AsAtom('1')) AS Uint8)
 ;
 
 SELECT
-    CAST(Yql::Date(AsAtom("1")) AS Uint32)
+    CAST(Yql::Date(AsAtom('1')) AS Uint32)
 ;
 
 SELECT
-    CAST(Yql::Date(AsAtom("1")) AS Int32)
+    CAST(Yql::Date(AsAtom('1')) AS Int32)
 ;
 
 SELECT
-    CAST(Yql::Date(AsAtom("1")) AS Uint64)
+    CAST(Yql::Date(AsAtom('1')) AS Uint64)
 ;
 
 SELECT
-    CAST(Yql::Date(AsAtom("1")) AS Int64)
+    CAST(Yql::Date(AsAtom('1')) AS Int64)
 ;
 
 SELECT
-    CAST(Yql::Datetime(AsAtom("1")) AS Uint8)
+    CAST(Yql::Datetime(AsAtom('1')) AS Uint8)
 ;
 
 SELECT
-    CAST(Yql::Datetime(AsAtom("1")) AS Uint32)
+    CAST(Yql::Datetime(AsAtom('1')) AS Uint32)
 ;
 
 SELECT
-    CAST(Yql::Datetime(AsAtom("1")) AS Int32)
+    CAST(Yql::Datetime(AsAtom('1')) AS Int32)
 ;
 
 SELECT
-    CAST(Yql::Datetime(AsAtom("1")) AS Uint64)
+    CAST(Yql::Datetime(AsAtom('1')) AS Uint64)
 ;
 
 SELECT
-    CAST(Yql::Datetime(AsAtom("1")) AS Int64)
+    CAST(Yql::Datetime(AsAtom('1')) AS Int64)
 ;
 
 SELECT
-    CAST(Yql::Timestamp(AsAtom("1")) AS Uint8)
+    CAST(Yql::Timestamp(AsAtom('1')) AS Uint8)
 ;
 
 SELECT
-    CAST(Yql::Timestamp(AsAtom("1")) AS Uint32)
+    CAST(Yql::Timestamp(AsAtom('1')) AS Uint32)
 ;
 
 SELECT
-    CAST(Yql::Timestamp(AsAtom("1")) AS Int32)
+    CAST(Yql::Timestamp(AsAtom('1')) AS Int32)
 ;
 
 SELECT
-    CAST(Yql::Timestamp(AsAtom("1")) AS Uint64)
+    CAST(Yql::Timestamp(AsAtom('1')) AS Uint64)
 ;
 
 SELECT
-    CAST(Yql::Timestamp(AsAtom("1")) AS Int64)
+    CAST(Yql::Timestamp(AsAtom('1')) AS Int64)
 ;
 
 SELECT
-    CAST(Yql::Interval(AsAtom("1")) AS Uint8)
+    CAST(Yql::Interval(AsAtom('1')) AS Uint8)
 ;
 
 SELECT
-    CAST(Yql::Interval(AsAtom("1")) AS Uint32)
+    CAST(Yql::Interval(AsAtom('1')) AS Uint32)
 ;
 
 SELECT
-    CAST(Yql::Interval(AsAtom("1")) AS Int32)
+    CAST(Yql::Interval(AsAtom('1')) AS Int32)
 ;
 
 SELECT
-    CAST(Yql::Interval(AsAtom("1")) AS Uint64)
+    CAST(Yql::Interval(AsAtom('1')) AS Uint64)
 ;
 
 SELECT
-    CAST(Yql::Interval(AsAtom("1")) AS Int64)
+    CAST(Yql::Interval(AsAtom('1')) AS Int64)
 ;
 
 SELECT

@@ -94,6 +94,8 @@ private:
 
     bool IsSortedDict() const final;
 
+    TStringRef GetResourceTag() const final;
+
     void* GetResource() final;
 
     ui32 Count_;

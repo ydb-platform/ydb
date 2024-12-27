@@ -228,7 +228,7 @@ public:
         PingableTx_ = &pingableTx;
         Running_ = true;
 
-        PingerThread_ = MakeHolder<TThread>(
+        PingerThread_ = std::make_unique<TThread>(
             TThread::TParams{Pinger, this}.SetName("pingable_tx"));
         PingerThread_->Start();
     }
@@ -261,8 +261,7 @@ private:
         while (Running_) {
             TDuration waitTime = minPingInterval + (maxPingInterval - minPingInterval) * RandomNumber<float>();
             try {
-                auto noRetryPolicy = MakeIntrusive<TAttemptLimitedRetryPolicy>(1u, PingableTx_->GetContext().Config);
-                NDetail::NRawClient::PingTx(noRetryPolicy, PingableTx_->GetContext(), PingableTx_->GetId());
+                PingableTx_->Ping();
             } catch (const std::exception& e) {
                 if (auto* errorResponse = dynamic_cast<const TErrorResponse*>(&e)) {
                     if (errorResponse->GetError().ContainsErrorCode(NYT::NClusterErrorCodes::NTransactionClient::NoSuchTransaction)) {
@@ -285,7 +284,7 @@ private:
     const TPingableTransaction* PingableTx_ = nullptr;
 
     std::atomic<bool> Running_ = false;
-    THolder<TThread> PingerThread_;
+    std::unique_ptr<TThread> PingerThread_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

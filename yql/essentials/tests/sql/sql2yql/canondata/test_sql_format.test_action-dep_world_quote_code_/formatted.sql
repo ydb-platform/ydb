@@ -8,10 +8,10 @@ $combineQueries = ($query, $list) -> {
             ($world) -> {
                 $queries = ListMap(
                     $list, ($arg) -> {
-                        RETURN FuncCode("Apply", QuoteCode($query), $world, ReprCode($arg));
+                        RETURN FuncCode('Apply', QuoteCode($query), $world, ReprCode($arg));
                     }
                 );
-                RETURN FuncCode("Extend", $queries);
+                RETURN FuncCode('Extend', $queries);
             }
         )
     );
@@ -41,10 +41,10 @@ DEFINE ACTION $aaa($z) AS
     ;
 END DEFINE;
 
-EVALUATE FOR $z IN AsList("Input") DO
+EVALUATE FOR $z IN AsList('Input') DO
     $aaa($z)
 ;
 
 DO
-    $aaa("Input")
+    $aaa('Input')
 ;

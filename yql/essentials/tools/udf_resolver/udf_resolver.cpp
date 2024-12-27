@@ -456,6 +456,7 @@ int main(int argc, char **argv) {
                 Allow(stat),
 #endif
                 Allow(sysinfo),
+                Allow(sigaltstack),
                 Allow(uname),
 #ifndef _arm64_
                 Allow(unlink),

@@ -18,7 +18,8 @@ from clickhouse_connect.datatypes.string import String, FixedString
 from clickhouse_connect.datatypes.temporal import Date, Date32, DateTime, DateTime64
 from clickhouse_connect.driver.common import array_sizes
 
-dt_from_ts = datetime.fromtimestamp
+dt_from_ts = datetime.utcfromtimestamp
+dt_from_ts_tz = datetime.fromtimestamp
 epoch_date = date(1970, 1, 1)
 date32_start_date = date(1925, 1, 1)
 
@@ -137,7 +138,7 @@ def random_datetime():
 
 
 def random_datetime_tz(timezone: tzinfo):
-    return dt_from_ts(int(random() * 2 ** 32), timezone).replace(microsecond=0)
+    return dt_from_ts_tz(int(random() * 2 ** 32), timezone).replace(microsecond=0)
 
 
 def random_ascii_str(max_len: int = 200, min_len: int = 0):
@@ -171,7 +172,7 @@ def random_datetime64_tz(prec: int, timezone: tzinfo):
         u_sec = int(random() * 1000) * 1000
     else:
         u_sec = int(random() * 1000000)
-    return dt_from_ts(int(random() * 4294967296), timezone).replace(microsecond=u_sec)
+    return dt_from_ts_tz(int(random() * 4294967296), timezone).replace(microsecond=u_sec)
 
 
 def random_ipv6():

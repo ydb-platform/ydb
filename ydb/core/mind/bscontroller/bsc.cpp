@@ -188,11 +188,11 @@ void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
     }
 }
 
-void TBlobStorageController::ApplyStorageConfig() {
+void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
     if (!StorageConfig.HasBlobStorageConfig() || // this would be strange
-            !StorageConfig.HasSelfManagementConfig() ||
+            !ignoreDistconf && (!StorageConfig.HasSelfManagementConfig() ||
             !StorageConfig.GetSelfManagementConfig().GetEnabled() ||
-            !StorageConfig.GetSelfManagementConfig().GetAutomaticBoxManagement()) {
+            !StorageConfig.GetSelfManagementConfig().GetAutomaticBoxManagement())) {
         return;
     }
     const auto& bsConfig = StorageConfig.GetBlobStorageConfig();

@@ -29,7 +29,6 @@ target_link_libraries(cpp-yt-error PUBLIC
   cpp-yt-misc
   cpp-yt-threading
   cpp-yt-string
-  cpp-yt-yson_string
   cpp-yt-logging
 )
 
@@ -38,5 +37,6 @@ target_sources(cpp-yt-error PRIVATE
   ${PROJECT_SOURCE_DIR}/library/cpp/yt/error/error_attributes.cpp
   ${PROJECT_SOURCE_DIR}/library/cpp/yt/error/error_code.cpp
   ${PROJECT_SOURCE_DIR}/library/cpp/yt/error/origin_attributes.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/error/text_yson.cpp
 )
 

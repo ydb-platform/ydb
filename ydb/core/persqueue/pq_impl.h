@@ -443,6 +443,7 @@ private:
     void DeleteExpiredTransactions(const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
 
+    void SetTxCounters();
     void SetTxCompleteLagCounter();
     void SetTxInFlyCounter();
 

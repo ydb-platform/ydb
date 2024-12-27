@@ -1015,8 +1015,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     EndInitTransactions();
     EndReadConfig(ctx);
 
-    SetTxCompleteLagCounter();
-    SetTxInFlyCounter();
+    SetTxCounters();
 }
 
 void TPersQueue::EndReadConfig(const TActorContext& ctx)
@@ -3091,8 +3090,7 @@ void TPersQueue::HandleWakeup(const TActorContext& ctx) {
     }
     MeteringSink.MayFlush(ctx.Now());
     DeleteExpiredTransactions(ctx);
-    SetTxCompleteLagCounter();
-    SetTxInFlyCounter();
+    SetTxCounters();
     ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
 }
 
@@ -3111,6 +3109,12 @@ void TPersQueue::DeleteExpiredTransactions(const TActorContext& ctx)
     }
 
     TryWriteTxs(ctx);
+}
+
+void TPersQueue::SetTxCounters()
+{
+    SetTxCompleteLagCounter();
+    SetTxInFlyCounter();
 }
 
 void TPersQueue::SetTxCompleteLagCounter()

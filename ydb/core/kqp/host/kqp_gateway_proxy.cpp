@@ -1505,16 +1505,17 @@ public:
             switch (settings.CanLogin) {
                 case TCreateUserSettings::ETypeOfLogin::Login:
                 {
-                    createUser.SetIsEnabled(true);
+                    createUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Login);
                     break;
                 }
                 case TCreateUserSettings::ETypeOfLogin::NoLogin:
                 {
-                    createUser.SetIsEnabled(false);
+                    createUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::NoLogin);
                     break;
                 }
                 case TCreateUserSettings::ETypeOfLogin::Undefined:
                 {
+                    createUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Undefined);
                     break;
                 }
             }
@@ -1550,23 +1551,27 @@ public:
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
             auto& alterUser = *schemeTx.MutableAlterLogin()->MutableModifyUser();
             alterUser.SetUser(settings.UserName);
-            if (settings.Password) {
+
+            if (settings.NoPassword) {
+                alterUser.SetNoPassword(true);
+            } else {
                 alterUser.SetPassword(settings.Password);
             }
 
             switch (settings.CanLogin) {
                 case TAlterUserSettings::ETypeOfLogin::Login:
                 {
-                    alterUser.SetIsEnabled(true);
+                    alterUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Login);
                     break;
                 }
                 case TAlterUserSettings::ETypeOfLogin::NoLogin:
                 {
-                    alterUser.SetIsEnabled(false);
+                    alterUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::NoLogin);
                     break;
                 }
                 case TAlterUserSettings::ETypeOfLogin::Undefined:
                 {
+                    alterUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Undefined);
                     break;
                 }
             }

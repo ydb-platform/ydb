@@ -689,6 +689,7 @@ struct TAlterUserSettings {
     TString UserName;
     TString Password;
     bool PasswordEncrypted = false;
+    bool NoPassword = true;
 
     enum class ETypeOfLogin {
         Undefined,

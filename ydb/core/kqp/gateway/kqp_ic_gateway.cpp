@@ -1374,16 +1374,17 @@ public:
             switch (settings.CanLogin) {
                 case NYql::TCreateUserSettings::ETypeOfLogin::Login:
                 {
-                    createUser.SetIsEnabled(true);
+                    createUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Login);
                     break;
                 }
                 case NYql::TCreateUserSettings::ETypeOfLogin::NoLogin:
                 {
-                    createUser.SetIsEnabled(false);
+                    createUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::NoLogin);
                     break;
                 }
                 case NYql::TCreateUserSettings::ETypeOfLogin::Undefined:
                 {
+                    createUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Undefined);
                     break;
                 }
             }
@@ -1427,23 +1428,26 @@ public:
             auto& alterUser = *schemeTx.MutableAlterLogin()->MutableModifyUser();
 
             alterUser.SetUser(settings.UserName);
-            if (settings.Password) {
+            if (settings.NoPassword) {
+                alterUser.SetNoPassword(true);
+            } else {
                 alterUser.SetPassword(settings.Password);
             }
 
             switch (settings.CanLogin) {
                 case NYql::TAlterUserSettings::ETypeOfLogin::Login:
                 {
-                    alterUser.SetIsEnabled(true);
+                    alterUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Login);
                     break;
                 }
                 case NYql::TAlterUserSettings::ETypeOfLogin::NoLogin:
                 {
-                    alterUser.SetIsEnabled(false);
+                    alterUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::NoLogin);
                     break;
                 }
                 case NYql::TAlterUserSettings::ETypeOfLogin::Undefined:
                 {
+                    alterUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Undefined);
                     break;
                 }
             }

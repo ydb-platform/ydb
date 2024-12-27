@@ -200,6 +200,9 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimiz
 
 TExprBase KqpRewriteReturningUpsert(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext&) {
     auto upsert = node.Cast<TKqlUpsertRows>();
+    if (upsert.ReturningColumns().Empty()) {
+        return node;
+    }
 
     if (upsert.Input().Maybe<TDqPrecompute>() || upsert.Input().Maybe<TDqPhyPrecompute>()) {
         return node;
@@ -219,6 +222,9 @@ TExprBase KqpRewriteReturningUpsert(TExprBase node, TExprContext& ctx, const TKq
 
 TExprBase KqpRewriteReturningDelete(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext&) {
     auto del = node.Cast<TKqlDeleteRows>();
+    if (del.ReturningColumns().Empty()) {
+        return node;
+    }
 
     if (del.Input().Maybe<TDqPrecompute>() || del.Input().Maybe<TDqPhyPrecompute>()) {
         return node;

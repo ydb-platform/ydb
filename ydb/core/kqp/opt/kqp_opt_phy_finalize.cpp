@@ -92,6 +92,8 @@ TStatus KqpBuildPureExprStagesResult(const TExprNode::TPtr& input, TExprNode::TP
             omitResultPrecomputes = false;
             break;
         }
+        // returning works by forcing materialization of modified rows via precompute
+        // so omitting precomputes here breaks returning logic
         if (hasReturning(effect)) {
             omitResultPrecomputes = false;
             break;

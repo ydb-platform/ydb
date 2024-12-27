@@ -35,6 +35,6 @@ NKikimr::NUdf::TUnboxedValue CreateInputUnionValue(const NKikimr::NMiniKQL::TTyp
 
 NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(const NKikimr::NMiniKQL::TType* type, TVector<IDqInput::TPtr>&& inputs,
     TVector<TSortColumnInfo>&& sortCols, const NKikimr::NMiniKQL::THolderFactory& factory,
-    TDqMeteringStats::TInputStatsMeter = {}, NUdf::IPgBuilder* = nullptr);
+    TDqMeteringStats::TInputStatsMeter = {}, NUdf::IPgBuilder* pgBuilder = nullptr);
 
 } // namespace NYql::NDq

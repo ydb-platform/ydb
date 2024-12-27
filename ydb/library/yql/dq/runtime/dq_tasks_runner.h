@@ -212,11 +212,15 @@ struct TDqTaskRunnerMemoryLimits {
 };
 
 NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, const NKikimr::NMiniKQL::TType* type,
-    TVector<IDqInputChannel::TPtr>&& channels, const NKikimr::NMiniKQL::THolderFactory& holderFactory, NUdf::IPgBuilder*);
+    TVector<IDqInputChannel::TPtr>&& channels, const NKikimr::NMiniKQL::THolderFactory& holderFactory, NUdf::IPgBuilder* pgBuilder);
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NKikimr::NMiniKQL::TType* type,
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TVector<IDqOutput::TPtr>&& channels, TMaybe<ui8> minFillPercentage = {}, NUdf::IPgBuilder* pgBuilder = nullptr);
+    TVector<IDqOutput::TPtr>&& channels, NUdf::IPgBuilder* pgBuilder, TMaybe<ui8> minFillPercentage = {});
+
+IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NKikimr::NMiniKQL::TType* type,
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    TVector<IDqOutput::TPtr>&& channels, TMaybe<ui8> minFillPercentage = {});
 
 using TDqTaskRunnerParameterProvider = std::function<
     bool(std::string_view name, NKikimr::NMiniKQL::TType* type, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,

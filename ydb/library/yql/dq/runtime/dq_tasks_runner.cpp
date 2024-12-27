@@ -166,7 +166,7 @@ NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, con
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NMiniKQL::TType* type,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui8> minFillPercentage, NUdf::IPgBuilder* pgBuilder)
+    TVector<IDqOutput::TPtr>&& outputs,NUdf::IPgBuilder* pgBuilder, TMaybe<ui8> minFillPercentage)
 {
     TMaybe<ui32> outputWidth;
     if (type->IsMulti()) {
@@ -208,11 +208,18 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
     }
 }
 
+IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NKikimr::NMiniKQL::TType* type,
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    TVector<IDqOutput::TPtr>&& channels, TMaybe<ui8> minFillPercentage)
+{
+    return DqBuildOutputConsumer(outputDesc, type, typeEnv, holderFactory, std::move(channels), nullptr, minFillPercentage);
+}
+
 IDqOutputConsumer::TPtr TDqTaskRunnerExecutionContextBase::CreateOutputConsumer(const TTaskOutput& outputDesc,
     const NKikimr::NMiniKQL::TType* type, NUdf::IApplyContext*, const TTypeEnvironment& typeEnv,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory, TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* pgBuilder) const
 {
-    return DqBuildOutputConsumer(outputDesc, type, typeEnv, holderFactory, std::move(outputs), {}, pgBuilder);
+    return DqBuildOutputConsumer(outputDesc, type, typeEnv, holderFactory, std::move(outputs), pgBuilder, {});
 }
 
 inline TCollectStatsLevel StatsModeToCollectStatsLevel(NDqProto::EDqStatsMode statsMode) {

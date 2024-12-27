@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import pytest
-from .test_base import TestBase
+from ydb.tests.sql.lib.test_base import TestBase
 
 
 class TestYdbKvWorkload(TestBase):

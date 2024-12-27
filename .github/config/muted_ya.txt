@@ -229,4 +229,5 @@ ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generate
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStmtQueryContext]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStringWithNul]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimestampWithTimeZone]
+ydb/tests/sql test_inserts.py.TestYdbInsertsOperations.test_insert_multiple_empty_rows
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTxOptions]

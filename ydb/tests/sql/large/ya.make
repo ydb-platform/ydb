@@ -1,13 +1,16 @@
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
+REQUIREMENTS(ram:48)
+
 TEST_SRCS(
-    test_sql.py
-    test_crud.py
-    test_inserts.py
+    test_bulkupserts_tpch.py
+    test_insertinto_selectfrom.py
+    test_insert_delete_duplicate_records.py
 )
 
-SIZE(MEDIUM)
+SIZE(LARGE)
+TAG(ya:fat)
 
 DEPENDS(
     ydb/apps/ydb
@@ -19,5 +22,7 @@ PEERDIR(
     ydb/tests/library
     ydb/tests/sql/lib
 )
+
+FORK_SUBTESTS()
 
 END()

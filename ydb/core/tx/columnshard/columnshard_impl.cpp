@@ -619,6 +619,9 @@ public:
 class TDataAccessorsSubscriberBase: public NOlap::IDataAccessorRequestsSubscriber {
 private:
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Default<std::shared_ptr<const TAtomicCounter>>();
+    }
 
     virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result) override final {
         AFL_VERIFY(ResourcesGuard);
@@ -1048,8 +1051,10 @@ void TColumnShard::SetupCleanupPortions() {
         return;
     }
 
-    auto changes =
-        TablesManager.MutablePrimaryIndex().StartCleanupPortions(GetMinReadSnapshot(), TablesManager.GetPathsToDrop(), DataLocksManager);
+    const NOlap::TSnapshot minReadSnapshot = GetMinReadSnapshot();
+    THashSet<ui64> pathsToDrop = TablesManager.GetPathsToDrop(minReadSnapshot);
+
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(minReadSnapshot, pathsToDrop, DataLocksManager);
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;
@@ -1074,7 +1079,7 @@ void TColumnShard::SetupCleanupTables() {
     }
 
     THashSet<ui64> pathIdsEmptyInInsertTable;
-    for (auto&& i : TablesManager.GetPathsToDrop()) {
+    for (auto&& i : TablesManager.GetPathsToDrop(GetMinReadSnapshot())) {
         if (InsertTable->HasPathIdData(i)) {
             continue;
         }
@@ -1422,13 +1427,13 @@ private:
 
 public:
     TTxAskPortionChunks(TColumnShard* self, const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& fetchCallback,
-        THashMap<ui64, NOlap::TPortionInfo::TConstPtr>&& portions, const TString& consumer)
+        std::vector<NOlap::TPortionInfo::TConstPtr>&& portions, const TString& consumer)
         : TBase(self)
         , FetchCallback(fetchCallback)
         , Consumer(consumer)
     {
         for (auto&& i : portions) {
-            PortionsByPath[i.second->GetPathId()].emplace_back(i.second);
+            PortionsByPath[i->GetPathId()].emplace_back(i);
         }
     }
 

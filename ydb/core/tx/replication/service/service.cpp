@@ -22,6 +22,20 @@
 namespace NKikimr::NReplication::NService {
 
 class TSessionInfo {
+    struct TWorkerInfo {
+        const TActorId ActorId;
+        TRowVersion Heartbeat;
+
+        explicit TWorkerInfo(const TActorId& actorId)
+            : ActorId(actorId)
+        {
+        }
+
+        operator TActorId() const {
+            return ActorId;
+        }
+    };
+
 public:
     explicit TSessionInfo(const TActorId& actorId)
         : ActorId(actorId)
@@ -113,7 +127,9 @@ public:
         ops->Send(ActorId, ev.Release());
     }
 
-    void SendWorkerDataEnd(IActorOps* ops, const TWorkerId& id, ui64 partitionId, const TVector<ui64>&& adjacentPartitionsIds, const TVector<ui64>&& childPartitionsIds) {
+    void SendWorkerDataEnd(IActorOps* ops, const TWorkerId& id, ui64 partitionId,
+            const TVector<ui64>&& adjacentPartitionsIds, const TVector<ui64>&& childPartitionsIds)
+    {
         auto ev = MakeHolder<TEvService::TEvWorkerDataEnd>();
         auto& record = ev->Record;
 
@@ -129,6 +145,92 @@ public:
         ops->Send(ActorId, ev.Release());
     }
 
+    void Handle(IActorOps* ops, TEvService::TEvGetTxId::TPtr& ev) {
+        TMap<TRowVersion, ui64> result;
+        TVector<TRowVersion> versionsWithoutTxId;
+
+        for (const auto& v : ev->Get()->Record.GetVersions()) {
+            const auto version = TRowVersion::FromProto(v);
+            if (auto it = TxIds.upper_bound(version); it != TxIds.end()) {
+                result[it->first] = it->second;
+            } else {
+                versionsWithoutTxId.push_back(version);
+                PendingTxId[version].insert(ev->Sender);
+            }
+        }
+
+        if (versionsWithoutTxId) {
+            ops->Send(ActorId, new TEvService::TEvGetTxId(versionsWithoutTxId));
+        }
+
+        if (result) {
+            SendTxIdResult(ops, ev->Sender, result);
+        }
+    }
+
+    void Handle(IActorOps* ops, TEvService::TEvTxIdResult::TPtr& ev) {
+        THashMap<TActorId, TMap<TRowVersion, ui64>> results;
+
+        for (const auto& kv : ev->Get()->Record.GetVersionTxIds()) {
+            const auto version = TRowVersion::FromProto(kv.GetVersion());
+            TxIds.emplace(version, kv.GetTxId());
+
+            for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
+                if (it->first >= version) {
+                    break;
+                }
+
+                for (const auto& actorId : it->second) {
+                    results[actorId].emplace(version, kv.GetTxId());
+                }
+
+                PendingTxId.erase(it++);
+            }
+        }
+
+        for (const auto& [actorId, result] : results) {
+            SendTxIdResult(ops, actorId, result);
+        }
+    }
+
+    void Handle(IActorOps* ops, TEvService::TEvHeartbeat::TPtr& ev) {
+        const auto id = GetWorkerId(ev->Sender);
+        if (!Workers.contains(id)) {
+            return;
+        }
+
+        auto& worker = Workers.at(id);
+        auto& record = ev->Get()->Record;
+        const auto version = TRowVersion::FromProto(record.GetVersion());
+
+        if (const auto& prevVersion = worker.Heartbeat) {
+            if (version <= prevVersion) {
+                return;
+            }
+
+            auto it = WorkersByHeartbeat.find(prevVersion);
+            if (it != WorkersByHeartbeat.end()) {
+                it->second.erase(id);
+                if (it->second.empty()) {
+                    WorkersByHeartbeat.erase(it);
+                }
+            }
+        }
+
+        worker.Heartbeat = version;
+        WorkersWithHeartbeat.insert(id);
+        WorkersByHeartbeat[version].insert(id);
+
+        if (Workers.size() == WorkersWithHeartbeat.size()) {
+            while (!TxIds.empty() && WorkersByHeartbeat.begin()->first < TxIds.begin()->first) {
+                TxIds.erase(TxIds.begin());
+            }
+        }
+
+        id.Serialize(*record.MutableWorker());
+        ops->Send(ActorId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
+    }
+
     void Shutdown(IActorOps* ops) const {
         for (const auto& [_, actorId] : Workers) {
             ops->Send(actorId, new TEvents::TEvPoison());
@@ -136,10 +238,28 @@ public:
     }
 
 private:
+    static void SendTxIdResult(IActorOps* ops, const TActorId& recipient, const TMap<TRowVersion, ui64>& result) {
+        auto ev = MakeHolder<TEvService::TEvTxIdResult>();
+
+        for (const auto& [version, txId] : result) {
+            auto& item = *ev->Record.AddVersionTxIds();
+            version.ToProto(item.MutableVersion());
+            item.SetTxId(txId);
+        }
+
+        ops->Send(recipient, ev.Release());
+    }
+
+private:
     TActorId ActorId;
     ui64 Generation;
-    THashMap<TWorkerId, TActorId> Workers;
+    THashMap<TWorkerId, TWorkerInfo> Workers;
     THashMap<TActorId, TWorkerId> ActorIdToWorkerId;
+
+    TMap<TRowVersion, ui64> TxIds;
+    TMap<TRowVersion, THashSet<TActorId>> PendingTxId;
+    THashSet<TWorkerId> WorkersWithHeartbeat;
+    TMap<TRowVersion, THashSet<TWorkerId>> WorkersByHeartbeat;
 
 }; // TSessionInfo
 
@@ -281,7 +401,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         const auto mode = consistencySettings.HasGlobal()
             ? EWriteMode::Consistent
             : EWriteMode::Simple;
-        return [tablePathId = PathIdFromPathId(writerSettings.GetPathId()), mode]() {
+        return [tablePathId = TPathId::FromProto(writerSettings.GetPathId()), mode]() {
             return CreateLocalTableWriter(tablePathId, mode);
         };
     }
@@ -365,22 +485,10 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         session.StopWorker(this, id);
     }
 
-    void SendTxIdResult(const TActorId& recipient, const TMap<TRowVersion, ui64>& result) {
-        auto ev = MakeHolder<TEvService::TEvTxIdResult>();
-
-        for (const auto& [version, txId] : result) {
-            auto& item = *ev->Record.AddVersionTxIds();
-            version.Serialize(*item.MutableVersion());
-            item.SetTxId(txId);
-        }
-
-        Send(recipient, ev.Release());
-    }
-
     void Handle(TEvService::TEvGetTxId::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
-        const auto* session = SessionFromWorker(ev->Sender);
+        auto* session = SessionFromWorker(ev->Sender);
         if (!session) {
             return;
         }
@@ -391,26 +499,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             return;
         }
 
-        TMap<TRowVersion, ui64> result;
-        TVector<TRowVersion> versionsWithoutTxId;
-
-        for (const auto& v : ev->Get()->Record.GetVersions()) {
-            const auto version = TRowVersion::Parse(v);
-            if (auto it = TxIds.upper_bound(version); it != TxIds.end()) {
-                result[it->first] = it->second;
-            } else {
-                versionsWithoutTxId.push_back(version);
-                PendingTxId[version].insert(ev->Sender);
-            }
-        }
-
-        if (versionsWithoutTxId) {
-            Send(*session, new TEvService::TEvGetTxId(versionsWithoutTxId));
-        }
-
-        if (result) {
-            SendTxIdResult(ev->Sender, result);
-        }
+        session->Handle(this, ev);
     }
 
     void Handle(TEvService::TEvTxIdResult::TPtr& ev) {
@@ -436,34 +525,13 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             return;
         }
 
-        THashMap<TActorId, TMap<TRowVersion, ui64>> results;
-
-        for (const auto& kv : record.GetVersionTxIds()) {
-            const auto version = TRowVersion::Parse(kv.GetVersion());
-            TxIds.emplace(version, kv.GetTxId());
-
-            for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
-                if (it->first >= version) {
-                    break;
-                }
-
-                for (const auto& actorId : it->second) {
-                    results[actorId].emplace(version, kv.GetTxId());
-                }
-
-                PendingTxId.erase(it++);
-            }
-        }
-
-        for (const auto& [actorId, result] : results) {
-            SendTxIdResult(actorId, result);
-        }
+        session.Handle(this, ev);
     }
 
     void Handle(TEvService::TEvHeartbeat::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
-        const auto* session = SessionFromWorker(ev->Sender);
+        auto* session = SessionFromWorker(ev->Sender);
         if (!session) {
             return;
         }
@@ -474,14 +542,10 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             return;
         }
 
-        auto& record = ev->Get()->Record;
-
         LOG_I("Heartbeat"
             << ": worker# " << ev->Sender
-            << ", version# " << TRowVersion::Parse(record.GetVersion()));
-
-        session->GetWorkerId(ev->Sender).Serialize(*record.MutableWorker());
-        Send(ev->Forward(*session));
+            << ", version# " << TRowVersion::FromProto(ev->Get()->Record.GetVersion()));
+        session->Handle(this, ev);
     }
 
     void Handle(TEvWorker::TEvDataEnd::TPtr& ev) {
@@ -608,8 +672,6 @@ private:
     THashMap<ui64, TSessionInfo> Sessions;
     THashMap<TConnectionParams, TActorId> YdbProxies;
     THashMap<TActorId, ui64> WorkerActorIdToSession;
-    TMap<TRowVersion, ui64> TxIds;
-    TMap<TRowVersion, THashSet<TActorId>> PendingTxId;
 
 }; // TReplicationService
 

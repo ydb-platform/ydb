@@ -17,6 +17,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/replication/service/service.h>
 #include <ydb/core/tx/tx_allocator_client/actor_client.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -99,6 +100,7 @@ private:
     void Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
 
     void CreateSession(ui32 nodeId, const TActorContext& ctx);
@@ -135,6 +137,7 @@ private:
     class TTxWorkerError;
     class TTxAssignTxId;
     class TTxHeartbeat;
+    class TTxCommitChanges;
 
     // tx runners
     void RunTxInitSchema(const TActorContext& ctx);
@@ -216,6 +219,7 @@ private:
     TMap<TRowVersion, THashSet<TWorkerId>> WorkersByHeartbeat;
     THashMap<TWorkerId, TRowVersion> PendingHeartbeats;
     bool ProcessHeartbeatsInFlight = false;
+    ui64 CommittingTxId = 0;
 
 }; // TController
 

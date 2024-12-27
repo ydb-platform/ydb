@@ -36,23 +36,14 @@ public:
         return *it;
     }
 
-    void RegisterField(const TString& fingerprint, const std::shared_ptr<arrow::Field>& f) {
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "register_field")("fp", fingerprint)("f", f->ToString());
+    std::shared_ptr<arrow::Field> GetOrInsertField(const std::shared_ptr<arrow::Field>& f) {
         TGuard lock(FieldsMutex);
-        AFL_VERIFY(Fields.emplace(fingerprint, f).second);
-    }
-    void RegisterColumnFeatures(const TString& fingerprint, const std::shared_ptr<TColumnFeatures>& f) {
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "register_column_features")("fp", fingerprint)("info", f->DebugString());
-        TGuard lock(FeaturesMutex);
-        AFL_VERIFY(ColumnFeatures.emplace(fingerprint, f).second);
-    }
-    std::shared_ptr<arrow::Field> GetField(const TString& fingerprint) const {
-        TGuard lock(FieldsMutex);
+        const TString fingerprint = f->ToString(true);
         auto it = Fields.find(fingerprint);
         if (it == Fields.end()) {
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_field_miss")("fp", fingerprint)("count", Fields.size())(
                 "acc", AcceptionFieldsCount);
-            return nullptr;
+            it = Fields.emplace(fingerprint, f).first;
         }
         if (++AcceptionFieldsCount % 1000 == 0) {
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_field_accept")("fp", fingerprint)("count", Fields.size())(
@@ -60,6 +51,7 @@ public:
         }
         return it->second;
     }
+
     template <class TConstructor>
     TConclusion<std::shared_ptr<TColumnFeatures>> GetOrCreateColumnFeatures(const TString& fingerprint, const TConstructor& constructor) {
         TGuard lock(FeaturesMutex);

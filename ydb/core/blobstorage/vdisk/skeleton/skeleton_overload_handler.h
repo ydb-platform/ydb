@@ -61,6 +61,7 @@ namespace NKikimr {
     class TOverloadHandler {
     public:
         TOverloadHandler(
+                const TIntrusivePtr<TVDiskConfig> &vcfg,
                 const TIntrusivePtr<TVDiskContext> &vctx,
                 const TPDiskCtxPtr &pdiskCtx,
                 std::shared_ptr<THull> hull,
@@ -90,8 +91,6 @@ namespace NKikimr {
         void RenderHtml(IOutputStream &str);
 
         void OnKickEmergencyPutQueue();
-
-        void RegisterIcbControls(TIntrusivePtr<TControlBoard> icb);
 
     private:
         std::shared_ptr<THull> Hull;

@@ -49,7 +49,7 @@ class TController::TTxAssignTxId: public TTxBase {
                 }
 
                 auto& item = *ev->Record.AddVersionTxIds();
-                it->first.Serialize(*item.MutableVersion());
+                it->first.ToProto(item.MutableVersion());
                 item.SetTxId(txId);
             }
 

@@ -110,6 +110,7 @@ public:
         const ui64 TxId;
         const TMaybe<ui64> LockTxId;
         const ui32 LockNodeId;
+        const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
         NYql::NDqProto::TDqTask* Task;
         TIntrusivePtr<NRm::TTxState> TxInfo;
         const NYql::NDq::TComputeRuntimeSettings& RuntimeSettings;

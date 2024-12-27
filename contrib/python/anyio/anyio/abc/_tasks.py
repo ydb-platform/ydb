@@ -40,6 +40,12 @@ class TaskGroup(metaclass=ABCMeta):
 
     :ivar cancel_scope: the cancel scope inherited by all child tasks
     :vartype cancel_scope: CancelScope
+
+    .. note:: On asyncio, support for eager task factories is considered to be
+        **experimental**. In particular, they don't follow the usual semantics of new
+        tasks being scheduled on the next iteration of the event loop, and may thus
+        cause unexpected behavior in code that wasn't written with such semantics in
+        mind.
     """
 
     cancel_scope: CancelScope

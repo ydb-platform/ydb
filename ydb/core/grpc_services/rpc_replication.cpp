@@ -75,7 +75,7 @@ private:
 
                 ConvertDirectoryEntry(desc.GetSelf(), Result.mutable_self(), true);
                 return DescribeReplication(desc.GetReplicationDescription().GetControllerId(),
-                    PathIdFromPathId(desc.GetReplicationDescription().GetPathId()));
+                    TPathId::FromProto(desc.GetReplicationDescription().GetPathId()));
 
             case NKikimrScheme::StatusPathDoesNotExist:
             case NKikimrScheme::StatusSchemeError:
@@ -103,7 +103,7 @@ private:
         }
 
         auto ev = std::make_unique<NReplication::TEvController::TEvDescribeReplication>();
-        PathIdFromPathId(pathId, ev->Record.MutablePathId());
+        pathId.ToProto(ev->Record.MutablePathId());
         ev->Record.SetIncludeStats(GetProtoRequest()->include_stats());
 
         NTabletPipe::SendData(SelfId(), ControllerPipeClient, ev.release());

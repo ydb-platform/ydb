@@ -940,7 +940,7 @@ TTransaction::TTransaction(
     : TClientBase(rawClient, context, parentTransactionId, parentClient->GetRetryPolicy())
     , TransactionPinger_(parentClient->GetTransactionPinger())
     , PingableTx_(
-        MakeHolder<TPingableTransaction>(
+        std::make_unique<TPingableTransaction>(
             rawClient,
             parentClient->GetRetryPolicy(),
             context,
@@ -1352,11 +1352,27 @@ TNode::TListType TClient::SkyShareTable(
     const TSkyShareTableOptions& options)
 {
     CheckShutdown();
-    return NRawClient::SkyShareTable(
-        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        Context_,
-        tablePaths,
-        options);
+
+    // As documented at https://wiki.yandex-team.ru/yt/userdoc/blob_tables/#shag3.sozdajomrazdachu
+    // first request returns HTTP status code 202 (Accepted). And we need retrying until we have 200 (OK).
+    NHttpClient::IHttpResponsePtr response;
+    do {
+        response = RequestWithRetry<NHttpClient::IHttpResponsePtr>(
+            ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+            [this, &tablePaths, &options] (TMutationId /*mutationId*/) {
+                return RawClient_->SkyShareTable(tablePaths, options);
+            });
+        TWaitProxy::Get()->Sleep(TDuration::Seconds(5));
+    } while (response->GetStatusCode() != 200);
+
+    if (options.KeyColumns_) {
+        return NodeFromJsonString(response->GetResponse())["torrents"].AsList();
+    } else {
+        TNode torrent;
+        torrent["key"] = TNode::CreateList();
+        torrent["rbtorrent"] = response->GetResponse();
+        return TNode::TListType{torrent};
+    }
 }
 
 TCheckPermissionResponse TClient::CheckPermission(
@@ -1418,7 +1434,7 @@ TYtPoller& TClient::GetYtPoller()
         // We don't use current client and create new client because YtPoller_ might use
         // this client during current client shutdown.
         // That might lead to incrementing of current client refcount and double delete of current client object.
-        YtPoller_ = MakeHolder<TYtPoller>(Context_, ClientRetryPolicy_);
+        YtPoller_ = std::make_unique<TYtPoller>(Context_, ClientRetryPolicy_);
     }
     return *YtPoller_;
 }

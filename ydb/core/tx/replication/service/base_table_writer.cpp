@@ -465,6 +465,9 @@ class TLocalTableWriter
 
         if (records) {
             EnqueueRecords(std::move(records));
+        } else if (PendingTxId.empty()) {
+            Y_ABORT_UNLESS(PendingRecords.empty());
+            Send(Worker, new TEvWorker::TEvPoll());
         }
     }
 
@@ -474,7 +477,7 @@ class TLocalTableWriter
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
 
         for (const auto& kv : ev->Get()->Record.GetVersionTxIds()) {
-            const auto version = TRowVersion::Parse(kv.GetVersion());
+            const auto version = TRowVersion::FromProto(kv.GetVersion());
             TxIds.emplace(version, kv.GetTxId());
 
             for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {

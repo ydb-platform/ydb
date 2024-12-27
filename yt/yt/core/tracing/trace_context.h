@@ -70,7 +70,7 @@ DEFINE_ENUM(ETraceContextState,
  *
  *  By default, child objects inherit TraceId, RequestId and LoggingTag from the parent.
  *
- *  \note Thread affininty: any unless noted otherwise.
+ *  \note Thread affinity: any unless noted otherwise.
  */
 class TTraceContext
     : public TRefCounted

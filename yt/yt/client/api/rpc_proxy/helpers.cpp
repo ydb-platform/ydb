@@ -2076,14 +2076,6 @@ bool IsRetriableError(const TError& error, bool retryProxyBanned, bool retrySequ
         IsDynamicTableRetriableError(error);
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-void SetTimeoutOptions(
-    NRpc::TClientRequest& request,
-    const TTimeoutOptions& options)
-{
-    request.SetTimeout(options.Timeout);
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 // ROWSETS

@@ -10,18 +10,52 @@ BOOL_XOR(Bool?)->Bool?
 
 Применение соответствующей логической операции (`AND`/`OR`/`XOR`) ко всем значениям булевой колонки или выражения.
 
-Эти функции **не пропускают** `NULL` значение при агрегации и действуют по правилу `true and null == null`, `false or null == null`. Для `BOOL_AND` по всем `true` и любым `NULL` значениям превратит результат в `NULL`, а любое `false` значение превратит результат в `false` независимо от наличия `NULL`. Для `BOOL_OR` по всем `false` и любым `NULL` значениям превратит результат в `NULL`, а любое `true` значение превратит результат в `true` независимо от наличия `NULL`. Для `BOOL_XOR` любое `NULL` значение превратит результат в `NULL`.
+В отличие от большинства агрегатных функций, эти функции **не пропускают** `NULL` значение при агрегации и действуют по правилу:
+
+- `true AND null == null`
+- `false OR null == null`
+
+Для `BOOL_AND`:
+
+- Для любого количества значений `true` и хотя бы одного `NULL` значения, результатом будет `NULL`.
+- В случае хотя бы одного `false` значения, результатом будет `false`, независимо от наличия `NULL`.
+
+Для `BOOL_OR`:
+
+- Для любого количества значений `false` и хотя бы одного `NULL` значения, результатом будет `NULL`.
+- В случае хотя бы одного `true` значения, результатом будет `true`, независимо от наличия `NULL`.
+
+Для `BOOL_XOR`:
+
+- В случае хотя бы одного `NULL` значения, результатом будет `NULL`.
+
+Примеры описанного поведения приведены ниже.
 
 Для агрегации с пропуском `NULL`-ов можно использовать функции `MIN`/`MAX` или `BIT_AND`/`BIT_OR`/`BIT_XOR`.
 
 ### Примеры
 
 ```yql
+$data = [
+    <|nonNull: true, nonFalse: true, nonTrue: NULL, anyVal: true|>,
+    <|nonNull: false, nonFalse: NULL, nonTrue: NULL, anyVal: NULL|>,
+    <|nonNull: false, nonFalse: NULL, nonTrue: false, anyVal: false|>,
+];
+
 SELECT
-  BOOL_AND(bool_column),
-  BOOL_OR(bool_column),
-  BOOL_XOR(bool_column)
-FROM my_table;
+    BOOL_AND(nonNull) as nonNullAnd,      -- false
+    BOOL_AND(nonFalse) as nonFalseAnd,    -- NULL
+    BOOL_AND(nonTrue) as nonTrueAnd,      -- false
+    BOOL_AND(anyVal) as anyAnd,           -- false
+    BOOL_OR(nonNull) as nonNullOr,        -- true
+    BOOL_OR(nonFalse) as nonFalseOr,      -- true
+    BOOL_OR(nonTrue) as nonTrueOr,        -- NULL
+    BOOL_OR(anyVal) as anyOr,             -- true
+    BOOL_XOR(nonNull) as nonNullXor,      -- true
+    BOOL_XOR(nonFalse) as nonFalseXor,    -- NULL
+    BOOL_XOR(nonTrue) as nonTrueXor,      -- NULL
+    BOOL_XOR(anyVal) as anyXor,           -- NULL
+FROM AS_TABLE($data);
 ```
 
 ## BIT_AND, BIT_OR и BIT_XOR {#bit-and-or-xor}

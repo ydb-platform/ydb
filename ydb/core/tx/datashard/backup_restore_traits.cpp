@@ -72,6 +72,27 @@ TString DataFileExtension(EDataFormat format, ECompressionCodec codec) {
     return Sprintf("%s%s", fit->second.c_str(), cit->second.c_str());
 }
 
+TString PermissionsKeySuffix() {
+    return "permissions.pb";
+}
+
+TString SchemeKeySuffix() {
+    return "scheme.pb";
+}
+
+TString MetadataKeySuffix() {
+    return "metadata.json";
+}
+
+TString DataKeySuffix(ui32 n, EDataFormat format, ECompressionCodec codec) {
+    const auto ext = DataFileExtension(format, codec);
+    return Sprintf("data_%02d%s", n, ext.c_str());
+}
+
+TString ChecksumKey(const TString& objKey) {
+    return objKey + ".sha256";
+}
+
 } // NBackupRestoreTraits
 } // NDataShard
 } // NKikimr

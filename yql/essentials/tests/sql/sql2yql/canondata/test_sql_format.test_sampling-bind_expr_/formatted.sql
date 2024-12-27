@@ -8,9 +8,8 @@ $count = (
         COUNT(*)
     FROM
         Input
-);
+); -- $count = 10
 
--- $count = 10
 $var = (
     SELECT
         *

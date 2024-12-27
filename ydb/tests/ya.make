@@ -5,9 +5,10 @@ RECURSE(
     library/sqs
     olap
     oss
-    perf
     postgres_integrations
+    sql
     stability
     supp
     tools
+    workloads
 )

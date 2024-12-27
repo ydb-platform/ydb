@@ -34,6 +34,10 @@ struct TTxSettings {
         return TTxSettings(TS_SNAPSHOT_RO);
     }
 
+    static TTxSettings SnapshotRW() {
+        return TTxSettings(TS_SNAPSHOT_RW);
+    }
+
     void Out(IOutputStream& out) const {
         switch (Mode_) {
         case TS_SERIALIZABLE_RW:
@@ -48,6 +52,9 @@ struct TTxSettings {
         case TS_SNAPSHOT_RO:
             out << "SnapshotRO";
             break;
+        case TS_SNAPSHOT_RW:
+            out << "SnapshotRW";
+            break;
         default:
             out << "Unknown";
             break;
@@ -58,7 +65,8 @@ struct TTxSettings {
         TS_SERIALIZABLE_RW,
         TS_ONLINE_RO,
         TS_STALE_RO,
-        TS_SNAPSHOT_RO
+        TS_SNAPSHOT_RO,
+        TS_SNAPSHOT_RW,
     };
 
     FLUENT_SETTING(TTxOnlineSettings, OnlineSettings);

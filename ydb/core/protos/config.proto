@@ -1291,11 +1291,9 @@ message TImmediateControlsConfig {
             MinValue: 65536,
             MaxValue: 4294967296,
             DefaultValue: 4294967296 }];
-        optional uint64 MemoryLimit = 3 [(ControlOptions) = {
-            Description: "Make a best effort attempt to prevent more than limit bytes of memory from being allocated by the system.",
-            MinValue: 0,
-            MaxValue: 9223372036854775807,
-            DefaultValue: 0 }];
+
+        reserved 3; // was MemoryLimit
+
         optional uint64 PageCacheTargetSize = 4 [(ControlOptions) = {
             Description: "Page Cache Target Size.",
             MinValue: 0,
@@ -1375,6 +1373,32 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 260 }];
+
+        optional uint64 ThrottlingDeviceSpeed = 14 [(ControlOptions) = {
+            Description: "Maximum allowed speed when throttling is active",
+            MinValue: 1048576,
+            MaxValue: 10737418240,
+            DefaultValue: 52428800 }];
+        optional uint64 ThrottlingMinSstCount = 15 [(ControlOptions) = {
+            Description: "Minimum level 0 SST count - throttling is turned on",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 100 }];
+        optional uint64 ThrottlingMaxSstCount = 16 [(ControlOptions) = {
+            Description: "Maximum level 0 SST count - throttling speed is zero",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 250 }];
+        optional uint64 ThrottlingMinInplacedSize = 17 [(ControlOptions) = {
+            Description: "Minimum size of all inplaced blobs - throttling is turned on",
+            MinValue: 1048576,
+            MaxValue: 536870912000,
+            DefaultValue: 21474836480 }];
+        optional uint64 ThrottlingMaxInplacedSize = 18 [(ControlOptions) = {
+            Description: "Maximum size of all inplaced blobs - throttling speed is zero",
+            MinValue: 1048576,
+            MaxValue: 536870912000,
+            DefaultValue: 64424509440 }];
     }
 
     message TTabletControls {
@@ -1628,14 +1652,14 @@ message THiveConfig {
     optional bool ContinueAutoBalancer = 31 [default = true];
     optional double MinNodeUsageToBalance = 32 [default = 0.1];
     optional double MinPeriodBetweenReassign = 33 [default = 300.0]; // seconds
-    optional double TabletRestartWatchPeriod = 34 [default = 3600.0]; // seconds
+    optional double TabletRestartWatchPeriod = 34 [default = 3600.0]; // seconds, period used for statistics, not to be confused with TabletRestartsPeriod
     optional double NodeRestartWatchPeriod = 35 [default = 3600.0]; // seconds
     optional uint64 NodeDeletePeriod = 36 [default = 3600]; // seconds
     repeated THiveTabletLimit DefaultTabletLimit = 37;
     repeated THiveTabletPreference DefaultTabletPreference = 38;
     optional uint64 SystemTabletCategoryId = 39 [default = 1];
     optional bool EnableFastTabletMove = 40 [default = true];
-    optional uint64 TabletRestartsPeriod = 42 [default = 1000]; // milliseconds
+    optional uint64 TabletRestartsPeriod = 42 [default = 1000]; // milliseconds, period checked for penalties - not to be confused with TabletRestartWatchPeriod
     optional uint64 TabletRestarsMaxCount = 43 [default = 2]; // deprecated, use TabletRestartsMaxCount instead
     optional uint64 PostponeStartPeriod = 44 [default = 1000]; // milliseconds
     optional EHiveNodeSelectStrategy NodeSelectStrategy = 45 [default = HIVE_NODE_SELECT_STRATEGY_RANDOM_MIN_7P];
@@ -1738,6 +1762,7 @@ message TColumnShardConfig {
     optional bool AllowNullableColumnsInPK = 29 [default = false];
     optional uint32 RestoreDataOnWriteTimeoutSeconds = 30;
     optional bool UseSlicesFilter = 31 [default = true];
+    optional uint32 LimitForPortionsMetadataAsk = 32 [default = 1000];
 }
 
 message TSchemeShardConfig {

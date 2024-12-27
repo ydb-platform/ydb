@@ -307,7 +307,7 @@ class WriterAsyncIOReconnector:
 
     def _prepare_internal_messages(self, messages: List[PublicMessage]) -> List[InternalMessage]:
         if self._settings.auto_created_at:
-            now = datetime.datetime.now()
+            now = datetime.datetime.now(datetime.timezone.utc)
         else:
             now = None
 
@@ -686,7 +686,10 @@ class WriterAsyncIOStream:
     async def _update_token_loop(self):
         while True:
             await asyncio.sleep(self._update_token_interval)
-            await self._update_token(token=self._get_token_function())
+            token = self._get_token_function()
+            if asyncio.iscoroutine(token):
+                token = await token
+            await self._update_token(token=token)
 
     async def _update_token(self, token: str):
         await self._update_token_event.wait()

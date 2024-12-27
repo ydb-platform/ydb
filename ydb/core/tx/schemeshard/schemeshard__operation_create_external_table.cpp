@@ -260,7 +260,7 @@ private:
         const TPath& dstPath) {
         auto& reference = *externalDataSource->ExternalTableReferences.AddReferences();
         reference.SetPath(dstPath.PathString());
-        PathIdFromPathId(externalTable->PathId, reference.MutablePathId());
+        externalTable->PathId.ToProto(reference.MutablePathId());
     }
 
     void PersistExternalTable(

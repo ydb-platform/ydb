@@ -26,7 +26,7 @@ public:
         THttpHeader Header;
     };
 
-    using TStreamFactory = std::function<THolder<IInputStream>()>;
+    using TStreamFactory = std::function<std::unique_ptr<IInputStream>()>;
 
 public:
     explicit THeavyRequestRetrier(TParameters parameters);
@@ -65,7 +65,7 @@ void RetryHeavyWriteRequest(
     const TClientContext& context,
     const TTransactionId& parentId,
     THttpHeader& header,
-    std::function<THolder<IInputStream>()> streamMaker);
+    std::function<std::unique_ptr<IInputStream>()> streamMaker);
 
 ////////////////////////////////////////////////////////////////////////////////
 

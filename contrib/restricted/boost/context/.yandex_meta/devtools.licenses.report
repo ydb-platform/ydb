@@ -127,38 +127,11 @@ BELONGS ya.make
         include/boost/context/stack_traits.hpp [3:5]
         include/boost/context/windows/protected_fixedsize_stack.hpp [3:5]
         src/continuation.cpp [3:5]
+        src/fcontext.cpp [2:4]
         src/fiber.cpp [3:5]
         src/posix/stack_traits.cpp [3:5]
         src/untested.cpp [3:5]
         src/windows/stack_traits.cpp [3:5]
-
-KEEP     BSL-1.0              a56863ff22557bda50c7e49c3d85f911
-BELONGS ya.make
-    License text:
-        // Distributed under the Boost Software License, Version 1.0.
-        //    (See accompanying file LICENSE_1_0.txt or copy at
-        //        http://www.boost.org/LICENSE_1_0.txt)
-    Scancode info:
-        Original SPDX id: BSL-1.0
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
-    Files with this license:
-        src/asm/tail_ontop_ppc32_sysv.cpp [3:5]
-
-KEEP     BSL-1.0              b8bd11cab76fe04f0b68b48ae6bc9630
-BELONGS ya.make
-    License text:
-           Distributed under the Boost Software License, Version 1.0.
-              (See accompanying file LICENSE_1_0.txt or copy at
-                  http://www.boost.org/LICENSE
-    Scancode info:
-        Original SPDX id: BSL-1.0
-        Score           : 88.89
-        Match type      : NOTICE
-        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
-    Files with this license:
-        src/asm/ontop_mips64_n64_elf_gas.S [3:5]
 
 KEEP     BSL-1.0              d398f407edc1c91c48f2e7613f7602d5
 BELONGS ya.make
@@ -172,22 +145,10 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
-        src/asm/jump_i386_ms_pe_clang_gas.S [4:6]
-        src/asm/jump_i386_ms_pe_gas.asm [4:6]
-        src/asm/jump_x86_64_ms_pe_clang_gas.S [4:6]
-        src/asm/jump_x86_64_ms_pe_gas.asm [4:6]
         src/asm/jump_x86_64_sysv_elf_gas.S [3:5]
         src/asm/jump_x86_64_sysv_macho_gas.S [3:5]
-        src/asm/make_i386_ms_pe_clang_gas.S [4:6]
-        src/asm/make_i386_ms_pe_gas.asm [4:6]
-        src/asm/make_x86_64_ms_pe_clang_gas.S [4:6]
-        src/asm/make_x86_64_ms_pe_gas.asm [4:6]
         src/asm/make_x86_64_sysv_elf_gas.S [3:5]
         src/asm/make_x86_64_sysv_macho_gas.S [3:5]
-        src/asm/ontop_i386_ms_pe_clang_gas.S [4:6]
-        src/asm/ontop_i386_ms_pe_gas.asm [4:6]
-        src/asm/ontop_x86_64_ms_pe_clang_gas.S [4:6]
-        src/asm/ontop_x86_64_ms_pe_gas.asm [4:6]
         src/asm/ontop_x86_64_sysv_elf_gas.S [3:5]
         src/asm/ontop_x86_64_sysv_macho_gas.S [3:5]
 
@@ -207,55 +168,17 @@ BELONGS ya.make
         src/asm/jump_arm64_aapcs_macho_gas.S [3:5]
         src/asm/jump_arm_aapcs_elf_gas.S [3:5]
         src/asm/jump_arm_aapcs_macho_gas.S [3:5]
-        src/asm/jump_combined_sysv_macho_gas.S [3:5]
         src/asm/jump_i386_sysv_elf_gas.S [3:5]
         src/asm/jump_i386_sysv_macho_gas.S [3:5]
-        src/asm/jump_i386_x86_64_sysv_macho_gas.S [3:5]
-        src/asm/jump_mips32_o32_elf_gas.S [3:5]
-        src/asm/jump_mips64_n64_elf_gas.S [3:5]
-        src/asm/jump_ppc32_ppc64_sysv_macho_gas.S [3:5]
-        src/asm/jump_ppc32_sysv_elf_gas.S [3:5]
-        src/asm/jump_ppc32_sysv_macho_gas.S [3:5]
-        src/asm/jump_ppc32_sysv_xcoff_gas.S [3:5]
-        src/asm/jump_ppc64_sysv_elf_gas.S [3:5]
-        src/asm/jump_ppc64_sysv_macho_gas.S [3:5]
-        src/asm/jump_ppc64_sysv_xcoff_gas.S [4:6]
-        src/asm/jump_riscv64_sysv_elf_gas.S [2:4]
-        src/asm/jump_sparc64_sysv_elf_gas.S [3:5]
         src/asm/make_arm64_aapcs_elf_gas.S [3:5]
         src/asm/make_arm64_aapcs_macho_gas.S [3:5]
         src/asm/make_arm_aapcs_elf_gas.S [3:5]
         src/asm/make_arm_aapcs_macho_gas.S [3:5]
-        src/asm/make_combined_sysv_macho_gas.S [3:5]
         src/asm/make_i386_sysv_elf_gas.S [3:5]
         src/asm/make_i386_sysv_macho_gas.S [3:5]
-        src/asm/make_i386_x86_64_sysv_macho_gas.S [3:5]
-        src/asm/make_mips32_o32_elf_gas.S [3:5]
-        src/asm/make_mips64_n64_elf_gas.S [3:5]
-        src/asm/make_ppc32_ppc64_sysv_macho_gas.S [3:5]
-        src/asm/make_ppc32_sysv_elf_gas.S [3:5]
-        src/asm/make_ppc32_sysv_macho_gas.S [3:5]
-        src/asm/make_ppc32_sysv_xcoff_gas.S [3:5]
-        src/asm/make_ppc64_sysv_elf_gas.S [3:5]
-        src/asm/make_ppc64_sysv_macho_gas.S [3:5]
-        src/asm/make_ppc64_sysv_xcoff_gas.S [3:5]
-        src/asm/make_riscv64_sysv_elf_gas.S [2:4]
-        src/asm/make_sparc64_sysv_elf_gas.S [3:5]
         src/asm/ontop_arm64_aapcs_elf_gas.S [3:5]
         src/asm/ontop_arm64_aapcs_macho_gas.S [3:5]
         src/asm/ontop_arm_aapcs_elf_gas.S [3:5]
         src/asm/ontop_arm_aapcs_macho_gas.S [3:5]
-        src/asm/ontop_combined_sysv_macho_gas.S [3:5]
         src/asm/ontop_i386_sysv_elf_gas.S [3:5]
         src/asm/ontop_i386_sysv_macho_gas.S [3:5]
-        src/asm/ontop_i386_x86_64_sysv_macho_gas.S [3:5]
-        src/asm/ontop_mips32_o32_elf_gas.S [3:5]
-        src/asm/ontop_ppc32_ppc64_sysv_macho_gas.S [3:5]
-        src/asm/ontop_ppc32_sysv_elf_gas.S [3:5]
-        src/asm/ontop_ppc32_sysv_macho_gas.S [3:5]
-        src/asm/ontop_ppc32_sysv_xcoff_gas.S [3:5]
-        src/asm/ontop_ppc64_sysv_elf_gas.S [3:5]
-        src/asm/ontop_ppc64_sysv_macho_gas.S [3:5]
-        src/asm/ontop_ppc64_sysv_xcoff_gas.S [3:5]
-        src/asm/ontop_riscv64_sysv_elf_gas.S [2:4]
-        src/asm/ontop_sparc64_sysv_elf_gas.S [3:5]

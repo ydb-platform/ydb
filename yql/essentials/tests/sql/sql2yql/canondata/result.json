@@ -11222,9 +11222,9 @@
     ],
     "test_sql2yql.test[match_recognize-all_rows_per_match]": [
         {
-            "checksum": "31a940b1bbcea146ae9383e278326c7a",
-            "size": 6729,
-            "uri": "https://{canondata_backend}/1889210/954e2f1656d98697ece5794c59acf75dd1d40612/resource.tar.gz#test_sql2yql.test_match_recognize-all_rows_per_match_/sql.yql"
+            "checksum": "ee193116db0e897c8a3fbb98a75caaac",
+            "size": 6732,
+            "uri": "https://{canondata_backend}/1889210/a0cc9e3113699f51443284ed56291923dfc3735d/resource.tar.gz#test_sql2yql.test_match_recognize-all_rows_per_match_/sql.yql"
         }
     ],
     "test_sql2yql.test[match_recognize-greedy_quantifiers]": [
@@ -12065,6 +12065,13 @@
             "checksum": "cd07820172ca2eec89586738d3626c3c",
             "size": 20847,
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_order_by-order_by_missing_project_column_join_types_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[order_by-order_by_missing_project_column_nosimple]": [
+        {
+            "checksum": "ea2472dbe1cea58561e9a506a692738f",
+            "size": 3172,
+            "uri": "https://{canondata_backend}/1599023/02c3082e8ed2b6689e833c3b6594da85e12a01be/resource.tar.gz#test_sql2yql.test_order_by-order_by_missing_project_column_nosimple_/sql.yql"
         }
     ],
     "test_sql2yql.test[order_by-order_by_mul_columns]": [
@@ -15663,6 +15670,13 @@
             "checksum": "5bb1eafb72a533864774829ee8346ac9",
             "size": 712,
             "uri": "https://{canondata_backend}/1937429/434276f26b2857be3c5ad3fdbbf877d2bf775ac5/resource.tar.gz#test_sql2yql.test_pg_duplicated-ambigous_ref_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[pg_duplicated-duplicated_rowspec]": [
+        {
+            "checksum": "70c2665c84dec52c9318ad1b43450c08",
+            "size": 623,
+            "uri": "https://{canondata_backend}/1871002/c5bebc3ea8669574f080ea93959c29fb53e4bc67/resource.tar.gz#test_sql2yql.test_pg_duplicated-duplicated_rowspec_/sql.yql"
         }
     ],
     "test_sql2yql.test[pg_duplicated-order_by_duplicated_proj_on_column_ref]": [
@@ -28623,6 +28637,11 @@
     "test_sql_format.test[order_by-order_by_missing_project_column_join_types]": [
         {
             "uri": "file://test_sql_format.test_order_by-order_by_missing_project_column_join_types_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[order_by-order_by_missing_project_column_nosimple]": [
+        {
+            "uri": "file://test_sql_format.test_order_by-order_by_missing_project_column_nosimple_/formatted.sql"
         }
     ],
     "test_sql_format.test[order_by-order_by_mul_columns]": [

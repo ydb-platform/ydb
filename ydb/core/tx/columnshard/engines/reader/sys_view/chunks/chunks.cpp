@@ -220,4 +220,8 @@ void TStatsIterator::TFetchingAccessorAllocation::DoOnAllocationImpossible(const
     Context->AbortWithError("cannot allocate memory for take accessors info: " + errorMessage);
 }
 
+const std::shared_ptr<const TAtomicCounter>& TStatsIterator::TFetchingAccessorAllocation::DoGetAbortionFlag() const {
+    return Context->GetAbortionFlag();
+}
+
 }   // namespace NKikimr::NOlap::NReader::NSysView::NChunks

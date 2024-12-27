@@ -64,6 +64,7 @@
                                                                     "i"
                                                                 ],
                                                                 "Node Type": "TableLookupJoin",
+                                                                "Path": "/Root/postgres_jointest/join1.test_plan/J2_TBL",
                                                                 "PlanNodeId": 3,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
@@ -77,6 +78,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableRangeScan",
+                                                                                        "Path": "/Root/postgres_jointest/join1.test_plan/J1_TBL",
                                                                                         "ReadColumns": [
                                                                                             "i",
                                                                                             "j",

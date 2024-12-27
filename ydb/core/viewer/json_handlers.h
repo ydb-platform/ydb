@@ -8,7 +8,15 @@ namespace NKikimr::NViewer {
 class TJsonHandlerBase {
 public:
     virtual ~TJsonHandlerBase() = default;
-    virtual IActor* CreateRequestActor(IViewer* viewer, NMon::TEvHttpInfo::TPtr& event) = 0;
+
+    virtual IActor* CreateRequestActor(IViewer* viewer, NMon::TEvHttpInfo::TPtr& event) {
+        return nullptr;
+    }
+
+    virtual IActor* CreateRequestActor(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& event) {
+        return nullptr;
+    }
+
     virtual YAML::Node GetRequestSwagger() = 0;
 };
 
@@ -22,6 +30,24 @@ public:
     {}
 
     IActor* CreateRequestActor(IViewer* viewer, NMon::TEvHttpInfo::TPtr& event) override {
+        return new ActorRequestType(viewer, event);
+    }
+
+    YAML::Node GetRequestSwagger() override {
+        return Swagger;
+    }
+};
+
+template <typename ActorRequestType>
+class THttpHandler : public TJsonHandlerBase {
+public:
+    YAML::Node Swagger;
+
+    THttpHandler(YAML::Node swagger = {})
+        : Swagger(swagger)
+    {}
+
+    IActor* CreateRequestActor(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& event) override {
         return new ActorRequestType(viewer, event);
     }
 

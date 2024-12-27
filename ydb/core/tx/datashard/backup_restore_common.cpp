@@ -6,9 +6,13 @@ void TMetadata::AddFullBackup(TFullBackupMetadata::TPtr fb) {
     FullBackups.emplace(fb->SnapshotVts, fb);
 }
 
+void TMetadata::SetVersion(ui64 version) {
+    Version = version;
+}
+
 TString TMetadata::Serialize() const {
     NJson::TJsonMap m;
-    m["version"] = 0;
+    m["version"] = Version;
     NJson::TJsonArray fullBackups;
     for (auto &[tp, _] : FullBackups) {
         NJson::TJsonMap backupMap;

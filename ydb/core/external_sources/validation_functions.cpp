@@ -26,7 +26,7 @@ void ValidateHostname(const std::vector<TRegExMatch>& hostnamePatterns, const TS
         }
     }
 
-    ythrow TExternalSourceException() << "It is not allowed to access hostname '" << hostname << "'";
+    throw TExternalSourceException() << "It is not allowed to access hostname '" << hostname << "'";
 }
 
 }  // NKikimr::NExternalSource

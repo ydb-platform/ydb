@@ -2529,6 +2529,87 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
     THashSet<TShardIdx> DoneShards;
 };
 
+struct TIncrRestorePipelineInfo : public TSimpleRefCount<TIncrRestorePipelineInfo> {
+    using TPtr = TIntrusivePtr<TIncrRestorePipelineInfo>;
+    using EMode = NKikimrSchemeOp::ECdcStreamMode;
+    using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
+    using EState = NKikimrSchemeOp::ECdcStreamState;
+
+    // shards of the table
+    struct TShardStatus {
+        NKikimrTxDataShard::TEvIncrRestorePipelineResponse::EStatus Status;
+
+        explicit TShardStatus(NKikimrTxDataShard::TEvIncrRestorePipelineResponse::EStatus status)
+            : Status(status)
+        {}
+    };
+
+    TIncrRestorePipelineInfo(ui64 version, EMode mode, EFormat format, bool vt, const TDuration& rt, const TString& awsRegion, EState state)
+        : AlterVersion(version)
+        , Mode(mode)
+        , Format(format)
+        , VirtualTimestamps(vt)
+        , ResolvedTimestamps(rt)
+        , AwsRegion(awsRegion)
+        , State(state)
+    {}
+
+    TIncrRestorePipelineInfo(const TIncrRestorePipelineInfo&) = default;
+
+    TPtr CreateNextVersion() {
+        Y_ABORT_UNLESS(AlterData == nullptr);
+        TPtr result = new TIncrRestorePipelineInfo(*this);
+        ++result->AlterVersion;
+        this->AlterData = result;
+        return result;
+    }
+
+    static TPtr New(EMode mode, EFormat format, bool vt, const TDuration& rt, const TString& awsRegion) {
+        return new TIncrRestorePipelineInfo(0, mode, format, vt, rt, awsRegion, EState::ECdcStreamStateInvalid);
+    }
+
+    static TPtr Create(const NKikimrSchemeOp::TIncrRestorePipelineDescription& desc) {
+        TPtr result = New(desc.GetMode(), desc.GetFormat(), desc.GetVirtualTimestamps(),
+            TDuration::MilliSeconds(desc.GetResolvedTimestampsIntervalMs()), desc.GetAwsRegion());
+        TPtr alterData = result->CreateNextVersion();
+        alterData->State = EState::ECdcStreamStateReady;
+        if (desc.HasState()) {
+            alterData->State = desc.GetState();
+        }
+
+        return result;
+    }
+
+    void FinishAlter() {
+        Y_ABORT_UNLESS(AlterData);
+
+        AlterVersion = AlterData->AlterVersion;
+        Mode = AlterData->Mode;
+        Format = AlterData->Format;
+        VirtualTimestamps = AlterData->VirtualTimestamps;
+        ResolvedTimestamps = AlterData->ResolvedTimestamps;
+        AwsRegion = AlterData->AwsRegion;
+        State = AlterData->State;
+
+        AlterData.Reset();
+    }
+
+    ui64 AlterVersion = 1;
+    EMode Mode;
+    EFormat Format;
+    bool VirtualTimestamps;
+    TDuration ResolvedTimestamps;
+    TString AwsRegion;
+    EState State;
+
+    TIncrRestorePipelineInfo::TPtr AlterData = nullptr;
+
+    TMap<TShardIdx, TShardStatus> ScanShards;
+    THashSet<TShardIdx> PendingShards;
+    THashSet<TShardIdx> InProgressShards;
+    THashSet<TShardIdx> DoneShards;
+};
+
 struct TSequenceInfo : public TSimpleRefCount<TSequenceInfo> {
     using TPtr = TIntrusivePtr<TSequenceInfo>;
 

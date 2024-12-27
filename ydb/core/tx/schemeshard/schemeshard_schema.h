@@ -1728,6 +1728,26 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct IncrRestorePipelineShardStatus : Table<112> {
+        // path id of cdc stream
+        struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        // shard idx of datashard
+        struct OwnerShardIdx : Column<3, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalShardIdx : Column<4, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
+
+        struct Status : Column<5, NScheme::NTypeIds::Uint32> { using Type = NKikimrTxDataShard::TEvIncrRestorePipelineResponse::EStatus; };
+
+        using TKey = TableKey<OwnerPathId, LocalPathId, OwnerShardIdx, LocalShardIdx>;
+        using TColumns = TableColumns<
+            OwnerPathId,
+            LocalPathId,
+            OwnerShardIdx,
+            LocalShardIdx,
+            Status
+        >;
+    };
+
     struct Sequences : Table<97> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
@@ -1988,7 +2008,8 @@ struct Schema : NIceDb::Schema {
         View,
         BackgroundSessions,
         ResourcePool,
-        BackupCollection
+        BackupCollection,
+        IncrRestorePipelineShardStatus
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

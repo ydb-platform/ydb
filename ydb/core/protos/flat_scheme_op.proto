@@ -943,6 +943,22 @@ message TCdcStreamDescription {
     optional TCdcStreamScanProgress ScanProgress = 11;
 }
 
+message TIncrRestorePipelineDescription {
+    optional string Name = 1;
+    optional ECdcStreamMode Mode = 2;
+    optional ECdcStreamFormat Format = 6;
+    optional bool VirtualTimestamps = 7;
+    optional NKikimrProto.TPathID PathId = 3;
+    optional ECdcStreamState State = 4;
+    optional uint64 SchemaVersion = 5;
+    repeated TUserAttribute UserAttributes = 8;
+    // AwsRegion used to mark records in DynamoDB-compatible mode (FormatDynamoDBStreamsJson)
+    optional string AwsRegion = 9;
+    // Set to '0' to disable resolved timestamps
+    optional uint64 ResolvedTimestampsIntervalMs = 10;
+    optional TCdcStreamScanProgress ScanProgress = 11;
+}
+
 message TCreateCdcStream {
     optional string TableName = 1;
     optional TCdcStreamDescription StreamDescription = 2;

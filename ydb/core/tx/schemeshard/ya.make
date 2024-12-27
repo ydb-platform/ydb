@@ -80,9 +80,9 @@ SRCS(
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard__monitoring.cpp
     schemeshard__notify.cpp
+    schemeshard__op_traits.h
     schemeshard__operation.cpp
     schemeshard__operation.h
-    schemeshard__op_traits.h
     schemeshard__operation_alter_bsv.cpp
     schemeshard__operation_alter_cdc_stream.cpp
     schemeshard__operation_alter_continuous_backup.cpp
@@ -105,7 +105,6 @@ SRCS(
     schemeshard__operation_assign_bsv.cpp
     schemeshard__operation_backup_backup_collection.cpp
     schemeshard__operation_backup_incremental_backup_collection.cpp
-    schemeshard__operation_restore_backup_collection.cpp
     schemeshard__operation_blob_depot.cpp
     schemeshard__operation_cancel_tx.cpp
     schemeshard__operation_cansel_build_index.cpp
@@ -182,6 +181,7 @@ SRCS(
     schemeshard__operation_move_tables.cpp
     schemeshard__operation_part.cpp
     schemeshard__operation_part.h
+    schemeshard__operation_restore_backup_collection.cpp
     schemeshard__operation_rmdir.cpp
     schemeshard__operation_side_effects.cpp
     schemeshard__operation_side_effects.h
@@ -232,6 +232,7 @@ SRCS(
     schemeshard_import__get.cpp
     schemeshard_import__list.cpp
     schemeshard_import_flow_proposals.cpp
+    schemeshard_incr_restore_pipeline.cpp
     schemeshard_info_types.cpp
     schemeshard_info_types.h
     schemeshard_path.cpp

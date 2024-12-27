@@ -1435,6 +1435,26 @@ public:
     void RemoveCdcStreamScanShardStatus(NIceDb::TNiceDb& db, const TPathId& streamPathId, const TShardIdx& shardIdx);
     // } // NCdcStreamScan
 
+    // namespace NIncrRestorePipeline {
+    struct TIncrRestorePipeline {
+        struct TTxProgress;
+    };
+
+    TDedicatedPipePool<TPathId> IncrRestorePipelinePipes;
+
+    NTabletFlatExecutor::ITransaction* CreateTxProgressIncrRestorePipeline(TEvPrivate::TEvRunIncrRestorePipeline::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressIncrRestorePipeline(TEvDataShard::TEvIncrRestorePipelineResponse::TPtr& ev);
+
+    void Handle(TEvPrivate::TEvRunIncrRestorePipeline::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvIncrRestorePipelineResponse::TPtr& ev, const TActorContext& ctx);
+
+    void ResumeIncrRestorePipelines(const TVector<TPathId>& ids, const TActorContext& ctx);
+
+    void PersistIncrRestorePipelineShardStatus(NIceDb::TNiceDb& db, const TPathId& streamPathId, const TShardIdx& shardIdx,
+        const TIncrRestorePipelineInfo::TShardStatus& status);
+    void RemoveIncrRestorePipelineShardStatus(NIceDb::TNiceDb& db, const TPathId& streamPathId, const TShardIdx& shardIdx);
+    // } // NIncrRestorePipeline
+
     // statistics
     TTabletId StatisticsAggregatorId;
     TActorId SAPipeClientId;

@@ -170,7 +170,7 @@ class TpchTestBaseH1(TestBase):
             'l_quantity': random.randint(1, 1000),
             'l_discount': random.uniform(1.0, 100.0),
             'l_extendedprice': random.uniform(1.0, 100.0),
-            'l_comment': b' ', # important! CS does not work with empty strings
+            'l_comment': b' ',  # important! CS does not work with empty strings https://github.com/ydb-platform/ydb/issues/13052
             'l_shipdate': date(year=2012, month=2, day=9),
             'l_returnflag': b'',
             'l_tax': 0.0,

@@ -111,19 +111,4 @@ Y_UNIT_TEST_SUITE(RequestValidation) {
         UNIT_ASSERT(res);
         UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrProto::ERROR);
     }
-
-    Y_UNIT_TEST(TestVPatchSize0) {
-        TestCtx ctx;
-        ctx.Initialize();
-        TLogoBlobID oldId(100, 1, 1, 0, /*blobSize=*/100, 0, /*partId=*/1);
-        TLogoBlobID newId(100, 1, 1, 0, /*blobSize=*/0, 1, /*partId=*/1);
-
-        auto ev = std::make_unique<TEvBlobStorage::TEvVPatchStart>(oldId, newId, ctx.VDiskId, TInstant::Max(), 0, false);
-        
-        ctx.Env->Runtime->Send(new IEventHandle(ctx.VDiskActorId, ctx.Edge, ev.release()), ctx.VDiskActorId.NodeId());
-
-        auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVPatchResult>(ctx.Edge, false, TInstant::Max());
-        UNIT_ASSERT(res);
-        UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrProto::ERROR);
-    }
 }

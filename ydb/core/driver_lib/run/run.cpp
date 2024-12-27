@@ -131,6 +131,7 @@
 #include <ydb/services/ydb/ydb_object_storage.h>
 #include <ydb/services/tablet/ydb_tablet.h>
 #include <ydb/services/view/grpc_service.h>
+#include <ydb/services/etcd/grpc_service.h>
 
 #include <ydb/core/fq/libs/init/init.h>
 
@@ -916,6 +917,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 server.AddService(service);
             }
         }
+
+        server.AddService(new NGRpcService::TEtcdGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies.front()));
     };
 
     if (appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().GetStartGRpcProxy()) {

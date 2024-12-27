@@ -1936,9 +1936,8 @@ public:
             }
         }
 
-
         auto options = Y(Q(Y(Q("mode"), Q(IsUser ? "createUser" : "createGroup"))));
-        {
+        if (Params) {
             if (Params->IsPasswordEncrypted) {
                 options = L(options, Q(Y(Q("passwordEncrypted"))));
             }

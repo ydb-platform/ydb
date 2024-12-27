@@ -614,9 +614,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     opts.push_back(opt.GetRule_create_user_option1());
                 }
 
-                bool isCreateUser = true;
-
-                if (!RoleParameters(opts, *roleParams, isCreateUser)) {
+                if (!RoleParameters(opts, *roleParams)) {
                     return false;
                 }
             }
@@ -659,9 +657,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                         opts.push_back(opt.GetRule_create_user_option1());
                     }
 
-                    bool isCreateUser = false;
-
-                    if (!RoleParameters(opts, roleParams, isCreateUser)) {
+                    if (!RoleParameters(opts, roleParams)) {
                         return false;
                     }
                     stmt = BuildAlterUser(pos, service, cluster, roleName, roleParams, Ctx.Scoped);

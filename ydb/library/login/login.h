@@ -70,8 +70,7 @@ public:
             SUCCESS,
             INVALID_USER,
             INVALID_PASSWORD,
-            UNAVAILABLE_KEY,
-            NOLOGIN
+            UNAVAILABLE_KEY
         };
 
         TString Token;
@@ -107,6 +106,7 @@ public:
     struct TModifyUserRequest : TBasicRequest {
         TString User;
         TString Password;
+        bool NoPassword = true;
         ETypeOfLogin CanLogin = ETypeOfLogin::Undefined;
     };
 
@@ -170,6 +170,7 @@ public:
         ESidType::SidType Type = ESidType::UNKNOWN;
         TString Name;
         TString Hash;
+        bool NoPassword = true;
         bool IsEnabled;
         std::unordered_set<TString> Members;
         // CreatedAt, FailedLoginAttemptCount, LastFailedLogin, LastSuccessfulLogin do not need in describe result.

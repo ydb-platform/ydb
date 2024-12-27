@@ -89,14 +89,17 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
     user.LastFailedLogin = std::chrono::system_clock::time_point();
 
     switch (request.CanLogin) {
-    case ETypeOfLogin::Login:
-        user.IsEnabled = true;
-        break;
-    case ETypeOfLogin::NoLogin:
-        user.IsEnabled = false;
-        break;
-    case ETypeOfLogin::Undefined:
-        break;
+        case ETypeOfLogin::Login:
+        case ETypeOfLogin::Undefined:
+        {
+            user.IsEnabled = true;
+            break;
+        }
+        case ETypeOfLogin::NoLogin:
+        {
+            user.IsEnabled = false;
+            break;
+        }
     }
 
     return response;
@@ -127,17 +130,27 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
     }
 
     TSidRecord& user = itUserModify->second;
-    user.Hash = Impl->GenerateHash(request.Password);
+    if (request.NoPassword) {
+        user.NoPassword = true;
+    } else {
+        user.Hash = Impl->GenerateHash(request.Password);
+    }
 
     switch (request.CanLogin) {
-    case ETypeOfLogin::Login:
-        user.IsEnabled = true;
-        break;
-    case ETypeOfLogin::NoLogin:
-        user.IsEnabled = false;
-        break;
-    case ETypeOfLogin::Undefined:
-        break;
+        case ETypeOfLogin::Login:
+        {
+            user.IsEnabled = true;
+            break;
+        }
+        case ETypeOfLogin::NoLogin:
+        {
+            user.IsEnabled = false;
+            break;
+        }
+        case ETypeOfLogin::Undefined:
+        {
+            break;
+        }
     }
 
     return response;
@@ -429,12 +442,6 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
             response.Error = "Invalid password";
             sid->LastFailedLogin = now;
             sid->FailedLoginAttemptCount++;
-            return response;
-        }
-
-        if (!itUser->second.IsEnabled) {
-            response.Status = TLoginUserResponse::EStatus::NOLOGIN;
-            response.Error = "role \"" + request.User + "\" is not permitted to log in";
             return response;
         }
     }

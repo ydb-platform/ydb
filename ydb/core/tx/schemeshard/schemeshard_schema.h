@@ -1636,7 +1636,7 @@ struct Schema : NIceDb::Schema {
         struct LastSuccessfulAttempt : Column<4, NScheme::NTypeIds::Timestamp> {};
         struct LastFailedAttempt : Column<5, NScheme::NTypeIds::Timestamp> {};
         struct FailedAttemptCount : Column<6, NScheme::NTypeIds::Uint32> {using Type = ui32; static constexpr Type Default = 0;};
-        struct CreatedAt : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct CreatedAt : Column<7, NScheme::NTypeIds::Timestamp> {};
 
         using TKey = TableKey<SidName>;
         using TColumns = TableColumns<

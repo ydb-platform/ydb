@@ -2,8 +2,6 @@
 
 #include "public.h"
 
-#include <library/cpp/yt/memory/ref.h>
-
 #include <yt/yt/library/re2/re2.h>
 
 #include <yt/yt/core/rpc/public.h>
@@ -11,6 +9,8 @@
 #include <yt/yt/client/api/client.h>
 
 #include <yt/yt_proto/yt/client/api/rpc_proxy/proto/api_service.pb.h>
+
+#include <library/cpp/yt/memory/ref.h>
 
 namespace NYT::NApi::NRpcProxy {
 

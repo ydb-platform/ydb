@@ -102,6 +102,8 @@ SRCS(
     security_client/helpers.cpp
 
     signature/signature.cpp
+    signature/validator.cpp
+    signature/generator.cpp
 
     table_client/public.cpp
     table_client/adapters.cpp

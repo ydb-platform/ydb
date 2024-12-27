@@ -1,3 +1,0 @@
-{"key"="aaa";"value"="a11"};
-{"key"="bbb";"value"="a12"};
-{"key"="ccc";"value"="a13"};

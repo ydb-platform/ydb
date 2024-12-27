@@ -1,7 +1,0 @@
-{
-    "_yql_row_spec"={
-        "Type"=["StructType";[
-            ["value";["DataType";"String"]]
-        ]];
-    }
-}

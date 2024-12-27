@@ -1149,12 +1149,13 @@ void TColumnShard::SetupCleanupInsertTable() {
 }
 
 void TColumnShard::Die(const TActorContext& ctx) {
-    AFL_VERIFY(TabletActivityImpl->Dec() == 0);
-    CleanupActors(ctx);
-    NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
-    UnregisterMediatorTimeCast();
-    NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
-    return IActor::Die(ctx);
+    if (TabletActivityImpl->Dec() == 0) {
+        CleanupActors(ctx);
+        NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
+        UnregisterMediatorTimeCast();
+        NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
+        IActor::Die(ctx);
+    }
 }
 
 void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&) {

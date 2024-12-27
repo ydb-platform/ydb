@@ -53,7 +53,7 @@ private:
     void DoAction() override {
         Become(&TThis::StateFunc);
 
-        NJson::TJsonValue tagsJson;
+        NJson::TJsonMap tagsJson;
         TStringStream tagsStr;
         if (QueueTags_.Defined()) {
             for (const auto& [k, v] : *QueueTags_) {

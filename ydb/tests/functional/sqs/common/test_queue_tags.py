@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import pytest
-from hamcrest import assert_that, equal_to
 
 from ydb.tests.library.sqs.test_base import KikimrSqsTestBase
 
@@ -28,17 +26,15 @@ class TestQueueTags(KikimrSqsTestBase):
         queue_url = self._create_queue_and_assert(self.queue_name, use_http=True)
 
         def add_tags(tags):
-            return self._sqs_api.tag_queue(queue_url, Tags=tags)
+            return self._sqs_api.tag_queue(queue_url, tags)
 
         def get_tags():
             return self._sqs_api.list_queue_tags(queue_url)
 
-        tags = get_tags()
-        assert len(tags) == 0
+        assert get_tags() == {}
 
         add_tags({})
-        tags = get_tags()
-        assert len(tags) == 0
+        assert get_tags() == {}
 
         add_tags({'key1': 'value0'})
         assert get_tags() == {'key1': 'value0'}
@@ -65,10 +61,10 @@ class TestQueueTags(KikimrSqsTestBase):
         queue_url = self._create_queue_and_assert(self.queue_name, use_http=True)
 
         def add_tags(tags):
-            return self._sqs_api.tag_queue(queue_url, Tags=tags)
+            return self._sqs_api.tag_queue(queue_url, tags)
 
         def remove_tags(keys):
-            return self._sqs_api.untag_queue(queue_url, TagKeys=keys)
+            return self._sqs_api.untag_queue(queue_url, keys)
 
         def get_tags():
             return self._sqs_api.list_queue_tags(queue_url)

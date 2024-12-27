@@ -568,13 +568,17 @@ class SqsHttpApi(object):
             extract_result_method=lambda x: x['ListQueueTagsResponse']['ListQueueTagsResult']['Tag'],
             QueueUrl=queue_url
         )
-        return {} if tags is None else tags
+
+        return {} if tags is None else {
+            tag['Key']: tag['Value']
+            for tag in wrap_in_list(tags)
+        }
 
     def tag_queue(self, queue_url, tags):
         params = {}
-        for i, (k, v) in enumerate(tags, 1):
-            params['Tag.{}.Name'.format(i)] = k
-            params['Tag.{}.Value'.format(i)] = v
+        for i, k in enumerate(tags, 1):
+            params['Tag.{}.Key'.format(i)] = k
+            params['Tag.{}.Value'.format(i)] = tags[k]
         return self.execute_request(
             action='TagQueue',
             extract_result_method=lambda x: x['TagQueueResponse']['ResponseMetadata']['RequestId'],
@@ -585,7 +589,7 @@ class SqsHttpApi(object):
     def untag_queue(self, queue_url, tag_keys):
         params = {}
         for i, k in enumerate(tag_keys, 1):
-            params['Tag.{}'.format(i)] = k
+            params['TagKey.{}'.format(i)] = k
         return self.execute_request(
             action='UntagQueue',
             extract_result_method=lambda x: x['UntagQueueResponse']['ResponseMetadata']['RequestId'],

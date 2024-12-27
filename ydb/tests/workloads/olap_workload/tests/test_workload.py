@@ -9,7 +9,12 @@ from ydb.tests.library.common.types import Erasure
 class TestYdbWorkload(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=Erasure.MIRROR_3_DC))
+        cls.cluster = KiKiMR(KikimrConfigGenerator(
+            erasure=Erasure.MIRROR_3_DC,
+            column_shard_config={
+                "allow_nullable_columns_in_pk": True,
+            }
+        ))
         cls.cluster.start()
 
     @classmethod
@@ -24,6 +29,7 @@ class TestYdbWorkload(object):
                 "--endpoint", f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
                 "--database=/Root",
                 "--duration", "120",
+                "--allow-nullables-in-pk", "1",
             ],
             wait=True
         )

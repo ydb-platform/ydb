@@ -69,12 +69,6 @@ HAS_QUEUES_PARAMS = {
 }
 
 
-def get_sqs_client_path():
-    if os.getenv("SQS_CLIENT_BINARY"):
-        return yatest.common.binary_path(os.getenv("SQS_CLIENT_BINARY"))
-    raise RuntimeError("SQS_CLIENT_BINARY enviroment variable is not specified")
-
-
 def to_bytes(v):
     if v is None:
         return v
@@ -191,8 +185,7 @@ class KikimrSqsTestBase(object):
         for slot_index in range(len(self.cluster.slots)):
             self._enable_tablets_on_node(slot_index)
 
-        grpc_port = self.cluster.slots[1].grpc_port if self.slot_count else self.cluster.nodes[1].grpc_port
-        self._sqs_server_opts = ['-s', 'localhost', '-p', str(grpc_port)]
+        self._http_port = self.cluster.nodes[1].sqs_port
         test_name = str(method.__name__)[5:]
 
         def create_unique_name(user=False):
@@ -315,18 +308,17 @@ class KikimrSqsTestBase(object):
             with ydb.SessionPool(driver, size=1) as pool:
                 with pool.checkout() as session:
                     create_all_sqs_tables(cls.sqs_root, driver, session)
-        cls.create_metauser(cluster, config_generator)
+        http_port = cluster.nodes[1].sqs_port
+        cls.create_metauser(http_port, config_generator)
 
     @classmethod
-    def create_metauser(cls, cluster, config_generator):
-        grpc_port = cluster.slots[1].grpc_port if cls.slot_count else cluster.nodes[1].grpc_port
+    def create_metauser(cls, http_port, config_generator):
         cmd = [
-            get_sqs_client_path(),
-            'user',
-            '-u', 'metauser',
-            '-n', 'metauser',
-            '-s', 'localhost',
-            '-p', str(grpc_port)
+            'curl',
+            '-v',
+            'localhost:'+str(http_port)+'?Action=CreateUser&UserName=metauser',
+            '-H',
+            'authorization: aaa credential=abacaba/20220830/ec2/aws4_request'
         ]
         yatest.common.execute(cmd)
 
@@ -339,12 +331,16 @@ class KikimrSqsTestBase(object):
         return cluster, config_generator
 
     def _setup_user(self, _username, retries_count=20):
+
         cmd = [
-            get_sqs_client_path(),
-            'user',
-            '-u', 'metauser',
-            '-n', _username,
-        ] + self._sqs_server_opts
+            'curl',
+            '-v',
+            'localhost:'+str(self._http_port)+'?Action=CreateUser&UserName='+_username+'',
+            '-H',
+            'authorization: aaa credential=abacaba/20220830/ec2/aws4_request'
+
+        ]
+
         while retries_count:
             logging.debug("Running {}".format(' '.join(cmd)))
             try:

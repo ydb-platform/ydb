@@ -94,6 +94,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
     , SysLocks(this) {
+    AFL_VERIFY(TabletActivityImpl->Inc() == 1);
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
@@ -1149,13 +1150,12 @@ void TColumnShard::SetupCleanupInsertTable() {
 }
 
 void TColumnShard::Die(const TActorContext& ctx) {
-    if (TabletActivityImpl->Dec() == 0) {
-        CleanupActors(ctx);
-        NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
-        UnregisterMediatorTimeCast();
-        NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
-        IActor::Die(ctx);
-    }
+    AFL_VERIFY(TabletActivityImpl->Dec() == 0);
+    CleanupActors(ctx);
+    NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
+    UnregisterMediatorTimeCast();
+    NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
+    IActor::Die(ctx);
 }
 
 void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&) {

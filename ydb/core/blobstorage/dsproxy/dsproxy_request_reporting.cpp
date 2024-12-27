@@ -10,24 +10,21 @@ struct TReportLeakBucket {
 static std::array<TReportLeakBucket, NKikimrBlobStorage::EPutHandleClass_MAX + 1> ReportPutPermissions;
 static std::array<TReportLeakBucket, NKikimrBlobStorage::EGetHandleClass_MAX + 1> ReportGetPermissions;
 
-bool AllowToReport(NKikimrBlobStorage::EPutHandleClass handleClass) {
-    auto& permission = ReportPutPermissions[(ui32)handleClass];
-    auto level = permission.Level.fetch_sub(1);
+bool GetFromBucket(TReportLeakBucket& bucket) {
+    auto level = bucket.Level.fetch_sub(1);
     if (level < 1) {
-        permission.Level++;
+        bucket.Level++;
         return false;
     }
     return true;
 }
 
+bool AllowToReport(NKikimrBlobStorage::EPutHandleClass handleClass) {
+    return GetFromBucket(ReportPutPermissions[(ui32)handleClass]);
+}
+
 bool AllowToReport(NKikimrBlobStorage::EGetHandleClass handleClass) {
-    auto& permission = ReportGetPermissions[(ui32)handleClass];
-    auto level = permission.Level.fetch_sub(1);
-    if (level < 1) {
-        permission.Level++;
-        return false;
-    }
-    return true;
+    return GetFromBucket(ReportGetPermissions[(ui32)handleClass]);
 }
 
 class TRequestReportingThrottler : public TActorBootstrapped<TRequestReportingThrottler> {

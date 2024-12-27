@@ -14,6 +14,11 @@
 namespace NKikimr {
 namespace NDSProxyRequestReportningTest {
 
+void SimulateSleep(TTestBasicRuntime& runtime, TDuration duration) {
+    runtime.AdvanceCurrentTime(duration);
+    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+}
+
 Y_UNIT_TEST_SUITE(TDSProxyRequestReportningTest) {
 
 Y_UNIT_TEST(CheckDefaultBehaviour) {
@@ -27,48 +32,40 @@ Y_UNIT_TEST(CheckDefaultBehaviour) {
     TControlWrapper leakRate(1, 1, 100000);
     NActors::TActorId reportingThrottler = runtime.Register(CreateRequestReportingThrottler(bucketSize, leakDurationMs, leakRate));
     runtime.EnableScheduleForActor(reportingThrottler);
-    runtime.AdvanceCurrentTime(TDuration::MilliSeconds(10));
-    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    SimulateSleep(runtime, TDuration::MilliSeconds(10));
 
     UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
     UNIT_ASSERT(!AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
     UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::AsyncBlob));
 
     // 10 seconds after last update
-    runtime.UpdateCurrentTime(runtime.GetCurrentTime() + TDuration::MilliSeconds(10000));
-    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    SimulateSleep(runtime, TDuration::Seconds(10));
     UNIT_ASSERT(!AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
     UNIT_ASSERT(!AllowToReport(NKikimrBlobStorage::EPutHandleClass::AsyncBlob));
 
     // 50 seconds after last update
-    runtime.UpdateCurrentTime(runtime.GetCurrentTime() + TDuration::MilliSeconds(40000));
-    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    SimulateSleep(runtime, TDuration::Seconds(40));
     UNIT_ASSERT(!AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
 
     // 61 seconds after last update
-    runtime.UpdateCurrentTime(runtime.GetCurrentTime() + TDuration::MilliSeconds(21000));
-    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    SimulateSleep(runtime, TDuration::Seconds(21));
     UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
     UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::AsyncBlob));
 
     // Check more than 1 request allowed for duration < 60000
 
     // update: + 1 in bucket
-    runtime.UpdateCurrentTime(runtime.GetCurrentTime() + TDuration::MilliSeconds(60000));
-    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    SimulateSleep(runtime, TDuration::Seconds(60));
 
     // 1 seconds before update
-    runtime.UpdateCurrentTime(runtime.GetCurrentTime() + TDuration::MilliSeconds(60000 - 1000));
-    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    SimulateSleep(runtime, TDuration::Seconds(59));
     UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
 
     // update
-    runtime.UpdateCurrentTime(runtime.GetCurrentTime() + TDuration::MilliSeconds(1000));
-    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    SimulateSleep(runtime, TDuration::Seconds(1));
 
     // 1 seconds after update
-    runtime.UpdateCurrentTime(runtime.GetCurrentTime() + TDuration::MilliSeconds(1000));
-    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    SimulateSleep(runtime, TDuration::Seconds(1));
     UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
 }
 
@@ -82,8 +79,7 @@ Y_UNIT_TEST(CheckLeakyBucketBehaviour) {
     TControlWrapper leakRate(1, 1, 100000);
     NActors::TActorId reportingThrottler = runtime.Register(CreateRequestReportingThrottler(bucketSize, leakDurationMs, leakRate));
     runtime.EnableScheduleForActor(reportingThrottler);
-    runtime.AdvanceCurrentTime(TDuration::MilliSeconds(10));
-    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    SimulateSleep(runtime, TDuration::MilliSeconds(10));
 
     UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
     UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
@@ -91,21 +87,18 @@ Y_UNIT_TEST(CheckLeakyBucketBehaviour) {
     UNIT_ASSERT(!AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
 
     // 61 seconds after last update
-    runtime.UpdateCurrentTime(runtime.GetCurrentTime() + TDuration::MilliSeconds(61000));
-    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    SimulateSleep(runtime, TDuration::Seconds(61));
     UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
     UNIT_ASSERT(!AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
 
     // 121 seconds after last update
-    runtime.UpdateCurrentTime(runtime.GetCurrentTime() + TDuration::MilliSeconds(121000));
-    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    SimulateSleep(runtime, TDuration::Seconds(121));
     UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
     UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
     UNIT_ASSERT(!AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
 
     // 181 seconds after last update
-    runtime.UpdateCurrentTime(runtime.GetCurrentTime() + TDuration::MilliSeconds(181000));
-    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    SimulateSleep(runtime, TDuration::Seconds(181));
     UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
     UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
     UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
@@ -114,23 +107,19 @@ Y_UNIT_TEST(CheckLeakyBucketBehaviour) {
     // Check no more than 3 request allowed for duration < 60000
 
     // update: + 3 in bucket
-    runtime.UpdateCurrentTime(runtime.GetCurrentTime() + TDuration::MilliSeconds(60000 * 3));
-    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    SimulateSleep(runtime, TDuration::Seconds(180));
 
     // 1 seconds before update
-    runtime.UpdateCurrentTime(runtime.GetCurrentTime() + TDuration::MilliSeconds(60000 - 1000));
-    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    SimulateSleep(runtime, TDuration::Seconds(59));
     UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
     UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
     UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
 
     // update
-    runtime.UpdateCurrentTime(runtime.GetCurrentTime() + TDuration::MilliSeconds(1000));
-    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    SimulateSleep(runtime, TDuration::Seconds(1));
 
     // 1 seconds after update
-    runtime.UpdateCurrentTime(runtime.GetCurrentTime() + TDuration::MilliSeconds(1000));
-    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    SimulateSleep(runtime, TDuration::Seconds(1));
     UNIT_ASSERT(AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
     UNIT_ASSERT(!AllowToReport(NKikimrBlobStorage::EPutHandleClass::TabletLog));
 }

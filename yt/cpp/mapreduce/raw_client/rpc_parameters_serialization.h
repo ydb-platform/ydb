@@ -1,8 +1,10 @@
 #pragma once
 
 #include <yt/cpp/mapreduce/common/helpers.h>
-#include <yt/cpp/mapreduce/interface/fwd.h>
+
 #include <yt/cpp/mapreduce/interface/client_method_options.h>
+#include <yt/cpp/mapreduce/interface/fwd.h>
+#include <yt/cpp/mapreduce/interface/operation.h>
 
 namespace NYT::NDetail::NRawClient {
 
@@ -95,7 +97,14 @@ TNode SerializeParamsForConcatenate(
 TNode SerializeParamsForPingTx(
     const TTransactionId& transactionId);
 
-TNode SerializeParamsForGetOperation(const std::variant<TString, TOperationId>& aliasOrOperationId, const TGetOperationOptions& options);
+TNode SerializeParamsForStartOperation(
+    const TTransactionId& transactionId,
+    EOperationType type,
+    const TNode& spec);
+
+TNode SerializeParamsForGetOperation(
+    const std::variant<TString, TOperationId>& aliasOrOperationId,
+    const TGetOperationOptions& options);
 
 TNode SerializeParamsForAbortOperation(
     const TOperationId& operationId);

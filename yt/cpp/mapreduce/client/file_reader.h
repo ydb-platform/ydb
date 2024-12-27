@@ -45,7 +45,7 @@ private:
 
     std::unique_ptr<IInputStream> Input_;
 
-    THolder<TPingableTransaction> ReadTransaction_;
+    std::unique_ptr<TPingableTransaction> ReadTransaction_;
 
     ui64 CurrentOffset_ = 0;
 };

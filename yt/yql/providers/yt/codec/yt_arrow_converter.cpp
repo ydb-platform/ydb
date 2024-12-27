@@ -1,13 +1,15 @@
 #include "yt_arrow_converter.h"
-#include "yt_arrow_converter_details.h"
+#include <yql/essentials/providers/common/codec/yt_arrow_converter_interface/yt_arrow_converter_details.h>
 
 #include <yql/essentials/public/udf/arrow/defs.h>
 #include <yql/essentials/public/udf/arrow/block_builder.h>
 #include <yql/essentials/public/udf/arrow/block_reader.h>
 #include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/parser/pg_wrapper/interface/arrow.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/detail.h>
@@ -35,6 +37,39 @@ struct TYtColumnConverterSettings {
     std::unique_ptr<NKikimr::NUdf::IArrayBuilder> Builder;
 };
 }
+
+template<bool Native>
+class IYsonYQLComplexTypeReader : public IYsonComplexTypeReader {
+public:
+    virtual NUdf::TBlockItem GetItem(TYsonBuffer& buf) = 0;
+    virtual NUdf::TBlockItem GetNotNull(TYsonBuffer&) = 0;
+    NUdf::TBlockItem GetNullableItem(TYsonBuffer& buf) {
+        char prev = buf.Current();
+        if constexpr (Native) {
+            if (prev == EntitySymbol) {
+                buf.Next();
+                return NUdf::TBlockItem();
+            }
+            return GetNotNull(buf).MakeOptional();
+        }
+        buf.Next();
+        if (prev == EntitySymbol) {
+            return NUdf::TBlockItem();
+        }
+        YQL_ENSURE(prev == BeginListSymbol);
+        if (buf.Current() == EndListSymbol) {
+            buf.Next();
+            return NUdf::TBlockItem();
+        }
+        auto result = GetNotNull(buf);
+        if (buf.Current() == ListItemSeparatorSymbol) {
+            buf.Next();
+        }
+        YQL_ENSURE(buf.Current() == EndListSymbol);
+        buf.Next();
+        return result.MakeOptional();
+    }
+};
 
 std::string_view GetNotNullString(auto& data, i64 idx) {
     i32 len;
@@ -236,10 +271,9 @@ NUdf::TBlockItem ReadYson(TYsonBuffer& buf) {
 }
 
 template<bool Nullable, bool Native>
-class TTupleYsonReader final : public IYsonComplexTypeReader<Native> {
+class TTupleYsonReader final : public IYsonYQLComplexTypeReader<Native> {
 public:
-    using TIReaderPtr = std::unique_ptr<IYsonComplexTypeReader<Native>>;
-    TTupleYsonReader(TVector<TIReaderPtr>&& children)
+    TTupleYsonReader(TVector<IYsonComplexTypeReader::TPtr>&& children)
         : Children_(std::move(children))
         , Items_(Children_.size())
     {}
@@ -264,12 +298,12 @@ public:
         return NUdf::TBlockItem(Items_.data());
     }
 private:
-    const TVector<TIReaderPtr> Children_;
+    const TVector<IYsonComplexTypeReader::TPtr> Children_;
     TVector<NUdf::TBlockItem> Items_;
 };
 
 template<typename T, bool Nullable, NKikimr::NUdf::EDataSlot OriginalT, bool Native>
-class TStringYsonReader final : public IYsonComplexTypeReader<Native> {
+class TStringYsonReader final : public IYsonYQLComplexTypeReader<Native> {
 public:
     NUdf::TBlockItem GetItem(TYsonBuffer& buf) override final {
         if constexpr (Nullable) {
@@ -293,7 +327,7 @@ public:
 };
 
 template<typename T, bool Nullable, bool Native>
-class TTzDateYsonReader final : public IYsonComplexTypeReader<Native> {
+class TTzDateYsonReader final : public IYsonYQLComplexTypeReader<Native> {
 public:
     NUdf::TBlockItem GetItem(TYsonBuffer& buf) override final {
         if constexpr (Nullable) {
@@ -334,7 +368,7 @@ public:
 };
 
 template<typename T, bool Nullable, bool Native>
-class TFixedSizeYsonReader final : public IYsonComplexTypeReader<Native> {
+class TFixedSizeYsonReader final : public IYsonYQLComplexTypeReader<Native> {
 public:
     NUdf::TBlockItem GetItem(TYsonBuffer& buf) override final {
         if constexpr (Nullable) {
@@ -380,10 +414,9 @@ public:
 };
 
 template<bool Native>
-class TExternalOptYsonReader final : public IYsonComplexTypeReader<Native> {
+class TExternalOptYsonReader final : public IYsonYQLComplexTypeReader<Native> {
 public:
-    using TIReaderPtr = std::unique_ptr<IYsonComplexTypeReader<Native>>;
-    TExternalOptYsonReader(TIReaderPtr&& inner)
+    TExternalOptYsonReader(IYsonComplexTypeReader::TPtr&& inner)
         : Underlying_(std::move(inner))
     {}
 
@@ -413,12 +446,12 @@ public:
         Y_ABORT("Can't be called");
     }
 private:
-    TIReaderPtr Underlying_;
+    IYsonComplexTypeReader::TPtr Underlying_;
 };
 
 template<bool Native>
 struct TComplexTypeYsonReaderTraits {
-    using TResult = IYsonComplexTypeReader<Native>;
+    using TResult = IYsonComplexTypeReader;
     template <bool Nullable>
     using TTuple = TTupleYsonReader<Nullable, Native>;
     // TODO: Implement reader for decimals
@@ -429,7 +462,7 @@ struct TComplexTypeYsonReaderTraits {
     using TExtOptional = TExternalOptYsonReader<Native>;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
-        ythrow yexception() << "Complex type Yson reader not implemented for block resources";
+        return BuildPgYsonColumnReader(desc);
     }
 
     static std::unique_ptr<TResult> MakeResource(bool) {
@@ -458,16 +491,18 @@ Y_FORCE_INLINE void AddFromYson(auto& reader, auto& builder, std::string_view ys
     builder->Add(std::move(res));
 }
 
-template<bool Native, bool IsTopOptional, bool IsDictionary>
-class TComplexTypeYsonColumnConverter {
+template<bool Native, bool IsTopOptional>
+class TComplexTypeYsonColumnConverter final : public IYtColumnConverter {
 public:
-    TComplexTypeYsonColumnConverter(TYtColumnConverterSettings& settings) : Settings_(settings) {
+    TComplexTypeYsonColumnConverter(TYtColumnConverterSettings&& settings) : Settings_(std::move(settings)) {
         Reader_ = NUdf::MakeBlockReaderImpl<TComplexTypeYsonReaderTraits<Native>>(TTypeInfoHelper(), settings.Type, settings.PgBuilder);
     }
 
     arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) {
         auto& builder = Settings_.Builder;
-        if constexpr(!IsDictionary) {
+        if (block->type->id() != arrow::Type::DICTIONARY) {
+            // complex types comes in yson (which is binary type)
+            YQL_ENSURE(block->type->id() == arrow::Type::BINARY);
             arrow::BinaryArray binary(block);
             if (block->GetNullCount()) {
                 for (i64 i = 0; i < block->length; ++i) {
@@ -484,6 +519,10 @@ public:
             }
             return builder->Build(false);
         }
+
+        // complex types comes in yson (which is binary type)
+        auto blockType = static_cast<const arrow::DictionaryType&>(*block->type).value_type()->id();
+        YQL_ENSURE(blockType == arrow::Type::BINARY);
         arrow::DictionaryArray dict(block);
         arrow::BinaryArray binary(block->dictionary);
         auto data = dict.indices()->data()->GetValues<YTDictIndexType>(1);
@@ -505,74 +544,78 @@ public:
 
 private:
     std::shared_ptr<typename TComplexTypeYsonReaderTraits<Native>::TResult> Reader_;
-    TYtColumnConverterSettings& Settings_;
+    TYtColumnConverterSettings Settings_;
 };
 
-template<bool Native, bool IsTopOptional>
-class TYtColumnConverter final : public IYtColumnConverter {
+class TTopLevelYsonYtConverter final : public IYtColumnConverter {
 public:
-    TYtColumnConverter(TYtColumnConverterSettings&& settings)
+    TTopLevelYsonYtConverter(TYtColumnConverterSettings&& settings)
         : Settings_(std::move(settings))
-        , DictYsonConverter_(Settings_)
-        , YsonConverter_(Settings_)
-        , DictPrimitiveConverter_(Settings_)
         , TopLevelYsonDictConverter_(Settings_)
         , TopLevelYsonConverter_(Settings_)
-    {
-        auto type = Settings_.Type;
-        IsJson_ = type->IsData() && AS_TYPE(TDataType, type)->GetDataSlot() == NUdf::EDataSlot::Json
-            || (Native && type->IsOptional() && AS_TYPE(TOptionalType, type)->GetItemType()->IsData()
-            && AS_TYPE(TDataType, AS_TYPE(TOptionalType, type)->GetItemType())->GetDataSlot() == NUdf::EDataSlot::Json);
-    }
+    {}
 
     arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) override {
-        if (arrow::Type::DICTIONARY == block->type->id()) {
-            auto valType = static_cast<const arrow::DictionaryType&>(*block->type).value_type();
-            if (Settings_.IsTopLevelYson) {
-                return TopLevelYsonDictConverter_.Convert(block);
-            } else if (valType->Equals(Settings_.ArrowType)) {
-                // just unpack
-                return DictPrimitiveConverter_.Convert(block);
-            }  else if (arrow::Type::UINT8 == Settings_.ArrowType->id() && arrow::Type::BOOL == valType->id()) {
-                // unpack an cast
-                auto result = arrow::compute::Cast(DictPrimitiveConverter_.Convert(block), Settings_.ArrowType);
-                YQL_ENSURE(result.ok());
-                return *result;
-            } else if (IsJson_ && arrow::Type::STRING == Settings_.ArrowType->id() && arrow::Type::BINARY == valType->id()) {
-                auto result = arrow::compute::Cast(DictPrimitiveConverter_.Convert(block), Settings_.ArrowType);
-                YQL_ENSURE(result.ok());
-                return *result;
-            } else {
-                return DictYsonConverter_.Convert(block);
-            }
+         if (arrow::Type::DICTIONARY == block->type->id()) {
+            return TopLevelYsonDictConverter_.Convert(block);
         } else {
-            auto blockType = block->type;
-            if (Settings_.IsTopLevelYson) {
-                return TopLevelYsonConverter_.Convert(block);
-            } else if (blockType->Equals(Settings_.ArrowType)) {
-                return block;
-            } else if (arrow::Type::UINT8 == Settings_.ArrowType->id() && arrow::Type::BOOL == blockType->id()) {
-                auto result = arrow::compute::Cast(arrow::Datum(*block), Settings_.ArrowType);
-                YQL_ENSURE(result.ok());
-                return *result;
-            } else if (IsJson_ && arrow::Type::STRING == Settings_.ArrowType->id() && arrow::Type::BINARY == blockType->id()) {
-                auto result = arrow::compute::Cast(arrow::Datum(*block), Settings_.ArrowType);
-                YQL_ENSURE(result.ok());
-                return *result;
-            } else {
-                YQL_ENSURE(arrow::Type::BINARY == blockType->id());
-                return YsonConverter_.Convert(block);
-            }
+            return TopLevelYsonConverter_.Convert(block);
         }
     }
 private:
     TYtColumnConverterSettings Settings_;
-    TComplexTypeYsonColumnConverter<Native, IsTopOptional, true> DictYsonConverter_;
-    TComplexTypeYsonColumnConverter<Native, IsTopOptional, false> YsonConverter_;
-    TPrimitiveColumnConverter<true, false> DictPrimitiveConverter_;
     TPrimitiveColumnConverter<true, true> TopLevelYsonDictConverter_;
     TPrimitiveColumnConverter<false, true> TopLevelYsonConverter_;
-    bool IsJson_;
+};
+
+template<arrow::Type::type Expected>
+class TTopLevelSimpleCastConverter final : public IYtColumnConverter {
+public:
+    TTopLevelSimpleCastConverter(TYtColumnConverterSettings&& settings)
+        : Settings_(std::move(settings))
+        , DictPrimitiveConverter_(Settings_)
+    {}
+
+    arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) override {
+        if (arrow::Type::DICTIONARY == block->type->id()) {
+            auto blockType = static_cast<const arrow::DictionaryType&>(*block->type).value_type();
+            YQL_ENSURE(Expected == blockType->id());
+            auto result = arrow::compute::Cast(DictPrimitiveConverter_.Convert(block), Settings_.ArrowType);
+            YQL_ENSURE(result.ok());
+            return *result;
+        } else {
+            auto blockType = block->type;
+            YQL_ENSURE(Expected == blockType->id());
+            auto result = arrow::compute::Cast(arrow::Datum(*block), Settings_.ArrowType);
+            YQL_ENSURE(result.ok());
+            return *result;
+        }
+    }
+private:
+    TYtColumnConverterSettings Settings_;
+    TPrimitiveColumnConverter<true, false> DictPrimitiveConverter_;
+};
+
+class TTopLevelAsIsConverter final : public IYtColumnConverter {
+public:
+    TTopLevelAsIsConverter(TYtColumnConverterSettings&& settings)
+        : Settings_(std::move(settings))
+        , DictPrimitiveConverter_(Settings_)
+    {}
+
+    arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) override {
+        if (arrow::Type::DICTIONARY == block->type->id()) {
+            auto blockType = static_cast<const arrow::DictionaryType&>(*block->type).value_type();
+            YQL_ENSURE(blockType->Equals(Settings_.ArrowType));
+            return DictPrimitiveConverter_.Convert(block);
+        } else {
+            YQL_ENSURE(block->type->Equals(Settings_.ArrowType));
+            return block;
+        }
+    }
+private:
+    TYtColumnConverterSettings Settings_;
+    TPrimitiveColumnConverter<true, false> DictPrimitiveConverter_;
 };
 
 TYtColumnConverterSettings::TYtColumnConverterSettings(TType* type, const NUdf::IPgBuilder* pgBuilder, arrow::MemoryPool& pool, bool isNative)
@@ -601,22 +644,64 @@ TYtColumnConverterSettings::TYtColumnConverterSettings(TType* type, const NUdf::
 
 template<typename Common, template <bool...> typename T, typename Args, bool... Acc>
 struct TBoolDispatcher {
+    std::unique_ptr<Common> Dispatch(Args&& args) const {
+        return std::make_unique<T<Acc...>>(std::forward<Args&&>(args));
+    }
 
-  std::unique_ptr<Common> Dispatch(Args&& args) const {
-    return std::make_unique<T<Acc...>>(std::forward<Args&&>(args));
-  }
-
-  template <typename... Bools>
-  auto Dispatch(Args&& args, bool head, Bools... tail) const {
-    return head ?
-      TBoolDispatcher<Common, T, Args, Acc..., true >().Dispatch(std::forward<Args&&>(args), tail...) :
-      TBoolDispatcher<Common, T, Args, Acc..., false>().Dispatch(std::forward<Args&&>(args), tail...);
-  }
+    template <typename... Bools>
+    auto Dispatch(Args&& args, bool head, Bools... tail) const {
+        return head ?
+        TBoolDispatcher<Common, T, Args, Acc..., true >().Dispatch(std::forward<Args&&>(args), tail...) :
+        TBoolDispatcher<Common, T, Args, Acc..., false>().Dispatch(std::forward<Args&&>(args), tail...);
+    }
 };
 
-std::unique_ptr<IYtColumnConverter> MakeYtColumnConverter(NKikimr::NMiniKQL::TType* type, const NUdf::IPgBuilder* pgBuilder, arrow::MemoryPool& pool, bool isNative) {
+std::unique_ptr<IYtColumnConverter> MakeYtColumnConverter(TType* type, const NUdf::IPgBuilder* pgBuilder, arrow::MemoryPool& pool, bool isNative) {
     TYtColumnConverterSettings settings(type, pgBuilder, pool, isNative);
     bool isTopOptional = settings.IsTopOptional;
-    return TBoolDispatcher<IYtColumnConverter, TYtColumnConverter, TYtColumnConverterSettings>().Dispatch(std::move(settings), isNative, isTopOptional);
+    auto requestedType = type;
+    if (isTopOptional) {
+        requestedType = static_cast<TOptionalType*>(type)->GetItemType();
+    }
+
+    if (type->IsPg()) {
+        // top-level pg is T? where T is int/string
+        return BuildPgTopLevelColumnReader(std::move(settings.Builder), static_cast<TPgType*>(type));
+    }
+
+    if (type->IsData() && static_cast<TDataType*>(type)->GetDataSlot() == NUdf::EDataSlot::Yson) {
+        // Special case: YT now has no non-optional Yson support
+        return std::make_unique<TTopLevelYsonYtConverter>(std::move(settings));
+    }
+
+    if (requestedType->IsData()) {
+        // T, T? where T is data
+        // There is no difference in native/non-native optional/non-optional
+        switch (*static_cast<TDataType*>(requestedType)->GetDataSlot()) {
+        case NUdf::EDataSlot::Bool:
+            // YT type for bool is arrow::Type::BOOL, but yql type is arrow::Type::UINT8
+            return std::make_unique<TTopLevelSimpleCastConverter<arrow::Type::BOOL>>(std::move(settings));
+        case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Json:
+        case NUdf::EDataSlot::Yson: // Yson there is top-level optional
+            // YT type for Yson, Json, String is arrow::Type::BINARY, but yql type is arrow::Type::String
+            return std::make_unique<TTopLevelSimpleCastConverter<arrow::Type::BINARY>>(std::move(settings));
+        case NUdf::EDataSlot::Double:
+        case NUdf::EDataSlot::Int8:
+        case NUdf::EDataSlot::Uint8:
+        case NUdf::EDataSlot::Int16:
+        case NUdf::EDataSlot::Uint16:
+        case NUdf::EDataSlot::Int32:
+        case NUdf::EDataSlot::Uint32:
+        case NUdf::EDataSlot::Int64:
+        case NUdf::EDataSlot::Uint64:
+            // As is, except dictionary has come (in that way just unpack it)
+            return std::make_unique<TTopLevelAsIsConverter>(std::move(settings));
+        default:
+            Y_ABORT("That dataslot isn't supported (or implemented yet)");
+        }
+    }
+    // Complex type and/or 2+ optional levels
+    return TBoolDispatcher<IYtColumnConverter, TComplexTypeYsonColumnConverter, TYtColumnConverterSettings>().Dispatch(std::move(settings), isNative, isTopOptional);
 }
 }

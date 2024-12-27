@@ -13,20 +13,22 @@ namespace NYql {
 template<typename TEvent>
 class TBlockingEQueue {
 public:
-    TBlockingEQueue(size_t maxSize):MaxSize_(maxSize) {
+    explicit TBlockingEQueue(size_t maxSize)
+        : MaxSize_(maxSize)
+    {
     }
     void Push(TEvent&& e, size_t size = 0) {
         with_lock(Mutex_) {
-            CanPush_.WaitI(Mutex_, [this] () {return Stopped_ || Size_ < MaxSize_;});
+            CanPush_.WaitI(Mutex_, [this] () {return CanPushPredicate();});
             Events_.emplace_back(std::move(e), size );
             Size_ += size;
         }
         CanPop_.BroadCast();
     }
-    
+
     void BlockUntilEvent() {
         with_lock(Mutex_) {
-            CanPop_.WaitI(Mutex_, [this] () {return Stopped_ || !Events_.empty();});
+            CanPop_.WaitI(Mutex_, [this] () {return CanPopPredicate();});
         }
     }
 
@@ -49,19 +51,18 @@ public:
             if (Size_ < MaxSize_) {
                 CanPush_.BroadCast();
             }
-            return std::move(front);
+            return std::move(front); // cast to TMaybe<>
         }
     }
 
     void Stop() {
         with_lock(Mutex_) {
             Stopped_ = true;
-            
             CanPop_.BroadCast();
             CanPush_.BroadCast();
         }
     }
-    
+
     bool IsStopped() {
         with_lock(Mutex_) {
             return Stopped_;
@@ -69,8 +70,12 @@ public:
     }
 
 private:
-    bool CanPopPredicate() {
+    bool CanPopPredicate() const {
         return !Events_.empty() || Stopped_;
+    }
+
+    bool CanPushPredicate() const {
+        return Size_ < MaxSize_ || Stopped_;
     }
 
     size_t MaxSize_;
@@ -84,14 +89,17 @@ private:
 
 class TFileTopicReadSession : public NYdb::NTopic::IReadSession {
 
-constexpr static auto FILE_POLL_PERIOD = TDuration::MilliSeconds(5);    
+constexpr static auto FILE_POLL_PERIOD = TDuration::MilliSeconds(5);
 
 public:
-    TFileTopicReadSession(TFile file, NYdb::NTopic::TPartitionSession::TPtr session, const TString& producerId = ""): 
-        File_(std::move(file)), Session_(std::move(session)), ProducerId_(producerId), 
-        FilePoller_([this] () {
-            PollFileForChanges();
-        }), Counters_()
+    TFileTopicReadSession(TFile file, NYdb::NTopic::TPartitionSession::TPtr session, const TString& producerId = "")
+        : File_(std::move(file))
+        , Session_(std::move(session))
+        , ProducerId_(producerId)
+        , FilePoller_([this] () {
+                PollFileForChanges();
+            })
+        , Counters_()
     {
         Pool_.Start(1);
     }
@@ -108,7 +116,7 @@ public:
         Y_UNUSED(maxByteSize);
 
         TVector<NYdb::NTopic::TReadSessionEvent::TEvent> res;
-        for (auto event = EventsQ_.Pop(block); !event.Empty() &&  res.size() < maxEventsCount.GetOrElse(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
+        for (auto event = EventsQ_.Pop(block); !event.Empty() && res.size() < maxEventsCount.GetOrElse(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
             res.push_back(std::move(*event));
         }
         return res;
@@ -131,13 +139,15 @@ public:
 
     bool Close(TDuration timeout = TDuration::Max()) override {
         Y_UNUSED(timeout);
+        // TODO send TSessionClosedEvent
+        // XXX (... but if we stop queues, nobody will receive it, needs rethinking)
         EventsQ_.Stop();
         Pool_.Stop();
 
         if (FilePoller_.joinable()) {
             FilePoller_.join();
         }
-        return true;
+        return true; // TODO incorrect if EventQ_ was non-empty
     }
 
     NYdb::NTopic::TReaderCounters::TPtr GetCounters() const override {
@@ -157,11 +167,11 @@ public:
     }
 
 private:
-    using TMessageInformation = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation; 
-    using TMessage = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage; 
+    using TMessageInformation = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation;
+    using TMessage = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage;
 
-    TMessageInformation MakeNextMessageInformation(size_t offset, size_t uncompressedSize, const TString& messageGroupId = "") { 
-        auto now = TInstant::Now(); 
+    TMessageInformation MakeNextMessageInformation(size_t offset, size_t uncompressedSize, const TString& messageGroupId = "") {
+        auto now = TInstant::Now();
         TMessageInformation msgInfo(
             offset,
             ProducerId_,
@@ -175,7 +185,7 @@ private:
         );
         return msgInfo;
     }
-    
+
     TMessage MakeNextMessage(const TString& msgBuff) {
         TMessage msg(msgBuff, nullptr, MakeNextMessageInformation(MsgOffset_, msgBuff.size()), Session_);
         return msg;
@@ -217,12 +227,14 @@ private:
     ui64 SeqNo_ = 0;
 };
 
-class TFileTopicWriteSession : public NYdb::NTopic::IWriteSession, private  NYdb::NTopic::TContinuationTokenIssuer {
+class TFileTopicWriteSession : public NYdb::NTopic::IWriteSession, private NYdb::NTopic::TContinuationTokenIssuer {
 public:
-    TFileTopicWriteSession(TFile file): 
-        File_(std::move(file)), FileWriter_([this] () {
-            PushToFile();
-        }), Counters_()
+    explicit TFileTopicWriteSession(TFile file)
+        : File_(std::move(file))
+        , FileWriter_([this] () {
+                PushToFile();
+            })
+        , Counters_()
     {
         Pool_.Start(1);
         EventsQ_.Push(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
@@ -241,7 +253,7 @@ public:
 
     TVector<NYdb::NTopic::TWriteSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount) override {
         TVector<NYdb::NTopic::TWriteSessionEvent::TEvent> res;
-        for (auto event = EventsQ_.Pop(block); !event.Empty() &&  res.size() < maxEventsCount.GetOrElse(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
+        for (auto event = EventsQ_.Pop(block); !event.Empty() && res.size() < maxEventsCount.GetOrElse(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
             res.push_back(std::move(*event));
         }
         return res;
@@ -251,10 +263,10 @@ public:
         return NThreading::MakeFuture(SeqNo_);
     }
 
-    void Write(NYdb::NTopic::TContinuationToken&&, NYdb::NTopic::TWriteMessage&& message, 
+    void Write(NYdb::NTopic::TContinuationToken&&, NYdb::NTopic::TWriteMessage&& message,
                NYdb::NTable::TTransaction* tx) override {
         Y_UNUSED(tx);
-        
+
         auto size = message.Data.size();
         EventsMsgQ_.Push(TOwningWriteMessage(std::move(message)), size);
     }
@@ -309,6 +321,8 @@ public:
 
     bool Close(TDuration timeout = TDuration::Max()) override {
         Y_UNUSED(timeout);
+        // TODO send TSessionClosedEvent
+        // XXX (... but if we stop queues, nobody will receive it, needs rethinking)
         EventsQ_.Stop();
         EventsMsgQ_.Stop();
         Pool_.Stop();
@@ -316,7 +330,7 @@ public:
         if (FileWriter_.joinable()) {
             FileWriter_.join();
         }
-        return true;
+        return true; // TODO incorrect if Event*Q_ was non-empty
     }
 
     NYdb::NTopic::TWriterCounters::TPtr GetCounters() override {
@@ -360,16 +374,19 @@ private:
             }
         }
     }
-    
+
     TFile File_;
-    
+
     // We acquire ownership of messages immediately
     // TODO: remove extra message copying to and from queue
     struct TOwningWriteMessage {
         TString content;
         NYdb::NTopic::TWriteMessage msg;
-        
-        TOwningWriteMessage(NYdb::NTopic::TWriteMessage&& msg): content(msg.Data), msg(std::move(msg)) {
+
+        explicit TOwningWriteMessage(NYdb::NTopic::TWriteMessage&& msg)
+            : content(msg.Data)
+            , msg(std::move(msg))
+        {
             msg.Data = content;
         }
     };
@@ -403,7 +420,7 @@ std::shared_ptr<NYdb::NTopic::IReadSession> TFileTopicClient::CreateReadSession(
     Y_ENSURE(topicsIt != Topics_.end());
     auto filePath = topicsIt->second.FilePath;
     Y_ENSURE(filePath);
-    
+
     // TODO
     ui64 sessionId = 0;
     ui64 partitionId = 0;
@@ -432,7 +449,7 @@ NYdb::TAsyncStatus TFileTopicClient::DropTopic(const TString& path, const NYdb::
     return NThreading::MakeFuture(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}));
 }
 
-NYdb::NTopic::TAsyncDescribeTopicResult TFileTopicClient::DescribeTopic(const TString& path, 
+NYdb::NTopic::TAsyncDescribeTopicResult TFileTopicClient::DescribeTopic(const TString& path,
     const NYdb::NTopic::TDescribeTopicSettings& settings) {
     Y_UNUSED(path);
     Y_UNUSED(settings);
@@ -441,7 +458,7 @@ NYdb::NTopic::TAsyncDescribeTopicResult TFileTopicClient::DescribeTopic(const TS
     return NThreading::MakeFuture(NYdb::NTopic::TDescribeTopicResult(std::move(success), {}));
 }
 
-NYdb::NTopic::TAsyncDescribeConsumerResult TFileTopicClient::DescribeConsumer(const TString& path, const TString& consumer, 
+NYdb::NTopic::TAsyncDescribeConsumerResult TFileTopicClient::DescribeConsumer(const TString& path, const TString& consumer,
     const NYdb::NTopic::TDescribeConsumerSettings& settings) {
     Y_UNUSED(path);
     Y_UNUSED(consumer);
@@ -451,7 +468,7 @@ NYdb::NTopic::TAsyncDescribeConsumerResult TFileTopicClient::DescribeConsumer(co
     return NThreading::MakeFuture(NYdb::NTopic::TDescribeConsumerResult(std::move(success), {}));
 }
 
-NYdb::NTopic::TAsyncDescribePartitionResult TFileTopicClient::DescribePartition(const TString& path, i64 partitionId, 
+NYdb::NTopic::TAsyncDescribePartitionResult TFileTopicClient::DescribePartition(const TString& path, i64 partitionId,
     const NYdb::NTopic::TDescribePartitionSettings& settings) {
     Y_UNUSED(path);
     Y_UNUSED(partitionId);

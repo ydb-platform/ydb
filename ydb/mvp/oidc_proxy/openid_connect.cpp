@@ -95,6 +95,7 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
                                                                      << request->Host
                                                                      << GetAuthCallbackUrl();
     NHttp::THeadersBuilder responseHeaders;
+    SetCORS(request, &responseHeaders);
     responseHeaders.Set("Set-Cookie", context.CreateYdbOidcCookie(settings.ClientSecret));
     if (context.IsAjaxRequest()) {
         return CreateResponseForAjaxRequest(request, responseHeaders, redirectUrl);

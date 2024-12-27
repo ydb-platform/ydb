@@ -494,8 +494,9 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(TPositionHand
                     });
 
                     ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-                    auto status = ExpandApply(traits, traits, ctx);
+                    auto status = ExpandApplyNoRepeat(traits, traits, ctx);
                     YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
+
                     switch (factoryIndex) {
                     case 0:
                         countAllTraits = traits;
@@ -2791,8 +2792,9 @@ TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, c
 
                     auto traits = ctx.ReplaceNodes(lambda->TailPtr(), replaces);
                     ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-                    auto status = ExpandApply(traits, traits, ctx);
+                    auto status = ExpandApplyNoRepeat(traits, traits, ctx);
                     YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
+
                     value = traits;
                 } else {
                     ythrow yexception() << "Not supported function: " << name;

@@ -13,11 +13,11 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 TNodeTableWriter::TNodeTableWriter(THolder<IProxyOutput> output, NYson::EYsonFormat format)
-    : Output_(std::move(output))
+    : Output_(output.Release())
 {
     for (size_t i = 0; i < Output_->GetStreamCount(); ++i) {
         Writers_.push_back(
-            MakeHolder<::NYson::TYsonWriter>(Output_->GetStream(i), format, NYT::NYson::EYsonType::ListFragment));
+            std::make_unique<::NYson::TYsonWriter>(Output_->GetStream(i), format, NYT::NYson::EYsonType::ListFragment));
     }
 }
 
@@ -54,7 +54,7 @@ void TNodeTableWriter::AddRow(const TNode& row, size_t tableIndex)
         }
     }
 
-    auto* writer = Writers_[tableIndex].Get();
+    auto* writer = Writers_[tableIndex].get();
     writer->OnListItem();
 
     TNodeVisitor visitor(writer);

@@ -112,6 +112,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
         auto resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
 
@@ -171,6 +172,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
         auto resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
 
@@ -249,6 +251,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
         auto resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
 
@@ -307,6 +310,53 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
         auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
         CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 0});
+    }
+    
+    Y_UNIT_TEST(AddAccess_NonExisting) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+
+        {
+            NACLib::TDiffACL diffACL;
+            diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
+            AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
+            TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "SID user1 not found"}});
+        }
+
+        {
+            AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", NACLib::TDiffACL{}.SerializeAsString(), "user1");
+            TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "Owner SID user1 not found"}});
+        }
+        
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
+            {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"), NLs::HasOwner("root@builtin")});
+    }
+
+    Y_UNIT_TEST(AddAccess_NonYdb) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+
+        {
+            NACLib::TDiffACL diffACL;
+            diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1@staff");
+            AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
+            TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        }
+
+        {
+            AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", NACLib::TDiffACL{}.SerializeAsString(), "user1@staff");
+            TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        }
     }
 
     Y_UNIT_TEST(DisableBuiltinAuthMechanism) {

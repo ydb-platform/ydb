@@ -2709,6 +2709,8 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
 
+    bool EnableChecksums = false;
+
     explicit TExportInfo(
             const ui64 id,
             const TString& uid,

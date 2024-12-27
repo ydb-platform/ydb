@@ -16,7 +16,7 @@ class RightlibSync:
     failed_comment_mark = "<!--RightLibSyncFailed-->"
     rightlib_check_status_name = "rightlib-merge"
 
-    def __init__(self, repo, base_branch, head_branch,  token):
+    def __init__(self, repo, base_branch, head_branch, token):
         self.repo_name = repo
         self.base_branch = base_branch
         self.head_branch = head_branch
@@ -96,8 +96,9 @@ class RightlibSync:
         self.git_run("fetch", "origin", f"pull/{pr.number}/head:PR")
         self.git_run("checkout", self.base_branch)
 
+        commit_msg = f"Merge pull request #{pr.number} from {pr.head.user.login}/{pr.head.ref}"
         try:
-            self.git_run("merge", "PR", "--no-edit")
+            self.git_run("merge", "PR", "-m", commit_msg)
         except subprocess.CalledProcessError:
             self.add_failed_comment(pr, "Unable to merge PR.")
             self.add_pr_failed_label(pr)
@@ -179,7 +180,9 @@ class RightlibSync:
         else:
             pr_body = f"PR was created by rightlib sync script"
 
-        pr = self.repo.create_pull(self.base_branch, dev_branch_name, title=pr_title, body=pr_body)
+        pr = self.repo.create_pull(
+            self.base_branch, dev_branch_name, title=pr_title, body=pr_body, maintainer_can_modify=True
+        )
         pr.add_to_labels(self.pr_label_rightlib)
 
     def sync(self):

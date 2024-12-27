@@ -225,7 +225,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestBasic) {
             [](const auto key) { return std::to_string(key); });
 
         // Add rows with the same keys
-        std::copy_n(rightKeyInit.begin(), rightKeyInit.size(), std::back_inserter(rightKeyInit));
+        rightKeyInit.reserve(fibonacci.size() * 2);
+        std::copy_n(rightKeyInit.begin(), fibonacci.size(), std::back_inserter(rightKeyInit));
         std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
             [](const auto key) { return std::to_string(key * 1001); });
 
@@ -282,7 +283,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestBasic) {
             [](const auto key) { return std::to_string(key); });
 
         // Add rows with the same keys
-        std::copy_n(rightKeyInit.begin(), rightKeyInit.size(), std::back_inserter(rightKeyInit));
+        rightKeyInit.reserve(fibonacci.size() * 2);
+        std::copy_n(rightKeyInit.begin(), fibonacci.size(), std::back_inserter(rightKeyInit));
         std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
             [](const auto key) { return std::to_string(key); });
 
@@ -393,7 +395,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestBasic) {
             [](const auto key) { return std::to_string(key); });
 
         // Add rows with the same keys
-        std::copy_n(rightKeyInit.begin(), rightKeyInit.size(), std::back_inserter(rightKeyInit));
+        rightKeyInit.reserve(fibonacci.size() * 2);
+        std::copy_n(rightKeyInit.begin(), fibonacci.size(), std::back_inserter(rightKeyInit));
         std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
             [](const auto key) { return std::to_string(key * 1001); });
 
@@ -453,7 +456,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestBasic) {
         // 2. Make input for the "right" stream.
         TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
         // Add rows with the same keys
-        std::copy_n(rightKeyInit.begin(), rightKeyInit.size(), std::back_inserter(rightKeyInit));
+        rightKeyInit.reserve(fibonacci.size() * 2);
+        std::copy_n(rightKeyInit.begin(), fibonacci.size(), std::back_inserter(rightKeyInit));
 
         // 3. Make "expected" data.
         TSet<ui64> rightSet(rightKeyInit.cbegin(), rightKeyInit.cend());
@@ -496,7 +500,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestBasic) {
         // 2. Make input for the "right" stream.
         TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
         // Add rows with the same keys
-        std::copy_n(rightKeyInit.begin(), rightKeyInit.size(), std::back_inserter(rightKeyInit));
+        rightKeyInit.reserve(fibonacci.size() * 2);
+        std::copy_n(rightKeyInit.begin(), fibonacci.size(), std::back_inserter(rightKeyInit));
 
         // 3. Make "expected" data.
         TSet<ui64> rightSet(rightKeyInit.cbegin(), rightKeyInit.cend());

@@ -1,5 +1,6 @@
 #include "mon.h"
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/base/base.h>
@@ -31,6 +32,9 @@ struct TEvMon {
     enum {
         EvMonitoringRequest = NActors::NMon::HttpInfo + 10,
         EvMonitoringResponse,
+        EvRegisterHandler,
+        EvMonitoringCancelRequest,
+        EvCleanupProxy,
         End
     };
 
@@ -44,24 +48,49 @@ struct TEvMon {
     struct TEvMonitoringResponse : TEventPB<TEvMonitoringResponse, NKikimrMonProto::TEvMonitoringResponse, EvMonitoringResponse> {
         TEvMonitoringResponse() = default;
     };
+
+    struct TEvRegisterHandler : TEventLocal<TEvRegisterHandler, EvRegisterHandler> {
+        TMon::TRegisterHandlerFields Fields;
+
+        TEvRegisterHandler(const TMon::TRegisterHandlerFields& fields)
+            : Fields(fields)
+        {}
+    };
+
+    struct TEvMonitoringCancelRequest : TEventPB<TEvMonitoringCancelRequest, NKikimrMonProto::TEvMonitoringCancelRequest, EvMonitoringCancelRequest> {
+        TEvMonitoringCancelRequest() = default;
+    };
+
+    struct TEvCleanupProxy : TEventLocal<TEvCleanupProxy, EvCleanupProxy> {
+        TString Address;
+
+        TEvCleanupProxy(const TString& address)
+            : Address(address)
+        {}
+    };
 };
 
 namespace {
 
 using namespace NKikimr;
 
-bool HasJsonContent(NMonitoring::IMonHttpRequest& request) {
-    const TStringBuf header = request.GetHeader("Content-Type");
-    return header.empty() || AsciiEqualsIgnoreCase(header, "application/json"); // by default we will try to parse json, no error will be generated if parsing fails
+bool HasJsonContent(NHttp::THttpIncomingRequest* request) {
+    if (request->Method == "POST") {
+        const TStringBuf header = request->ContentType.Before(';');
+        return header.empty() || AsciiEqualsIgnoreCase(header, "application/json"); // by default we will try to parse json, no error will be generated if parsing fails
+    }
+    return false;
 }
 
-TString GetDatabase(NMonitoring::IMonHttpRequest& request) {
-    if (const auto dbIt = request.GetParams().Find("database"); dbIt != request.GetParams().end()) {
-        return dbIt->second;
+TString GetDatabase(NHttp::THttpIncomingRequest* request) {
+    NHttp::TUrlParameters urlParams(request->URL);
+    TString database = urlParams["database"];
+    if (database) {
+        return database;
     }
-    if (request.GetMethod() == HTTP_METHOD_POST && HasJsonContent(request)) {
+    if (HasJsonContent(request)) {
         NJson::TJsonValue requestData;
-        if (NJson::ReadJsonTree(request.GetPostContent(), &requestData)) {
+        if (NJson::ReadJsonTree(request->Body, &requestData)) {
             return requestData["database"].GetString(); // empty if not string or no such key
         }
     }
@@ -82,9 +111,11 @@ IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const
 
 } // namespace
 
-NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner, NMonitoring::IMonHttpRequest& request) {
-    TStringBuf ydbSessionId = request.GetCookie("ydb_session_id");
-    TStringBuf authorization = request.GetHeader("Authorization");
+NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner, NHttp::THttpIncomingRequest* request) {
+    NHttp::THeaders headers(request->Headers);
+    NHttp::TCookies cookies(headers["Cookie"]);
+    TStringBuf ydbSessionId = cookies["ydb_session_id"];
+    TStringBuf authorization = headers["Authorization"];
     if (!authorization.empty()) {
         return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString(authorization));
     } else if (!ydbSessionId.empty()) {
@@ -175,7 +206,7 @@ IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
     });
 }
 
-NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, NMonitoring::IMonHttpRequest& request) {
+NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, NHttp::THttpIncomingRequest* request) {
     NActors::IEventHandle* eventHandle = SelectAuthorizationScheme(owner, request);
     if (eventHandle != nullptr) {
         return eventHandle;
@@ -347,7 +378,7 @@ public:
         }
         Become(&THttpMonLegacyActorRequest::StateFunc);
         if (ActorMonPage->Authorizer) {
-            NActors::IEventHandle* handle = ActorMonPage->Authorizer(SelfId(), Container);
+            NActors::IEventHandle* handle = ActorMonPage->Authorizer(SelfId(), Event->Get()->Request.Get());
             if (handle) {
                 TActivationContext::Send(handle);
                 return;
@@ -355,6 +386,7 @@ public:
         }
         SendRequest();
     }
+
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
         if (response->Status.StartsWith("2")) {
             TString url(Event->Get()->Request->URL.Before('?'));
@@ -391,7 +423,7 @@ public:
                     "Access-Control-Allow-Methods: OPTIONS,GET,POST,PUT,DELETE\r\n"
                     "Content-Type: " << type << "\r\n"
                     "Connection: keep-alive\r\n\r\n";
-        ReplyWith(request->CreateResponseString(response));
+        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(request->CreateResponseString(response)));
         PassAway();
     }
 
@@ -476,7 +508,7 @@ public:
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (ActorMonPage->Authorizer) {
             TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
-            LOG_NOTICE_S(*TlsActivationContext, NActorsServices::HTTP,
+            ALOG_NOTICE(NActorsServices::HTTP,
                 (request->Address ? request->Address->ToString() : "")
                 << " " << user
                 << " " << request->Method
@@ -596,73 +628,6 @@ public:
     TIntrusivePtr<TActorMonPage> ActorMonPage;
 };
 
-// receives everyhing not related to actor communcation, converts them to request-actors
-class THttpMonServiceLegacyIndex : public TActor<THttpMonServiceLegacyIndex> {
-public:
-    THttpMonServiceLegacyIndex(TIntrusivePtr<NMonitoring::TIndexMonPage> indexMonPage, const TString& redirectRoot = {})
-        : TActor(&THttpMonServiceLegacyIndex::StateWork)
-        , IndexMonPage(std::move(indexMonPage))
-        , RedirectRoot(redirectRoot)
-    {
-    }
-
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::HTTP_MON_LEGACY_INDEX_SERVICE;
-    }
-
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
-        bool redirect = false;
-        if (RedirectRoot && ev->Get()->Request->URL == "/") {
-            NHttp::THeaders headers(ev->Get()->Request->Headers);
-            if (!headers.Has("Referer")) {
-                redirect = true;
-            }
-        }
-        if (redirect) {
-            TStringBuilder response;
-            response << "HTTP/1.1 302 Found\r\nLocation: " << RedirectRoot << "\r\n\r\n";
-            Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseString(response)));
-            return;
-        } else if (!ev->Get()->Request->URL.ends_with("/") && ev->Get()->Request->URL.find('?') == TStringBuf::npos) {
-            TString url(ev->Get()->Request->URL);
-            bool index = false;
-            auto itPage = IndexPages.find(url);
-            if (itPage == IndexPages.end()) {
-                auto page = IndexMonPage->FindPageByAbsolutePath(url);
-                if (page) {
-                    index = page->IsIndex();
-                    IndexPages[url] = index;
-                }
-            } else {
-                index = itPage->second;
-            }
-            if (index) {
-                TStringBuilder response;
-                auto p = url.rfind('/');
-                if (p != TString::npos) {
-                    url = url.substr(p + 1);
-                }
-                url += '/';
-                response << "HTTP/1.1 302 Found\r\nLocation: " << url << "\r\n\r\n";
-                Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseString(response)));
-                return;
-            }
-        }
-        Register(new THttpMonLegacyIndexRequest(std::move(ev), IndexMonPage.Get()));
-    }
-
-    STATEFN(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
-            cFunc(TEvents::TSystem::Poison, PassAway);
-        }
-    }
-
-    TIntrusivePtr<NMonitoring::TIndexMonPage> IndexMonPage;
-    TString RedirectRoot;
-    std::unordered_map<TString, bool> IndexPages;
-};
-
 inline TActorId MakeNodeProxyId(ui32 node) {
     char x[12] = "nodeproxy";
     return TActorId(node, TStringBuf(x, 12));
@@ -670,13 +635,19 @@ inline TActorId MakeNodeProxyId(ui32 node) {
 
 class THttpMonServiceNodeRequest : public TActorBootstrapped<THttpMonServiceNodeRequest> {
 public:
+    using TBase = TActorBootstrapped<THttpMonServiceNodeRequest>;
     std::shared_ptr<NHttp::THttpEndpointInfo> Endpoint;
     TEvMon::TEvMonitoringRequest::TPtr Event;
+    TActorId OwnerActorId;
+    TString Address;
     TActorId HttpProxyActorId;
+    NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr CancelSubscriber;
 
-    THttpMonServiceNodeRequest(std::shared_ptr<NHttp::THttpEndpointInfo> endpoint, TEvMon::TEvMonitoringRequest::TPtr event, TActorId httpProxyActorId)
+    THttpMonServiceNodeRequest(std::shared_ptr<NHttp::THttpEndpointInfo> endpoint, TEvMon::TEvMonitoringRequest::TPtr event, TActorId ownerActorId, const TString& address, TActorId httpProxyActorId)
         : Endpoint(std::move(endpoint))
         , Event(std::move(event))
+        , OwnerActorId(ownerActorId)
+        , Address(address)
         , HttpProxyActorId(httpProxyActorId)
     {}
 
@@ -704,7 +675,7 @@ public:
         NHttp::THttpRequestRenderer renderer;
         renderer.InitRequest(parser.Method, parser.URL, parser.Protocol, parser.Version);
         renderer.Set(headers);
-        if (parser.HaveBody()) {
+        if (parser.HasBody()) {
             renderer.SetBody(parser.Body); // it shouldn't be here, 30x with a body is a bad idea
         }
         renderer.Finish();
@@ -738,7 +709,7 @@ public:
         NHttp::THttpResponseRenderer renderer;
         renderer.InitResponse(parser.Protocol, parser.Version, parser.Status, parser.Message);
         renderer.Set(headers);
-        if (parser.HaveBody()) {
+        if (parser.HasBody()) {
             renderer.SetBody(parser.Body); // it shouldn't be here, 30x with a body is a bad idea
         }
         renderer.Finish();
@@ -760,20 +731,63 @@ public:
         auto response = std::make_unique<TEvMon::TEvMonitoringResponse>();
         response->Record.SetHttpResponse(httpResponse);
         Send(Event->Sender, response.release(), 0, Event->Cookie);
+        if (ev->Get()->Response->IsDone()) {
+            return PassAway();
+        }
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk::TPtr& ev) {
+        auto response = std::make_unique<TEvMon::TEvMonitoringResponse>();
+        bool endOfData = false;
+        if (ev->Get()->Error) {
+            response->Record.SetError(ev->Get()->Error);
+            endOfData = true;
+        } else if (ev->Get()->DataChunk) {
+            response->Record.SetDataChunk(ev->Get()->DataChunk->AsString());
+            if (ev->Get()->DataChunk->IsEndOfData()) {
+                response->Record.SetEndOfData(true);
+                endOfData = true;
+            }
+        }
+        Send(Event->Sender, response.release(), 0, Event->Cookie);
+        if (endOfData) {
+            return PassAway();
+        }
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr& ev) {
+        CancelSubscriber = std::move(ev);
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvRequestCancelled::TPtr& ev) {
+        if (CancelSubscriber) {
+            Send(CancelSubscriber->Sender, new NHttp::TEvHttpProxy::TEvRequestCancelled(), 0, CancelSubscriber->Cookie);
+        }
         PassAway();
+    }
+
+    void PassAway() {
+        Send(OwnerActorId, new TEvMon::TEvCleanupProxy(Address));
+        TBase::PassAway();
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvSubscribeForCancel, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvRequestCancelled, Handle);
         }
     }
 };
 
 class THttpMonServiceMonRequest : public TActorBootstrapped<THttpMonServiceMonRequest> {
 public:
+    using TBase = TActorBootstrapped<THttpMonServiceMonRequest>;
+
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     ui32 NodeId;
+    NHttp::THttpOutgoingResponsePtr CurrentResponse;
 
     THttpMonServiceMonRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, ui32 nodeId)
         : Event(std::move(event))
@@ -810,15 +824,19 @@ public:
     }
 
     void Bootstrap() {
+        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
         TActorId monServiceNodeProxy = MakeNodeProxyId(NodeId);
         auto request = std::make_unique<TEvMon::TEvMonitoringRequest>();
         request->Record.SetHttpRequest(Event->Get()->Request->AsString());
         ToProto(*request->Record.MutableAddress(), Event->Get()->Request->Address);
-        Send(monServiceNodeProxy, request.release(), IEventHandle::FlagTrackDelivery);
+        Send(monServiceNodeProxy, request.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
         Become(&THttpMonServiceMonRequest::StateWork);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
+            return Cancelled();
+        }
         TString reason;
         switch (ev->Get()->Reason) {
             case TEvents::TEvUndelivered::ReasonUnknown:
@@ -836,33 +854,79 @@ public:
     }
 
     void Handle(TEvMon::TEvMonitoringResponse::TPtr& ev) {
-        TString responseTxt = ev->Get()->Record.GetHttpResponse();
-        NHttp::THttpOutgoingResponsePtr responseObj = Event->Get()->Request->CreateResponseString(responseTxt);
-        if (responseObj->Status == "301" || responseObj->Status == "302") {
-            NHttp::THttpResponseParser parser(responseTxt);
-            NHttp::THeadersBuilder headers(parser.Headers);
-            if (headers["Location"].starts_with('/')) {
-                NHttp::THttpOutgoingResponsePtr response = new NHttp::THttpOutgoingResponse(Event->Get()->Request);
-                response->InitResponse(parser.Protocol, parser.Version, parser.Status, parser.Message);
+        if (ev->Get()->Record.HasHttpResponse()) {
+            TString responseTxt = ev->Get()->Record.GetHttpResponse();
+            NHttp::THttpOutgoingResponsePtr responseObj = Event->Get()->Request->CreateResponseString(responseTxt);
 
-                headers.Set("Location", TStringBuilder() << "/node/" << NodeId << headers["Location"]);
-
-                response->Set(headers);
-                if (parser.HaveBody()) {
-                    response->SetBody(parser.Body);
+            if (responseObj->Status == "301" || responseObj->Status == "302") {
+                NHttp::THttpResponseParser parser(responseTxt);
+                NHttp::THeadersBuilder headers(parser.Headers);
+                auto location(headers["Location"]);
+                if (location.starts_with('/') && !location.starts_with("/node/")) {
+                    NHttp::THttpOutgoingResponsePtr response = new NHttp::THttpOutgoingResponse(Event->Get()->Request);
+                    response->InitResponse(parser.Protocol, parser.Version, parser.Status, parser.Message);
+                    headers.Set("Location", TStringBuilder() << "/node/" << NodeId << location);
+                    response->Set(headers);
+                    if (parser.HasBody()) {
+                        response->SetBody(parser.Body);
+                    }
+                    responseObj = response;
                 }
-                responseObj = response;
             }
-        }
 
-        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(responseObj.Release()), 0, Event->Cookie);
+            Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(responseObj), 0, Event->Cookie);
+
+            if (responseObj->IsDone()) {
+                return PassAway();
+            } else {
+                CurrentResponse = responseObj;
+            }
+        } else if (ev->Get()->Record.HasDataChunk() && CurrentResponse) {
+            auto dataChunk = CurrentResponse->CreateIncompleteDataChunk();
+            auto dataChunkContent = ev->Get()->Record.GetDataChunk();
+            dataChunk->Assign(dataChunkContent.data(), dataChunkContent.size());
+            bool endOfData = false;
+            if (ev->Get()->Record.GetEndOfData()) {
+                endOfData = true;
+                dataChunk->EndOfData = true;
+            }
+            Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(dataChunk), 0, Event->Cookie);
+            if (endOfData) {
+                return PassAway();
+            }
+        } else if (ev->Get()->Record.HasError() && CurrentResponse) {
+            Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(ev->Get()->Record.GetError()), 0, Event->Cookie);
+            return PassAway();
+        }
+    }
+
+    void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        if (CurrentResponse) {
+            Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk("NodeDisconnected"), 0, Event->Cookie);
+        } else {
+            Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Event->Get()->Request->CreateResponseServiceUnavailable("NodeDisconnected")), 0, Event->Cookie);
+        }
         PassAway();
+    }
+
+    void Cancelled() {
+        auto request = std::make_unique<TEvMon::TEvMonitoringCancelRequest>();
+        ToProto(*request->Record.MutableAddress(), Event->Get()->Request->Address);
+        Send(MakeNodeProxyId(NodeId), request.release());
+        PassAway();
+    }
+
+    void PassAway() override {
+        Send(TActivationContext::InterconnectProxy(NodeId), new TEvents::TEvUnsubscribe());
+        TBase::PassAway();
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvMon::TEvMonitoringResponse, Handle);
+            cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
             hFunc(TEvents::TEvUndelivered, Handle);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
         }
     }
 };
@@ -892,14 +956,34 @@ public:
         Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseBadRequest("bad request")), 0, ev->Cookie);
     }
 
+    static TString GetAddress(const NKikimrMonProto::TSockAddr& addr) {
+        return TStringBuilder() << addr.GetFamily() << "://" << addr.GetAddress() << ":" << addr.GetPort();
+    }
+
     void Handle(TEvMon::TEvMonitoringRequest::TPtr& ev) {
-        Register(new THttpMonServiceNodeRequest(Endpoint, ev, HttpProxyActorId));
+        auto address = GetAddress(ev->Get()->Record.GetAddress());
+        auto actorId = Register(new THttpMonServiceNodeRequest(Endpoint, ev, SelfId(), address, HttpProxyActorId));
+        RequestProxies[address] = actorId;
+    }
+
+    void Handle(TEvMon::TEvMonitoringCancelRequest::TPtr& ev) {
+        auto address = GetAddress(ev->Get()->Record.GetAddress());
+        auto itProxy = RequestProxies.find(address);
+        if (itProxy != RequestProxies.end()) {
+            Send(itProxy->second, new NHttp::TEvHttpProxy::TEvRequestCancelled());
+        }
+    }
+
+    void Handle(TEvMon::TEvCleanupProxy::TPtr& ev) {
+        RequestProxies.erase(ev->Get()->Address);
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
             hFunc(TEvMon::TEvMonitoringRequest, Handle);
+            hFunc(TEvMon::TEvMonitoringCancelRequest, Handle);
+            hFunc(TEvMon::TEvCleanupProxy, Handle);
             cFunc(TEvents::TSystem::Poison, PassAway);
         }
     }
@@ -907,6 +991,7 @@ public:
 protected:
     TActorId HttpProxyActorId;
     std::shared_ptr<NHttp::THttpEndpointInfo> Endpoint;
+    std::unordered_map<TString, TActorId> RequestProxies;
 };
 
 // initializes http and waits for the result
@@ -941,6 +1026,313 @@ protected:
     std::promise<void> Promise;
 };
 
+class THttpMonAuthorizedActorRequest : public TActorBootstrapped<THttpMonAuthorizedActorRequest> {
+public:
+    NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
+    TActorId TargetActorId;
+    TMon::TRequestAuthorizer Authorizer;
+    TVector<TString> AllowedSIDs;
+
+    THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TActorId targetActorId, TMon::TRequestAuthorizer authorizer, const TVector<TString>& allowedSIDs)
+        : Event(std::move(event))
+        , TargetActorId(targetActorId)
+        , Authorizer(std::move(authorizer))
+        , AllowedSIDs(allowedSIDs)
+    {}
+
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::HTTP_MON_AUTHORIZED_ACTOR_REQUEST;
+    }
+
+    void Bootstrap() {
+        if (Authorizer) {
+            NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get()->Request.Get());
+            if (handle) {
+                Send(handle);
+                Become(&THttpMonAuthorizedActorRequest::StateWork);
+                return;
+            }
+        }
+        Forward(Event, TargetActorId);
+        PassAway();
+    }
+
+    bool CredentialsProvided() {
+        NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
+        NHttp::THeaders headers(request->Headers);
+        if (headers.Has("Authorization")) {
+            return true;
+        }
+        NHttp::TCookies cookies(headers["Cookie"]);
+        if (cookies.Has("ydb_session_id")) {
+            return true;
+        }
+        return false;
+    }
+
+    TString YdbToHttpError(Ydb::StatusIds::StatusCode status) {
+        switch (status) {
+        case Ydb::StatusIds::UNAUTHORIZED:
+            // YDB status UNAUTHORIZED is used for both access denied case and if no credentials were provided.
+            return CredentialsProvided() ? "403 Forbidden" : "401 Unauthorized";
+        case Ydb::StatusIds::INTERNAL_ERROR:
+            return "500 Internal Server Error";
+        case Ydb::StatusIds::UNAVAILABLE:
+            return "503 Service Unavailable";
+        case Ydb::StatusIds::OVERLOADED:
+            return "429 Too Many Requests";
+        case Ydb::StatusIds::TIMEOUT:
+            return "408 Request Timeout";
+        case Ydb::StatusIds::PRECONDITION_FAILED:
+            return "412 Precondition Failed";
+        default:
+            return "400 Bad Request";
+        }
+    }
+
+    void ReplyErrorAndPassAway(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result) {
+        ReplyErrorAndPassAway(result.Status, result.Issues, true);
+    }
+
+    bool AcceptsJson() const {
+        NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
+        TStringBuf acceptHeader = NHttp::THeaders(request->Headers)["Accept"];
+        return acceptHeader.find("application/json") != TStringBuf::npos;
+    }
+
+    void ReplyErrorAndPassAway(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, bool addAccessControlHeaders) {
+        NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
+        TStringBuilder response;
+        TStringBuilder body;
+        TStringBuf contentType;
+        const TString httpError = YdbToHttpError(status);
+
+        if (AcceptsJson()) {
+            contentType = "application/json";
+            NJson::TJsonValue json;
+            TString message;
+            MakeJsonErrorReply(json, message, issues, NYdb::EStatus(status));
+            NJson::WriteJson(&body.Out, &json);
+        } else {
+            contentType = "text/html";
+            body << "<html><body><h1>" << httpError << "</h1>";
+            if (issues) {
+                body << "<p>" << issues.ToString() << "</p>";
+            }
+            body << "</body></html>";
+        }
+
+        response << "HTTP/1.1 " << httpError << "\r\n";
+        if (addAccessControlHeaders) {
+            NHttp::THeaders headers(request->Headers);
+            TString origin = TString(headers["Origin"]);
+            if (origin.empty()) {
+                origin = "*";
+            }
+            response << "Access-Control-Allow-Origin: " << origin << "\r\n";
+            response << "Access-Control-Allow-Credentials: true\r\n";
+            response << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n";
+            response << "Access-Control-Allow-Methods: OPTIONS, GET, POST, PUT, DELETE\r\n";
+        }
+
+        response << "Content-Type: " << contentType << "\r\n";
+        response << "Content-Length: " << body.size() << "\r\n";
+        response << "\r\n";
+        response << body;
+        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(request->CreateResponseString(response)));
+        PassAway();
+    }
+
+    void ReplyForbiddenAndPassAway(const TString& error = {}) {
+        NYql::TIssues issues;
+        issues.AddIssue(error);
+        ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issues, false);
+    }
+
+    void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result) {
+        NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
+        if (Authorizer) {
+            TString user = result.UserToken ? result.UserToken->GetUserSID() : "anonymous";
+            ALOG_NOTICE(NActorsServices::HTTP, (request->Address ? request->Address->ToString() : "")
+                << " " << user
+                << " " << request->Method
+                << " " << request->URL);
+        }
+        if (result.UserToken) {
+            Event->Get()->UserToken = result.UserToken->GetSerializedToken();
+        }
+        Forward(Event, TargetActorId);
+        PassAway();
+    }
+
+    void HandleUndelivered(TEvents::TEvUndelivered::TPtr&) {
+        NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
+        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
+            request->CreateResponseServiceUnavailable(TStringBuilder() << "Auth actor is not available")));
+        PassAway();
+    }
+
+    void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
+        const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
+        if (result.Status != Ydb::StatusIds::SUCCESS) {
+            return ReplyErrorAndPassAway(result);
+        }
+        bool found = false;
+        if (result.UserToken) {
+            for (const TString& sid : AllowedSIDs) {
+                if (result.UserToken->IsExist(sid)) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (found || AllowedSIDs.empty() || !result.UserToken) {
+            SendRequest(result);
+        } else {
+            return ReplyForbiddenAndPassAway("SID is not allowed");
+        }
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvents::TEvUndelivered, HandleUndelivered);
+            hFunc(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult, Handle);
+        }
+    }
+};
+
+// receives everyhing not related to actor communcation, converts them to request-actors
+class THttpMonIndexService : public TActor<THttpMonIndexService> {
+public:
+    THttpMonIndexService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring::TIndexMonPage> indexMonPage, TMon::TRequestAuthorizer authorizer, const TString& redirectRoot = {})
+        : TActor(&THttpMonIndexService::StateWork)
+        , HttpProxyActorId(httpProxyActorId)
+        , IndexMonPage(std::move(indexMonPage))
+        , Authorizer(std::move(authorizer))
+        , RedirectRoot(redirectRoot)
+    {
+    }
+
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::HTTP_MON_INDEX_SERVICE;
+    }
+
+    void ReplyWithOptions(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+        NHttp::THttpIncomingRequestPtr request = ev->Get()->Request;
+        TString url(request->URL.Before('?'));
+        TString type = mimetypeByExt(url.data());
+        if (type.empty()) {
+            type = "application/json";
+        }
+        TString origin = TString(NHttp::THeaders(request->Headers)["Origin"]);
+        if (origin.empty()) {
+            origin = "*";
+        }
+        TStringBuilder response;
+        response << "HTTP/1.1 204 No Content\r\n"
+                    "Access-Control-Allow-Origin: " << origin << "\r\n"
+                    "Access-Control-Allow-Credentials: true\r\n"
+                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent\r\n"
+                    "Access-Control-Expose-Headers: traceresponse,X-Worker-Name\r\n"
+                    "Access-Control-Allow-Methods: OPTIONS,GET,POST,PUT,DELETE\r\n"
+                    "Content-Type: " << type << "\r\n"
+                    "Connection: keep-alive\r\n\r\n";
+        Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(request->CreateResponseString(response)));
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+        if (ev->Get()->Request->Method == "OPTIONS") {
+            return ReplyWithOptions(ev);
+        }
+        bool redirect = false;
+        if (RedirectRoot && ev->Get()->Request->URL == "/") {
+            NHttp::THeaders headers(ev->Get()->Request->Headers);
+            if (!headers.Has("Referer")) {
+                redirect = true;
+            }
+        }
+        if (redirect) {
+            TStringBuilder response;
+            response << "HTTP/1.1 302 Found\r\nLocation: " << RedirectRoot << "\r\n\r\n";
+            Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseString(response)));
+            return;
+        }
+
+        if (!ev->Get()->Request->URL.ends_with("/") && ev->Get()->Request->URL.find('?') == TStringBuf::npos) {
+            TString url(ev->Get()->Request->URL);
+            bool index = false;
+            auto itPage = IndexPages.find(url);
+            if (itPage == IndexPages.end()) {
+                auto page = IndexMonPage->FindPageByAbsolutePath(url);
+                if (page) {
+                    index = page->IsIndex();
+                    IndexPages[url] = index;
+                }
+            } else {
+                index = itPage->second;
+            }
+            if (index) {
+                TStringBuilder response;
+                auto p = url.rfind('/');
+                if (p != TString::npos) {
+                    url = url.substr(p + 1);
+                }
+                url += '/';
+                response << "HTTP/1.1 302 Found\r\nLocation: " << url << "\r\n\r\n";
+                Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseString(response)));
+                return;
+            }
+        }
+
+        TStringBuf url = ev->Get()->Request->URL.Before('?');
+        while (!url.empty()) {
+            auto it = Handlers.find(TString(url));
+            if (it != Handlers.end()) {
+                if (it->second.UseAuth) {
+                    Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second.Handler, Authorizer, it->second.AllowedSIDs));
+                } else {
+                    Forward(ev, it->second.Handler);
+                }
+                return;
+            } else {
+                if (url.EndsWith('/')) {
+                    url.Chop(1);
+                } else {
+                    size_t pos = url.rfind('/');
+                    if (pos == TStringBuf::npos) {
+                        break;
+                    } else {
+                        url = url.substr(0, pos + 1);
+                    }
+                }
+            }
+        }
+
+        Register(new THttpMonLegacyIndexRequest(std::move(ev), IndexMonPage.Get()));
+    }
+
+    void Handle(TEvMon::TEvRegisterHandler::TPtr& ev) {
+        Handlers[ev->Get()->Fields.Path] = ev->Get()->Fields;
+        Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler(ev->Get()->Fields.Path, SelfId()));
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            hFunc(TEvMon::TEvRegisterHandler, Handle);
+            cFunc(TEvents::TSystem::Poison, PassAway);
+        }
+    }
+
+    TActorId HttpProxyActorId;
+    TIntrusivePtr<NMonitoring::TIndexMonPage> IndexMonPage;
+    std::unordered_map<TString, bool> IndexPages;
+    std::unordered_map<TString, TMon::TRegisterHandlerFields> Handlers;
+    TMon::TRequestAuthorizer Authorizer;
+    TString RedirectRoot;
+};
+
+
 TMon::TMon(TConfig config)
     : Config(std::move(config))
     , IndexMonPage(new NMonitoring::TIndexMonPage("", Config.Title))
@@ -971,7 +1363,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
         TMailboxType::ReadAsFilled,
         executorPool);
     HttpMonServiceActorId = ActorSystem->Register(
-        new THttpMonServiceLegacyIndex(IndexMonPage, Config.RedirectMainPageTo),
+        new THttpMonIndexService(HttpProxyActorId, IndexMonPage, Config.Authorizer, Config.RedirectMainPageTo),
         TMailboxType::ReadAsFilled,
         executorPool);
     auto nodeProxyActorId = ActorSystem->Register(
@@ -1009,7 +1401,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
         if (pageInfo.Page) {
             RegisterActorMonPage(pageInfo);
         } else if (pageInfo.Handler) {
-            ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler(pageInfo.Path, pageInfo.Handler));
+            ActorSystem->Send(HttpMonServiceActorId, new TEvMon::TEvRegisterHandler(pageInfo.Handler.value()));
         }
     }
     ActorMonPages.clear();
@@ -1097,14 +1489,13 @@ NMonitoring::IMonPage* TMon::RegisterCountersPage(const TString& path, const TSt
         return page;
 }
 
-void TMon::RegisterHandler(const TString& path, const TActorId& handler) {
+void TMon::RegisterActorHandler(const TRegisterHandlerFields& fields) {
     if (ActorSystem) {
-        ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler(path, handler));
+        ActorSystem->Send(HttpMonServiceActorId, new TEvMon::TEvRegisterHandler(fields));
     } else {
         TGuard<TMutex> g(Mutex);
         ActorMonPages.emplace_back(TActorMonPageInfo{
-            .Handler = handler,
-            .Path = path,
+            .Handler = fields,
         });
     }
 }

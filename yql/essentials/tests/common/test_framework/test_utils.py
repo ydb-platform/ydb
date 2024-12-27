@@ -1,7 +1,9 @@
 import json
 import os
+import six
 import re
 import yatest.common
+import zlib
 
 from yql_utils import get_param as yql_get_param
 from google.protobuf import text_format
@@ -17,6 +19,12 @@ try:
     YQLRUN_PATH = yatest.common.binary_path('yql/tools/yqlrun/yqlrun')
 except BaseException:
     YQLRUN_PATH = None
+
+
+def _make_hash(x):
+    if six.PY2:
+        return hash(x)
+    return zlib.crc32(repr(x).encode("utf-8"))
 
 
 def get_sql_flags():
@@ -86,9 +94,9 @@ def pytest_generate_tests_for_run(metafunc, template='.sql', suites=None, curren
             if os.path.exists(suite_dir + '/' + case + '.cfg'):
                 configs.append('')
             for cfg in sorted(configs):
-                if hash((suite, case, cfg)) % partsCount == currentPart:
+                if _make_hash((suite, case, cfg)) % partsCount == currentPart:
                     argvalues.append((suite, case, cfg))
-            if not configs and hash((suite, case, 'default.txt')) % partsCount == currentPart:
+            if not configs and _make_hash((suite, case, 'default.txt')) % partsCount == currentPart:
                 argvalues.append((suite, case, 'default.txt'))
 
     metafunc.parametrize(
@@ -97,8 +105,8 @@ def pytest_generate_tests_for_run(metafunc, template='.sql', suites=None, curren
     )
 
 
-def pytest_generate_tests_for_part(metafunc, currentPart, partsCount):
-    return pytest_generate_tests_for_run(metafunc, currentPart=currentPart, partsCount=partsCount)
+def pytest_generate_tests_for_part(metafunc, currentPart, partsCount, data_path=None):
+    return pytest_generate_tests_for_run(metafunc, currentPart=currentPart, partsCount=partsCount, data_path=data_path)
 
 
 def get_cfg_file(cfg, case):

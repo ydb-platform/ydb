@@ -51,7 +51,7 @@ private:
     TMaybe<TFormat> Format_;
     TTableReaderOptions Options_;
 
-    THolder<TPingableTransaction> ReadTransaction_;
+    std::unique_ptr<TPingableTransaction> ReadTransaction_;
 
     std::unique_ptr<IInputStream> Input_;
 

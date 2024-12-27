@@ -551,4 +551,14 @@ ui64 HexEncode(const char *src, size_t len, char *dst) {
     throw yexception() << "HexEncode in pg_dummy does nothing";
 }
 
+
+std::unique_ptr<IYtColumnConverter> BuildPgTopLevelColumnReader(std::unique_ptr<NKikimr::NUdf::IArrayBuilder>&& builder, const NKikimr::NMiniKQL::TPgType* targetType) {
+    throw yexception() << "PG types are not supported";
+}
+
+
+std::unique_ptr<IYsonComplexTypeReader> BuildPgYsonColumnReader(const NUdf::TPgTypeDescription& desc) {
+    throw yexception() << "PG types are not supported";
+}
+
 } // NYql

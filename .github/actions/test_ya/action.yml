@@ -212,9 +212,6 @@ runs:
             params+=(
               --build "release" --sanitize="address"
             )
-            if [ $TEST_RETRY_COUNT -z ]; then
-              TEST_RETRY_COUNT=1
-            fi
             IS_TEST_RESULT_IGNORED=1
             ;;
           release-tsan)

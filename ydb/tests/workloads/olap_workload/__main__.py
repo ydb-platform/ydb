@@ -284,12 +284,12 @@ class WorkloadInsertDelete(WorkloadBase):
 
 
 class WorkloadRunner:
-    def __init__(self, client, args):
+    def __init__(self, client, name, duration, allow_nullables_in_pk):
         self.client = client
         self.name = args.path
         self.tables_prefix = "/".join([self.client.database, self.name])
         self.duration = args.duration
-        self.allow_nullables_in_pk = args.allow_nullables_in_pk
+        self.allow_nullables_in_pk = allow_nullables_in_pk
 
     def __enter__(self):
         self._cleanup()
@@ -336,5 +336,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     client = YdbClient(args.endpoint, args.database, True)
     client.wait_connection()
-    with WorkloadRunner(client, args) as runner:
+    with WorkloadRunner(client, args.path, args.duration, args.allow_nullables_in_pk) as runner:
         runner.run()

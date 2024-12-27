@@ -29,6 +29,7 @@ class TestYdbWorkload(object):
                 "--endpoint", f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
                 "--database=/Root",
                 "--duration", "120",
+                "--allow-nullables-in-pk", "1",
             ],
             wait=True
         )

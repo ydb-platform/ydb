@@ -26,7 +26,9 @@ public:
     [[nodiscard]] const NYson::TYsonString& Payload() const;
 
 private:
-    NYson::TYsonString Header_;
+    // TODO(arkady-e1ppa): Whenever trivial generator/validators are added
+    // remove initialization.
+    NYson::TYsonString Header_ = NYson::TYsonString(TStringBuf(""));
     NYson::TYsonString Payload_;
     std::vector<std::byte> Signature_;
 

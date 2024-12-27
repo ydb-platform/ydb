@@ -137,11 +137,11 @@ namespace NKikimr::NStorage {
     void TNodeWarden::StartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk, bool temporary) {
         const TString& path = pdisk.GetPath();
         if (const auto it = PDiskByPath.find(path); it != PDiskByPath.end()) {
+            Y_ABORT_UNLESS(!temporary);
             const auto jt = LocalPDisks.find(it->second.RunningPDiskId);
             Y_ABORT_UNLESS(jt != LocalPDisks.end());
             TPDiskRecord& record = jt->second;
             if (record.Temporary) { // this is temporary PDisk spinning, have to wait for it to finish
-                Y_ABORT_UNLESS(!temporary);
                 PDisksWaitingToStart.insert(pdisk.GetPDiskID());
                 it->second.Pending = pdisk;
             } else { // incorrect configuration: we are trying to start two different PDisks with the same path
@@ -220,14 +220,10 @@ namespace NKikimr::NStorage {
             const TActorId actorId = MakeBlobStoragePDiskID(LocalNodeId, pdiskId);
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0));
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateDelete(pdiskId));
-            if (const auto jt = PDiskByPath.find(it->second.Record.GetPath()); jt != PDiskByPath.end() &&
-                    jt->second.RunningPDiskId == it->first) {
-                pending = std::move(jt->second.Pending);
-                PDiskByPath.erase(jt);
-                PDisksWaitingToStart.erase(pending->GetPDiskID());
-            } else {
-                Y_DEBUG_ABORT("missing entry in PDiskByPath");
-            }
+            const auto jt = PDiskByPath.find(it->second.Record.GetPath());
+            Y_ABORT_UNLESS(jt != PDiskByPath.end() && jt->second.RunningPDiskId == it->first);
+            pending = std::move(jt->second.Pending);
+            PDiskByPath.erase(jt);
             LocalPDisks.erase(it);
             PDiskRestartInFlight.erase(pdiskId);
 
@@ -239,6 +235,7 @@ namespace NKikimr::NStorage {
         }
 
         if (pending) {
+            PDisksWaitingToStart.erase(pending->GetPDiskID());
             StartLocalPDisk(*pending, false);
 
             // start VDisks over this one waiting for their turn

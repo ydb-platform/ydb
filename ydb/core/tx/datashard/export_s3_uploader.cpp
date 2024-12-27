@@ -14,6 +14,7 @@
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/events/common.h>
 #include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http_proxy.h>
@@ -166,6 +167,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             UploadPermissions();
         } else if (!SchemeUploaded) {
             UploadScheme();
+        } else if (!ChangefeedsUploaded) {
+            UploadChangefeeds();
         } else {
             this->Become(&TThis::StateUploadData);
 
@@ -194,10 +197,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
 
         this->Become(&TThis::StateUploadScheme);
-
-        if (!CdcStremsUploaded) {
-            UploadPersQueueGroups();
-        }
     }
 
     void UploadPersQueueGroups() {
@@ -227,19 +226,58 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         this->Become(&TThis::StateUploadPermissions);
     }
 
-    void UploadPersQueueGroups() {
-        Y_ABORT_UNLESS(!CdcStremsUploaded);
+    void PutChangefeedDescription(const Ydb::Table::ChangefeedDescription& changefeed, const TString& changefeedKeyPattern, const ui64 index) {
+        google::protobuf::TextFormat::PrintToString(changefeed, &Buffer);
+        auto request = Aws::S3::Model::PutObjectRequest()
+            .WithKey(Settings.GetChangefeedKey(changefeedKeyPattern));
+        this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
+        this->Become(TThis::StateUploadOneChangefeed(index));
+    }
 
-        for (const auto& message : PersQueues) {
-            google::protobuf::TextFormat::PrintToString(message, &Buffer);
-            const auto objKeyPattern = TStringBuilder() << Settings.ObjectKeyPattern << "/" << message.GetName();
-            auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(NBackupRestoreTraits::PersQueueKey(objKeyPattern));
-            this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
+    void PutTopicDescription(const Ydb::Topic::DescribeTopicResult& topic, const TString& changefeedKeyPattern, const ui64 index) {
+        google::protobuf::TextFormat::PrintToString(topic, &Buffer);
+        auto request = Aws::S3::Model::PutObjectRequest()
+            .WithKey(Settings.GetTopicKey(changefeedKeyPattern));
+        this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
+        this->Become(TThis::StateUploadOneTopic(index));
+    }
 
-            this->Become(&TThis::StateUploadScheme);
+    void UploadOneChangefeed(ui64 index) {
+        if (index >= ChangefeedsExportDescs.size()) {
+            //Error!
+            return;
         }
-        
+        if (index == ChangefeedsExportDescs.size()) {
+            ChangefeedsUploaded = true;
+            this->Become(&TThis::StateUploadData);
+            return;
+        }
+        const auto& changefeed = ChangefeedsExportDescs[index].ChangefeedDescription;
+        const auto changefeedKeyPattern = TStringBuilder() << Settings.ObjectKeyPattern << "/" << changefeed.Getname();
+        PutChangefeedDescription(changefeed, changefeedKeyPattern, index);
+    }
+
+    void UploadOneTopic(ui64 index) {
+        if (index >= ChangefeedsExportDescs.size()) {
+            //Error!
+            return;
+        }
+        auto& descs = ChangefeedsExportDescs[index];
+        const auto changefeedKeyPattern = TStringBuilder() << Settings.ObjectKeyPattern << "/" 
+            << descs.ChangefeedDescription.Getname();
+        PutTopicDescription(descs.Topic, changefeedKeyPattern, index);
+    }
+
+    void UploadChangefeeds() {
+        Y_ABORT_UNLESS(!ChangefeedsUploaded);
+
+        for (const auto &[changefeed, topic] : ChangefeedsExportDescs) {
+            google::protobuf::TextFormat::PrintToString(changefeed, &Buffer);
+            const auto changefeedKeyPattern = TStringBuilder() << Settings.ObjectKeyPattern << "/" << changefeed.Getname();
+            PutChangefeedDescription(changefeed, changefeedKeyPattern);
+            PutTopicDescription(topic, changefeedKeyPattern);
+        }
+        this->Become(&TThis::StateUploadScheme);
     }
 
     void UploadMetadata() {
@@ -288,7 +326,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             if (Scanner) {
                 this->Send(Scanner, new TEvExportScan::TEvFeed());
             }
-            this->Become(&TThis::StateUploadData);
+            UploadOneChangefeed(0);
         };
 
         if (EnableChecksums) {
@@ -321,6 +359,44 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         } else {
             nextStep();
         }
+    }
+
+    auto HandleOneChangefeed(ui64 index) {
+        return [index, this](TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
+            const auto& result = ev->Get()->Result;
+
+            EXPORT_LOG_D("HandleMetadata TEvExternalStorage::TEvPutObjectResponse"
+                << ": self# " << this->SelfId()
+                << ", result# " << result);
+
+            if (!CheckResult(result, TStringBuf("PutObject (changefeed)"))) {
+                return;
+            }
+
+            auto nextStep = [index, this]() {
+                UploadOneTopic(index);
+            };
+            nextStep();
+        };
+    }
+
+    auto HandleOneTopic(ui64 index) {
+        return [index, this](TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
+            const auto& result = ev->Get()->Result;
+
+            EXPORT_LOG_D("HandleMetadata TEvExternalStorage::TEvPutObjectResponse"
+                << ": self# " << this->SelfId()
+                << ", result# " << result);
+
+            if (!CheckResult(result, TStringBuf("PutObject (topic)"))) {
+                return;
+            }
+
+            auto nextStep = [index, this]() {
+                UploadOneChangefeed(index + 1);
+            };
+            nextStep();
+        };
     }
 
     void HandleMetadata(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
@@ -760,6 +836,26 @@ public:
         }
     }
 
+    std::function<void(TAutoPtr<::NActors::IEventHandle>&)> StateUploadOneChangefeed(ui64 index) {
+        return [index, this](TAutoPtr<::NActors ::IEventHandle> &ev) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleOneChangefeed(index));
+            default:
+                return StateBase(ev);
+            }
+        };
+    }
+
+    std::function<void(TAutoPtr<::NActors::IEventHandle>&)> StateUploadOneTopic(ui64 index) {
+        return [index, this](TAutoPtr<::NActors ::IEventHandle> &ev) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleOneTopic(index));
+            default:
+                return StateBase(ev);
+            }
+        };
+    }
+
     STATEFN(StateUploadMetadata) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleMetadata);
@@ -805,7 +901,7 @@ private:
     const TActorId DataShard;
     const ui64 TxId;
     const TMaybe<Ydb::Table::CreateTableRequest> Scheme;
-    const TVector<TChangefeedExportDescriptions> ChangefeedsExportDescs;
+    TVector<TChangefeedExportDescriptions> ChangefeedsExportDescs;
     const TString Metadata;
     const TMaybe<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
 
@@ -817,7 +913,7 @@ private:
 
     TActorId Client;
     bool SchemeUploaded;
-    bool CdcStremsUploaded;
+    bool ChangefeedsUploaded;
     bool MetadataUploaded;
     bool PermissionsUploaded;
     bool MultiPart;
@@ -846,17 +942,13 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
 
     const auto& persQueuesTPathDesc = Task.GetPersQueue();
 
-    Ydb::Table::DescribeTableResult descTableResult;
-    FillChangefeedDescription(descTableResult, Task.GetTable().GetTable());
-
-    const auto& changefeeds = descTableResult.Getchangefeeds();
-    const int changefeedsCount = changefeeds.SpaceUsedExcludingSelf();
+    const auto& cdcStreams = Task.GetTable().GetTable().GetCdcStreams();
+    const int changefeedsCount = cdcStreams.size();
     TVector <TChangefeedExportDescriptions> changefeedsExportDescs(changefeedsCount);
 
     for (int i = 0; i < changefeedsCount; ++i) {
-        changefeedsExportDescs[i].ChangefeedDescription = changefeeds[i];
-        changefeedsExportDescs[i].Topic = GenYdbDescribeTopicResult( persQueuesTPathDesc[i].GetPersQueueGroup() );
-
+        FillChangefeedDescription(changefeedsExportDescs[i].ChangefeedDescription, cdcStreams[i]);
+        FillTopicDescription(changefeedsExportDescs[i].Topic, persQueuesTPathDesc[i].GetPersQueueGroup());
     }
 
     auto permissions = (Task.GetShardNum() == 0)

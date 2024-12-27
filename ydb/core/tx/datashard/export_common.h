@@ -36,7 +36,4 @@ TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
 TMaybe<Ydb::Scheme::ModifyPermissionsRequest> GenYdbPermissions(
     const NKikimrSchemeOp::TPathDescription& pathDesc);
 
-Ydb::Topic::DescribeTopicResult GenYdbDescribeTopicResult(
-    const NKikimrSchemeOp::TPersQueueGroupDescription& persQueue);
-
 } // NKikimr::NDataShard

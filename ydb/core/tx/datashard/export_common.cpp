@@ -3,8 +3,6 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/services/persqueue_v1/actors/schema_actors.h>
-#include <ydb/library/persqueue/obfuscate/obfuscate.h>
 
 #include <util/generic/algorithm.h>
 

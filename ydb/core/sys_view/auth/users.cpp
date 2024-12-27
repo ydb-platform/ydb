@@ -39,7 +39,7 @@ protected:
         for (const auto& user : entry.DomainInfo->Users) {
             for (auto& column : Columns) {
                 switch (column.Tag) {
-                case Schema::AuthUsers::Name::ColumnId:
+                case Schema::AuthUsers::Sid::ColumnId:
                     cells.push_back(TCell(user.Sid.data(), user.Sid.size()));
                     break;
                 default:

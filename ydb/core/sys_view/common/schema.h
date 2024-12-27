@@ -618,20 +618,20 @@ struct Schema : NIceDb::Schema {
     };
 
     struct AuthUsers : Table<15> {
-        struct Name: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Sid: Column<1, NScheme::NTypeIds::Utf8> {};
 
-        using TKey = TableKey<Name>;
+        using TKey = TableKey<Sid>;
         using TColumns = TableColumns<
-            Name
+            Sid
         >;
     };
 
     struct AuthGroups : Table<16> {
-        struct Name: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Sid: Column<1, NScheme::NTypeIds::Utf8> {};
 
-        using TKey = TableKey<Name>;
+        using TKey = TableKey<Sid>;
         using TColumns = TableColumns<
-            Name
+            Sid
         >;
     };
 

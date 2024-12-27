@@ -2194,7 +2194,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
-    Y_UNIT_TEST(AuthSids) {
+    Y_UNIT_TEST(AuthGroups) {
         TTestEnv env;
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);

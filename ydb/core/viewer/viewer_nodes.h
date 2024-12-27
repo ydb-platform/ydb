@@ -95,6 +95,7 @@ class TJsonNodes : public TViewerPipeClient {
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvPDiskStateResponse>> PDiskStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvTabletStateResponse>> TabletStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvNodeStateResponse>> PeersStateResponse;
+    std::unordered_map<TNodeId, std::unordered_set<TNodeId>> SystemViewerRequest;
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> SystemViewerResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> VDiskViewerResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> PDiskViewerResponse;
@@ -329,6 +330,7 @@ class TJsonNodes : public TViewerPipeClient {
                     SystemState.SetDisconnectTime(disconnectTime.MilliSeconds());
                 }
             }
+            CalcUptimeSeconds(TInstant::Now());
         }
 
         void RemapDisks() {
@@ -2012,9 +2014,12 @@ public:
                 auto viewerRequest = std::make_unique<TEvViewer::TEvViewerRequest>();
                 InitWhiteboardRequest(viewerRequest->Record.MutableSystemRequest());
                 viewerRequest->Record.SetTimeout(Timeout / 2);
+                std::unordered_set<TNodeId> nodeIds;
                 for (const TNode* node : batch.NodesToAskAbout) {
+                    nodeIds.insert(node->GetNodeId());
                     viewerRequest->Record.MutableLocation()->AddNodeId(node->GetNodeId());
                 }
+                SystemViewerRequest[nodeId] = std::move(nodeIds);
                 SystemViewerResponse.emplace(nodeId, MakeViewerRequest(nodeId, viewerRequest.release()));
                 NodeBatches.emplace(nodeId, batch);
                 ++WhiteboardStateRequestsInFlight;
@@ -2187,10 +2192,7 @@ public:
             for (const auto& [responseNodeId, response] : SystemViewerResponse) {
                 if (response.IsOk()) {
                     const auto& systemResponse(response.Get()->Record.GetSystemResponse());
-                    std::unordered_set<TNodeId> nodesWithoutData;
-                    for (auto nodeId : response.Get()->Record.GetLocationResponded().GetNodeId()) {
-                        nodesWithoutData.insert(nodeId);
-                    }
+                    std::unordered_set<TNodeId> nodesWithoutData = std::move(SystemViewerRequest[responseNodeId]);
                     for (const auto& systemInfo : systemResponse.GetSystemStateInfo()) {
                         TNodeId nodeId = systemInfo.GetNodeId();
                         TNode* node = FindNode(nodeId);
@@ -2681,7 +2683,6 @@ public:
             if (FieldsRequired.test(+ENodeFields::PDisks) || FieldsRequired.test(+ENodeFields::VDisks)) {
                 node->RemapDisks();
             }
-            node->CalcUptimeSeconds(TInstant::Now());
         }
         TString error("NodeDisconnected");
         {

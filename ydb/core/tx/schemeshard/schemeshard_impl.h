@@ -1468,15 +1468,6 @@ public:
 
     NLogin::TLoginProvider LoginProvider;
 
-    struct TAccountLockout {
-        size_t AttemptThreshold = 4;
-        TDuration AttemptResetDuration = TDuration::Hours(1);
-
-        TAccountLockout(const ::NKikimrProto::TAccountLockout& accountLockout);
-    };
-
-    TAccountLockout AccountLockout;
-
 private:
     void OnDetach(const TActorContext &ctx) override;
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override;

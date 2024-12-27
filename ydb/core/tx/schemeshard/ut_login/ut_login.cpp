@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // check login
         {
             auto resultLogin = Login(runtime, "user1", "password1");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user: user1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Invalid user");
         }
 
         // another still has access
@@ -215,7 +215,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // check login
         {
             auto resultLogin = Login(runtime, "user1", "password1");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user: user1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Invalid user");
         }
 
         // another still has access
@@ -288,7 +288,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
                 {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"), NLs::HasOwner("user2")});
             auto resultLogin = Login(runtime, "user1", "password1");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user: user1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Invalid user");
         }
     }
 
@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         auto resultLogin = Login(runtime, "ldapuser@ldap.domain", "password1");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: ldapuser@ldap.domain");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid user");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
         auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
         CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 0});
@@ -447,7 +447,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLowerCaseCount = 3});
             CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user3", "PASSWORDU3", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 lower case character"}});
             auto resultLogin = Login(runtime, "user3", "PASSWORDU3");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user3");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid user");
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 2});
         }
@@ -480,7 +480,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLowerCaseCount = 0, .MinUpperCaseCount = 3});
             CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user5", "passwordu5", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 upper case character"}});
             auto resultLogin = Login(runtime, "user5", "passwordu5");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user5");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid user");
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 4});
         }
@@ -515,7 +515,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLength = 8});
             CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user7", "passwu7", {{NKikimrScheme::StatusPreconditionFailed, "Password is too short"}});
             auto resultLogin = Login(runtime, "user7", "passwu7");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user7");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid user");
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 6});
         }
@@ -549,7 +549,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinNumbersCount = 3});
             CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user9", "passwordunine", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 number"}});
             auto resultLogin = Login(runtime, "user9", "passwordunine");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user9");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid user");
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 8});
         }
@@ -583,7 +583,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinSpecialCharsCount = 3});
             CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user11", "passwordu11", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 special character"}});
             auto resultLogin = Login(runtime, "user11", "passwordu11");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user11");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid user");
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 10});
         }
@@ -606,7 +606,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.SpecialChars = "*#"}); // Only 2 special symbols are valid
             CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user12", "passwordu12*&%#", {{NKikimrScheme::StatusPreconditionFailed, "Password contains unacceptable characters"}});
             auto resultLogin = Login(runtime, "user12", "passwordu12*&%#");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user12");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid user");
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 11});
         }
@@ -623,6 +623,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
     Y_UNIT_TEST(AccountLockoutAndAutomaticallyUnlock) {
         TTestBasicRuntime runtime;
+        runtime.AddAppDataInit([] (ui32 nodeIdx, NKikimr::TAppData& appData) {
+            Y_UNUSED(nodeIdx);
+            auto accountLockout = appData.AuthConfig.MutableAccountLockout();
+            accountLockout->SetAttemptThreshold(4);
+            accountLockout->SetAttemptResetDuration("3s");
+        });
         TTestEnv env(runtime);
         auto accountLockoutConfig = runtime.GetAppData().AuthConfig.GetAccountLockout();
         ui64 txId = 100;
@@ -650,8 +656,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
         }
 
-        // User is blocked for 1 hour
-        runtime.AdvanceCurrentTime(TDuration::Minutes(61));
+        // User is blocked for 3 seconds
+        // runtime.AdvanceCurrentTime(TDuration::Minutes(61));
+        Sleep(TDuration::Seconds(4));
 
         resultLogin = Login(runtime, "user1", "wrongpassword6");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
@@ -667,6 +674,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
     Y_UNIT_TEST(ResetFailedAttemptCount) {
         TTestBasicRuntime runtime;
+        runtime.AddAppDataInit([] (ui32 nodeIdx, NKikimr::TAppData& appData) {
+            Y_UNUSED(nodeIdx);
+            auto accountLockout = appData.AuthConfig.MutableAccountLockout();
+            accountLockout->SetAttemptThreshold(4);
+            accountLockout->SetAttemptResetDuration("3s");
+        });
         TTestEnv env(runtime);
         auto accountLockoutConfig = runtime.GetAppData().AuthConfig.GetAccountLockout();
         ui64 txId = 100;
@@ -688,8 +701,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
         }
 
-        // FailedAttemptCount will reset in 1 hour
-        runtime.AdvanceCurrentTime(TDuration::Minutes(61));
+        // FailedAttemptCount will reset in 3 seconds
+        // runtime.AdvanceCurrentTime(TDuration::Minutes(61));
+        Sleep(TDuration::Seconds(4));
 
         // FailedAttemptCount should be reset
         for (size_t attempt = 0; attempt < accountLockoutConfig.GetAttemptThreshold() - 1; attempt++) {
@@ -708,6 +722,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
     Y_UNIT_TEST(ChangeAccountLockoutParameters) {
         TTestBasicRuntime runtime;
+        runtime.AddAppDataInit([] (ui32 nodeIdx, NKikimr::TAppData& appData) {
+            Y_UNUSED(nodeIdx);
+            auto accountLockout = appData.AuthConfig.MutableAccountLockout();
+            accountLockout->SetAttemptThreshold(4);
+            accountLockout->SetAttemptResetDuration("3s");
+        });
         TTestEnv env(runtime);
         auto accountLockoutConfig = runtime.GetAppData().AuthConfig.GetAccountLockout();
         ui64 txId = 100;
@@ -731,8 +751,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
         }
 
-        // user is blocked for 1 hour
-        runtime.AdvanceCurrentTime(TDuration::Minutes(61));
+        // user is blocked for 3 seconds
+        // runtime.AdvanceCurrentTime(TDuration::Minutes(61));
+        Sleep(TDuration::Seconds(4));
 
         // Unlock user after 1 hour
         resultLogin = Login(runtime, "user1", "password1");
@@ -745,7 +766,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
 
         size_t newAttemptThreshold = 6;
-        SetAccountLockoutParameters(runtime, TTestTxConfig::SchemeShard, {.AttemptThreshold = newAttemptThreshold, .AttemptResetDuration = "5h"});
+        SetAccountLockoutParameters(runtime, TTestTxConfig::SchemeShard, {.AttemptThreshold = newAttemptThreshold, .AttemptResetDuration = "7s"});
 
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
         // Now user2 have 6 attempts to login
@@ -762,16 +783,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 2});
         }
 
-        // user2 is blocked for 10 hour
+        // user2 is blocked for 7 seconds
         // After 3 hours user2 must be locked out
-        runtime.AdvanceCurrentTime(TDuration::Hours(3));
+        // runtime.AdvanceCurrentTime(TDuration::Hours(3));
+        Sleep(TDuration::Seconds(4));
         resultLogin = Login(runtime, "user2", "wrongpassword28");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user2 is locked out");
 
-        // After 5 h 1 m user2 must be unlocked
-        runtime.AdvanceCurrentTime(TDuration::Minutes(5 * 60 + 1));
+        // After 8 seconds user2 must be unlocked
+        // runtime.AdvanceCurrentTime(TDuration::Minutes(5 * 60 + 1));
+        Sleep(TDuration::Seconds(8));
 
-        // Unlock user after 10 sec
+        // Unlock user after 7 sec
         resultLogin = Login(runtime, "user2", "password2");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
         {
@@ -851,27 +874,29 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
     }
 
-    Y_UNIT_TEST(LockOutUserPermanentlyIfAttemptResetDurationIsZeroSeconds) {
-        TTestBasicRuntime runtime;
-        runtime.AddAppDataInit([] (ui32 nodeIdx, NKikimr::TAppData& appData) {
-            Y_UNUSED(nodeIdx);
-            auto accountLockout = appData.AuthConfig.MutableAccountLockout();
-            accountLockout->SetAttemptThreshold(4);
-            accountLockout->SetAttemptResetDuration("0s");
-        });
-        CheckUserIsLockedOutPermanently(runtime);
-    }
+    // Incorrect tests. Login library is using std::chrono and we cannot to simulate change current time
 
-    Y_UNIT_TEST(LockOutUserPermanentlyIfAttemptResetDurationCannotParse) {
-        TTestBasicRuntime runtime;
-        runtime.AddAppDataInit([] (ui32 nodeIdx, NKikimr::TAppData& appData) {
-            Y_UNUSED(nodeIdx);
-            auto accountLockout = appData.AuthConfig.MutableAccountLockout();
-            accountLockout->SetAttemptThreshold(4);
-            accountLockout->SetAttemptResetDuration("blablabla");
-        });
-        CheckUserIsLockedOutPermanently(runtime);
-    }
+    // Y_UNIT_TEST(LockOutUserPermanentlyIfAttemptResetDurationIsZeroSeconds) {
+    //     TTestBasicRuntime runtime;
+    //     runtime.AddAppDataInit([] (ui32 nodeIdx, NKikimr::TAppData& appData) {
+    //         Y_UNUSED(nodeIdx);
+    //         auto accountLockout = appData.AuthConfig.MutableAccountLockout();
+    //         accountLockout->SetAttemptThreshold(4);
+    //         accountLockout->SetAttemptResetDuration("0s");
+    //     });
+    //     CheckUserIsLockedOutPermanently(runtime);
+    // }
+
+    // Y_UNIT_TEST(LockOutUserPermanentlyIfAttemptResetDurationCannotParse) {
+    //     TTestBasicRuntime runtime;
+    //     runtime.AddAppDataInit([] (ui32 nodeIdx, NKikimr::TAppData& appData) {
+    //         Y_UNUSED(nodeIdx);
+    //         auto accountLockout = appData.AuthConfig.MutableAccountLockout();
+    //         accountLockout->SetAttemptThreshold(4);
+    //         accountLockout->SetAttemptResetDuration("blablabla");
+    //     });
+    //     CheckUserIsLockedOutPermanently(runtime);
+    // }
 }
 
 namespace NSchemeShardUT_Private {

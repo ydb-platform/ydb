@@ -21,6 +21,7 @@
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/library/login/password_checker/password_checker.h>
+#include <ydb/library/login/account_lockout/account_lockout.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <util/random/random.h>
@@ -4438,20 +4439,6 @@ TActorId TSchemeShard::TPipeClientFactory::CreateClient(const TActorContext& ctx
     return clientId;
 }
 
-TSchemeShard::TAccountLockout::TAccountLockout(const ::NKikimrProto::TAccountLockout& accountLockout)
-    : AttemptThreshold(accountLockout.GetAttemptThreshold())
-{
-    AttemptResetDuration = TDuration::Zero();
-    if (accountLockout.GetAttemptResetDuration().empty()) {
-        return;
-    }
-    if (TDuration::TryParse(accountLockout.GetAttemptResetDuration(), AttemptResetDuration)) {
-        if (AttemptResetDuration.Seconds() == 0) {
-            AttemptResetDuration = TDuration::Zero();
-        }
-    }
-}
-
 TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
@@ -4489,8 +4476,9 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
         .MinSpecialCharsCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinSpecialCharsCount(),
         .SpecialChars = AppData()->AuthConfig.GetPasswordComplexity().GetSpecialChars(),
         .CanContainUsername = AppData()->AuthConfig.GetPasswordComplexity().GetCanContainUsername()
-    }))
-    , AccountLockout(AppData()->AuthConfig.GetAccountLockout())
+    }), {.AttemptThreshold = AppData()->AuthConfig.GetAccountLockout().GetAttemptThreshold(),
+         .AttemptResetDuration = AppData()->AuthConfig.GetAccountLockout().GetAttemptResetDuration()
+    })
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
                             ESimpleCounters_descriptor,
@@ -7403,11 +7391,16 @@ void TSchemeShard::ConfigureAccountLockout(
         const ::NKikimrProto::TAuthConfig& config,
         const TActorContext &ctx)
 {
-    AccountLockout = TAccountLockout(config.GetAccountLockout());
+    NLogin::TAccountLockout::TInitializer accountLockoutInitializer {
+        .AttemptThreshold = config.GetAccountLockout().GetAttemptThreshold(),
+        .AttemptResetDuration = config.GetAccountLockout().GetAttemptResetDuration()
+    };
+
+    LoginProvider.UpdateAccountLockout(accountLockoutInitializer);
 
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                 "AccountLockout configured: AttemptThreshold# " << AccountLockout.AttemptThreshold
-                 << ", AttemptResetDuration# " << AccountLockout.AttemptResetDuration.ToString());
+                 "AccountLockout configured: AttemptThreshold# " << accountLockoutInitializer.AttemptThreshold
+                 << ", AttemptResetDuration# " << accountLockoutInitializer.AttemptResetDuration);
 }
 
 void TSchemeShard::StartStopCompactionQueues() {

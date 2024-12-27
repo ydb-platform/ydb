@@ -38,11 +38,17 @@ struct TLoginProvider::TImpl {
 TLoginProvider::TLoginProvider()
     : Impl(new TImpl())
     , PasswordChecker(TPasswordComplexity())
+    , AccountLockout()
 {}
 
-TLoginProvider::TLoginProvider(const TPasswordComplexity& passwordComplexity)
+TLoginProvider::TLoginProvider(const TAccountLockout::TInitializer& accountLockoutInitializer)
+    : TLoginProvider(TPasswordComplexity(), accountLockoutInitializer)
+{}
+
+TLoginProvider::TLoginProvider(const TPasswordComplexity& passwordComplexity, const TAccountLockout::TInitializer& accountLockoutInitializer)
     : Impl(new TImpl())
     , PasswordChecker(passwordComplexity)
+    , AccountLockout(accountLockoutInitializer)
 {}
 
 TLoginProvider::~TLoginProvider()
@@ -80,6 +86,7 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
     user.Name = request.User;
     user.Hash = Impl->GenerateHash(request.Password);
     user.CreatedAt = std::chrono::system_clock::now();
+    // user.LastFailedLoginAttempt = std::chrono::system_clock::duration::zero();
 
     return response;
 }
@@ -317,10 +324,71 @@ std::vector<TString> TLoginProvider::GetGroupsMembership(const TString& member) 
     return groups;
 }
 
+bool TLoginProvider::CheckLockout(const TSidRecord& sid) const {
+    return (AccountLockout.AttemptThreshold != 0 && sid.CurrentFailedLoginAttemptCount >= AccountLockout.AttemptThreshold);
+}
+
+void TLoginProvider::ResetFailedLoginAttemptCount(TSidRecord* sid) {
+    sid->CurrentFailedLoginAttemptCount = 0;
+}
+
+void TLoginProvider::UnlockAccount(TSidRecord* sid) {
+    ResetFailedLoginAttemptCount(sid);
+}
+
+bool TLoginProvider::ShouldResetFailedAttemptCount(const TSidRecord& sid) const {
+    if (sid.CurrentFailedLoginAttemptCount == 0) {
+        return false;
+    }
+    if (AccountLockout.AttemptResetDuration == std::chrono::system_clock::duration::zero()) {
+        return false;
+    }
+    // Cerr << "+++now: " << std::chrono::system_clock::now().time_since_epoch().count() << Endl;;
+    // Cerr << "+++sid.LastFailedLoginAttempt: " << sid.LastFailedLoginAttempt.time_since_epoch().count() << Endl;
+    // Cerr << "+++AccountLockout.AttemptResetDuration: " << AccountLockout.AttemptResetDuration.count() << Endl;
+    // Cerr << "+++sum: " << (sid.LastFailedLoginAttempt + AccountLockout.AttemptResetDuration).time_since_epoch().count() << Endl;
+    return sid.LastFailedLoginAttempt + AccountLockout.AttemptResetDuration < std::chrono::system_clock::now();
+}
+
+bool TLoginProvider::ShouldUnlockAccount(const TSidRecord& sid) const {
+    return ShouldResetFailedAttemptCount(sid);
+}
+
+TLoginProvider::TCheckLockOutResponse TLoginProvider::CheckLockOutUser(const TCheckLockOutRequest& request) {
+    TCheckLockOutResponse response;
+    auto itUser = Sids.find(request.User);
+    if (itUser == Sids.end() || itUser->second.Type != ESidType::USER) {
+        response.Status = TCheckLockOutResponse::EStatus::INVALID_USER;
+        response.Error = "Invalid user";
+        return response;
+    }
+
+    TSidRecord& sid  = itUser->second;
+    if (CheckLockout(sid)) {
+        // Cerr << "+++CheckLockout: true" << Endl;
+        if (ShouldUnlockAccount(sid)) {
+            // Cerr << "+++UnlockAccount" << Endl;
+            UnlockAccount(&sid);
+            response.Status = TCheckLockOutResponse::EStatus::RESET;
+        } else {
+            response.Status = TCheckLockOutResponse::EStatus::SUCCESS;
+            response.Error = TStringBuilder() << "User " << request.User << " is locked out";
+        }
+        return response;
+    } else if (ShouldResetFailedAttemptCount(sid)) {
+        // Cerr << "+++CheckLockout: false" << Endl;
+        ResetFailedLoginAttemptCount(&sid);
+        response.Status = TCheckLockOutResponse::EStatus::RESET;
+        return response;
+    }
+    response.Status = TCheckLockOutResponse::EStatus::UNLOCKED;
+    return response;
+}
+
 TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserRequest& request) {
     auto now = std::chrono::system_clock::now();
     TLoginUserResponse response;
-    response.LoginAttemptTime = std::chrono::time_point_cast<std::chrono::microseconds>(now).time_since_epoch().count();
+    // response.LoginAttemptTime = std::chrono::time_point_cast<std::chrono::microseconds>(now).time_since_epoch().count();
 
     if (Keys.empty() || Keys.back().PrivateKey.empty()) {
         response.Status = TLoginUserResponse::EStatus::UNAVAILABLE_KEY;
@@ -328,6 +396,7 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
         return response;
     }
 
+    TSidRecord* sid = nullptr;
     if (!request.ExternalAuth) {
         auto itUser = Sids.find(request.User);
         if (itUser == Sids.end() || itUser->second.Type != ESidType::USER) {
@@ -336,9 +405,12 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
             return response;
         }
 
+        sid = &(itUser->second);
         if (!Impl->VerifyHash(request.Password, itUser->second.Hash)) {
             response.Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
             response.Error = "Invalid password";
+            sid->LastFailedLoginAttempt = std::chrono::system_clock::now();
+            sid->CurrentFailedLoginAttemptCount++;
             return response;
         }
 
@@ -381,6 +453,11 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
     response.Token = TString(encoded_token);
     response.SanitizedToken = SanitizeJwtToken(response.Token);
     response.Status = TLoginUserResponse::EStatus::SUCCESS;
+
+    if (sid) {
+        sid->LastSuccessfulLoginAttempt = std::chrono::system_clock::now();
+        sid->CurrentFailedLoginAttemptCount = 0;
+    }
 
     return response;
 }
@@ -691,6 +768,10 @@ TString TLoginProvider::SanitizeJwtToken(const TString& token) {
 
 void TLoginProvider::UpdatePasswordCheckParameters(const TPasswordComplexity& passwordComplexity) {
     PasswordChecker.Update(passwordComplexity);
+}
+
+void TLoginProvider::UpdateAccountLockout(const TAccountLockout::TInitializer& accountLockoutInitializer) {
+    AccountLockout.Update(accountLockoutInitializer);
 }
 
 }

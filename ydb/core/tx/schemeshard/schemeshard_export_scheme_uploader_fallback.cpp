@@ -3,8 +3,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 class TSchemeUploaderFallback: public TActorBootstrapped<TSchemeUploaderFallback> {
 public:
@@ -34,5 +33,4 @@ IActor* CreateSchemeUploader(TSchemeShard* schemeShard, TExportInfo::TPtr export
     return new TSchemeUploaderFallback(schemeShard, txId);
 }
 
-} // NSchemeShard
-} // NKikimr
+} // NSchemeShard::NKikimr

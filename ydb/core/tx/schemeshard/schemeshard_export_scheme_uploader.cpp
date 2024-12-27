@@ -12,8 +12,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
 
@@ -274,5 +273,4 @@ IActor* CreateSchemeUploader(TSchemeShard* schemeShard, TExportInfo::TPtr export
     return new TSchemeUploader(schemeShard, exportInfo, itemIdx, txId, task);
 }
 
-} // NSchemeShard
-} // NKikimr
+} // NSchemeShard::NKikimr

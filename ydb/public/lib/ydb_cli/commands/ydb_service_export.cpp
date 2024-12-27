@@ -5,6 +5,7 @@
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 
+#include <util/generic/is_in.h>
 #include <util/generic/serialized_enum.h>
 #include <util/string/builder.h>
 
@@ -21,7 +22,7 @@ namespace {
     bool FilterSupportedSchemeObjects(const NScheme::TSchemeEntry& entry) {
         return IsIn({
             NScheme::ESchemeEntryType::Table,
-            NScheme::ESchemeEntryType::View
+            NScheme::ESchemeEntryType::View,
         }, entry.Type);
     }
 

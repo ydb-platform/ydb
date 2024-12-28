@@ -90,7 +90,6 @@ target_sources(core-client-server PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_request.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_scheme_initroot.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_scheme_request.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_sqs.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_tablet_counters.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_tablet_kill.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_tablet_state.cpp

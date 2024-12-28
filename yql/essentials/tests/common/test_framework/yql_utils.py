@@ -964,12 +964,13 @@ def normalize_result(res, sort):
     res = replace_vals(res)
     for r in res:
         for data in r[b'Write']:
-            if sort and b'Data' in data:
+            is_list = (b'Type' in data) and (data[b'Type'][0] == b'ListType')
+            if is_list and sort and b'Data' in data:
                 data[b'Data'] = sorted(data[b'Data'])
             if b'Ref' in data:
                 data[b'Ref'] = []
                 data[b'Truncated'] = True
-            if b'Data' in data and len(data[b'Data']) == 0:
+            if is_list and b'Data' in data and len(data[b'Data']) == 0:
                 del data[b'Data']
     return res
 

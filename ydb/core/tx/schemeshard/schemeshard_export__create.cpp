@@ -1048,17 +1048,17 @@ private:
             item.State = EState::Done;
             item.WaitTxId = InvalidTxId;
 
-            if (const auto issue = GetIssues(ItemPathId(Self, exportInfo, itemIdx), txId);
-                item.SourcePathType == NKikimrSchemeOp::EPathTypeTable
-                && issue
-            ) {
-                item.Issue = *issue;
-                Cancel(exportInfo, itemIdx, "issues during backing up");
-            } else {
-                if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                    exportInfo->State = EState::Done;
-                    exportInfo->EndTime = TAppData::TimeProvider->Now();
+            bool itemHasIssues = false;
+            if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable) {
+                if (const auto issue = GetIssues(ItemPathId(Self, exportInfo, itemIdx), txId)) {
+                    item.Issue = *issue;
+                    Cancel(exportInfo, itemIdx, "issues during backing up");
+                    itemHasIssues = true;
                 }
+            }
+            if (!itemHasIssues && AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
+                exportInfo->State = EState::Done;
+                exportInfo->EndTime = TAppData::TimeProvider->Now();
             }
 
             Self->PersistExportItemState(db, exportInfo, itemIdx);

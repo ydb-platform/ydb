@@ -44,6 +44,7 @@ target_link_libraries(ydbd PUBLIC
   hyperloglog_udf
   ip_udf
   knn_udf
+  roaring
   json_udf
   json2_udf
   math_udf

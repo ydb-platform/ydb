@@ -5,7 +5,6 @@
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 
-#include <util/generic/is_in.h>
 #include <util/generic/serialized_enum.h>
 #include <util/string/builder.h>
 
@@ -19,11 +18,8 @@ namespace {
     const char slashC = '/';
     const TStringBuf slash(&slashC, 1);
 
-    bool FilterSupportedSchemeObjects(const NScheme::TSchemeEntry& entry) {
-        return IsIn({
-            NScheme::ESchemeEntryType::Table,
-            NScheme::ESchemeEntryType::View,
-        }, entry.Type);
+    bool FilterTables(const NScheme::TSchemeEntry& entry) {
+        return entry.Type == NScheme::ESchemeEntryType::Table;
     }
 
     TVector<std::pair<TString, TString>> ExpandItem(NScheme::TSchemeClient& client, TStringBuf srcPath, TStringBuf dstPath) {
@@ -31,7 +27,7 @@ namespace {
         srcPath.ChopSuffix(slash);
         dstPath.ChopSuffix(slash);
 
-        const auto ret = RecursiveList(client, TString{srcPath}, TRecursiveListSettings().Filter(&FilterSupportedSchemeObjects));
+        const auto ret = RecursiveList(client, TString{srcPath}, TRecursiveListSettings().Filter(&FilterTables));
         ThrowOnError(ret.Status);
 
         if (ret.Entries.size() == 1 && srcPath == ret.Entries[0].Name) {
@@ -286,7 +282,7 @@ void TCommandExportToS3::Config(TConfig& config) {
             << "    - zstd-N (N is compression level in range [1, 22], e.g. zstd-3)" << Endl)
         .RequiredArgument("STRING").StoreResult(&Compression);
 
-    config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
+    config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder() 
             << "Sets bucket URL style. Value "
             << colors.BoldColor() << "true" << colors.OldColor()
             << " means use Virtual-Hosted-Style URL, "

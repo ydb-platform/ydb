@@ -1057,6 +1057,7 @@ struct TEvPQ {
     };
 
     struct TEvGetWriteInfoRequest : public TEventLocal<TEvGetWriteInfoRequest, EvGetWriteInfoRequest> {
+        TActorId OriginalPartition;
     };
 
     struct TEvGetWriteInfoResponse : public TEventLocal<TEvGetWriteInfoResponse, EvGetWriteInfoResponse> {

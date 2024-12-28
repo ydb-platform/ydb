@@ -95,6 +95,7 @@ public:
     TStorageChanges& DbChanges;
 
     TMaybe<NACLib::TUserToken> UserToken;
+    TString PeerName;
     bool IsAllowedPrivateTables = false;
 
 private:

@@ -1,3 +1,4 @@
+#include "schemeshard_audit_log.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
@@ -12,10 +13,27 @@ class TAlterLogin: public TSubOperationBase {
 public:
     using TSubOperationBase::TSubOperationBase;
 
+    void AddLastSuccessfulAttempt(const TString& user, NIceDb::TNiceDb& db, TParts& additionalParts) {
+        static const TString LastSuccessfulAttemptAuditParam = "last_login";
+
+        auto row = db.Table<Schema::LoginSids>().Key(user).Select();
+        if (!row.IsReady() || !row.IsValid()) {
+            return;
+        }
+
+        const auto time = TInstant::FromValue(row.GetValueOrDefault<Schema::LoginSids::LastSuccessfulAttempt>(0));
+        if (!time) {
+            return;
+        }
+
+        additionalParts.emplace_back(LastSuccessfulAttemptAuditParam, time.ToString());
+    }
+
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         NIceDb::TNiceDb db(context.GetTxc().DB); // do not track is there are direct writes happen
         TTabletId ssId = context.SS->SelfTabletId();
-        auto result = MakeHolder<TProposeResponse>(OperationId.GetTxId(), ssId);
+        const auto txId = OperationId.GetTxId();
+        auto result = MakeHolder<TProposeResponse>(txId, ssId);
         if (!AppData()->AuthConfig.GetEnableLoginAuthentication()) {
             result->SetStatus(NKikimrScheme::StatusPreconditionFailed, "Login authentication is disabled");
         } else if (Transaction.GetWorkingDir() != context.SS->LoginProvider.Audience) {
@@ -23,6 +41,9 @@ public:
         } else {
             const NKikimrConfig::TDomainsConfig::TSecurityConfig& securityConfig = context.SS->GetDomainsConfig().GetSecurityConfig();
             const NKikimrSchemeOp::TAlterLogin& alterLogin = Transaction.GetAlterLogin();
+
+            TParts additionalParts;
+
             switch (alterLogin.GetAlterCase()) {
                 case NKikimrSchemeOp::TAlterLogin::kCreateUser: {
                     const auto& createUser = alterLogin.GetCreateUser();
@@ -48,6 +69,9 @@ public:
                 }
                 case NKikimrSchemeOp::TAlterLogin::kModifyUser: {
                     const auto& modifyUser = alterLogin.GetModifyUser();
+
+                    AddLastSuccessfulAttempt(modifyUser.GetUser(), db, additionalParts);
+
                     auto response = context.SS->LoginProvider.ModifyUser({.User = modifyUser.GetUser(), .Password = modifyUser.GetPassword()});
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
@@ -60,6 +84,9 @@ public:
                 }
                 case NKikimrSchemeOp::TAlterLogin::kRemoveUser: {
                     const auto& removeUser = alterLogin.GetRemoveUser();
+
+                    AddLastSuccessfulAttempt(removeUser.GetUser(), db, additionalParts);
+
                     auto response = RemoveUser(context, removeUser, db);
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
@@ -158,6 +185,13 @@ public:
                     break;
                 }
             }
+
+            TString userSID, sanitizedToken;
+            if (context.UserToken) {
+                userSID = context.UserToken->GetUserSID();
+                sanitizedToken = context.UserToken->GetSanitizedToken();
+            }
+            AuditLogModifySchemeTransaction(Transaction, result->Record, context.SS, context.PeerName, userSID, sanitizedToken, ui64(txId), additionalParts);
         }
 
         if (result->Record.GetStatus() == NKikimrScheme::StatusSuccess) {

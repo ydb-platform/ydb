@@ -290,6 +290,31 @@ Y_UNIT_TEST(ReturningColumnsOrder) {
     
 }
 
+Y_UNIT_TEST(Random) {
+    auto kikimr = DefaultKikimrRunner();
+
+    auto client = kikimr.GetQueryClient();
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .Syntax(NYdb::NQuery::ESyntax::YqlV1)
+        .ConcurrentResultSets(false);
+
+    {
+        auto result = client.ExecuteQuery("CREATE TABLE example (key Uint64, value String, PRIMARY KEY (key));",
+            NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+    }
+
+    {
+        auto result = client.ExecuteQuery(
+            R"(
+            UPSERT INTO example (key, value) VALUES (1, CAST(RandomUuid(1) AS String)) RETURNING *;
+            SELECT * FROM example;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+        CompareYson(FormatResultSetYson(result.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(1)));
+    }
+}
+
 Y_UNIT_TEST(ReturningTypes) {
     auto kikimr = DefaultKikimrRunner();
 

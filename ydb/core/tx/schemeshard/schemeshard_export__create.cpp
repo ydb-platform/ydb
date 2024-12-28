@@ -300,7 +300,7 @@ private:
         Send(Self->SelfId(), MkDirPropose(Self, txId, exportInfo));
     }
 
-    void CopyTables(TExportInfo::TPtr exportInfo, TTxId txId) {
+    bool CopyTables(TExportInfo::TPtr exportInfo, TTxId txId, TTransactionContext& txc) {
         LOG_I("TExport::TTxProgress: CopyTables propose"
             << ": info# " << exportInfo->ToString()
             << ", txId# " << txId);
@@ -310,12 +310,9 @@ private:
             return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable;
         })) {
             Send(Self->SelfId(), CopyTablesPropose(Self, txId, exportInfo));
-        } else {
-            Send(Self->SelfId(), new TEvSchemeShard::TEvModifySchemeTransactionResult(
-                TEvSchemeShard::EStatus::StatusAccepted, ui64(txId), ui64(Self->SelfTabletId())
-            ));
-            Send(Self->SelfId(), new TEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId)));
+            return true;
         }
+        return false;
     }
 
     void TransferData(TExportInfo::TPtr exportInfo, ui32 itemIdx, TTxId txId, const TActorContext& ctx) {
@@ -646,7 +643,7 @@ private:
         }
     }
 
-    void OnAllocateResult(TTransactionContext&, const TActorContext& ctx) {
+    void OnAllocateResult(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(AllocateResult);
 
         const auto txId = TTxId(AllocateResult->Get()->TxIds.front());
@@ -677,7 +674,21 @@ private:
             break;
 
         case EState::CopyTables:
-            CopyTables(exportInfo, txId);
+            if (!CopyTables(exportInfo, txId, txc)) {
+                // all the items don't need copying
+                NIceDb::TNiceDb db(txc.DB);
+
+                for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
+                    exportInfo->Items[itemIdx].State = EState::Transferring;
+                    Self->PersistExportItemState(db, exportInfo, itemIdx);
+
+                    AllocateTxId(exportInfo, itemIdx);
+                }
+
+                exportInfo->State = EState::Transferring;
+                Self->PersistExportState(db, exportInfo);
+                return;
+            }
             break;
 
         case EState::Transferring:

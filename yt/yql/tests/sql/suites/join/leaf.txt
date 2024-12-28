@@ -1,0 +1,17 @@
+{"key"=0u;"value"="zero"};
+{"key"=0u;"value"=#};
+{"key"=0u;"value"="null"};
+{"key"=1u;"value"="one"};
+{"key"=2u;"value"="two"};
+{"key"=2u;"value"="two"};
+{"key"=2u;"value"="pair"};
+{"key"=3u;"value"="three"};
+{"key"=6u;"value"="six"};
+{"key"=6u;"value"="3+3"};
+{"key"=3u;"value"="1+1+1"};
+{"key"=7u;"value"="seven"};
+{"key"=9u;"value"="nine"};
+{"key"=8u;"value"="eight"};
+{"key"=5u;"value"="five"};
+{"key"=4u;"value"="2*2"};
+{"key"=4u;"value"="four"};

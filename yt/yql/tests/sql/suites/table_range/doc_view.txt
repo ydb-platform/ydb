@@ -1,0 +1,10 @@
+$f = ($x)->{return $x+1};
+
+select key,min(num) as num from (
+select key,$f(0) as `num` from Input1
+union all
+select key,$f(1) as `num` from Input2
+)
+group by key
+order by key
+

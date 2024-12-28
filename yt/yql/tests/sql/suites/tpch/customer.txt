@@ -1,0 +1,1 @@
+{"c_custkey"=1;"c_acctbal"=711.56;"c_phone"="25-989-741-2988";"c_mktsegment"="BUILDING";"c_nationkey"=15;"c_comment"="to the even, regular platelets. regular, ironic epitaphs nag e";"c_name"="Customer#000000001";"c_address"="IVhzIApeRb ot,c,E";};

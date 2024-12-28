@@ -1,0 +1,4 @@
+{"key"="075";"subkey"="1";"value"="abc"};
+{"key"="800";"subkey"="1";"value"="ddd"};
+{"key"="020";"subkey"="1";"value"="q"};
+{"key"="150";"subkey"="1";"value"="qzz"};

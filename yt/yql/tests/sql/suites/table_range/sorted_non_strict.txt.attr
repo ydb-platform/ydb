@@ -1,0 +1,15 @@
+{
+    "schema" = <"strict" = %false; "unique_keys" = %false>
+    [
+        {
+            "name" = "key";
+            "type" = "string";
+            "sort_order" = "ascending";
+        };
+        {
+            "name" = "subkey";
+            "type" = "string";
+            "sort_order" = "ascending";
+        }
+    ]
+}

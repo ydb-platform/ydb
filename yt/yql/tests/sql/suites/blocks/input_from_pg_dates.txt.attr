@@ -1,0 +1,7 @@
+{"_yql_row_spec"={
+    "Type"=["StructType";[
+        ["a";["PgType";"date"]];
+        ["b";["PgType";"timestamp"]];
+    ]];
+}}
+

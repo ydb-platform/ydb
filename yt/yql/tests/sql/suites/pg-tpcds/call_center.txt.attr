@@ -1,0 +1,37 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+              ["cc_call_center_sk";["PgType";"int4";];];
+              ["cc_call_center_id";["PgType";"text";];];
+              ["cc_rec_start_date";["PgType";"date";];];
+              ["cc_rec_end_date";["PgType";"date";];];
+              ["cc_closed_date_sk";["PgType";"int4";];];
+              ["cc_open_date_sk";["PgType";"int4";];];
+              ["cc_name";["PgType";"text";];];
+              ["cc_class";["PgType";"text";];];
+              ["cc_employees";["PgType";"int4";];];
+              ["cc_sq_ft";["PgType";"int4";];];
+              ["cc_hours";["PgType";"text";];];
+              ["cc_manager";["PgType";"text";];];
+              ["cc_mkt_id";["PgType";"int4";];];
+              ["cc_mkt_class";["PgType";"text";];];
+              ["cc_mkt_desc";["PgType";"text";];];
+              ["cc_market_manager";["PgType";"text";];];
+              ["cc_division";["PgType";"int4";];];
+              ["cc_division_name";["PgType";"text";];];
+              ["cc_company";["PgType";"int4";];];
+              ["cc_company_name";["PgType";"text";];];
+              ["cc_street_number";["PgType";"text";];];
+              ["cc_street_name";["PgType";"text";];];
+              ["cc_street_type";["PgType";"text";];];
+              ["cc_suite_number";["PgType";"text";];];
+              ["cc_city";["PgType";"text";];];
+              ["cc_county";["PgType";"text";];];
+              ["cc_state";["PgType";"text";];];
+              ["cc_zip";["PgType";"text";];];
+              ["cc_country";["PgType";"text";];];
+              ["cc_gmt_offset";["PgType";"numeric";];];
+              ["cc_tax_percentage";["PgType";"numeric";];];
+        ];];
+    }
+}

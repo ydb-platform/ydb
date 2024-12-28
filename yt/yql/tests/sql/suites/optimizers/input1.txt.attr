@@ -1,0 +1,42 @@
+{
+    "_yql_row_spec" = {
+        "UniqueKeys"=%true;
+        "SortMembers"=["Group"; "Name"];
+        "SortedBy"=["Group"; "Name"];
+        "SortDirections"=[1; 1];
+        "SortedByTypes"=[["DataType";"Uint64"]; ["DataType";"String"]];
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "Group";
+                    [
+                        "DataType";
+                        "Uint64"
+                    ]
+                ];
+                [
+                    "Name";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "Amount";
+                    [
+                        "DataType";
+                        "Int64"
+                    ]
+                ];
+                [
+                    "Comment";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}

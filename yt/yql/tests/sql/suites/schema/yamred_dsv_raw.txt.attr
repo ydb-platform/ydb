@@ -1,0 +1,11 @@
+{
+    "_format" = <
+        "escape_carriage_return" = %true;
+        "has_subkey" = %false;
+        "key_column_names" = [
+            "a";
+            "b"
+        ];
+    >
+    "yamred_dsv";
+}

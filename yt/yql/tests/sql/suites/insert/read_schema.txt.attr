@@ -1,0 +1,3 @@
+{
+    "_read_schema"=[{"type"="int64";"name"="a"};{"type"="uint64";"name"="b"};{"type"="double";"name"="c"};{"type"="string";"name"="d"};{"type"="boolean";name="e"};{"type"="any";"name"="f"}]
+}

@@ -1,0 +1,32 @@
+{
+    "_yql_view_lambda"="$update_key = ($key) -> ($key || '.updated'); SELECT $update_key(key) as key, subkey, value from self";
+    "_yql_view_lambda_process"="$update_row = ($row) -> (AddMember($row, 'new_value', 'NEW_VALUE')); PROCESS self USING $update_row(TableRow());";
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "subkey";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "value";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}

@@ -6,6 +6,8 @@
 
 #include <yt/yt/client/sequoia_client/public.h>
 
+#include <yt/yt/client/signature/signature.h>
+
 #include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/column_sort_schema.h>
 #include <yt/yt/client/table_client/logical_type.h>
@@ -1964,6 +1966,7 @@ void FillRequest(
     const TDistributedWriteSessionStartOptions& options)
 {
     ToProto(req->mutable_path(), path);
+    req->set_cookie_count(options.CookieCount);
 
     if (options.TransactionId) {
         ToProto(req->mutable_transactional_options(), options);
@@ -1976,6 +1979,7 @@ void ParseRequest(
     const TReqStartDistributedWriteSession& req)
 {
     *mutablePath = FromProto<NYPath::TRichYPath>(req.path());
+    mutableOptions->CookieCount = req.cookie_count();
     if (req.has_transactional_options()) {
         FromProto(mutableOptions, req.transactional_options());
     }
@@ -1985,19 +1989,31 @@ void ParseRequest(
 
 void FillRequest(
     TReqFinishDistributedWriteSession* req,
-    TDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionWithResults& sessionWithResults,
     const TDistributedWriteSessionFinishOptions& options)
 {
-    req->set_session(ConvertToYsonString(session).ToString());
+    YT_VERIFY(sessionWithResults.Session);
+
+    req->set_signed_session(ConvertToYsonString(sessionWithResults.Session).ToString());
+    for (const auto& writeResult : sessionWithResults.Results) {
+        YT_VERIFY(writeResult);
+        req->add_signed_write_results(ConvertToYsonString(writeResult).ToString());
+    }
     req->set_max_children_per_attach_request(options.MaxChildrenPerAttachRequest);
 }
 
 void ParseRequest(
-    TDistributedWriteSessionPtr* mutableSession,
+    TDistributedWriteSessionWithResults* mutableSessionWithResults,
     TDistributedWriteSessionFinishOptions* mutableOptions,
     const TReqFinishDistributedWriteSession& req)
 {
-    *mutableSession = ConvertTo<TDistributedWriteSessionPtr>(TYsonString(req.session()));
+    mutableSessionWithResults->Results.reserve(req.signed_write_results().size());
+    for (const auto& writeResult : req.signed_write_results()) {
+        mutableSessionWithResults->Results.push_back(ConvertTo<TSignedWriteFragmentResultPtr>(TYsonString(writeResult)));
+    }
+
+    mutableSessionWithResults->Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(req.signed_session()));
+
     mutableOptions->MaxChildrenPerAttachRequest = req.max_children_per_attach_request();
 }
 
@@ -2005,10 +2021,10 @@ void ParseRequest(
 
 void FillRequest(
     TReqWriteTableFragment* req,
-    const TFragmentWriteCookiePtr& cookie,
-    const TFragmentTableWriterOptions& options)
+    const TSignedWriteFragmentCookiePtr& cookie,
+    const TTableFragmentWriterOptions& options)
 {
-    req->set_cookie(ConvertToYsonString(cookie).ToString());
+    req->set_signed_cookie(ConvertToYsonString(cookie).ToString());
 
     if (options.Config) {
         req->set_config(ConvertToYsonString(*options.Config).ToString());
@@ -2016,11 +2032,11 @@ void FillRequest(
 }
 
 void ParseRequest(
-    TFragmentWriteCookiePtr* mutableCookie,
-    TFragmentTableWriterOptions* mutableOptions,
+    TSignedWriteFragmentCookiePtr* mutableCookie,
+    TTableFragmentWriterOptions* mutableOptions,
     const TReqWriteTableFragment& req)
 {
-    *mutableCookie = ConvertTo<TFragmentWriteCookiePtr>(TYsonString(req.cookie()));
+    *mutableCookie = ConvertTo<TSignedWriteFragmentCookiePtr>(TYsonString(req.signed_cookie()));
     if (req.has_config()) {
         mutableOptions->Config = ConvertTo<TTableWriterConfigPtr>(TYsonString(req.config()));
     } else {

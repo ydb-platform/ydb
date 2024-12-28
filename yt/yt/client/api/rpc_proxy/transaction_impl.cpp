@@ -921,7 +921,7 @@ IJournalWriterPtr TTransaction::CreateJournalWriter(
         PatchTransactionId(options));
 }
 
-TFuture<TDistributedWriteSessionPtr> TTransaction::StartDistributedWriteSession(
+TFuture<TDistributedWriteSessionWithCookies> TTransaction::StartDistributedWriteSession(
     const NYPath::TRichYPath& path,
     const TDistributedWriteSessionStartOptions& options)
 {
@@ -932,12 +932,12 @@ TFuture<TDistributedWriteSessionPtr> TTransaction::StartDistributedWriteSession(
 }
 
 TFuture<void> TTransaction::FinishDistributedWriteSession(
-    TDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionWithResults& sessionWithResults,
     const TDistributedWriteSessionFinishOptions& options)
 {
     ValidateActive();
     return Client_->FinishDistributedWriteSession(
-        std::move(session),
+        sessionWithResults,
         options);
 }
 

@@ -686,6 +686,7 @@ std::unique_ptr<IYtColumnConverter> MakeYtColumnConverter(TType* type, const NUd
         case NUdf::EDataSlot::Yson: // Yson there is top-level optional
             // YT type for Yson, Json, String is arrow::Type::BINARY, but yql type is arrow::Type::String
             return std::make_unique<TTopLevelSimpleCastConverter<arrow::Type::BINARY>>(std::move(settings));
+        case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Double:
         case NUdf::EDataSlot::Int8:
         case NUdf::EDataSlot::Uint8:

@@ -190,7 +190,7 @@ TNode SerializeParamsForMultisetAttributes(
     const TTransactionId& transactionId,
     const TString& pathPrefix,
     const TYPath& path,
-    [[maybe_unused]] const TMultisetAttributesOptions& options)
+    const TMultisetAttributesOptions& options)
 {
     TNode result;
     SetTransactionIdParam(&result, transactionId);

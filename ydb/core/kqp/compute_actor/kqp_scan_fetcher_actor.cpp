@@ -373,12 +373,9 @@ void TKqpScanFetcherActor::HandleExecute(TEvents::TEvUndelivered::TPtr& ev) {
         case TEvKqpCompute::TEvScanDataAck::EventType: {
             auto info = InFlightShards.GetShardScanner(ev->Cookie);
             if (!!info) {
-                TStringBuilder builder;
-                builder << "Delivery problem: EvScanDataAck lost, NodeId: " << SelfId().NodeId() << ", Details: " << info->ToString() << ".";
-
-                auto state = InFlightShards.GetShardState(info->GetTabletId());
-                AFL_VERIFY(!!state);
-                CA_LOG_W("Got EvDeliveryProblem, TabletId: " << info->GetTabletId() << " state " << state->State);
+                auto state = InFlightShards.GetShardStateVerified(info->GetTabletId());
+                AFL_WARN(NKikimrServices::KQP_COMPUTE)("event", "TEvents::TEvUndelivered")("from_tablet", info->GetTabletId())
+                    ("state", state->State)("details", info->ToString())("node", SelfId().NodeId());
                 AFL_VERIFY(state->State == EShardState::Running)("state", state->State);
                 RetryDeliveryProblem(state);
             }

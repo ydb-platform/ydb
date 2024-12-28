@@ -94,6 +94,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
     , SysLocks(this) {
+    AFL_VERIFY(TabletActivityImpl->Inc() == 1);
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
@@ -895,6 +896,7 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
     }
 
     auto compaction = dynamic_pointer_cast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>(indexChanges);
+    compaction->SetActivityFlag(GetTabletActivity());
     compaction->SetQueueGuard(guard);
     compaction->Start(*this);
 
@@ -1148,11 +1150,12 @@ void TColumnShard::SetupCleanupInsertTable() {
 }
 
 void TColumnShard::Die(const TActorContext& ctx) {
+    AFL_VERIFY(TabletActivityImpl->Dec() == 0);
     CleanupActors(ctx);
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
     UnregisterMediatorTimeCast();
     NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
-    return IActor::Die(ctx);
+    IActor::Die(ctx);
 }
 
 void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&) {

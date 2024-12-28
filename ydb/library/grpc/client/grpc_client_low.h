@@ -451,6 +451,10 @@ public:
 
 class TGRpcKeepAliveSocketMutator;
 
+namespace NImpl {
+grpc_socket_mutator* GetGRpcKeepAliveSocketMutator(const TTcpKeepAliveSettings& TcpKeepAliveSettings_);
+} // NImpl
+
 // Class to hold stubs allocated on channel.
 // It is poor documented part of grpc. See KIKIMR-6109 and comment to this commit
 
@@ -1384,6 +1388,11 @@ public:
     template<typename TGRpcService>
     std::unique_ptr<TServiceConnection<TGRpcService>> CreateGRpcServiceConnection(const TGRpcClientConfig& config) {
         return std::unique_ptr<TServiceConnection<TGRpcService>>(new TServiceConnection<TGRpcService>(CreateChannelInterface(config), this));
+    }
+
+    template<typename TGRpcService>
+    std::unique_ptr<TServiceConnection<TGRpcService>> CreateGRpcServiceConnection(const TGRpcClientConfig& config, const TTcpKeepAliveSettings &keepAlive) {
+        return std::unique_ptr<TServiceConnection<TGRpcService>>(new TServiceConnection<TGRpcService>(CreateChannelInterface(config, NImpl::GetGRpcKeepAliveSocketMutator(keepAlive)), this));
     }
 
     template<typename TGRpcService>

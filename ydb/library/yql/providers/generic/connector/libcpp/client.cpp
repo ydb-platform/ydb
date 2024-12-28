@@ -44,7 +44,8 @@ namespace NYql::NConnector {
             GrpcClient_ = std::make_unique<NYdbGrpc::TGRpcClientLow>();
 
             // FIXME: is it OK to use single connection during the client lifetime?
-            GrpcConnection_ = GrpcClient_->CreateGRpcServiceConnection<NApi::Connector>(GrpcConfig_);
+            // TODO band-aid; we will need timeouts, re-connection/etc
+            GrpcConnection_ = GrpcClient_->CreateGRpcServiceConnection<NApi::Connector>(GrpcConfig_, NYdbGrpc::TTcpKeepAliveSettings {true, 30, 5, 10}); // TODO configure hardcoded values
         }
 
         virtual TDescribeTableAsyncResult DescribeTable(const NApi::TDescribeTableRequest& request) override {

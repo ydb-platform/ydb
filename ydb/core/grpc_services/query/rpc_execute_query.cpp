@@ -214,6 +214,7 @@ private:
                 HFunc(TEvents::TEvWakeup, Handle);
                 HFunc(TRpcServices::TEvGrpcNextReply, Handle);
                 HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
+                HFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, Handle);
                 HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
                 hFunc(NKikimr::NGRpcService::TEvSubscribeGrpcCancel, Handle);
                 default:
@@ -351,6 +352,23 @@ private:
             << ", queue: " << FlowControl_.QueueSize());
 
         channel.SendAck(SelfId());
+    }
+
+    void Handle(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev, const TActorContext& ctx) {
+        auto& record = ev->Get()->Record;
+
+        Ydb::Query::ExecuteQueryResponsePart response;
+        response.set_status(Ydb::StatusIds::SUCCESS);
+        if (NeedReportStats(*Request_->GetProtoRequest())) {
+            FillQueryStats(*response.mutable_exec_stats(), record.GetQueryStats());
+        }
+
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
+
+        FlowControl_.PushResponse(out.size());
+
+        Request_->SendSerializedResult(std::move(out), Ydb::StatusIds::SUCCESS);
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {

@@ -199,11 +199,7 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
             if (!streamPart.GetStats().Empty()) {
                 const auto& queryStats = *streamPart.GetStats();
                 stats = queryStats.ToString();
-                ast = queryStats.GetAst();
-
-                if (queryStats.GetPlan()) {
-                    plan = queryStats.GetPlan();
-                }
+                Cout << Endl << "Current statistics:" << Endl << *stats;
             }
         }
     } // TResultSetPrinter destructor should be called before printing stats

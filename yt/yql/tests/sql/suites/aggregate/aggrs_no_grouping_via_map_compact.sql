@@ -1,0 +1,45 @@
+/* syntax version 1 */
+/* postgres can not */
+pragma yt.PartitionByConstantKeysViaMap;
+select
+    count(key) as keyCount,
+    count(sub) as subCount,
+    count(val) as valCount,
+    countIf(sub % 2 == 0) as evenCount,
+    countIf(sub % 2 == 1) as oddCount,
+    every(sub % 2 == 0) as every,
+    boolOr(sub % 2 == 0) as boolOr,
+    avg(key) as keyAvg,
+    avg(sub) as subAvg,
+    min(key) as keyMin,
+    min(sub) as subMin,
+    min(val) as valMin,
+    max(key) as keyMax,
+    max(sub) as subMax,
+    max(val) as valMax,
+    some(key) as keySome,
+    some(sub) as subSome,
+    some(val) as valSome,
+    bitAnd(cast(key AS Uint64)) as keyBitAnd,
+    bitOr(cast(key AS Uint64)) as keyBitOr,
+    bitXor(cast(key AS Uint64)) as keyBitXor,
+    bitAnd(cast(sub AS Uint64)) as subBitAnd,
+    bitOr(cast(sub AS Uint64)) as subBitOr,
+    bitXor(cast(sub AS Uint64)) as subBitXor,
+    median(key) as keyMedian,
+    median(sub) as subMedian,
+    stdDev(key) as keyStdDev,
+    stdDev(sub) as subStdDev,
+    stdDev(empty) as emptyStdDev,
+    variance(key) as keyVariance,
+    variance(sub) as subVariance,
+    stdDevPop(key) as keyPopStdDev,
+    stdDevPop(sub) as subPopStdDev,
+    varPop(key) as keyPopVariance,
+    varPop(sub) as subPopVariance,
+    correlation(key, sub) AS corr,
+    covariance(key, sub) AS covar,
+    covarpop(key, sub) AS covarpop
+from
+    (select cast(key as int) as key, Unwrap(cast(subkey as int)) as sub, value as val, cast(value AS int) AS empty from plato.Input)
+group compact by ();

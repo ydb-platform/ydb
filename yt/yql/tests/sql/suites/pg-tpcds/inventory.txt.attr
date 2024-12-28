@@ -1,0 +1,10 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+              ["inv_date_sk";["PgType";"int4";];];
+              ["inv_item_sk";["PgType";"int4";];];
+              ["inv_warehouse_sk";["PgType";"int4";];];
+              ["inv_quantity_on_hand";["PgType";"int4";];];
+        ];];
+    }
+}

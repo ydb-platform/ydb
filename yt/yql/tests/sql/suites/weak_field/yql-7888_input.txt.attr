@@ -1,0 +1,22 @@
+{
+    "_read_schema" = <"strict" = %false>[
+        {"type"="string";"name"="key"};
+        {"type"="string";"name"="subkey"};
+        {"type"="string";"name"="value"};
+    ];
+    "schema" = <"strict" = %false; "unique_keys" = %false>
+    [
+        {
+            "name" = "key";
+            "type" = "string"
+        };
+        {
+            "name" = "subkey";
+            "type" = "string"
+        };
+        {
+            "name" = "value";
+            "type" = "string"
+        }
+    ]
+}

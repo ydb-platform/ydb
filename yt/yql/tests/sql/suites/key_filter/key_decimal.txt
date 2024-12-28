@@ -1,0 +1,9 @@
+{"value"="bad"};
+{"value"="-inf"};
+{"value"="12.7"};
+{"value"="inf"};
+{"value"="nan"};
+{"value"="6.6"};
+{"value"="-77.5"};
+{"value"="-47.0"};
+{"value"="3.3"};

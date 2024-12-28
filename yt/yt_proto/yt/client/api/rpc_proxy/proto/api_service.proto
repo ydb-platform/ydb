@@ -1448,6 +1448,7 @@ message TIndexInfo
     required int32 index_kind = 2; // NTableClient::ESecondaryIndexKind
     optional string predicate = 3;
     optional string unfolded_column = 4;
+    optional int32 index_correspondence = 6; // NTableClient::ESecondaryIndexState
 }
 
 message TReqGetTableMountInfo

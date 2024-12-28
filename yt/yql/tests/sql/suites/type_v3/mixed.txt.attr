@@ -1,0 +1,40 @@
+{
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "name" = "dt";
+            "required" = %true;
+            "type" = "date";
+            "type_v3" = "date";
+        };
+        {
+            "name" = "dt_yson";
+            "required" = %false;
+            "type" = "any";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "yson";
+            };
+        };
+        {
+            "name" = "lst";
+            "required" = %true;
+            "type" = "any";
+            "type_v3" = {
+                "type_name" = "list";
+                "item" = "int32";
+            };
+        };
+        {
+            "name" = "lst_yson";
+            "required" = %false;
+            "type" = "any";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "yson";
+            };
+        };
+    ];
+}

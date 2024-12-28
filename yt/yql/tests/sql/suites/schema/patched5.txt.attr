@@ -1,0 +1,22 @@
+{
+    "schema"=<"strict" = %true;"unique_keys" = %false;>[
+        {"type" = "any";"required" = %false;"name" = "any_column";};
+        {"type" = "boolean";"required" = %true;"name" = "boolean_column";};
+        {"type" = "uint16";"required" = %true;"name" = "date_column";};
+        {"type" = "double";"required" = %true;"name" = "double_column";};
+        {"type" = "int64";"required" = %true;"name" = "int64_column";};
+        {"type" = "int64";"required" = %true;"name" = "interval_column";};
+        {"type" = "any";"required" = %false;"name" = "list_column";};
+        {"type" = "any";"required" = %false;"name" = "null_column";};
+        {"type" = "utf8";"required" = %false;"name" = "optional_column";};
+        {"type" = "string";"required" = %true;"name" = "string_column";};
+    ];
+    "_yql_row_spec"={
+        "TypePatch"=["StructType";[
+            ["null_column";["NullType";];];
+            ["list_column";["ListType";["DataType";"Bool"]];];
+            ["interval_column";["DataType";"Interval";];];
+            ["date_column";["DataType";"Date";];];
+        ]];
+    };
+}

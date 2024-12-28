@@ -1,0 +1,77 @@
+{
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "name" = "bool";
+            "required" = %true;
+            "type" = "boolean";
+            "type_v3" = "bool";
+        };
+        {
+            "name" = "optionalDouble";
+            "required" = %false;
+            "type" = "double";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "double";
+            };
+        };
+        {
+            "name" = "string";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "tuple";
+            "required" = %true;
+            "type" = "any";
+            "type_v3" = {
+                "type_name" = "tuple";
+                "elements" = [
+                    {
+                        "type" = "int64";
+                    };
+                    {
+                        "type" = "string";
+                    };
+                    {
+                        "type" = "bool";
+                    };
+                    {
+                        "type" = {
+                            "type_name" = "optional";
+                            "item" = "double";
+                        };
+                    };
+                    {
+                        "type" = "utf8";
+                    };
+                ];
+            };
+        };
+        {
+            "name" = "int64";
+            "required" = %true;
+            "type" = "int64";
+            "type_v3" = "int64";
+        };
+        {
+            "name" = "utf8";
+            "required" = %true;
+            "type" = "utf8";
+            "type_v3" = "utf8";
+        };
+        {
+            "name" = "yson";
+            "required" = %false;
+            "type" = "any";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "yson";
+            };
+        };
+    ];
+}

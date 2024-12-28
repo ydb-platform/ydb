@@ -1,0 +1,15 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+              ["cd_demo_sk";["PgType";"int4";];];
+              ["cd_gender";["PgType";"text";];];
+              ["cd_marital_status";["PgType";"text";];];
+              ["cd_education_status";["PgType";"text";];];
+              ["cd_purchase_estimate";["PgType";"int4";];];
+              ["cd_credit_rating";["PgType";"text";];];
+              ["cd_dep_count";["PgType";"int4";];];
+              ["cd_dep_employed_count";["PgType";"int4";];];
+              ["cd_dep_college_count";["PgType";"int4";];];
+        ];];
+    }
+}

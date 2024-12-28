@@ -1,0 +1,3 @@
+{"key"=10;"subkey"=3;"value"="foo";"value_utf"="тест"};
+{"key"=20;"subkey"=4;"value"="bar";"value_utf"="проверка"};
+{"key"=30;"subkey"=5;"value"="";"value_utf"=""};

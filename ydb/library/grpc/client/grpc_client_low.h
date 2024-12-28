@@ -1391,7 +1391,7 @@ public:
     }
 
     template<typename TGRpcService>
-    std::unique_ptr<TServiceConnection<TGRpcService>> CreateGRpcServiceConnection(const TGRpcClientConfig& config, const TTcpKeepAliveSettings &keepAlive) {
+    std::unique_ptr<TServiceConnection<TGRpcService>> CreateGRpcServiceConnection(const TGRpcClientConfig& config, const TTcpKeepAliveSettings& keepAlive) {
         return std::unique_ptr<TServiceConnection<TGRpcService>>(new TServiceConnection<TGRpcService>(CreateChannelInterface(config, NImpl::GetGRpcKeepAliveSocketMutator(keepAlive)), this));
     }
 

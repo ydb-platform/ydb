@@ -1399,6 +1399,16 @@ message TImmediateControlsConfig {
             MinValue: 1048576,
             MaxValue: 536870912000,
             DefaultValue: 64424509440 }];
+        optional uint64 ThrottlingMinOccupancyPerMille = 19 [(ControlOptions) = {
+            Description: "Minimum occupancy of disk per mille - throttling is turned on",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 900 }];
+        optional uint64 ThrottlingMaxOccupancyPerMille = 20 [(ControlOptions) = {
+            Description: "Maximum occupancy of disk per mille - throttling speed is zero",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 950 }];
     }
 
     message TTabletControls {

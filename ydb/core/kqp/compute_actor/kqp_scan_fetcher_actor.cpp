@@ -367,11 +367,17 @@ void TKqpScanFetcherActor::HandleExecute(TEvents::TEvUndelivered::TPtr& ev) {
         case TEvDataShard::TEvKqpScan::EventType:
             // Handled by TEvPipeCache::TEvDeliveryProblem event.
             return;
-        case TEvKqpCompute::TEvScanDataAck::EventType:
-            if (!!InFlightShards.GetShardScanner(ev->Cookie)) {
-                SendGlobalFail(NDqProto::StatusIds::UNAVAILABLE, TIssuesIds::DEFAULT_ERROR, "Delivery problem: EvScanDataAck lost.");
+        case TEvKqpCompute::TEvScanDataAck::EventType: {
+            auto info = InFlightShards.GetShardScanner(ev->Cookie);
+            if (!!info) {
+                auto state = InFlightShards.GetShardStateVerified(info->GetTabletId());
+                AFL_WARN(NKikimrServices::KQP_COMPUTE)("event", "TEvents::TEvUndelivered")("from_tablet", info->GetTabletId())
+                    ("state", state->State)("details", info->ToString())("node", SelfId().NodeId());
+                AFL_VERIFY(state->State == EShardState::Running)("state", state->State);
+                RetryDeliveryProblem(state);
             }
             return;
+        }
     }
     Y_ABORT("UNEXPECTED EVENT TYPE");
 }

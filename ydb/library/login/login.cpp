@@ -632,7 +632,6 @@ NLoginProto::TSecurityState TLoginProvider::GetSecurityState() const {
             for (const auto& subSid : sidInfo.Members) {
                 sid.AddMembers(subSid);
             }
-            // do not set CreatedAt. It does not need in describe result
             // no user hash here
         }
     }

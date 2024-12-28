@@ -108,6 +108,19 @@ private:
             return false;
         }
 
+        {
+            TSqsEvents::TQueueTags tags;
+            for (const auto& tag : Request().GetTags()) {
+                tags.emplace(tag.GetKey(), tag.GetValue());
+            }
+            auto tagValidator = TTagValidator({}, tags);
+            if (!tagValidator.Validate()) {
+                MakeError(result, NErrors::INVALID_PARAMETER_VALUE, tagValidator.GetError());
+                return false;
+            }
+            TagsJson_ = tagValidator.GetJson();
+        }
+
         return true;
     }
 
@@ -120,7 +133,7 @@ private:
         SchemaActor_ = Register(
             new TCreateQueueSchemaActorV2(TQueuePath(cfg.GetRoot(), accountName, queueName),
                                           Request(), SelfId(), RequestId_, customQueueName, FolderId_, IsCloud(),
-                                          cfg.GetEnableQueueAttributesValidation(), UserCounters_, QuoterResources_)
+                                          cfg.GetEnableQueueAttributesValidation(), UserCounters_, QuoterResources_, TagsJson_)
         );
     }
 
@@ -224,6 +237,7 @@ private:
 private:
     TString ResourceId_;
     TActorId SchemaActor_;
+    TString TagsJson_;
 };
 
 IActor* CreateCreateQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

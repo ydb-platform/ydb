@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from ydb.tests.library.sqs.test_base import KikimrSqsTestBase
+import pytest
+
+from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
 
 
 class TestQueueTags(KikimrSqsTestBase):
@@ -10,8 +12,10 @@ class TestQueueTags(KikimrSqsTestBase):
         config_generator = super(TestQueueTags, cls)._setup_config_generator()
         return config_generator
 
-    def test_list_queue_tags(self):
-        self._init_with_params()
+    @pytest.mark.parametrize(**IS_FIFO_PARAMS)
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_list_queue_tags(self, is_fifo, tables_format):
+        self._init_with_params(is_fifo, tables_format)
 
         queue_url = self._create_queue_and_assert(self.queue_name, use_http=True)
 
@@ -20,8 +24,10 @@ class TestQueueTags(KikimrSqsTestBase):
 
         assert get_tags() == {}
 
-    def test_tag_queue(self):
-        self._init_with_params()
+    @pytest.mark.parametrize(**IS_FIFO_PARAMS)
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_tag_queue(self, is_fifo, tables_format):
+        self._init_with_params(is_fifo, tables_format)
 
         queue_url = self._create_queue_and_assert(self.queue_name, use_http=True)
 
@@ -55,10 +61,12 @@ class TestQueueTags(KikimrSqsTestBase):
         add_tags({'key4': 'value4', 'key5': 'value5'})
         assert get_tags() == {'key1': 'value1', 'key2': 'value2', 'key3': 'value3', 'key4': 'value4', 'key5': 'value5'}
 
-    def test_invalid_tag_queue(self):
+    @pytest.mark.parametrize(**IS_FIFO_PARAMS)
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_invalid_tag_queue(self, is_fifo, tables_format):
         # Test invalid key/values
 
-        self._init_with_params()
+        self._init_with_params(is_fifo, tables_format)
 
         queue_url = self._create_queue_and_assert(self.queue_name, use_http=True)
 
@@ -68,7 +76,19 @@ class TestQueueTags(KikimrSqsTestBase):
         def get_tags():
             return self._sqs_api.list_queue_tags(queue_url)
 
+        # Delete this line:
         self._sqs_api._SqsHttpApi__raise_on_error = False
+        # Replace with proper checks like this:
+        # def empty_key_value():
+        #     add_tags({'': ''})
+        #     assert get_tags() == {}
+        # assert_that(
+        #     empty_key_value,
+        #     raises(
+        #         RuntimeError,
+        #         pattern='Tag key must not be empty.'
+        #     )
+        # )
 
         add_tags({'': ''})
         assert get_tags() == {}
@@ -98,8 +118,10 @@ class TestQueueTags(KikimrSqsTestBase):
         add_tags({f'k{i}': 'v' for i in range(80)})
         assert get_tags() == {}
 
-    def test_untag_queue(self):
-        self._init_with_params()
+    @pytest.mark.parametrize(**IS_FIFO_PARAMS)
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_untag_queue(self, is_fifo, tables_format):
+        self._init_with_params(is_fifo, tables_format)
 
         queue_url = self._create_queue_and_assert(self.queue_name, use_http=True)
 

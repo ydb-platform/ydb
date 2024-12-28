@@ -104,6 +104,9 @@ message TCreateQueueRequest {
     optional string CustomQueueName = 10;
     /// Created time of queue
     optional uint64 CreatedTimestamp = 11;
+
+    /// Queue's tags.
+    repeated TQueueTag Tags = 12;
 }
 
 message TCreateQueueResponse {

@@ -198,11 +198,13 @@ class SqsHttpApi(object):
             extract_result_method=lambda x: x['CountQueuesResponse']['CountQueuesResult']['Count'],
         )
 
-    def create_queue(self, queue_name, is_fifo=False, attributes=None, private_api=False, created_timestamp_sec=None, custom_name=None):
+    def create_queue(self, queue_name, is_fifo=False, attributes=None, private_api=False, created_timestamp_sec=None, custom_name=None, tags=None):
         # if is_fifo and not queue_name.endswith('.fifo'):
         #     return None
         if attributes is None:
-            attributes = dict()
+            attributes = {}
+        if tags is None:
+            tags = {}
         if is_fifo:
             attributes = dict(attributes)  # copy
             attributes['FifoQueue'] = 'true'
@@ -215,6 +217,10 @@ class SqsHttpApi(object):
         for i, (k, v) in enumerate(attributes.items()):
             params['Attribute.{id}.Name'.format(id=i+1)] = k
             params['Attribute.{id}.Value'.format(id=i + 1)] = v
+
+        for i, (k, v) in enumerate(tags.items()):
+            params['Tag.{id}.Key'.format(id=i+1)] = k
+            params['Tag.{id}.Value'.format(id=i+1)] = v
 
         return self.execute_request(
             action='CreateQueue',
@@ -576,9 +582,9 @@ class SqsHttpApi(object):
 
     def tag_queue(self, queue_url, tags):
         params = {}
-        for i, k in enumerate(tags, 1):
+        for i, (k, v) in enumerate(tags.items(), 1):
             params['Tag.{}.Key'.format(i)] = k
-            params['Tag.{}.Value'.format(i)] = tags[k]
+            params['Tag.{}.Value'.format(i)] = v
         return self.execute_request(
             action='TagQueue',
             extract_result_method=lambda x: x['TagQueueResponse']['ResponseMetadata']['RequestId'],

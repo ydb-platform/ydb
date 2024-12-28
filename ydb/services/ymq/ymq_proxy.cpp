@@ -239,11 +239,15 @@ namespace NKikimr::NYmq::V1 {
         NKikimr::NSQS::TCreateQueueRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableCreateQueue();
             result->SetQueueName(GetProtoRequest()->queue_name());
-
             for (auto &srcAttribute : GetProtoRequest()->attributes()) {
                 auto dstAttribute = result->MutableAttributes()->Add();
                 dstAttribute->SetName(srcAttribute.first);
                 dstAttribute->SetValue(srcAttribute.second);
+            }
+            for (auto &srcTag : GetProtoRequest()->tags()) {
+                auto dstTag = result->MutableTags()->Add();
+                dstTag->SetKey(srcTag.first);
+                dstTag->SetValue(srcTag.second);
             }
             return result;
         }

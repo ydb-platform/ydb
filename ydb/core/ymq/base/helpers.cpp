@@ -1,5 +1,7 @@
 #include "helpers.h"
 
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/charset/utf8.h>
@@ -8,6 +10,7 @@
 #include <util/stream/format.h>
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 
 namespace NKikimr::NSQS {
 
@@ -184,6 +187,84 @@ bool ValidateMessageBody(TStringBuf body, TString& errorDescription) {
         s += clen;
     }
     return true;
+}
+
+bool TTagValidator::ValidateString(const TString& str, const bool key) {
+    if (str.empty()) {
+        Error = key ? "Tag key must not be empty."
+                    : "Tag value must not be empty.";
+        return false;
+    }
+
+    if (key && !IsAsciiLower(str[0])) {
+        Error = key ? "Tag key must start with a lowercase letter (a-z)."
+                    : "Tag value must start with a lowercase letter (a-z).";
+        return false;
+    }
+
+    constexpr size_t maxSize = 63;
+    if (str.size() > maxSize) {
+        Error = key ? "Tag key must not be longer than 63 characters."
+                    : "Tag value must not be longer than 63 characters.";
+        return false;
+    }
+
+    for (char c : str) {
+        bool ok = IsAsciiLower(c) || IsAsciiDigit(c) || c == '-' || c == '_';
+        if (!ok) {
+            Error = key ? "Tag key can only consist of ASCII lowercase letters, digits, dashes and underscores."
+                        : "Tag value can only consist of ASCII lowercase letters, digits, dashes and underscores.";
+            return false;
+        }
+    }
+
+    return true;
+}
+
+TTagValidator::TTagValidator(const TMaybe<THashMap<TString, TString>>& currentTags, const THashMap<TString, TString>& newTags)
+    : CurrentTags(currentTags)
+    , NewTags(newTags)
+{
+    for (const auto& [k, v] : newTags) {
+        if (!ValidateString(k, true) || !ValidateString(v, false)) {
+            return;
+        }
+    }
+    PrepareJson();
+}
+
+bool TTagValidator::Validate() const {
+    return Error.empty();
+}
+
+void TTagValidator::PrepareJson() {
+    NJson::TJsonMap tagsJson;
+
+    if (CurrentTags.Defined()) {
+        for (const auto& [k, v] : *CurrentTags) {
+            tagsJson[k] = v;
+        }
+    }
+    for (const auto& [k, v] : NewTags) {
+        tagsJson[k] = v;
+    }
+
+    if (tagsJson.GetMapSafe().size() > 50) {
+        Error = "Too many tags added for queue";
+        return;
+    }
+
+    TStringStream tags;
+    NJson::WriteJson(&tags, &tagsJson, /*formatOutput=*/false, /*sortkeys=*/true);
+    Json = tags.Str();
+}
+
+TString TTagValidator::GetJson() const {
+    return Json;
+}
+
+TString TTagValidator::GetError() const {
+    return Error;
 }
 
 } // namespace NKikimr::NSQS

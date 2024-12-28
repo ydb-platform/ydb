@@ -627,6 +627,10 @@ void THttpRequest::SetupCreateQueue(TCreateQueueRequest* const req) {
     for (const auto& attr : QueryParams_.Attributes) {
         req->AddAttributes()->CopyFrom(attr.second);
     }
+
+    for (const auto& tag : QueryParams_.Tags) {
+        req->AddTags()->CopyFrom(tag.second);
+    }
 }
 
 void THttpRequest::SetupCreateUser(TCreateUserRequest* const req) {

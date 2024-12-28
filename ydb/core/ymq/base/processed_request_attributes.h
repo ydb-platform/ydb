@@ -2,6 +2,8 @@
 
 #include <ydb/core/ymq/base/action.h>
 
+#include <library/cpp/scheme/scheme.h>
+
 #include <util/generic/string.h>
 
 namespace NKikimr::NSQS {
@@ -19,6 +21,8 @@ struct TProcessedRequestAttributes {
     TString FolderId;
     TString ResourceId;
     TString SourceAddress;
+
+    NSc::TValue QueueTags;
 
     EAction Action;
 };

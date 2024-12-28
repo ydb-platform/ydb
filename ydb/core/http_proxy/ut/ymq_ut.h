@@ -120,6 +120,55 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT(resultQueueUrl.EndsWith(queueName));
     }
 
+    Y_UNIT_TEST_F(TestCreateQueueWithTags, THttpProxyTestMock) {
+        auto tags = NJson::TJsonMap{
+            {"key1", "value1"},
+            {"key2", "value2"},
+        };
+        auto json = CreateQueue({
+            {"QueueName", "ExampleQueueName"},
+            {"Tags", tags}
+        });
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+        json = ListQueueTags({{"QueueUrl", queueUrl}});
+        UNIT_ASSERT(json["Tags"] == tags);
+
+        // The next request asks to create a queue with the same name and the same set of tags.
+        // We must return a URL to an existing queue.
+        json = CreateQueue({
+            {"QueueName", "ExampleQueueName"},
+            {"Tags", tags}
+        });
+        UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetByPath<TString>(json, "QueueUrl"));
+
+        // In the next requests we try to create a queue with the same name as before,
+        // but with different sets of tags. All requests must be failed.
+
+        CreateQueue({
+            {"QueueName", "ExampleQueueName"},
+            {"Tags", NJson::TJsonMap{
+                {"key1", "value1"},
+            }}
+        }, 400);
+
+        CreateQueue({
+            {"QueueName", "ExampleQueueName"},
+            {"Tags", NJson::TJsonMap{
+                {"key1", "value1"},
+                {"key2", "value0"},
+            }}
+        }, 400);
+
+        CreateQueue({
+            {"QueueName", "ExampleQueueName"},
+            {"Tags", NJson::TJsonMap{
+                {"key1", "value1"},
+                {"key2", "value2"},
+                {"key3", "value3"},
+            }}
+        }, 400);
+    }
+
     Y_UNIT_TEST_F(TestGetQueueUrl, THttpProxyTestMock) {
         auto json = GetQueueUrl({}, 400);
         UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "MissingParameter");

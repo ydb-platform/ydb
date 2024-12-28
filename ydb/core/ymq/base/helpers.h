@@ -16,6 +16,22 @@ bool ValidateQueueNameOrUserName(TStringBuf name);
 // Validation function for message body or string message attributes
 bool ValidateMessageBody(TStringBuf body, TString& errorDescription);
 
+class TTagValidator {
+public:
+    TTagValidator(const TMaybe<THashMap<TString, TString>>& currentTags, const THashMap<TString, TString>& newTags);
+    bool Validate() const;
+    TString GetJson() const;
+    TString GetError() const;
+private:
+    void PrepareJson();
+    bool ValidateString(const TString& str, const bool key);
+    TString Error;
+    TString Json;
+private:
+    const TMaybe<THashMap<TString, TString>>& CurrentTags;
+    const THashMap<TString, TString>& NewTags;
+};
+
 TString EncodeReceiptHandle(const TReceipt& receipt);
 TReceipt DecodeReceiptHandle(const TString& receipt);
 

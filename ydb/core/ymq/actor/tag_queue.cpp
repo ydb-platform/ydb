@@ -6,6 +6,7 @@
 #include <ydb/core/ymq/base/constants.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/base/dlq_helpers.h>
+#include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/queues/common/key_hashes.h>
 #include <ydb/public/lib/value/value.h>
 
@@ -35,43 +36,6 @@ public:
     }
 
 private:
-    bool ValidString(const TStringBuf str, const bool key = false) {
-        if (str.empty()) {
-            MakeError(Response_.MutableTagQueue(), NErrors::INVALID_PARAMETER_VALUE,
-                key ? "Tag key must not be empty."
-                    : "Tag value must not be empty.");
-            return false;
-        }
-
-        if (key && !IsAsciiLower(str[0])) {
-            MakeError(Response_.MutableTagQueue(), NErrors::INVALID_PARAMETER_VALUE,
-                key ? "Tag key must start with a lowercase letter (a-z)."
-                    : "Tag value must start with a lowercase letter (a-z).");
-            return false;
-        }
-
-        constexpr size_t maxSize = 63;
-        if (str.size() > maxSize) {
-            MakeError(
-                Response_.MutableTagQueue(), NErrors::INVALID_PARAMETER_VALUE,
-                key ? "Tag key must not be longer than 63 characters."
-                    : "Tag value must not be longer than 63 characters.");
-            return false;
-        }
-
-        for (char c : str) {
-            bool ok = IsAsciiLower(c) || IsAsciiDigit(c) || c == '-' || c == '_';
-            if (!ok) {
-                MakeError(
-                    Response_.MutableTagQueue(), NErrors::INVALID_PARAMETER_VALUE,
-                    key ? "Tag key can only consist of ASCII lowercase letters, digits, dashes and underscores."
-                        : "Tag value can only consist of ASCII lowercase letters, digits, dashes and underscores.");
-                return false;
-            }
-        }
-
-        return true;
-    }
 
     bool DoValidate() override {
         if (!GetQueueName()) {
@@ -79,11 +43,13 @@ private:
             return false;
         }
 
-        for (const auto& [k, v] : Tags_) {
-            if (!ValidString(k, true) || !ValidString(v)) {
-                return false;
-            }
+        auto validator = TTagValidator(QueueTags_, Tags_);
+        if (!validator.Validate()) {
+            MakeError(Response_.MutableTagQueue(), NErrors::INVALID_PARAMETER_VALUE, validator.GetError());
+            return false;
         }
+
+        TagsJson_ = validator.GetJson();
 
         return true;
     }
@@ -94,28 +60,6 @@ private:
 
     void DoAction() override {
         Become(&TThis::StateFunc);
-
-        NJson::TJsonMap tagsJson;
-        TStringStream tagsStr;
-        if (QueueTags_.Defined()) {
-            for (const auto& [k, v] : *QueueTags_) {
-                tagsJson[k] = v;
-            }
-        }
-        for (const auto& [k, v] : Tags_) {
-            tagsJson[k] = v;
-        }
-
-        if (tagsJson.GetMapSafe().size() > 50) {
-            RLOG_SQS_ERROR("Tag queue query failed: Too many tags added for queue: " << GetQueueName());
-            auto* result = Response_.MutableTagQueue();
-            MakeError(result, NErrors::INVALID_PARAMETER_VALUE, "Too many tags added for queue");
-            SendReplyAndDie();
-            return;
-        }
-
-        WriteJson(&tagsStr, &tagsJson);
-
         TExecutorBuilder builder(SelfId(), RequestId_);
         builder
             .User(UserName_)
@@ -128,7 +72,7 @@ private:
             .Params()
                 .Utf8("NAME", GetQueueName())
                 .Utf8("USER_NAME", UserName_)
-                .Utf8("TAGS", tagsStr.Str());
+                .Utf8("TAGS", TagsJson_);
 
         builder.Start();
     }
@@ -168,7 +112,7 @@ private:
 
 private:
     THashMap<TString, TString> Tags_;
-    THashMap<TString, TString> ValidatedTags_;
+    TString TagsJson_;
 };
 
 IActor* CreateTagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

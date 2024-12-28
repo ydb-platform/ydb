@@ -185,12 +185,12 @@ public:
         const NApi::TTableWriterOptions& options) override;
 
     // Distributed table client
-    TFuture<TDistributedWriteSessionPtr> StartDistributedWriteSession(
+    TFuture<TDistributedWriteSessionWithCookies> StartDistributedWriteSession(
         const NYPath::TRichYPath& path,
         const TDistributedWriteSessionStartOptions& options) override;
 
     TFuture<void> FinishDistributedWriteSession(
-        TDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options) override;
 };
 

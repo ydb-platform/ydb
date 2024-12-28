@@ -56,13 +56,16 @@ def recursive_glob(root, begin_template=None, end_template=None):
             yield os.path.relpath(path, root)
 
 
-def pytest_generate_tests_by_template(template, metafunc):
+def pytest_generate_tests_by_template(template, metafunc, data_path=None):
+    if data_path is None:
+        data_path = DATA_PATH
+
     argvalues = []
 
-    suites = [name for name in os.listdir(DATA_PATH) if os.path.isdir(os.path.join(DATA_PATH, name))]
+    suites = [name for name in os.listdir(data_path) if os.path.isdir(os.path.join(data_path, name))]
     for suite in suites:
         for case in sorted([sql_query_path[:-len(template)]
-                            for sql_query_path in recursive_glob(os.path.join(DATA_PATH, suite), end_template=template)]):
+                            for sql_query_path in recursive_glob(os.path.join(data_path, suite), end_template=template)]):
             argvalues.append((suite, case))
 
     metafunc.parametrize(['suite', 'case'], argvalues)

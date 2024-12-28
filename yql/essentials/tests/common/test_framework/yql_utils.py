@@ -288,9 +288,11 @@ def normalize_yson(y):
         return [normalize_yson(i) for i in y]
     if isinstance(y, dict):
         return {normalize_yson(k): normalize_yson(v) for k, v in six.iteritems(y)}
-    if not isinstance(y, bytes):
-        return str(y).encode('ascii')
-    return y
+    if isinstance(y, bytes):
+        return y
+    if isinstance(y, six.text_type):
+        return y.encode('utf-8')
+    return str(y).encode('ascii')
 
 
 volatile_attrs = {'DataSize', 'ModifyTime', 'Id', 'Revision'}

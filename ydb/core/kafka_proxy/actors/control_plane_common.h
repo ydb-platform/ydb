@@ -209,7 +209,8 @@ public:
     }
 
     const TString& GetSerializedToken() const override {
-        return UserToken->GetSerializedToken();
+        static TString emptyString;
+        return UserToken == nullptr ? emptyString : UserToken->GetSerializedToken();
     }
 
     bool IsClientLost() const override {

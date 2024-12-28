@@ -7,8 +7,8 @@ Released on December 24, 2024. To update to version **2.18.0**, select the [Down
 ### Features
 
 * Added support for [VIEW](./concepts/datamodel/view) in local backups: `ydb tools dump` and `ydb tools restore`. Views are backed up as `CREATE VIEW` queries saved in the `create_view.sql` files, which can be executed to recreate the original views.
-* Added new options to the [command](./reference/ydb-cli/workload-topic#run-write) `ydb workload topic run`: `--tx-commit-interval` and `--tx-commit-messages`, allowing you to specify the interval between transaction commits in milliseconds or in the number of messages written, respectively.
-* Made the `--consumer` flag in the [command](./reference/ydb-cli/topic-read) `ydb topic read` command optional. In the non-subscriber reading mode, the partition IDs must be specified with the `--partition-ids` option. In this case, the read is performed without saving the offset commit.
+* Added new options to the `ydb workload topic run` [command](./reference/ydb-cli/workload-topic#run-write): `--tx-commit-interval` and `--tx-commit-messages`, allowing you to specify the interval between transaction commits in milliseconds or by the number of messages written, respectively.
+* Made the `--consumer` flag in the `ydb topic read` [command](./reference/ydb-cli/topic-read) optional. In the non-subscriber reading mode, the partition IDs must be specified with the `--partition-ids` option. In this case, the read is performed without saving the offset commit.
 * The `ydb import file csv` [command]((./reference/ydb-cli/export-import/import-file)) now saves import progress. Relaunching the import command will continue from the row where it was interrupted.
 * In the `ydb workload kv` and `ydb workload stock` commands, the default value of the `--executer` option has been changed to `generic`, which makes them no longer rely on the legacy query execution infrastructure.
 * Replaced the CSV format with Parquet for filling tables in `ydb workload` benchmarks.

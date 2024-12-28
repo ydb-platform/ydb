@@ -1600,7 +1600,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
                     Y_ASSERT(record.GetResultSet().rows().size() == 1);
                     Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
-                    result += record.GetResultSet().rows().at(0).items().at(0).uint64_value();
+                    result = record.GetResultSet().rows().at(0).items().at(0).uint64_value();
 
                     auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                     resp->Record.SetEnough(false);
@@ -1641,9 +1641,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         runtime->SetObserverFunc(captureEvents);
         auto streamSender = runtime->AllocateEdgeActor();
         NDataShard::NKqpHelpers::SendRequest(*runtime, streamSender, NDataShard::NKqpHelpers::MakeStreamRequest(streamSender, "SELECT COUNT(*) FROM `/Root/largeOlapStore/largeOlapTable`;", false));
-        while (result != insertRows) {
-            runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender, TDuration::Seconds(10));
-        }
+        auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
+        UNIT_ASSERT_VALUES_EQUAL(result, insertRows);
     }
 
     Y_UNIT_TEST(PredicatePushdownWithParameters) {

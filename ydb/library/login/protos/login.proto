@@ -23,7 +23,9 @@ message TSid {
     string Hash = 3;
     repeated string Members = 4;
     uint64 CreatedAt = 5;
-    uint64 LastSuccessfulLogin = 6; // microseconds
+    uint64 CurrentFailedLoginAttemptCount = 6;
+    uint64 LastFailedLoginAttempt = 7;
+    uint64 LastSuccessfulLoginAttempt = 8;
 }
 
 message TSecurityState {

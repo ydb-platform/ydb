@@ -388,13 +388,18 @@ namespace NYql::NDq {
         }
 
         static void SendError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NYdbGrpc::TGrpcStatus& status, const ui32 retriesRemaining) {
-            if (retriesRemaining && NConnector::GrpcStatusNeedsRetry(status)) {
-                actorSystem->Schedule(
-                    TDuration::MilliSeconds(1u<<(RequestRetriesLimit - retriesRemaining)), // XXX FIXME
-                    new IEventHandle(selfId, selfId, new TEvRetry()));
-            } else {
-                SendError(actorSystem, selfId, NConnector::ErrorFromGRPCStatus(status));
+            if (NConnector::GrpcStatusNeedsRetry(status)) {
+                if (retriesRemaining) {
+                    const auto retry = RequestRetriesLimit - retriesRemaining;
+                    // XXX FIXME tune/tweak
+                    const auto delay = TDuration::MilliSeconds(1u << retry); // Exponential delay from 1ms to 1s
+                    YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry " << (retry + 1) << " of " << RequestRetriesLimit << ", scheduled in " << delay;
+                    actorSystem->Schedule(delay, new IEventHandle(selfId, selfId, new TEvRetry()));
+                    return;
+                }
+                YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry count exceed limit " << RequestRetriesLimit;
             }
+            SendError(actorSystem, selfId, NConnector::ErrorFromGRPCStatus(status));
         }
 
         static void SendError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, TString error) {

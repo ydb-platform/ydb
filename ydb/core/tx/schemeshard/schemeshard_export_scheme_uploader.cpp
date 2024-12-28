@@ -67,11 +67,11 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
             return;
         }
 
-        if (auto permissions = NDataShard::GenYdbPermissions(describeResult.GetPathDescription()); !permissions.Defined()) {
+        if (auto permissions = NDataShard::GenYdbPermissions(describeResult.GetPathDescription())) {
+            google::protobuf::TextFormat::PrintToString(permissions.GetRef(), &Permissions);
+        } else {
             reportError("cannot infer permissions");
             return;
-        } else {
-            google::protobuf::TextFormat::PrintToString(permissions.GetRef(), &Permissions);
         }
 
         Restart();
@@ -222,27 +222,44 @@ public:
         , Retries(settings.number_of_retries())
         , DatabaseRoot(databaseRoot)
     {
-        if (itemIdx >= ui32(settings.items_size())) {
-            Send(SchemeShard, new TEvPrivate::TEvExportSchemeUploadResult(ExportId, ItemIdx, false,
-                TStringBuilder() << "item index: " << itemIdx << " out of range, number of items: " << settings.items_size())
-            );
-            return;
+        if (itemIdx < ui32(settings.items_size())) {
+            DestinationPrefix = settings.items(itemIdx).destination_prefix();
         }
-        DestinationPrefix = settings.items(itemIdx).destination_prefix();
     }
 
     void Bootstrap() {
+        if (!DestinationPrefix) {
+            Finish(false, TStringBuilder() << "cannot determine destination prefix, item index: " << ItemIdx << " out of range");
+            return;
+        }
         if (!Scheme || !Permissions) {
             Send(SchemeShard, new TEvSchemeShard::TEvDescribeScheme(SourcePathId));
+            this->Become(&TThis::StateDescribe);
+            return;
         }
-        this->Become(&TThis::StateBase);
+        if (!SchemeUploaded) {
+            UploadScheme();
+            return;
+        }
+        if (!PermissionsUploaded) {
+            UploadPermissions();
+            return;
+        }
+        Finish();
     }
 
     STATEFN(StateBase) {
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvents::TEvWakeup, Bootstrap);
             sFunc(TEvents::TEvPoisonPill, PassAway);
+        }
+    }
+
+    STATEFN(StateDescribe) {
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvDescribeSchemeResult, HandleSchemeDescription);
+        default:
+            return StateBase(ev);
         }
     }
 

@@ -334,7 +334,7 @@ private:
             Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo->Settings));
             const auto databaseRoot = TStringBuilder() << '/' << JoinSeq('/', Self->RootPathElements);
 
-            ctx.Register(CreateSchemeUploader(
+            item.SchemeUploader = ctx.Register(CreateSchemeUploader(
                 Self->SelfId(), exportInfo->Id, itemIdx, item.SourcePathId, exportSettings, databaseRoot
             ));
         }
@@ -937,8 +937,10 @@ private:
             return;
         }
 
-        auto& item = exportInfo->Items[itemIdx];
         NIceDb::TNiceDb db(txc.DB);
+
+        auto& item = exportInfo->Items[itemIdx];
+        item.SchemeUploader = TActorId();
 
         if (!SchemeUploadResult->Get()->Success) {
             item.State = EState::Cancelled;

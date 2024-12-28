@@ -2668,6 +2668,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         EState State = EState::Waiting;
         ESubState SubState = ESubState::AllocateTxId;
         TTxId WaitTxId = InvalidTxId;
+        TActorId SchemeUploader;
         TString Issue;
 
         TItem() = default;

@@ -1,0 +1,1 @@
+{"s_acctbal"="\0\2\0\0\0\0\0\2\x16{$\xB8";"s_address"=" N kD4on9OM Ipw3,gf0JBoQDd7tgrzrddZ";"s_comment"="each slyly above the careful";"s_name"="Supplier#000000001";"s_nationkey"=17;"s_phone"="27-918-335-1736";"s_suppkey"=1;};

@@ -1141,7 +1141,13 @@
         "7686710688": "https://devtools-registry.s3.yandex.net/7686710688",
         "2980468199": "https://devtools-registry.s3.yandex.net/2980468199",
         "5562224408": "https://devtools-registry.s3.yandex.net/5562224408",
-        "7663495611": "https://devtools-registry.s3.yandex.net/7663495611"
+        "7663495611": "https://devtools-registry.s3.yandex.net/7663495611",
+        "6442167169": "https://devtools-registry.s3.yandex.net/6442167169",
+        "7503032594": "https://devtools-registry.s3.yandex.net/7503032594",
+        "7633866901": "https://devtools-registry.s3.yandex.net/7633866901",
+        "7633869171": "https://devtools-registry.s3.yandex.net/7633869171",
+        "7633871466": "https://devtools-registry.s3.yandex.net/7633871466",
+        "7633873137": "https://devtools-registry.s3.yandex.net/7633873137"
     },
     "resources_descriptions": {
         "6277415836": "Allure 2.29.0",
@@ -2284,7 +2290,13 @@
         "7686710688": "yt/go/ytrecipe/cmd/ytexec for linux",
         "2980468199": "ytexec for linux",
         "5562224408": "ytexec for linux",
-        "7663495611": "ytexec for linux"
+        "7663495611": "ytexec for linux",
+        "6442167169": "pnpm 8.6.12",
+        "7503032594": "pnpm 9.12.3 (default)",
+        "7633866901": "Node.js 20.18.1 for linux-x64",
+        "7633869171": "Node.js 20.18.1 for linux-arm64",
+        "7633871466": "Node.js 20.18.1 for darwin-x64",
+        "7633873137": "Node.js 20.18.1 for darwin-arm64"
     },
     "resources_info": {},
     "tasks": {}

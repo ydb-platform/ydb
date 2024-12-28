@@ -1,0 +1,1 @@
+{"key"="FoO_1";"subkey"="-";"value"="zero"};

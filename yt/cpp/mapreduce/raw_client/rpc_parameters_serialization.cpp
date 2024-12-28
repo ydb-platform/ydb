@@ -78,22 +78,6 @@ static void SetFirstLastTabletIndex(TNode* node, const TOptions& options)
     }
 }
 
-static TString GetDefaultTransactionTitle()
-{
-    const auto processState = TProcessState::Get();
-    TStringStream res;
-
-    res << "User transaction. Created by: " << processState->UserName << " on " << processState->FqdnHostName
-        << " client: " << processState->ClientVersion << " pid: " << processState->Pid;
-    res << " program: " << processState->BinaryName;
-
-#ifndef NDEBUG
-    res << " build: debug";
-#endif
-
-    return res.Str();
-}
-
 template <typename T>
 void SerializeMasterReadOptions(TNode* node, const TMasterReadOptions<T>& options)
 {

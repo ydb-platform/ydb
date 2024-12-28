@@ -1,0 +1,29 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+              ["ss_sold_date_sk";["PgType";"int4";];];
+              ["ss_sold_time_sk";["PgType";"int4";];];
+              ["ss_item_sk";["PgType";"int4";];];
+              ["ss_customer_sk";["PgType";"int4";];];
+              ["ss_cdemo_sk";["PgType";"int4";];];
+              ["ss_hdemo_sk";["PgType";"int4";];];
+              ["ss_addr_sk";["PgType";"int4";];];
+              ["ss_store_sk";["PgType";"int4";];];
+              ["ss_promo_sk";["PgType";"int4";];];
+              ["ss_ticket_number";["PgType";"int4";];];
+              ["ss_quantity";["PgType";"int4";];];
+              ["ss_wholesale_cost";["PgType";"numeric";];];
+              ["ss_list_price";["PgType";"numeric";];];
+              ["ss_sales_price";["PgType";"numeric";];];
+              ["ss_ext_discount_amt";["PgType";"numeric";];];
+              ["ss_ext_sales_price";["PgType";"numeric";];];
+              ["ss_ext_wholesale_cost";["PgType";"numeric";];];
+              ["ss_ext_list_price";["PgType";"numeric";];];
+              ["ss_ext_tax";["PgType";"numeric";];];
+              ["ss_coupon_amt";["PgType";"numeric";];];
+              ["ss_net_paid";["PgType";"numeric";];];
+              ["ss_net_paid_inc_tax";["PgType";"numeric";];];
+              ["ss_net_profit";["PgType";"numeric";];];
+        ];];
+    }
+}

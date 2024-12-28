@@ -1,0 +1,3 @@
+{"key"="1";"subkey"="";"value"="http://www.ya.ru/foo"};
+{"key"="2";"subkey"="";"value"="http://www.ya.ru/bar"};
+{"key"="3";"subkey"="";"value"="http://www.ya.hz/wat"};

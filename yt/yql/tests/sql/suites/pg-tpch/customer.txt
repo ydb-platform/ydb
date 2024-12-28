@@ -1,0 +1,1 @@
+{"c_acctbal"="\0\2\0\0\0\0\0\2\x11\xAA\x1D\xB0";"c_address"="ocIz 2S9MsEyfkL";"c_comment"="dolites alongside of the furiously pending theodolites affix closely idly bold instruction";"c_custkey"=750001;"c_mktsegment"="FURNITURE";"c_name"="Customer#000750001";"c_nationkey"=6;"c_phone"="16-182-876-9496";};

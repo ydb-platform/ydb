@@ -21,6 +21,7 @@ namespace NYql::NDq {
             EvReadSplitsPart,
             EvReadSplitsFinished,
             EvError,
+            EvRetry,
             EvEnd
         };
 
@@ -87,6 +88,12 @@ namespace NYql::NDq {
             }
 
             NConnector::NApi::TError Error;
+        };
+
+        struct TEvRetry: NActors::TEventLocal<TEvRetry, EvRetry> {
+            explicit TEvRetry()
+            {
+            }
         };
 
     protected: // TODO move common logic here

@@ -1,7 +1,7 @@
 
 ## 2.18.0 ##
 
-* Query plan and statistics improvements:
+* _awaiting release ydb server 24.4_ Query plan and statistics improvements:
   * Expression and attributes added to various operator properties (i.e. GroupBy)
   * Per operator statistics (Rows)
   * Statistics from Column Shards (Rows and Bytes)

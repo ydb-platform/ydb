@@ -123,15 +123,30 @@ void FillPartitioning(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& desc
     *desc.MutablePartitionConfig()->MutablePartitioningPolicy() = copiedTable.GetPartitionConfig().GetPartitioningPolicy();
 }
 
-NKikimrSchemeOp::TBackupTask BuildBackupTask(
-    TSchemeShard* ss, const TExportInfo::TPtr exportInfo, ui32 itemIdx, const TPath& exportPath, const TString& tableName
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    const TExportInfo::TPtr exportInfo,
+    ui32 itemIdx
 ) {
-    NKikimrSchemeOp::TBackupTask task;
-    task.SetTableName(tableName);
+    Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+
+    auto& modifyScheme = *propose->Record.AddTransaction();
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpBackup);
+    modifyScheme.SetInternal(true);
+
+    const TPath exportPath = TPath::Init(exportInfo->ExportPathId, ss);
+    const TString& exportPathName = exportPath.PathString();
+    modifyScheme.SetWorkingDir(exportPathName);
+
+    auto& task = *modifyScheme.MutableBackup();
+    task.SetTableName(ToString(itemIdx));
     task.SetNeedToBill(!exportInfo->UserSID || !ss->SystemBackupSIDs.contains(*exportInfo->UserSID));
 
     const TPath sourcePath = TPath::Init(exportInfo->Items[itemIdx].SourcePathId, ss);
-    const TPath exportItemPath = exportPath.Child(tableName);
+    const TPath exportItemPath = exportPath.Child(ToString(itemIdx));
     if (sourcePath.IsResolved() && exportItemPath.IsResolved()) {
         auto sourceDescription = GetTableDescription(ss, sourcePath.Base()->PathId);
         if (sourceDescription.HasTable()) {
@@ -199,27 +214,6 @@ NKikimrSchemeOp::TBackupTask BuildBackupTask(
         }
         break;
     }
-
-    return task;
-}
-
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
-    TSchemeShard* ss,
-    TTxId txId,
-    const TExportInfo::TPtr exportInfo,
-    ui32 itemIdx
-) {
-    Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
-
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
-
-    auto& modifyScheme = *propose->Record.AddTransaction();
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpBackup);
-    modifyScheme.SetInternal(true);
-
-    const TPath exportPath = TPath::Init(exportInfo->ExportPathId, ss);
-    modifyScheme.SetWorkingDir(exportPath.PathString());
-    *modifyScheme.MutableBackup() = BuildBackupTask(ss, exportInfo, itemIdx, exportPath, ToString(itemIdx));
 
     return propose;
 }

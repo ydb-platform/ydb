@@ -19,10 +19,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
     const TExportInfo::TPtr exportInfo
 );
 
-NKikimrSchemeOp::TBackupTask BuildBackupTask(
-    TSchemeShard* ss, const TExportInfo::TPtr exportInfo, ui32 itemIdx, const TPath& exportPath, const TString& tableName
-);
-
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     TSchemeShard* ss,
     TTxId txId,

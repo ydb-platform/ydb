@@ -1,15 +1,15 @@
 #include "schemeshard.h"
 #include "schemeshard_export_scheme_uploader.h"
-#include "schemeshard_impl.h"
-#include "schemeshard_path_describer.h"
 
 #include <ydb/core/tx/datashard/export_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export_helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 
 namespace NKikimr::NSchemeShard {
@@ -18,6 +18,80 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
 
     using TS3ExternalStorageConfig = NWrappers::NExternalStorage::TS3ExternalStorageConfig;
     using TEvExternalStorage = NWrappers::TEvExternalStorage;
+    using TPutObjectResult = Aws::Utils::Outcome<Aws::S3::Model::PutObjectResult, Aws::S3::S3Error>;
+
+    static TString BuildViewScheme(const TString& path, const NKikimrSchemeOp::TViewDescription& viewDescription, const TString& backupRoot, TString& error) {
+        NYql::TIssues issues;
+        auto scheme = NYdb::NDump::BuildCreateViewQuery(viewDescription.GetName(), path, viewDescription.GetQueryText(), backupRoot, issues);
+        if (!scheme) {
+            error = issues.ToString();
+        }
+        return scheme;
+    }
+
+    bool BuildSchemeToUpload(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, TString& error) {
+        const auto pathType = describeResult.GetPathDescription().GetSelf().GetPathType();
+        switch (pathType) {
+            case NKikimrSchemeOp::EPathTypeView: {
+                Scheme = BuildViewScheme(describeResult.GetPath(), describeResult.GetPathDescription().GetViewDescription(), DatabaseRoot, error);
+                return !Scheme.empty();
+            }
+            default:
+                error = TStringBuilder() << "unsupported path type: " << pathType;
+                return false;
+        }
+    }
+
+    void HandleSchemeDescription(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        const auto& describeResult = ev->Get()->GetRecord();
+
+        LOG_D("HandleSchemeDescription TEvSchemeShard::TEvDescribeSchemeResult"
+            << ", self: " << this->SelfId()
+            << ", status: " << describeResult.GetStatus()
+        );
+
+        auto reportError = [&](const TString& error) {
+            Send(SchemeShard, new TEvPrivate::TEvExportSchemeUploadResult(
+                ExportId, ItemIdx, false, error
+            ));
+        };
+
+        if (describeResult.GetStatus() != TEvSchemeShard::EStatus::StatusSuccess) {
+            reportError(describeResult.GetReason());
+            return;
+        }
+
+        TString error;
+        if (!BuildSchemeToUpload(describeResult, error)) {
+            reportError(error);
+            return;
+        }
+
+        if (auto permissions = NDataShard::GenYdbPermissions(describeResult.GetPathDescription()); !permissions.Defined()) {
+            reportError("cannot infer permissions");
+            return;
+        } else {
+            google::protobuf::TextFormat::PrintToString(permissions.GetRef(), &Permissions);
+        }
+
+        Restart();
+    }
+
+    void Restart() {
+        if (Attempt) {
+            this->Send(std::exchange(StorageOperator, TActorId()), new TEvents::TEvPoisonPill());
+        }
+
+        StorageOperator = this->RegisterWithSameMailbox(
+            NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator())
+        );
+
+        if (!SchemeUploaded) {
+            UploadScheme();
+        } else if (!PermissionsUploaded) {
+            UploadPermissions();
+        }
+    }
 
     void UploadScheme() {
         Y_ABORT_UNLESS(!SchemeUploaded);
@@ -27,30 +101,16 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         }
 
         auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Sprintf("%s/create_view.sql", DestinationFolder.c_str()));
-        this->Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, std::exchange(Scheme, "")));
+            .WithKey(Sprintf("%s/create_view.sql", DestinationPrefix.c_str()));
+        this->Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Scheme)));
 
         this->Become(&TThis::StateUploadScheme);
     }
 
-    void UploadPermissions() {
-        Y_ABORT_UNLESS(!PermissionsUploaded);
-
-        if (!Permissions) {
-            return Finish(false, "Cannot infer permissions");
-        }
-
-        auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Sprintf("%s/permissions.pb", DestinationFolder.c_str()));
-        this->Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, std::exchange(Permissions, "")));
-
-        this->Become(&TThis::StateUploadPermissions);
-    }
-
-    void HandleScheme(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
+    void HandleSchemePutResponse(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_D("HandleScheme TEvExternalStorage::TEvPutObjectResponse"
+        LOG_D("HandleSchemePutResponse TEvExternalStorage::TEvPutObjectResponse"
             << ", self: " << this->SelfId()
             << ", result: " << result
         );
@@ -64,10 +124,24 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         UploadPermissions();
     }
 
-    void HandlePermissions(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
+    void UploadPermissions() {
+        Y_ABORT_UNLESS(!PermissionsUploaded);
+
+        if (!Permissions) {
+            return Finish(false, "Cannot infer permissions");
+        }
+
+        auto request = Aws::S3::Model::PutObjectRequest()
+            .WithKey(Sprintf("%s/permissions.pb", DestinationPrefix.c_str()));
+        this->Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Permissions)));
+
+        this->Become(&TThis::StateUploadPermissions);
+    }
+
+    void HandlePermissionsPutResponse(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_D("HandlePermissions TEvExternalStorage::TEvPutObjectResponse"
+        LOG_D("HandlePermissionsPutResponse TEvExternalStorage::TEvPutObjectResponse"
             << ", self: " << this->SelfId()
             << ", result: " << result
         );
@@ -81,8 +155,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         Finish();
     }
 
-    template <typename TResult>
-    bool CheckResult(const TResult& result, const TStringBuf marker) {
+    bool CheckResult(const TPutObjectResult& result, const TStringBuf marker) {
         if (result.IsSuccess()) {
             return true;
         }
@@ -103,10 +176,6 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         return error.GetExceptionName() == "TooManyRequests";
     }
 
-    bool CanRetry(const Aws::S3::S3Error& error) const {
-        return Attempt < Retries && ShouldRetry(error);
-    }
-
     void Retry() {
         Delay = Min(Delay * ++Attempt, MaxDelay);
         const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
@@ -114,7 +183,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
     }
 
     void RetryOrFinish(const Aws::S3::S3Error& error) {
-        if (CanRetry(error)) {
+        if (Attempt < Retries && ShouldRetry(error)) {
             Retry();
         } else {
             Finish(false, TStringBuilder() << "S3 error: " << error.GetMessage());
@@ -128,35 +197,13 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
             << ", error: " << error
         );
 
-        auto& item = ExportInfo->Items[ItemIdx];
-
-        if (!success) {
-            item.Issue = error;
-        }
-        Send(SchemeShard->SelfId(), new TEvPrivate::TEvExportSchemeUploadResult(ExportInfo->Id, ItemIdx, success, error));
-
+        Send(SchemeShard, new TEvPrivate::TEvExportSchemeUploadResult(ExportId, ItemIdx, success, error));
         PassAway();
     }
 
     void PassAway() override {
         this->Send(StorageOperator, new TEvents::TEvPoisonPill());
         IActor::PassAway();
-    }
-
-    void Restart() {
-        if (Attempt) {
-            this->Send(std::exchange(StorageOperator, TActorId()), new TEvents::TEvPoisonPill());
-        }
-
-        StorageOperator = this->RegisterWithSameMailbox(
-            NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator())
-        );
-
-        if (!SchemeUploaded) {
-            UploadScheme();
-        } else if (!PermissionsUploaded) {
-            UploadPermissions();
-        }
     }
 
 public:
@@ -166,63 +213,48 @@ public:
     }
 
     TSchemeUploader(
-        TSchemeShard* schemeShard,
-        TExportInfo::TPtr exportInfo,
+        TActorId schemeShard,
+        ui64 exportId,
         ui32 itemIdx,
-        TTxId txId,
-        const NKikimrSchemeOp::TBackupTask& task
+        TPathId sourcePathId,
+        const Ydb::Export::ExportToS3Settings& settings,
+        const TString& databaseRoot
     )
-        : ExternalStorageConfig(new TS3ExternalStorageConfig(task.GetS3Settings()))
-        , DestinationFolder(task.GetS3Settings().GetObjectKeyPattern())
-        , Retries(task.GetNumberOfRetries())
-        , SchemeShard(schemeShard)
-        , ExportInfo(exportInfo)
+        : SchemeShard(schemeShard)
+        , ExportId(exportId)
         , ItemIdx(itemIdx)
-        , TxId(txId)
+        , SourcePathId(sourcePathId)
+        , ExternalStorageConfig(new TS3ExternalStorageConfig(settings))
+        , Retries(settings.number_of_retries())
+        , DatabaseRoot(databaseRoot)
     {
+        if (itemIdx >= ui32(settings.items_size())) {
+            Send(SchemeShard, new TEvPrivate::TEvExportSchemeUploadResult(ExportId, ItemIdx, false,
+                TStringBuilder() << "item index: " << itemIdx << " out of range, number of items: " << settings.items_size())
+            );
+            return;
+        }
+        DestinationPrefix = settings.items(itemIdx).destination_prefix();
     }
 
     void Bootstrap() {
-        auto* uploadingResult = new TEvPrivate::TEvExportSchemeUploadResult(ExportInfo->Id, ItemIdx, true, "");
-
-        auto describeResult = DescribePath(SchemeShard, ActorContext(), ExportInfo->Items[ItemIdx].SourcePathId)->GetRecord();
-        if (describeResult.GetStatus() != TEvSchemeShard::EStatus::StatusSuccess) {
-            uploadingResult->SetError(describeResult.GetReason());
-            Send(SchemeShard->SelfId(), uploadingResult);
-            return;
+        if (!Scheme || !Permissions) {
+            Send(SchemeShard, new TEvSchemeShard::TEvDescribeScheme(SourcePathId));
         }
-
-        NYql::TIssues issues;
-        const auto& viewDescription = describeResult.GetPathDescription().GetViewDescription();
-        const auto backupRoot = TStringBuilder() << '/' << JoinSeq('/', SchemeShard->RootPathElements);
-        Scheme = NYdb::NDump::BuildCreateViewQuery(viewDescription.GetName(), describeResult.GetPath(), viewDescription.GetQueryText(), backupRoot, issues);
-        if (Scheme.empty()) {
-            uploadingResult->SetError(issues.ToString());
-            Send(SchemeShard->SelfId(), uploadingResult);
-            return;
-        }
-
-        if (auto permissions = NDataShard::GenYdbPermissions(describeResult.GetPathDescription()); !permissions.Defined()) {
-            uploadingResult->SetError("cannot infer permissions");
-            Send(SchemeShard->SelfId(), uploadingResult);
-            return;
-        } else {
-            google::protobuf::TextFormat::PrintToString(permissions.GetRef(), &Permissions);
-        }
-
-        Restart();
+        this->Become(&TThis::StateBase);
     }
 
     STATEFN(StateBase) {
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvents::TEvWakeup, Bootstrap);
             sFunc(TEvents::TEvPoisonPill, PassAway);
+            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, HandleSchemeDescription);
         }
     }
 
     STATEFN(StateUploadScheme) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleScheme);
+            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleSchemePutResponse);
         default:
             return StateBase(ev);
         }
@@ -230,7 +262,7 @@ public:
 
     STATEFN(StateUploadPermissions) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandlePermissions);
+            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandlePermissionsPutResponse);
         default:
             return StateBase(ev);
         }
@@ -238,10 +270,24 @@ public:
 
 private:
 
+    TActorId SchemeShard;
+
+    ui64 ExportId;
+    ui32 ItemIdx;
+    TPathId SourcePathId;
+
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
-    TString DestinationFolder;
+    TString DestinationPrefix;
+
+    ui32 Attempt = 0;
+    const ui32 Retries;
+
+    TString DatabaseRoot;
 
     TActorId StorageOperator;
+
+    TDuration Delay = TDuration::Minutes(1);
+    static constexpr TDuration MaxDelay = TDuration::Minutes(10);
 
     TString Scheme;
     bool SchemeUploaded = false;
@@ -249,22 +295,12 @@ private:
     TString Permissions;
     bool PermissionsUploaded = false;
 
-    ui32 Attempt = 0;
-    const ui32 Retries;
-
-    TDuration Delay = TDuration::Minutes(1);
-    static constexpr TDuration MaxDelay = TDuration::Minutes(10);
-
-    TSchemeShard* const SchemeShard;
-    TExportInfo::TPtr ExportInfo;
-    const ui32 ItemIdx;
-
-    TTxId TxId;
-
 }; // TSchemeUploader
 
-IActor* CreateSchemeUploader(TSchemeShard* schemeShard, TExportInfo::TPtr exportInfo, ui32 itemIdx, TTxId txId, const NKikimrSchemeOp::TBackupTask& task) {
-    return new TSchemeUploader(schemeShard, exportInfo, itemIdx, txId, task);
+IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
+    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot
+) {
+    return new TSchemeUploader(schemeShard, exportId, itemIdx, sourcePathId, settings, databaseRoot);
 }
 
 } // NSchemeShard::NKikimr

@@ -330,9 +330,12 @@ private:
         if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable) {
             Send(Self->SelfId(), BackupPropose(Self, txId, exportInfo, itemIdx));
         } else if (item.SourcePathType == NKikimrSchemeOp::EPathTypeView) {
-            const TPath sourcePath = TPath::Init(item.SourcePathId, Self);
-            ctx.RegisterWithSameMailbox(CreateSchemeUploader(Self, exportInfo, itemIdx, txId,
-                BuildBackupTask(Self, exportInfo, itemIdx, sourcePath.Parent(), sourcePath.Base()->Name)
+            Ydb::Export::ExportToS3Settings exportSettings;
+            Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo->Settings));
+            const auto databaseRoot = TStringBuilder() << '/' << JoinSeq('/', Self->RootPathElements);
+
+            ctx.Register(CreateSchemeUploader(
+                Self->SelfId(), exportInfo->Id, itemIdx, item.SourcePathId, exportSettings, databaseRoot
             ));
         }
     }

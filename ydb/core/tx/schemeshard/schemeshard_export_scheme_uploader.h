@@ -1,11 +1,16 @@
 #pragma once
 
-#include "schemeshard_info_types.h"
-
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/library/actors/core/actor.h>
+
+namespace Ydb::Export {
+    class ExportToS3Settings;
+}
 
 namespace NKikimr::NSchemeShard {
 
-IActor* CreateSchemeUploader(TSchemeShard* schemeShard, TExportInfo::TPtr exportInfo, ui32 itemIdx, TTxId txId, const NKikimrSchemeOp::TBackupTask& task);
+NActors::IActor* CreateSchemeUploader(NActors::TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
+    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot
+);
 
 }

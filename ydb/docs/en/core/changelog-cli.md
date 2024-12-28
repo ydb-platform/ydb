@@ -12,7 +12,6 @@ Released on December 24, 2024. To update to version **2.18.0**, select the [Down
 * The `ydb import file csv` [command]((./reference/ydb-cli/export-import/import-file)) now saves the import progress. Relaunching the import command will resume the process from the row where it was interrupted.
 * In the `ydb workload kv` and `ydb workload stock` commands, the default value of the `--executer` option has been changed to `generic`, which makes them no longer rely on the legacy query execution infrastructure.
 * Replaced the CSV format with Parquet for filling tables in `ydb workload` benchmarks.
-* Added the `ydb admin cluster bootstrap` command to bootstrap an automatically configured cluster.
 
 ### Backward incompatible changes
 

@@ -687,7 +687,7 @@ struct TModifyPermissionsSettings {
 
 struct TAlterUserSettings {
     TString UserName;
-    TString Password;
+    std::optional<TString> Password;
     bool PasswordEncrypted = false;
     bool NoPassword = true;
 

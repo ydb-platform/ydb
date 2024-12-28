@@ -428,9 +428,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         ChangeIsEnabledUser(runtime, ++txId, "/MyRoot", "user1", false);
         auto resultLogin2 = Login(runtime, "user1", "123");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin2.error(), "User 'user1' is not permitted to log in");
-        std::cerr << "±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±" << std::endl;
         ChangeIsEnabledUser(runtime, ++txId, "/MyRoot", "user1", true);
-        std::cerr << "±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±" << std::endl;
         auto resultLogin3 = Login(runtime, "user1", "123");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin3.error(), "");
     }

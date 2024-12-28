@@ -129,10 +129,8 @@ namespace {
             auto name = setting.Name().Value();
             if (name == "password") {
                 alterUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
-                alterUserSettings.NoPassword = false;
             } else if (name == "nullPassword") {
-                // alterUserSettings.Password = Default value
-                alterUserSettings.NoPassword = false;
+                alterUserSettings.Password = TString();
             } else if (name == "passwordEncrypted") {
                 alterUserSettings.PasswordEncrypted = true;
             } else if (name == "login") {

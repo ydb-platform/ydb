@@ -1428,11 +1428,6 @@ public:
             auto& alterUser = *schemeTx.MutableAlterLogin()->MutableModifyUser();
 
             alterUser.SetUser(settings.UserName);
-            if (settings.NoPassword) {
-                alterUser.SetNoPassword(true);
-            } else {
-                alterUser.SetPassword(settings.Password);
-            }
 
             switch (settings.CanLogin) {
                 case NYql::TAlterUserSettings::ETypeOfLogin::Login:

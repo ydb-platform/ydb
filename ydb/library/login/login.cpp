@@ -123,17 +123,16 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
         return response;
     }
 
-    TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password);
-    if (!passwordCheckResult.Success) {
-        response.Error = passwordCheckResult.Error;
-        return response;
-    }
-
     TSidRecord& user = itUserModify->second;
-    if (request.NoPassword) {
-        user.NoPassword = true;
-    } else {
-        user.Hash = Impl->GenerateHash(request.Password);
+
+    if (request.Password.has_value()) {
+        TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password.value());
+        if (!passwordCheckResult.Success) {
+            response.Error = passwordCheckResult.Error;
+            return response;
+        }
+
+        user.Hash = Impl->GenerateHash(request.Password.value());
     }
 
     switch (request.CanLogin) {

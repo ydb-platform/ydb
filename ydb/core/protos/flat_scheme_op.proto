@@ -861,7 +861,6 @@ message TLoginModifyUser {
     optional string User = 1;
     optional string Password = 2;
     optional ETypeOfLogin CanLogin = 3;
-    optional bool NoPassword = 4 [default = true];
 }
 
 message TLoginRemoveUser {

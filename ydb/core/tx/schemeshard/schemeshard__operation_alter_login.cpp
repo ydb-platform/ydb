@@ -81,33 +81,39 @@ public:
                 case NKikimrSchemeOp::TAlterLogin::kModifyUser: {
                     const auto& modifyUser = alterLogin.GetModifyUser();
 
-                    NLogin::TLoginProvider::ETypeOfLogin canLogin;
+                    NLogin::TLoginProvider::TModifyUserRequest request;
+
+                    request.User = modifyUser.GetUser();
+
                     switch (modifyUser.GetCanLogin()) {
                         case NKikimrSchemeOp::ETypeOfLogin::Login:
                         {
-                            canLogin = NLogin::TLoginProvider::ETypeOfLogin::Login;
+                            request.CanLogin = NLogin::TLoginProvider::ETypeOfLogin::Login;
                             break;
                         }
                         case NKikimrSchemeOp::ETypeOfLogin::NoLogin:
                         {
-                            canLogin = NLogin::TLoginProvider::ETypeOfLogin::NoLogin;
+                            request.CanLogin = NLogin::TLoginProvider::ETypeOfLogin::NoLogin;
                             break;
                         }
                         case NKikimrSchemeOp::ETypeOfLogin::Undefined:
                         {
-                            canLogin = NLogin::TLoginProvider::ETypeOfLogin::Undefined;
+                            request.CanLogin = NLogin::TLoginProvider::ETypeOfLogin::Undefined;
                             break;
                         }
                     }
 
-                    auto response = context.SS->LoginProvider.ModifyUser(
-                        {.User = modifyUser.GetUser(), .Password = modifyUser.GetPassword(), .CanLogin = canLogin});
+                    if (modifyUser.HasPassword()) {
+                        request.Password = modifyUser.GetPassword();
+                    }
+
+                    auto response = context.SS->LoginProvider.ModifyUser(request);
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[modifyUser.GetUser()];
 
-                        if (modifyUser.GetNoPassword()) {
+                        if (modifyUser.HasPassword()) {
                             db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::SidHash>(sid.Type, sid.Hash);
                         }
 

@@ -377,7 +377,12 @@ void TKqpScanFetcherActor::HandleExecute(TEvents::TEvUndelivered::TPtr& ev) {
                 builder << "Delivery problem: EvScanDataAck lost, NodeId: "
                     << SelfId().NodeId() << ", Details: " << info->ToString() << ".";
 
-                SendGlobalFail(NDqProto::StatusIds::UNAVAILABLE, TIssuesIds::DEFAULT_ERROR, TString(builder));
+                auto state = InFlightShards.GetShardState(msg.TabletId);
+                AFL_VERIFY(!!state);
+                const auto shardState = state->State;
+                CA_LOG_W("Got EvDeliveryProblem, TabletId: " << msg.TabletId << ", NotDelivered: " << msg.NotDelivered << ", " << shardState);
+                AFL_VERIFY(state->State == EShardState::Running)("state", state->State);
+                RetryDeliveryProblem(state);
             }
             return;
         }

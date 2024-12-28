@@ -1135,7 +1135,7 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorCon
     PQ_LOG_D("Handle TEvPQ::TEvGetWriteInfoRequest");
     TActorId originalPartition = ev->Get()->OriginalPartition;
     if (!originalPartition) {
-        // delayed message
+        // original message
         originalPartition = ev->Sender;
     }
     if (ClosedInternalPartition || WaitingForPreviousBlobQuota() || (CurrentStateFunc() != &TThis::StateIdle)) {

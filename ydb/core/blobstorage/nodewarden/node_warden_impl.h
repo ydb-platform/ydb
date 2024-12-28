@@ -174,6 +174,8 @@ namespace NKikimr::NStorage {
         TControlWrapper ThrottlingMaxSstCount;
         TControlWrapper ThrottlingMinInplacedSize;
         TControlWrapper ThrottlingMaxInplacedSize;
+        TControlWrapper ThrottlingMinOccupancyPerMille;
+        TControlWrapper ThrottlingMaxOccupancyPerMille;
 
         TControlWrapper MaxCommonLogChunksHDD;
         TControlWrapper MaxCommonLogChunksSSD;

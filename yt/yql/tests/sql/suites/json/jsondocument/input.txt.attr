@@ -1,0 +1,23 @@
+{
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "Id";
+                    [
+                        "DataType";
+                        "Int64"
+                    ]
+                ];
+                [
+                    "Profile";
+                    [
+                        "DataType";
+                        "JsonDocument"
+                    ]
+                ]
+            ]
+        ]
+    }
+}

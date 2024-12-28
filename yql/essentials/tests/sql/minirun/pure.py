@@ -12,9 +12,10 @@ from yql_utils import execute, get_tables, get_files, get_http_files, \
     normalize_result
 from yqlrun import YQLRun
 
-from test_utils import get_config, get_parameters_json, DATA_PATH
+from test_utils import get_config, get_parameters_json
 from test_file_common import run_file, run_file_no_cache, get_gateways_config, get_sql_query
 
+DATA_PATH = yatest.common.source_path('yql/essentials/tests/sql/suites')
 ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
 MINIRUN_PATH = yql_binary_path('yql/essentials/tools/minirun/minirun')
 
@@ -23,7 +24,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if get_gateway_cfg_suffix() != '' and what not in ('Results','LLVM'):
         pytest.skip('non-trivial gateways.conf')
 
-    config = get_config(suite, case, cfg)
+    config = get_config(suite, case, cfg, data_path = DATA_PATH)
 
     xfail = is_xfail(config)
     if xfail and what != 'Results':
@@ -37,7 +38,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if is_with_final_result_issues(config):
         extra_final_args += ['--with-final-issues']
     (res, tables_res) = run_file('pure', suite, case, cfg, config, yql_http_file_server, MINIRUN_PATH,
-                                 extra_args=extra_final_args, allow_llvm=False)
+                                 extra_args=extra_final_args, allow_llvm=False, data_path=DATA_PATH)
 
     to_canonize = []
     assert xfail or os.path.exists(res.results_file)

@@ -1,0 +1,1 @@
+select count(cast(key as int)), value from plato.Input group by value order by value;

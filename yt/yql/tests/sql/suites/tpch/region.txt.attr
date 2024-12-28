@@ -1,0 +1,26 @@
+{
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "name" = "r_regionkey";
+            "required" = %true;
+            "sort_order" = "ascending";
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "r_comment";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "r_name";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+    ];
+}

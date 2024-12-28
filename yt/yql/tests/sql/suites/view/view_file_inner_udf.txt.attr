@@ -1,0 +1,32 @@
+{
+    "_yql_view_file_inner_udf1"="PRAGMA file('myfile','http_test://myfile');PRAGMA udf('myfile');select TestImportUdf::Concat(key,'!') as k, 2 as s, 3 as v from self";
+    "_yql_view_file_inner_udf2"="PRAGMA file('myfile','http_test://myfile');PRAGMA udf('myfile');select TestImportUdf::Concat(key,'?') as k, 2 as s, 3 as v from self";
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "subkey";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "value";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}

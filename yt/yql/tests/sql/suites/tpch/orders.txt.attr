@@ -1,0 +1,65 @@
+{
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "name" = "o_orderkey";
+            "required" = %true;
+            "sort_order" = "ascending";
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "o_orderstatus";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "o_comment";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "o_totalprice";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "o_clerk";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "o_custkey";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "o_orderpriority";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "o_orderdate";
+            "required" = %false;
+            "type" = "date";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "date";
+            };
+        };
+        {
+            "name" = "o_shippriority";
+            "required" = %true;
+            "type" = "int64";
+            "type_v3" = "int64";
+        };
+    ];
+}

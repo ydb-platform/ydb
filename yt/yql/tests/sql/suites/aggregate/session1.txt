@@ -1,0 +1,27 @@
+{"user"="u1"; "ts"=2; payload=6 };
+{"user"="u1"; "ts"=3; payload=8 };
+{"user"="u1"; "ts"=4; payload=10 };
+{"user"="u1"; "ts"=11; payload=12 };
+
+{"user"="u1"; "ts"=22; payload=14 };
+{"user"="u1"; "ts"=32; payload=16 };
+
+{"user"="u1"; "ts"=51; payload=18 };
+
+{"user"="u1"; "ts"=#; payload=2 };
+{"user"="u1"; "ts"=#; payload=4 };
+
+
+
+{"user"=#;    "ts"=#; payload=1 };
+{"user"=#;    "ts"=#; payload=1 };
+
+{"user"=#;    "ts"=1; payload=5 };
+{"user"=#;    "ts"=2; payload=5 };
+{"user"=#;    "ts"=3; payload=5 };
+{"user"=#;    "ts"=10; payload=11 };
+
+{"user"=#;    "ts"=21; payload=13 };
+{"user"=#;    "ts"=31; payload=15 };
+
+{"user"=#;    "ts"=50; payload=17 };

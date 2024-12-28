@@ -1,0 +1,15 @@
+{
+    "_yql_row_spec" = {
+        "StrictSchema"=%true;
+        "Type"=["StructType";[
+            ["IsValid";["DataType";"Bool"]];
+            ["dates";["ListType";["DataType";"String"]]];
+            ["id1";["OptionalType";["DataType";"String"]]];
+        ]];
+    };
+    "schema" = [
+        {"required"=%false; "type"="any"; "name"="dates"};
+        {"required"=%false; "type"="string"; "name"="id1"};
+        {"required"=%true; "type"="boolean"; "name"="IsValid"};
+    ];
+}

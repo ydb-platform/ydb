@@ -1,0 +1,11 @@
+{"_yql_row_spec"={
+	"Type"=["StructType";[
+		["a";["DataType";"Utf8"]];
+		["b";["PgType";"text"]];
+		["c";["PgType";"cstring"]];		
+		["d";["OptionalType";["DataType";"Utf8"]]];
+		["e";["DataType";"Int64"]];
+		["f";["PgType";"int8"]];
+		["g";["OptionalType";["DataType";"Int64"]]];		
+	]];
+}}

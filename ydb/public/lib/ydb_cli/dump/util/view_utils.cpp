@@ -269,7 +269,7 @@ TString BuildCreateViewQuery(
     const TString& name, const TString& dbPath, const TString& viewQuery, const TString& backupRoot,
     NYql::TIssues& issues
 ) {
-    auto [contextRecreation, select] = NDump::SplitViewQuery(viewQuery);
+    auto [contextRecreation, select] = SplitViewQuery(viewQuery);
 
     const TString creationQuery = std::format(
         "-- backup root: \"{}\"\n"
@@ -282,10 +282,10 @@ TString BuildCreateViewQuery(
         select.data()
     );
 
-    NYdb::NDump::ValidateViewQuery(creationQuery, dbPath, issues);
+    ValidateViewQuery(creationQuery, dbPath, issues);
 
     TString formattedQuery;
-    if (!NYdb::NDump::Format(creationQuery, formattedQuery, issues)) {
+    if (!Format(creationQuery, formattedQuery, issues)) {
         return "";
     }
     return formattedQuery;

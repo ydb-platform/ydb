@@ -97,13 +97,12 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         Y_ABORT_UNLESS(!SchemeUploaded);
 
         if (!Scheme) {
-            return Finish(false, "Cannot infer scheme");
+            return Finish(false, "cannot infer scheme");
         }
-
         auto request = Aws::S3::Model::PutObjectRequest()
             .WithKey(Sprintf("%s/create_view.sql", DestinationPrefix.c_str()));
-        this->Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Scheme)));
 
+        this->Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Scheme)));
         this->Become(&TThis::StateUploadScheme);
     }
 
@@ -118,9 +117,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         if (!CheckResult(result, TStringBuf("PutObject (scheme)"))) {
             return;
         }
-
         SchemeUploaded = true;
-
         UploadPermissions();
     }
 
@@ -128,13 +125,12 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         Y_ABORT_UNLESS(!PermissionsUploaded);
 
         if (!Permissions) {
-            return Finish(false, "Cannot infer permissions");
+            return Finish(false, "cannot infer permissions");
         }
-
         auto request = Aws::S3::Model::PutObjectRequest()
             .WithKey(Sprintf("%s/permissions.pb", DestinationPrefix.c_str()));
-        this->Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Permissions)));
 
+        this->Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Permissions)));
         this->Become(&TThis::StateUploadPermissions);
     }
 
@@ -149,9 +145,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         if (!CheckResult(result, TStringBuf("PutObject (permissions)"))) {
             return;
         }
-
         PermissionsUploaded = true;
-
         Finish();
     }
 

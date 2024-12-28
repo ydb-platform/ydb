@@ -17,10 +17,7 @@ public:
     }
 
     void Bootstrap() {
-        Send(SchemeShard, new TEvPrivate::TEvExportSchemeUploadResult(
-            ExportId,
-            ItemIdx,
-            false,
+        Send(SchemeShard, new TEvPrivate::TEvExportSchemeUploadResult(ExportId, ItemIdx, false,
             "Exports to S3 are disabled"
         ));
         PassAway();

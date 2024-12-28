@@ -300,7 +300,7 @@ private:
         Send(Self->SelfId(), MkDirPropose(Self, txId, exportInfo));
     }
 
-    bool CopyTables(TExportInfo::TPtr exportInfo, TTxId txId, TTransactionContext& txc) {
+    bool CopyTables(TExportInfo::TPtr exportInfo, TTxId txId) {
         LOG_I("TExport::TTxProgress: CopyTables propose"
             << ": info# " << exportInfo->ToString()
             << ", txId# " << txId);
@@ -677,8 +677,8 @@ private:
             break;
 
         case EState::CopyTables:
-            if (!CopyTables(exportInfo, txId, txc)) {
-                // all the items don't need copying
+            if (!CopyTables(exportInfo, txId)) {
+                // none of the items is a table
                 NIceDb::TNiceDb db(txc.DB);
 
                 for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
@@ -931,8 +931,8 @@ private:
         if (itemIdx >= exportInfo->Items.size()) {
             LOG_E("TExport::TTxProgress: OnSchemeUploadResult item index out of range"
                 << ": id# " << exportId
-                << ", itemIdx# " << itemIdx
-                << ", items size# " << exportInfo->Items.size()
+                << ", item index# " << itemIdx
+                << ", number of items# " << exportInfo->Items.size()
             );
             return;
         }

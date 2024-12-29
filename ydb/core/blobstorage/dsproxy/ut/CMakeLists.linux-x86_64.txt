@@ -52,6 +52,7 @@ target_sources(ydb-core-blobstorage-dsproxy-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_sequence_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_patch_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_counters_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_request_reporting_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_get_ut.cpp
 )
 

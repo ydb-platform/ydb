@@ -1,5 +1,5 @@
 from devtools.yamaker.project import CMakeNinjaNixProject
-from devtools.yamaker.modules import GLOBAL, Linkable, Switch
+from devtools.yamaker.modules import Linkable, Switch
 
 
 def post_install(self):

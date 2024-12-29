@@ -47,7 +47,7 @@ TString FormatIOTag(EAggregateIOTag tag);
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-void AddTagToBaggage(const NYTree::IAttributeDictionaryPtr& baggage, T tag, const TStringBuf& value);
+void AddTagToBaggage(const NYTree::IAttributeDictionaryPtr& baggage, T tag, TStringBuf value);
 
 ////////////////////////////////////////////////////////////////////////////////
 

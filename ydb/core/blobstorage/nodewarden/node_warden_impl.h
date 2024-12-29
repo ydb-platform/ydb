@@ -200,7 +200,9 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxNumOfSlowDisksSSD;
 
         TControlWrapper LongRequestThresholdMs;
-        TControlWrapper LongRequestReportingDelayMs;
+        TControlWrapper ReportingControllerBucketSize;
+        TControlWrapper ReportingControllerLeakDurationMs;
+        TControlWrapper ReportingControllerLeakRate;
 
     public:
         struct TGroupRecord;

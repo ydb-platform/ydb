@@ -111,12 +111,6 @@ class TBaseEtcdRequest {
 protected:
     void OnBootstrap() {
         auto self = static_cast<TDerived*>(this);
-        Ydb::StatusIds::StatusCode status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-        NYql::TIssues issues;
-        if (!self->ValidateRequest(status, issues)) {
-            self->Reply(status, issues, self->ActorContext());
-            return;
-        }
         if (const auto& userToken = self->Request_->GetSerializedToken()) {
             UserToken = new NACLib::TUserToken(userToken);
         }
@@ -469,10 +463,10 @@ protected:
     NWilson::TSpan Span_;
 };
 
-template <typename TDerived, typename TRequest, typename TKVRequest>
+template <typename TDerived, typename TRequest, typename TKVRequest, NACLib::EAccessRights AccessRights>
 class TEtcdRequestGrpc
     : public TEtcdOperationRequestActor<TDerived, TRequest>
-    , public TBaseEtcdRequest<TEtcdRequestGrpc<TDerived, TRequest, TKVRequest>>
+    , public TBaseEtcdRequest<TEtcdRequestGrpc<TDerived, TRequest, TKVRequest, AccessRights>>
 {
 public:
     using TBase = TEtcdOperationRequestActor<TDerived, TRequest>;
@@ -487,15 +481,13 @@ public:
     template<typename T>
     static constexpr bool HasMsgV = THasMsg<T>::value;
 
-    friend class TBaseEtcdRequest<TEtcdRequestGrpc<TDerived, TRequest, TKVRequest>>;
+    friend class TBaseEtcdRequest<TEtcdRequestGrpc<TDerived, TRequest, TKVRequest, AccessRights>>;
 
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
         this->OnBootstrap();
         this->Become(&TEtcdRequestGrpc::StateFunc);
     }
-
-
 protected:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
@@ -512,7 +504,7 @@ protected:
         TEvTxProxySchemeCache::TEvNavigateKeySetResult* res = ev->Get();
         NSchemeCache::TSchemeCacheNavigate *request = res->Request.Get();
 
-        if (!this->OnNavigateKeySetResult(ev, static_cast<TDerived*>(this)->GetRequiredAccessRights())) {
+        if (!this->OnNavigateKeySetResult(ev, AccessRights)) {
             return;
         }
 
@@ -582,8 +574,6 @@ protected:
         this->Reply(StatusIds::UNAVAILABLE, "Connection to coordination node was lost.", NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, this->ActorContext());
     }
 
-    virtual bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) = 0;
-
     void PassAway() override {
         if (KVPipeClient) {
             NTabletPipe::CloseClient(this->SelfId(), KVPipeClient);
@@ -599,54 +589,24 @@ protected:
 
 class TRangeRequest
     : public TEtcdRequestGrpc<TRangeRequest, TEvRangeKVRequest,
-            TEvKeyValue::TEvReadRange> {
+            TEvKeyValue::TEvReadRange, NACLib::SelectRow> {
 public:
-    using TBase = TEtcdRequestGrpc<TRangeRequest, TEvRangeKVRequest,
-           TEvKeyValue::TEvReadRange>;
+    using TBase = TEtcdRequestGrpc<TRangeRequest, TEvRangeKVRequest, TEvKeyValue::TEvReadRange, NACLib::SelectRow>;
     using TBase::TBase;
-    using TBase::Handle;
-    STFUNC(StateFunc) {
-        switch (ev->GetTypeRewrite()) {
-        default:
-            return TBase::StateFunc(ev);
-        }
-    }
-    bool ValidateRequest(Ydb::StatusIds::StatusCode&, NYql::TIssues&) override {
-        return true;
-    }
-    NACLib::EAccessRights GetRequiredAccessRights() const {
-        return NACLib::SelectRow;
-    }
 };
 
 class TPutRequest
-    : public TEtcdRequestGrpc<TPutRequest, TEvPutKVRequest, TEvKeyValue::TEvExecuteTransaction> {
+    : public TEtcdRequestGrpc<TPutRequest, TEvPutKVRequest, TEvKeyValue::TEvExecuteTransaction, NACLib::UpdateRow> {
 public:
-    using TBase = TEtcdRequestGrpc<TPutRequest, TEvPutKVRequest, TEvKeyValue::TEvExecuteTransaction>;
+    using TBase = TEtcdRequestGrpc<TPutRequest, TEvPutKVRequest, TEvKeyValue::TEvExecuteTransaction, NACLib::UpdateRow>;
     using TBase::TBase;
-
-    bool ValidateRequest(Ydb::StatusIds::StatusCode&, NYql::TIssues&) override {
-        return true;
-    }
-
-    NACLib::EAccessRights GetRequiredAccessRights() const {
-        return NACLib::UpdateRow;
-    }
 };
 
 class TDeleteRangeRequest
-    : public TEtcdRequestGrpc<TDeleteRangeRequest, TEvDeleteRangeKVRequest, TEvKeyValue::TEvExecuteTransaction> {
+    : public TEtcdRequestGrpc<TDeleteRangeRequest, TEvDeleteRangeKVRequest, TEvKeyValue::TEvExecuteTransaction, NACLib::EraseRow> {
 public:
-    using TBase = TEtcdRequestGrpc<TDeleteRangeRequest, TEvDeleteRangeKVRequest, TEvKeyValue::TEvExecuteTransaction>;
+    using TBase = TEtcdRequestGrpc<TDeleteRangeRequest, TEvDeleteRangeKVRequest, TEvKeyValue::TEvExecuteTransaction, NACLib::EraseRow>;
     using TBase::TBase;
-
-    bool ValidateRequest(Ydb::StatusIds::StatusCode&, NYql::TIssues&) override {
-        return true;
-    }
-
-    NACLib::EAccessRights GetRequiredAccessRights() const {
-        return NACLib::EraseRow;
-    }
 };
 
 }

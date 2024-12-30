@@ -43,6 +43,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::OpenFileError == 11);
         UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::ChunkQuotaError == 12);
         UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::DeviceIoError == 13);
+        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::Stopped == 14);
     }
 
     Y_UNIT_TEST(TestPDiskActorErrorState) {

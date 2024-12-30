@@ -31,6 +31,10 @@ extern TStatKey Combine_MaxRowsCount;
 
 namespace {
 
+bool HasMemoryForProcessing() {
+    return !TlsAllocState->IsMemoryYellowZoneEnabled();
+}
+
 struct TMyValueEqual {
     TMyValueEqual(const TKeyTypes& types)
         : Types(types)
@@ -282,6 +286,7 @@ public:
         if (isNew) {
             GrowStates();
         }
+        IsOutOfMemory = IsOutOfMemory || !HasMemoryForProcessing();
         return isNew;
     }
 
@@ -296,10 +301,6 @@ public:
                 IsOutOfMemory = true;
             }
         }
-    }
-
-    bool CheckIsOutOfMemory() const {
-        return IsOutOfMemory;
     }
 
     template<bool SkipYields>
@@ -485,7 +486,7 @@ public:
     ETasteResult TasteIt() {
         if (GetMode() == EOperatingMode::InMemory) {
             bool isNew = InMemoryProcessingState.TasteIt();
-            if (InMemoryProcessingState.CheckIsOutOfMemory()) {
+            if (InMemoryProcessingState.IsOutOfMemory) {
                 StateWantsToSpill = true;
             }
             Throat = InMemoryProcessingState.Throat;
@@ -894,10 +895,6 @@ private:
         Mode = mode;
     }
 
-    bool HasMemoryForProcessing() const {
-        return !TlsAllocState->IsMemoryYellowZoneEnabled();
-    }
-
     bool IsSwitchToSpillingModeCondition() const {
         return !HasMemoryForProcessing() || TlsAllocState->GetMaximumLimitValueReached();
     }
@@ -1058,7 +1055,7 @@ public:
 
                     Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
                     Nodes.ProcessItem(ctx, ptr->TasteIt() ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
-                } while (!ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage - ptr->StoredDataSize) && !ptr->IsOutOfMemory && !TlsAllocState->IsMemoryYellowZoneEnabled());
+                } while (!ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage - ptr->StoredDataSize) && !ptr->IsOutOfMemory);
 
                 ptr->PushStat(ctx.Stats);
             }

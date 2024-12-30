@@ -325,7 +325,7 @@ TEST_W(TSchedulerTest, InvokerAffinity1)
 
     SwitchTo(invoker);
 
-    VERIFY_INVOKER_AFFINITY(invoker);
+    YT_ASSERT_INVOKER_AFFINITY(invoker);
 }
 
 TEST_W(TSchedulerTest, InvokerAffinity2)
@@ -335,8 +335,8 @@ TEST_W(TSchedulerTest, InvokerAffinity2)
 
     SwitchTo(invoker);
 
-    VERIFY_INVOKER_AFFINITY(invoker);
-    VERIFY_INVOKER_AFFINITY(Queue1->GetInvoker());
+    YT_ASSERT_INVOKER_AFFINITY(invoker);
+    YT_ASSERT_INVOKER_AFFINITY(Queue1->GetInvoker());
 }
 
 using TSchedulerDeathTest = TSchedulerTest;
@@ -351,18 +351,18 @@ TEST_W(TSchedulerDeathTest, SerializedInvokerAffinity)
 
     SwitchTo(actionQueueInvoker);
 
-    VERIFY_INVOKER_AFFINITY(actionQueueInvoker);
-    VERIFY_SERIALIZED_INVOKER_AFFINITY(actionQueueInvoker);
+    YT_ASSERT_INVOKER_AFFINITY(actionQueueInvoker);
+    YT_ASSERT_SERIALIZED_INVOKER_AFFINITY(actionQueueInvoker);
 
     SwitchTo(serializedThreadPoolInvoker);
 
-    VERIFY_INVOKER_AFFINITY(serializedThreadPoolInvoker);
-    VERIFY_SERIALIZED_INVOKER_AFFINITY(serializedThreadPoolInvoker);
+    YT_ASSERT_INVOKER_AFFINITY(serializedThreadPoolInvoker);
+    YT_ASSERT_SERIALIZED_INVOKER_AFFINITY(serializedThreadPoolInvoker);
 
     SwitchTo(threadPoolInvoker);
 
-    VERIFY_INVOKER_AFFINITY(threadPoolInvoker);
-    ASSERT_DEATH({ VERIFY_SERIALIZED_INVOKER_AFFINITY(threadPoolInvoker); }, ".*");
+    YT_ASSERT_INVOKER_AFFINITY(threadPoolInvoker);
+    ASSERT_DEATH({ YT_ASSERT_SERIALIZED_INVOKER_AFFINITY(threadPoolInvoker); }, ".*");
 }
 
 #endif

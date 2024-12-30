@@ -528,14 +528,14 @@ private:
 
     void SetResultError(const NYT::TError& error) override
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
         TFutureState<void>::SetResultError(error);
         Result_.emplace(error);
     }
 
     bool DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<NThreading::TSpinLock>* guard) override
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
         return
             ResultHandlers_.TryRemove(cookie, guard) ||
             TFutureState<void>::DoUnsubscribe(cookie, guard);

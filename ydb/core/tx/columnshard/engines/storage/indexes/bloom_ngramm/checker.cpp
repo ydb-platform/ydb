@@ -21,12 +21,15 @@ bool TFilterChecker::DoCheckImpl(const std::vector<TString>& blobs) const {
     for (auto&& blob : blobs) {
         TFixStringBitsStorage bits(blob);
         bool found = true;
+        TStringBuilder sb;
         for (auto&& i : HashValues) {
+            sb << i % bits.GetSizeBits() << ",";
             if (!bits.Get(i % bits.GetSizeBits())) {
                 found = false;
                 break;
             }
         }
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("size", bits.GetSizeBits())("found", found)("hashes", sb)("details", bits.DebugString());
         if (found) {
             //            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("size", bArray.length())("data", bArray.ToString())("index_id", GetIndexId());
             return true;

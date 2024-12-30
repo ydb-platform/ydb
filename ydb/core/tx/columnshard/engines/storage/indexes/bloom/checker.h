@@ -38,12 +38,32 @@ public:
         return (bytesCount + ((bitsCount % 8) ? 1 : 0)) * 8;
     }
 
+    TString DebugString() const {
+        TStringBuilder sb;
+        ui32 count1 = 0;
+        ui32 count0 = 0;
+        for (ui32 i = 0; i < GetSizeBits(); ++i) {
+            if (Get(i)) {
+//                sb << 1 << " ";
+                ++count1;
+            } else {
+//                sb << 0 << " ";
+                ++count0;
+            }
+//            if (i % 20 == 0) {
+//                sb << i << " ";
+//            }
+        }
+        sb << GetSizeBits() << "=" << count0 << "[0]+" << count1 << "[1]";
+        return sb;
+    }
+
     template <class TBitsVector>
     TFixStringBitsStorage(const TBitsVector& bitsVector)
         : TFixStringBitsStorage(TSizeDetector<TBitsVector>::GetSize(bitsVector)) {
         ui32 byteIdx = 0;
         ui8 byteCurrent = 0;
-        ui8 shiftCurrent = 0;
+        ui8 shiftCurrent = 1;
         for (ui32 i = 0; i < TSizeDetector<TBitsVector>::GetSize(bitsVector); ++i) {
             if (i && i % 8 == 0) {
                 Data[byteIdx] = (char)byteCurrent;

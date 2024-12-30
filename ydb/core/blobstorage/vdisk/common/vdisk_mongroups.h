@@ -742,6 +742,8 @@ public:                                                                         
                         return GetDiscover();
                     case NKikimrBlobStorage::LowRead:
                         return GetLow();
+                    default:
+                        return Undefined();
                 }
             }
             ::NMonitoring::TDeprecatedCounter &GetCounter(const std::optional<NKikimrBlobStorage::EPutHandleClass>& handleClass = std::nullopt) {
@@ -755,6 +757,8 @@ public:                                                                         
                         return PutAsyncBlob();
                     case NKikimrBlobStorage::UserData:
                         return PutUserData();
+                    default:
+                        return Undefined();
                 }
             }
         };

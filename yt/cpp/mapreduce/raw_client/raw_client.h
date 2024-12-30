@@ -194,11 +194,6 @@ public:
         const TJobId& jobId,
         const TGetJobFailContextOptions& options = {}) override;
 
-    TString GetJobStderrWithRetries(
-        const TOperationId& operationId,
-        const TJobId& jobId,
-        const TGetJobStderrOptions& options = {}) override;
-
     IFileReaderPtr GetJobStderr(
         const TOperationId& operationId,
         const TJobId& jobId,

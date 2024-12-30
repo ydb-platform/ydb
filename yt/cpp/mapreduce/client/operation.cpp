@@ -358,7 +358,7 @@ TString GetJobStderrWithRetriesAndIgnoreErrors(
         jobStderr = RequestWithRetry<TString>(
             retryPolicy,
             [&rawClient, &operationId, &jobId, &options] (TMutationId /*mutationId*/) {
-                return rawClient->GetJobStderrWithRetries(operationId, jobId, options);
+                return rawClient->GetJobStderr(operationId, jobId, options)->ReadAll();
             });
     } catch (const TErrorResponse& e) {
         YT_LOG_ERROR("Cannot get job stderr (OperationId: %v, JobId: %v, Error: %v)",

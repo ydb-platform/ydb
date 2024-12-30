@@ -9,7 +9,7 @@
 namespace NKikimr::NGRpcService {
 
 class TEtcdGRpcService
-        : public NYdbGrpc::TGrpcServiceBase<Ydb::Etcd::V1::KV>
+        : public NYdbGrpc::TGrpcServiceBase<etcdserverpb::KV>
 {
 public:
     TEtcdGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,

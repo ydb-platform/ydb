@@ -18,16 +18,16 @@ using namespace NActors;
 using namespace Ydb;
 
 using TEvRangeKVRequest =
-    TGrpcRequestOperationCall<Ydb::Etcd::RangeRequest,
-        Ydb::Etcd::RangeResponse>;
+    TGrpcRequestOperationCall<etcdserverpb::RangeRequest,
+        etcdserverpb::RangeResponse>;
 
 using TEvPutKVRequest =
-    TGrpcRequestOperationCall<Ydb::Etcd::PutRequest,
-        Ydb::Etcd::PutResponse>;
+    TGrpcRequestOperationCall<etcdserverpb::PutRequest,
+        etcdserverpb::PutResponse>;
 
 using TEvDeleteRangeKVRequest =
-    TGrpcRequestOperationCall<Ydb::Etcd::DeleteRangeRequest,
-        Ydb::Etcd::DeleteRangeResponse>;
+    TGrpcRequestOperationCall<etcdserverpb::DeleteRangeRequest,
+        etcdserverpb::DeleteRangeResponse>;
 
 } // namespace NKikimr::NGRpcService
 
@@ -49,7 +49,7 @@ using namespace Ydb;
 
 namespace {
 
-void CopyProtobuf(const Ydb::Etcd::RangeRequest &from, NKikimrKeyValue::ReadRangeRequest *to) {
+void CopyProtobuf(const etcdserverpb::RangeRequest &from, NKikimrKeyValue::ReadRangeRequest *to) {
     to->mutable_range()->set_from_key_inclusive(from.key());
     to->mutable_range()->set_to_key_exclusive(from.range_end());
     to->set_include_data(!(from.keys_only() || from.count_only()));
@@ -60,30 +60,30 @@ void CopyProtobuf(const NKikimrKeyValue::ReadRangeResult::KeyValuePair &from, mv
     to->set_value(from.value());
 }
 
-void CopyProtobuf(const NKikimrKeyValue::ReadRangeResult &from, Ydb::Etcd::RangeResponse *to) {
+void CopyProtobuf(const NKikimrKeyValue::ReadRangeResult &from, etcdserverpb::RangeResponse *to) {
     to->set_count(from.pair().size());
     for (const auto &pair : from.pair()) {
         CopyProtobuf(pair, to->add_kvs());
     }
 }
 
-void CopyProtobuf(const Ydb::Etcd::PutRequest &from, NKikimrKeyValue::ExecuteTransactionRequest *to) {
+void CopyProtobuf(const etcdserverpb::PutRequest &from, NKikimrKeyValue::ExecuteTransactionRequest *to) {
     const auto cmd = to->add_commands()->mutable_write();
     cmd->set_key(from.key());
     cmd->set_value(from.value());
 }
 
-void CopyProtobuf(const NKikimrKeyValue::ExecuteTransactionResult &from, Ydb::Etcd::PutResponse *to) {
+void CopyProtobuf(const NKikimrKeyValue::ExecuteTransactionResult &from, etcdserverpb::PutResponse *to) {
 
 }
 
-void CopyProtobuf(const Ydb::Etcd::DeleteRangeRequest &from, NKikimrKeyValue::ExecuteTransactionRequest *to) {
+void CopyProtobuf(const etcdserverpb::DeleteRangeRequest &from, NKikimrKeyValue::ExecuteTransactionRequest *to) {
     const auto cmd = to->add_commands()->mutable_delete_range();
     cmd->mutable_range()->set_from_key_inclusive(from.key());
     cmd->mutable_range()->set_to_key_exclusive(from.range_end());
 }
 
-void CopyProtobuf(const NKikimrKeyValue::ExecuteTransactionResult &from, Ydb::Etcd::DeleteRangeResponse *to) {
+void CopyProtobuf(const NKikimrKeyValue::ExecuteTransactionResult &from, etcdserverpb::DeleteRangeResponse *to) {
 
 }
 

@@ -515,8 +515,8 @@ void TEtcdGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
 #define SETUP_METHOD_RAW(methodName, method, rlMode, requestType, serviceType, serviceName, counterName)    \
     MakeIntrusive<NGRpcService::TGRpcRequest<                                                              \
-        Ydb::serviceType::Y_CAT(methodName, Request),                                                       \
-        Ydb::serviceType::Y_CAT(methodName, Response),                                                       \
+        etcdserverpb::Y_CAT(methodName, Request),                                                       \
+        etcdserverpb::Y_CAT(methodName, Response),                                                       \
         T##serviceType##GRpcService>>                                                                         \
     (                                                                                                          \
         this,                                                                                                   \
@@ -525,14 +525,14 @@ void TEtcdGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                                      \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                                \
             ActorSystem->Send(GRpcRequestProxyId, new TEtcdRequestOperationCall<                              \
-                Ydb::serviceType::Y_CAT(methodName, Request),                                                \
-                Ydb::serviceType::Y_CAT(methodName, Response)>(reqCtx, &method,                             \
+                etcdserverpb::Y_CAT(methodName, Request),                                                \
+                etcdserverpb::Y_CAT(methodName, Response)>(reqCtx, &method,                             \
                     TRequestAuxSettings {                                                                    \
                         .RlMode = TRateLimiterMode::rlMode,                                                 \
                         .RequestType = NJaegerTracing::ERequestType::requestType,                         \
                     }));                                                                                      \
         },                                                                                                      \
-        &Ydb::serviceType::V1::serviceName::AsyncService::Y_CAT(Request, methodName),          \
+        &etcdserverpb::serviceName::AsyncService::Y_CAT(Request, methodName),          \
         Y_STRINGIZE(serviceType) "/" Y_STRINGIZE(methodName),                                               \
         logger,                                                                                                 \
         getCounterBlock(Y_STRINGIZE(counterName), Y_STRINGIZE(methodName))                                  \

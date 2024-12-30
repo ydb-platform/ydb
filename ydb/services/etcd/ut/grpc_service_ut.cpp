@@ -84,6 +84,7 @@ public:
         ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
         ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TEtcdGRpcService>("etcd");
         ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TKeyValueGRpcService>("keyvalue");
+        ServerSettings->Verbose = true;
 
         Server_.Reset(new Tests::TServer(*ServerSettings));
         Tenants_.Reset(new Tests::TTenants(Server_));
@@ -284,7 +285,7 @@ Y_UNIT_TEST_SUITE(EtcdGRPCService) {
         }
     }
 
-    void MakeSimpleTest(const TString &tablePath, std::function<void(const std::unique_ptr<Ydb::Etcd::V1::KV::Stub>&)> etcd)
+    void MakeSimpleTest(const TString &tablePath, std::function<void(const std::unique_ptr<etcdserverpb::KV::Stub>&)> etcd)
     {
         TKikimrWithGrpcAndRootSchema server;
         const auto grpc = server.GetPort();
@@ -297,26 +298,26 @@ Y_UNIT_TEST_SUITE(EtcdGRPCService) {
         UNIT_ASSERT_VALUES_EQUAL(listDirectoryResult.children(0).name(), pr.back());
 
         WaitTableCreation(server, tablePath);
-        const std::unique_ptr<Ydb::Etcd::V1::KV::Stub> stub = Ydb::Etcd::V1::KV::NewStub(channel);
+        const std::unique_ptr<etcdserverpb::KV::Stub> stub = etcdserverpb::KV::NewStub(channel);
         etcd(stub);
     }
 
-    void Write(const TString &key, const TString &value, const std::unique_ptr<Ydb::Etcd::V1::KV::Stub> &stub)
+    void Write(const TString &key, const TString &value, const std::unique_ptr<etcdserverpb::KV::Stub> &stub)
     {
         grpc::ClientContext writeCtx;
         AdjustCtxForDB(writeCtx);
 
-        Ydb::Etcd::PutRequest putRequest;
+        etcdserverpb::PutRequest putRequest;
         putRequest.set_key(key);
         putRequest.set_value(value);
 
-        Ydb::Etcd::PutResponse putResponse;
+        etcdserverpb::PutResponse putResponse;
         stub->Put(&writeCtx, putRequest, &putResponse);
     }
 
     Y_UNIT_TEST(SimpleWriteReadDelete) {
         TString tablePath = "/Root/mydb/kvtable";
-        MakeSimpleTest(tablePath, [](const std::unique_ptr<Ydb::Etcd::V1::KV::Stub> &etcd) {
+        MakeSimpleTest(tablePath, [](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
             Write("key0", "value0", etcd);
             Write("key1", "value1", etcd);
             Write("key2", "value2", etcd);
@@ -330,11 +331,11 @@ Y_UNIT_TEST_SUITE(EtcdGRPCService) {
                 grpc::ClientContext readRangeCtx;
                 AdjustCtxForDB(readRangeCtx);
 
-                Ydb::Etcd::RangeRequest rangeRequest;
+                etcdserverpb::RangeRequest rangeRequest;
                 rangeRequest.set_key("key1");
                 rangeRequest.set_range_end("key5");
 
-                Ydb::Etcd::RangeResponse rangeResponse;
+                etcdserverpb::RangeResponse rangeResponse;
                 etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
 
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 4U);
@@ -351,22 +352,22 @@ Y_UNIT_TEST_SUITE(EtcdGRPCService) {
                 grpc::ClientContext delCtx;
                 AdjustCtxForDB(delCtx);
 
-                Ydb::Etcd::DeleteRangeRequest deleteRangeRequest;
+                etcdserverpb::DeleteRangeRequest deleteRangeRequest;
                 deleteRangeRequest.set_key("key2");
                 deleteRangeRequest.set_range_end("key4");
-                Ydb::Etcd::DeleteRangeResponse deleteRangeResponse;
+                etcdserverpb::DeleteRangeResponse deleteRangeResponse;
                 etcd->DeleteRange(&delCtx, deleteRangeRequest, &deleteRangeResponse);
             }
             {
                 grpc::ClientContext readRangeCtx;
                 AdjustCtxForDB(readRangeCtx);
 
-                Ydb::Etcd::RangeRequest rangeRequest;
+                etcdserverpb::RangeRequest rangeRequest;
                 rangeRequest.set_key("key1");
                 rangeRequest.set_range_end("key5");
                 rangeRequest.set_keys_only(true);
 
-                Ydb::Etcd::RangeResponse rangeResponse;
+                etcdserverpb::RangeResponse rangeResponse;
                 etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
 
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 2U);

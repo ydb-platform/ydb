@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package Ydb.Etcd.V1;
+package etcdserverpb;
 
 import "ydb/public/api/protos/etcd/rpc.proto";
 

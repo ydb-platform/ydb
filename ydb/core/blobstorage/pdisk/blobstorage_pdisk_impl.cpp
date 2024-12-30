@@ -1647,10 +1647,11 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
     // Check disk size
     {
         ui32 diskSizeChunks = format.DiskSizeChunks();
-        Y_VERIFY_S(diskSizeChunks > format.SystemChunkCount + 2,
-            "Incorrect disk parameters! Total chunks# " << diskSizeChunks
-            << ", System chunks needed# " << format.SystemChunkCount << ", cant run with < 3 free chunks!"
-            << " Debug format# " << format.ToString());
+        if (diskSizeChunks <= (format.SystemChunkCount + 2)) {
+            ythrow yexception() << "Incorrect disk parameters! Total chunks# " << diskSizeChunks
+                << ", System chunks needed# " << format.SystemChunkCount << ", cant run with < 3 free chunks!"
+                << " Debug format# " << format.ToString();
+        }
 
         ChunkState = TVector<TChunkState>(diskSizeChunks);
         for (ui32 i = 0; i < format.SystemChunkCount; ++i) {

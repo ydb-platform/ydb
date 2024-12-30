@@ -521,7 +521,7 @@ class TLocalTableWriter
             PendingRecords.erase(record);
         }
 
-        if (PendingRecords.empty()) {
+        if (PendingRecords.empty() && PendingTxId.empty()) {
             Send(Worker, new TEvWorker::TEvPoll());
         }
     }

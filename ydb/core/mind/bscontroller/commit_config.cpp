@@ -40,7 +40,7 @@ namespace NKikimr::NBsController {
                 Y_VERIFY_DEBUG_S(false, "Storage config changed");
             }
             Self->StorageConfig = StorageConfig;
-            Self->ApplyStorageConfig();
+            Self->ApplyStorageConfig(true);
             Self->YamlConfig = Config;
             Self->ConfigVersion = ConfigVersion;
             Result.Status = TConsoleInteraction::TCommitConfigResult::EStatus::Success;

@@ -35,6 +35,8 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ThrottlingMaxSstCount(250, 1, 1000)
     , ThrottlingMinInplacedSize(20ull << 30, 1 << 20, 500ull < 30)
     , ThrottlingMaxInplacedSize(60ull << 30, 1 << 20, 500ull < 30)
+    , ThrottlingMinOccupancyPerMille(900, 1, 1000)
+    , ThrottlingMaxOccupancyPerMille(950, 1, 1000)
     , MaxCommonLogChunksHDD(200, 1, 1'000'000)
     , MaxCommonLogChunksSSD(200, 1, 1'000'000)
     , CostMetricsParametersByMedia({
@@ -52,7 +54,9 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , MaxNumOfSlowDisksHDD(DefaultMaxNumOfSlowDisks, 1, 2)
     , MaxNumOfSlowDisksSSD(DefaultMaxNumOfSlowDisks, 1, 2)
     , LongRequestThresholdMs(50'000, 1, 1'000'000)
-    , LongRequestReportingDelayMs(60'000, 1, 1'000'000)
+    , ReportingControllerBucketSize(1, 1, 100'000)
+    , ReportingControllerLeakDurationMs(60'000, 1, 3'600'000)
+    , ReportingControllerLeakRate(1, 1, 100'000)
 {
     Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
     AvailDomainId = 1;
@@ -287,7 +291,7 @@ void TNodeWarden::StopInvalidGroupProxy() {
 
 void TNodeWarden::StartRequestReportingThrottler() {
     STLOG(PRI_DEBUG, BS_NODE, NW62, "StartRequestReportingThrottler");
-    Register(CreateRequestReportingThrottler(LongRequestReportingDelayMs));
+    Register(CreateRequestReportingThrottler(ReportingControllerBucketSize, ReportingControllerLeakDurationMs, ReportingControllerLeakRate));
 }
 
 void TNodeWarden::PassAway() {
@@ -347,6 +351,8 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(ThrottlingMaxSstCount, "VDiskControls.ThrottlingMaxSstCount");
         icb->RegisterSharedControl(ThrottlingMinInplacedSize, "VDiskControls.ThrottlingMinInplacedSize");
         icb->RegisterSharedControl(ThrottlingMaxInplacedSize, "VDiskControls.ThrottlingMaxInplacedSize");
+        icb->RegisterSharedControl(ThrottlingMinOccupancyPerMille, "VDiskControls.ThrottlingMinOccupancyPerMille");
+        icb->RegisterSharedControl(ThrottlingMaxOccupancyPerMille, "VDiskControls.ThrottlingMaxOccupancyPerMille");
 
         icb->RegisterSharedControl(MaxCommonLogChunksHDD, "PDiskControls.MaxCommonLogChunksHDD");
         icb->RegisterSharedControl(MaxCommonLogChunksSSD, "PDiskControls.MaxCommonLogChunksSSD");
@@ -377,7 +383,9 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(MaxNumOfSlowDisksSSD, "DSProxyControls.MaxNumOfSlowDisksSSD");
 
         icb->RegisterSharedControl(LongRequestThresholdMs, "DSProxyControls.LongRequestThresholdMs");
-        icb->RegisterSharedControl(LongRequestReportingDelayMs, "DSProxyControls.LongRequestReportingDelayMs");
+        icb->RegisterSharedControl(ReportingControllerBucketSize, "DSProxyControls.RequestReportingSettings.BucketSize");
+        icb->RegisterSharedControl(ReportingControllerLeakDurationMs, "DSProxyControls.RequestReportingSettings.LeakDurationMs");
+        icb->RegisterSharedControl(ReportingControllerLeakRate, "DSProxyControls.RequestReportingSettings.LeakRate");
     }
 
     // start replication broker

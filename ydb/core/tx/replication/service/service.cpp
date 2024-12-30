@@ -51,10 +51,30 @@ public:
         return Generation;
     }
 
-    void Update(const TActorId& actorId, ui64 generation) {
+    void Handle(IActorOps* ops, TEvService::TEvHandshake::TPtr& ev) {
+        const ui64 generation = ev->Get()->Record.GetController().GetGeneration();
         Y_ABORT_UNLESS(Generation <= generation);
-        ActorId = actorId;
+
+        ActorId = ev->Sender;
         Generation = generation;
+
+        auto status = MakeHolder<TEvService::TEvStatus>();
+        auto& record = status->Record;
+
+        for (const auto& [id, _] : Workers) {
+            id.Serialize(*record.AddWorkers());
+        }
+
+        ops->Send(ActorId, status.Release());
+
+        TVector<TRowVersion> versionsWithoutTxId;
+        for (const auto& [version, _] : PendingTxId) {
+            versionsWithoutTxId.push_back(version);
+        }
+
+        if (versionsWithoutTxId) {
+            ops->Send(ActorId, new TEvService::TEvGetTxId(versionsWithoutTxId));
+        }
     }
 
     bool HasWorker(const TWorkerId& id) const {
@@ -114,17 +134,6 @@ public:
     template <typename... Args>
     void SendWorkerStatus(IActorOps* ops, const TWorkerId& id, Args&&... args) {
         ops->Send(ActorId, new TEvService::TEvWorkerStatus(id, std::forward<Args>(args)...));
-    }
-
-    void SendStatus(IActorOps* ops) const {
-        auto ev = MakeHolder<TEvService::TEvStatus>();
-        auto& record = ev->Record;
-
-        for (const auto& [id, _] : Workers) {
-            id.Serialize(*record.AddWorkers());
-        }
-
-        ops->Send(ActorId, ev.Release());
     }
 
     void SendWorkerDataEnd(IActorOps* ops, const TWorkerId& id, ui64 partitionId,
@@ -350,8 +359,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             return;
         }
 
-        session.Update(ev->Sender, controller.GetGeneration());
-        session.SendStatus(this);
+        session.Handle(this, ev);
     }
 
     template <typename... Args>

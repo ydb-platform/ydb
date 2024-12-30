@@ -326,6 +326,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void ActivateTiering(const ui64 pathId, const THashSet<TString>& usedTiers);
     void OnTieringModified(const std::optional<ui64> pathId = {});
 
+    std::shared_ptr<TAtomicCounter> TabletActivityImpl = std::make_shared<TAtomicCounter>(0);
+
 public:
     ui64 BuildEphemeralTxId() {
         static TAtomicCounter Counter = 0;
@@ -601,6 +603,10 @@ private:
 
 public:
     ui64 TabletTxCounter = 0;
+
+    std::shared_ptr<const TAtomicCounter> GetTabletActivity() const {
+        return TabletActivityImpl;
+    }
 
     const TTablesManager& GetTablesManager() const {
         return TablesManager;

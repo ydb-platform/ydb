@@ -146,6 +146,8 @@ DECLARE_REFCOUNTED_STRUCT(IRowBatchWriter)
 DECLARE_REFCOUNTED_STRUCT(ITableReader)
 DECLARE_REFCOUNTED_STRUCT(ITableWriter)
 
+DECLARE_REFCOUNTED_STRUCT(ITableFragmentWriter);
+
 DECLARE_REFCOUNTED_STRUCT(IFileReader)
 DECLARE_REFCOUNTED_STRUCT(IFileWriter)
 
@@ -186,10 +188,6 @@ DECLARE_REFCOUNTED_STRUCT(TTableBackupManifest)
 DECLARE_REFCOUNTED_STRUCT(TBackupManifest)
 
 DECLARE_REFCOUNTED_STRUCT(TListOperationsAccessFilter)
-
-DECLARE_REFCOUNTED_CLASS(TDistributedWriteSession)
-DECLARE_REFCOUNTED_CLASS(TFragmentWriteCookie)
-struct IDistributedTableClientBase;
 
 DECLARE_REFCOUNTED_STRUCT(TShuffleHandle)
 
@@ -237,6 +235,13 @@ constexpr int TypicalMaintenanceTargetCount = 1;
 
 using TMaintenanceIdPerTarget = TCompactFlatMap<std::string, TMaintenanceId, TypicalMaintenanceTargetCount>;
 using TMaintenanceCountsPerTarget = TCompactFlatMap<std::string, TMaintenanceCounts, TypicalMaintenanceTargetCount>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+using NTableClient::TSignedDistributedWriteSessionPtr;
+using NTableClient::TSignedWriteFragmentCookiePtr;
+using NTableClient::TSignedWriteFragmentResultPtr;
+struct TWriteFragmentCookie;
 
 ////////////////////////////////////////////////////////////////////////////////
 

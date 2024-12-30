@@ -54,8 +54,8 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConsoleInteraction::MakeGetBlock() {
         auto ev = MakeHolder<TEvBlobStorage::TEvGetBlock>(Self.TabletID(), TInstant::Max());
-        auto proxyId = MakeBlobStorageProxyID(Self.Info()->GroupFor(0, Self.Executor()->Generation()));
-        TActivationContext::Schedule(TDuration::MilliSeconds(GetBlockBackoff.NextBackoffMs()), new IEventHandle(proxyId, Self.SelfId(), ev.Release()));
+        auto bsProxyEv = CreateEventForBSProxy(Self.SelfId(), Self.Info()->GroupFor(0, Self.Executor()->Generation()), ev.Release(), 0);
+        TActivationContext::Schedule(TDuration::MilliSeconds(GetBlockBackoff.NextBackoffMs()), bsProxyEv);
     }
 
     void TBlobStorageController::TConsoleInteraction::MakeRetrySession() {
@@ -238,6 +238,7 @@ namespace NKikimr::NBsController {
             case NKikimrProto::OK:
                 if (generation <= blockedGeneration) {
                     Self.PassAway();
+                    return;
                 }
                 if (generation == blockedGeneration + 1 && NeedRetrySession) {
                     MakeRetrySession();

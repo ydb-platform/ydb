@@ -4,6 +4,8 @@
 
 #include <library/cpp/yt/coding/varint.h>
 
+#include <library/cpp/yt/error/text_yson.h>
+
 #include <util/charset/utf8.h>
 
 #include <util/stream/buffer.h>
@@ -253,7 +255,7 @@ void TYsonWriter::OnDoubleScalar(double value)
         Stream_->Write(&value, sizeof(double));
     } else {
         char buf[256];
-        auto str = TStringBuf(buf, NDetail::FloatToStringWithNanInf(value, buf, sizeof(buf)));
+        auto str = TStringBuf(buf, NYT::NDetail::FloatToStringWithNanInf(value, buf, sizeof(buf)));
         Stream_->Write(str);
         if (str.find('.') == TString::npos && str.find('e') == TString::npos && std::isfinite(value)) {
             Stream_->Write(".");

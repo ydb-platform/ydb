@@ -470,12 +470,6 @@ void TGRpcService::SetupIncomingRequests() {
         RegisterRequestActor(CreateMessageBusCmsRequest(msg));
     })
 
-    // SQS request
-    ADD_REQUEST(SqsRequest, TSqsRequest, TSqsResponse, {
-        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_SQS_REQUEST));
-        RegisterRequestActor(CreateMessageBusSqsRequest(msg));
-    })
-
     // Console request
     ADD_REQUEST(ConsoleRequest, TConsoleRequest, TConsoleResponse, {
         NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST));

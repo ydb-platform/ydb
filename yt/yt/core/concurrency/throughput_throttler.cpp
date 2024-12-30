@@ -448,7 +448,8 @@ private:
         YT_VERIFY(limit >= 0);
 
         // Reconfigure clears the update cookie, so infinity is fine.
-        auto delay = limit ? TDuration::MilliSeconds(Max<i64>(0, -Available_ * 1000 / limit)) : TDuration::Max();
+        // NB: Cap by 1 ms from below to somewhat limit the wakeup rate.
+        auto delay = limit ? TDuration::MilliSeconds(Max<i64>(1, -Available_ * 1000 / limit)) : TDuration::Max();
 
         UpdateCookie_ = TDelayedExecutor::Submit(
             BIND_NO_PROPAGATE(&TReconfigurableThroughputThrottler::Update, MakeWeak(this)),

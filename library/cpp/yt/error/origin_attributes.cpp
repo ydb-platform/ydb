@@ -128,22 +128,21 @@ TOriginAttributes ExtractFromDictionaryDefault(TErrorAttributes* attributes)
         return result;
     }
 
-    // TODO(arkady-e1ppa): Try using std::string here.
-    static const TString HostKey("host");
-    result.HostHolder = TSharedRef::FromString(attributes->GetAndRemove(HostKey, TString()));
+    static const std::string HostKey("host");
+    result.HostHolder = TSharedRef::FromString(attributes->GetAndRemove(HostKey, std::string()));
     result.Host = result.HostHolder.empty() ? TStringBuf() : TStringBuf(result.HostHolder.Begin(), result.HostHolder.End());
 
-    static const TString DatetimeKey("datetime");
+    static const std::string DatetimeKey("datetime");
     result.Datetime = attributes->GetAndRemove(DatetimeKey, TInstant());
 
-    static const TString PidKey("pid");
+    static const std::string PidKey("pid");
     result.Pid = attributes->GetAndRemove(PidKey, TProcessId{});
 
-    static const TString TidKey("tid");
+    static const std::string TidKey("tid");
     result.Tid = attributes->GetAndRemove(TidKey, NThreading::InvalidThreadId);
 
-    static const TString ThreadNameKey("thread");
-    result.ThreadName = attributes->GetAndRemove<TString>(ThreadNameKey, TString());
+    static const std::string ThreadNameKey("thread");
+    result.ThreadName = TString(attributes->GetAndRemove(ThreadNameKey, std::string()));
 
     return result;
 }

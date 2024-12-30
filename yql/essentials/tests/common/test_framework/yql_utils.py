@@ -57,7 +57,7 @@ def do_custom_error_check(res, sql_query):
         err_string = custom_error.group(1).strip()
     assert err_string, 'Expected custom error check in test.\nTest error: %s' % res.std_err
     log('Custom error: ' + err_string)
-    assert err_string in res.std_err
+    assert err_string in res.std_err, '"' + err_string + '" is not found'
 
 
 def get_gateway_cfg_suffix():
@@ -288,9 +288,11 @@ def normalize_yson(y):
         return [normalize_yson(i) for i in y]
     if isinstance(y, dict):
         return {normalize_yson(k): normalize_yson(v) for k, v in six.iteritems(y)}
-    if not isinstance(y, bytes):
-        return str(y).encode('ascii')
-    return y
+    if isinstance(y, bytes):
+        return y
+    if isinstance(y, six.text_type):
+        return y.encode('utf-8')
+    return str(y).encode('ascii')
 
 
 volatile_attrs = {'DataSize', 'ModifyTime', 'Id', 'Revision'}
@@ -962,12 +964,13 @@ def normalize_result(res, sort):
     res = replace_vals(res)
     for r in res:
         for data in r[b'Write']:
-            if sort and b'Data' in data:
+            is_list = (b'Type' in data) and (data[b'Type'][0] == b'ListType')
+            if is_list and sort and b'Data' in data:
                 data[b'Data'] = sorted(data[b'Data'])
             if b'Ref' in data:
                 data[b'Ref'] = []
                 data[b'Truncated'] = True
-            if b'Data' in data and len(data[b'Data']) == 0:
+            if is_list and b'Data' in data and len(data[b'Data']) == 0:
                 del data[b'Data']
     return res
 
@@ -1005,7 +1008,7 @@ def stable_result_file(res):
     for r in res:
         for data in r[b'Write']:
             if b'Unordered' in r and b'Data' in data:
-                data[b'Data'] = sorted(data[b'Data'])
+                data[b'Data'] = sorted(data[b'Data'], key=cyson.dumps)
     with open(path, 'wb') as f:
         writer = cyson.Writer(stream=cyson.OutputStream.from_file(f), format='pretty', mode='node')
         writer.begin_stream()
@@ -1027,7 +1030,7 @@ def stable_table_file(table):
     if not is_sorted:
         with open(path, 'rb') as f:
             r = cyson.Reader(cyson.InputStream.from_file(f), mode='list_fragment')
-            lst = sorted(list(r.list_fragments()))
+            lst = sorted(list(r.list_fragments()), key=cyson.dumps)
         with open(path, 'wb') as f:
             writer = cyson.Writer(stream=cyson.OutputStream.from_file(f), format='pretty', mode='list_fragment')
             writer.begin_stream()

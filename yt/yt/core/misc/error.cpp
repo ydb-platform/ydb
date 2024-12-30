@@ -359,7 +359,7 @@ void Serialize(
                 }
                 for (const auto& [key, value] : error.Attributes().ListPairs()) {
                     fluent
-                        .Item(key).Value(value);
+                        .Item(key).Value(NYson::TYsonString(value));
                 }
             })
             .DoIf(!error.InnerErrors().empty(), [&] (auto fluent) {
@@ -398,8 +398,10 @@ void Deserialize(TError& error, const NYTree::INodePtr& node)
     auto children = mapNode->GetChildOrThrow(AttributesKey)->AsMap()->GetChildren();
 
     for (const auto& [key, value] : children) {
-        // TODO(babenko): migrate to std::string
-        error <<= TErrorAttribute(TString(key), ConvertToYsonString(value));
+        // NB(arkady-e1ppa): Serialization may add some attributes in normal yson
+        // format (in legacy versions) thus we have to reconvert them into the
+        // text ones in order to make sure that everything is in the text format.
+        error <<= TErrorAttribute(key, ConvertToYsonString(value));
     }
 
     error.UpdateOriginAttributes();
@@ -443,7 +445,7 @@ void ToProto(NYT::NProto::TError* protoError, const TError& error)
         for (const auto& [key, value] : pairs) {
             auto* protoAttribute = protoAttributes->add_attributes();
             protoAttribute->set_key(key);
-            protoAttribute->set_value(value.ToString());
+            protoAttribute->set_value(value);
         }
     }
 
@@ -503,6 +505,8 @@ void FromProto(TError* error, const NYT::NProto::TError& protoError)
     error->SetMessage(FromProto<TString>(protoError.message()));
     if (protoError.has_attributes()) {
         for (const auto& protoAttribute : protoError.attributes().attributes()) {
+            // NB(arkady-e1ppa): Again for compatibility reasons we have to reconvert stuff
+            // here as well.
             auto key = FromProto<TString>(protoAttribute.key());
             auto value = FromProto<TString>(protoAttribute.value());
             (*error) <<= TErrorAttribute(key, TYsonString(value));
@@ -607,8 +611,10 @@ void TErrorSerializer::Save(TStreamSaveContext& context, const TError& error)
             return lhs.first < rhs.first;
         });
         for (const auto& [key, value] : attributePairs) {
-            Save(context, key);
-            Save(context, value);
+            // NB(arkady-e1ppa): For the sake of compatibility we keep the old
+            // serialization format.
+            Save(context, TString(key));
+            Save(context, NYson::TYsonString(value));
         }
     } else {
         Save(context, false);

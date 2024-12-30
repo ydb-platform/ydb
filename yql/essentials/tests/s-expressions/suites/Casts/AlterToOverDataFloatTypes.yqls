@@ -4,7 +4,6 @@
 (import alterto_module '"alterto.yql")
 
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 # Float -> Double (always success)
 (let world (Apply (bind alterto_module 'doAlterTo) world (Float '"1.0") (DataType 'Double) (Double '"0.0")))

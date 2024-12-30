@@ -1,5 +1,0 @@
-(
-#comment
-(let world (Commit! world (DataSink 'yt 'plato)))
-(return world)
-)

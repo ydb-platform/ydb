@@ -1172,7 +1172,7 @@ void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
                 currentFiber,
                 canceler = std::move(canceler)
             ] (const TError&) mutable {
-                YT_LOG_DEBUG("Waking up fiber (TargetFiberId: %x)",
+                YT_LOG_TRACE("Waking up fiber (TargetFiberId: %x)",
                     canceler->GetFiberId());
 
                 invoker->Invoke(

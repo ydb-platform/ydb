@@ -50,17 +50,28 @@ class StatementDefinition:
         StreamQuery = 'statement stream query'
         ImportTableData = 'statement import table data'
 
-    def __init__(self, suite: str, at_line: int, type: Type, text: [str]):
+    class SqlStatementType(enum.Enum):
+        Create = "create"
+        DropTable = "drop"
+        Insert = "insert"
+        Uosert = "upsert"
+        Replace = "replace"
+        Delete = "delete"
+        Select = "select"
+
+    def __init__(self, suite: str, at_line: int, type: Type, text: [str], sql_statement_type: SqlStatementType):
         self.suite_name = suite
         self.at_line = at_line
         self.s_type = type
         self.text = text
+        self.sql_statement_type = sql_statement_type
 
     def __str__(self):
         return f'''StatementDefinition:
     suite: {self.suite_name}
     line: {self.at_line}
     type: {self.s_type}
+    sql_stmt_tyoe: {self.sql_statement_type}
     text:
 ''' + '\n'.join([f'        {row}' for row in self.text.split('\n')])
 
@@ -69,6 +80,17 @@ class StatementDefinition:
         for t in list(StatementDefinition.Type):
             if t.value in statement_line.lower():
                 return t
+        return None
+
+    @staticmethod
+    def _parse_sql_statement_type(lines: [str]) -> SqlStatementType:
+        for line in lines:
+            line = line.lower()
+            if line.startswith("pragma"):
+                continue
+            for t in list(StatementDefinition.SqlStatementType):
+                if line.startswith(t.value):
+                    return t
         return None
 
     @staticmethod
@@ -86,7 +108,10 @@ class StatementDefinition:
                 pass
             else:
                 statement_lines.append(line)
-        return StatementDefinition(suite, at_line, type, "\n".join(statement_lines))
+        sql_statement_type = StatementDefinition._parse_sql_statement_type(statement_lines)
+        if sql_statement_type is None:
+            raise RuntimeError(f'Unknown sql statement type in {suite}, at line: {at_line}')
+        return StatementDefinition(suite, at_line, type, "\n".join(statement_lines), sql_statement_type)
 
 
 def get_token(length=10):
@@ -274,6 +299,7 @@ class BaseSuiteRunner(object):
             future_results.append(
                 tp.submit(
                     self.execute_query,
+                    statement,
                     cmd,
                 )
             )
@@ -298,7 +324,7 @@ class BaseSuiteRunner(object):
             parsed_statement.at_line, parsed_statement.suite_name, end_time - start_time))
 
     def assert_statement_ok(self, statement):
-        actual = safe_execute(lambda: self.execute_query(statement.text))
+        actual = safe_execute(lambda: self.execute_query(statement))
         assert_that(
             len(actual),
             1,
@@ -307,14 +333,14 @@ class BaseSuiteRunner(object):
 
     def assert_statement_error(self, statement):
         assert_that(
-            lambda: self.execute_query(statement.text),
+            lambda: self.execute_query(statement),
             raises(
                 ydb.Error
             )
         )
 
-    def get_query_and_output(self, statement_text):
-        return statement_text, None
+    def get_expected_output(self, _):
+        return None
 
     @staticmethod
     def pretty_json(j):
@@ -331,11 +357,6 @@ class BaseSuiteRunner(object):
                         del op[key]
 
     def assert_statement_query(self, statement):
-        def get_actual_and_expected():
-            query, expected = self.get_query_and_output(statement.text)
-            actual = self.execute_query(query)
-            return actual, expected
-
         query_id = next(self.query_id)
         query_name = "query_%d" % query_id
         if self.plan:
@@ -350,8 +371,8 @@ class BaseSuiteRunner(object):
             )
 
             return
-
-        actual_output, expected_output = safe_execute(get_actual_and_expected, statement, query_name)
+        expected_output = self.get_expected_output(statement.text)
+        actual_output = safe_execute(lambda: self.execute_query(statement), statement, query_name)
 
         if len(actual_output) > 0:
             self.files[query_name] = write_canonical_response(
@@ -367,25 +388,14 @@ class BaseSuiteRunner(object):
                 )
 
     def execute_scan_query(self, yql_text):
-        success = False
-        retries = 10
-        while retries > 0 and not success:
-            retries -= 1
-
+        def callee():
             it = self.driver.table_client.scan_query(yql_text)
             result = []
-            while True:
-                try:
-                    response = next(it)
-                    for row in response.result_set.rows:
-                        result.append(row)
-
-                except StopIteration:
-                    return result
-
-                except Exception:
-                    if retries == 0:
-                        raise
+            for response in it:
+                for row in response.result_set.rows:
+                    result.append(row)
+            return result
+        return ydb.retry_operation_sync(callee)
 
     def assert_statement_stream_query(self, statement):
         if self.plan:
@@ -420,17 +430,17 @@ class BaseSuiteRunner(object):
 
         return self.legacy_pool.retry_operation_sync(lambda s: s.explain(yql_text)).query_plan
 
-    def execute_query(self, statement_text):
-        yql_text = patch_yql_statement(statement_text, self.table_path_prefix)
+    def execute_query(self, statement: StatementDefinition, amended_text: str = None):
+        yql_text = amended_text if amended_text is not None else statement.text
+        yql_text = patch_yql_statement(yql_text, self.table_path_prefix)
         result = self.pool.execute_with_retries(yql_text)
 
-        if len(result) == 1:
+        if statement.sql_statement_type == StatementDefinition.SqlStatementType.Select:
             scan_query_result = self.execute_scan_query(yql_text)
-            for i in range(len(result)):
-                self.execute_assert(
-                    result[i].rows,
-                    scan_query_result,
-                    "Results are not same",
-                )
+            self.execute_assert(
+                result[0].rows,
+                scan_query_result,
+                "Results are not same",
+            )
 
         return result

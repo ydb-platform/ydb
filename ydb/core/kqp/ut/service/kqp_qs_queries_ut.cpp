@@ -2334,6 +2334,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
 
         WaitForZeroSessions(counters);
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
 
         for (const auto& service: kikimr.GetTestServer().GetGRpcServer().GetServices()) {
             UNIT_ASSERT_VALUES_EQUAL(service->RequestsInProgress(), 0);

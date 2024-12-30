@@ -530,7 +530,7 @@ private:
         auto minExcessTime = std::numeric_limits<NProfiling::TCpuDuration>::max();
 
         int minPoolIndex = -1;
-        for (int index = 0; index < static_cast<int>(IdToPool_.size()); ++index) {
+        for (int index = 0; index < std::ssize(IdToPool_); ++index) {
             const auto& pool = IdToPool_[index];
             if (pool && !pool->Heap.empty() && pool->ExcessTime < minExcessTime) {
                 minExcessTime = pool->ExcessTime;

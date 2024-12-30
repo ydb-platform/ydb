@@ -1559,7 +1559,7 @@ private:
 
     void BeginNestedMessage()
     {
-        auto index =  static_cast<int>(NestedMessages_.size());
+        auto index =  std::ssize(NestedMessages_);
         NestedMessages_.emplace_back(BodyCodedStream_.ByteCount(), -1);
         NestedIndexStack_.push_back(index);
     }

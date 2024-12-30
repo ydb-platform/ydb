@@ -74,7 +74,7 @@ private:
         // without extra serializing/deserializing.
         TYamrFormatConfigPtr config(static_cast<TYamrFormatConfig*>(Config_.Get()));
 
-        int rowCount = static_cast<int>(rows.Size());
+        int rowCount = std::ssize(rows);
         for (int index = 0; index < rowCount; index++) {
             auto row = rows[index];
             if (CheckKeySwitch(row, index + 1 == rowCount /* isLastRow */)) {

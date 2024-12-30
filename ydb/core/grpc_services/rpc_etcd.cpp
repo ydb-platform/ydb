@@ -1,6 +1,6 @@
 #include "service_etcd.h"
 
-#include <ydb/public/api/protos/etcd/rpc.pb.h>
+#include <ydb/public/api/grpc/etcd/rpc.pb.h>
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
@@ -17,17 +17,9 @@ namespace NKikimr::NGRpcService {
 using namespace NActors;
 using namespace Ydb;
 
-using TEvRangeKVRequest =
-    TGrpcRequestOperationCall<etcdserverpb::RangeRequest,
-        etcdserverpb::RangeResponse>;
-
-using TEvPutKVRequest =
-    TGrpcRequestOperationCall<etcdserverpb::PutRequest,
-        etcdserverpb::PutResponse>;
-
-using TEvDeleteRangeKVRequest =
-    TGrpcRequestOperationCall<etcdserverpb::DeleteRangeRequest,
-        etcdserverpb::DeleteRangeResponse>;
+using TEvRangeKVRequest = TGrpcRequestOperationCall<etcdserverpb::RangeRequest, etcdserverpb::RangeResponse>;
+using TEvPutKVRequest = TGrpcRequestOperationCall<etcdserverpb::PutRequest, etcdserverpb::PutResponse>;
+using TEvDeleteRangeKVRequest = TGrpcRequestOperationCall<etcdserverpb::DeleteRangeRequest, etcdserverpb::DeleteRangeResponse>;
 
 } // namespace NKikimr::NGRpcService
 

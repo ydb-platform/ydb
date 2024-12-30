@@ -12,7 +12,6 @@ SRCS(
     ydb_coordination_v1.proto
     ydb_debug_v1.proto
     ydb_discovery_v1.proto
-    ydb_etcd_v1.proto
     ydb_export_v1.proto
     ydb_import_v1.proto
     ydb_monitoring_v1.proto
@@ -28,10 +27,7 @@ SRCS(
 
 PEERDIR(
     ydb/public/api/protos
-    ydb/public/api/protos/etcd
 )
-
-USE_COMMON_GOOGLE_APIS(api/annotations)
 
 EXCLUDE_TAGS(GO_PROTO)
 

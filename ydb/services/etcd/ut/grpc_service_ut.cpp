@@ -2,7 +2,7 @@
 #include <ydb/services/keyvalue/grpc_service.h>
 
 #include <ydb/public/api/grpc/ydb_keyvalue_v1.grpc.pb.h>
-#include <ydb/public/api/grpc/ydb_etcd_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/etcd/rpc.grpc.pb.h>
 
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>

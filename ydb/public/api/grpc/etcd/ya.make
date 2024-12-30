@@ -1,4 +1,6 @@
-PROTO_LIBRARY()
+PROTO_LIBRARY(etcd-grpc)
+
+GRPC()
 
 SRCS(
     auth.proto

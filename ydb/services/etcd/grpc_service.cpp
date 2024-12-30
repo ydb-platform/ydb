@@ -29,15 +29,6 @@ public:
         auto self = Derived();
         self->FinishRequest();
         auto resp = self->CreateResponseMessage();
-/*        auto deferred = resp->mutable_operation();
-        deferred->set_ready(true);
-        deferred->set_status(status);
-        deferred->mutable_issues()->MergeFrom(message);
-        if (self->CostInfo) {
-            deferred->mutable_cost_info()->Swap(self->CostInfo);
-        }
-        auto data = deferred->mutable_result();
-        data->PackFrom(result);*/
         self->Reply(resp, status);
     }
 
@@ -45,15 +36,6 @@ public:
         auto self = Derived();
         self->FinishRequest();
         auto resp = self->CreateResponseMessage();
-/*        auto deferred = resp->mutable_operation();
-        deferred->set_ready(true);
-        deferred->set_status(status);
-        if (self->CostInfo) {
-            deferred->mutable_cost_info()->Swap(self->CostInfo);
-        }
-        NYql::IssuesToMessage(self->IssueManager.GetIssues(), deferred->mutable_issues());
-        auto data = deferred->mutable_result();
-        data->PackFrom(result); */
         self->Reply(resp, status);
     }
 

@@ -144,8 +144,8 @@ PEERDIR(
     yql/essentials/public/issue
     ydb/library/services
     ydb/public/api/grpc/draft
+    ydb/public/api/grpc/etcd
     ydb/public/api/protos
-    ydb/public/api/protos/etcd
     ydb/public/lib/fq
     ydb/public/lib/operation_id
     ydb/public/sdk/cpp/client/resources

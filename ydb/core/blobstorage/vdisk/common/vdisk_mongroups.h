@@ -710,14 +710,14 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(THandleClassGroup)
             {
-                COUNTER_INIT(Undefined, true);
-                COUNTER_INIT(GetDiscover, true);
-                COUNTER_INIT(GetFast, true);
-                COUNTER_INIT(GetAsync, true);
-                COUNTER_INIT(GetLow, true);
-                COUNTER_INIT(PutTabletLog, true);
-                COUNTER_INIT(PutUserData, true);
-                COUNTER_INIT(PutAsyncBlob, true);
+                COUNTER_INIT_IF_EXTENDED(Undefined, true);
+                COUNTER_INIT_IF_EXTENDED(GetDiscover, true);
+                COUNTER_INIT_IF_EXTENDED(GetFast, true);
+                COUNTER_INIT_IF_EXTENDED(GetAsync, true);
+                COUNTER_INIT_IF_EXTENDED(GetLow, true);
+                COUNTER_INIT_IF_EXTENDED(PutTabletLog, true);
+                COUNTER_INIT_IF_EXTENDED(PutUserData, true);
+                COUNTER_INIT_IF_EXTENDED(PutAsyncBlob, true);
             }
 
             COUNTER_DEF(Undefined);

@@ -377,9 +377,10 @@ def get_program_cfg(suite, case, data_path):
         config = os.path.join(data_path, suite if suite else '', 'default.cfg')
 
     if os.path.exists(config):
-        for line in open(config, 'r'):
-            if line.strip():
-                ret.append(tuple(line.split()))
+        with open(config, 'r') as f:
+            for line in f:
+                if line.strip():
+                    ret.append(tuple(line.split()))
     else:
         in_filename = case + '.in'
         in_path = os.path.join(data_path, in_filename)

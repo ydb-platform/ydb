@@ -37,6 +37,7 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
                         TABLED() {YELLOW_TEXT(str, briefStateStr);}
                         break;
                     case TPDiskMon::TPDisk::Error:
+                    case TPDiskMon::TPDisk::Stopped:
                         TABLED() {RED_TEXT(str, stateStr);}
                         TABLED() {RED_TEXT(str, briefStateStr);}
                         break;

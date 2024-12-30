@@ -94,7 +94,7 @@ message RangeResponse {
   ResponseHeader header = 1;
   // kvs is the list of key-value pairs matched by the range request.
   // kvs is empty when count is requested.
-  repeated KeyValue kvs = 2;
+  repeated mvccpb.KeyValue kvs = 2;
   // more indicates if there are more keys to return in the requested range.
   bool more = 3;
   // count is set to the number of keys within the range when requested.
@@ -126,7 +126,7 @@ message PutRequest {
 message PutResponse {
   ResponseHeader header = 1;
   // if prev_kv is set in the request, the previous key-value pair will be returned.
-  KeyValue prev_kv = 2;
+  mvccpb.KeyValue prev_kv = 2;
 }
 
 message DeleteRangeRequest {
@@ -149,7 +149,7 @@ message DeleteRangeResponse {
   // deleted is the number of keys deleted by the delete range request.
   int64 deleted = 2;
   // if prev_kv is set in the request, the previous key-value pairs will be returned.
-  repeated KeyValue prev_kvs = 3;
+  repeated mvccpb.KeyValue prev_kvs = 3;
 }
 
 message RequestOp {
@@ -396,7 +396,7 @@ message WatchResponse {
   // framgment is true if large watch response was split over multiple responses.
   bool fragment = 7;
 
-  repeated Event events = 11;
+  repeated mvccpb.Event events = 11;
 }
 
 message LeaseGrantRequest {
@@ -673,7 +673,7 @@ message AuthenticateRequest {
 message AuthUserAddRequest {
   string name = 1;
   string password = 2;
-  UserAddOptions options = 3;
+  authpb.UserAddOptions options = 3;
   string hashedPassword = 4;
 }
 
@@ -730,7 +730,7 @@ message AuthRoleGrantPermissionRequest {
   // name is the name of the role which will be granted the permission.
   string name = 1;
   // perm is the permission to grant to the role.
-  Permission perm = 2;
+  authpb.Permission perm = 2;
 }
 
 message AuthRoleRevokePermissionRequest {
@@ -793,7 +793,7 @@ message AuthRoleAddResponse {
 message AuthRoleGetResponse {
   ResponseHeader header = 1;
 
-  repeated Permission perm = 2;
+  repeated authpb.Permission perm = 2;
 }
 
 message AuthRoleListResponse {

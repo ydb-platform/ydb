@@ -32,6 +32,8 @@ public:
     TMaybe<NKikimrTx::TEvReadSet> ReadSet;
     TMaybe<NKikimrTx::TEvReadSetAck> ReadSetAck;
 
+    THashMap<std::pair<ui64, ui64>, TVector<NKikimrTx::TEvReadSet>> ReadSets;
+
 private:
     struct TEvPQTablet {
         enum EEv {

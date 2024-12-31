@@ -21,7 +21,7 @@ namespace {
     class TPartsRequester {
     private:
         const TActorId NotifyId;
-        TConstArrayRef<TLogoBlobID> Parts;
+        TVector<TLogoBlobID> Parts;
         TReplQuoter::TPtr Quoter;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TQueueActorMapPtr QueueActorMapPtr;
@@ -32,14 +32,14 @@ namespace {
         ui32 Responses = 0;
     public:
 
-        TPartsRequester(TActorId notifyId, TConstArrayRef<TLogoBlobID> parts, TReplQuoter::TPtr quoter, TIntrusivePtr<TBlobStorageGroupInfo> gInfo, TQueueActorMapPtr queueActorMapPtr, NMonGroup::TBalancingGroup& monGroup)
+        TPartsRequester(TActorId notifyId, TVector<TLogoBlobID>&& parts, TReplQuoter::TPtr quoter, TIntrusivePtr<TBlobStorageGroupInfo> gInfo, TQueueActorMapPtr queueActorMapPtr, NMonGroup::TBalancingGroup& monGroup)
             : NotifyId(notifyId)
-            , Parts(parts)
+            , Parts(std::move(parts))
             , Quoter(quoter)
             , GInfo(gInfo)
             , QueueActorMapPtr(queueActorMapPtr)
             , MonGroup(monGroup)
-            , Result(parts.size())
+            , Result(Parts.size())
         {
         }
 
@@ -294,14 +294,14 @@ namespace {
         TDeleter() = default;
         TDeleter(
             TActorId notifyId,
-            TConstArrayRef<TLogoBlobID> parts,
+            TVector<TLogoBlobID>&& parts,
             TQueueActorMapPtr queueActorMapPtr,
             std::shared_ptr<TBalancingCtx> ctx
         )
             : NotifyId(notifyId)
             , Ctx(ctx)
             , GInfo(ctx->GInfo)
-            , PartsRequester(SelfId(), parts, Ctx->VCtx->ReplNodeRequestQuoter, GInfo, queueActorMapPtr, Ctx->MonGroup)
+            , PartsRequester(SelfId(), std::move(parts), Ctx->VCtx->ReplNodeRequestQuoter, GInfo, queueActorMapPtr, Ctx->MonGroup)
             , PartsDeleter(ctx, GInfo)
         {
         }
@@ -314,11 +314,11 @@ namespace {
 
 IActor* CreateDeleterActor(
     TActorId notifyId,
-    TConstArrayRef<TLogoBlobID> parts,
+    TVector<TLogoBlobID>&& parts,
     TQueueActorMapPtr queueActorMapPtr,
     std::shared_ptr<TBalancingCtx> ctx
 ) {
-    return new TDeleter(notifyId, parts, queueActorMapPtr, ctx);
+    return new TDeleter(notifyId, std::move(parts), queueActorMapPtr, ctx);
 }
 
 } // NBalancing

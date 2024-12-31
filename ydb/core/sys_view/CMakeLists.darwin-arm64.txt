@@ -16,6 +16,7 @@ add_subdirectory(service)
 add_subdirectory(common)
 add_subdirectory(partition_stats)
 add_subdirectory(processor)
+add_subdirectory(auth)
 add_subdirectory(nodes)
 add_subdirectory(sessions)
 add_subdirectory(pg_tables)
@@ -36,6 +37,7 @@ target_link_libraries(ydb-core-sys_view PUBLIC
   yutil
   ydb-core-base
   core-kqp-runtime
+  core-sys_view-auth
   core-sys_view-common
   core-sys_view-nodes
   core-sys_view-sessions

@@ -12,46 +12,29 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(service)
-add_subdirectory(common)
-add_subdirectory(partition_stats)
-add_subdirectory(processor)
-add_subdirectory(auth)
-add_subdirectory(nodes)
-add_subdirectory(sessions)
-add_subdirectory(pg_tables)
-add_subdirectory(query_stats)
-add_subdirectory(storage)
-add_subdirectory(tablets)
-add_subdirectory(ut)
-
-add_library(ydb-core-sys_view)
+add_library(core-sys_view-auth)
 
 
-target_compile_options(ydb-core-sys_view PRIVATE
+target_compile_options(core-sys_view-auth PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
-target_link_libraries(ydb-core-sys_view PUBLIC
+target_link_libraries(core-sys_view-auth PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  library-actors-core
   ydb-core-base
   core-kqp-runtime
-  core-sys_view-auth
   core-sys_view-common
-  core-sys_view-nodes
-  core-sys_view-sessions
-  core-sys_view-partition_stats
-  core-sys_view-pg_tables
-  core-sys_view-query_stats
-  core-sys_view-service
-  core-sys_view-storage
-  core-sys_view-tablets
 )
 
-target_sources(ydb-core-sys_view PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/scan.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/scan.h
+target_sources(core-sys_view-auth PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/auth/group_members.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/auth/users.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/auth/groups.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/auth/group_members.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/auth/users.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/auth/groups.h
 )
 

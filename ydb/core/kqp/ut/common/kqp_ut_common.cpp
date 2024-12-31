@@ -553,7 +553,7 @@ TString ReformatYson(const TString& yson) {
 }
 
 void CompareYson(const TString& expected, const TString& actual) {
-    UNIT_ASSERT_NO_DIFF(ReformatYson(expected), ReformatYson(actual));
+    UNIT_ASSERT_VALUES_EQUAL(ReformatYson(expected), ReformatYson(actual));
 }
 
 void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual) {

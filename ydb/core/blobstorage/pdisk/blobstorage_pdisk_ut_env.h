@@ -48,8 +48,6 @@ public:
         ui64 formatGuid = TestCtx.PDiskGuid + static_cast<ui64>(isBad);
 
         if (Settings.InitiallyZeroed) {
-            UNIT_ASSERT(Settings.UseSectorMap);
-
             if (Settings.DiskSize) {
                 TestCtx.SectorMap->ForceSize(Settings.DiskSize);
             } else {

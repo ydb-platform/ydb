@@ -4,6 +4,7 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/library/login/protos/login.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -1240,6 +1241,22 @@ TCheckFunc HasColumnTableTtlSettingsTier(const TString& columnName, const TDurat
 TCheckFunc HasOwner(const TString& owner) {
     return [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSelf().GetOwner(), owner);
+    };
+}
+
+TCheckFunc HasGroup(const TString& group, const TSet<TString> members) {
+    return [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        std::optional<TSet<TString>> actualMembers;
+        for (const auto& sid : record.GetPathDescription().GetDomainDescription().GetSecurityState().GetSids()) {
+            if (sid.GetName() == group) {
+                actualMembers.emplace();
+                for (const auto& member : sid.GetMembers()) {
+                    actualMembers->insert(member);
+                }
+            }
+        }
+        UNIT_ASSERT_C(actualMembers.has_value(), "Group " + group + " not found");
+        UNIT_ASSERT_VALUES_EQUAL(members, actualMembers.value());
     };
 }
 

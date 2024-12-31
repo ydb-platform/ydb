@@ -148,6 +148,33 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
     }
 
+    Y_UNIT_TEST(RemoveLogin_Groups) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
+        auto resultLogin = Login(runtime, "user1", "password1");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+
+        CreateAlterLoginCreateGroup(runtime, ++txId, "/MyRoot", "group");
+        AlterLoginAddGroupMembership(runtime, ++txId, "/MyRoot", "user1", "group");
+        AlterLoginAddGroupMembership(runtime, ++txId, "/MyRoot", "user2", "group");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+            {NLs::HasGroup("group", {"user1", "user2"})});
+
+        CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1");
+
+        // check user has been removed:
+        {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+            {NLs::HasGroup("group", {"user2"})});
+            auto resultLogin = Login(runtime, "user1", "password1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user: user1");
+        }
+    }
+
     Y_UNIT_TEST(RemoveLogin_Owner) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

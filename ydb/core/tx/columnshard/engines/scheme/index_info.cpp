@@ -419,7 +419,8 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     std::shared_ptr<IPortionDataChunk> chunk = index->BuildIndex(originalData, recordsCount, *this);
     auto opStorage = operators->GetOperatorVerified(index->GetStorageId());
     if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
-        return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ") bigger than limit (" +
+        return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ":" + ::ToString(chunk->GetPackedSize()) + ":" +
+                                       ::ToString(recordsCount) + ") bigger than limit (" +
                                        ::ToString(opStorage->GetBlobSplitSettings().GetMaxBlobSize()) + ")");
     }
     if (index->GetStorageId() == IStoragesManager::LocalMetadataStorageId) {

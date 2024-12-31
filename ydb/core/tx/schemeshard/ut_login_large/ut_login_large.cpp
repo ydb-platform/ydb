@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginLargeTest) {
     Y_UNIT_TEST(RemoveLogin_Many) {
         const size_t pathsToCreate = 10'000;
         const size_t usersWithAccess = 200; // 2M ACL rules in total
-        const size_t usersTotal = 300; // 2M ACL rules in total
+        const size_t usersTotal = 300;
 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginLargeTest) {
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
         
         {
-            TLogStopwatch stopwatch(TStringBuilder() << "Created " << pathsToCreate << " paths");
+            TLogStopwatch stopwatch(TStringBuilder() << "Created " << pathsToCreate << " paths with " << usersWithAccess * pathsToCreate << " acls");
 
             NACLib::TDiffACL diffACL;
             for (auto userId : xrange(usersWithAccess)) {

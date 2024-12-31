@@ -22,28 +22,26 @@ private:
     template <ui32 CharsRemained>
     class THashesBuilder {
     public:
-        static ui64 Build(const ui8* data, ui64& h) {
-            h = h ^ uint64_t(*data);
-            h = h * 16777619;
-            return THashesBuilder<CharsRemained - 1>::Build(data + 1, h);
+        static ui64 Build(const ui8* data, const ui64 h) {
+            return THashesBuilder<CharsRemained - 1>::Build(data + 1, (h ^ uint64_t(*data)) * 16777619);
         }
     };
 
     template <>
     class THashesBuilder<0> {
     public:
-        static ui64 Build(const ui8* /*data*/, ui64& hash) {
+        static ui64 Build(const ui8* /*data*/, const ui64 hash) {
             return hash;
         }
     };
 
     template <ui32 HashIdx, ui32 CharsCount>
     class THashesCountSelector {
+        static constexpr ui64 HashStart = (ui64)HashIdx * (ui64)2166136261;
     public:
         template <class TActor>
         static void BuildHashes(const ui8* data, TActor& actor) {
-            ui64 hash = (ui64)2166136261 * (ui64)HashIdx;
-            actor(THashesBuilder<CharsCount>::Build(data, hash));
+            actor(THashesBuilder<CharsCount>::Build(data, HashStart));
             THashesCountSelector<HashIdx - 1, CharsCount>::BuildHashes(data, actor);
         }
     };
@@ -212,13 +210,22 @@ public:
     }
 };
 
-TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
+TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     TNGrammBuilder builder(HashesCount);
 
     TDynBitMap bitMap;
-    const ui32 size = FilterSizeBytes * 8;
-    bitMap.Reserve(FilterSizeBytes * 8);
+    ui32 size = FilterSizeBytes * 8;
+    if ((size & (size - 1)) == 0) {
+        ui32 recordsCountBase = RecordsCount;
+        while (recordsCountBase < recordsCount && size * 2 <= TConstants::MaxFilterSizeBytes) {
+            size <<= 1;
+            recordsCountBase *= 2;
+        }
+    } else {
+        size *= ((recordsCount <= RecordsCount) ? 1.0 : (1.0 * recordsCount / RecordsCount));
+    }
+    bitMap.Reserve(size * 8);
 
     const auto doFillFilter = [&](auto& inserter) {
         for (reader.Start(); reader.IsCorrect();) {

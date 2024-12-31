@@ -762,7 +762,14 @@ def add_format_mode(modes, walle_provider):
 
     mode = modes.add_parser(
         "format",
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
+        parents=[
+            direct_nodes_args(),
+            cluster_description_args(),
+            binaries_args(),
+            component_args(),
+            ssh_args(),
+            with_confirmation(),
+        ],
         description="Stop all ydbd instances at the nodes, format all ydbd drives at the nodes, start the instances. "
         "If you call format for all cluster, you will spoil it. "
         "Additional dynamic configuration will required after it. "

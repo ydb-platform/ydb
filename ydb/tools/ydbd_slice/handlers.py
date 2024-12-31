@@ -65,11 +65,18 @@ class Slice:
         self.nodes._check_async_execution(tasks)
 
     def slice_format(self):
+        if not self.__confirm():
+            print("Aborting slice formatting")
+            return
         self.slice_stop()
         self._format_drives()
         self.slice_start()
 
     def slice_clear(self):
+        if not self.__confirm():
+            print("Aborting slice formatting")
+            return
+
         self.slice_stop()
 
         if 'dynamic_slots' in self.components:
@@ -118,8 +125,8 @@ class Slice:
             return True
 
         confirm = input(
-            "You are trying to setup slice. Note, that during setup all previous data will be erased.\n"
-            + "Press [y] to continue or [n] to abort installation: "
+            "You are trying to setup or format slice. Note, that during setup or format all previous data will be erased.\n"
+            + "Press [y] to continue or [n] to abort installation/formatting: "
         )
         for i in range(0, 3):
             lw = confirm.strip().lower()

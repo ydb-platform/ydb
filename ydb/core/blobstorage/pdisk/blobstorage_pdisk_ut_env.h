@@ -27,6 +27,7 @@ public:
         bool SmallDisk = false;
         bool SuppressCompatibilityCheck = false;
         TAutoPtr<TLogBackend> LogBackend = nullptr;
+        bool InitiallyZeroed = false; // Only for sector map. Zero first 1MiB on start.
     };
 
 private:
@@ -45,10 +46,25 @@ public:
         TString path;
         EntropyPool().Read(&TestCtx.PDiskGuid, sizeof(TestCtx.PDiskGuid));
         ui64 formatGuid = TestCtx.PDiskGuid + static_cast<ui64>(isBad);
-        if (Settings.DiskSize) {
-            FormatPDiskForTest(path, formatGuid, Settings.ChunkSize, Settings.DiskSize, false, TestCtx.SectorMap, Settings.SmallDisk);
-        } else {
-            FormatPDiskForTest(path, formatGuid, Settings.ChunkSize, false, TestCtx.SectorMap, Settings.SmallDisk);
+
+        if (Settings.InitiallyZeroed) {
+            if (Settings.DiskSize) {
+                TestCtx.SectorMap->ForceSize(Settings.DiskSize);
+            } else {
+                ui64 diskSizeHeuristic = (ui64)Settings.ChunkSize * 1000;
+                TestCtx.SectorMap->ForceSize(diskSizeHeuristic);
+            }
+
+            // Zero the first 1MB so that PDisk seems like it is a new disk.
+            TestCtx.SectorMap->ZeroInit(1_MB / NPDisk::NSectorMap::SECTOR_SIZE);
+        }
+
+        if (!Settings.InitiallyZeroed) {
+            if (Settings.DiskSize) {
+                FormatPDiskForTest(path, formatGuid, Settings.ChunkSize, Settings.DiskSize, false, TestCtx.SectorMap, Settings.SmallDisk);
+            } else {
+                FormatPDiskForTest(path, formatGuid, Settings.ChunkSize, false, TestCtx.SectorMap, Settings.SmallDisk);
+            }
         }
 
         ui64 pDiskCategory = 0;

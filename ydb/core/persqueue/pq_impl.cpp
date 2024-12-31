@@ -4390,7 +4390,10 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         Y_ABORT_UNLESS(tx.TxId == TxsOrder[tx.State].front(),
                        "PQ %" PRIu64 ", TxId %" PRIu64 ", FrontTxId %" PRIu64,
                        TabletID(), tx.TxId, TxsOrder[tx.State].front());
-
+        Y_ABORT_UNLESS(tx.TxId == TxQueue.front().second,
+                       "PQ %" PRIu64 ", TxId %" PRIu64 ", FrontTxId %" PRIu64,
+                       TabletID(), tx.TxId, TxQueue.front().second);
+        TxQueue.pop_front();
         SendEvReadSetAckToSenders(ctx, tx);
 
         TryChangeTxState(tx, NKikimrPQ::TTransaction::WAIT_RS_ACKS);
@@ -4409,10 +4412,6 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
     case NKikimrPQ::TTransaction::DELETING:
         // The PQ tablet has persisted its state. Now she can delete the transaction and take the next one.
-        if (!TxQueue.empty() && (TxQueue.front().second == tx.TxId)) {
-            TxQueue.pop_front();
-        }
-
         DeleteWriteId(tx.WriteId);
         PQ_LOG_D("delete TxId " << tx.TxId);
         Txs.erase(tx.TxId);

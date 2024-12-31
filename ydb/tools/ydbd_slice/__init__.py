@@ -300,6 +300,8 @@ def deduce_components_from_args(args, cluster_details):
     if 'dynamic_slots' in result:
         result['dynamic_slots'] = ['all']
 
+    result['confirm'] = args.confirm
+
     logger.debug("active components is '%s'", result)
     return result
 
@@ -511,6 +513,18 @@ def ssh_args():
     return args
 
 
+def with_confirmation():
+    args = argparse.ArgumentParser(add_help=False)
+    args.add_argument(
+        "--confirm",
+        "-y",
+        action="store_true",
+        default=False,
+        help="Confirm slice installation"
+    )
+    return args
+
+
 def databases_config_path_args():
     args = argparse.ArgumentParser(add_help=False)
     args.add_argument(
@@ -648,6 +662,7 @@ def add_install_mode(modes, walle_provider):
             component_args(),
             log_args(),
             ssh_args(),
+            with_confirmation(),
             # databases_config_path_args(),
         ],
         description="Full installation of the cluster from scratch. "

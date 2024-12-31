@@ -113,7 +113,34 @@ class Slice:
             )
         )
 
+    def __confirm(self) -> bool:
+        if self.components['confirm']:
+            return True
+
+        confirm = input(
+            "You are trying to setup slice. Note, that during setup all previous data will be erased.\n"
+            + "Press [y] to continue or [n] to abort installation: "
+        )
+        for i in range(0, 3):
+            lw = confirm.strip().lower()
+            if lw == "n":
+                return False
+            if lw == "y":
+                return True
+            confirm = input("Enter [y] or [n]")
+        lw = confirm.strip().lower()
+        if lw == "n":
+            return False
+        if lw == "y":
+            return True
+
+        return False
+
     def slice_install(self):
+        if not self.__confirm():
+            print("Aborting installation")
+            return
+
         self._ensure_berkanavt_exists()
         self.slice_stop()
 

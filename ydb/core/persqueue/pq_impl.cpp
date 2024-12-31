@@ -1150,9 +1150,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
             Txs.emplace(tx.GetTxId(), tx);
 
             if (tx.HasStep()) {
-                if (std::make_pair(tx.GetStep(), tx.GetTxId()) >= std::make_pair(ExecStep, ExecTxId)) {
-                    PlannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
-                }
+                PlannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
             }
 
             if (tx.HasWriteId()) {

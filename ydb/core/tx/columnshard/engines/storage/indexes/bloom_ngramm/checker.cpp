@@ -29,7 +29,7 @@ bool TFilterChecker::DoCheckImpl(const std::vector<TString>& blobs) const {
                 break;
             }
         }
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("size", bits.GetSizeBits())("found", found)("hashes", sb)("details", bits.DebugString());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("size", bits.GetSizeBits())("found", found)("hashes", sb)("details", bits.DebugString());
         if (found) {
             //            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("size", bArray.length())("data", bArray.ToString())("index_id", GetIndexId());
             return true;

@@ -396,6 +396,7 @@ message TRequestedBloomNGrammFilter {
     optional uint32 FilterSizeBytes = 2;
     optional uint32 HashesCount = 3;
     optional string ColumnName = 4;
+    optional uint32 RecordsCount = 5;
 }
 
 message TRequestedMaxIndex {
@@ -432,6 +433,7 @@ message TBloomNGrammFilter {
     optional uint32 FilterSizeBytes = 2;
     optional uint32 HashesCount = 3;
     optional uint32 ColumnId = 4;
+    optional uint32 RecordsCount = 5;
 }
 
 message TMaxIndex {

@@ -1401,6 +1401,7 @@ void WaitForZeroReadIterators(Tests::TServer& server, const TString& path) {
         TTestActorRuntime* runtime = server.GetRuntime();
         auto sender = runtime->AllocateEdgeActor();
         auto shards = GetTableShards(&server, sender, path);
+        UNIT_ASSERT_C(shards.size() > 0, "Table: " << path << " has no shards");
         iterators = 0;
         for (auto x : shards) {
             runtime->SendToPipe(

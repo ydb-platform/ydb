@@ -300,6 +300,8 @@ def deduce_components_from_args(args, cluster_details):
     if 'dynamic_slots' in result:
         result['dynamic_slots'] = ['all']
 
+    result['confirm'] = args.confirm
+
     logger.debug("active components is '%s'", result)
     return result
 
@@ -511,6 +513,18 @@ def ssh_args():
     return args
 
 
+def with_confirmation():
+    args = argparse.ArgumentParser(add_help=False)
+    args.add_argument(
+        "--confirm",
+        "-y",
+        action="store_true",
+        default=False,
+        help="Confirm slice installation"
+    )
+    return args
+
+
 def databases_config_path_args():
     args = argparse.ArgumentParser(add_help=False)
     args.add_argument(
@@ -648,6 +662,7 @@ def add_install_mode(modes, walle_provider):
             component_args(),
             log_args(),
             ssh_args(),
+            with_confirmation(),
             # databases_config_path_args(),
         ],
         description="Full installation of the cluster from scratch. "
@@ -747,7 +762,14 @@ def add_format_mode(modes, walle_provider):
 
     mode = modes.add_parser(
         "format",
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
+        parents=[
+            direct_nodes_args(),
+            cluster_description_args(),
+            binaries_args(),
+            component_args(),
+            ssh_args(),
+            with_confirmation(),
+        ],
         description="Stop all ydbd instances at the nodes, format all ydbd drives at the nodes, start the instances. "
         "If you call format for all cluster, you will spoil it. "
         "Additional dynamic configuration will required after it. "

@@ -6,6 +6,7 @@
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/driver_lib/run/config.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
@@ -460,7 +461,9 @@ namespace Tests {
         NMsgBusProxy::EResponseStatus CreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken = "");
         NMsgBusProxy::EResponseStatus ModifyUser(const TString& parent, const TString& user, const TString& password, const TString& userToken = "");
         NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password);
-
+        NMsgBusProxy::EResponseStatus CreateGroup(const TString& parent, const TString& group);
+        NMsgBusProxy::EResponseStatus AddGroupMembership(const TString& parent, const TString& group, const TString& member);
+        
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const TString& scheme, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CreateTableWithUniformShardedIndex(const TString& parent,
@@ -513,6 +516,7 @@ namespace Tests {
         void SetSecurityToken(const TString& token) { SecurityToken = token; }
         void ModifyOwner(const TString& parent, const TString& name, const TString& owner);
         void ModifyACL(const TString& parent, const TString& name, const TString& acl);
+        NKikimrScheme::TEvDescribeSchemeResult Describe(TTestActorRuntime* runtime, const TString& path, ui64 tabletId = SchemeRoot);
         TString CreateStoragePool(const TString& poolKind, const TString& partOfName, ui32 groups = 1);
         NKikimrBlobStorage::TDefineStoragePool DescribeStoragePool(const TString& name);
         void RemoveStoragePool(const TString& name);

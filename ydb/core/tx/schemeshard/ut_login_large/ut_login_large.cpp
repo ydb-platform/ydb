@@ -24,7 +24,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginLargeTest) {
 
     Y_UNIT_TEST(RemoveLogin_Many) {
         const size_t pathsToCreate = 10'000;
-        const size_t usersToAdd = 200; // 2M ACL rules in total
+        const size_t usersWithAccess = 200; // 2M ACL rules in total
+        const size_t usersTotal = 300; // 2M ACL rules in total
 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -32,7 +33,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginLargeTest) {
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
         runtime.SetDispatchedEventsLimit(100'000'000'000);
 
-        for (auto userId : xrange(usersToAdd)) {
+        for (auto userId : xrange(usersTotal)) {
             CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user" + std::to_string(userId), "password" + std::to_string(userId));
         }
         auto resultLogin = Login(runtime, "user0", "password0");
@@ -42,7 +43,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginLargeTest) {
             TLogStopwatch stopwatch(TStringBuilder() << "Created " << pathsToCreate << " paths");
 
             NACLib::TDiffACL diffACL;
-            for (auto userId : xrange(usersToAdd)) {
+            for (auto userId : xrange(usersWithAccess)) {
                 diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user" + std::to_string(userId));
             }
 
@@ -79,25 +80,44 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginLargeTest) {
         Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot").DebugString() << Endl;
 
         {
-            TLogStopwatch stopwatch(TStringBuilder() << "Added single root acl");
+            TLogStopwatch stopwatch(TStringBuilder() << "Created single user userx");
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "userx", "passwordX");
+        }
+
+        {
+            TLogStopwatch stopwatch(TStringBuilder() << "Added single root acl userx");
             NACLib::TDiffACL diffACL;
-            diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "userX");
+            diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "userx");
             AsyncModifyACL(runtime, ++txId, "", "MyRoot", diffACL.SerializeAsString(), "");
             TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
         }
 
         {
-            TLogStopwatch stopwatch(TStringBuilder() << "Removed single root acl");
+            TLogStopwatch stopwatch(TStringBuilder() << "Removed single root acl userx");
             NACLib::TDiffACL diffACL;
-            diffACL.RemoveAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "userX");
+            diffACL.RemoveAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "userx");
             AsyncModifyACL(runtime, ++txId, "", "MyRoot", diffACL.SerializeAsString(), "");
             TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
         }
+
+        {
+            TLogStopwatch stopwatch(TStringBuilder() << "Removed single user userx");
+            CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "userx");
+        }
     
-        for (auto userId : xrange(Min<size_t>(usersToAdd, 3)))
+        // removing users without access:
+        for (auto userId : xrange(usersWithAccess, Min<size_t>(usersTotal, usersWithAccess + 3)))
         {
             TLogStopwatch stopwatch(TStringBuilder() << "Removed user" + std::to_string(userId));
             CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user" + std::to_string(userId));
+        }
+
+        // removing users with access (failing with a error):
+        for (auto userId : xrange(Min<size_t>(usersWithAccess, 3)))
+        {
+            TLogStopwatch stopwatch(TStringBuilder() << "Don't removed user" + std::to_string(userId));
+            CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user" + std::to_string(userId),
+                {{NKikimrScheme::StatusPreconditionFailed}});
         }
     }
 

@@ -285,19 +285,21 @@ namespace {
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
-            auto* bitmap = roaring_bitmap_create();
+            roaring_bitmap_t *bitmap = roaring_bitmap_create();
             try {
+                roaring_bulk_context_t context = {};
+
                 const auto vector = args[0];
                 const auto* elements = vector.GetElements();
                 if (elements) {
                     for (auto& value : TArrayRef{elements, vector.GetListLength()}) {
-                        roaring_bitmap_add(bitmap, value.Get<ui32>());
+                        roaring_bitmap_add_bulk(bitmap, &context, value.Get<ui32>());
                     }
                 } else {
                     TUnboxedValue value;
                     const auto it = vector.GetListIterator();
                     while (it.Next(value)) {
-                        roaring_bitmap_add(bitmap, value.Get<ui32>());
+                        roaring_bitmap_add_bulk(bitmap, &context, value.Get<ui32>());
                     }
                 }
 

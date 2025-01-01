@@ -461,9 +461,110 @@ protected:
         }
     }
 
+    class TWriteTask: TNonCopyable {
+    private:
+        std::shared_ptr<TArrowData> ArrowData;
+        ISnapshotSchema::TPtr Schema;
+        const NActors::TActorId SourceId;
+        const std::optional<ui32> GranuleShardingVersionId;
+        const ui64 PathId;
+        const ui64 Cookie;
+        const ui64 LockId;
+        const NEvWrite::EModificationType ModificationType;
+        const EOperationBehaviour Behaviour;
+        const TMonotonic Created = TMonotonic::Now();
+    public:
+        TWriteTask(const std::shared_ptr<TArrowData>& arrowData, const ISnapshotSchema::TPtr& schema, const NActors::TActorId sourceId,
+            const std::optional<ui32>& granuleShardingVersionId, const ui64 pathId, const ui64 cookie, const ui64 lockId,
+            const NEvWrite::EModificationType modificationType, const EOperationBehaviour behaviour)
+            : ArrowData(arrowData)
+            , Schema(schema)
+            , SourceId(sourceId)
+            , GranuleShardingVersionId(granuleShardingVersionId)
+            , PathId(pathId)
+            , Cookie(cookie)
+            , LockId(lockId)
+            , Behaviour(behaviour) {
+        }
+
+        const TMonotonic& GetCreatedMonotonic() const {
+            return Created;
+        }
+
+        bool Execute(TColumnShard* owner) {
+            auto overloadStatus = owner->CheckOverloaded(PathId);
+            if (overloadStatus == EOverloadStatus::OverloadMetadata) {
+                AFL_INFO(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "wait_overload")("status", overloadStatus);
+                return false;
+            }
+            Owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(TMonotonic::Now() - Created);
+            if (overloadStatus != EOverloadStatus::None) {
+                std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(
+                    TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
+                owner->OverloadWriteFail(overloadStatus, NEvWrite::TWriteMeta(0, PathId, Source, {}, TGUID::CreateTimebased().AsGuidString()),
+                    arrowData->GetSize(), Cookie, std::move(result), ctx);
+                return true;
+            }
+
+            owner->OperationsManager->RegisterLock(LockId, owner->Generation());
+            auto writeOperation = owner->OperationsManager->RegisterOperation(
+                PathId, LockId, Cookie, GranuleShardingVersionId, *ModificationType, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
+
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", ArrowData->GetSize())(
+                "operation_id", writeOperation->GetIdentifier())("in_flight", owner->Counters.GetWritesMonitor()->GetWritesInFlight())(
+                "size_in_flight", owner->Counters.GetWritesMonitor()->GetWritesSizeInFlight());
+            owner->Counters.GetWritesMonitor()->OnStartWrite(ArrowData->GetSize());
+
+            AFL_VERIFY(writeOperation);
+            writeOperation->SetBehaviour(Behaviour);
+            NOlap::TWritingContext wContext(TabletID(), SelfId(), Schema, owner->StoragesManager,
+                owner->Counters.GetIndexationCounters().SplitterCounters,
+                owner->Counters.GetCSCounters().WritingCounters, NOlap::TSnapshot::Max(), writeOperation->GetActivityChecker());
+            ArrowData->SetSeparationPoints(GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId)->GetBucketPositions());
+            writeOperation->Start(*this, ArrowData, Source, wContext);
+            return true;
+        }
+    };
+
+    class TWriteTasksQueue {
+    private:
+        bool WriteTasksOverloadCheckerScheduled = false;
+        std::deque<TWriteTask> WriteTasks;
+        i64 PredWriteTasksSize = 0;
+        TColumnShard* Owner;
+    public:
+        TWriteTasksQueue(TColumnShard* owner)
+            : Owner(owner) {
+        }
+
+        ~TWriteTasksQueue() {
+            owner->Counters.GetCSCounters().WritingCounters->QueueWaitSize->Sub(PredWriteTasksSize);
+        }
+
+        void Enqueue(TWriteTask&& task) {
+            WriteTasks.emplace_back(std::move(task));
+        }
+
+        void Drain(const bool onWakeup) {
+            if (onWakeup) {
+                WriteTasksOverloadCheckerScheduled = false;
+            }
+            while (WriteTasks.size() && WriteTasks.front().Execute(Owner)) {
+                WriteTasks.pop_front();
+            }
+            if (!WriteTasks.size() && !WriteTasksOverloadCheckerScheduled) {
+                Owner->Schedule(TDuration::MilliSeconds(100), NActors::TEvents::TEvWakeup(1));
+                WriteTasksOverloadCheckerScheduled = true;
+            }
+            Owner->Counters.GetCSCounters().WritingCounters->QueueWaitSize->Add((i64)WriteTasks.size() - PredWriteTasksSize);
+            PredWriteTasksSize = (i64)WriteTasks.size();
+        }
+    };
+
 private:
     std::unique_ptr<TTabletCountersBase> TabletCountersHolder;
     TCountersManager Counters;
+    TWriteTasksQueue WriteTasksQueue;
 
     std::unique_ptr<TTxController> ProgressTxController;
     std::unique_ptr<TOperationsManager> OperationsManager;

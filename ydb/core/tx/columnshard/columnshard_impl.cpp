@@ -77,6 +77,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TabletCountersHolder(new TProtobufTabletCounters<ESimpleCounters_descriptor, ECumulativeCounters_descriptor,
           EPercentileCounters_descriptor, ETxTypes_descriptor>())
     , Counters(*TabletCountersHolder)
+    , WriteTasksQueue(this)
     , ProgressTxController(std::make_unique<TTxController>(*this))
     , StoragesManager(std::make_shared<NOlap::TStoragesManager>(*this))
     , DataLocksManager(std::make_shared<NOlap::NDataLocks::TManager>())

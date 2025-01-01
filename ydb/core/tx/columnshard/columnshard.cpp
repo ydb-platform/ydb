@@ -250,6 +250,8 @@ void TColumnShard::Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorCon
         const TMonotonic now = TMonotonic::Now();
         GetProgressTxController().PingTimeouts(now);
         ctx.Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup(0));
+    } else if (ev->Get()->Tag == 1) {
+        WriteTasksQueue.Drain(this, true);
     }
 }
 

@@ -251,7 +251,7 @@ void TColumnShard::Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorCon
         GetProgressTxController().PingTimeouts(now);
         ctx.Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup(0));
     } else if (ev->Get()->Tag == 1) {
-        WriteTasksQueue.Drain(this, true);
+        WriteTasksQueue.Drain(true, ctx);
     }
 }
 

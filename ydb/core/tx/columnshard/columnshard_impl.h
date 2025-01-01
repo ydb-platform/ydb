@@ -90,6 +90,7 @@ class TGeneralCompactColumnEngineChanges;
 
 namespace NKikimr::NColumnShard {
 
+class TArrowData;
 class TEvWriteCommitPrimaryTransactionOperator;
 class TEvWriteCommitSecondaryTransactionOperator;
 class TTxFinishAsyncTransaction;
@@ -461,10 +462,10 @@ protected:
         }
     }
 
-    class TWriteTask: TNonCopyable {
+    class TWriteTask: TMoveOnly {
     private:
         std::shared_ptr<TArrowData> ArrowData;
-        ISnapshotSchema::TPtr Schema;
+        NOlap::ISnapshotSchema::TPtr Schema;
         const NActors::TActorId SourceId;
         const std::optional<ui32> GranuleShardingVersionId;
         const ui64 PathId;
@@ -474,7 +475,7 @@ protected:
         const EOperationBehaviour Behaviour;
         const TMonotonic Created = TMonotonic::Now();
     public:
-        TWriteTask(const std::shared_ptr<TArrowData>& arrowData, const ISnapshotSchema::TPtr& schema, const NActors::TActorId sourceId,
+        TWriteTask(const std::shared_ptr<TArrowData>& arrowData, const NOlap::ISnapshotSchema::TPtr& schema, const NActors::TActorId sourceId,
             const std::optional<ui32>& granuleShardingVersionId, const ui64 pathId, const ui64 cookie, const ui64 lockId,
             const NEvWrite::EModificationType modificationType, const EOperationBehaviour behaviour)
             : ArrowData(arrowData)
@@ -484,6 +485,7 @@ protected:
             , PathId(pathId)
             , Cookie(cookie)
             , LockId(lockId)
+            , ModificationType(modificationType)
             , Behaviour(behaviour) {
         }
 
@@ -491,39 +493,7 @@ protected:
             return Created;
         }
 
-        bool Execute(TColumnShard* owner) {
-            auto overloadStatus = owner->CheckOverloaded(PathId);
-            if (overloadStatus == EOverloadStatus::OverloadMetadata) {
-                AFL_INFO(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "wait_overload")("status", overloadStatus);
-                return false;
-            }
-            Owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(TMonotonic::Now() - Created);
-            if (overloadStatus != EOverloadStatus::None) {
-                std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(
-                    TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
-                owner->OverloadWriteFail(overloadStatus, NEvWrite::TWriteMeta(0, PathId, Source, {}, TGUID::CreateTimebased().AsGuidString()),
-                    arrowData->GetSize(), Cookie, std::move(result), ctx);
-                return true;
-            }
-
-            owner->OperationsManager->RegisterLock(LockId, owner->Generation());
-            auto writeOperation = owner->OperationsManager->RegisterOperation(
-                PathId, LockId, Cookie, GranuleShardingVersionId, *ModificationType, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
-
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", ArrowData->GetSize())(
-                "operation_id", writeOperation->GetIdentifier())("in_flight", owner->Counters.GetWritesMonitor()->GetWritesInFlight())(
-                "size_in_flight", owner->Counters.GetWritesMonitor()->GetWritesSizeInFlight());
-            owner->Counters.GetWritesMonitor()->OnStartWrite(ArrowData->GetSize());
-
-            AFL_VERIFY(writeOperation);
-            writeOperation->SetBehaviour(Behaviour);
-            NOlap::TWritingContext wContext(TabletID(), SelfId(), Schema, owner->StoragesManager,
-                owner->Counters.GetIndexationCounters().SplitterCounters,
-                owner->Counters.GetCSCounters().WritingCounters, NOlap::TSnapshot::Max(), writeOperation->GetActivityChecker());
-            ArrowData->SetSeparationPoints(GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId)->GetBucketPositions());
-            writeOperation->Start(*this, ArrowData, Source, wContext);
-            return true;
-        }
+        bool Execute(TColumnShard* owner, const TActorContext& ctx);
     };
 
     class TWriteTasksQueue {
@@ -538,22 +508,22 @@ protected:
         }
 
         ~TWriteTasksQueue() {
-            owner->Counters.GetCSCounters().WritingCounters->QueueWaitSize->Sub(PredWriteTasksSize);
+            Owner->Counters.GetCSCounters().WritingCounters->QueueWaitSize->Sub(PredWriteTasksSize);
         }
 
         void Enqueue(TWriteTask&& task) {
             WriteTasks.emplace_back(std::move(task));
         }
 
-        void Drain(const bool onWakeup) {
+        void Drain(const bool onWakeup, const TActorContext& ctx) {
             if (onWakeup) {
                 WriteTasksOverloadCheckerScheduled = false;
             }
-            while (WriteTasks.size() && WriteTasks.front().Execute(Owner)) {
+            while (WriteTasks.size() && WriteTasks.front().Execute(Owner, ctx)) {
                 WriteTasks.pop_front();
             }
             if (!WriteTasks.size() && !WriteTasksOverloadCheckerScheduled) {
-                Owner->Schedule(TDuration::MilliSeconds(100), NActors::TEvents::TEvWakeup(1));
+                Owner->Schedule(TDuration::MilliSeconds(100), new NActors::TEvents::TEvWakeup(1));
                 WriteTasksOverloadCheckerScheduled = true;
             }
             Owner->Counters.GetCSCounters().WritingCounters->QueueWaitSize->Add((i64)WriteTasks.size() - PredWriteTasksSize);

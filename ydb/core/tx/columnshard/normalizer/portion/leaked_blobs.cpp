@@ -81,6 +81,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
+        Y_UNUSED(ctx);
         WaitingCount = 0;
 
         for (auto it = Channels.begin(); it != Channels.end(); ++it) {

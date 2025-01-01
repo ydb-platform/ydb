@@ -1,4 +1,5 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/raw_socket/sock_config.h>
 #include <ydb/core/util/address_classifier.h>
 
@@ -7,12 +8,6 @@
 #include "kafka_events.h"
 #include "kafka_log_impl.h"
 #include "kafka_metrics.h"
-#include "actors/kafka_read_session_actor.h"
-
-
-#include <strstream>
-#include <sstream>
-#include <iosfwd>
 
 namespace NKafka {
 
@@ -103,6 +98,11 @@ public:
 
     void Bootstrap() {
         Context->ConnectionId = SelfId();
+        // if no authentication required, then we can use local database as our target
+        if (!NKikimr::AppData()->EnforceUserTokenRequirement) {
+            Context->RequireAuthentication = false;
+            Context->DatabasePath = NKikimr::AppData()->TenantName;
+        }
 
         Become(&TKafkaConnection::StateAccepting);
         Schedule(InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
@@ -449,6 +449,7 @@ protected:
             return;
         }
 
+        Context->RequireAuthentication = NKikimr::AppData()->EnforceUserTokenRequirement;
         Context->UserToken = event->UserToken;
         Context->DatabasePath = event->DatabasePath;
         Context->AuthenticationStep = authStep;
@@ -709,6 +710,15 @@ protected:
                 }
             }
         }
+    }
+
+    bool RequireAuthentication(EApiKey apiKey) {
+        bool configuredToAuthenticate = NKikimr::AppData()->EnforceUserTokenRequirement;
+        bool apiKeyRequiresAuthentication = !(EApiKey::API_VERSIONS == apiKey || 
+                                              EApiKey::SASL_HANDSHAKE == apiKey || 
+                                              EApiKey::SASL_AUTHENTICATE == apiKey);
+                                            
+        return configuredToAuthenticate && apiKeyRequiresAuthentication;
     }
 
     void HandleConnected(TEvPollerReady::TPtr event, const TActorContext& ctx) {

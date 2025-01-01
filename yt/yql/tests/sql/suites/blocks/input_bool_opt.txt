@@ -1,0 +1,9 @@
+{"key"=%false;"subkey"=%false;};
+{"key"=%false;"subkey"=%true;};
+{"key"=%false;"subkey"=#;};
+{"key"=%true;"subkey"=%false;};
+{"key"=%true;"subkey"=%true;};
+{"key"=%true;"subkey"=#;};
+{"key"=#;"subkey"=%false;};
+{"key"=#;"subkey"=%true;};
+{"key"=#;"subkey"=#;};

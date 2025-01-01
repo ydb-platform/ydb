@@ -1,0 +1,36 @@
+{
+    "_yql_row_spec"={
+        "ColumnOrder"=["x";"x"];
+        "NativeYtTypeFlags"=0u;
+        "StrictSchema"= %true;
+        "TypePatch"= [
+            "StructType"; [
+                ["x"; ["PgType";"int4"]];
+                ["x_generated_2"; ["PgType";"int8"]];
+            ]
+        ]
+    };
+    "schema"=<
+        "strict"=%true;
+        "unique_keys"=%false;
+    >[
+        {
+            "name"= "x";
+            "required"= %false;
+            "type"= "int32";
+            "type_v3"= {
+                "item"= "int32";
+                "type_name"= "optional";
+            }
+        };
+        {
+            "name"= "x_generated_2";
+            "required"= %false;
+            "type"= "int64";
+            "type_v3"= {
+                "item"= "int64";
+                "type_name"= "optional";
+            }
+        };
+    ]
+}

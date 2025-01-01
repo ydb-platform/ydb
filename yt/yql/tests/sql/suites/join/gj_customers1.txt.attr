@@ -1,0 +1,18 @@
+{
+   "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false
+    >
+    [
+        {
+            "name" = "customer_id";
+            "required" = %true;
+            "type" = "string"
+        };
+        {
+            "name" = "country_id";
+            "required" = %true;
+            "type" = "string"
+        };
+     ];
+}

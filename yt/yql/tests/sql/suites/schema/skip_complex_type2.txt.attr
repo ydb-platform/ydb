@@ -1,0 +1,3 @@
+{
+    "schema"=<strict=%false>[{name=boobee;required=%true;type=int32;type_v3=int32};{name=xx;required=%false;type=any;type_v3={type_name=optional;item={type_name=list;item={type_name=struct;members=[{type=int32;name=bee};{type=int32;name=foo}]}}}}]
+}

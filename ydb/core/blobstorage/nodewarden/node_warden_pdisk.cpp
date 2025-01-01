@@ -465,6 +465,11 @@ namespace NKikimr::NStorage {
             }
             pdiskToDelete.erase(key);
             pathsToResetPending.erase(pdisk.GetPath());
+
+            if (pdisk.HasStop() && pdisk.GetStop()) {
+                const TActorId actorId = MakeBlobStoragePDiskID(LocalNodeId, key.PDiskId);
+                Send(actorId, new NPDisk::TEvYardControl(NPDisk::TEvYardControl::EAction::PDiskStop, nullptr));
+            }
         };
 
         for (const auto& pdisk : StaticServices.GetPDisks()) {

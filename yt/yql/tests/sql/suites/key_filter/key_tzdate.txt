@@ -1,0 +1,9 @@
+{"value"="bad"};
+{"value"="1970-01-01,GMT"};
+{"value"="1970-01-01,Europe/Moscow"};
+{"value"="1999-01-01,Europe/Moscow"};
+{"value"="2018-02-01,Europe/Moscow"};
+{"value"="2018-02-01,GMT"};
+{"value"="2018-02-01,America/Los_Angeles"};
+{"value"="2105-12-30,America/Los_Angeles"};
+{"value"="2105-12-30,posixrules"};

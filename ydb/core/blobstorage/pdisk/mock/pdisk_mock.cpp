@@ -853,6 +853,19 @@ public:
         }
     }
 
+    void Handle(NPDisk::TEvYardControl::TPtr &ev) {
+        auto *msg = ev->Get();
+
+        switch (msg->Action) {
+            case NPDisk::TEvYardControl::PDiskStop:
+                Impl.StateErrorReason = "Stopped by control message";
+                Become(&TThis::StateError);
+                break;
+            default:
+                break;
+        }
+    }
+
     void Handle(NPDisk::TEvConfigureScheduler::TPtr ev) {
         auto *msg = ev->Get();
         auto res = std::make_unique<NPDisk::TEvConfigureSchedulerResult>(NKikimrProto::OK, TString());
@@ -982,6 +995,7 @@ public:
         hFunc(NPDisk::TEvHarakiri, Handle);
         hFunc(NPDisk::TEvConfigureScheduler, Handle);
         hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
+        hFunc(NPDisk::TEvYardControl, Handle);
         cFunc(TEvents::TSystem::Wakeup, ReportMetrics);
         hFunc(NPDisk::TEvReadMetadata, Handle);
         hFunc(NPDisk::TEvWriteMetadata, Handle);

@@ -4,6 +4,10 @@
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
+TString TConstants::GetRecordsCountIntervalString() {
+    return TStringBuilder() << "[" << MinRecordsCount << ", " << MaxRecordsCount << "]";
+}
+
 TString TConstants::GetHashesCountIntervalString() {
     return TStringBuilder() << "[" << MinHashesCount << ", " << MaxHashesCount << "]";
 }

@@ -174,6 +174,8 @@ namespace NKikimr::NStorage {
         TControlWrapper ThrottlingMaxSstCount;
         TControlWrapper ThrottlingMinInplacedSize;
         TControlWrapper ThrottlingMaxInplacedSize;
+        TControlWrapper ThrottlingMinOccupancyPerMille;
+        TControlWrapper ThrottlingMaxOccupancyPerMille;
 
         TControlWrapper MaxCommonLogChunksHDD;
         TControlWrapper MaxCommonLogChunksSSD;
@@ -198,7 +200,9 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxNumOfSlowDisksSSD;
 
         TControlWrapper LongRequestThresholdMs;
-        TControlWrapper LongRequestReportingDelayMs;
+        TControlWrapper ReportingControllerBucketSize;
+        TControlWrapper ReportingControllerLeakDurationMs;
+        TControlWrapper ReportingControllerLeakRate;
 
     public:
         struct TGroupRecord;

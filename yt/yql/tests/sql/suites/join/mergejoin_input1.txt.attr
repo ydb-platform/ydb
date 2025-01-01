@@ -1,0 +1,25 @@
+{
+   "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false
+    >
+    [
+        {
+            "name" = "PhraseID";
+            "required" = %false;
+            "sort_order" = "ascending";
+            "type" = "uint64"
+        };
+        {
+            "name" = "BaseNo";
+            "required" = %false;
+            "sort_order" = "ascending";
+            "type" = "uint16"
+        };
+        {
+            "name" = "Text";
+            "required" = %false;
+            "type" = "string"
+        }
+    ];
+}

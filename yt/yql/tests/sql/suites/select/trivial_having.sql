@@ -1,0 +1,1 @@
+select key, "WAT" as subkey, Max(value) as value from plato.Input group by key having Max(value) = "FOO";

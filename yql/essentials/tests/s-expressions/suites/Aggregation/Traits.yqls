@@ -1,7 +1,6 @@
 (
 #comment
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 (let init (lambda '(x) x))
 (let update (lambda '(x y) (+ x y)))

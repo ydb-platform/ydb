@@ -1,0 +1,5 @@
+DEFINE SUBQUERY $subq() AS
+    SELECT key, subkey, value, DENSE_RANK() OVER w AS r FROM plato.Input WINDOW w AS (PARTITION BY key ORDER BY subkey);
+END DEFINE;
+
+EXPORT $subq;

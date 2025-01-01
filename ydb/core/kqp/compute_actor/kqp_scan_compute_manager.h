@@ -72,6 +72,10 @@ public:
             new TEvPipeCache::TEvForward(ev.release(), TabletId, !subscribed), IEventHandle::FlagTrackDelivery);
     }
 
+    ui64 GetTabletId() const {
+        return TabletId;
+    }
+
     TString ToString() const {
         TStringBuilder builder;
 

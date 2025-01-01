@@ -10,15 +10,16 @@
 
 namespace NKikimr::NOlap {
 
-std::optional<std::vector<NKikimr::NArrow::TSerializedBatch>> TBuildSlicesTask::BuildSlices() {
+std::optional<std::vector<NArrow::TSerializedBatch>> TBuildSlicesTask::BuildSlices() {
     if (!OriginalBatch->num_rows()) {
         return std::vector<NKikimr::NArrow::TSerializedBatch>();
     }
-    NArrow::TBatchSplitttingContext context(NColumnShard::TLimits::GetMaxBlobSize());
+    const auto splitSettings = NYDBTest::TControllers::GetColumnShardController()->GetBlobSplitSettings();
+    NArrow::TBatchSplitttingContext context(splitSettings.GetMaxBlobSize());
     context.SetFieldsForSpecialKeys(WriteData.GetPrimaryKeySchema());
     auto splitResult = NArrow::SplitByBlobSize(OriginalBatch, context);
     if (splitResult.IsFail()) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_WRITE)(
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)(
             "event", TStringBuilder() << "cannot split batch in according to limits: " + splitResult.GetErrorMessage());
         return {};
     }

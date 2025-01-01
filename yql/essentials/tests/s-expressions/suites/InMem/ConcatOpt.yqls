@@ -1,6 +1,5 @@
 (
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 (import aggregate_module '"/lib/yql/aggregate.yqls")
 (import window_module '"/lib/yql/window.yqls")

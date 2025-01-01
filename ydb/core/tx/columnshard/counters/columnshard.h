@@ -37,12 +37,13 @@ public:
     }
 
     TWriteCounters(TCommonCountersOwner& owner)
-        : TBase(owner, "activity", "writing") {
+        : TBase(owner, "activity", "writing")
+        , QueueWaitSize(TBase::GetValue("Write/Queue/Size"))
+    {
         VolumeWriteData = TBase::GetDeriviative("Write/Incoming/Bytes");
         HistogramBytesWriteDataCount = TBase::GetHistogram("Write/Incoming/ByBytes/Count", NMonitoring::ExponentialHistogram(18, 2, 100));
         HistogramBytesWriteDataBytes = TBase::GetHistogram("Write/Incoming/ByBytes/Bytes", NMonitoring::ExponentialHistogram(18, 2, 100));
         HistogramDurationQueueWait = TBase::GetHistogram("Write/Queue/Waiting/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 100));
-        QueueWaitSize = TBase::GetValue("Write/Queue/Size");
     }
 
     void OnIncomingData(const ui64 dataSize) const {

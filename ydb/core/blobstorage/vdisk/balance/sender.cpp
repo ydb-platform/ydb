@@ -45,7 +45,6 @@ namespace {
                     [&](TRope&& data) {
                         // part is already in memory, no need to read it from disk
                         Y_DEBUG_ABORT_UNLESS(item.PartsMask.CountBits() == 1);
-                        Result[i].PartsData.reserve(1);
                         Result[i].PartsData.emplace_back(std::move(data));
                         ++Responses;
                     },
@@ -153,7 +152,7 @@ namespace {
                 auto localParts = part.PartsMask;
                 for (ui8 partIdx = localParts.FirstPosition(), i = 0; partIdx < localParts.GetSize(); partIdx = localParts.NextPosition(partIdx), ++i) {
                     auto key = TLogoBlobID(part.Key, partIdx + 1);
-                    auto&& data = std::move(part.PartsData[i]);
+                    auto& data = part.PartsData[i];
                     size_t dataSize = data.size();
                     auto vDiskId = GetMainReplicaVDiskId(*GInfo, key);
 

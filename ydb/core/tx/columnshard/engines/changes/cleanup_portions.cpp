@@ -18,10 +18,8 @@ void TCleanupPortionsColumnEngineChanges::DoDebugString(TStringOutput& out) cons
 }
 
 void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
-    if (PortionsToRemove.GetSize()) {
-        AFL_VERIFY(FetchedDataAccessors);
-        PortionsToRemove.ApplyOnExecute(self, context, *FetchedDataAccessors);
-    }
+    AFL_VERIFY(FetchedDataAccessors);
+    PortionsToRemove.ApplyOnExecute(self, context, *FetchedDataAccessors);
 
     THashSet<ui64> pathIds;
     if (!self) {

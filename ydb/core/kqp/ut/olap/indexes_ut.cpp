@@ -422,16 +422,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
             AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() == 0);
             AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() == 0);
-            TInstant start = Now();
-            ui32 compactionsStart = csController->GetCompactionStartedCounter().Val();
-            while (Now() - start < TDuration::Seconds(10)) {
-                if (compactionsStart != csController->GetCompactionStartedCounter().Val()) {
-                    compactionsStart = csController->GetCompactionStartedCounter().Val();
-                    start = Now();
-                }
-                Cerr << "WAIT_COMPACTION: " << csController->GetCompactionStartedCounter().Val() << Endl;
-                Sleep(TDuration::Seconds(1));
-            }
+            csController->WaitCompactions(TDuration::Seconds(5));
             // important checker for control compactions (<=21) and control indexes constructed (>=21)
             AFL_VERIFY(csController->GetCompactionStartedCounter().Val() == 21)("count", csController->GetCompactionStartedCounter().Val());
 

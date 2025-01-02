@@ -9,11 +9,10 @@
 namespace NKikimr::NGRpcService {
 
 class TEtcdGRpcService
-        : public NYdbGrpc::TGrpcServiceBase<etcdserverpb::KV>
+    : public NYdbGrpc::TGrpcServiceBase<etcdserverpb::KV>
 {
 public:
-    TEtcdGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
-            NActors::TActorId grpcRequestProxyId);
+    TEtcdGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId);
     ~TEtcdGRpcService();
 
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
@@ -21,12 +20,11 @@ private:
     void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
 
 private:
-    NActors::TActorSystem* ActorSystem = nullptr;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
-    NActors::TActorId GRpcRequestProxyId;
+    NActors::TActorSystem *const ActorSystem;
+    const TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    const NActors::TActorId GRpcRequestProxyId;
 
     grpc::ServerCompletionQueue* CQ = nullptr;
 };
 
 } // namespace NKikimr::NGRpcService
-

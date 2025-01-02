@@ -4,7 +4,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/service_etcd.h>
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
-#include "ydb/library/grpc/server/grpc_method_setup.h"
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -167,7 +167,6 @@ public:
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
         TResponse* resp = CreateResponseMessage();
-//        TCommonResponseFiller<TResponse, TDerived::IsOp>::Fill(*resp, IssueManager.GetIssues(), CostInfo, status);
         FinishRequest();
         Reply(resp, status);
         if (Ctx_->IsStreamCall()) {
@@ -433,12 +432,10 @@ public:
         , AuxSettings(std::move(auxSettings))
     { }
 
-    void Pass(const IFacilityProvider& facility) override {
-        try {
-            PassMethod(std::move(std::unique_ptr<TRequestIface>(this)), facility);
-        } catch (const std::exception& ex) {
-            this->RaiseIssue(NYql::TIssue{TStringBuilder() << "unexpected exception: " << ex.what()});
-        }
+    void Pass(const IFacilityProvider& facility) override try {
+        PassMethod(std::move(std::unique_ptr<TRequestIface>(this)), facility);
+    } catch (const std::exception& ex) {
+        this->RaiseIssue(NYql::TIssue{TStringBuilder() << "unexpected exception: " << ex.what()});
     }
 
     TRateLimiterMode GetRlMode() const override {

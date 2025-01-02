@@ -1,12 +1,14 @@
 #include "write_queue.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/operations/write_data.h>
+#include <ydb/core/tx/data_events/write_data.h>
 
 namespace NKikimr::NColumnShard {
 
 bool TWriteTask::CheckOverloadImmediate(TColumnShard* owner, const TActorContext& ctx) {
     auto overloadStatus = owner->CheckOverloadedImmediate(PathId);
-    if (overloadStatus == EOverloadStatus::None) {
+    if (overloadStatus == TColumnShard::EOverloadStatus::None) {
         return false;
     }
     owner->Counters.GetWritesMonitor()->OnFinishWrite(ArrowData->GetSize());
@@ -19,12 +21,12 @@ bool TWriteTask::CheckOverloadImmediate(TColumnShard* owner, const TActorContext
 }
 
 bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) {
-    overloadStatus = owner->CheckOverloadedWait(PathId);
-    if (overloadStatus == EOverloadStatus::OverloadMetadata) {
+    auto overloadStatus = owner->CheckOverloadedWait(PathId);
+    if (overloadStatus == TColumnShard::EOverloadStatus::OverloadMetadata) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "wait_overload")("status", overloadStatus);
         return false;
     }
-    AFL_VERIFY(overloadStatus == EOverloadStatus::None);
+    AFL_VERIFY(overloadStatus == TColumnShard::EOverloadStatus::None);
 
     owner->OperationsManager->RegisterLock(LockId, owner->Generation());
     auto writeOperation = owner->OperationsManager->RegisterOperation(
@@ -42,6 +44,10 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) {
     ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId)->GetBucketPositions());
     writeOperation->Start(*owner, ArrowData, SourceId, wContext);
     return true;
+}
+
+ui64 TWriteTask::GetSize() const {
+    return ArrowData->GetSize();
 }
 
 bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {

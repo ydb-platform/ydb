@@ -101,6 +101,7 @@ class TWaitEraseTablesTxSubscriber;
 class TTxBlobsWritingFinished;
 class TTxBlobsWritingFailed;
 class TWriteTasksQueue;
+class TWriteTask;
 
 namespace NLoading {
 class TInsertTableInitializer;
@@ -230,6 +231,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NLoading::TInFlightReadsInitializer;
     friend class NLoading::TSpecialValuesInitializer;
     friend class NLoading::TTablesManagerInitializer;
+    friend class TWriteTasksQueue;
+    friend class TWriteTask;
 
     class TTxProgressTx;
     class TTxProposeCancel;

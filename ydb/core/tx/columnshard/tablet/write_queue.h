@@ -2,10 +2,10 @@
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
-#include <ydb/core/tx/data_events/write_data.h>
 
 namespace NKikimr::NColumnShard {
 class TColumnShard;
+class TArrowData;
 class TWriteTask: TMoveOnly {
 private:
     std::shared_ptr<TArrowData> ArrowData;
@@ -34,10 +34,13 @@ public:
         , Behaviour(behaviour) {
     }
 
+    ui64 GetSize() const;
+
     const TMonotonic& GetCreatedMonotonic() const {
         return Created;
     }
 
+    bool CheckOverloadImmediate(TColumnShard* owner, const TActorContext& ctx);
     bool Execute(TColumnShard* owner, const TActorContext& ctx);
 };
 

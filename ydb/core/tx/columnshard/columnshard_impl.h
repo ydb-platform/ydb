@@ -100,6 +100,7 @@ class TOperationsManager;
 class TWaitEraseTablesTxSubscriber;
 class TTxBlobsWritingFinished;
 class TTxBlobsWritingFailed;
+class TWriteTasksQueue;
 
 namespace NLoading {
 class TInsertTableInitializer;
@@ -374,7 +375,8 @@ public:
 private:
     void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize, const ui64 cookie,
         std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
-    EOverloadStatus CheckOverloaded(const ui64 tableId) const;
+    EOverloadStatus CheckOverloadedImmediate(const ui64 tableId) const;
+    EOverloadStatus CheckOverloadedWait(const ui64 tableId) const;
 
 protected:
     STFUNC(StateInit) {
@@ -462,80 +464,10 @@ protected:
         }
     }
 
-    class TWriteTask: TMoveOnly {
-    private:
-        std::shared_ptr<TArrowData> ArrowData;
-        NOlap::ISnapshotSchema::TPtr Schema;
-        const NActors::TActorId SourceId;
-        const std::optional<ui32> GranuleShardingVersionId;
-        const ui64 PathId;
-        const ui64 Cookie;
-        const ui64 LockId;
-        const NEvWrite::EModificationType ModificationType;
-        const EOperationBehaviour Behaviour;
-        const TMonotonic Created = TMonotonic::Now();
-    public:
-        TWriteTask(const std::shared_ptr<TArrowData>& arrowData, const NOlap::ISnapshotSchema::TPtr& schema, const NActors::TActorId sourceId,
-            const std::optional<ui32>& granuleShardingVersionId, const ui64 pathId, const ui64 cookie, const ui64 lockId,
-            const NEvWrite::EModificationType modificationType, const EOperationBehaviour behaviour)
-            : ArrowData(arrowData)
-            , Schema(schema)
-            , SourceId(sourceId)
-            , GranuleShardingVersionId(granuleShardingVersionId)
-            , PathId(pathId)
-            , Cookie(cookie)
-            , LockId(lockId)
-            , ModificationType(modificationType)
-            , Behaviour(behaviour) {
-        }
-
-        const TMonotonic& GetCreatedMonotonic() const {
-            return Created;
-        }
-
-        bool Execute(TColumnShard* owner, const TActorContext& ctx);
-    };
-
-    class TWriteTasksQueue {
-    private:
-        bool WriteTasksOverloadCheckerScheduled = false;
-        std::deque<TWriteTask> WriteTasks;
-        i64 PredWriteTasksSize = 0;
-        TColumnShard* Owner;
-    public:
-        TWriteTasksQueue(TColumnShard* owner)
-            : Owner(owner) {
-        }
-
-        ~TWriteTasksQueue() {
-            Owner->Counters.GetCSCounters().WritingCounters->QueueWaitSize->Sub(PredWriteTasksSize);
-        }
-
-        void Enqueue(TWriteTask&& task) {
-            WriteTasks.emplace_back(std::move(task));
-        }
-
-        void Drain(const bool onWakeup, const TActorContext& ctx) {
-            if (onWakeup) {
-                WriteTasksOverloadCheckerScheduled = false;
-            }
-            while (WriteTasks.size() && WriteTasks.front().Execute(Owner, ctx)) {
-                WriteTasks.pop_front();
-            }
-            if (WriteTasks.size() && !WriteTasksOverloadCheckerScheduled) {
-                Owner->Schedule(TDuration::MilliSeconds(300), new NActors::TEvents::TEvWakeup(1));
-                WriteTasksOverloadCheckerScheduled = true;
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "queue_on_write")("size", WriteTasks.size());
-            }
-            Owner->Counters.GetCSCounters().WritingCounters->QueueWaitSize->Add((i64)WriteTasks.size() - PredWriteTasksSize);
-            PredWriteTasksSize = (i64)WriteTasks.size();
-        }
-    };
-
 private:
     std::unique_ptr<TTabletCountersBase> TabletCountersHolder;
     TCountersManager Counters;
-    TWriteTasksQueue WriteTasksQueue;
+    std::unique_ptr<TWriteTasksQueue> WriteTasksQueue;
 
     std::unique_ptr<TTxController> ProgressTxController;
     std::unique_ptr<TOperationsManager> OperationsManager;

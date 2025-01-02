@@ -1,0 +1,78 @@
+#include "write_queue.h"
+
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
+
+namespace NKikimr::NColumnShard {
+
+bool TWriteTask::CheckOverloadImmediate(TColumnShard* owner, const TActorContext& ctx) {
+    auto overloadStatus = owner->CheckOverloadedImmediate(PathId);
+    if (overloadStatus == EOverloadStatus::None) {
+        return false;
+    }
+    owner->Counters.GetWritesMonitor()->OnFinishWrite(ArrowData->GetSize());
+    owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(TMonotonic::Now() - Created);
+    std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(
+        owner->TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error: " + ::ToString(overloadStatus));
+    owner->OverloadWriteFail(overloadStatus, NEvWrite::TWriteMeta(0, PathId, SourceId, {}, TGUID::CreateTimebased().AsGuidString()),
+        ArrowData->GetSize(), Cookie, std::move(result), ctx);
+    return true;
+}
+
+bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) {
+    overloadStatus = owner->CheckOverloadedWait(PathId);
+    if (overloadStatus == EOverloadStatus::OverloadMetadata) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "wait_overload")("status", overloadStatus);
+        return false;
+    }
+    AFL_VERIFY(overloadStatus == EOverloadStatus::None);
+
+    owner->OperationsManager->RegisterLock(LockId, owner->Generation());
+    auto writeOperation = owner->OperationsManager->RegisterOperation(
+        PathId, LockId, Cookie, GranuleShardingVersionId, ModificationType, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
+
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", ArrowData->GetSize())("operation_id", writeOperation->GetIdentifier())(
+        "in_flight", owner->Counters.GetWritesMonitor()->GetWritesInFlight())(
+        "size_in_flight", owner->Counters.GetWritesMonitor()->GetWritesSizeInFlight());
+
+    AFL_VERIFY(writeOperation);
+    writeOperation->SetBehaviour(Behaviour);
+    NOlap::TWritingContext wContext(owner->TabletID(), owner->SelfId(), Schema, owner->StoragesManager,
+        owner->Counters.GetIndexationCounters().SplitterCounters, owner->Counters.GetCSCounters().WritingCounters, NOlap::TSnapshot::Max(),
+        writeOperation->GetActivityChecker());
+    ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId)->GetBucketPositions());
+    writeOperation->Start(*owner, ArrowData, SourceId, wContext);
+    return true;
+}
+
+bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
+    if (onWakeup) {
+        WriteTasksOverloadCheckerScheduled = false;
+    }
+    while (WriteTasks.size() && (WriteTasks.front().CheckOverloadImmediate(Owner, ctx) || WriteTasks.front().Execute(Owner, ctx))) {
+        WriteTasks.pop_front();
+    }
+    if (WriteTasks.size() && !WriteTasksOverloadCheckerScheduled) {
+        Owner->Schedule(TDuration::MilliSeconds(300), new NActors::TEvents::TEvWakeup(1));
+        WriteTasksOverloadCheckerScheduled = true;
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "queue_on_write")("size", WriteTasks.size());
+    }
+    Owner->Counters.GetCSCounters().WritingCounters->QueueWaitSize->Add((i64)WriteTasks.size() - PredWriteTasksSize);
+    PredWriteTasksSize = (i64)WriteTasks.size();
+    return !WriteTasks.size();
+}
+
+bool TWriteTasksQueue::TryEnqueue(TColumnShard* owner, const TActorContext& ctx, TWriteTask&& task) {
+    owner->Counters.GetWritesMonitor()->OnStartWrite(task.GetSize());
+    if (!task.CheckOverloadImmediate(owner, ctx)) {
+        WriteTasks.emplace_back(std::move(task));
+        return true;
+    } else {
+        return false;
+    }
+}
+
+TWriteTasksQueue::~TWriteTasksQueue() {
+    Owner->Counters.GetCSCounters().WritingCounters->QueueWaitSize->Sub(PredWriteTasksSize);
+}
+
+}   // namespace NKikimr::NColumnShard

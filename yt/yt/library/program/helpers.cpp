@@ -1,8 +1,6 @@
 #include "helpers.h"
 #include "config.h"
 
-#include <yt/yt/library/profiling/perf/event_counter_profiler.h>
-
 #include <yt/yt/core/misc/ref_counted_tracker_profiler.h>
 
 #include <yt/yt/core/logging/log_manager.h>
@@ -24,9 +22,6 @@ void ConfigureSingletons(const TSingletonsConfigPtr& config)
     // Failure to do so may result in issues like YT-4561.
     // TODO(babenko): move to server program base
     NNet::TAddressResolver::Get()->EnsureLocalHostName();
-
-    // TODO(babenko): move to server program base
-    NProfiling::EnablePerfEventCounterProfiling();
 }
 
 void ReconfigureSingletons(const TSingletonsDynamicConfigPtr& dynamicConfig)

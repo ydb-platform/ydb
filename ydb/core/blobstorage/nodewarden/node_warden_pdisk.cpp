@@ -203,10 +203,19 @@ namespace NKikimr::NStorage {
         SendToController(std::move(report));
     }
 
-    void TNodeWarden::AskBSCToRestartPDisk(ui32 pdiskId, ui64 requestCookie) {
+    void TNodeWarden::AskBSCToRestartPDisk(ui32 pdiskId, bool ignoreDegradedGroups, ui64 requestCookie) {
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
 
-        NKikimrBlobStorage::TRestartPDisk* cmd = ev->Record.MutableRequest()->AddCommand()->MutableRestartPDisk();
+        NKikimrBlobStorage::TConfigRequest* request = ev->Record.MutableRequest();
+
+        NKikimrBlobStorage::TRestartPDisk* cmd = request->AddCommand()->MutableRestartPDisk();
+
+        if (ignoreDegradedGroups) {
+            request->SetIgnoreGroupFailModelChecks(true);
+            request->SetIgnoreDegradedGroupsChecks(true);
+            request->SetIgnoreDisintegratedGroupsChecks(true);
+            request->SetIgnoreGroupSanityChecks(true);
+        }
 
         auto targetPDiskId = cmd->MutableTargetPDiskId();
         targetPDiskId->SetNodeId(LocalNodeId);

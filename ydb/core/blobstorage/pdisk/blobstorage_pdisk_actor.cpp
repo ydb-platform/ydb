@@ -1004,7 +1004,7 @@ public:
             }
 
             Send(ev->Sender, new TEvBlobStorage::TEvNotifyWardenPDiskRestarted(PDisk->PDiskId, NKikimrProto::EReplyStatus::NOTREADY));
-            
+
             return;
         }
 
@@ -1017,7 +1017,7 @@ public:
             NPDisk::TMainKey newMainKey = ev->Get()->MainKey;
 
             SecureWipeBuffer((ui8*)ev->Get()->MainKey.Keys.data(), sizeof(NPDisk::TKey) * ev->Get()->MainKey.Keys.size());
-            
+
             LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
                     << " Going to restart PDisk since received TEvAskWardenRestartPDiskResult");
 
@@ -1031,7 +1031,7 @@ public:
             TIntrusivePtr<TPDiskConfig> actorCfg = std::move(Cfg);
 
             auto& newCfg = ev->Get()->Config;
-            
+
             if (newCfg) {
                 Y_VERIFY_S(newCfg->PDiskId == pdiskId,
                         "New config's PDiskId# " << newCfg->PDiskId << " is not equal to real PDiskId# " << pdiskId);
@@ -1046,7 +1046,7 @@ public:
             TGenericExecutorThread& executorThread = actorCtx.ExecutorThread;
 
             PassAway();
-            
+
             CreatePDiskActor(executorThread, counters, actorCfg, newMainKey, pdiskId, poolId, nodeId);
 
             Send(ev->Sender, new TEvBlobStorage::TEvNotifyWardenPDiskRestarted(pdiskId));
@@ -1125,10 +1125,12 @@ public:
             }
         }
         if (cgi.Has("restartPDisk")) {
-            ui32 cookieIdxPart = NextRestartRequestCookie++;
-            ui64 fullCookie = (((ui64) PDisk->PDiskId) << 32) | cookieIdxPart; // This way cookie will be unique no matter the disk.
+            bool ignoreChecks = "true" == cgi.Get("ignoreChecks");
 
-            Send(NodeWardenServiceId, new TEvBlobStorage::TEvAskWardenRestartPDisk(PDisk->PDiskId), fullCookie);
+            ui32 cookieIdxPart = NextRestartRequestCookie++;
+            ui64 fullCookie = (((ui64) PDisk->PDiskId) << 32) | cookieIdxPart; // This way cookie will be unique regardless of the disk.
+
+            Send(NodeWardenServiceId, new TEvBlobStorage::TEvAskWardenRestartPDisk(PDisk->PDiskId, ignoreChecks), fullCookie);
             // Send responce later when restart command will be received.
             PendingRestartResponse = [this, actor = ev->Sender] (bool restartAllowed, TString& details) {
                 TStringStream jsonBuilder;

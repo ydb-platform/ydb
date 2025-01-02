@@ -522,9 +522,10 @@ protected:
             while (WriteTasks.size() && WriteTasks.front().Execute(Owner, ctx)) {
                 WriteTasks.pop_front();
             }
-            if (!WriteTasks.size() && !WriteTasksOverloadCheckerScheduled) {
-                Owner->Schedule(TDuration::MilliSeconds(100), new NActors::TEvents::TEvWakeup(1));
+            if (WriteTasks.size() && !WriteTasksOverloadCheckerScheduled) {
+                Owner->Schedule(TDuration::MilliSeconds(300), new NActors::TEvents::TEvWakeup(1));
                 WriteTasksOverloadCheckerScheduled = true;
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "queue_on_write")("size", WriteTasks.size());
             }
             Owner->Counters.GetCSCounters().WritingCounters->QueueWaitSize->Add((i64)WriteTasks.size() - PredWriteTasksSize);
             PredWriteTasksSize = (i64)WriteTasks.size();

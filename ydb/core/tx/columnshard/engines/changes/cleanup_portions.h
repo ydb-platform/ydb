@@ -1,5 +1,6 @@
 #pragma once
 #include "abstract/abstract.h"
+#include "abstract/remove_portions.h"
 
 namespace NKikimr::NOlap {
 
@@ -88,4 +89,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap

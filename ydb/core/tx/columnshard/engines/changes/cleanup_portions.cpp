@@ -18,7 +18,10 @@ void TCleanupPortionsColumnEngineChanges::DoDebugString(TStringOutput& out) cons
 }
 
 void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
-    PortionsToRemove.ApplyOnExecute(self, context);
+    if (PortionsToRemove.GetSize()) {
+        AFL_VERIFY(FetchedDataAccessors);
+        PortionsToRemove.ApplyOnExecute(self, context, *FetchedDataAccessors);
+    }
 
     THashSet<ui64> pathIds;
     if (!self) {
@@ -42,7 +45,7 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
 }
 
 void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
-    PortionsToRemove.ApplyOnComplete(self, context);
+    PortionsToRemove.ApplyOnComplete(self, context, *FetchedDataAccessors);
     for (auto& portionInfo : PortionsToDrop) {
         if (!context.EngineLogs.ErasePortion(*portionInfo)) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo->DebugString());

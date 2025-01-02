@@ -13,9 +13,11 @@ namespace NKikimr::NOlap {
 void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     THashSet<ui64> usedPortionIds = PortionsToRemove.GetPortionIds();
     auto schemaPtr = context.EngineLogs.GetVersionedIndex().GetLastSchema();
-
-    PortionsToRemove.ApplyOnExecute(self, context);
-    PortionsToMove.ApplyOnExecute(self, context);
+    if (PortionsToRemove.GetSize() || PortionsToMove.GetSize()) {
+        AFL_VERIFY(FetchedDataAccessors);
+        PortionsToRemove.ApplyOnExecute(self, context, *FetchedDataAccessors);
+        PortionsToMove.ApplyOnExecute(self, context, *FetchedDataAccessors);
+    }
     const auto predRemoveDroppedTable = [self](const TWritePortionInfoWithBlobsResult& item) {
         auto& portionInfo = item.GetPortionResult();
         if (!!self && !self->TablesManager.HasTable(portionInfo.GetPortionInfo().GetPathId(), false)) {
@@ -63,23 +65,28 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portions", sb)("task_id", GetTaskIdentifier());
     }
 
-    PortionsToRemove.ApplyOnComplete(self, context);
+    auto g = context.EngineLogs.GranulesStorage->GetStats()->StartPackModification();
+    for (auto& portionBuilder : AppendedPortions) {
+        context.EngineLogs.AppendPortion(portionBuilder.GetPortionResult());
+    }
+
+    PortionsToRemove.ApplyOnComplete(self, context, *FetchedDataAccessors);
+    PortionsToMove.ApplyOnComplete(self, context, *FetchedDataAccessors);
 }
 
 void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
     AFL_VERIFY(PortionsToRemove.GetSize() + PortionsToMove.GetSize() + AppendedPortions.size() || NoAppendIsCorrect);
     for (auto&& i : AppendedPortions) {
         i.GetPortionConstructor().MutablePortionConstructor().SetPortionId(context.NextPortionId());
-        i.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(TargetCompactionLevel.value_or(0));
+        i.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(PortionsToMove.GetTargetCompactionLevel().value_or(0));
     }
 }
 
 void TChangesWithAppend::DoOnAfterCompile() {
-    if (AppendedPortions.size()) {
-        for (auto&& i : AppendedPortions) {
-            i.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(TargetCompactionLevel.value_or(0));
-            i.FinalizePortionConstructor();
-        }
+    for (auto&& i : AppendedPortions) {
+        i.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(
+            PortionsToMove.GetTargetCompactionLevel().value_or(0));
+        i.FinalizePortionConstructor();
     }
 }
 

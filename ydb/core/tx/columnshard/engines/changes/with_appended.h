@@ -1,8 +1,12 @@
 #pragma once
 #include "abstract/abstract.h"
-#include <util/generic/hash.h>
+#include "abstract/move_portions.h"
+#include "abstract/remove_portions.h"
+
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/tier_info.h>
+
+#include <util/generic/hash.h>
 
 namespace NKikimr::NOlap {
 
@@ -18,7 +22,6 @@ protected:
     bool NoAppendIsCorrect = false;
 
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& /*context*/) override {
-
     }
 
     virtual void DoCompile(TFinalizationContext& context) override;
@@ -35,7 +38,7 @@ protected:
 
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override final {
         auto actLock = DoBuildDataLockImpl();
-        auto removePortionsLock = PortionsToRemove.BuildDataLock(TypeString() + "::" + GetTaskIdentifier() + "::REMOVE" , GetLockCategory());
+        auto removePortionsLock = PortionsToRemove.BuildDataLock(TypeString() + "::" + GetTaskIdentifier() + "::REMOVE", GetLockCategory());
         auto movePortionsLock = PortionsToMove.BuildDataLock(TypeString() + "::" + GetTaskIdentifier() + "::MOVE", GetLockCategory());
         return NDataLocks::TCompositeLock::Build(TypeString() + "::" + GetTaskIdentifier(), {actLock, removePortionsLock, movePortionsLock});
     }
@@ -43,9 +46,19 @@ protected:
 public:
     TChangesWithAppend(const TSaverContext& saverContext, const NBlobOperations::EConsumer consumerId)
         : TBase(saverContext.GetStoragesManager(), consumerId)
-        , SaverContext(saverContext)
-    {
+        , SaverContext(saverContext) {
+    }
 
+    const TRemovePortionsChange& GetPortionsToRemove() const {
+        return PortionsToRemove;
+    }
+
+    const TMovePortionsChange& GetPortionsToMove() const {
+        return PortionsToMove;
+    }
+
+    void SetTargetCompactionLevel(const ui32 level) {
+        PortionsToMove.SetTargetCompactionLevel(level);
     }
 
     const std::vector<TWritePortionInfoWithBlobsResult>& GetAppendedPortions() const {
@@ -64,7 +77,7 @@ public:
     }
 
     void AddPortionToRemove(const TPortionInfo::TConstPtr& info, const bool addIntoDataAccessRequest = true) {
-        AFL_VERIFY(PortionsToRemove->AddPortion(info));
+        AFL_VERIFY(PortionsToRemove.AddPortion(info));
         if (addIntoDataAccessRequest) {
             PortionsToAccess->AddPortion(info);
         }

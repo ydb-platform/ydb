@@ -23,7 +23,7 @@ DEPENDS(
 
 DATA(
     arcadia/ydb/library/yql/tests/sql
-    arcadia/yql/essentials/tests/sql/suites
+    arcadia/yt/yql/tests/sql/suites
     arcadia/ydb/tests/fq/yt
     arcadia/ydb/tests/fq/yt/cfg
 )

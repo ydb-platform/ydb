@@ -28,18 +28,19 @@ add_subdirectory(counters)
 add_subdirectory(hooks)
 add_subdirectory(data_accessor)
 add_subdirectory(splitter)
+add_subdirectory(blobs_reader)
+add_subdirectory(resource_subscriber)
+add_subdirectory(data_locks)
 add_subdirectory(resources)
 add_subdirectory(tx_reader)
+add_subdirectory(export)
+add_subdirectory(loading)
+add_subdirectory(normalizer)
 add_subdirectory(operations)
 add_subdirectory(data_reader)
-add_subdirectory(export)
 add_subdirectory(transactions)
-add_subdirectory(blobs_reader)
-add_subdirectory(data_locks)
 add_subdirectory(subscriber)
-add_subdirectory(loading)
-add_subdirectory(resource_subscriber)
-add_subdirectory(normalizer)
+add_subdirectory(tablet)
 add_subdirectory(test_helper)
 add_subdirectory(ut_rw)
 add_subdirectory(ut_schema)
@@ -56,7 +57,6 @@ target_link_libraries(core-tx-columnshard PUBLIC
   contrib-libs-cxxsupp
   yutil
   tools-enum_parser-enum_serialization_runtime
-  library-actors-core
   ydb-core-actorlib_impl
   ydb-core-base
   ydb-core-control
@@ -65,38 +65,40 @@ target_link_libraries(core-tx-columnshard PUBLIC
   ydb-core-protos
   ydb-core-tablet
   ydb-core-tablet_flat
-  core-tx-time_cast
-  tx-columnshard-engines
-  columnshard-engines-writer
-  engines-reader-abstract
-  tx-columnshard-counters
-  tx-columnshard-common
-  tx-columnshard-splitter
-  tx-columnshard-operations
-  tx-columnshard-transactions
-  columnshard-transactions-operators
-  tx-columnshard-blobs_reader
   tx-columnshard-blobs_action
+  columnshard-blobs_action-storages_manager
+  tx-columnshard-blobs_reader
+  tx-columnshard-common
+  tx-columnshard-counters
+  tx-columnshard-data_accessor
+  columnshard-data_accessor-in_mem
   tx-columnshard-data_locks
   tx-columnshard-data_sharing
-  tx-columnshard-subscriber
+  tx-columnshard-engines
+  engines-reader-abstract
+  columnshard-engines-writer
   tx-columnshard-export
-  tx-columnshard-tx_reader
   tx-columnshard-loading
-  tx-columnshard-data_accessor
-  tx-columnshard-resource_subscriber
   tx-columnshard-normalizer
-  columnshard-blobs_action-storages_manager
-  columnshard-data_accessor-in_mem
-  core-tx-tiering
+  tx-columnshard-operations
+  tx-columnshard-resource_subscriber
+  tx-columnshard-splitter
+  tx-columnshard-subscriber
+  tx-columnshard-tablet
+  tx-columnshard-transactions
+  columnshard-transactions-operators
+  tx-columnshard-tx_reader
   tx-conveyor-usage
-  tx-priorities-service
-  core-tx-tracing
   tx-long_tx_service-public
+  tx-priorities-service
+  core-tx-tiering
+  core-tx-time_cast
+  core-tx-tracing
   ydb-core-util
-  api-protos
-  dq-actors-compute
+  library-actors-core
   ydb-library-chunks_limiter
+  dq-actors-compute
+  api-protos
 )
 
 target_sources(core-tx-columnshard PRIVATE

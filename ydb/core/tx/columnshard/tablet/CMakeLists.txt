@@ -12,35 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(protos)
-add_subdirectory(abstract)
-add_subdirectory(common)
-add_subdirectory(events)
-add_subdirectory(counters)
-add_subdirectory(transaction)
-add_subdirectory(storages_manager)
-add_subdirectory(bs)
-add_subdirectory(local)
-add_subdirectory(tier)
-
-add_library(tx-columnshard-blobs_action)
-
-
-target_link_libraries(tx-columnshard-blobs_action PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-protos
-  libs-apache-arrow
-  ydb-core-tablet_flat
-  core-tx-tiering
-  columnshard-blobs_action-abstract
-  columnshard-blobs_action-counters
-  columnshard-blobs_action-transaction
-  columnshard-blobs_action-events
-  columnshard-blobs_action-protos
-)
-
-target_sources(tx-columnshard-blobs_action PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/blob_manager_db.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

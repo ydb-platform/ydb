@@ -12,11 +12,11 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(session)
+add_subdirectory(protos)
+add_subdirectory(actor)
 add_subdirectory(events)
 add_subdirectory(common)
-add_subdirectory(protos)
-add_subdirectory(session)
-add_subdirectory(actor)
 
 add_library(tx-columnshard-export INTERFACE)
 

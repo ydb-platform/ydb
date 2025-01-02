@@ -18,10 +18,10 @@ add_subdirectory(common)
 add_subdirectory(events)
 add_subdirectory(counters)
 add_subdirectory(transaction)
-add_subdirectory(tier)
 add_subdirectory(storages_manager)
 add_subdirectory(bs)
 add_subdirectory(local)
+add_subdirectory(tier)
 
 add_library(tx-columnshard-blobs_action)
 

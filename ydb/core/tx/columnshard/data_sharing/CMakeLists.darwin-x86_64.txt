@@ -14,10 +14,10 @@
 
 add_subdirectory(initiator)
 add_subdirectory(protos)
-add_subdirectory(destination)
-add_subdirectory(common)
-add_subdirectory(source)
 add_subdirectory(manager)
+add_subdirectory(source)
+add_subdirectory(common)
+add_subdirectory(destination)
 add_subdirectory(modification)
 
 add_library(tx-columnshard-data_sharing INTERFACE)

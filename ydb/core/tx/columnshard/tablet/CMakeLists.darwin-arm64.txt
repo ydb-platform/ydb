@@ -12,35 +12,16 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(protos)
-add_subdirectory(abstract)
-add_subdirectory(common)
-add_subdirectory(events)
-add_subdirectory(counters)
-add_subdirectory(transaction)
-add_subdirectory(storages_manager)
-add_subdirectory(bs)
-add_subdirectory(local)
-add_subdirectory(tier)
-
-add_library(tx-columnshard-blobs_action)
+add_library(tx-columnshard-tablet)
 
 
-target_link_libraries(tx-columnshard-blobs_action PUBLIC
+target_link_libraries(tx-columnshard-tablet PUBLIC
   contrib-libs-cxxsupp
   yutil
-  ydb-core-protos
-  libs-apache-arrow
-  ydb-core-tablet_flat
-  core-tx-tiering
-  columnshard-blobs_action-abstract
-  columnshard-blobs_action-counters
-  columnshard-blobs_action-transaction
-  columnshard-blobs_action-events
-  columnshard-blobs_action-protos
+  columnshard-hooks-abstract
 )
 
-target_sources(tx-columnshard-blobs_action PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/blob_manager_db.cpp
+target_sources(tx-columnshard-tablet PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/tablet/write_queue.cpp
 )
 

@@ -34,13 +34,10 @@ public:
         , Behaviour(behaviour) {
     }
 
-    ui64 GetSize() const;
-
     const TMonotonic& GetCreatedMonotonic() const {
         return Created;
     }
 
-    bool CheckOverloadImmediate(TColumnShard* owner, const TActorContext& ctx);
     bool Execute(TColumnShard* owner, const TActorContext& ctx);
 };
 
@@ -58,7 +55,7 @@ public:
 
     ~TWriteTasksQueue();
 
-    bool TryEnqueue(TColumnShard* owner, const TActorContext& ctx, TWriteTask&& task);
+    void Enqueue(TWriteTask&& task);
     bool Drain(const bool onWakeup, const TActorContext& ctx);
 };
 

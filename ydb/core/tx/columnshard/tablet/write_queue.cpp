@@ -6,27 +6,12 @@
 
 namespace NKikimr::NColumnShard {
 
-bool TWriteTask::CheckOverloadImmediate(TColumnShard* owner, const TActorContext& ctx) {
-    auto overloadStatus = owner->CheckOverloadedImmediate(PathId);
-    if (overloadStatus == TColumnShard::EOverloadStatus::None) {
-        return false;
-    }
-    owner->Counters.GetWritesMonitor()->OnFinishWrite(ArrowData->GetSize());
-    owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(TMonotonic::Now() - Created);
-    std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(
-        owner->TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error: " + ::ToString(overloadStatus));
-    owner->OverloadWriteFail(overloadStatus, NEvWrite::TWriteMeta(0, PathId, SourceId, {}, TGUID::CreateTimebased().AsGuidString()),
-        ArrowData->GetSize(), Cookie, std::move(result), ctx);
-    return true;
-}
-
 bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) {
     auto overloadStatus = owner->CheckOverloadedWait(PathId);
-    if (overloadStatus == TColumnShard::EOverloadStatus::OverloadMetadata) {
+    if (overloadStatus != TColumnShard::EOverloadStatus::None) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "wait_overload")("status", overloadStatus);
         return false;
     }
-    AFL_VERIFY(overloadStatus == TColumnShard::EOverloadStatus::None);
 
     owner->OperationsManager->RegisterLock(LockId, owner->Generation());
     auto writeOperation = owner->OperationsManager->RegisterOperation(
@@ -46,15 +31,11 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) {
     return true;
 }
 
-ui64 TWriteTask::GetSize() const {
-    return ArrowData->GetSize();
-}
-
 bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
     if (onWakeup) {
         WriteTasksOverloadCheckerScheduled = false;
     }
-    while (WriteTasks.size() && (WriteTasks.front().CheckOverloadImmediate(Owner, ctx) || WriteTasks.front().Execute(Owner, ctx))) {
+    while (WriteTasks.size() && WriteTasks.front().Execute(Owner, ctx)) {
         WriteTasks.pop_front();
     }
     if (WriteTasks.size() && !WriteTasksOverloadCheckerScheduled) {
@@ -67,14 +48,8 @@ bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
     return !WriteTasks.size();
 }
 
-bool TWriteTasksQueue::TryEnqueue(TColumnShard* owner, const TActorContext& ctx, TWriteTask&& task) {
-    owner->Counters.GetWritesMonitor()->OnStartWrite(task.GetSize());
-    if (!task.CheckOverloadImmediate(owner, ctx)) {
-        WriteTasks.emplace_back(std::move(task));
-        return true;
-    } else {
-        return false;
-    }
+void TWriteTasksQueue::Enqueue(TWriteTask&& task) {
+    WriteTasks.emplace_back(std::move(task));
 }
 
 TWriteTasksQueue::~TWriteTasksQueue() {

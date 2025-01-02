@@ -54,6 +54,9 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
 }
 
 TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const ui64 pathId) const {
+    if (InsertTable && InsertTable->IsOverloadedByCommitted(pathId)) {
+        return EOverloadStatus::InsertTable;
+    }
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     if (TablesManager.GetPrimaryIndex() && TablesManager.GetPrimaryIndex()->IsOverloadedByMetadata(NOlap::IColumnEngine::GetMetadataLimit())) {
         return EOverloadStatus::OverloadMetadata;
@@ -64,9 +67,6 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const ui64 pathI
 TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedImmediate(const ui64 pathId) const {
     if (IsAnyChannelYellowStop()) {
         return EOverloadStatus::Disk;
-    }
-    if (InsertTable && InsertTable->IsOverloadedByCommitted(pathId)) {
-        return EOverloadStatus::InsertTable;
     }
     ui64 txLimit = Settings.OverloadTxInFlight;
     ui64 writesLimit = Settings.OverloadWritesInFlight;

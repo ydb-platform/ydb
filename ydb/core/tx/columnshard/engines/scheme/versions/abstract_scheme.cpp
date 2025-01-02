@@ -3,9 +3,10 @@
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
-#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
@@ -60,7 +61,7 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
         }
         if (restoreColumnIds.contains(columnId)) {
             AFL_VERIFY(!!GetExternalDefaultValueVerified(columnId) || GetIndexInfo().IsNullableVerified(columnId))("column_name",
-                                                                          GetIndexInfo().GetColumnName(columnId, false))("id", columnId);
+                                                                        GetIndexInfo().GetColumnName(columnId, false))("id", columnId);
             result->AddField(resultField, GetColumnLoaderVerified(columnId)->BuildDefaultAccessor(batch->num_rows())).Validate();
         }
     }
@@ -324,7 +325,8 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
 
     TGeneralSerializedSlice slice(chunks, schemaDetails, splitterCounters);
     std::vector<TSplittedBlob> blobs;
-    if (!slice.GroupBlobs(blobs, NSplitter::TEntityGroups(NSplitter::TSplitSettings(), NBlobOperations::TGlobal::DefaultStorageId))) {
+    if (!slice.GroupBlobs(blobs, NSplitter::TEntityGroups(NYDBTest::TControllers::GetColumnShardController()->GetBlobSplitSettings(),
+                                     NBlobOperations::TGlobal::DefaultStorageId))) {
         return TConclusionStatus::Fail("cannot split data for appropriate blobs size");
     }
     auto constructor =

@@ -70,9 +70,10 @@ bool IsGoodState(EPDiskState state) {
         case NKikimrBlobStorage::TPDiskState::OpenFileError:
         case NKikimrBlobStorage::TPDiskState::ChunkQuotaError:
         case NKikimrBlobStorage::TPDiskState::DeviceIoError:
-        case NKikimrBlobStorage::TPDiskState::Reserved14:
+        case NKikimrBlobStorage::TPDiskState::Stopped:
         case NKikimrBlobStorage::TPDiskState::Reserved15:
         case NKikimrBlobStorage::TPDiskState::Reserved16:
+        case NKikimrBlobStorage::TPDiskState::Reserved17:
         case NKikimrBlobStorage::TPDiskState::Missing:
         case NKikimrBlobStorage::TPDiskState::Timeout:
         case NKikimrBlobStorage::TPDiskState::NodeDisconnected:
@@ -588,6 +589,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             case NKikimrBlobStorage::TPDiskState::OpenFileError:
             case NKikimrBlobStorage::TPDiskState::ChunkQuotaError:
             case NKikimrBlobStorage::TPDiskState::DeviceIoError:
+            case NKikimrBlobStorage::TPDiskState::Stopped:
                 return state;
             default:
                 LOG_C("Unknown pdisk state: " << (ui32)state);

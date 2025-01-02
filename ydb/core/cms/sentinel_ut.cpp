@@ -455,9 +455,9 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         TTestEnv env(8, 4);
 
         const auto reservedStates = TVector<EPDiskState>{
-            NKikimrBlobStorage::TPDiskState::Reserved14,
             NKikimrBlobStorage::TPDiskState::Reserved15,
             NKikimrBlobStorage::TPDiskState::Reserved16,
+            NKikimrBlobStorage::TPDiskState::Reserved17,
         };
 
         for (const auto state : reservedStates) {

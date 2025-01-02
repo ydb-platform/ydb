@@ -9,20 +9,21 @@ from yql_utils import replace_vals, yql_binary_path, is_xfail, get_param, \
     get_gateway_cfg_suffix, normalize_result, stable_result_file, stable_table_file, \
     dump_table_yson, normalize_source_code_path
 
-from test_utils import get_config, DATA_PATH
+from test_utils import get_config
 from test_file_common import run_file, run_file_no_cache
 
 ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
 DQRUN_PATH = yql_binary_path('ydb/library/yql/tools/dqrun/dqrun')
+DATA_PATH = yatest.common.source_path('yt/yql/tests/sql/suites')
 
 def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if get_gateway_cfg_suffix() != '' and what != 'Results':
         pytest.skip('non-trivial gateways.conf')
 
-    config = get_config(suite, case, cfg)
+    config = get_config(suite, case, cfg, data_path=DATA_PATH)
     xfail = is_xfail(config)
 
-    (res, tables_res) = run_file('hybrid', suite, case, cfg, config, yql_http_file_server, DQRUN_PATH, extra_args=["--emulate-yt", "--no-force-dq"])
+    (res, tables_res) = run_file('hybrid', suite, case, cfg, config, yql_http_file_server, DQRUN_PATH, extra_args=["--emulate-yt", "--no-force-dq"], data_path=DATA_PATH)
 
     if what == 'Results':
         if not xfail:
@@ -31,7 +32,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
                 sql_query = program_file_descr.read()
 
             # yqlrun run
-            yqlrun_res, yqlrun_tables_res = run_file_no_cache('yt', suite, case, cfg, config, yql_http_file_server)
+            yqlrun_res, yqlrun_tables_res = run_file_no_cache('yt', suite, case, cfg, config, yql_http_file_server, data_path=DATA_PATH)
             hybrid_result_name = 'HYBRIDFILE'
             yqlrun_result_name = 'YQLRUN'
 

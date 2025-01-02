@@ -898,7 +898,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         runtime.RegisterService(pdiskServiceId, pdiskActorId);
 
-        runtime.Send(new IEventHandle(nodeWarden, pdiskActorId, new TEvBlobStorage::TEvAskWardenRestartPDisk(pdiskId), 0, cookie), nodeId);
+        runtime.Send(new IEventHandle(nodeWarden, pdiskActorId, new TEvBlobStorage::TEvAskWardenRestartPDisk(pdiskId, false), 0, cookie), nodeId);
 
         auto responseEvent = new TEvBlobStorage::TEvControllerConfigResponse();
 

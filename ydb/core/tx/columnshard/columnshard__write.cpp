@@ -592,6 +592,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         lockId = record.GetLockTxId();
     }
 
+    Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize());
     WriteTasksQueue->Enqueue(TWriteTask(arrowData, schema, source, granuleShardingVersionId, pathId, cookie, lockId, *mType, behaviour));
     WriteTasksQueue->Drain(false, ctx);
 }

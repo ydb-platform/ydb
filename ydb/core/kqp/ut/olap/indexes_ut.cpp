@@ -21,7 +21,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
         csController->SetOverrideMemoryLimitForPortionReading(1e+10);
         csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
 
@@ -347,7 +346,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         void Execute() {
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-            csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
             csController->SetOverrideMemoryLimitForPortionReading(1e+10);
             csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
             TLocalHelper(*Kikimr).CreateTestOlapTable();

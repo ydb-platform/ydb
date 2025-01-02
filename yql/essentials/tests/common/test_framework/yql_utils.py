@@ -880,9 +880,9 @@ def normalize_table_yson(y):
 
 
 def dump_table_yson(res_yson, sort=True):
-    rows = normalize_table_yson(cyson.loads('[' + res_yson + ']'))
+    rows = normalize_table_yson(cyson.loads(b'[' + res_yson + b']'))
     if sort:
-        rows = sorted(rows)
+        rows = sorted(rows, key=cyson.dumps)
     return cyson.dumps(rows, format="pretty")
 
 

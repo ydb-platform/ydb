@@ -723,7 +723,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvAskWardenRestartPDisk::TPtr ev) {
 
     PDiskRestartRequests[requestCookie] = pdiskId;
 
-    AskBSCToRestartPDisk(pdiskId, requestCookie);
+    AskBSCToRestartPDisk(pdiskId, ev->Get()->IgnoreChecks, requestCookie);
 }
 
 void TNodeWarden::Handle(TEvBlobStorage::TEvNotifyWardenPDiskRestarted::TPtr ev) {

@@ -13,6 +13,7 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) {
         return false;
     }
 
+    owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(TMonotonic::Now() - Created);
     owner->OperationsManager->RegisterLock(LockId, owner->Generation());
     auto writeOperation = owner->OperationsManager->RegisterOperation(
         PathId, LockId, Cookie, GranuleShardingVersionId, ModificationType, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());

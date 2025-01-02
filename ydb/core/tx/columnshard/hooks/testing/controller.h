@@ -31,9 +31,6 @@ private:
 
     EOptimizerCompactionWeightControl CompactionControl = EOptimizerCompactionWeightControl::Force;
 
-    YDB_ACCESSOR(std::optional<ui64>, OverrideReduceMemoryIntervalLimit, 1024);
-    YDB_ACCESSOR_DEF(std::optional<ui64>, OverrideRejectMemoryIntervalLimit);
-
     std::optional<ui32> ExpectedShardsCount;
 
     THashMap<ui64, const ::NKikimr::NColumnShard::TColumnShard*> ShardActuals;
@@ -201,12 +198,6 @@ protected:
     }
     virtual TDuration DoGetMaxReadStaleness(const TDuration def) const override {
         return OverrideMaxReadStaleness.value_or(def);
-    }
-    virtual ui64 DoGetReduceMemoryIntervalLimit(const ui64 def) const override {
-        return OverrideReduceMemoryIntervalLimit.value_or(def);
-    }
-    virtual ui64 DoGetRejectMemoryIntervalLimit(const ui64 def) const override {
-        return OverrideRejectMemoryIntervalLimit.value_or(def);
     }
     virtual ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 def) const override {
         return 0;

@@ -1,4 +1,4 @@
-PY3TEST()
+PY2TEST()
 
 TEST_SRCS(
     test.py

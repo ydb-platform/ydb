@@ -1,7 +1,8 @@
 #pragma once
-#include "common/owner.h"
 #include "initialization.h"
 #include "tx_progress.h"
+
+#include "common/owner.h"
 
 #include <ydb/core/tx/columnshard/counters/tablet_counters.h>
 
@@ -26,14 +27,23 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr VolumeWriteData;
     NMonitoring::THistogramPtr HistogramBytesWriteDataCount;
     NMonitoring::THistogramPtr HistogramBytesWriteDataBytes;
+    NMonitoring::THistogramPtr HistogramDurationQueueWait;
 
 public:
+    const NMonitoring::TDynamicCounters::TCounterPtr QueueWaitSize;
+
+    void OnWritingTaskDequeue(const TDuration d){ 
+        HistogramDurationQueueWait->Collect(d.MilliSeconds());
+    }
+
     TWriteCounters(TCommonCountersOwner& owner)
         : TBase(owner, "activity", "writing")
+        , QueueWaitSize(TBase::GetValue("Write/Queue/Size"))
     {
         VolumeWriteData = TBase::GetDeriviative("Write/Incoming/Bytes");
         HistogramBytesWriteDataCount = TBase::GetHistogram("Write/Incoming/ByBytes/Count", NMonitoring::ExponentialHistogram(18, 2, 100));
         HistogramBytesWriteDataBytes = TBase::GetHistogram("Write/Incoming/ByBytes/Bytes", NMonitoring::ExponentialHistogram(18, 2, 100));
+        HistogramDurationQueueWait = TBase::GetHistogram("Write/Queue/Waiting/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 100));
     }
 
     void OnIncomingData(const ui64 dataSize) const {
@@ -231,4 +241,4 @@ public:
     TCSCounters();
 };
 
-}
+}   // namespace NKikimr::NColumnShard

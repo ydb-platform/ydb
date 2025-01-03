@@ -197,25 +197,6 @@
   includes:
     - cuda.h:        contrib/deprecated/tf/tensorflow/core/platform/cuda.h
 
-# windows sdk includes that we do not want to apply for whole arcadia
-- source_filter: "^contrib"
-  includes:
-    - process.h
-
-- source_filter: "^contrib/libs/ceres-solver"
-  includes:
-    - tbb/tbb_stddef.h
-
-- source_filter: "^contrib/libs/freetype"
-  includes:
-    - hb-ot.h
-    - hb-ft.h
-    - hb.h
-
-- source_filter: "^contrib/libs/libpcap"
-  includes:
-    - strerror.h
-
 - source_filter: "^contrib/libs/(apache/apr|openssl)"
   includes:
     - netinet/sctp.h

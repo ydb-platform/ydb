@@ -4,6 +4,7 @@
 #include "ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch/meta.h"
 
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
@@ -105,7 +106,7 @@ public:
 
 class TColumnPortionsAccumulator {
 private:
-    const std::shared_ptr<NOlap::IStoragesManager> StoragesManager; 
+    const std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     const std::set<ui32> ColumnTagsRequested;
     std::vector<NOlap::TPortionInfo::TConstPtr> Portions;
     const ui32 PortionsCountLimit = 10000;
@@ -114,9 +115,9 @@ private:
     const std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
 
 public:
-    TColumnPortionsAccumulator(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const std::shared_ptr<TResultAccumulator>& result,
-        const ui32 portionsCountLimit,
-        const std::set<ui32>& originalColumnTags, const std::shared_ptr<NOlap::TVersionedIndex>& vIndex,
+    TColumnPortionsAccumulator(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
+        const std::shared_ptr<TResultAccumulator>& result, const ui32 portionsCountLimit, const std::set<ui32>& originalColumnTags,
+        const std::shared_ptr<NOlap::TVersionedIndex>& vIndex,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager)
         : StoragesManager(storagesManager)
         , ColumnTagsRequested(originalColumnTags)
@@ -130,22 +131,22 @@ public:
     private:
         using TBase = NOlap::NBlobOperations::NRead::ITask;
         const std::shared_ptr<TResultAccumulator> Result;
-        THashMap<ui32, THashMap<TString, std::vector<TBlobRange>>> RangesByColumn;
+        THashMap<ui32, THashMap<TString, THashSet<NOlap::TBlobRange>>> RangesByColumn;
         THashMap<ui32, std::unique_ptr<TCountMinSketch>> SketchesByColumns;
 
     protected:
         virtual void DoOnDataReady(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) override {
-            TCompositeReadBlobs blobs = ExtractBlobsData();
+            NOlap::NBlobOperations::NRead::TCompositeReadBlobs blobsData = ExtractBlobsData();
             for (auto&& [columnId, data] : RangesByColumn) {
                 for (auto&& [storageId, blobs] : data) {
                     for (auto&& b : blobs) {
-                        const TString blob = blobs.Extract(storageId, b);
+                        const TString blob = blobsData.Extract(storageId, b);
                         auto sketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(blob.data(), blob.size()));
-                        *sketchesByColumns[columnId] += *sketch;
+                        *SketchesByColumns[columnId] += *sketch;
                     }
                 }
             }
-            Result->AddResult(std::move(sketchesByColumns));
+            Result->AddResult(std::move(SketchesByColumns));
         }
 
         virtual bool DoOnError(
@@ -153,18 +154,18 @@ public:
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DoOnError")("storage_id", storageId)("blob_id", range)(
                 "status", status.GetErrorMessage())("status_code", status.GetStatus());
             AFL_VERIFY(status.GetStatus() != NKikimrProto::EReplyStatus::NODATA)("blob_id", range)("status", status.GetStatus())(
-                "error", status.GetErrorMessage())("type", TxEvent->IndexChanges->TypeString())(
-                "task_id", TxEvent->IndexChanges->GetTaskIdentifier())("debug", TxEvent->IndexChanges->DebugString());
+                "error", status.GetErrorMessage())("type", "STATISTICS");
             return false;
         }
 
     public:
-        TIndexReadTask(const std::shared_ptr<TResultAccumulator>& result, std::vector<std::shared_ptr<IBlobsReadingAction>>&& readingActions,
-            THashMap<ui32, THashMap<TString, std::vector<TBlobRange>>>&& rangesByColumn,
+        TIndexReadTask(const std::shared_ptr<TResultAccumulator>& result,
+            std::vector<std::shared_ptr<NOlap::IBlobsReadingAction>>&& readingActions,
+            THashMap<ui32, THashMap<TString, THashSet<NOlap::TBlobRange>>>&& rangesByColumn,
             THashMap<ui32, std::unique_ptr<TCountMinSketch>>&& readySketches)
             : TBase(std::move(readingActions), "STATISTICS", "STATISTICS")
             , Result(result)
-            , RangesByColumn(std::move(RangesByColumn))
+            , RangesByColumn(std::move(rangesByColumn))
             , SketchesByColumns(std::move(readySketches)) {
             AFL_VERIFY(!!Result);
             AFL_VERIFY(RangesByColumn.size());
@@ -187,7 +188,7 @@ public:
                 sketchesByColumns.emplace(id, TCountMinSketch::Create());
             }
 
-            THashMap<ui32, THashMap<TString, std::vector<TBlobRange>>> rangesByColumn;
+            THashMap<ui32, THashMap<TString, THashSet<NOlap::TBlobRange>>> rangesByColumn;
 
             for (const auto& [id, portionInfo] : result.GetPortions()) {
                 std::shared_ptr<NOlap::ISnapshotSchema> portionSchema = portionInfo.GetPortionInfo().GetSchema(*VersionedIndex);
@@ -214,9 +215,9 @@ public:
                 }
             }
             if (rangesByColumn.size()) {
-                TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::STATISTICS);
+                NOlap::TBlobsAction blobsAction(StoragesManager, NOlap::NBlobOperations::EConsumer::STATISTICS);
                 for (auto&& i : rangesByColumn) {
-                    for (auto&& [storageId, ranges]: i.second) {
+                    for (auto&& [storageId, ranges] : i.second) {
                         auto reader = blobsAction.GetReading(storageId);
                         for (auto&& i : ranges) {
                             reader->AddRange(i);
@@ -224,16 +225,17 @@ public:
                     }
                 }
                 TActorContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(
-                    std::make_shared<TIndexReadTask>(Result, blobsAction.GetReadingActions(), rangesByColumn, sketchesByColumns)));
+                    std::make_shared<TIndexReadTask>(Result, blobsAction.GetReadingActions(), std::move(rangesByColumn), std::move(sketchesByColumns))));
             } else {
                 Result->AddResult(std::move(sketchesByColumns));
             }
         }
 
     public:
-        TMetadataSubscriber(
-            const std::shared_ptr<TResultAccumulator>& result, const std::shared_ptr<NOlap::TVersionedIndex>& vIndex, const std::set<ui32>& tags)
-            : Result(result)
+        TMetadataSubscriber(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const std::shared_ptr<TResultAccumulator>& result,
+            const std::shared_ptr<NOlap::TVersionedIndex>& vIndex, const std::set<ui32>& tags)
+            : StoragesManager(storagesManager)
+            , Result(result)
             , VersionedIndex(vIndex)
             , ColumnTagsRequested(tags) {
         }
@@ -296,8 +298,8 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
     std::shared_ptr<TResultAccumulator> resultAccumulator =
         std::make_shared<TResultAccumulator>(columnTagsRequested, ev->Sender, ev->Cookie, std::move(response));
     auto versionedIndex = std::make_shared<NOlap::TVersionedIndex>(index.GetVersionedIndex());
-    TColumnPortionsAccumulator portionsPack(StoragesManager,
-        resultAccumulator, 1000, columnTagsRequested, versionedIndex, DataAccessorsManager.GetObjectPtrVerified());
+    TColumnPortionsAccumulator portionsPack(
+        StoragesManager, resultAccumulator, 1000, columnTagsRequested, versionedIndex, DataAccessorsManager.GetObjectPtrVerified());
 
     for (const auto& [_, portionInfo] : spg->GetPortions()) {
         if (!portionInfo->IsVisible(GetMaxReadVersion())) {

@@ -119,7 +119,7 @@ TPortionDataAccessor::TPreparedBatchData TPortionDataAccessor::PrepareForAssembl
 void TPortionDataAccessor::FillBlobRangesByStorage(THashMap<ui32, THashMap<TString, THashSet<TBlobRange>>>& result,
     const TVersionedIndex& index, const THashSet<ui32>& entityIds) const {
     auto schema = PortionInfo->GetSchema(index);
-    return FillBlobRangesByStorage(result, schema->GetIndexInfo());
+    return FillBlobRangesByStorage(result, schema->GetIndexInfo(), entityIds);
 }
 
 void TPortionDataAccessor::FillBlobRangesByStorage(

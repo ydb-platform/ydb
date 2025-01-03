@@ -402,13 +402,8 @@ void THttpParser<THttpResponse>::ConnectionClosed() {
     if (Stage == EParseStage::Done) {
         return;
     }
-    if (Stage == EParseStage::Body) {
-        // ?
-        Stage = EParseStage::Done;
-    } else {
-        LastSuccessStage = Stage;
-        Stage = EParseStage::Error;
-    }
+    LastSuccessStage = Stage;
+    Stage = EParseStage::Error;
 }
 
 THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseString(TStringBuf data) {
@@ -421,8 +416,7 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseString(TStringBuf d
     response->InitResponse(parser.Protocol, parser.Version, parser.Status, parser.Message);
     if (parser.IsDone() && parser.HasBody()) {
         if (parser.ContentType && !Endpoint->CompressContentTypes.empty()) {
-            TStringBuf contentType = parser.ContentType.Before(';');
-            Trim(contentType, ' ');
+            TStringBuf contentType = Trim(parser.ContentType.Before(';'), ' ');
             if (Count(Endpoint->CompressContentTypes, contentType) != 0) {
                 if (response->EnableCompression()) {
                     headers.Erase("Content-Length"); // we will need new length after compression
@@ -513,8 +507,7 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateIncompleteResponse(TStringB
     THttpOutgoingResponsePtr response = CreateIncompleteResponse(status, message, headers);
     if (!response->ContentType.empty() && !body.empty()) {
         if (!Endpoint->CompressContentTypes.empty()) {
-            TStringBuf contentType = response->ContentType.Before(';');
-            Trim(contentType, ' ');
+            TStringBuf contentType = Trim(response->ContentType.Before(';'), ' ');
             if (Count(Endpoint->CompressContentTypes, contentType) != 0) {
                 response->EnableCompression();
             }
@@ -571,6 +564,10 @@ THttpOutgoingDataChunkPtr THttpOutgoingResponse::CreateDataChunk(TStringBuf data
     return new THttpOutgoingDataChunk(this, data);
 }
 
+THttpOutgoingDataChunkPtr THttpOutgoingResponse::CreateIncompleteDataChunk() {
+    return new THttpOutgoingDataChunk(this);
+}
+
 THttpIncomingRequestPtr THttpIncomingRequest::Duplicate() {
     THttpIncomingRequestPtr request = new THttpIncomingRequest(*this);
     request->Reparse();
@@ -614,8 +611,7 @@ THttpOutgoingResponsePtr THttpOutgoingResponse::Duplicate(THttpIncomingRequestPt
     response->InitResponse(Protocol, Version, Status, Message);
     if (Body) {
         if (ContentType && !request->Endpoint->CompressContentTypes.empty()) {
-            TStringBuf contentType = ContentType.Before(';');
-            Trim(contentType, ' ');
+            TStringBuf contentType = Trim(ContentType.Before(';'), ' ');
             if (Count(request->Endpoint->CompressContentTypes, contentType) != 0) {
                 if (response->EnableCompression()) {
                     headers.Erase("Content-Length"); // we will need new length after compression
@@ -656,6 +652,10 @@ void THttpOutgoingResponse::AddDataChunk(THttpOutgoingDataChunkPtr dataChunk) {
 THttpOutgoingDataChunk::THttpOutgoingDataChunk(THttpOutgoingResponsePtr response, TStringBuf data)
     : THttpDataChunk(data)
     , Response(std::move(response))
+{}
+
+THttpOutgoingDataChunk::THttpOutgoingDataChunk(THttpOutgoingResponsePtr response)
+    : Response(std::move(response))
 {}
 
 THttpOutgoingResponsePtr THttpIncomingResponse::Reverse(THttpIncomingRequestPtr request) {
@@ -889,7 +889,7 @@ bool THeaders::IsChunkedEncoding() const {
     if (it == Headers.end()) {
         return false;
     }
-    return it->second.find("chunked") != TStringBuf::npos;
+    return TEqNoCase()(it->second, "chunked"); // TODO: add support for multiple comma-separated values
 }
 
 THeadersBuilder::THeadersBuilder()

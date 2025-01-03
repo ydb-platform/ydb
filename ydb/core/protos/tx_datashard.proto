@@ -261,6 +261,8 @@ message TKqpReadRangesSourceSettings {
     optional bool AllowInconsistentReads = 18 [default = false];
 
     repeated TKqpTransaction.TColumnMeta DuplicateCheckColumns = 19;
+
+    optional NKikimrDataEvents.ELockMode LockMode = 20;
 }
 
 message TKqpTaskInfo {
@@ -298,6 +300,7 @@ message TDataTransaction {
 
     // Datashard will subscribe to lock status when node id is non-zero
     optional uint32 LockNodeId = 17;
+    optional NKikimrDataEvents.ELockMode LockMode = 18;
 }
 
 message TCreateVolatileSnapshot {
@@ -1702,6 +1705,7 @@ message TEvKqpScan {
     optional uint32 LockNodeId = 25;
     optional string CSScanPolicy = 26;
     optional NKikimrKqp.TEvKqpScanCursor ScanCursor = 27;
+    optional NKikimrDataEvents.ELockMode LockMode = 28;
 }
 
 message TEvCompactTable {
@@ -1887,6 +1891,8 @@ message TEvRead {
 
     optional bytes Program = 902;
     optional NKikimrSchemeOp.EOlapProgramType ProgramType = 903;
+
+    optional NKikimrDataEvents.ELockMode LockMode = 904;
 }
 
 message TReadContinuationToken {
@@ -2258,4 +2264,19 @@ message TEvInMemoryStateResponse {
 
     // Will be set for incomplete replies
     optional bytes ContinuationToken = 3;
+}
+
+// Forces cleanup-related operations in datashard tablet:
+// compaction, GC, GC log and other temporary data erasure.
+// Once the operation is done, any deleted data not used initially
+// will be included in garbage collection requests for the blobstorage.
+// Note: deleted data may still be used for a while, e.g. for history for MVCC.
+message TEvForceDataCleanup {
+    optional uint64 DataCleanupGeneration = 1; // increasing sequence
+}
+
+// Returns DataCleanupGeneration of the last successfully completed TEvForceDataCleanup request.
+// Intermediate requests and corresponding TEvForceDataCleanupResult's may be skipped.
+message TEvForceDataCleanupResult {
+    optional uint64 DataCleanupGeneration = 1; // from corresponding request
 }

@@ -1015,6 +1015,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TAc
 
     Y_ABORT_UNLESS(IsSupportive());
 
+    ev->Get()->OriginalPartition = ev->Sender;
     PendingEvents.emplace_back(ev->ReleaseBase().Release());
 }
 
@@ -1132,11 +1133,16 @@ void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx
 
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx) {
     PQ_LOG_D("Handle TEvPQ::TEvGetWriteInfoRequest");
+    TActorId originalPartition = ev->Get()->OriginalPartition;
+    if (!originalPartition) {
+        // original message
+        originalPartition = ev->Sender;
+    }
     if (ClosedInternalPartition || WaitingForPreviousBlobQuota() || (CurrentStateFunc() != &TThis::StateIdle)) {
         PQ_LOG_D("Send TEvPQ::TEvGetWriteInfoError");
         auto* response = new TEvPQ::TEvGetWriteInfoError(Partition.InternalPartitionId,
                                                          "Write info requested while writes are not complete");
-        ctx.Send(ev->Sender, response);
+        ctx.Send(originalPartition, response);
         ClosedInternalPartition = true;
         return;
     }
@@ -1160,7 +1166,7 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorCon
     response->InputLags = std::move(SupportivePartitionTimeLag);
 
     PQ_LOG_D("Send TEvPQ::TEvGetWriteInfoResponse");
-    ctx.Send(ev->Sender, response);
+    ctx.Send(originalPartition, response);
 }
 
 void TPartition::WriteInfoResponseHandler(
@@ -2154,6 +2160,11 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
 
 TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx, TMaybe<bool>& predicate)
 {
+    if (tx.ForcePredicateFalse) {
+        predicate = false;
+        return EProcessResult::Continue;
+    }
+
     THashSet<TString> consumers;
     bool ok = true;
     for (auto& operation : tx.Operations) {

@@ -5,6 +5,8 @@
 
 #include <yt/yt/core/actions/callback.h>
 
+#include <library/cpp/yt/misc/concepts.h>
+
 #include <util/system/context.h>
 
 #include <optional>

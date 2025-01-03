@@ -297,7 +297,7 @@ public:
         // make coverity happy
 #if LLVM_VERSION_MAJOR == 12
         targetOptions.StackProtectorGuardOffset = 0;
-#endif        
+#endif
 
         std::string what;
         auto&& engineBuilder = llvm::EngineBuilder(std::move(module));
@@ -397,14 +397,11 @@ public:
 #if defined(_msan_enabled_)
         ReverseGlobalMapping_[(const void*)&__emutls_get_address] = "__emutls_get_address";
 #endif
-#if defined(_win_) && !defined(__clang__)
+#if defined(_win_)
+
         AddGlobalMapping("__security_check_cookie", (const void*)&__security_check_cookie);
         AddGlobalMapping("__security_cookie", (const void*)&__security_cookie);
-        AddGlobalMapping("__divti3", (const void*)&__divti3abi);
-        AddGlobalMapping("__modti3", (const void*)&__modti3abi);
-        AddGlobalMapping("__floattisf", (const void*)&__floattisfabi);
-        AddGlobalMapping("__floattidf", (const void*)&__floattidfabi);
-#else
+#endif
         AddGlobalMapping("__divti3", (const void*)&__divti3);
         AddGlobalMapping("__fixdfti", (const void*)&__fixdfti);
         AddGlobalMapping("__fixsfti", (const void*)&__fixsfti);
@@ -417,7 +414,6 @@ public:
         AddGlobalMapping("__muloti4", (const void*)&__muloti4);
         AddGlobalMapping("__udivti3", (const void*)&__udivti3);
         AddGlobalMapping("__umodti3", (const void*)&__umodti3);
-#endif
 
         for (auto& function : Module_->getFunctionList()) {
             function.addFnAttr("target-cpu", "x86-64");
@@ -725,7 +721,7 @@ private:
     std::string Diagnostic_;
     std::string Triple_;
     llvm::Module* Module_;
-#ifdef __linux__    
+#ifdef __linux__
     llvm::JITEventListener* PerfListener_ = nullptr;
 #endif
     std::unique_ptr<llvm::ExecutionEngine> Engine_;

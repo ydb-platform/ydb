@@ -133,6 +133,10 @@ bool TMapNode::IsSortedDict() const {
     return true;
 }
 
+TStringRef TMapNode::GetResourceTag() const {
+    return NodeResourceName;
+}
+
 void* TMapNode::GetResource() {
     return Items_;
 }

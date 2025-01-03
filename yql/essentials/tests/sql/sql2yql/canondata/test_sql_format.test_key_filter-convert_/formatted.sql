@@ -1,8 +1,0 @@
-SELECT
-    *
-FROM
-    plato.Input
-WHERE
-    key == 3755112183455673684
-    OR key == 10790819990820982188
-;

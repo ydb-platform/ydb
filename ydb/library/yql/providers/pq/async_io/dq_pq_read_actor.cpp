@@ -94,15 +94,15 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
         TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
             , Counters(counters) {
-            SubGroup = Counters->GetSubgroup("sink", "PqRead");
-            auto sink = SubGroup->GetSubgroup("tx_id", TxId);
-            auto task = sink->GetSubgroup("task_id", ToString(taskId));
+            SubGroup = Counters->GetSubgroup("source", "PqRead");
+            auto source = SubGroup->GetSubgroup("tx_id", TxId);
+            auto task = source->GetSubgroup("task_id", ToString(taskId));
             InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
             InFlySubscribe = task->GetCounter("InFlySubscribe");
             AsyncInputDataRate = task->GetCounter("AsyncInputDataRate", true);
             ReconnectRate = task->GetCounter("ReconnectRate", true);
             DataRate = task->GetCounter("DataRate", true);
-            WaitEventTimeMs = sink->GetHistogram("WaitEventTimeMs", NMonitoring::ExponentialHistogram(13, 2, 1)); // ~ 1ms -> ~ 8s
+            WaitEventTimeMs = source->GetHistogram("WaitEventTimeMs", NMonitoring::ExponentialHistogram(13, 2, 1)); // ~ 1ms -> ~ 8s
         }
 
         ~TMetrics() {

@@ -35,12 +35,11 @@ plugins {
 {%- endif %}
 }
 
-{#- language level -#}
-{%- if has_required_jdk %}
+{%- if jdk_version %}
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of("{{ required_jdk }}")
+        languageVersion = JavaLanguageVersion.of("{{ jdk_version }}")
     }
 }
-{%- endif -%}
+{%  endif -%}

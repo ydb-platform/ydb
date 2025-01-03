@@ -2,10 +2,6 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
 FORK_SUBTESTS()
 
-SIZE(MEDIUM)
-
-TIMEOUT(600)
-
 SRCS(
     huge.cpp
 )
@@ -14,8 +10,12 @@ PEERDIR(
     ydb/core/blobstorage/ut_blobstorage/lib
 )
 
-IF (SANITIZER_TYPE)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
     REQUIREMENTS(ram:32)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    SIZE(MEDIUM)
 ENDIF()
 
 END()

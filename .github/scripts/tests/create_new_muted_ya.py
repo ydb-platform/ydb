@@ -212,6 +212,8 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
         unmuted_tests_debug = []
         muted_ya_tests_sorted = []
         muted_ya_tests_sorted_debug = []
+        deleted_tests_in_mute = []
+        deleted_tests_in_mute_debug = []
         muted_before_count = 0
         unmuted_stable = 0
         unmuted_deleted = 0
@@ -247,6 +249,8 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
                         unmuted_stable += 1
                     if test_string in deleted_tests:
                         unmuted_deleted += 1
+                        deleted_tests_in_mute.append(test_string)
+                        deleted_tests_in_mute_debug.append(test_string_debug)
                     unmuted_tests_debug.append(test_string_debug)
 
         muted_ya_tests_sorted = sorted(muted_ya_tests_sorted)
@@ -265,6 +269,10 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
         )
         unmuted_tests_debug = sorted(unmuted_tests_debug)
         add_lines_to_file(os.path.join(output_path, 'unmuted_debug.txt'), unmuted_tests_debug)
+        deleted_tests_in_mute = sorted(deleted_tests_in_mute)
+        add_lines_to_file(os.path.join(output_path, 'deleted_tests_in_mute.txt'), deleted_tests_in_mute)
+        deleted_tests_in_mute_debug = sorted(deleted_tests_in_mute_debug)
+        add_lines_to_file(os.path.join(output_path, 'deleted_tests_in_mute_debug.txt'), deleted_tests_in_mute_debug)
 
         logging.info(f"Muted before script: {muted_before_count} tests")
         logging.info(f"Muted stable : {len(muted_stable_tests)}")

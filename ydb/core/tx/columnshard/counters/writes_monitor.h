@@ -21,12 +21,12 @@ public:
     }
 
     ~TWritesMonitor() {
-        OnFinishWrite(WritesSizeInFlightLocal, WritesInFlightLocal);
+        OnFinishWrite(WritesSizeInFlightLocal, WritesInFlightLocal, true);
     }
 
     void OnStartWrite(const ui64 dataSize);
 
-    void OnFinishWrite(const ui64 dataSize, const ui32 writesCount = 1);
+    void OnFinishWrite(const ui64 dataSize, const ui32 writesCount = 1, const bool onDestroy = false);
 
     TString DebugString() const;
 

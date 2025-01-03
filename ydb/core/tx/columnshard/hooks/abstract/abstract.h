@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
+#include <ydb/core/tx/columnshard/splitter/settings.h>
 #include <ydb/core/tx/tiering/tier/object.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -92,6 +93,9 @@ protected:
     virtual TDuration DoGetUsedSnapshotLivetime(const TDuration defaultValue) const {
         return defaultValue;
     }
+    virtual ui64 DoGetLimitForPortionsMetadataAsk(const ui64 defaultValue) const {
+        return defaultValue;
+    }
     virtual TDuration DoGetOverridenGCPeriod(const TDuration defaultValue) const {
         return defaultValue;
     }
@@ -140,6 +144,9 @@ protected:
     virtual ui64 DoGetMemoryLimitScanPortion(const ui64 defaultValue) const {
         return defaultValue;
     }
+    virtual const NOlap::NSplitter::TSplitSettings& DoGetBlobSplitSettings(const NOlap::NSplitter::TSplitSettings& defaultValue) const {
+        return defaultValue;
+    }
 
 private:
     inline static const NKikimrConfig::TColumnShardConfig DefaultConfig = {};
@@ -152,6 +159,11 @@ private:
     }
 
 public:
+    const NOlap::NSplitter::TSplitSettings& GetBlobSplitSettings(
+        const NOlap::NSplitter::TSplitSettings& defaultValue = Default<NOlap::NSplitter::TSplitSettings>()) {
+        return DoGetBlobSplitSettings(defaultValue);
+    }
+
     virtual void OnRequestTracingChanges(
         const std::set<NOlap::TSnapshot>& /*snapshotsToSave*/, const std::set<NOlap::TSnapshot>& /*snapshotsToRemove*/) {
     }
@@ -187,6 +199,11 @@ public:
     }
 
     virtual void OnSelectShardingFilter() {
+    }
+
+    ui64 GetLimitForPortionsMetadataAsk() const {
+        const ui64 defaultValue = GetConfig().GetLimitForPortionsMetadataAsk();
+        return DoGetLimitForPortionsMetadataAsk(defaultValue);
     }
 
     TDuration GetCompactionActualizationLag() const {

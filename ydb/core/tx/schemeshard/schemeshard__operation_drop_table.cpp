@@ -125,7 +125,7 @@ public:
             NKikimrTxDataShard::TFlatSchemeTransaction tx;
             context.SS->FillSeqNo(tx, seqNo);
             tx.MutableDropTable()->SetId_Deprecated(pathId.LocalPathId);
-            PathIdFromPathId(pathId, tx.MutableDropTable()->MutablePathId());
+            pathId.ToProto(tx.MutableDropTable()->MutablePathId());
             tx.MutableDropTable()->SetName(path->Name);
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
         }

@@ -45,6 +45,7 @@ public:
         const ui64 TxId;
         const TMaybe<ui64> LockTxId;
         const ui32 LockNodeId;
+        const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
         const TActorId& Executer;
         const IKqpGateway::TKqpSnapshot& Snapshot;
         const TString& Database;
@@ -107,6 +108,7 @@ private:
     const ui64 TxId;
     const TMaybe<ui64> LockTxId;
     const ui32 LockNodeId;
+    const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
     const TActorId ExecuterId;
     TVector<ui64> ComputeTasks;
     THashMap<ui64, TVector<ui64>> TasksPerNode;

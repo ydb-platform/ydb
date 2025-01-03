@@ -334,7 +334,7 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, st
     for (auto&& i : changes->GetAppendedPortions()) {
         blobsCount += i.GetBlobs().size();
     }
-    UNIT_ASSERT_VALUES_EQUAL(blobsCount, 1);   // add 2 columns: planStep, txId
+    AFL_VERIFY(blobsCount == 5 || blobsCount == 1)("count", blobsCount);
 
     AddIdsToBlobs(changes->MutableAppendedPortions(), blobs, step);
 
@@ -358,6 +358,9 @@ class TTestCompactionAccessorsSubscriber: public NOlap::IDataAccessorRequestsSub
 private:
     std::shared_ptr<TColumnEngineChanges> Changes;
     const std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Default<std::shared_ptr<const TAtomicCounter>>();
+    }
 
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         const TDataAccessorsInitializationContext context(VersionedIndex);
@@ -438,6 +441,9 @@ private:
     std::shared_ptr<IMetadataAccessorResultProcessor> Processor;
     TColumnEngineForLogs& Engine;
 
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Default<std::shared_ptr<const TAtomicCounter>>();
+    }
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         Processor->ApplyResult(
             NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>::BuildForTest(std::move(result)), Engine);

@@ -29,7 +29,7 @@ public:
 
 private:
     const int Port_;
-    THolder<IThreadPool> ThreadPool_;
+    std::unique_ptr<IThreadPool> ThreadPool_;
     THolder<IThreadFactory::IThread> ListenerThread_;
-    THolder<TInetStreamSocket> SendFinishSocket_;
+    std::unique_ptr<TInetStreamSocket> SendFinishSocket_;
 };

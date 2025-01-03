@@ -377,21 +377,24 @@ void CrackAddress(const TString& address, TString& hostname, TIpPort& port) {
     }
 }
 
-void TrimBegin(TStringBuf& target, char delim) {
+TStringBuf TrimBegin(TStringBuf target, char delim) {
     while (!target.empty() && *target.begin() == delim) {
         target.Skip(1);
     }
+    return target;
 }
 
-void TrimEnd(TStringBuf& target, char delim) {
+TStringBuf TrimEnd(TStringBuf target, char delim) {
     while (!target.empty() && target.back() == delim) {
         target.Trunc(target.size() - 1);
     }
+    return target;
 }
 
-void Trim(TStringBuf& target, char delim) {
-    TrimBegin(target, delim);
-    TrimEnd(target, delim);
+TStringBuf Trim(TStringBuf target, char delim) {
+    target = TrimBegin(target, delim);
+    target = TrimEnd(target, delim);
+    return target;
 }
 
 void TrimEnd(TString& target, char delim) {
@@ -437,6 +440,12 @@ TString GetObfuscatedData(TString data, const THeaders& headers) {
         }
     }
     return data;
+}
+
+TString ToHex(size_t value) {
+    std::ostringstream hex;
+    hex << std::hex << value;
+    return hex.str();
 }
 
 }

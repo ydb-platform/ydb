@@ -1,13 +1,13 @@
 #include <gtest/gtest.h>
 
-#include <library/cpp/testing/common/env.h>
-
 #include <yt/yt/library/ytprof/spinlock_profiler.h>
 #include <yt/yt/library/ytprof/symbolize.h>
 #include <yt/yt/library/ytprof/profile.h>
 #include <yt/yt/library/ytprof/external_pprof.h>
 
 #include <tcmalloc/malloc_extension.h>
+
+#include <library/cpp/testing/common/env.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
 

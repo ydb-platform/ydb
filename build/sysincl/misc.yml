@@ -23,21 +23,6 @@
   includes:
   - Python.h:        contrib/libs/python/Include/Python.h
 
-# Same as libunistring - lftp has own libc header wrappers/replacements.
-# However here we have GLOBAL ADDINCL to contrib/libs/lftp{,/trio,/lib}
-# that can poison resolving in PEERDIRing projects.
-# Fortunately lftp is used only in contrib/tools/lftp.
-# Probably we should add PEERDIR restriction rule to it.
-- source_filter: "^contrib/libs/lftp"
-  includes:
-    - alloca.h:      contrib/libs/lftp/alloca.h
-    - error.h:       contrib/libs/lftp/lib/error.h
-    - fnmatch.h:     contrib/libs/lftp/lib/fnmatch.h
-    - regex.h:       contrib/libs/lftp/lib/regex.h
-    - sys/socket.h:  contrib/libs/lftp/lib/sys/socket.h
-    - sys/stat.h:    contrib/libs/lftp/lib/sys/stat.h
-    - sys/time.h:    contrib/libs/lftp/lib/sys/time.h
-
 # Another sysincl/addincl clash. Here we also have GLOBAL ADDINCL that will
 # produce sysincl/addincl mismatch configure errors when someone writes
 # #include <math.h> and enables USE_ARCADIA_LIBM. Now we have no instances of this.
@@ -83,9 +68,6 @@
   includes:
     - fnmatch.h:     contrib/tools/make/glob/fnmatch.h
     - glob.h:        contrib/tools/make/glob/glob.h
-- source_filter: "^contrib/tools/tre"
-  includes:
-    - regex.h:       contrib/tools/tre/lib/regex.h
 
 - source_filter: "^contrib/libs/cppkafka"
   includes:
@@ -113,6 +95,7 @@
 - source_filter: "^contrib/restricted/openal-soft"
   includes:
     - atomic.h: contrib/restricted/openal-soft/common/atomic.h
+    - threads.h: contrib/restricted/openal-soft/common/threads.h
 
 - source_filter: "^contrib/libs/ffmpeg-3/"
   includes:
@@ -222,16 +205,6 @@
 - source_filter: "^contrib"
   includes:
     - process.h
-- source_filter: "^contrib/tools/tpce-benchmark"
-  includes:
-    - sql.h
-    - sqlext.h
-    - sqltypes.h
-    - sqlucode.h
-
-- source_filter: "^contrib/libs/authparser"
-  includes:
-    - settings.h
 
 - source_filter: "^contrib/libs/ceres-solver"
   includes:
@@ -278,10 +251,6 @@
   includes:
     - mem.h
 
-- source_filter: "^contrib/libs/(authparser|libcoro-perl|libev-perl|libevent-perl)"
-  includes:
-    - patchlevel.h
-
 - source_filter: "^(contrib/restricted/boost/boost/mpi|catboost/cuda/cuda_lib/mpi)"
   includes:
     - mpi.h
@@ -323,10 +292,6 @@
   - alloc.h: contrib/libs/libsrtp/crypto/include/alloc.h
   - err.h: contrib/libs/libsrtp/crypto/include/err.h
   - stat.h: contrib/libs/libsrtp/crypto/include/stat.h
-
-- source_filter: "^contrib/restricted/openal-soft"
-  includes:
-    - threads.h: contrib/restricted/openal-soft/common/threads.h
 
 - source_filter: "^contrib/python/pymqi"
   includes:

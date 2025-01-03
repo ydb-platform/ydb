@@ -539,7 +539,7 @@ public:
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
         , Location_
 #endif
-    );
+        );
     }
 
 private:

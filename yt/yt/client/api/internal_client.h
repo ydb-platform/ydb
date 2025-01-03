@@ -118,6 +118,12 @@ struct TFetchShuffleChunksOptions
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TForsakeChaosCoordinatorOptions
+    : public TTimeoutOptions
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Provides a set of private APIs.
 /*!
  *  Only native clients are expected to implement this.
@@ -195,6 +201,11 @@ struct IInternalClient
         const TShuffleHandlePtr& handle,
         int partitionIndex,
         const TFetchShuffleChunksOptions& options = {}) = 0;
+
+    virtual TFuture<void> ForsakeChaosCoordinator(
+        NHydra::TCellId chaosCellId,
+        NHydra::TCellId coordiantorCellId,
+        const TForsakeChaosCoordinatorOptions& options = {}) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IInternalClient)

@@ -75,8 +75,10 @@ namespace NKikimr {
             return ++copy;
         }
 
-        static TRowVersion Parse(const NKikimrProto::TRowVersion& proto);
-        void Serialize(NKikimrProto::TRowVersion& proto) const;
+        static TRowVersion FromProto(const NKikimrProto::TRowVersion& proto);
+        void ToProto(NKikimrProto::TRowVersion& proto) const;
+        void ToProto(NKikimrProto::TRowVersion* proto) const;
+        NKikimrProto::TRowVersion ToProto() const;
 
         friend constexpr bool operator==(const TRowVersion& a, const TRowVersion& b) {
             return a.Step == b.Step && a.TxId == b.TxId;

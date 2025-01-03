@@ -65,6 +65,7 @@ You can use the following settings:
 | **Missing** | The node responds, but this PDisk is missing from its list. Transition to `FAULTY`. |
 | **Timeout** | The node didn't respond within the specified timeout. Transition to `FAULTY`. |
 | **NodeDisconnected** | The node has disconnected. Transition to `FAULTY`. |
+| **Stopped** | PDisk has been stopped. Transition to `FAULTY`. |
 | **Unknown** | Unexpected response, for example, `TEvUndelivered` to the state request. Transition to `FAULTY`. |
 
 ## Working with donor disks {#disks}

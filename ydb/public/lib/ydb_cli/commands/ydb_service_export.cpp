@@ -165,7 +165,7 @@ int TCommandExportToYt::Run(TConfig& config) {
     using namespace NExport;
     using namespace NScheme;
 
-    TExportToYtSettings settings = FillSettings(TExportToYtSettings());
+    TExportToYtSettings settings = FillSettings(TExportToYtSettings(), config);
 
     settings.Host(YtHost);
     settings.Port(YtPort);
@@ -282,7 +282,7 @@ void TCommandExportToS3::Config(TConfig& config) {
             << "    - zstd-N (N is compression level in range [1, 22], e.g. zstd-3)" << Endl)
         .RequiredArgument("STRING").StoreResult(&Compression);
 
-    config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder() 
+    config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
             << "Sets bucket URL style. Value "
             << colors.BoldColor() << "true" << colors.OldColor()
             << " means use Virtual-Hosted-Style URL, "
@@ -317,7 +317,7 @@ int TCommandExportToS3::Run(TConfig& config) {
     using namespace NExport;
     using namespace NScheme;
 
-    TExportToS3Settings settings = FillSettings(TExportToS3Settings());
+    TExportToS3Settings settings = FillSettings(TExportToS3Settings(), config);
 
     settings.Endpoint(AwsEndpoint);
     settings.Scheme(AwsScheme);

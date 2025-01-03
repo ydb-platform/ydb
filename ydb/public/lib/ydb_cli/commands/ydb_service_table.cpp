@@ -242,7 +242,7 @@ int TCommandCreateTable::Run(TConfig& config) {
         builder.AddSecondaryIndex(parts[0], columns);
     }
 
-    NTable::TCreateTableSettings tableSettings = FillSettings(NTable::TCreateTableSettings());
+    NTable::TCreateTableSettings tableSettings = FillSettings(NTable::TCreateTableSettings(), config);
     if (PresetName) {
         tableSettings.PresetName(PresetName);
     }
@@ -321,7 +321,7 @@ int TCommandDropTable::Run(TConfig& config) {
     ThrowOnError(
         GetSession(config).DropTable(
             Path,
-            FillSettings(NTable::TDropTableSettings())
+            FillSettings(NTable::TDropTableSettings(), config)
         ).GetValueSync()
     );
     return EXIT_SUCCESS;
@@ -454,14 +454,14 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
         THolder<TParamsBuilder> paramBuilder;
         while (GetNextParams(driver, Query, paramBuilder)) {
             TParams params = paramBuilder->Build();
-            auto operation = [this, &txSettings, &params, &settings, &asyncResult](NTable::TSession session) {
+            auto operation = [this, &txSettings, &params, &settings, &asyncResult, &config](NTable::TSession session) {
                 auto promise = NThreading::NewPromise<NTable::TDataQueryResult>();
                 asyncResult = promise.GetFuture();
                 auto result = session.ExecuteDataQuery(
                     Query,
                     NTable::TTxControl::BeginTx(txSettings).CommitTx(),
                     params,
-                    FillSettings(settings)
+                    FillSettings(settings, config)
                 );
                 return result.Apply([promise](const NTable::TAsyncDataQueryResult& result) mutable {
                     promise.SetValue(result.GetValue());
@@ -474,13 +474,13 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
             PrintDataQueryResponse(result);
         }
     } else {
-        auto operation = [this, &txSettings, &settings, &asyncResult](NTable::TSession session) {
+        auto operation = [this, &txSettings, &settings, &asyncResult, &config](NTable::TSession session) {
             auto promise = NThreading::NewPromise<NTable::TDataQueryResult>();
             asyncResult = promise.GetFuture();
             auto result = session.ExecuteDataQuery(
                 Query,
                 NTable::TTxControl::BeginTx(txSettings).CommitTx(),
-                FillSettings(settings)
+                FillSettings(settings, config)
             );
             return result.Apply([promise](const NTable::TAsyncDataQueryResult& result) mutable {
                 promise.SetValue(result.GetValue());
@@ -522,7 +522,7 @@ int TCommandExecuteQuery::ExecuteSchemeQuery(TConfig& config) {
     ThrowOnError(
         GetSession(config).ExecuteSchemeQuery(
             Query,
-            FillSettings(NTable::TExecSchemeQuerySettings())
+            FillSettings(NTable::TExecSchemeQuerySettings(), config)
         ).GetValueSync()
     );
     return EXIT_SUCCESS;
@@ -548,13 +548,14 @@ namespace {
         NQuery::TExecuteQuerySettings>;
 
     template <typename TClient>
-    auto GetSettings(const TString& collectStatsMode, const bool basicStats, std::optional<TDuration> timeout) {
+    auto GetSettings(const TString& collectStatsMode, const bool basicStats, std::optional<TDuration> timeout, const TClientCommand::TConfig& config) {
         if constexpr (std::is_same_v<TClient, NTable::TTableClient>) {
             const auto defaultStatsMode = basicStats
                 ? NTable::ECollectQueryStatsMode::Basic
                 : NTable::ECollectQueryStatsMode::None;
             NTable::TStreamExecScanQuerySettings settings;
             settings.CollectQueryStats(ParseQueryStatsModeOrThrow(collectStatsMode, defaultStatsMode));
+            settings.OTelTraceId(config.OTelTraceId);
             if (timeout.has_value()) {
                 settings.ClientTimeout(*timeout);
             }
@@ -565,6 +566,7 @@ namespace {
                 : NQuery::EStatsMode::None;
             NQuery::TExecuteQuerySettings settings;
             settings.StatsMode(ParseQueryStatsModeOrThrow(collectStatsMode, defaultStatsMode));
+            settings.OTelTraceId(config.OTelTraceId);
             if (timeout.has_value()) {
                 settings.ClientTimeout(*timeout);
             }
@@ -635,7 +637,7 @@ namespace {
         }
         Y_UNREACHABLE();
     }
-    
+
     template <typename TQueryPart>
     const NQuery::TExecStats& GetStats(const TQueryPart& part) {
         if constexpr (std::is_same_v<TQueryPart, NTable::TScanQueryPart>) {
@@ -674,7 +676,7 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
     if (OperationTimeout) {
         optTimeout = TDuration::MilliSeconds(FromString<ui64>(OperationTimeout));
     }
-    const auto settings = GetSettings<TClient>(CollectStatsMode, BasicStats, optTimeout);
+    const auto settings = GetSettings<TClient>(CollectStatsMode, BasicStats, optTimeout, config);
 
     TAsyncPartIterator<TClient> asyncResult;
     SetInterruptHandlers();
@@ -865,6 +867,7 @@ int TCommandExplain::Run(TConfig& config) {
         NTable::TTableClient client(CreateDriver(config));
         NTable::TStreamExecScanQuerySettings settings;
         settings.ClientTimeout(timeout.value_or(TDuration()));
+        settings.OTelTraceId(config.OTelTraceId);
 
         if (Analyze) {
             settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Full);
@@ -908,6 +911,7 @@ int TCommandExplain::Run(TConfig& config) {
         NQuery::TQueryClient client(CreateDriver(config));
         NQuery::TExecuteQuerySettings settings;
         settings.ClientTimeout(timeout.value_or(TDuration()));
+        settings.OTelTraceId(config.OTelTraceId);
 
         if (Analyze) {
             settings.StatsMode(NQuery::EStatsMode::Full);
@@ -940,11 +944,12 @@ int TCommandExplain::Run(TConfig& config) {
     } else if (QueryType == "data" && (Analyze || FlameGraphPath)) {
         NTable::TExecDataQuerySettings settings;
         settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Full);
+        settings.OTelTraceId(config.OTelTraceId);
 
         auto result = GetSession(config).ExecuteDataQuery(
             Query,
             NTable::TTxControl::BeginTx(NTable::TTxSettings::SerializableRW()).CommitTx(),
-            FillSettings(settings)
+            FillSettings(settings, config)
         ).ExtractValueSync();
         ThrowOnError(result);
         planJson = result.GetQueryPlan();
@@ -953,7 +958,8 @@ int TCommandExplain::Run(TConfig& config) {
             ast = proto.query_ast();
         }
     } else if (QueryType == "data" && !Analyze) {
-        NTable::TExplainDataQuerySettings settings(FillSettings(NTable::TExplainDataQuerySettings()));
+        NTable::TExplainDataQuerySettings settings(FillSettings(NTable::TExplainDataQuerySettings(), config));
+        settings.OTelTraceId(config.OTelTraceId);
         if (CollectFullDiagnostics) {
             settings.WithCollectFullDiagnostics(true);
         }
@@ -1029,7 +1035,7 @@ void TCommandReadTable::Config(TConfig& config) {
         .NoArgument().SetFlag(&FromExclusive);
     config.Opts->AddLongOption("to-exclusive", "Don't include the right border element into response")
         .NoArgument().SetFlag(&ToExclusive);
-    
+
     AddLegacyJsonInputFormats(config);
 
     AddOutputFormats(config, {

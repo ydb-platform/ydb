@@ -61,7 +61,7 @@ namespace NYdb::NConsoleClient {
         TCommandTopic();
     };
 
-    class TCommandTopicCreate: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode, public TCommandWithAutoPartitioning {
+    class TCommandTopicCreate: public TYdbOperationCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode, public TCommandWithAutoPartitioning {
     public:
         TCommandTopicCreate();
         void Config(TConfig& config) override;
@@ -77,7 +77,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<ui32> PartitionsPerTablet_;
     };
 
-    class TCommandTopicAlter: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode, public TCommandWithAutoPartitioning {
+    class TCommandTopicAlter: public TYdbOperationCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode, public TCommandWithAutoPartitioning {
     public:
         TCommandTopicAlter();
         void Config(TConfig& config) override;
@@ -93,10 +93,10 @@ namespace NYdb::NConsoleClient {
 
         TMaybe<ui32> PartitionWriteSpeedKbps_;
 
-        NYdb::NTopic::TAlterTopicSettings PrepareAlterSettings(NYdb::NTopic::TDescribeTopicResult& describeResult);
+        NYdb::NTopic::TAlterTopicSettings PrepareAlterSettings(NYdb::NTopic::TDescribeTopicResult& describeResult, const TConfig& config);
     };
 
-    class TCommandTopicDrop: public TYdbCommand, public TCommandWithTopicName {
+    class TCommandTopicDrop: public TYdbOperationCommand, public TCommandWithTopicName {
     public:
         TCommandTopicDrop();
         void Config(TConfig& config) override;
@@ -114,7 +114,7 @@ namespace NYdb::NConsoleClient {
         TCommandTopicConsumerOffset();
     };
 
-    class TCommandTopicConsumerAdd: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs {
+    class TCommandTopicConsumerAdd: public TYdbOperationCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs {
     public:
         TCommandTopicConsumerAdd();
         void Config(TConfig& config) override;
@@ -127,7 +127,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<TInstant> StartingMessageTimestamp_;
     };
 
-    class TCommandTopicConsumerDrop: public TYdbCommand, public TCommandWithTopicName {
+    class TCommandTopicConsumerDrop: public TYdbOperationCommand, public TCommandWithTopicName {
     public:
         TCommandTopicConsumerDrop();
         void Config(TConfig& config) override;
@@ -138,7 +138,7 @@ namespace NYdb::NConsoleClient {
         TString ConsumerName_;
     };
 
-    class TCommandTopicConsumerDescribe: public TYdbCommand, public TCommandWithOutput, public TCommandWithTopicName {
+    class TCommandTopicConsumerDescribe: public TYdbOperationCommand, public TCommandWithOutput, public TCommandWithTopicName {
     public:
         TCommandTopicConsumerDescribe();
         void Config(TConfig& config) override;
@@ -153,7 +153,7 @@ namespace NYdb::NConsoleClient {
         bool ShowPartitionStats_ = false;
     };
 
-    class TCommandTopicConsumerCommitOffset: public TYdbCommand, public TCommandWithTopicName {
+    class TCommandTopicConsumerCommitOffset: public TYdbOperationCommand, public TCommandWithTopicName {
     public:
         TCommandTopicConsumerCommitOffset();
         void Config(TConfig& config) override;
@@ -220,7 +220,7 @@ namespace NYdb::NConsoleClient {
         void ParseMetadataFields();
         void AddAllowedTransformFormats(TConfig& config);
         void ParseTransformFormat();
-        NTopic::TReadSessionSettings PrepareReadSessionSettings();
+        NTopic::TReadSessionSettings PrepareReadSessionSettings(const TConfig& config);
     };
 
     class TCommandWithCodec {
@@ -263,6 +263,6 @@ namespace NYdb::NConsoleClient {
         void CheckOptions(NTopic::TTopicClient& topicClient);
 
     private:
-        NTopic::TWriteSessionSettings PrepareWriteSessionSettings();
+        NTopic::TWriteSessionSettings PrepareWriteSessionSettings(const TConfig& config);
     };
 } // namespace NYdb::NConsoleClient

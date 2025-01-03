@@ -128,6 +128,7 @@ int TCommandSql::RunCommand(TConfig& config) {
     SetInterruptHandlers();
     // Single stream execution
     NQuery::TExecuteQuerySettings settings;
+    settings.OTelTraceId(config.OTelTraceId);
 
     if (ExplainMode || ExplainAst) {
         // Execute explain request for the query

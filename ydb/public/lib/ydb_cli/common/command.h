@@ -105,6 +105,7 @@ public:
         bool EnableSsl = false;
         bool IsNetworkIntensive = false;
         TString Oauth2KeyFile;
+        TString OTelTraceId;
 
         EVerbosityLevel VerbosityLevel = EVerbosityLevel::NONE;
         size_t HelpCommandVerbosiltyLevel = 1; // No options -h or one - 1, -hh - 2, -hhh - 3 etc

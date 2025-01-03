@@ -49,7 +49,7 @@ int TCommandMakeDirectory::Run(TConfig& config) {
     ThrowOnError(
         client.MakeDirectory(
             Path,
-            FillSettings(NScheme::TMakeDirectorySettings())
+            FillSettings(NScheme::TMakeDirectorySettings(), config)
         ).GetValueSync()
     );
     return EXIT_SUCCESS;
@@ -82,7 +82,7 @@ void TCommandRemoveDirectory::Parse(TConfig& config) {
 int TCommandRemoveDirectory::Run(TConfig& config) {
     TDriver driver = CreateDriver(config);
     NScheme::TSchemeClient schemeClient(driver);
-    const auto settings = FillSettings(NScheme::TRemoveDirectorySettings());
+    const auto settings = FillSettings(NScheme::TRemoveDirectorySettings(), config);
 
     if (Recursive) {
         NTable::TTableClient tableClient(driver);
@@ -251,23 +251,23 @@ int TCommandDescribe::Run(TConfig& config) {
     NScheme::TSchemeClient client(driver);
     NScheme::TDescribePathResult result = client.DescribePath(
         Path,
-        FillSettings(NScheme::TDescribePathSettings())
+        FillSettings(NScheme::TDescribePathSettings(), config)
     ).GetValueSync();
     if (!result.IsSuccess()) {
-        return TryTopicConsumerDescribeOrFail(driver, result);
+        return TryTopicConsumerDescribeOrFail(driver, result, config);
     }
     ThrowOnError(result);
-    return PrintPathResponse(driver, result);
+    return PrintPathResponse(driver, result, config);
 }
 
-int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescribePathResult& result) {
+int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescribePathResult& result, const TConfig& config) {
     NScheme::TSchemeEntry entry = result.GetEntry();
     Cout << "<" << EntryTypeToString(entry.Type) << "> " << entry.Name << Endl;
     switch (entry.Type) {
     case NScheme::ESchemeEntryType::Table:
-        return DescribeTable(driver);
+        return DescribeTable(driver, config);
     case NScheme::ESchemeEntryType::ColumnTable:
-        return DescribeColumnTable(driver);
+        return DescribeColumnTable(driver, config);
     case NScheme::ESchemeEntryType::PqGroup:
     case NScheme::ESchemeEntryType::Topic:
         return DescribeTopic(driver);
@@ -425,7 +425,7 @@ int TCommandDescribe::DescribeTopic(TDriver& driver) {
     return PrintDescription(this, OutputFormat, desc, &TCommandDescribe::PrintTopicResponsePretty);
 }
 
-int TCommandDescribe::DescribeTable(TDriver& driver) {
+int TCommandDescribe::DescribeTable(TDriver& driver, const TConfig& config) {
     NTable::TTableClient client(driver);
     NTable::TCreateSessionResult sessionResult = client.GetSession(NTable::TCreateSessionSettings()).GetValueSync();
     ThrowOnError(sessionResult);
@@ -433,9 +433,10 @@ int TCommandDescribe::DescribeTable(TDriver& driver) {
         Path,
         FillSettings(
             NTable::TDescribeTableSettings()
-            .WithKeyShardBoundary(ShowKeyShardBoundaries)
-            .WithTableStatistics(ShowStats || ShowPartitionStats)
-            .WithPartitionStatistics(ShowPartitionStats)
+                .WithKeyShardBoundary(ShowKeyShardBoundaries)
+                .WithTableStatistics(ShowStats || ShowPartitionStats)
+                .WithPartitionStatistics(ShowPartitionStats),
+            config
         )
     ).GetValueSync();
     ThrowOnError(result);
@@ -444,7 +445,7 @@ int TCommandDescribe::DescribeTable(TDriver& driver) {
     return PrintDescription(this, OutputFormat, desc, &TCommandDescribe::PrintTableResponsePretty);
 }
 
-int TCommandDescribe::DescribeColumnTable(TDriver& driver) {
+int TCommandDescribe::DescribeColumnTable(TDriver& driver, const TConfig& config) {
     NTable::TTableClient client(driver);
     NTable::TCreateSessionResult sessionResult = client.GetSession(NTable::TCreateSessionSettings()).GetValueSync();
     ThrowOnError(sessionResult);
@@ -452,7 +453,8 @@ int TCommandDescribe::DescribeColumnTable(TDriver& driver) {
         Path,
         FillSettings(
             NTable::TDescribeTableSettings()
-            .WithTableStatistics(ShowStats)
+                .WithTableStatistics(ShowStats),
+            config
         )
     ).GetValueSync();
     ThrowOnError(result);
@@ -967,7 +969,7 @@ std::pair<TString, TString> TCommandDescribe::ParseTopicConsumer() const {
     return result;
 }
 
-int TCommandDescribe::TryTopicConsumerDescribeOrFail(TDriver& driver, const NScheme::TDescribePathResult& result) {
+int TCommandDescribe::TryTopicConsumerDescribeOrFail(TDriver& driver, const NScheme::TDescribePathResult& result, const TConfig& config) {
     auto [topic, consumer] = ParseTopicConsumer();
     if (!topic || !consumer) {
         ThrowOnError(result); // no consumer can be found
@@ -976,7 +978,7 @@ int TCommandDescribe::TryTopicConsumerDescribeOrFail(TDriver& driver, const NSch
     NScheme::TSchemeClient client(driver);
     NScheme::TDescribePathResult topicDescribeResult = client.DescribePath(
         topic,
-        FillSettings(NScheme::TDescribePathSettings())
+        FillSettings(NScheme::TDescribePathSettings(), config)
     ).GetValueSync();
     if (!topicDescribeResult.IsSuccess() || topicDescribeResult.GetEntry().Type != NScheme::ESchemeEntryType::Topic && topicDescribeResult.GetEntry().Type != NScheme::ESchemeEntryType::PqGroup) {
         ThrowOnError(result); // return previous error, this is not topic
@@ -1062,8 +1064,8 @@ int TCommandList::Run(TConfig& config) {
         Recursive,
         Multithread,
         FromNewLine,
-        FillSettings(NScheme::TListDirectorySettings()),
-        FillSettings(NTable::TDescribeTableSettings().WithTableStatistics(true))
+        FillSettings(NScheme::TListDirectorySettings(), config),
+        FillSettings(NTable::TDescribeTableSettings().WithTableStatistics(true), config)
     };
     std::unique_ptr<ISchemePrinter> printer;
 
@@ -1135,7 +1137,8 @@ int TCommandPermissionGrant::Run(TConfig& config) {
             Path,
             FillSettings(
                 NScheme::TModifyPermissionsSettings()
-                .AddGrantPermissions({ Subject, PermissionsToGrant })
+                    .AddGrantPermissions({ Subject, PermissionsToGrant }),
+                config
             )
         ).GetValueSync()
     );
@@ -1176,7 +1179,8 @@ int TCommandPermissionRevoke::Run(TConfig& config) {
             Path,
             FillSettings(
                 NScheme::TModifyPermissionsSettings()
-                .AddRevokePermissions({ Subject, PermissionsToRevoke })
+                    .AddRevokePermissions({ Subject, PermissionsToRevoke }),
+                config
             )
         ).GetValueSync()
     );
@@ -1217,7 +1221,8 @@ int TCommandPermissionSet::Run(TConfig& config) {
             Path,
             FillSettings(
                 NScheme::TModifyPermissionsSettings()
-                .AddSetPermissions({ Subject, PermissionsToSet })
+                    .AddSetPermissions({ Subject, PermissionsToSet }),
+                config
             )
         ).GetValueSync()
     );
@@ -1252,7 +1257,8 @@ int TCommandChangeOwner::Run(TConfig& config) {
             Path,
             FillSettings(
                 NScheme::TModifyPermissionsSettings()
-                .AddChangeOwner(Owner)
+                    .AddChangeOwner(Owner),
+                config
             )
         ).GetValueSync()
     );
@@ -1282,7 +1288,8 @@ int TCommandPermissionClear::Run(TConfig& config) {
             Path,
             FillSettings(
                 NScheme::TModifyPermissionsSettings()
-                .AddClearAcl()
+                    .AddClearAcl(),
+                config
             )
         ).GetValueSync()
     );
@@ -1370,7 +1377,7 @@ int TCommandPermissionList::Run(TConfig& config) {
     NScheme::TSchemeClient client(driver);
     NScheme::TDescribePathResult result = client.DescribePath(
         Path,
-        FillSettings(NScheme::TDescribePathSettings())
+        FillSettings(NScheme::TDescribePathSettings(), config)
     ).GetValueSync();
     ThrowOnError(result);
     NScheme::TSchemeEntry entry = result.GetEntry();

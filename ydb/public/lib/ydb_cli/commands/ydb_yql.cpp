@@ -105,7 +105,7 @@ int TCommandYql::RunCommand(TConfig& config, const TString& script) {
             auto asyncResult = client.StreamExecuteYqlScript(
                     script,
                     paramBuilder->Build(),
-                    FillSettings(settings)
+                    FillSettings(settings, config)
             );
 
             auto result = asyncResult.GetValueSync();
@@ -117,7 +117,7 @@ int TCommandYql::RunCommand(TConfig& config, const TString& script) {
     } else {
         auto asyncResult = client.StreamExecuteYqlScript(
             script,
-            FillSettings(settings)
+            FillSettings(settings, config)
         );
 
         auto result = asyncResult.GetValueSync();

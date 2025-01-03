@@ -147,7 +147,7 @@ void TCommandRestore::Config(TConfig& config) {
 
     config.Opts->AddLongOption("restore-indexes", "Whether to restore indexes or not")
         .DefaultValue(defaults.RestoreIndexes_).StoreResult(&RestoreIndexes);
-    
+
     config.Opts->AddLongOption("restore-acl", "Whether to restore ACL and owner or not")
         .DefaultValue(defaults.RestoreACL_).StoreResult(&RestoreACL);
 
@@ -295,7 +295,7 @@ int TCommandCopy::Run(TConfig& config) {
     ThrowOnError(
         GetSession(config).CopyTables(
             copyItems,
-            FillSettings(NTable::TCopyTablesSettings())
+            FillSettings(NTable::TCopyTablesSettings(), config)
         ).GetValueSync()
     );
     return EXIT_SUCCESS;
@@ -388,7 +388,7 @@ int TCommandRename::Run(TConfig& config) {
     ThrowOnError(
         GetSession(config).RenameTables(
             renameItems,
-            FillSettings(NTable::TRenameTablesSettings())
+            FillSettings(NTable::TRenameTablesSettings(), config)
         ).GetValueSync()
     );
     return EXIT_SUCCESS;

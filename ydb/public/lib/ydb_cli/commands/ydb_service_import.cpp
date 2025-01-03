@@ -94,7 +94,7 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("retries", "Number of retries")
         .RequiredArgument("NUM").StoreResult(&NumberOfRetries).DefaultValue(NumberOfRetries);
 
-    config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder() 
+    config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
             << "Sets bucket URL style. Value "
             << colors.BoldColor() << "true" << colors.OldColor()
             << " means use Virtual-Hosted-Style URL, "
@@ -131,7 +131,7 @@ void TCommandImportFromS3::Parse(TConfig& config) {
 int TCommandImportFromS3::Run(TConfig& config) {
     using namespace NImport;
 
-    TImportFromS3Settings settings = FillSettings(TImportFromS3Settings());
+    TImportFromS3Settings settings = FillSettings(TImportFromS3Settings(), config);
 
     settings.Endpoint(AwsEndpoint);
     settings.Scheme(AwsScheme);

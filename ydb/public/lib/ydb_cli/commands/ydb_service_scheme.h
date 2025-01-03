@@ -85,10 +85,10 @@ public:
     virtual int Run(TConfig& config) override;
 
 private:
-    int PrintPathResponse(TDriver& driver, const NScheme::TDescribePathResult& result);
+    int PrintPathResponse(TDriver& driver, const NScheme::TDescribePathResult& result, const TConfig& config);
     int DescribeEntryDefault(NScheme::TSchemeEntry entry);
-    int DescribeTable(TDriver& driver);
-    int DescribeColumnTable(TDriver& driver);
+    int DescribeTable(TDriver& driver, const TConfig& config);
+    int DescribeColumnTable(TDriver& driver, const TConfig& config);
     int PrintTableResponsePretty(const NTable::TTableDescription& tableDescription) const;
     void WarnAboutTableOptions();
 
@@ -104,7 +104,7 @@ private:
     int DescribeView(const TDriver& driver);
     int PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const;
 
-    int TryTopicConsumerDescribeOrFail(NYdb::TDriver& driver, const NScheme::TDescribePathResult& result);
+    int TryTopicConsumerDescribeOrFail(NYdb::TDriver& driver, const NScheme::TDescribePathResult& result, const TConfig& config);
     std::pair<TString, TString> ParseTopicConsumer() const;
     int PrintConsumerResponsePretty(const NYdb::NTopic::TConsumerDescription& description) const;
 

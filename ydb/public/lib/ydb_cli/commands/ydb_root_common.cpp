@@ -24,12 +24,31 @@
 
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
+#include <util/random/random.h>
 #include <util/string/strip.h>
 #include <util/string/builder.h>
 #include <util/system/env.h>
 
+#include <iomanip>
+#include <sstream>
+
 namespace NYdb {
 namespace NConsoleClient {
+
+static TString GenerateOTelTraceIdHeader() {
+    // https://w3c.github.io/trace-context/#traceparent-header-field-values
+    std::stringstream result, traceId;
+    traceId
+        << std::hex << std::setfill('0') << std::setw(16) << std::right << RandomNumber<ui64>()
+        << std::hex << std::setfill('0') << std::setw(16) << std::right << RandomNumber<ui64>();
+    std::string traceIdStr = traceId.str();
+    result << "00-" << traceIdStr << '-'; // version-<trace id>-
+    result
+        << std::hex << std::setfill('0') << std::setw(16) << std::right << RandomNumber<ui64>() // span id
+        << "-00"; // flags
+    Cerr << "Open telemetry trace id: " << traceIdStr << Endl;
+    return result.str();
+}
 
 TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TClientSettings& settings)
     : TClientCommandRootBase(name)
@@ -314,6 +333,9 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     opts.AddLongOption("profile-file", "Path to config file with profile data in yaml format")
         .RequiredArgument("PATH").StoreResult(&ProfileFile);
 
+    opts.AddLongOption("otel-trace", "Generate open telemetry tracing header for requests")
+        .Optional().NoArgument().SetFlag(&OTelTrace);
+
     TStringStream stream;
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     stream << " [options...] <subcommand>" << Endl << Endl
@@ -345,6 +367,10 @@ void TClientCommandRootCommon::Parse(TConfig& config) {
     ParseIamEndpoint(config);
 
     config.VerbosityLevel = std::min(static_cast<TConfig::EVerbosityLevel>(VerbosityLevel), TConfig::EVerbosityLevel::DEBUG);
+
+    if (OTelTrace) {
+        config.OTelTraceId = GenerateOTelTraceIdHeader();
+    }
 }
 
 namespace {

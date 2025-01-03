@@ -298,11 +298,11 @@ namespace NYdb::NConsoleClient {
     }
 
     TCommandTopicCreate::TCommandTopicCreate()
-        : TYdbCommand("create", {}, "Create topic command") {
+        : TYdbOperationCommand("create", {}, "Create topic command") {
     }
 
     void TCommandTopicCreate::Config(TConfig& config) {
-        TYdbCommand::Config(config);
+        TYdbOperationCommand::Config(config);
         config.Opts->AddLongOption("partitions-count", "Initial and minimum number of partitions for topic")
             .Optional()
             .StoreResult(&MinActivePartitions_)
@@ -336,7 +336,7 @@ namespace NYdb::NConsoleClient {
     }
 
     void TCommandTopicCreate::Parse(TConfig& config) {
-        TYdbCommand::Parse(config);
+        TYdbOperationCommand::Parse(config);
         ParseTopicName(config, 0);
         ParseCodecs();
         ParseMeteringMode();
@@ -348,6 +348,7 @@ namespace NYdb::NConsoleClient {
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto settings = NYdb::NTopic::TCreateTopicSettings();
+        FillSettings(settings, config);
 
         auto autoscaleSettings = NTopic::TAutoPartitioningSettings(
         GetAutoPartitioningStrategy() ? *GetAutoPartitioningStrategy() : NTopic::EAutoPartitioningStrategy::Disabled,
@@ -385,11 +386,11 @@ namespace NYdb::NConsoleClient {
     }
 
     TCommandTopicAlter::TCommandTopicAlter()
-        : TYdbCommand("alter", {}, "Alter topic command") {
+        : TYdbOperationCommand("alter", {}, "Alter topic command") {
     }
 
     void TCommandTopicAlter::Config(TConfig& config) {
-        TYdbCommand::Config(config);
+        TYdbOperationCommand::Config(config);
         config.Opts->AddLongOption("partitions-count", "Initial and minimum number of partitions for topic")
             .Optional()
             .StoreResult(&MinActivePartitions_);
@@ -414,7 +415,7 @@ namespace NYdb::NConsoleClient {
     }
 
     void TCommandTopicAlter::Parse(TConfig& config) {
-        TYdbCommand::Parse(config);
+        TYdbOperationCommand::Parse(config);
         ParseTopicName(config, 0);
         ParseCodecs();
         ParseMeteringMode();
@@ -422,8 +423,9 @@ namespace NYdb::NConsoleClient {
     }
 
     NYdb::NTopic::TAlterTopicSettings TCommandTopicAlter::PrepareAlterSettings(
-        NYdb::NTopic::TDescribeTopicResult& describeResult) {
+        NYdb::NTopic::TDescribeTopicResult& describeResult, const TConfig& config) {
         auto settings = NYdb::NTopic::TAlterTopicSettings();
+        FillSettings(settings, config);
         auto& partitioningSettings = settings.BeginAlterPartitioningSettings();
         auto& originPartitioningSettings = describeResult.GetTopicDescription().GetPartitioningSettings();
 
@@ -489,23 +491,23 @@ namespace NYdb::NConsoleClient {
         auto describeResult = topicClient.DescribeTopic(TopicName).GetValueSync();
         ThrowOnError(describeResult);
 
-        auto settings = PrepareAlterSettings(describeResult);
+        auto settings = PrepareAlterSettings(describeResult, config);
         auto result = topicClient.AlterTopic(TopicName, settings).GetValueSync();
         ThrowOnError(result);
         return EXIT_SUCCESS;
     }
 
     TCommandTopicDrop::TCommandTopicDrop()
-        : TYdbCommand("drop", {}, "Drop topic command") {
+        : TYdbOperationCommand("drop", {}, "Drop topic command") {
     }
 
     void TCommandTopicDrop::Parse(TConfig& config) {
-        TYdbCommand::Parse(config);
+        TYdbOperationCommand::Parse(config);
         ParseTopicName(config, 0);
     }
 
     void TCommandTopicDrop::Config(TConfig& config) {
-        TYdbCommand::Config(config);
+        TYdbOperationCommand::Config(config);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
     }
@@ -518,6 +520,7 @@ namespace NYdb::NConsoleClient {
         ThrowOnError(topicDescription);
 
         auto settings = NYdb::NTopic::TDropTopicSettings();
+        FillSettings(settings, config);
         TStatus status = topicClient.DropTopic(TopicName, settings).GetValueSync();
         ThrowOnError(status);
         return EXIT_SUCCESS;
@@ -538,11 +541,11 @@ namespace NYdb::NConsoleClient {
 
 
     TCommandTopicConsumerAdd::TCommandTopicConsumerAdd()
-        : TYdbCommand("add", {}, "Consumer add operation") {
+        : TYdbOperationCommand("add", {}, "Consumer add operation") {
     }
 
     void TCommandTopicConsumerAdd::Config(TConfig& config) {
-        TYdbCommand::Config(config);
+        TYdbOperationCommand::Config(config);
         config.Opts->AddLongOption("consumer", "New consumer for topic")
             .Required()
             .StoreResult(&ConsumerName_);
@@ -560,7 +563,7 @@ namespace NYdb::NConsoleClient {
     }
 
     void TCommandTopicConsumerAdd::Parse(TConfig& config) {
-        TYdbCommand::Parse(config);
+        TYdbOperationCommand::Parse(config);
         ParseCodecs();
         ParseTopicName(config, 0);
     }
@@ -573,6 +576,7 @@ namespace NYdb::NConsoleClient {
         ThrowOnError(topicDescription);
 
         NYdb::NTopic::TAlterTopicSettings readRuleSettings = NYdb::NTopic::TAlterTopicSettings();
+        FillSettings(readRuleSettings, config);
         NYdb::NTopic::TConsumerSettings<NYdb::NTopic::TAlterTopicSettings> consumerSettings(readRuleSettings);
         consumerSettings.ConsumerName(ConsumerName_);
         if (StartingMessageTimestamp_.Defined()) {
@@ -593,11 +597,11 @@ namespace NYdb::NConsoleClient {
     }
 
     TCommandTopicConsumerDrop::TCommandTopicConsumerDrop()
-        : TYdbCommand("drop", {}, "Consumer drop operation") {
+        : TYdbOperationCommand("drop", {}, "Consumer drop operation") {
     }
 
     void TCommandTopicConsumerDrop::Config(TConfig& config) {
-        TYdbCommand::Config(config);
+        TYdbOperationCommand::Config(config);
         config.Opts->AddLongOption("consumer", "Consumer which will be dropped")
             .Required()
             .StoreResult(&ConsumerName_);
@@ -606,7 +610,7 @@ namespace NYdb::NConsoleClient {
     }
 
     void TCommandTopicConsumerDrop::Parse(TConfig& config) {
-        TYdbCommand::Parse(config);
+        TYdbOperationCommand::Parse(config);
         ParseTopicName(config, 0);
     }
 
@@ -625,6 +629,7 @@ namespace NYdb::NConsoleClient {
         }
 
         NYdb::NTopic::TAlterTopicSettings removeReadRuleSettings = NYdb::NTopic::TAlterTopicSettings();
+        FillSettings(removeReadRuleSettings, config);
         removeReadRuleSettings.AppendDropConsumers(ConsumerName_);
 
         TStatus status = topicClient.AlterTopic(TopicName, removeReadRuleSettings).GetValueSync();
@@ -633,11 +638,11 @@ namespace NYdb::NConsoleClient {
     }
 
     TCommandTopicConsumerDescribe::TCommandTopicConsumerDescribe()
-        : TYdbCommand("describe", {}, "Consumer describe operation") {
+        : TYdbOperationCommand("describe", {}, "Consumer describe operation") {
     }
 
     void TCommandTopicConsumerDescribe::Config(TConfig& config) {
-        TYdbCommand::Config(config);
+        TYdbOperationCommand::Config(config);
         config.Opts->AddLongOption("consumer", "Consumer to describe")
             .Required()
             .StoreResult(&ConsumerName_);
@@ -649,7 +654,7 @@ namespace NYdb::NConsoleClient {
     }
 
     void TCommandTopicConsumerDescribe::Parse(TConfig& config) {
-        TYdbCommand::Parse(config);
+        TYdbOperationCommand::Parse(config);
         ParseOutputFormats();
         ParseTopicName(config, 0);
     }
@@ -658,7 +663,10 @@ namespace NYdb::NConsoleClient {
         TDriver driver = CreateDriver(config);
         NYdb::NTopic::TTopicClient topicClient(driver);
 
-        auto consumerDescription = topicClient.DescribeConsumer(TopicName, ConsumerName_, NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(ShowPartitionStats_)).GetValueSync();
+        NTopic::TDescribeConsumerSettings settings;
+        FillSettings(settings, config);
+        settings.IncludeStats(ShowPartitionStats_);
+        auto consumerDescription = topicClient.DescribeConsumer(TopicName, ConsumerName_, settings).GetValueSync();
         ThrowOnError(consumerDescription);
 
         return PrintDescription(this, OutputFormat, consumerDescription.GetConsumerDescription(), &TCommandTopicConsumerDescribe::PrintPrettyResult);
@@ -669,11 +677,11 @@ namespace NYdb::NConsoleClient {
     }
 
     TCommandTopicConsumerCommitOffset::TCommandTopicConsumerCommitOffset()
-        : TYdbCommand("commit", {}, "Commit offset for consumer") {
+        : TYdbOperationCommand("commit", {}, "Commit offset for consumer") {
     }
 
     void TCommandTopicConsumerCommitOffset::Config(TConfig& config) {
-        TYdbCommand::Config(config);
+        TYdbOperationCommand::Config(config);
         config.Opts->AddLongOption("consumer", "Consumer which offset will be changed")
             .Required()
             .StoreResult(&ConsumerName_);
@@ -691,7 +699,7 @@ namespace NYdb::NConsoleClient {
     }
 
     void TCommandTopicConsumerCommitOffset::Parse(TConfig& config) {
-        TYdbCommand::Parse(config);
+        TYdbOperationCommand::Parse(config);
         ParseTopicName(config, 0);
     }
 
@@ -709,7 +717,9 @@ namespace NYdb::NConsoleClient {
             return EXIT_FAILURE;
         }
 
-        TStatus status = topicClient.CommitOffset(TopicName, PartitionId_, ConsumerName_, Offset_).GetValueSync();
+        NTopic::TCommitOffsetSettings settings;
+        FillSettings(settings, config);
+        TStatus status = topicClient.CommitOffset(TopicName, PartitionId_, ConsumerName_, Offset_, settings).GetValueSync();
         ThrowOnError(status);
         return EXIT_SUCCESS;
     }
@@ -860,7 +870,7 @@ namespace NYdb::NConsoleClient {
         ParseTransform();
     }
 
-    NTopic::TReadSessionSettings TCommandTopicRead::PrepareReadSessionSettings() {
+    NTopic::TReadSessionSettings TCommandTopicRead::PrepareReadSessionSettings(const TConfig& config) {
         NTopic::TReadSessionSettings settings;
         settings.AutoPartitioningSupport(true);
         if (Consumer_) {
@@ -881,6 +891,7 @@ namespace NYdb::NConsoleClient {
         }
 
         settings.AppendTopics(std::move(readSettings));
+        settings.OTelTraceId(config.OTelTraceId);
         return settings;
     }
 
@@ -904,7 +915,7 @@ namespace NYdb::NConsoleClient {
             std::make_unique<TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
         NTopic::TTopicClient topicClient(*driver);
 
-        auto readSession = topicClient.CreateReadSession(PrepareReadSessionSettings());
+        auto readSession = topicClient.CreateReadSession(PrepareReadSessionSettings(config));
 
         {
             TTopicReader reader = TTopicReader(std::move(readSession), TTopicReaderSettings(
@@ -1002,7 +1013,7 @@ namespace NYdb::NConsoleClient {
         }
     }
 
-    NTopic::TWriteSessionSettings TCommandTopicWrite::PrepareWriteSessionSettings() {
+    NTopic::TWriteSessionSettings TCommandTopicWrite::PrepareWriteSessionSettings(const TConfig& config) {
         NTopic::TWriteSessionSettings settings;
         if (auto codec = GetCodec(); codec.Defined()) {
             settings.Codec(*codec);
@@ -1024,6 +1035,7 @@ namespace NYdb::NConsoleClient {
 
         settings.MessageGroupId(*MessageGroupId_);
         settings.ProducerId(*MessageGroupId_);
+        settings.OTelTraceId(config.OTelTraceId);
 
         return settings;
     }
@@ -1036,7 +1048,7 @@ namespace NYdb::NConsoleClient {
         NTopic::TTopicClient topicClient(*driver);
 
         {
-            auto writeSession = NTopic::TTopicClient(*driver).CreateWriteSession(std::move(PrepareWriteSessionSettings()));
+            auto writeSession = NTopic::TTopicClient(*driver).CreateWriteSession(std::move(PrepareWriteSessionSettings(config)));
             auto writer =
                 TTopicWriter(writeSession, std::move(TTopicWriterParams(MessagingFormat, Delimiter_, MessageSizeLimit_, BatchDuration_,
                                                                         BatchSize_, BatchMessagesCount_, GetTransform())));

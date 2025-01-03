@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
         csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper(kikimr).CreateTestOlapTableWithoutStore();
         auto tableClient = kikimr.GetTableClient();
         auto& client = kikimr.GetTestClient();
 
@@ -165,13 +165,13 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
 
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1200000, 300200000, 10000);
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1300000, 300300000, 10000);
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1400000, 300400000, 10000);
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 2000000, 200000000, 70000);
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 3000000, 100000000, 110000);
+        WriteTestData(kikimr, "/Root/olapTable", 1000000, 300000000, 10000);
+        WriteTestData(kikimr, "/Root/olapTable", 1100000, 300100000, 10000);
+        WriteTestData(kikimr, "/Root/olapTable", 1200000, 300200000, 10000);
+        WriteTestData(kikimr, "/Root/olapTable", 1300000, 300300000, 10000);
+        WriteTestData(kikimr, "/Root/olapTable", 1400000, 300400000, 10000);
+        WriteTestData(kikimr, "/Root/olapTable", 2000000, 200000000, 70000);
+        WriteTestData(kikimr, "/Root/olapTable", 3000000, 100000000, 110000);
 
         csController->WaitActualization(TDuration::Seconds(10));
 
@@ -371,8 +371,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     TStringBuilder() << Sprintf(
                         R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=BLOOM_NGRAMM_FILTER,
                     FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 512, "records_count" : 1024}`);
-                )",
-                        StorageId.data());
+                )");
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
                 auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
@@ -468,6 +467,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
                     const auto query = [](const TString& res, const TString& uid, const ui32 level) {
+                        Y_UNUSED(uid);
+                        Y_UNUSED(level);
                         TStringBuilder sb;
                         sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
                         sb << "WHERE(" << Endl;
@@ -489,6 +490,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
                     const auto query = [](const TString& res, const TString& uid, const ui32 level) {
+                        Y_UNUSED(uid);
+                        Y_UNUSED(level);
                         TStringBuilder sb;
                         sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
                         sb << "WHERE" << Endl;
@@ -506,6 +509,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
                     const auto query = [](const TString& res, const TString& uid, const ui32 level) {
+                        Y_UNUSED(uid);
+                        Y_UNUSED(level);
                         TStringBuilder sb;
                         sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
                         sb << "WHERE" << Endl;
@@ -524,6 +529,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
                     const auto query = [](const TString& res, const TString& uid, const ui32 level) {
+                        Y_UNUSED(uid);
+                        Y_UNUSED(level);
                         TStringBuilder sb;
                         sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
                         sb << "WHERE" << Endl;

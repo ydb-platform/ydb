@@ -102,7 +102,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
         csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
 
         TLocalHelper(kikimr).CreateTestOlapTableWithoutStore();

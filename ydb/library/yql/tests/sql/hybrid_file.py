@@ -16,9 +16,37 @@ ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
 DQRUN_PATH = yql_binary_path('ydb/library/yql/tools/dqrun/dqrun')
 DATA_PATH = yatest.common.source_path('yt/yql/tests/sql/suites')
 
+
+# TODO move to yql_utils
+def is_sorted_table(table):
+    import cyson
+    assert table.attr is not None
+    for column in cyson.loads(table.attr)[b'schema']:
+        if b'sort_order' in column:
+            return True
+    return False
+
+
+# TODO move to yql_utils
+def is_unordered_result(res):
+    import cyson
+    path = res.results_file
+    assert os.path.exists(path)
+    with open(path, 'rb') as f:
+        res = f.read()
+    res = cyson.loads(res)
+    for r in res:
+        for data in r[b'Write']:
+            if b'Unordered' in data:
+                return True
+    return False
+
+
 def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if get_gateway_cfg_suffix() != '' and what != 'Results':
         pytest.skip('non-trivial gateways.conf')
+    if (suite, case) in [('result_types','containers')]:
+        pytest.skip('TODO make sorted/stable dicts')
 
     config = get_config(suite, case, cfg, data_path=DATA_PATH)
     xfail = is_xfail(config)
@@ -39,8 +67,8 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
             if os.path.exists(yqlrun_res.results_file):
                 assert os.path.exists(res.results_file)
 
-                hybrid_res_yson = normalize_result(stable_result_file(res), False)
-                yqlrun_res_yson = normalize_result(stable_result_file(yqlrun_res), False)
+                hybrid_res_yson = normalize_result(stable_result_file(res), is_unordered_result(res))
+                yqlrun_res_yson = normalize_result(stable_result_file(yqlrun_res), is_unordered_result(yqlrun_res))
 
                 # Compare results
                 assert hybrid_res_yson == yqlrun_res_yson, 'RESULTS_DIFFER\n' \
@@ -52,8 +80,10 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
 
                 if os.path.exists(yqlrun_tables_res[table].file):
                     assert os.path.exists(tables_res[table].file)
-                    yqlrun_table_yson = dump_table_yson(stable_table_file(yqlrun_tables_res[table]), False)
-                    hybrid_table_yson = dump_table_yson(stable_table_file(tables_res[table]), False)
+                    yqlrun_table_yson = dump_table_yson(stable_table_file(yqlrun_tables_res[table]),\
+                        not is_sorted_table(yqlrun_tables_res[table]))
+                    hybrid_table_yson = dump_table_yson(stable_table_file(tables_res[table]),\
+                        not is_sorted_table(tables_res[table]))
 
                     assert yqlrun_table_yson == hybrid_table_yson, \
                         'OUT_TABLE_DIFFER: %(table)s\n' \

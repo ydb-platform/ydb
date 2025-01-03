@@ -162,7 +162,7 @@ void TOperationsManager::OnTransactionFinishOnComplete(
     const TVector<TWriteOperation::TPtr>& operations, const TLockFeatures& lock, const ui64 txId) {
     {
         lock.RemoveInteractions(InteractionsContext);
-                LockFeatures.erase(lock.GetLockId());
+        LockFeatures.erase(lock.GetLockId());
     }
     Tx2Lock.erase(txId);
     for (auto&& op : operations) {

@@ -202,7 +202,7 @@ public:
                     AFL_VERIFY(indexMeta->GetColumnIds().size() == 1);
 
                     if (!indexMeta->IsInplaceData()) {
-                        portionInfo.FillBlobRangesByStorage(rangesByColumn, portionSchema->GetIndexInfo(), { columnId });
+                        portionInfo.FillBlobRangesByStorage(rangesByColumn, portionSchema->GetIndexInfo(), { indexMeta->GetIndexId() });
                     } else {
                         const std::vector<TString> data = portionInfo.GetIndexInplaceDataVerified(indexMeta->GetIndexId());
 

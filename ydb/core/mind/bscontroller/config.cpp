@@ -990,6 +990,7 @@ namespace NKikimr::NBsController {
             pb->MutablePDiskMetrics()->ClearPDiskId();
             pb->SetExpectedSerial(pdisk.ExpectedSerial);
             pb->SetLastSeenSerial(pdisk.LastSeenSerial);
+            pb->SetReadOnly(pdisk.Mood == TPDiskMood::ReadOnly);
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id) {

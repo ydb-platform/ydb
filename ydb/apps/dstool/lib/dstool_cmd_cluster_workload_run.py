@@ -19,6 +19,7 @@ def add_options(p):
     p.add_argument('--enable-kill-tablets', action='store_true', help='Enable tablet killer')
     p.add_argument('--enable-kill-blob-depot', action='store_true', help='Enable BlobDepot killer')
     p.add_argument('--enable-restart-pdisks', action='store_true', help='Enable PDisk restarter')
+    p.add_argument('--enable-readonly-pdisks', action='store_true', help='Enable SetPDiskReadOnly requests')
     p.add_argument('--kill-signal', type=str, default='KILL', help='Kill signal to send to restart node')
 
 
@@ -101,6 +102,12 @@ def do(args):
             if vslot.ReadOnly
         }
 
+        pdisk_readonly = {
+            (pdisk.NodeId, pdisk.PDiskId)
+            for pdisk in base_config.PDisk
+            if pdisk.ReadOnly
+        }
+
         if (len(pdisk_keys) == 0):
             # initialize pdisk_keys and pdisk_key_versions
             for node_id in {pdisk.NodeId for pdisk in base_config.PDisk}:
@@ -155,6 +162,20 @@ def do(args):
                 response = common.invoke_bsc_request(request)
             except Exception as e:
                 raise Exception('failed to perform restart request: %s' % e)
+            if not response.Success:
+                raise Exception('Unexpected error from BSC: %s' % response.ErrorDescription)
+            
+        def do_readonly_pdisk(node_id, pdisk_id, readonly):
+            assert can_act_on_vslot(node_id, pdisk_id)
+            request = common.kikimr_bsconfig.TConfigRequest(IgnoreDegradedGroupsChecks=True)
+            cmd = request.Command.add().SetPDiskReadOnly
+            cmd.TargetPDiskId.NodeId = node_id
+            cmd.TargetPDiskId.PDiskId = pdisk_id
+            cmd.Value = readonly
+            try:
+                response = common.invoke_bsc_request(request)
+            except Exception as e:
+                raise Exception('failed to perform SetPDiskReadOnly request: %s' % e)
             if not response.Success:
                 raise Exception('Unexpected error from BSC: %s' % response.ErrorDescription)
 
@@ -245,15 +266,22 @@ def do(args):
         readonlies = []
         unreadonlies = []
         pdisk_restarts = []
+        make_pdisks_readonly = []
+        make_pdisks_not_readonly = []
 
         for vslot in base_config.VSlot:
             if common.is_dynamic_group(vslot.GroupId):
                 vslot_id = common.get_vslot_id(vslot.VSlotId)
+                node_id, pdisk_id = vslot_id[:2]
                 vdisk_id = '[%08x:%d:%d:%d]' % (vslot.GroupId, vslot.FailRealmIdx, vslot.FailDomainIdx, vslot.VDiskIdx)
                 if vslot_id in vslot_readonly and not args.disable_readonly:
                     unreadonlies.append(('un-readonly vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_readonly, vslot, False)))
                 if can_act_on_vslot(*vslot_id[:2]) and args.enable_restart_pdisks:
-                    pdisk_restarts.append(('restart pdisk node_id: %d, pdisk_id: %d' % vslot_id[:2], (do_restart_pdisk, *vslot_id[:2])))
+                    pdisk_restarts.append(('restart pdisk node_id: %d, pdisk_id: %d' % (node_id, pdisk_id), (do_restart_pdisk, node_id, pdisk_id)))
+                if can_act_on_vslot(*vslot_id[:2]) and args.enable_readonly_pdisks:
+                    make_pdisks_readonly.append(('readonly pdisk node_id: %d, pdisk_id: %d' % (node_id, pdisk_id), (do_readonly_pdisk, node_id, pdisk_id, True)))
+                if (node_id, pdisk_id) in pdisk_readonly and args.enable_readonly_pdisks:
+                    make_pdisks_not_readonly.append(('un-readonly pdisk node_id: %d, pdisk_id: %d' % (node_id, pdisk_id), (do_readonly_pdisk, node_id, pdisk_id, False)))
                 if can_act_on_vslot(*vslot_id) and (recent_restarts or args.disable_restarts):
                     if not args.disable_evicts:
                         evicts.append(('evict vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_evict, vslot_id)))
@@ -277,6 +305,10 @@ def do(args):
             possible_actions.append(('un-readonly', (pick, unreadonlies)))
         if pdisk_restarts:
             possible_actions.append(('restart-pdisk', (pick, pdisk_restarts)))
+        if make_pdisks_readonly:
+            possible_actions.append(('make-pdisks-readonly', (pick, make_pdisks_readonly)))
+        if make_pdisks_not_readonly:
+            possible_actions.append(('make-pdisks-not-readonly', (pick, make_pdisks_not_readonly)))
 
         restarts = []
 

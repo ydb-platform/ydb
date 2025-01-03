@@ -2,6 +2,7 @@
 #include "datashard_active_transaction.h"
 #include "datashard_distributed_erase.h"
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_pipeline.h"
 #include "datashard_user_db.h"
 #include "execution_unit_ctors.h"
@@ -51,7 +52,7 @@ public:
             THolder<IDataShardChangeCollector> changeCollector{CreateChangeCollector(DataShard, userDb, groupProvider, txc.DB, request.GetTableId())};
 
             auto presentRows = TDynBitMap().Set(0, request.KeyColumnsSize());
-            if (!Execute(txc, request, presentRows, eraseTx->GetConfirmedRows(), writeVersion, op->GetGlobalTxId(),
+            if (!Execute(txc, request, presentRows, eraseTx->GetConfirmedRows(), writeVersion, op->GetGlobalTxId(), ctx,
                     &userDb, &groupProvider, changeCollector.Get()))
             {
                 return EExecutionStatus::Restart;
@@ -94,7 +95,7 @@ public:
                     Y_ABORT_UNLESS(presentRows.contains(rs.Origin));
 
                     auto confirmedRows = DeserializeBitMap<TDynBitMap>(body.GetConfirmedRows());
-                    if (!Execute(txc, request, presentRows.at(rs.Origin), confirmedRows, writeVersion, op->GetGlobalTxId())) {
+                    if (!Execute(txc, request, presentRows.at(rs.Origin), confirmedRows, writeVersion, op->GetGlobalTxId(), ctx)) {
                         return EExecutionStatus::Restart;
                     }
                 }
@@ -120,7 +121,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const NKikimrTxDataShard::TEvEraseRowsRequest& request,
             const TDynBitMap& presentRows, const TDynBitMap& confirmedRows, const TRowVersion& writeVersion,
-            ui64 globalTxId,
+            ui64 globalTxId, const TActorContext& ctx,
             TDataShardUserDb* userDb = nullptr,
             TDataShardChangeGroupProvider* groupProvider = nullptr,
             IDataShardChangeCollector* changeCollector = nullptr)
@@ -159,7 +160,7 @@ public:
             }
 
             if (breakWriteConflicts || checkVolatileDependencies) {
-                if (!DataShard.BreakWriteConflicts(txc.DB, fullTableId, keyCells.GetCells(), volatileDependencies)) {
+                if (!DataShard.BreakWriteConflicts(txc.DB, fullTableId, globalTxId, keyCells.GetCells(), volatileDependencies, ctx)) {
                     if (breakWriteConflicts) {
                         pageFault = true;
                     } else if (checkVolatileDependencies) {
@@ -186,7 +187,8 @@ public:
                 continue;
             }
 
-            DataShard.SysLocksTable().BreakLocks(fullTableId, keyCells.GetCells());
+            auto brokenLocks = DataShard.SysLocksTable().BreakLocks(fullTableId, keyCells.GetCells());
+            NDataIntegrity::LogIntegrityTrailsLocks(ctx, DataShard.TabletID(), globalTxId, brokenLocks);
 
             if (!volatileDependencies.empty() || volatileOrdered) {
                 txc.DB.UpdateTx(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, globalTxId);

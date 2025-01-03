@@ -1185,16 +1185,20 @@ void TSysLocks::EraseLock(const TArrayRef<const TCell>& key) {
     }
 }
 
-void TSysLocks::CommitLock(const TArrayRef<const TCell>& key) {
+TVector<ui64> TSysLocks::CommitLock(const TArrayRef<const TCell>& key) {
     Y_ABORT_UNLESS(Update);
+    TVector<ui64> brokenLocks;
     if (auto* lock = Locker.FindLockPtr(GetLockId(key))) {
         for (auto& pr : lock->ConflictLocks) {
             if (!!(pr.second & ELockConflictFlags::BreakThemOnOurCommit)) {
                 Update->AddBreakLock(pr.first);
+                brokenLocks.push_back(pr.first->LockId);
             }
         }
         Update->AddEraseLock(lock);
     }
+
+    return brokenLocks;
 }
 
 void TSysLocks::SetLock(const TTableId& tableId, const TArrayRef<const TCell>& key) {
@@ -1238,14 +1242,16 @@ void TSysLocks::BreakLock(ui64 lockId) {
     }
 }
 
-void TSysLocks::BreakLocks(const TTableId& tableId, const TArrayRef<const TCell>& key) {
+TVector<ui64> TSysLocks::BreakLocks(const TTableId& tableId, const TArrayRef<const TCell>& key) {
     Y_ABORT_UNLESS(!tableId.HasSamePath(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks)));
 
+    TVector<ui64> brokenLocks;
     if (auto* table = Locker.FindTablePtr(tableId)) {
         if (table->HasRangeLocks()) {
             // Note: avoid copying the key, find all locks here
-            table->Ranges.EachIntersection(key, [update = Update](const TRangeTreeBase::TRange&, TLockInfo* lock) {
+            table->Ranges.EachIntersection(key, [update = Update, &brokenLocks](const TRangeTreeBase::TRange&, TLockInfo* lock) {
                 update->AddBreakLock(lock);
+                brokenLocks.push_back(lock->LockId);
             });
         }
         if (table->HasShardLocks()) {
@@ -1253,6 +1259,8 @@ void TSysLocks::BreakLocks(const TTableId& tableId, const TArrayRef<const TCell>
             Update->AddBreakShardLocks(table);
         }
     }
+
+    return brokenLocks;
 }
 
 void TSysLocks::AddReadConflict(ui64 conflictId) {

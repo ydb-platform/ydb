@@ -883,12 +883,12 @@ public:
     TLock GetLock(const TArrayRef<const TCell>& syslockKey) const;
     void EraseLock(ui64 lockId);
     void EraseLock(const TArrayRef<const TCell>& syslockKey);
-    void CommitLock(const TArrayRef<const TCell>& syslockKey);
+    TVector<ui64> CommitLock(const TArrayRef<const TCell>& syslockKey);
     void SetLock(const TTableId& tableId, const TArrayRef<const TCell>& key);
     void SetLock(const TTableId& tableId, const TTableRange& range);
     void SetWriteLock(const TTableId& tableId, const TArrayRef<const TCell>& key);
     void BreakLock(ui64 lockId);
-    void BreakLocks(const TTableId& tableId, const TArrayRef<const TCell>& key);
+    TVector<ui64> BreakLocks(const TTableId& tableId, const TArrayRef<const TCell>& key);
     void AddReadConflict(ui64 conflictId);
     void AddWriteConflict(ui64 conflictId);
     void AddWriteConflict(const TTableId& tableId, const TArrayRef<const TCell>& key);

@@ -1,5 +1,6 @@
 #include "change_collector.h"
 #include "datashard_direct_erase.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_user_db.h"
 #include "erase_rows_condition.h"
 
@@ -19,7 +20,7 @@ TDirectTxErase::TDirectTxErase(TEvDataShard::TEvEraseRowsRequest::TPtr& ev)
 TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         TDataShard* self, const TExecuteParams& params,
         const NKikimrTxDataShard::TEvEraseRowsRequest& request,
-        NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status, TString& error)
+        NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status, TString& error, const NActors::TActorContext& ctx)
 {
     const ui64 tableId = request.GetTableId();
     const TTableId fullTableId(self->GetPathOwnerId(), tableId);
@@ -140,7 +141,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
 
         if (breakWriteConflicts) {
-            if (!self->BreakWriteConflicts(params.Txc->DB, fullTableId, keyCells.GetCells(), volatileDependencies)) {
+            if (!self->BreakWriteConflicts(params.Txc->DB, fullTableId, params.GlobalTxId, keyCells.GetCells(), volatileDependencies, ctx)) {
                 pageFault = true;
             }
         }
@@ -165,7 +166,8 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
             continue;
         }
 
-        self->SysLocksTable().BreakLocks(fullTableId, keyCells.GetCells());
+        auto brokenLocks = self->SysLocksTable().BreakLocks(fullTableId, keyCells.GetCells());
+        NDataIntegrity::LogIntegrityTrailsLocks(ctx, self->TabletID(), params.GlobalTxId, brokenLocks);
 
         if (!volatileDependencies.empty()) {
             if (!params.GlobalTxId) {
@@ -217,9 +219,9 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
 }
 
 bool TDirectTxErase::CheckRequest(TDataShard* self, const NKikimrTxDataShard::TEvEraseRowsRequest& request,
-        NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status, TString& error)
+        NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status, TString& error, const NActors::TActorContext& ctx)
 {
-    const auto result = CheckedExecute(self, TExecuteParams::ForCheck(), request, status, error);
+    const auto result = CheckedExecute(self, TExecuteParams::ForCheck(), request, status, error, ctx);
     switch (result) {
     case EStatus::Success:
         return true;
@@ -232,7 +234,7 @@ bool TDirectTxErase::CheckRequest(TDataShard* self, const NKikimrTxDataShard::TE
 
 bool TDirectTxErase::Execute(TDataShard* self, TTransactionContext& txc,
         const TRowVersion& readVersion, const TRowVersion& writeVersion,
-        ui64 globalTxId, absl::flat_hash_set<ui64>& volatileReadDependencies)
+        ui64 globalTxId, absl::flat_hash_set<ui64>& volatileReadDependencies, const NActors::TActorContext& ctx)
 {
     const auto& record = Ev->Get()->Record;
 
@@ -244,7 +246,7 @@ bool TDirectTxErase::Execute(TDataShard* self, TTransactionContext& txc,
     NKikimrTxDataShard::TEvEraseRowsResponse::EStatus status;
     TString error;
 
-    const auto result = CheckedExecute(self, params, record, status, error);
+    const auto result = CheckedExecute(self, params, record, status, error, ctx);
     switch (result) {
     case EStatus::Success:
     case EStatus::Error:

@@ -111,10 +111,6 @@
     - stdatomic.h:    contrib/libs/ffmpeg-3.4.1/compat/atomics/win32/stdatomic.h
     - atomic.h:       contrib/libs/ffmpeg-3.4.1/libavutil/atomic.h
 
-- source_filter: "^contrib/libs/postgresql"
-  includes:
-    - port.h:        contrib/libs/postgresql/src/include/port.h
-
 - source_filter: "^contrib/(deprecated/onednn|libs/intel/onednn)"
 
   includes:
@@ -229,11 +225,6 @@
     - magic.h
     - xmlparse.h
 
-- source_filter: "^contrib/tools/python"
-  includes:
-    - ioctl.h
-    - utils.h
-
 - source_filter: "^(contrib/libs/cxxsupp/openmp|catboost/cuda/cuda_lib)"
   includes:
     - hwloc.h
@@ -254,18 +245,6 @@
 - source_filter: "^catboost/cuda/cuda_lib/mpi"
   includes:
     - mpi.h
-
-- source_filter: "^contrib/libs/libf2c"
-  includes:
-    - local.h
-
-- source_filter: "^contrib/libs/libpq"
-  includes:
-    - local.h
-
-- source_filter: "^contrib/libs/breakpad"
-  includes:
-    - stab.h
 
 - source_filter: "^contrib/tools/fluent-bit-(full|minimal)"
   includes:

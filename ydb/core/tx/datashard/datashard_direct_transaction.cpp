@@ -30,12 +30,12 @@ void TDirectTransaction::BuildExecutionPlan(bool loaded)
     RewriteExecutionPlan(plan);
 }
 
-bool TDirectTransaction::Execute(TDataShard* self, TTransactionContext& txc) {
+bool TDirectTransaction::Execute(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx) {
     auto [readVersion, writeVersion] = self->GetReadWriteVersions(this);
 
     // NOTE: may throw TNeedGlobalTxId exception, which is handled in direct tx unit
     absl::flat_hash_set<ui64> volatileReadDependencies;
-    if (!Impl->Execute(self, txc, readVersion, writeVersion, GetGlobalTxId(), volatileReadDependencies)) {
+    if (!Impl->Execute(self, txc, readVersion, writeVersion, GetGlobalTxId(), volatileReadDependencies, ctx)) {
         if (!volatileReadDependencies.empty()) {
             for (ui64 txId : volatileReadDependencies) {
                 AddVolatileDependency(txId);

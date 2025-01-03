@@ -22,7 +22,7 @@ public:
     virtual ~IDirectTx() = default;
     virtual bool Execute(TDataShard* self, TTransactionContext& txc,
         const TRowVersion& readVersion, const TRowVersion& writeVersion,
-        ui64 globalTxId, absl::flat_hash_set<ui64>& volatileReadDependencies) = 0;
+        ui64 globalTxId, absl::flat_hash_set<ui64>& volatileReadDependencies, const NActors::TActorContext&) = 0;
     virtual TDirectTxResult GetResult(TDataShard* self) = 0;
     virtual TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const = 0;
 };
@@ -35,7 +35,7 @@ public:
     void BuildExecutionPlan(bool) override;
 
 private:
-    bool Execute(TDataShard* self, TTransactionContext& txc);
+    bool Execute(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx);
     void SendResult(TDataShard* self, const TActorContext& ctx);
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const;
 

@@ -1,5 +1,6 @@
 #include "change_collector.h"
 #include "datashard_common_upload.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_user_db.h"
 
 namespace NKikimr::NDataShard {
@@ -15,7 +16,7 @@ TCommonUploadOps<TEvRequest, TEvResponse>::TCommonUploadOps(typename TEvRequest:
 template <typename TEvRequest, typename TEvResponse>
 bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTransactionContext& txc,
         const TRowVersion& readVersion, const TRowVersion& writeVersion, ui64 globalTxId,
-        absl::flat_hash_set<ui64>* volatileReadDependencies)
+        absl::flat_hash_set<ui64>* volatileReadDependencies, const NActors::TActorContext& ctx)
 {
     const auto& record = Ev->Get()->Record;
     Result = MakeHolder<TEvResponse>(self->TabletID());
@@ -210,13 +211,14 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             // produce inconsistency.
             if (BreakLocks) {
                 if (breakWriteConflicts) {
-                    if (!self->BreakWriteConflicts(txc.DB, fullTableId, keyCells.GetCells(), volatileDependencies)) {
+                    if (!self->BreakWriteConflicts(txc.DB, fullTableId, globalTxId, keyCells.GetCells(), volatileDependencies, ctx)) {
                         pageFault = true;
                     }
                 }
 
                 if (!pageFault) {
-                    self->SysLocksTable().BreakLocks(fullTableId, keyCells.GetCells());
+                    auto brokenLocks = self->SysLocksTable().BreakLocks(fullTableId, keyCells.GetCells());
+                    NDataIntegrity::LogIntegrityTrailsLocks(ctx, self->TabletID(), globalTxId, brokenLocks);
                 }
             }
 

@@ -41,7 +41,7 @@ public:
         Y_ABORT_UNLESS(tx != nullptr);
 
         try {
-            if (!tx->Execute(&DataShard, txc)) {
+            if (!tx->Execute(&DataShard, txc, ctx)) {
                 return EExecutionStatus::Restart;
             }
         } catch (const TNeedGlobalTxId&) {

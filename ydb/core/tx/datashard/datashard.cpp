@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_txs.h"
 #include "datashard_locks_db.h"
 #include "memory_state_migration.h"
@@ -4664,15 +4665,17 @@ private:
     TBreakWriteConflictsTxObserver* const Observer;
 };
 
-bool TDataShard::BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tableId,
-        TArrayRef<const TCell> keyCells, absl::flat_hash_set<ui64>& volatileDependencies)
+bool TDataShard::BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tableId, ui64 globalTxId,
+        TArrayRef<const TCell> keyCells, absl::flat_hash_set<ui64>& volatileDependencies, const TActorContext& ctx)
 {
     const auto localTid = GetLocalTableId(tableId);
     Y_ABORT_UNLESS(localTid);
 
     if (auto* cached = GetConflictsCache().GetTableCache(localTid).FindUncommittedWrites(keyCells)) {
         for (ui64 txId : *cached) {
-            BreakWriteConflict(txId, volatileDependencies);
+            if (BreakWriteConflict(txId, volatileDependencies)) {
+                NDataIntegrity::LogIntegrityTrailsLocks(ctx, TabletID(), globalTxId, {txId});
+            }
         }
         return true;
     }
@@ -4699,14 +4702,17 @@ bool TDataShard::BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tabl
     return true;
 }
 
-void TDataShard::BreakWriteConflict(ui64 txId, absl::flat_hash_set<ui64>& volatileDependencies) {
+bool TDataShard::BreakWriteConflict(ui64 txId, absl::flat_hash_set<ui64>& volatileDependencies) {
     if (auto* info = GetVolatileTxManager().FindByCommitTxId(txId)) {
         if (info->State != EVolatileTxState::Aborting) {
             volatileDependencies.insert(txId);
         }
-    } else {
-        SysLocksTable().BreakLock(txId);
+
+        return false;
     }
+
+    SysLocksTable().BreakLock(txId);
+    return true;
 }
 
 class TDataShard::TTxGetOpenTxs : public NTabletFlatExecutor::TTransactionBase<TDataShard> {

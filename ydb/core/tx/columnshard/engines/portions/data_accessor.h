@@ -181,6 +181,19 @@ public:
         return result;
     }
 
+    THashMap<TString, std::vector<TBlobRange>> GetIndexRangesVerified(const ui32 indexId) const {
+        if (!Indexes) {
+            return {};
+        }
+        THashMap<TString, std::vector<TBlobRange>> result;
+        for (auto&& i : *Indexes) {
+            if (i.GetEntityId() == indexId) {
+                result.emplace_back(i.GetBlobDataVerified());
+            }
+        }
+        return result;
+    }
+
     std::set<ui32> GetColumnIds() const {
         std::set<ui32> result;
         for (auto&& i : GetRecordsVerified()) {
@@ -229,6 +242,9 @@ public:
 
     void FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TIndexInfo& indexInfo) const;
     void FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TVersionedIndex& index) const;
+    void FillBlobRangesByStorage(THashMap<ui32, THashMap<TString, THashSet<TBlobRange>>>& result, const TIndexInfo& indexInfo, const THashSet<ui32>& entityIds) const;
+    void FillBlobRangesByStorage(
+        THashMap<ui32, THashMap<TString, THashSet<TBlobRange>>>& result, const TVersionedIndex& index, const THashSet<ui32>& entityIds) const;
     void FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TIndexInfo& indexInfo) const;
     void FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TVersionedIndex& index) const;
 

@@ -74,6 +74,23 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         env.Runtime->SendToPipe(env.TabletId, actorId, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
     }
 
+    void CheckDiskIsReadOnly(TEnvironmentSetup& env, const TPDiskId& diskId) {
+        auto config = env.FetchBaseConfig();
+        
+        for (const NKikimrBlobStorage::TBaseConfig::TPDisk& pdisk : config.GetPDisk()) {
+            if (pdisk.GetNodeId() == diskId.NodeId && pdisk.GetPDiskId() == diskId.PDiskId) {
+                UNIT_ASSERT_VALUES_EQUAL(true, pdisk.GetReadOnly());
+                break;
+            }
+        }
+
+        auto stateIt = env.PDiskMockStates.find(std::pair(diskId.NodeId, diskId.PDiskId));
+
+        UNIT_ASSERT(stateIt != env.PDiskMockStates.end());
+
+        UNIT_ASSERT(stateIt->second->IsDiskReadOnly());
+    }
+
     Y_UNIT_TEST(RestartAndReadOnlyConsecutive) {
         // This test ensures that restart that sets disk to read-only is not lost when regular restart is in progress.
         TEnvironmentSetup env({
@@ -153,11 +170,7 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
 
         UNIT_ASSERT(gotReport);
 
-        auto stateIt = env.PDiskMockStates.find(std::pair(diskId.NodeId, diskId.PDiskId));
-
-        UNIT_ASSERT(stateIt != env.PDiskMockStates.end());
-
-        UNIT_ASSERT(stateIt->second->IsDiskReadOnly());
+        CheckDiskIsReadOnly(env, diskId);
     }
 
     Y_UNIT_TEST(ReadOnlyOneByOne) {
@@ -233,6 +246,10 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
 
                 UNIT_ASSERT(gotServiceSetUpdate);
                 UNIT_ASSERT(gotConfigResponse);
+
+                if (val) {
+                    CheckDiskIsReadOnly(env, diskId);
+                }
 
                 // Wait for VSlot to become ready after PDisk restart due to ReadOnly status being changed.
                 env.Sim(TDuration::Seconds(30));
@@ -319,6 +336,8 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         });
 
         UNIT_ASSERT(gotPdiskReport);
+
+        CheckDiskIsReadOnly(env, {targetNodeId, targetPDiskId});
     }
 
     Y_UNIT_TEST(SetGoodDiskInBrokenGroupReadOnlyNotAllowed) {

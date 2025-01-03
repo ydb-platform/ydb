@@ -153,14 +153,16 @@ void TOperationsManager::OnTransactionFinishOnExecute(
         RemoveOperationOnExecute(op, txc);
     }
     NIceDb::TNiceDb db(txc.DB);
-    db.Table<Schema::OperationTxIds>().Key(txId, lock.GetLockId()).Delete();
+    if (!operations.empty()){
+        db.Table<Schema::OperationTxIds>().Key(txId, lock.GetLockId()).Delete();
+    }
 }
 
 void TOperationsManager::OnTransactionFinishOnComplete(
     const TVector<TWriteOperation::TPtr>& operations, const TLockFeatures& lock, const ui64 txId) {
     {
         lock.RemoveInteractions(InteractionsContext);
-        LockFeatures.erase(lock.GetLockId());
+                LockFeatures.erase(lock.GetLockId());
     }
     Tx2Lock.erase(txId);
     for (auto&& op : operations) {
@@ -193,8 +195,10 @@ std::optional<ui64> TOperationsManager::GetLockForTx(const ui64 txId) const {
 }
 
 void TOperationsManager::LinkTransactionOnExecute(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
-    NIceDb::TNiceDb db(txc.DB);
-    db.Table<Schema::OperationTxIds>().Key(txId, lockId).Update();
+    if (const auto& lock = GetLockVerified(lockId); !lock.GetWriteOperations().empty()){
+        NIceDb::TNiceDb db(txc.DB);
+        db.Table<Schema::OperationTxIds>().Key(txId, lockId).Update();
+    }
     Tx2Lock[txId] = lockId;
 }
 

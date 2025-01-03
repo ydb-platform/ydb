@@ -70,8 +70,10 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
         context.EngineLogs.AppendPortion(portionBuilder.GetPortionResult());
     }
 
-    PortionsToRemove.ApplyOnComplete(self, context, *FetchedDataAccessors);
-    PortionsToMove.ApplyOnComplete(self, context, *FetchedDataAccessors);
+    if (PortionsToRemove.GetSize() || PortionsToMove.GetSize()) {
+        PortionsToRemove.ApplyOnComplete(self, context, *FetchedDataAccessors);
+        PortionsToMove.ApplyOnComplete(self, context, *FetchedDataAccessors);
+    }
 }
 
 void TChangesWithAppend::DoCompile(TFinalizationContext& context) {

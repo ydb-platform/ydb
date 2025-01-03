@@ -541,7 +541,8 @@ def cluster_type_args():
     args = argparse.ArgumentParser(add_help=False)
     available_erasure_types = [
         "block-4-2-8-nodes",
-        "mirror-3-dc-3-nodes-in-memory",
+        "block-4-2-4-nodes",
+        "block-4-2-2-nodes",
         "mirror-3-dc-3-nodes",
         "mirror-3-dc-9-nodes",
     ]
@@ -785,6 +786,10 @@ def add_sample_config_mode(modes):
         template_path = ""
         if cluster_type == "block-4-2-8-nodes":
             template_path = "/ydbd_slice/baremetal/templates/block-4-2-8-nodes.yaml"
+        elif cluster_type == "block-4-2-4-nodes":
+            template_path = "/ydbd_slice/baremetal/templates/block-4-2-4-nodes.yaml"
+        elif cluster_type == "block-4-2-2-nodes":
+            template_path = "/ydbd_slice/baremetal/templates/block-4-2-2-nodes.yaml"
         elif cluster_type == "mirror-3-dc-3-nodes-in-memory":
             pass
         elif cluster_type == "mirror-3-dc-3-nodes":

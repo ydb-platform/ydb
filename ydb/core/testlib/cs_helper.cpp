@@ -229,6 +229,32 @@ void THelper::CreateOlapTablesWithStore(TVector<TString> tableNames /*= {"olapTa
         CreateSchemaOlapTablesWithStore(GetTestTableSchema(), tableNames, storeName, storeShardsCount, tableShardsCount);
 }
 
+void THelper::CreateSchemaOlapTables(const TString tableSchema, TVector<TString> tableNames, ui32 tableShardsCount) {
+    TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
+
+    const TString shardingColumns = "[\"" + JoinSeq("\",\"", GetShardingColumns()) + "\"]";
+
+    for (const TString& tableName : tableNames) {
+        TBase::CreateTestOlapTable(sender, "", Sprintf(R"(
+            Name: "%s"
+            ColumnShardCount: %d
+            Sharding {
+                HashSharding {
+                    Function: %s
+                    Columns: %s
+                }
+            }
+            Schema {
+                %s
+            }
+        )", tableName.c_str(), tableShardsCount, ShardingMethod.data(), shardingColumns.c_str(), tableSchema.data()));
+    }
+}
+
+void THelper::CreateOlapTables(TVector<TString> tableNames /*= {"olapTable"}*/, ui32 tableShardsCount /*= 3*/) {
+        CreateSchemaOlapTables(GetTestTableSchema(), tableNames, tableShardsCount);
+}
+
 // Clickbench table
 
 std::shared_ptr<arrow::Schema> TCickBenchHelper::GetArrowSchema() const {

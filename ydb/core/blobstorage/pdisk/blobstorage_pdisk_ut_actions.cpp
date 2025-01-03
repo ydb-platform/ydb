@@ -1136,7 +1136,7 @@ void TTestChunkUnlockRestart::TestFSM(const TActorContext &ctx) {
             SignalDoneEvent();
             break;
         }
-        ctx.Send(NodeWardenId, new TEvBlobStorage::TEvAskWardenRestartPDisk(LastResponse.whiteboardPDiskResult->Record.GetPDiskId()));
+        ctx.Send(NodeWardenId, new TEvBlobStorage::TEvAskWardenRestartPDisk(LastResponse.whiteboardPDiskResult->Record.GetPDiskId(), false));
         break;
     case 30:
         TEST_RESPONSE(EvHarakiri, OK);

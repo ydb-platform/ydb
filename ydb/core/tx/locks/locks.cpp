@@ -722,7 +722,7 @@ TLocksUpdate::~TLocksUpdate() {
 
 // TSysLocks
 
-TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
+std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
     Y_ABORT_UNLESS(Update);
 
     TMicrosecTimerCounter measureApplyLocks(*Self, COUNTER_APPLY_LOCKS_USEC);
@@ -737,8 +737,14 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
     Locker.RemoveBrokenRanges();
 
     Update->FlattenBreakLocks();
+
+    TVector<ui64> brokenLocks;
+    brokenLocks.reserve(Update->BreakLocks.Size());
     if (Update->BreakLocks) {
         Locker.BreakLocks(Update->BreakLocks, breakVersion);
+        for (const auto& lock : Update->BreakLocks) {
+            brokenLocks.push_back(lock.GetLockId());
+        }
     }
 
     Locker.SaveBrokenPersistentLocks(Db);
@@ -768,7 +774,7 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
         // Adding read/write conflicts implies locking
         Y_ABORT_UNLESS(!Update->ReadConflictLocks);
         Y_ABORT_UNLESS(!Update->WriteConflictLocks);
-        return TVector<TLock>();
+        return {TVector<TLock>(), brokenLocks};
     }
 
     bool shardLock = Locker.ForceShardLock(Update->ReadTables);
@@ -838,7 +844,7 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
         out.emplace_back(MakeLock(Update->LockTxId, lock ? lock->GetGeneration() : Self->Generation(), counter,
             table.GetTableId(), Update->Lock && Update->Lock->IsWriteLock()));
     }
-    return out;
+    return {out, brokenLocks};
 }
 
 void TSysLocks::UpdateCounters() {

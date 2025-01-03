@@ -214,6 +214,7 @@ public:
             if (data.GetData().template Is<NKikimrTxDataShard::TEvKqpInputActorResultInfo>()) {
                 NKikimrTxDataShard::TEvKqpInputActorResultInfo info;
                 YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
+                NDataIntegrity::LogIntegrityTrails("InputActorResult", Request.UserTraceId, TxId, info, TlsActivationContext->AsActorContext());
                 for (auto& lock : info.GetLocks()) {
                     Locks.push_back(lock);
 
@@ -224,6 +225,7 @@ public:
             } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
                 NKikimrKqp::TEvKqpOutputActorResultInfo info;
                 YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
+                NDataIntegrity::LogIntegrityTrails("OutputActorResult", Request.UserTraceId, TxId, info, TlsActivationContext->AsActorContext());
                 for (auto& lock : info.GetLocks()) {
                     Locks.push_back(lock);
 
@@ -393,6 +395,7 @@ private:
         TShardState* shardState = ShardStates.FindPtr(shardId);
         YQL_ENSURE(shardState, "Unexpected propose result from unknown tabletId " << shardId);
 
+        NDataIntegrity::LogIntegrityTrails("Prepare", Request.UserTraceId, ev, TlsActivationContext->AsActorContext());
         LOG_D("Got propose result, shard: " << shardId
                                             << ", status: " << NKikimrTxDataShard::TEvProposeTransactionResult_EStatus_Name(res->GetStatus())
                                             << ", error: " << res->GetError());
@@ -458,6 +461,7 @@ private:
         NYql::TIssues issues;
         NYql::IssuesFromMessage(res->Record.GetIssues(), issues);
 
+        NDataIntegrity::LogIntegrityTrails("Prepare", Request.UserTraceId, ev, TlsActivationContext->AsActorContext());
         LOG_D("Recv EvWriteResult (prepare) from ShardID=" << shardId << ", Status="
                                                            << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
                                                            << ", TxId=" << ev->Get()->Record.GetTxId() << ", Locks= " <<
@@ -994,7 +998,7 @@ private:
             transaction.SetFlags(TEvTxProxy::TEvProposeTransaction::FlagVolatile);
         }
 
-        NDataIntegrity::LogIntegrityTrails("PlannedTx", Request.UserTraceId, TxId, {}, TlsActivationContext->AsActorContext());
+        NDataIntegrity::LogIntegrityTrails("PlannedTx", "", Request.UserTraceId, TxId, {}, TlsActivationContext->AsActorContext());
 
         LOG_T("Execute planned transaction, coordinator: " << TxCoordinator);
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ev.Release(), TxCoordinator, /* subscribe */ true));
@@ -1130,6 +1134,7 @@ private:
         NYql::TIssues issues;
         NYql::IssuesFromMessage(res->Record.GetIssues(), issues);
 
+        NDataIntegrity::LogIntegrityTrails("Execute", Request.UserTraceId, ev, TlsActivationContext->AsActorContext());
         LOG_D("Recv EvWriteResult (execute) from ShardID=" << shardId << ", Status="
                                                            << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
                                                            << ", TxId=" << ev->Get()->Record.GetTxId() << ", Locks= " <<
@@ -1196,6 +1201,7 @@ private:
         TShardState* shardState = ShardStates.FindPtr(shardId);
         YQL_ENSURE(shardState);
 
+        NDataIntegrity::LogIntegrityTrails("Execute", Request.UserTraceId, ev, TlsActivationContext->AsActorContext());
         LOG_D("Got propose result, shard: " << shardId
                                             << ", status: " << NKikimrTxDataShard::TEvProposeTransactionResult_EStatus_Name(res->GetStatus())
                                             << ", error: " << res->GetError());
@@ -1645,7 +1651,8 @@ private:
                     NKikimrTxDataShard::TX_KIND_DATA, SelfId(), TxId, dataTransaction.SerializeAsString(), flags));
             }
 
-            NDataIntegrity::LogIntegrityTrails("DatashardTx", Request.UserTraceId, TxId, shardId, TlsActivationContext->AsActorContext());
+            NDataIntegrity::LogIntegrityTrails("DatashardTx", dataTransaction.GetKqpTransaction().GetLocks().ShortDebugString(), 
+                Request.UserTraceId, TxId, shardId, TlsActivationContext->AsActorContext());
 
             ResponseEv->Orbit.Fork(evData->Orbit);
             ev = std::move(evData);
@@ -1679,7 +1686,8 @@ private:
 
         auto traceId = ExecuterSpan.GetTraceId();
 
-        NDataIntegrity::LogIntegrityTrails("EvWriteTx", Request.UserTraceId, TxId, shardId, TlsActivationContext->AsActorContext());
+        NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWriteTransaction->Record.GetLocks().ShortDebugString(), 
+            Request.UserTraceId, TxId, shardId, TlsActivationContext->AsActorContext());
 
         auto shardsToString = [](const auto& shards) {
             TStringBuilder builder;

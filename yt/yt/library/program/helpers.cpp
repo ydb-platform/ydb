@@ -24,11 +24,6 @@ void ConfigureSingletons(const TSingletonsConfigPtr& config)
     NNet::TAddressResolver::Get()->EnsureLocalHostName();
 }
 
-void ReconfigureSingletons(const TSingletonsDynamicConfigPtr& dynamicConfig)
-{
-    TSingletonManager::Reconfigure(dynamicConfig);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

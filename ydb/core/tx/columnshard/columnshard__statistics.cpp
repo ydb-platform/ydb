@@ -142,7 +142,9 @@ public:
                     for (auto&& b : blobs) {
                         const TString blob = blobsData.Extract(storageId, b);
                         auto sketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(blob.data(), blob.size()));
-                        *SketchesByColumns[columnId] += *sketch;
+                        auto it = SketchesByColumns.find(columnId);
+                        AFL_VERIFY(it != SketchesByColumns.end());
+                        *it->second += *sketch;
                     }
                 }
             }
@@ -189,6 +191,7 @@ public:
             }
 
             THashMap<ui32, THashMap<TString, THashSet<NOlap::TBlobRange>>> rangesByColumn;
+            THashMap<ui32, ui32> indexIdToColumnId;
 
             for (const auto& [id, portionInfo] : result.GetPortions()) {
                 std::shared_ptr<NOlap::ISnapshotSchema> portionSchema = portionInfo.GetPortionInfo().GetSchema(*VersionedIndex);
@@ -200,7 +203,7 @@ public:
                         continue;
                     }
                     AFL_VERIFY(indexMeta->GetColumnIds().size() == 1);
-
+                    indexIdToColumnId.emplace(indexMeta->GetIndexId(), columnId);
                     if (!indexMeta->IsInplaceData()) {
                         portionInfo.FillBlobRangesByStorage(rangesByColumn, portionSchema->GetIndexInfo(), { indexMeta->GetIndexId() });
                     } else {
@@ -216,6 +219,7 @@ public:
             }
             if (rangesByColumn.size()) {
                 NOlap::TBlobsAction blobsAction(StoragesManager, NOlap::NBlobOperations::EConsumer::STATISTICS);
+                THashMap<ui32, THashMap<TString, THashSet<NOlap::TBlobRange>>> rangesByColumnLocal;
                 for (auto&& i : rangesByColumn) {
                     for (auto&& [storageId, ranges] : i.second) {
                         auto reader = blobsAction.GetReading(storageId);
@@ -223,9 +227,12 @@ public:
                             reader->AddRange(i);
                         }
                     }
+                    auto it = indexIdToColumnId.find(i.first);
+                    AFL_VERIFY(it != indexIdToColumnId.end());
+                    rangesByColumnLocal.emplace(it->second, std::move(i.second));
                 }
-                TActorContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(
-                    std::make_shared<TIndexReadTask>(Result, blobsAction.GetReadingActions(), std::move(rangesByColumn), std::move(sketchesByColumns))));
+                TActorContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(std::make_shared<TIndexReadTask>(
+                    Result, blobsAction.GetReadingActions(), std::move(rangesByColumnLocal), std::move(sketchesByColumns))));
             } else {
                 Result->AddResult(std::move(sketchesByColumns));
             }

@@ -3,37 +3,22 @@ ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestD
 ydb/core/client/ut TClientTest.PromoteFollower
 ydb/core/client/ut TClientTest.ReadFromFollower
 ydb/core/client/ut TFlatTest.AutoSplitMergeQueue
-ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
-ydb/core/cms/ut_sentinel_unstable sole chunk chunk
-ydb/core/cms/ut_sentinel_unstable sole+chunk+chunk
-ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
-ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
-ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
-ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
-ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.Select
-ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertEvWrite
-ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertViaLegacyScripting-Streaming
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_1_clean_with_restarts
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingConsistency64
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingModuloN
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.UpsertWhileSplitTest
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleMerge
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplits
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplitsThenMerges
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplitsWithRestartsAfterWait
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplitsWithRestartsWhenWait
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleMergesWithRestartsAfterWait
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleMergesWithRestartsWhenWait
+ydb/core/cms/ut_sentinel_unstable *
+ydb/core/external_sources *
+ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
+ydb/core/keyvalue/ut_trace TKeyValueTracingTest.*
+ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
+ydb/core/kqp/ut/join KqpJoinOrder.Chain65Nodes
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.*
 ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
-ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
-ydb/core/kqp/ut/olap KqpOlapIndexes.Indexes*
-ydb/core/kqp/ut/olap [*/*] chunk chunk
-ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
-ydb/core/kqp/ut/query KqpLimits.QueryExecTimeoutCancel
-ydb/core/kqp/ut/query KqpStats.SysViewClientLost
+ydb/core/kqp/ut/pg KqpPg.CreateIndex
+ydb/core/kqp/ut/tx KqpLocksTricky.TestNoLocksIssueInteractiveTx+withSink
+ydb/core/kqp/ut/tx KqpLocksTricky.TestNoLocksIssue+withSink
+ydb/core/kqp/ut/tx KqpSnapshotRead.ReadOnlyTxWithIndexCommitsOnConcurrentWrite+withSink
+ydb/core/kqp/ut/tx KqpSinkTx.InvalidateOnError
+ydb/core/kqp/ut/query KqpLimits.QueryReplySize
+ydb/core/kqp/ut/query KqpQuery.QueryTimeout
+ydb/core/kqp/ut/service KqpQueryService.TableSink_OltpReplace+HasSecondaryIndex
 ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
@@ -45,19 +30,24 @@ ydb/core/kqp/ut/service KqpQueryService.ExecuteQueryPgTableSelect
 ydb/core/kqp/ut/service KqpQueryService.QueryOnClosedSession
 ydb/core/kqp/ut/service KqpQueryService.TableSink_OltpUpdate
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
-ydb/core/kqp/ut/service [*/*] chunk chunk
-ydb/core/kqp/ut/service [*/*]+chunk+chunk
-ydb/services/ydb/ut YdbLogStore.AlterLogTable
-ydb/core/mind/hive/ut THiveTest.DrainWithHiveRestart
-ydb/core/mind/hive/ut THiveTest.TestHiveBalancerNodeRestarts
-ydb/core/persqueue/ut [*/*] chunk chunk
-ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
-ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
-ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-false
+ydb/core/kqp/ut/service [38/50]*
+ydb/core/kqp/ut/service KqpQueryService.TableSink_OltpReplace+HasSecondaryIndex
+ydb/core/persqueue/ut [37/40] chunk chunk
+ydb/core/persqueue/ut [38/40] chunk chunk
+ydb/core/persqueue/ut TPQTest.*DirectRead*
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ManySession_AutoscaleAwareSDK
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ManySession_existed_AutoscaleAwareSDK
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ReadNotEmptyPartitions_AutoscaleAwareSDK
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ReadNotEmptyPartitions_BeforeAutoscaleAwareSDK
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.ReadingAfterSplitTest_PreferedPartition_AutoscaleAwareSDK
+ydb/core/persqueue/ut/ut_with_sdk [4/10] chunk chunk
+ydb/core/persqueue/ut/ut_with_sdk [6/10] chunk chunk
+ydb/core/persqueue/ut/ut_with_sdk [7/10] chunk chunk
+ydb/core/persqueue/ut/ut_with_sdk [8/10] chunk chunk
+ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
+ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitBySizeTest.Merge1KShards
-ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst*
 ydb/core/tx/tx_proxy/ut_storage_tenant TStorageTenantTest.RemoveStoragePoolBeforeDroppingTablet
 ydb/core/util/ut TCircularOperationQueueTest.ShouldShuffle

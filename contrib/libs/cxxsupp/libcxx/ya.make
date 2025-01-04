@@ -27,26 +27,12 @@ CXXFLAGS(-D_LIBCPP_BUILDING_LIBRARY)
 
 IF (OS_ANDROID)
     DEFAULT(CXX_RT "default")
-    IF (ARCH_I686 OR ARCH_ARM7)
-        # 32-bit architectures require additional libandroid_support.so to be linked
-        # We add --start-group / --end-group statements due to the issue in NDK < r22.
-        # See: https://github.com/android/ndk/issues/1130
-        #
-        # Though these statements are not respected by LLD, they might have sense for other linkers.
-        LDFLAGS(
-            -Wl,--start-group
-            -lc++abi
-            -landroid_support
-            -Wl,--end-group
-        )
-    ELSE()
-        LDFLAGS(-lc++abi)
-    ENDIF()
+    LDFLAGS(-lc++abi)
     CFLAGS(
         -DLIBCXX_BUILDING_LIBCXXABI
     )
-# Take cxxabi implementation from system.
 ELSEIF (OS_IOS)
+    # Take cxxabi implementation from system.
     LDFLAGS(-lc++abi)
     CFLAGS(
         -DLIBCXX_BUILDING_LIBCXXABI

@@ -18,7 +18,7 @@ add_library(data_sharing-source-transactions)
 target_link_libraries(data_sharing-source-transactions PUBLIC
   contrib-libs-cxxsupp
   yutil
-  data_sharing-common-transactions
+  tx-columnshard-tablet
 )
 
 target_sources(data_sharing-source-transactions PRIVATE

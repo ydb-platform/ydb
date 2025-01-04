@@ -20,7 +20,7 @@ target_link_libraries(data_sharing-modification-tasks PUBLIC
   yutil
   data_sharing-initiator-controller
   data_sharing-common-session
-  data_sharing-common-transactions
+  tx-columnshard-tablet
   data_sharing-destination-transactions
 )
 

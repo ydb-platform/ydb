@@ -12,22 +12,18 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(data_sharing-destination-transactions)
+add_library(tx-columnshard-tablet)
 
 
-target_link_libraries(data_sharing-destination-transactions PUBLIC
+target_link_libraries(tx-columnshard-tablet PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  core-tx-tiering
-  columnshard-data_sharing-protos
-  tx-columnshard-tablet
+  columnshard-hooks-abstract
 )
 
-target_sources(data_sharing-destination-transactions PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_start_from_initiator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_data_from_source.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_finish_from_source.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_finish_ack_from_initiator.cpp
+target_sources(tx-columnshard-tablet PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/tablet/write_queue.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/tablet/ext_tx_base.h
 )
 

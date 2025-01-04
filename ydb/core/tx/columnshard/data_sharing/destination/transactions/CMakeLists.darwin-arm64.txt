@@ -20,7 +20,7 @@ target_link_libraries(data_sharing-destination-transactions PUBLIC
   yutil
   core-tx-tiering
   columnshard-data_sharing-protos
-  data_sharing-common-transactions
+  tx-columnshard-tablet
 )
 
 target_sources(data_sharing-destination-transactions PRIVATE

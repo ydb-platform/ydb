@@ -14,7 +14,6 @@
 
 add_subdirectory(session)
 add_subdirectory(context)
-add_subdirectory(transactions)
 
 add_library(columnshard-data_sharing-common INTERFACE)
 
@@ -23,7 +22,6 @@ target_link_libraries(columnshard-data_sharing-common INTERFACE
   contrib-libs-cxxsupp
   yutil
   data_sharing-common-session
-  data_sharing-common-transactions
   data_sharing-common-context
 )
 

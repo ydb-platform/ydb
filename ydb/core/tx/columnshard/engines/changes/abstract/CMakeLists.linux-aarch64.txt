@@ -37,6 +37,9 @@ target_sources(engines-changes-abstract PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/abstract/abstract.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/abstract/compaction_info.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/abstract/settings.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/abstract/remove_portions.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/abstract/move_portions.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/abstract/changes.cpp
 )
 
 

@@ -5,9 +5,9 @@
 
 namespace NKikimr::NOlap::NDataSharing {
 
-class TTxFinishAckFromInitiator: public TExtendedTransactionBase<NColumnShard::TColumnShard> {
+class TTxFinishAckFromInitiator: public NColumnShard::TExtendedTransactionBase<NColumnShard::TColumnShard> {
 private:
-    using TBase = TExtendedTransactionBase<NColumnShard::TColumnShard>;
+    using TBase = NColumnShard::TExtendedTransactionBase<NColumnShard::TColumnShard>;
     std::shared_ptr<TDestinationSession> Session;
 protected:
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override;

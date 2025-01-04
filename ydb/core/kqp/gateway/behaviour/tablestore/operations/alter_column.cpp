@@ -1,4 +1,6 @@
 #include "alter_column.h"
+#include <util/string/vector.h>
+#include <util/string/split.h>
 
 namespace NKikimr::NKqp::NColumnshard {
 
@@ -38,20 +40,22 @@ TConclusionStatus TAlterColumnOperation::DoDeserialize(NYql::TObjectSettingsImpl
 }
 
 void TAlterColumnOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchema& schemaData) const {
-    auto* column = schemaData.AddAlterColumns();
-    column->SetName(ColumnName);
-    if (StorageId && !!*StorageId) {
-        column->SetStorageId(*StorageId);
-    }
-    if (!!Serializer) {
-        Serializer.SerializeToProto(*column->MutableSerializer());
-    }
-    if (!!AccessorConstructor) {
-        *column->MutableDataAccessorConstructor() = AccessorConstructor.SerializeToProto();
-    }
-    *column->MutableDictionaryEncoding() = DictionaryEncodingDiff.SerializeToProto();
-    if (DefaultValue) {
-        column->SetDefaultValue(*DefaultValue);
+    for (auto&& i : StringSplitter(ColumnName).SplitBySet(", ").SkipEmpty().ToList<TString>()) {
+        auto* column = schemaData.AddAlterColumns();
+        column->SetName(i);
+        if (StorageId && !!*StorageId) {
+            column->SetStorageId(*StorageId);
+        }
+        if (!!Serializer) {
+            Serializer.SerializeToProto(*column->MutableSerializer());
+        }
+        if (!!AccessorConstructor) {
+            *column->MutableDataAccessorConstructor() = AccessorConstructor.SerializeToProto();
+        }
+        *column->MutableDictionaryEncoding() = DictionaryEncodingDiff.SerializeToProto();
+        if (DefaultValue) {
+            column->SetDefaultValue(*DefaultValue);
+        }
     }
 }
 

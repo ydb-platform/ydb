@@ -8,6 +8,7 @@ namespace NKikimr::NArrow {
 
 class TSchemaSubset;
 class TSchemaLite;
+class TSchemaLiteView;
 
 class TColumnOperator {
 public:
@@ -59,7 +60,7 @@ public:
     }
 
     TConclusion<std::shared_ptr<arrow::RecordBatch>> AdaptIncomingToDestinationExt(const std::shared_ptr<arrow::RecordBatch>& incoming,
-        const std::shared_ptr<TSchemaLite>& dstSchema, const std::function<TConclusionStatus(const ui32, const i32)>& checker,
+        const TSchemaLiteView& dstSchema, const std::function<TConclusionStatus(const ui32, const i32)>& checker,
         const std::function<i32(const std::string&)>& nameResolver) const;
 
     std::shared_ptr<arrow::RecordBatch> Extract(
@@ -73,7 +74,7 @@ public:
     std::shared_ptr<arrow::Table> Extract(const std::shared_ptr<arrow::Table>& incoming, const std::vector<TString>& columnNames);
 
     TConclusion<TSchemaSubset> BuildSequentialSubset(
-        const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<NArrow::TSchemaLite>& dstSchema);
+        const std::shared_ptr<arrow::RecordBatch>& incoming, const NArrow::TSchemaLiteView& dstSchema);
 
     TConclusion<std::shared_ptr<arrow::RecordBatch>> Adapt(
         const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<arrow::Schema>& dstSchema, TSchemaSubset* subset = nullptr);

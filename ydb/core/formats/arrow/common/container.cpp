@@ -148,27 +148,32 @@ std::shared_ptr<NKikimr::NArrow::TGeneralContainer> TGeneralContainer::BuildEmpt
     return std::make_shared<TGeneralContainer>(Schema, std::move(columns));
 }
 
-std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableOptional(const std::optional<std::set<std::string>>& columnNames /*= {}*/) const {
+std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableOptional(const TTableConstructionContext& context) const {
     std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
     std::vector<std::shared_ptr<arrow::Field>> fields;
     for (i32 i = 0; i < Schema->num_fields(); ++i) {
-        if (columnNames && !columnNames->contains(Schema->field(i)->name())) {
+        if (context.GetColumnNames() && !context.GetColumnNames()->contains(Schema->field(i)->name())) {
             continue;
         }
-        columns.emplace_back(Columns[i]->GetChunkedArray());
+        if (context.GetRecordsCount() || context.GetStartIndex()) {
+            columns.emplace_back(Columns[i]->Slice(context.GetStartIndex().value_or(0),
+                context.GetRecordsCount().value_or(GetRecordsCount() - context.GetStartIndex().value_or(0))));
+        } else {
+            columns.emplace_back(Columns[i]->GetChunkedArray());
+        }
         fields.emplace_back(Schema->field(i));
     }
     if (fields.empty()) {
         return nullptr;
     }
     AFL_VERIFY(RecordsCount);
-    return arrow::Table::Make(std::make_shared<arrow::Schema>(fields), columns, *RecordsCount);
+    return arrow::Table::Make(std::make_shared<arrow::Schema>(fields), columns, context.GetRecordsCount().value_or(*RecordsCount));
 }
 
-std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableVerified(const std::optional<std::set<std::string>>& columnNames /*= {}*/) const {
-    auto result = BuildTableOptional(columnNames);
+std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableVerified(const TTableConstructionContext& context) const {
+    auto result = BuildTableOptional(context);
     AFL_VERIFY(result);
-    AFL_VERIFY(!columnNames || result->schema()->num_fields() == (i32)columnNames->size());
+    AFL_VERIFY(!context.GetColumnNames() || result->schema()->num_fields() == (i32)context.GetColumnNames()->size());
     return result;
 }
 

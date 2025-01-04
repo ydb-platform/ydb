@@ -36,6 +36,10 @@ public:
         CreateOlapTablesWithStore(tableNames, storeName, storeShardsCount, tableShardsCount);
     }
 
+    void CreateTestOlapTableWithoutStore(TString tableName = "olapTable", ui32 tableShardsCount = 3) {
+        CreateOlapTables({tableName}, tableShardsCount);
+    }
+
     using TBase::TBase;
 
     TLocalHelper(TKikimrRunner& runner)

@@ -97,7 +97,7 @@ TString TNativeSerializer::DoSerializePayload(const std::shared_ptr<arrow::Recor
     // Write prepared payload into the resultant string. No extra allocation will be made.
     TStatusValidator::Validate(arrow::ipc::WriteIpcPayload(payload, Options, &out, &metadata_length));
     Y_ABORT_UNLESS(out.GetPosition() == str.size());
-    Y_DEBUG_ABORT_UNLESS(Deserialize(str, batch->schema()).ok());
+    AFL_VERIFY_DEBUG(Deserialize(str, batch->schema()).ok());
     AFL_DEBUG(NKikimrServices::ARROW_HELPER)("event", "serialize")("size", str.size())("columns", batch->schema()->num_fields());
     return str;
 }
@@ -111,9 +111,8 @@ NKikimr::TConclusion<std::shared_ptr<arrow::util::Codec>> TNativeSerializer::Bui
     const int levelMin = codec->minimum_compression_level();
     const int levelMax = codec->maximum_compression_level();
     if (levelDef < levelMin || levelMax < levelDef) {
-        return TConclusionStatus::Fail(
-            TStringBuilder() << "incorrect level for codec. have to be: [" << levelMin << ":" << levelMax << "]"
-        );
+        return TConclusionStatus::Fail(TStringBuilder() << "incorrect level for codec `" << arrow::util::Codec::GetCodecAsString(cType)
+                                                        << "`. have to be: [" << levelMin << ":" << levelMax << "]");
     }
     std::shared_ptr<arrow::util::Codec> codecPtr = std::move(NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(cType, levelDef)));
     return codecPtr;
@@ -178,8 +177,14 @@ NKikimr::TConclusionStatus TNativeSerializer::DoDeserializeFromProto(const NKiki
 }
 
 void TNativeSerializer::DoSerializeToProto(NKikimrSchemeOp::TOlapColumn::TSerializer& proto) const {
-    proto.MutableArrowCompression()->SetCodec(NArrow::CompressionToProto(Options.codec->compression_type()));
-    proto.MutableArrowCompression()->SetLevel(Options.codec->compression_level());
+    if (Options.codec) {
+        proto.MutableArrowCompression()->SetCodec(NArrow::CompressionToProto(Options.codec->compression_type()));
+        if (arrow::util::Codec::SupportsCompressionLevel(Options.codec->compression_type())) {
+            proto.MutableArrowCompression()->SetLevel(Options.codec->compression_level());
+        }
+    } else {
+        proto.MutableArrowCompression()->SetCodec(NArrow::CompressionToProto(arrow::Compression::UNCOMPRESSED));
+    }
 }
 
 }

@@ -6,9 +6,10 @@
 
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
+#include <ydb/core/tx/columnshard/splitter/batch_slice.h>
+
 #include <ydb/library/formats/arrow/simple_builder/array.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
-#include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
@@ -139,14 +140,14 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             }
             batchSlices.emplace_back(portionColumns, schemaDetails, Context.Counters.SplitterCounters);
         }
-        NArrow::NSplitter::TSimilarPacker slicer(NSplitter::TSplitSettings().GetExpectedPortionSize());
+        NArrow::NSplitter::TSimilarPacker slicer(PortionExpectedSize);
         auto packs = slicer.Split(batchSlices);
 
         ui32 recordIdx = 0;
         for (auto&& i : packs) {
             TGeneralSerializedSlice slicePrimary(std::move(i));
             auto dataWithSecondary = resultFiltered->GetIndexInfo()
-                                         .AppendIndexes(slicePrimary.GetPortionChunksToHash(), SaverContext.GetStoragesManager())
+                    .AppendIndexes(slicePrimary.GetPortionChunksToHash(), SaverContext.GetStoragesManager(), slicePrimary.GetRecordsCount())
                                          .DetachResult();
             TGeneralSerializedSlice slice(dataWithSecondary.GetExternalData(), schemaDetails, Context.Counters.SplitterCounters);
 
@@ -158,10 +159,10 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
 
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultFiltered->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
-            constructor.GetPortionConstructor().AddMetadata(*resultFiltered, deletionsCount, primaryKeys, snapshotKeys);
-            constructor.GetPortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
+            constructor.GetPortionConstructor().MutablePortionConstructor().AddMetadata(*resultFiltered, deletionsCount, primaryKeys, snapshotKeys);
+            constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
             if (shardingActualVersion) {
-                constructor.GetPortionConstructor().SetShardingVersion(*shardingActualVersion);
+                constructor.GetPortionConstructor().MutablePortionConstructor().SetShardingVersion(*shardingActualVersion);
             }
             result.emplace_back(std::move(constructor));
             recordIdx += slice.GetRecordsCount();

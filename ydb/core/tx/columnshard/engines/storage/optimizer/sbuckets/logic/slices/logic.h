@@ -7,7 +7,7 @@ class TTimeSliceLogic: public IOptimizationLogic {
 private:
     TDuration FreshnessCheckDuration = TDuration::Seconds(300);
 
-    std::vector<std::shared_ptr<TPortionInfo>> GetPortionsForMerge(const TInstant now, const ui64 memLimit, const TBucketInfo& bucket) const;
+    std::vector<TPortionInfo::TConstPtr> GetPortionsForMerge(const TInstant now, const ui64 memLimit, const TBucketInfo& bucket) const;
 
     virtual TCalcWeightResult DoCalcWeight(const TInstant now, const TBucketInfo& bucket) const override;
 

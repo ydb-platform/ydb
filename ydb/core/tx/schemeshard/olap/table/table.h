@@ -49,6 +49,16 @@ public:
         }
     }
 
+    THashSet<TString> GetUsedTiers() const {
+        THashSet<TString> tiers;
+        for (const auto& tier : Description.GetTtlSettings().GetEnabled().GetTiers()) {
+            if (tier.HasEvictToExternalStorage()) {
+                tiers.emplace(tier.GetEvictToExternalStorage().GetStorage());
+            }
+        }
+        return tiers;
+    }
+
     NKikimrSchemeOp::TColumnTableDescription Description;
     TMaybe<NKikimrSchemeOp::TColumnStoreSharding> StandaloneSharding;
     TMaybe<NKikimrSchemeOp::TAlterColumnTable> AlterBody;

@@ -1,15 +1,18 @@
 #include "transfer.h"
-#include <ydb/core/tx/columnshard/data_sharing/modification/tasks/modification.h>
+
 #include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
+#include <ydb/core/tx/columnshard/data_sharing/modification/tasks/modification.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 
 namespace NKikimr::NOlap::NDataSharing::NEvents {
 
-THashMap<NKikimr::NOlap::TTabletId, NKikimr::NOlap::NDataSharing::TTaskForTablet> TPathIdData::BuildLinkTabletTasks(
-    const std::shared_ptr<IStoragesManager>& storages, const TTabletId selfTabletId, const TTransferContext& context, const TVersionedIndex& index) {
+THashMap<TTabletId, TTaskForTablet> TPathIdData::BuildLinkTabletTasks(
+    const std::shared_ptr<IStoragesManager>& storages, const TTabletId selfTabletId, const TTransferContext& context,
+    const TVersionedIndex& index) {
     THashMap<TString, THashSet<TUnifiedBlobId>> blobIds;
     for (auto&& i : Portions) {
-        auto schema = i.GetSchema(index);
+        auto schema = i.GetPortionInfo().GetSchema(index);
         i.FillBlobIdsByStorage(blobIds, schema->GetIndexInfo());
     }
 
@@ -51,7 +54,9 @@ THashMap<NKikimr::NOlap::TTabletId, NKikimr::NOlap::NDataSharing::TTaskForTablet
     for (auto&& [storageId, blobs] : blobsInfo) {
         THashMap<TTabletId, TStorageTabletTask> storageTabletTasks;
         for (auto&& [_, blobInfo] : blobs) {
-            THashMap<TTabletId, TStorageTabletTask> blobTabletTasks = context.GetMoving() ? blobInfo.BuildTabletTasksOnMove(context, selfTabletId, storageId) : blobInfo.BuildTabletTasksOnCopy(context, selfTabletId, storageId);
+            THashMap<TTabletId, TStorageTabletTask> blobTabletTasks = context.GetMoving()
+                                                                          ? blobInfo.BuildTabletTasksOnMove(context, selfTabletId, storageId)
+                                                                          : blobInfo.BuildTabletTasksOnCopy(context, selfTabletId, storageId);
             for (auto&& [tId, tInfo] : blobTabletTasks) {
                 auto itTablet = storageTabletTasks.find(tId);
                 if (itTablet == storageTabletTasks.end()) {
@@ -71,4 +76,4 @@ THashMap<NKikimr::NOlap::TTabletId, NKikimr::NOlap::NDataSharing::TTaskForTablet
     return globalTabletTasks;
 }
 
-}
+}   // namespace NKikimr::NOlap::NDataSharing::NEvents

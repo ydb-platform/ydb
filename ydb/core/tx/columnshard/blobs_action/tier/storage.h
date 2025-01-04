@@ -56,6 +56,9 @@ public:
         return GCInfo->HasToDelete(blobId, tabletId);
     }
 
+    virtual bool IsReady() const override {
+        return !!ExternalStorageOperator;
+    }
 };
 
 }

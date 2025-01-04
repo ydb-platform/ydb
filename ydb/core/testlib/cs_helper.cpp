@@ -193,7 +193,6 @@ TString THelper::GetTestTableSchema() const {
     sb << R"(
         KeyColumnNames: "timestamp"
         KeyColumnNames: "uid"
-        Engine : COLUMN_ENGINE_REPLACING_TIMESERIES
     )";
     return sb;
 }
@@ -228,6 +227,32 @@ void THelper::CreateSchemaOlapTablesWithStore(const TString tableSchema, TVector
 
 void THelper::CreateOlapTablesWithStore(TVector<TString> tableNames /*= {"olapTable"}*/, TString storeName /*= "olapStore"*/, ui32 storeShardsCount /*= 4*/, ui32 tableShardsCount /*= 3*/) {
         CreateSchemaOlapTablesWithStore(GetTestTableSchema(), tableNames, storeName, storeShardsCount, tableShardsCount);
+}
+
+void THelper::CreateSchemaOlapTables(const TString tableSchema, TVector<TString> tableNames, ui32 tableShardsCount) {
+    TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
+
+    const TString shardingColumns = "[\"" + JoinSeq("\",\"", GetShardingColumns()) + "\"]";
+
+    for (const TString& tableName : tableNames) {
+        TBase::CreateTestOlapTable(sender, "", Sprintf(R"(
+            Name: "%s"
+            ColumnShardCount: %d
+            Sharding {
+                HashSharding {
+                    Function: %s
+                    Columns: %s
+                }
+            }
+            Schema {
+                %s
+            }
+        )", tableName.c_str(), tableShardsCount, ShardingMethod.data(), shardingColumns.c_str(), tableSchema.data()));
+    }
+}
+
+void THelper::CreateOlapTables(TVector<TString> tableNames /*= {"olapTable"}*/, ui32 tableShardsCount /*= 3*/) {
+        CreateSchemaOlapTables(GetTestTableSchema(), tableNames, tableShardsCount);
 }
 
 // Clickbench table

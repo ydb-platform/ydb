@@ -41,8 +41,8 @@ public:
 
 class TMetadataFromStore: public NAbstract::TMetadataFromStore {
 protected:
-    virtual NAbstract::TGranuleMetaView DoBuildGranuleView(const TGranuleMeta& granule, const bool reverse) const override {
-        NAbstract::TGranuleMetaView result(granule, reverse);
+    virtual NAbstract::TGranuleMetaView DoBuildGranuleView(const TGranuleMeta& granule, const bool reverse, const TSnapshot& reqSnapshot) const override {
+        NAbstract::TGranuleMetaView result(granule, reverse, reqSnapshot);
         result.FillOptimizerTasks(granule, reverse);
         return result;
     }
@@ -52,8 +52,9 @@ public:
 
 class TMetadataFromTable: public NAbstract::TMetadataFromTable {
 protected:
-    virtual NAbstract::TGranuleMetaView DoBuildGranuleView(const TGranuleMeta& granule, const bool reverse) const override {
-        NAbstract::TGranuleMetaView result(granule, reverse);
+    virtual NAbstract::TGranuleMetaView DoBuildGranuleView(
+        const TGranuleMeta& granule, const bool reverse, const TSnapshot& reqSnapshot) const override {
+        NAbstract::TGranuleMetaView result(granule, reverse, reqSnapshot);
         result.FillOptimizerTasks(granule, reverse);
         return result;
     }
@@ -63,8 +64,8 @@ public:
 
 class TStoreSysViewPolicy: public NAbstract::ISysViewPolicy {
 protected:
-    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(const TSnapshot& snapshot, const ui64 itemsLimit, const bool reverse) const override {
-        return std::make_unique<TConstructor>(snapshot, itemsLimit, reverse);
+    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(const TScannerConstructorContext& request) const override {
+        return std::make_unique<TConstructor>(request);
     }
     virtual std::shared_ptr<NAbstract::IMetadataFiller> DoCreateMetadataFiller() const override {
         return std::make_shared<TMetadataFromStore>();
@@ -76,8 +77,8 @@ public:
 
 class TTableSysViewPolicy: public NAbstract::ISysViewPolicy {
 protected:
-    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(const TSnapshot& snapshot, const ui64 itemsLimit, const bool reverse) const override {
-        return std::make_unique<TConstructor>(snapshot, itemsLimit, reverse);
+    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(const TScannerConstructorContext& request) const override {
+        return std::make_unique<TConstructor>(request);
     }
     virtual std::shared_ptr<NAbstract::IMetadataFiller> DoCreateMetadataFiller() const override {
         return std::make_shared<TMetadataFromTable>();

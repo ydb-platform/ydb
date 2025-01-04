@@ -2026,7 +2026,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("setTtlSettings"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("expireAfter"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("tiers"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("evictionDelay"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("86400000"));
             }
         };
@@ -2048,10 +2049,85 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("setTtlSettings"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("expireAfter"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("tiers"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("evictionDelay"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("86400000"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("columnUnit"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("seconds"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(TtlTieringParseCorrect) {
+        NYql::TAstParseResult res = SqlToYql(
+            R"( USE plato;
+                CREATE TABLE tableName (Key Uint32, CreatedAt Uint32, PRIMARY KEY (Key))
+                WITH (TTL =
+                        Interval("P1D") TO EXTERNAL DATA SOURCE Tier1,
+                        Interval("P2D") TO EXTERNAL DATA SOURCE Tier2,
+                        Interval("P30D") DELETE
+                    ON CreatedAt AS SECONDS);)"
+        );
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("setTtlSettings"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("tiers"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("evictionDelay"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("storageName"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Tier1"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Tier2"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("86400000"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("172800000"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("2592000000"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("columnUnit"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("seconds"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(TtlTieringWithOtherActionsParseCorrect) {
+        NYql::TAstParseResult res = SqlToYql(
+            R"( USE plato;
+                ALTER TABLE tableName
+                    ADD FAMILY cold (DATA = "rot"),
+                    SET TTL
+                        Interval("P1D") TO EXTERNAL DATA SOURCE Tier1,
+                        Interval("P2D") TO EXTERNAL DATA SOURCE Tier2,
+                        Interval("P30D") DELETE
+                    ON CreatedAt,
+                    ALTER COLUMN payload_v2 SET FAMILY cold,
+                    ALTER FAMILY default SET DATA "ssd"
+                ;)"
+        );
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("addColumnFamilies"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("cold"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("alterColumnFamilies"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("default"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("setTtlSettings"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("tiers"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("evictionDelay"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("storageName"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Tier1"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Tier2"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("86400000"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("172800000"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("2592000000"));
             }
         };
 
@@ -7049,5 +7125,126 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifier) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}
+
+Y_UNIT_TEST_SUITE(ColumnFamily) {
+    Y_UNIT_TEST(CompressionLevelCorrectUsage) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            CREATE TABLE tableName (
+                Key Uint32 FAMILY default,
+                Value String FAMILY family1,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = "lz4",
+                     COMPRESSION_LEVEL = 5
+                ),
+                FAMILY family1 (
+                     DATA = "test",
+                     COMPRESSION = "lz4",
+                     COMPRESSION_LEVEL = 3
+                )
+            );
+        )");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("compression_level"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("5"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("3"));
+            }
+        };
+
+        TWordCountHive elementStat = { { TString("Write"), 0 }, { TString("compression_level"), 0 } };
+        VerifyProgram(res, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["compression_level"]);
+    }
+
+    Y_UNIT_TEST(FieldDataIsNotString) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            CREATE TABLE tableName (
+                Key Uint32 FAMILY default,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = 1,
+                     COMPRESSION = "lz4",
+                     COMPRESSION_LEVEL = 5
+                )
+            );
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "DATA value should be a string literal");
+    }
+
+    Y_UNIT_TEST(FieldCompressionIsNotString) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            CREATE TABLE tableName (
+                Key Uint32 FAMILY default,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = 2,
+                     COMPRESSION_LEVEL = 5
+                ),
+            );
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION value should be a string literal");
+    }
+
+    Y_UNIT_TEST(FieldCompressionLevelIsNotInteger) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            CREATE TABLE tableName (
+                Key Uint32 FAMILY default,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = "lz4",
+                     COMPRESSION_LEVEL = "5"
+                )
+            );
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION_LEVEL value should be an integer");
+    }
+
+    Y_UNIT_TEST(AlterCompressionCorrectUsage) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION "lz4";
+        )");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+    }
+
+    Y_UNIT_TEST(AlterCompressionFieldIsNotString) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION lz4;
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "Unexpected token 'lz4' : cannot match to any predicted input");
+    }
+
+    Y_UNIT_TEST(AlterCompressionLevelCorrectUsage) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION_LEVEL 5;
+        )");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+    }
+
+    Y_UNIT_TEST(AlterCompressionLevelFieldIsNotInteger) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION_LEVEL "5";
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION_LEVEL value should be an integer");
     }
 }

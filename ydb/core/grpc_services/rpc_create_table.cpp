@@ -109,7 +109,6 @@ private:
         tableDesc->SetName(tableName);
 
         auto schema = tableDesc->MutableSchema();
-        schema->SetEngine(NKikimrSchemeOp::EColumnTableEngine::COLUMN_ENGINE_REPLACING_TIMESERIES);
 
         TString error;
         if (!FillColumnDescription(*tableDesc, req.columns(), code, error)) {
@@ -136,7 +135,6 @@ private:
                 return false;
             }
         }
-        tableDesc->MutableTtlSettings()->SetUseTiering(req.tiering());
 
         return true;
     }

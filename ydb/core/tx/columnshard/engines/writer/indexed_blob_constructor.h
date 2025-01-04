@@ -9,7 +9,7 @@
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/user_data.h>
-#include <ydb/core/tx/columnshard/engines/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/data_events/write_data.h>
 
 namespace NKikimr::NColumnShard {
@@ -67,7 +67,8 @@ public:
         if (BlobSize + batch.GetSplittedBlobs().GetSize() < 8 * 1024 * 1024) {
             Ranges.emplace_back(&batch);
             BlobSize += batch.GetSplittedBlobs().GetSize();
-            batch.SetRange(TBlobRange(TUnifiedBlobId(0, 0, 0, 0, 0, 0, BlobSize), BlobData.size(), batch.GetSplittedBlobs().GetSize()));
+            batch.SetRange(TBlobRange(
+                TUnifiedBlobId(0, 0, 0, 0, 0, 0, BlobSize), BlobSize - batch.GetSplittedBlobs().GetSize(), batch.GetSplittedBlobs().GetSize()));
             BlobData.emplace_back(batch.GetSplittedBlobs().GetData());
             return true;
         } else {
@@ -96,7 +97,7 @@ private:
     YDB_READONLY(ui64, Size, 0);
     YDB_READONLY(ui64, Rows, 0);
     YDB_ACCESSOR_DEF(std::vector<TWideSerializedBatch>, SplittedBlobs);
-    YDB_READONLY_DEF(TVector<TInsertWriteId>, InsertWriteIds);
+    YDB_READONLY_DEF(std::vector<TInsertWriteId>, InsertWriteIds);
     YDB_READONLY_DEF(std::shared_ptr<NOlap::IBlobsWritingAction>, BlobsAction);
     YDB_READONLY_DEF(NArrow::TSchemaSubset, SchemaSubset);
     std::shared_ptr<arrow::RecordBatch> RecordBatch;

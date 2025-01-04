@@ -98,6 +98,9 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
         exchangerSettings->SetMaxDelayMs(10);
         AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
         FeatureFlags.SetEnableSparsedColumns(true);
+        FeatureFlags.SetEnableWritePortionsOnInsert(true);
+        FeatureFlags.SetEnableParameterizedDecimal(true);
+        FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
     }
 
     TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }
@@ -157,9 +160,9 @@ public:
 
     NYdb::TDriverConfig GetDriverConfig() const { return DriverConfig; }
 
-    NYdb::NTable::TTableClient GetTableClient() const {
-        return NYdb::NTable::TTableClient(*Driver, NYdb::NTable::TClientSettings()
-            .UseQueryCache(false));
+    NYdb::NTable::TTableClient GetTableClient(
+        NYdb::NTable::TClientSettings settings = NYdb::NTable::TClientSettings()) const {
+        return NYdb::NTable::TTableClient(*Driver, settings.UseQueryCache(false));
     }
 
     NYdb::NQuery::TQueryClient GetQueryClient(

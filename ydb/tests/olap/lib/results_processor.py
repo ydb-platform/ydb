@@ -1,7 +1,9 @@
 from __future__ import annotations
+import allure
 import json
 import ydb
 import os
+import logging
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import external_param_is_true, get_external_param
 from time import time_ns
@@ -15,9 +17,14 @@ class ResultsProcessor:
             self._table = table
 
         def send_data(self, data):
-            self._driver.table_client.bulk_upsert(
-                os.path.join(self._db, self._table), [data], ResultsProcessor._columns_types
-            )
+            try:
+                ydb.retry_operation_sync(
+                    lambda: self._driver.table_client.bulk_upsert(
+                        os.path.join(self._db, self._table), [data], ResultsProcessor._columns_types
+                    )
+                )
+            except BaseException as e:
+                logging.error(f'Exception while send results: {e}')
 
     _endpoints : list[ResultsProcessor.Endpoint] = None
     _run_id : int = None
@@ -73,6 +80,7 @@ class ResultsProcessor:
         return os.path.join(YdbCluster.ydb_endpoint, YdbCluster.ydb_database, run_id)
 
     @classmethod
+    @allure.step
     def upload_results(
         cls,
         kind: str,

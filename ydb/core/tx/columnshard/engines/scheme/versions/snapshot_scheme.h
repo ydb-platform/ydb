@@ -2,13 +2,15 @@
 
 #include "abstract_scheme.h"
 
-#include <ydb/core/tx/columnshard/engines/index_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema_version.h>
 
 namespace NKikimr::NOlap {
 
 class TSnapshotSchema: public ISnapshotSchema {
 private:
-    TIndexInfo IndexInfo;
+    TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard IndexInfo;
     std::shared_ptr<NArrow::TSchemaLite> Schema;
     TSnapshot Snapshot;
 protected:
@@ -16,15 +18,15 @@ protected:
         return TStringBuilder() << "("
             "schema=" << Schema->ToString() << ";" <<
             "snapshot=" << Snapshot.DebugString() << ";" <<
-            "index_info=" << IndexInfo.DebugString() << ";" <<
+            "index_info=" << IndexInfo->DebugString() << ";" <<
             ")"
             ;
     }
 public:
-    TSnapshotSchema(TIndexInfo&& indexInfo, const TSnapshot& snapshot);
+    TSnapshotSchema(TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo, const TSnapshot& snapshot);
 
-    virtual const std::vector<ui32>& GetColumnIds() const override {
-        return IndexInfo.GetColumnIds();
+    virtual TColumnIdsView GetColumnIds() const override {
+        return IndexInfo->GetColumnIds();
     }
 
     TColumnSaver GetColumnSaver(const ui32 columnId) const override;

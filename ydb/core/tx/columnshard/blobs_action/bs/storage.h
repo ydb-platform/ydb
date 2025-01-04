@@ -41,6 +41,10 @@ public:
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const override {
         return Manager;
     }
+
+    virtual bool IsReady() const override {
+        return true;
+    }
 };
 
 }

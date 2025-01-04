@@ -13,9 +13,10 @@ private:
 protected:
     std::set<ui32> ColumnIds;
 
-    virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader) const = 0;
+    virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const = 0;
 
-    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const override final;
+    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data,
+        const ui32 recordsCount, const TIndexInfo& indexInfo) const override final;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override;
 
     TConclusionStatus CheckSameColumnsForModification(const IIndexMeta& newMeta) const;

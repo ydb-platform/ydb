@@ -266,6 +266,9 @@ protected:
 
 TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node);
 
+bool StoreString(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx);
+bool StoreInt(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx);
+
 template<typename TChar>
 struct TPatternComponent {
         TBasicString<TChar> Prefix;

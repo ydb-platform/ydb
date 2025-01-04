@@ -5,6 +5,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/conclusion/status.h>
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
@@ -83,7 +84,7 @@ public:
         Value += value;
     }
     void Sub(const ui64 value) {
-        AFL_VERIFY(value <= Value);
+        AFL_VERIFY(value <= Value)("base", Value)("delta", value);
         Value -= value;
     }
     ui64 Val() const {
@@ -95,6 +96,7 @@ class TStageFeatures {
 private:
     YDB_READONLY_DEF(TString, Name);
     YDB_READONLY(ui64, Limit, 0);
+    YDB_READONLY(ui64, HardLimit, 0);
     YDB_ACCESSOR_DEF(TPositiveControlInteger, Usage);
     YDB_ACCESSOR_DEF(TPositiveControlInteger, Waiting);
     std::shared_ptr<TStageFeatures> Owner;
@@ -114,27 +116,41 @@ public:
         return Usage.Val() + Waiting.Val();
     }
 
-    TStageFeatures(
-        const TString& name, const ui64 limit, const std::shared_ptr<TStageFeatures>& owner, const std::shared_ptr<TStageCounters>& counters)
+    TStageFeatures(const TString& name, const ui64 limit, const ui64 hardLimit, const std::shared_ptr<TStageFeatures>& owner,
+        const std::shared_ptr<TStageCounters>& counters)
         : Name(name)
         , Limit(limit)
+        , HardLimit(hardLimit)
         , Owner(owner)
         , Counters(counters) {
     }
 
-    void Allocate(const ui64 volume) {
+    [[nodiscard]] TConclusionStatus Allocate(const ui64 volume) {
         Waiting.Sub(volume);
+        if (HardLimit < Usage.Val() + volume) {
+            Counters->OnCannotAllocate();
+            AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", Name)("event", "cannot_allocate")("limit", HardLimit)(
+                "usage", Usage.Val())(
+                "delta", volume);
+            return TConclusionStatus::Fail(TStringBuilder() << Name << "::(limit:" << HardLimit << ";val:" << Usage.Val() << ";delta=" << volume << ");");
+        }
         Usage.Add(volume);
+        AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", Name)("event", "allocate")("usage", Usage.Val())("delta", volume);
         if (Counters) {
             Counters->Add(volume, true);
             Counters->Sub(volume, false);
         }
         if (Owner) {
-            Owner->Allocate(volume);
+            const auto ownerResult = Owner->Allocate(volume);
+            if (ownerResult.IsFail()) {
+                Free(volume, true, false);
+                return ownerResult;
+            }
         }
+        return TConclusionStatus::Success();
     }
 
-    void Free(const ui64 volume, const bool allocated) {
+    void Free(const ui64 volume, const bool allocated, const bool withOwner = true) {
         if (Counters) {
             Counters->Sub(volume, allocated);
         }
@@ -143,8 +159,9 @@ public:
         } else {
             Waiting.Sub(volume);
         }
+        AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", Name)("event", "free")("usage", Usage.Val())("delta", volume);
 
-        if (Owner) {
+        if (withOwner && Owner) {
             Owner->Free(volume, allocated);
         }
     }
@@ -154,6 +171,8 @@ public:
             Counters->Sub(from, allocated);
             Counters->Add(to, allocated);
         }
+        AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", Name)("event", "update")("usage", Usage.Val())("waiting", Waiting.Val())(
+            "allocated", allocated)("from", from)("to", to);
         if (allocated) {
             Usage.Sub(from);
             Usage.Add(to);
@@ -199,6 +218,7 @@ private:
     YDB_READONLY(ui64, Identifier, Counter.Inc());
     YDB_READONLY(ui64, Memory, 0);
     bool Allocated = false;
+    virtual void DoOnAllocationImpossible(const TString& errorMessage) = 0;
     virtual bool DoOnAllocated(
         std::shared_ptr<TAllocationGuard>&& guard, const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) = 0;
 
@@ -214,6 +234,10 @@ public:
 
     bool IsAllocated() const {
         return Allocated;
+    }
+
+    void OnAllocationImpossible(const TString& errorMessage) {
+        DoOnAllocationImpossible(errorMessage);
     }
 
     [[nodiscard]] bool OnAllocated(

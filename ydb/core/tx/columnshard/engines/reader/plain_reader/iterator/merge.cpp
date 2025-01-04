@@ -33,6 +33,8 @@ void TBaseMergeTask::PrepareResultBatch() {
         LastPK = nullptr;
         return;
     }
+    const ui64 dataSizeBefore = NArrow::GetTableDataSize(ResultBatch);
+    const ui64 memorySizeBefore = NArrow::GetTableMemorySize(ResultBatch);
     {
         ResultBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
         AFL_VERIFY((ui32)ResultBatch->num_columns() == Context->GetProgramInputColumns()->GetColumnNamesVector().size());
@@ -45,7 +47,10 @@ void TBaseMergeTask::PrepareResultBatch() {
         } else {
             ShardedBatch = NArrow::TShardedRecordBatch(ResultBatch);
         }
-        AllocationGuard->Update(NArrow::GetTableMemorySize(ResultBatch));
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "update_memory_merger")("before_data", dataSizeBefore)(
+            "before_memory", memorySizeBefore)("after_memory", NArrow::GetTableMemorySize(ResultBatch))(
+            "after_data", NArrow::GetTableDataSize(ResultBatch))("guard", AllocationGuard->GetMemory());
+        //        AllocationGuard->Update(NArrow::GetTableMemorySize(ResultBatch));
         AFL_VERIFY(!!LastPK == !!ShardedBatch->GetRecordsCount())("lpk", !!LastPK)("sb", ShardedBatch->GetRecordsCount());
     } else {
         AllocationGuard = nullptr;
@@ -85,7 +90,7 @@ TConclusionStatus TStartMergeTask::DoExecuteImpl() {
             break;
         }
     }
-    if ((MergingContext->IsExclusiveInterval() || Context->GetCommonContext()->GetReadMetadata()->HasGuaranteeExclusivePK()) &&
+    if ((MergingContext->IsExclusiveInterval()) &&
         sourcesInMemory) {
         TMemoryProfileGuard mGuard("SCAN_PROFILE::MERGE::EXCLUSIVE", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
         auto& container = Sources.begin()->second->GetStageResult().GetBatch();

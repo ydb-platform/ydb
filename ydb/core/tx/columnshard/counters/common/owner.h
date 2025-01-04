@@ -56,6 +56,10 @@ public:
     NMonitoring::THistogramPtr GetHistogram(const TString& name, NMonitoring::IHistogramCollectorPtr&& hCollector) const;
 
     TCommonCountersOwner(const TString& module, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals = nullptr);
+
+    TCommonCountersOwner(TCommonCountersOwner&& other)
+        : TCommonCountersOwner(other) {
+    }
 };
 
 class TValueGuard {

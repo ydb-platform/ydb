@@ -47,12 +47,12 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
         const auto* snapshot = ev->Get()->GetSnapshotAs<NMetadata::NSecret::TSnapshot>();
 
-        TString secretValue;
-        if (!snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(SecretId), secretValue)) {
-            return Reply(false, TStringBuilder() << "Secret '" << SecretName << "' not found");
+        auto secretValue = snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(SecretId));
+        if (secretValue.IsFail()) {
+            return Reply(false, secretValue.GetErrorMessage());
         }
 
-        Reply(secretValue);
+        Reply(secretValue.DetachResult());
     }
 
     template <typename... Args>

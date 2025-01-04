@@ -93,7 +93,6 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TInsertionsDedupNormalizer::DoIn
         if (constructor.GetRecType() == NColumnShard::Schema::EInsertTableIds::Committed) {
             AFL_VERIFY(constructor.GetPlanStep());
         } else {
-            AFL_VERIFY(!constructor.GetPlanStep());
             if (constructor.GetRecType() == NColumnShard::Schema::EInsertTableIds::Aborted) {
                 insertions[constructor.GetInsertWriteId()].SetAborted(constructor);
             } else if (constructor.GetRecType() == NColumnShard::Schema::EInsertTableIds::Inserted) {

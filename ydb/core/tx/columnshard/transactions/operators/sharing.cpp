@@ -52,11 +52,24 @@ void TSharingTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner
 }
 
 bool TSharingTransactionOperator::ProgressOnExecute(
-    TColumnShard& /*owner*/, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) {
+    TColumnShard& owner, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& txc) {
+    if (!SharingTask) {
+        return true;
+    }
+    if (!TxFinish) {
+        TxFinish = SharingTask->AckInitiatorFinished(&owner, SharingTask).DetachResult();
+    }
+    TxFinish->Execute(txc, NActors::TActivationContext::AsActorContext());
+
     return true;
 }
 
 bool TSharingTransactionOperator::ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) {
+    if (!SharingTask) {
+        return true;
+    }
+    AFL_VERIFY(!!TxFinish);
+    TxFinish->Complete(ctx);
     for (TActorId subscriber : NotifySubscribers) {
         auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
         ctx.Send(subscriber, event.Release(), 0, 0);

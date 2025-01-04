@@ -14,7 +14,6 @@ static const TString defaultStoreSchema = R"(
             Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
             Columns { Name: "data" Type: "Utf8" }
             KeyColumnNames: "timestamp"
-            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
         }
     }
 )";
@@ -26,7 +25,6 @@ static const TString defaultTableSchema = R"(
         Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
         Columns { Name: "data" Type: "Utf8" }
         KeyColumnNames: "timestamp"
-        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
     }
 )";
 

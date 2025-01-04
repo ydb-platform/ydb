@@ -12,7 +12,8 @@ namespace NKikimr::NYDBTest::NColumnShard {
 class TController: public TReadOnlyController {
 private:
     using TBase = TReadOnlyController;
-    YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideRequestsTracePingCheckPeriod);
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideUsedSnapshotLivetime);
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideStalenessLivetimePing);
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideLagForCompactionBeforeTierings);
     YDB_ACCESSOR(std::optional<TDuration>, OverrideGuaranteeIndexationInterval, TDuration::Zero());
     YDB_ACCESSOR(std::optional<TDuration>, OverridePeriodicWakeupActivationPeriod, std::nullopt);
@@ -21,7 +22,13 @@ private:
     YDB_ACCESSOR(std::optional<TDuration>, OverrideOptimizerFreshnessCheckDuration, TDuration::Zero());
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideCompactionActualizationLag);
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideTasksActualizationLag);
-    YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideReadTimeoutClean);
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideMaxReadStaleness);
+    YDB_ACCESSOR(std::optional<ui64>, OverrideMemoryLimitForPortionReading, 100);
+    YDB_ACCESSOR(std::optional<ui64>, OverrideLimitForPortionsMetadataAsk, 1);
+    YDB_ACCESSOR(std::optional<NOlap::NSplitter::TSplitSettings>, OverrideBlobSplitSettings, NOlap::NSplitter::TSplitSettings::BuildForTests());
+    
+    YDB_ACCESSOR_DEF(std::optional<NKikimrProto::EReplyStatus>, OverrideBlobPutResultOnWriteValue);
+
     EOptimizerCompactionWeightControl CompactionControl = EOptimizerCompactionWeightControl::Force;
 
     YDB_ACCESSOR(std::optional<ui64>, OverrideReduceMemoryIntervalLimit, 1024);
@@ -129,15 +136,35 @@ private:
 
     THashSet<TString> SharingIds;
 protected:
-    virtual ::NKikimr::NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const override;
+    virtual const NOlap::NSplitter::TSplitSettings& DoGetBlobSplitSettings(const NOlap::NSplitter::TSplitSettings& defaultValue) const override {
+        if (OverrideBlobSplitSettings) {
+            return *OverrideBlobSplitSettings;
+        } else {
+            return defaultValue;
+        }
+    }
+    virtual ::NKikimr::NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(
+        const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const override;
+
+    virtual ui64 DoGetLimitForPortionsMetadataAsk(const ui64 defaultValue) const override {
+        return OverrideLimitForPortionsMetadataAsk.value_or(defaultValue);
+    }
+
+
+    virtual ui64 DoGetMemoryLimitScanPortion(const ui64 defaultValue) const override {
+        return OverrideMemoryLimitForPortionReading.value_or(defaultValue);
+    }
+
     virtual TDuration DoGetLagForCompactionBeforeTierings(const TDuration def) const override {
         return OverrideLagForCompactionBeforeTierings.value_or(def);
     }
 
-    virtual TDuration DoGetPingCheckPeriod(const TDuration def) const override {
-        return OverrideRequestsTracePingCheckPeriod.value_or(def);
+    virtual TDuration DoGetUsedSnapshotLivetime(const TDuration def) const override {
+        return OverrideUsedSnapshotLivetime.value_or(def);
     }
-
+    virtual std::optional<TDuration> DoGetStalenessLivetimePing() const override {
+        return OverrideStalenessLivetimePing;
+    }
     virtual TDuration DoGetCompactionActualizationLag(const TDuration def) const override {
         return OverrideCompactionActualizationLag.value_or(def);
     }
@@ -172,14 +199,18 @@ protected:
     virtual TDuration DoGetOptimizerFreshnessCheckDuration(const TDuration defaultValue) const override {
         return OverrideOptimizerFreshnessCheckDuration.value_or(defaultValue);
     }
-    virtual TDuration DoGetReadTimeoutClean(const TDuration def) const override {
-        return OverrideReadTimeoutClean.value_or(def);
+    virtual TDuration DoGetMaxReadStaleness(const TDuration def) const override {
+        return OverrideMaxReadStaleness.value_or(def);
     }
     virtual ui64 DoGetReduceMemoryIntervalLimit(const ui64 def) const override {
         return OverrideReduceMemoryIntervalLimit.value_or(def);
     }
     virtual ui64 DoGetRejectMemoryIntervalLimit(const ui64 def) const override {
         return OverrideRejectMemoryIntervalLimit.value_or(def);
+    }
+    virtual ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 def) const override {
+        Y_UNUSED(def);
+        return 0;
     }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const override {
         return CompactionControl;
@@ -196,6 +227,10 @@ protected:
     }
 
 public:
+    virtual NKikimrProto::EReplyStatus OverrideBlobPutResultOnWrite(const NKikimrProto::EReplyStatus originalStatus) const override {
+        return OverrideBlobPutResultOnWriteValue.value_or(originalStatus);
+    }
+
     const TAtomicCounter& GetIndexWriteControllerBrokeCount() const {
         return IndexWriteControllerBrokeCount;
     }

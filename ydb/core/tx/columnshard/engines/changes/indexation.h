@@ -11,7 +11,7 @@
 
 namespace NKikimr::NOlap {
 
-class TInsertColumnEngineChanges: public TChangesWithAppend {
+class TInsertColumnEngineChanges: public TChangesWithAppend, public NColumnShard::TMonitoringObjectsCounter<TInsertColumnEngineChanges> {
 private:
     using TBase = TChangesWithAppend;
     std::vector<TCommittedData> DataToIndex;
@@ -35,13 +35,16 @@ protected:
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
         return nullptr;
     }
-
+    virtual NDataLocks::ELockCategory GetLockCategory() const override {
+        return NDataLocks::ELockCategory::Compaction;
+    }
 public:
     THashMap<ui64, NArrow::NMerger::TIntervalPositions> PathToGranule;   // pathId -> positions (sorted by pk)
 public:
     TInsertColumnEngineChanges(std::vector<NOlap::TCommittedData>&& dataToIndex, const TSaverContext& saverContext)
         : TBase(saverContext, NBlobOperations::EConsumer::INDEXATION)
         , DataToIndex(std::move(dataToIndex)) {
+        SetTargetCompactionLevel(0);
     }
 
     const std::vector<NOlap::TCommittedData>& GetDataToIndex() const {

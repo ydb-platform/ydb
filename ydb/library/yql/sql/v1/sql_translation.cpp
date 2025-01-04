@@ -1406,15 +1406,59 @@ TNodePtr TSqlTranslation::SerialTypeNode(const TRule_type_name_or_bind& node) {
     return nullptr;
 }
 
+bool StoreString(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx) {
+    switch (from.Alt_case()) {
+        case TRule_family_setting_value::kAltFamilySettingValue1: {
+            // STRING_VALUE
+            const TString stringValue(ctx.Token(from.GetAlt_family_setting_value1().GetToken1()));
+            TNodePtr literal = BuildLiteralSmartString(ctx, stringValue);
+            if (!literal) {
+                return false;
+            }
+            to = literal;
+            break;
+        }
+        default:
+            return false;
+    }
+    return true;
+}
+
+bool StoreInt(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx) {
+    switch (from.Alt_case()) {
+        case TRule_family_setting_value::kAltFamilySettingValue2: {
+            // integer
+            TNodePtr literal = LiteralNumber(ctx, from.GetAlt_family_setting_value2().GetRule_integer1());
+            if (!literal) {
+                return false;
+            }
+            to = literal;
+            break;
+        }
+        default:
+            return false;
+    }
+    return true;
+}
+
 bool TSqlTranslation::FillFamilySettingsEntry(const TRule_family_settings_entry& settingNode, TFamilyEntry& family) {
     TIdentifier id = IdEx(settingNode.GetRule_an_id1(), *this);
     const TRule_family_setting_value& value = settingNode.GetRule_family_setting_value3();
     if (to_lower(id.Name) == "data") {
-        const TString stringValue(Ctx.Token(value.GetToken1()));
-        family.Data = BuildLiteralSmartString(Ctx, stringValue);
+        if (!StoreString(value, family.Data, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
     } else if (to_lower(id.Name) == "compression") {
-        const TString stringValue(Ctx.Token(value.GetToken1()));
-        family.Compression = BuildLiteralSmartString(Ctx, stringValue);
+        if (!StoreString(value, family.Compression, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
+    } else if (to_lower(id.Name) == "compression_level") {
+        if (!StoreInt(value, family.CompressionLevel, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be an integer";
+            return false;
+        }
     } else {
         Ctx.Error() << "Unknown table setting: " << id.Name;
         return false;
@@ -1758,19 +1802,68 @@ namespace {
         return true;
     }
 
-    bool StoreTtlSettings(const TRule_table_setting_value& from, TResetableSetting<TTtlSettings, void>& to,
-            TSqlExpression& expr, TContext& ctx, TTranslation& txc) {
+    bool FillTieringInterval(const TRule_expr& from, TNodePtr& tieringInterval, TSqlExpression& expr, TContext& ctx) {
+        auto exprNode = expr.Build(from);
+        if (!exprNode) {
+            return false;
+        }
+
+        if (exprNode->GetOpName() != "Interval") {
+            ctx.Error() << "Literal of Interval type is expected for TTL";
+            return false;
+        }
+
+        tieringInterval = exprNode;
+        return true;
+    }
+
+    bool FillTierAction(const TRule_ttl_tier_action& from, std::optional<TIdentifier>& storageName, TTranslation& txc) {
+        switch (from.GetAltCase()) {
+            case TRule_ttl_tier_action::kAltTtlTierAction1:
+                storageName = IdEx(from.GetAlt_ttl_tier_action1().GetRule_an_id5(), txc);
+                break;
+            case TRule_ttl_tier_action::kAltTtlTierAction2:
+                storageName.reset();
+                break;
+            case TRule_ttl_tier_action::ALT_NOT_SET:
+                Y_ABORT("You should change implementation according to grammar changes");
+        }
+        return true;
+    }
+
+    bool StoreTtlSettings(const TRule_table_setting_value& from, TResetableSetting<TTtlSettings, void>& to, TSqlExpression& expr, TContext& ctx,
+        TTranslation& txc) {
         switch (from.Alt_case()) {
         case TRule_table_setting_value::kAltTableSettingValue5: {
             auto columnName = IdEx(from.GetAlt_table_setting_value5().GetRule_an_id3(), txc);
-            auto exprNode = expr.Build(from.GetAlt_table_setting_value5().GetRule_expr1());
-            if (!exprNode) {
+            auto tiersLiteral = from.GetAlt_table_setting_value5().GetRule_ttl_tier_list1();
+
+            TNodePtr firstInterval;
+            if (!FillTieringInterval(tiersLiteral.GetRule_expr1(), firstInterval, expr, ctx)) {
                 return false;
             }
 
-            if (exprNode->GetOpName() != "Interval") {
-                ctx.Error() << "Literal of Interval type is expected for TTL";
-                return false;
+            std::vector<TTtlSettings::TTierSettings> tiers;
+            if (!tiersLiteral.HasBlock2()) {
+                tiers.emplace_back(firstInterval);
+            } else {
+                std::optional<TIdentifier> firstStorageName;
+                if (!FillTierAction(tiersLiteral.GetBlock2().GetRule_ttl_tier_action1(), firstStorageName, txc)) {
+                    return false;
+                }
+                tiers.emplace_back(firstInterval, firstStorageName);
+
+                for (const auto& tierLiteral : tiersLiteral.GetBlock2().GetBlock2()) {
+                    TNodePtr intervalExpr;
+                    if (!FillTieringInterval(tierLiteral.GetRule_expr2(), intervalExpr, expr, ctx)) {
+                        return false;
+                    }
+                    std::optional<TIdentifier> storageName;
+                    if (!FillTierAction(tierLiteral.GetRule_ttl_tier_action3(), storageName, txc)) {
+                        return false;
+                    }
+                    tiers.emplace_back(intervalExpr, storageName);
+                }
             }
 
             TMaybe<TTtlSettings::EUnit> columnUnit;
@@ -1783,7 +1876,7 @@ namespace {
                 }
             }
 
-            to.Set(TTtlSettings(columnName, exprNode, columnUnit));
+            to.Set(TTtlSettings(columnName, tiers, columnUnit));
             break;
         }
         default:

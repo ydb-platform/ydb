@@ -266,14 +266,21 @@ private:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
 
+        NIceDb::TNiceDb db(context.GetDB());
+
         bool isStandalone = false;
         {
             Y_ABORT_UNLESS(context.SS->ColumnTables.contains(txState->TargetPathId));
             auto tableInfo = context.SS->ColumnTables.GetVerified(txState->TargetPathId);
             isStandalone = tableInfo->IsStandalone();
+
+            for (const auto& tier : tableInfo->GetUsedTiers()) {
+                auto tierPath = TPath::Resolve(tier, context.SS);
+                AFL_VERIFY(tierPath.IsResolved())("path", tier);
+                context.SS->PersistRemoveExternalDataSourceReference(db, tierPath->PathId, txState->TargetPathId);
+            }
         }
 
-        NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistColumnTableRemove(db, txState->TargetPathId);
 
         if (isStandalone) {

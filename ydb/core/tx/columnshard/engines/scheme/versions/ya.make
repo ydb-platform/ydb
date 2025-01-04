@@ -9,6 +9,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/tx/columnshard/engines/scheme/abstract
+    ydb/core/tx/columnshard/engines/scheme/common
 )
 
 END()

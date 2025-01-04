@@ -106,10 +106,6 @@ NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTableSchema(const
         NTypeIds::Utf8,
         NTypeIds::Decimal
     };
-    if (!schema.HasEngine() ||
-        schema.GetEngine() != NKikimrSchemeOp::EColumnTableEngine::COLUMN_ENGINE_REPLACING_TIMESERIES) {
-        return TConclusionStatus::Fail("Invalid scheme engine: " + (schema.HasEngine() ? NKikimrSchemeOp::EColumnTableEngine_Name(schema.GetEngine()) : TString("No")));
-    }
 
     if (!schema.KeyColumnNamesSize()) {
         return TConclusionStatus::Fail("There is no key columns");

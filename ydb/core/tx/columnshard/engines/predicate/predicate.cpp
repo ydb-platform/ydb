@@ -2,9 +2,10 @@
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/library/formats/arrow/switch_type.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/switch_type.h>
 
 namespace NKikimr::NOlap {
 
@@ -135,6 +136,40 @@ std::shared_ptr<arrow::RecordBatch> TPredicate::CutNulls(const std::shared_ptr<a
     }
     AFL_VERIFY(colsNotNull.size());
     return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fieldsNotNull), 1, colsNotNull);
+}
+
+bool TPredicate::IsEqualSchema(const std::shared_ptr<arrow::Schema>& schema) const {
+    AFL_VERIFY(Batch);
+    AFL_VERIFY(schema);
+    if (schema->num_fields() != Batch->schema()->num_fields()) {
+        return false;
+    }
+    for (i32 i = 0; i < schema->num_fields(); ++i) {
+        if (!schema->field(i)->Equals(Batch->schema()->field(i))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TPredicate::IsEqualTo(const TPredicate& item) const {
+    AFL_VERIFY(Batch);
+    AFL_VERIFY(item.Batch);
+    AFL_VERIFY(Batch->num_rows() == 1);
+    AFL_VERIFY(item.Batch->num_rows() == 1);
+    if (Batch->schema()->num_fields() != item.Batch->schema()->num_fields()) {
+        return false;
+    }
+    for (i32 i = 0; i < Batch->schema()->num_fields(); ++i) {
+        if (!Batch->schema()->field(i)->Equals(item.Batch->schema()->field(i))) {
+            return false;
+        }
+        if (NArrow::ScalarCompare(NArrow::TStatusValidator::GetValid(Batch->column(i)->GetScalar(0)),
+                NArrow::TStatusValidator::GetValid(item.Batch->column(i)->GetScalar(0)))) {
+            return false;
+        }
+    }
+    return true;
 }
 
 IOutputStream& operator<<(IOutputStream& out, const TPredicate& pred) {

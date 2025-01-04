@@ -16,11 +16,14 @@
 
 namespace NKikimr::NOlap::NReader {
 
-class TColumnShardScan: public TActorBootstrapped<TColumnShardScan>, NArrow::IRowWriter {
+class TColumnShardScan: public TActorBootstrapped<TColumnShardScan>,
+                        NArrow::IRowWriter,
+                        NColumnShard::TMonitoringObjectsCounter<TColumnShardScan> {
 private:
     TActorId ResourceSubscribeActorId;
     TActorId ReadCoordinatorActorId;
     const std::shared_ptr<IStoragesManager> StoragesManager;
+    const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::optional<TMonotonic> StartInstant;
 
 public:
@@ -32,9 +35,11 @@ public:
     virtual void PassAway() override;
 
     TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId,
-        const std::shared_ptr<IStoragesManager>& storagesManager, const TComputeShardingPolicy& computeShardingPolicy, ui32 scanId, ui64 txId,
-        ui32 scanGen, ui64 requestCookie, ui64 tabletId, TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange,
-        NKikimrDataEvents::EDataFormat dataFormat, const NColumnShard::TScanCounters& scanCountersPool);
+        const std::shared_ptr<IStoragesManager>& storagesManager,
+        const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+        const TComputeShardingPolicy& computeShardingPolicy, ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId,
+        TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
+        const NColumnShard::TScanCounters& scanCountersPool);
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -42,10 +47,11 @@ private:
     STATEFN(StateScan) {
         auto g = Stats->MakeGuard("processing");
         TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())(
-            "TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen));
+            "TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)("task_identifier", ReadMetadataRange->GetScanIdentifier()));
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScan);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleScan);
+            hFunc(NActors::TEvents::TEvPoison, HandleScan);
             hFunc(TEvents::TEvUndelivered, HandleScan);
             hFunc(TEvents::TEvWakeup, HandleScan);
             hFunc(NColumnShard::TEvPrivate::TEvTaskProcessedResult, HandleScan);
@@ -64,6 +70,7 @@ private:
     void ContinueProcessing();
 
     void HandleScan(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) noexcept;
+    void HandleScan(NActors::TEvents::TEvPoison::TPtr& ev) noexcept;
 
     void HandleScan(TEvents::TEvUndelivered::TPtr& ev);
 
@@ -133,8 +140,7 @@ private:
 
     TChunksLimiter ChunksLimiter;
     THolder<NKqp::TEvKqpCompute::TEvScanData> Result;
-    std::shared_ptr<arrow::RecordBatch> CurrentLastReadKey;
-    i64 InFlightReads = 0;
+    std::shared_ptr<IScanCursor> CurrentLastReadKey;
     bool Finished = false;
     std::optional<TMonotonic> LastResultInstant;
 

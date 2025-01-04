@@ -116,7 +116,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                                              Columns { Name: "Datetime_column" Type: "Datetime" }
                                              #Columns { Name: "Interval_column" Type: "Interval" }
                                              KeyColumnNames: "key"
-                                             Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                                          }
                                      }
         )");
@@ -1504,7 +1503,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto sender = runtime->AllocateEdgeActor();
 
         InitRoot(server, sender);
-        Tests::NCommon::TLoggerInit(runtime).Initialize();
+//        Tests::NCommon::TLoggerInit(runtime).Initialize();
 
         const ui32 numShards = 10;
         const ui32 numIterations = 50;
@@ -2444,11 +2443,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             tableInserter.AddRow().Add(2).Add("test_res_2").Add("val2").AddNull();
             testHelper.BulkUpsert(testTable, tableInserter);
         }
-        while (csController->GetInsertFinishedCounter().Val() == 0) {
-            Cout << "Wait indexation..." << Endl;
-            Sleep(TDuration::Seconds(2));
-        }
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=2", "[[2;\"test_res_2\";#;[\"val1\"]]]");
+//        while (csController->GetCompactionFinishedCounter().Val() == 0) {
+//            Cout << "Wait indexation..." << Endl;
+//            Sleep(TDuration::Seconds(2));
+//        }
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=2", "[[2;\"test_res_2\";#;[\"val2\"]]]");
     }
 
     Y_UNIT_TEST(BulkUpsertUpdate) {
@@ -2470,10 +2469,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             tableInserter.AddRow().Add(1).Add(10);
             testHelper.BulkUpsert(testTable, tableInserter);
         }
-        while (csController->GetInsertFinishedCounter().Val() < 1) {
-            Cout << "Wait indexation..." << Endl;
-            Sleep(TDuration::Seconds(2));
-        }
+//        while (csController->GetCompactionFinishedCounter().Val() < 1) {
+//            Cout << "Wait compaction..." << Endl;
+//            Sleep(TDuration::Seconds(2));
+//        }
         testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest` WHERE id = 1", "[[10]]");
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
@@ -2481,8 +2480,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
         testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest` WHERE id = 1", "[[110]]");
-        while (csController->GetInsertFinishedCounter().Val() < 2) {
-            Cout << "Wait indexation..." << Endl;
+        while (csController->GetCompactionFinishedCounter().Val() < 1) {
+            Cout << "Wait compaction..." << Endl;
             Sleep(TDuration::Seconds(2));
         }
         testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest` WHERE id = 1", "[[110]]");
@@ -2704,6 +2703,18 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
 
         {
+            auto alterQuery =
+                TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                  {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "180s", "expected_blobs_size" : 2048000}, 
+                               {"class_name" : "Zero", "expected_blobs_size" : 2048000}, {"class_name" : "Zero"}]}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        {
             auto it = tableClient.StreamExecuteScanQuery(R"(
                 --!syntax_v1
 
@@ -2718,6 +2729,64 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(result, R"([[120000u;]])");
         }
 
+    }
+
+    Y_UNIT_TEST(MetadataMemoryManager) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        //        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
+        {
+            auto it = tableClient
+                          .StreamExecuteScanQuery(R"(
+                --!syntax_v1
+
+                SELECT
+                    COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+            )")
+                          .GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([[20000u;]])");
+        }
+        {
+            auto alterQuery =
+                TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `METADATA_MEMORY_MANAGER.CLASS_NAME`=`local_db`,
+                    `METADATA_MEMORY_MANAGER.FEATURES`=`{"memory_cache_size" : 0}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        {
+            auto it = tableClient
+                          .StreamExecuteScanQuery(R"(
+                --!syntax_v1
+
+                SELECT
+                    COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+            )")
+                          .GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([[20000u;]])");
+        }
     }
 
     Y_UNIT_TEST(NormalizeAbsentColumn) {

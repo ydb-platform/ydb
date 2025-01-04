@@ -2,6 +2,7 @@ package NKikimrColumnShardDataSharingProto;
 
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
 import "ydb/core/tx/columnshard/data_sharing/protos/initiator.proto";
+import "ydb/core/protos/tx_columnshard.proto";
 
 message TDestinationRemapIds {
     optional uint64 SourcePathId = 1;
@@ -47,6 +48,8 @@ message TSourceSession {
         optional uint32 PackIdx = 5;
         optional uint32 AckReceivedForPackIdx = 6[default = 0];
         repeated uint64 LinksModifiedTablets = 7;
+        optional uint32 NextSchemasIntervalBegin = 8;
+        optional uint32 NextSchemasIntervalEnd = 9;
     }
 
     message TPathPortionsHash {
@@ -56,6 +59,7 @@ message TSourceSession {
 
     message TCursorStatic {
         repeated TPathPortionsHash PathHashes = 7;
+        repeated NKikimrTxColumnShard.TSchemaPresetVersionInfo SchemeHistory = 8;
     }
 }
 

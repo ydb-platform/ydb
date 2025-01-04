@@ -16,6 +16,13 @@ namespace {
 
 class TTestInsertTableDB : public IDbWrapper {
 public:
+    virtual const IBlobGroupSelector* GetDsGroupSelector() const override {
+        return &Default<TFakeGroupSelector>();
+    }
+
+    virtual void WriteColumns(const NOlap::TPortionInfo& /*portion*/, const NKikimrTxColumnShard::TIndexPortionAccessor& /*proto*/) override {
+
+    }
     void Insert(const TInsertedData&) override {
     }
     void Commit(const TCommittedData&) override {
@@ -42,7 +49,8 @@ public:
     }
     virtual void ErasePortion(const NOlap::TPortionInfo& /*portion*/) override {
     }
-    virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& /*callback*/) override {
+    virtual bool LoadPortions(const std::optional<ui64> /*reqPathId*/,
+        const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& /*callback*/) override {
         return true;
     }
 
@@ -50,7 +58,7 @@ public:
     }
     void EraseColumn(const TPortionInfo&, const TColumnRecord&) override {
     }
-    bool LoadColumns(const std::function<void(NOlap::TPortionInfoConstructor&&, const TColumnChunkLoadContext&)>&) override {
+    bool LoadColumns(const std::optional<ui64> /*reqPathId*/, const std::function<void(TColumnChunkLoadContextV2&&)>&) override {
         return true;
     }
 
@@ -58,7 +66,8 @@ public:
     }
     virtual void EraseIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {
     }
-    virtual bool LoadIndexes(const std::function<void(const ui64 /*pathId*/, const ui64 /*portionId*/, const TIndexChunkLoadContext&)>& /*callback*/) override {
+    virtual bool LoadIndexes(const std::optional<ui64> /*reqPathId*/,
+        const std::function<void(const ui64 /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&&)>& /*callback*/) override {
         return true;
     }
 
@@ -84,6 +93,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         
         // insert, not commited
         auto userData1 = std::make_shared<TUserData>(tableId, TBlobRange(blobId1), TLocalHelper::GetMetaProto(), indexSnapshot, std::nullopt);
+        insertTable.RegisterPathInfo(tableId);
         bool ok = insertTable.Insert(dbTable, TInsertedData(writeId, userData1));
         UNIT_ASSERT(ok);
 

@@ -50,6 +50,19 @@ public:
         return sb;
     }
 
+    NJson::TJsonValue DebugJson() const {
+        NJson::TJsonValue result = NJson::JSON_ARRAY;
+        for (auto&& i : *Columns) {
+            auto res = i->GetScalar(Position);
+            if (!res.ok()) {
+                result.AppendValue(res.status().ToString());
+            } else {
+                result.AppendValue((*res)->ToString());
+            }
+        }
+        return result;
+    }
+
     TReplaceKeyTemplate(TArrayVecPtr columns, const ui64 position)
         : Columns(columns)
         , Position(position)

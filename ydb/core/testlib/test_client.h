@@ -252,6 +252,7 @@ namespace Tests {
             AppConfig->MutableHiveConfig()->SetObjectImbalanceToBalance(100);
             AppConfig->MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
             FeatureFlags.SetEnableSeparationComputeActorsFromRead(true);
+            FeatureFlags.SetEnableWritePortionsOnInsert(true);
         }
 
         TServerSettings(const TServerSettings& settings) = default;

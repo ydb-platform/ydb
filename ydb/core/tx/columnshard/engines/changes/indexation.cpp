@@ -104,14 +104,20 @@ public:
             return;
         }
         auto blobSchema = context.SchemaVersions.GetSchemaVerified(data.GetSchemaVersion());
+        std::set<ui32> columnIdsToDelete = blobSchema->GetColumnIdsToDelete(ResultSchema);
         if (!Schemas.contains(data.GetSchemaVersion())) {
             Schemas.emplace(data.GetSchemaVersion(), blobSchema);
         }
-        std::vector<ui32> filteredIds = data.GetMeta().GetSchemaSubset().Apply(blobSchema->GetIndexInfo().GetColumnIds(false));
+        TColumnIdsView columnIds = blobSchema->GetIndexInfo().GetColumnIds(false);
+        std::vector<ui32> filteredIds = data.GetMeta().GetSchemaSubset().Apply(columnIds.begin(), columnIds.end());
         if (data.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete) {
             filteredIds.emplace_back((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);
         }
-        UsageColumnIds.insert(filteredIds.begin(), filteredIds.end());
+        for (const auto& filteredId : filteredIds) {
+            if (!columnIdsToDelete.contains(filteredId)) {
+                UsageColumnIds.insert(filteredId);
+            }
+        }
     }
 };
 
@@ -225,6 +231,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         }
         pathBatches.AddChunkInfo(inserted, context);
     }
+    NoAppendIsCorrect = pathBatches.GetData().empty();
 
     pathBatches.FinishChunksInfo();
 
@@ -239,10 +246,15 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         std::shared_ptr<NArrow::TGeneralContainer> batch;
         {
             const auto blobData = Blobs.Extract(IStoragesManager::DefaultStorageId, blobRange);
+
+            NArrow::TSchemaLiteView blobSchemaView = blobSchema->GetIndexInfo().ArrowSchema();
             auto batchSchema =
-                std::make_shared<arrow::Schema>(inserted.GetMeta().GetSchemaSubset().Apply(blobSchema->GetIndexInfo().ArrowSchema()->fields()));
+                std::make_shared<arrow::Schema>(inserted.GetMeta().GetSchemaSubset().Apply(blobSchemaView.begin(), blobSchemaView.end()));
             batch = std::make_shared<NArrow::TGeneralContainer>(NArrow::DeserializeBatch(blobData, batchSchema));
-            blobSchema->AdaptBatchToSchema(*batch, resultSchema);
+            std::set<ui32> columnIdsToDelete = blobSchema->GetColumnIdsToDelete(resultSchema);
+            if (!columnIdsToDelete.empty()) {
+                batch->DeleteFieldsByIndex(blobSchema->ConvertColumnIdsToIndexes(columnIdsToDelete));
+            }
         }
         IIndexInfo::AddSnapshotColumns(*batch, inserted.GetSnapshot(), (ui64)inserted.GetInsertWriteId());
 
@@ -273,7 +285,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         merger.SetOptimizationWritingPackMode(true);
         auto localAppended = merger.Execute(stats, itGranule->second, filteredSnapshot, pathId, shardingVersion);
         for (auto&& i : localAppended) {
-            i.GetPortionConstructor().MutableMeta().UpdateRecordsMeta(NPortion::EProduced::INSERTED);
+            i.GetPortionConstructor().MutablePortionConstructor().MutableMeta().UpdateRecordsMeta(NPortion::EProduced::INSERTED);
             AppendedPortions.emplace_back(std::move(i));
         }
     }

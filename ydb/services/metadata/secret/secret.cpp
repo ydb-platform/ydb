@@ -32,20 +32,4 @@ IClassBehaviour::TPtr TSecret::GetBehaviour() {
     return TSecretBehaviour::GetInstance();
 }
 
-TString TSecretId::SerializeToString() const {
-    TStringBuilder sb;
-    sb << "USId:" << OwnerUserId << ":" << SecretId;
-    return sb;
-}
-
-
-TString TSecretIdOrValue::DebugString() const {
-    if (SecretId) {
-        return SecretId->SerializeToString();
-    } else if (Value) {
-        return MD5::Calc(*Value);
-    }
-    return "";
-}
-
 }

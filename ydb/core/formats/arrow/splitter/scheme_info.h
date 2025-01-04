@@ -22,8 +22,6 @@ public:
     NAccessor::TColumnSaver GetColumnSaver(const ui32 columnId) const;
     virtual std::shared_ptr<arrow::Field> GetField(const ui32 columnId) const = 0;
     virtual std::optional<TColumnSerializationStat> GetColumnSerializationStats(const ui32 columnId) const = 0;
-    virtual bool NeedMinMaxForColumn(const ui32 columnId) const = 0;
-    virtual bool IsSortedColumn(const ui32 columnId) const = 0;
     virtual std::optional<TBatchSerializationStat> GetBatchSerializationStats(const std::shared_ptr<arrow::RecordBatch>& rb) const = 0;
 };
 }   // namespace NKikimr::NArrow::NSplitter

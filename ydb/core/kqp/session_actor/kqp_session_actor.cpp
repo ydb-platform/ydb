@@ -862,7 +862,9 @@ public:
                             "Write transactions between column and row tables are disabled at current time.");
             return false;
         }
+
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
+        QueryState->TxCtx->ApplyPhysicalQuery(phyQuery);
         auto [success, issues] = QueryState->TxCtx->ApplyTableOperations(phyQuery.GetTableOps(), phyQuery.GetTableInfos(),
             EKikimrQueryType::Dml);
         if (!success) {
@@ -1232,7 +1234,7 @@ public:
         } else if (QueryState->ShouldAcquireLocks(tx) && (!txCtx.HasOlapTable || Settings.TableService.GetEnableOlapSink())) {
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
 
-            if (txCtx.HasUncommittedChangesRead || Config->FeatureFlags.GetEnableForceImmediateEffectsExecution() || txCtx.HasOlapTable) {
+            if (!txCtx.CanDeferEffects()) {
                 request.UseImmediateEffects = true;
             }
         }

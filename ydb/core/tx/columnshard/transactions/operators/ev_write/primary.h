@@ -77,9 +77,9 @@ private:
     virtual TString DoDebugString() const override {
         return "EV_WRITE_PRIMARY";
     }
-    class TTxWriteReceivedBrokenFlag: public TExtendedTransactionBase<TColumnShard> {
+    class TTxWriteReceivedBrokenFlag: public TExtendedTransactionBase {
     private:
-        using TBase = TExtendedTransactionBase<TColumnShard>;
+        using TBase = TExtendedTransactionBase;
         const ui64 TxId;
         const ui64 TabletId;
         const bool BrokenFlag;
@@ -126,9 +126,9 @@ private:
         return std::make_unique<TTxWriteReceivedBrokenFlag>(owner, GetTxId(), sendTabletId, broken);
     }
 
-    class TTxWriteReceivedResultAck: public TExtendedTransactionBase<TColumnShard> {
+    class TTxWriteReceivedResultAck: public TExtendedTransactionBase {
     private:
-        using TBase = TExtendedTransactionBase<TColumnShard>;
+        using TBase = TExtendedTransactionBase;
         const ui64 TxId;
         const ui64 TabletId;
 
@@ -222,9 +222,9 @@ private:
         CheckFinished(owner);
     }
 
-    class TTxStartPreparation: public TExtendedTransactionBase<TColumnShard> {
+    class TTxStartPreparation: public TExtendedTransactionBase {
     private:
-        using TBase = TExtendedTransactionBase<TColumnShard>;
+        using TBase = TExtendedTransactionBase;
         const ui64 TxId;
 
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {

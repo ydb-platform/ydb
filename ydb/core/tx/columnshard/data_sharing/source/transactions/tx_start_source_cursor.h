@@ -5,9 +5,9 @@
 
 namespace NKikimr::NOlap::NDataSharing {
 
-class TTxStartSourceCursor: public NColumnShard::TExtendedTransactionBase<NColumnShard::TColumnShard> {
+class TTxStartSourceCursor: public NColumnShard::TExtendedTransactionBase {
 private:
-    using TBase = NColumnShard::TExtendedTransactionBase<NColumnShard::TColumnShard>;
+    using TBase = NColumnShard::TExtendedTransactionBase;
 
     TSourceSession* Session;
     THashMap<ui64, std::vector<TPortionDataAccessor>> Portions;

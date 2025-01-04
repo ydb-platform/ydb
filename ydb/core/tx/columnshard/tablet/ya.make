@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    ext_tx_base.h
+    ext_tx_base.cpp
     write_queue.cpp
 )
 

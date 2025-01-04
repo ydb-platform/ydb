@@ -6,9 +6,9 @@
 
 namespace NKikimr::NOlap::NDataSharing {
 
-class TTxWriteSourceCursor: public NColumnShard::TExtendedTransactionBase<NColumnShard::TColumnShard> {
+class TTxWriteSourceCursor: public NColumnShard::TExtendedTransactionBase {
 private:
-    using TBase = NColumnShard::TExtendedTransactionBase<NColumnShard::TColumnShard>;
+    using TBase = NColumnShard::TExtendedTransactionBase;
     std::shared_ptr<TSourceSession> Session;
 protected:
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override;

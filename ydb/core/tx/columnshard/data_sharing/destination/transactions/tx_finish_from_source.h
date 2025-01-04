@@ -5,9 +5,9 @@
 
 namespace NKikimr::NOlap::NDataSharing {
 
-class TTxFinishFromSource: public NColumnShard::TExtendedTransactionBase<NColumnShard::TColumnShard> {
+class TTxFinishFromSource: public NColumnShard::TExtendedTransactionBase {
 private:
-    using TBase = NColumnShard::TExtendedTransactionBase<NColumnShard::TColumnShard>;
+    using TBase = NColumnShard::TExtendedTransactionBase;
     std::shared_ptr<TDestinationSession> Session;
     const TTabletId SourceTabletId;
     bool Finished = false;

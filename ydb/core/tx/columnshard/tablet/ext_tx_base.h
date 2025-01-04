@@ -4,33 +4,22 @@
 
 namespace NKikimr::NColumnShard {
 
+class TColumnShard;
+
 //Base class for LocalDB transactions with ColumnShard specific
-template <class TShard>
-class TExtendedTransactionBase: public NTabletFlatExecutor::TTransactionBase<TShard> {
+class TExtendedTransactionBase: public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
 private:
     const TString TxInfo;
     const ui32 TabletTxNo;
-    using TBase = NTabletFlatExecutor::TTransactionBase<TShard>;
+    using TBase = NTabletFlatExecutor::TTransactionBase<TColumnShard>;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& ctx) = 0;
     virtual void DoComplete(const NActors::TActorContext & ctx) = 0;
 
 public:
-    virtual bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& ctx) override final {
-        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", TBase::Self->TabletID())("local_tx_no", TabletTxNo)("tx_info", TxInfo);
-        return DoExecute(txc, ctx);
-    }
-    virtual void Complete(const NActors::TActorContext& ctx) override final {
-        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", TBase::Self->TabletID())("local_tx_no", TabletTxNo)("tx_info", TxInfo);
-        return DoComplete(ctx);
-    }
+    virtual bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& ctx) override final;
+    virtual void Complete(const NActors::TActorContext& ctx) override final;
 
-    TExtendedTransactionBase(TShard* self, const TString& txInfo = Default<TString>())
-        : TBase(self)
-        , TxInfo(txInfo)
-        , TabletTxNo(++TBase::Self->TabletTxCounter)
-    {
-
-    }
+    TExtendedTransactionBase(TColumnShard* self, const TString& txInfo = Default<TString>());
 };
 
 } //namespace NKikimr::NColumnShard

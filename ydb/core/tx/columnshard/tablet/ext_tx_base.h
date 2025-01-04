@@ -21,7 +21,8 @@ public:
     }
     virtual void Complete(const NActors::TActorContext& ctx) override final {
         NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", TBase::Self->TabletID())("local_tx_no", TabletTxNo)("tx_info", TxInfo);
-        return DoComplete(ctx);
+        DoComplete(ctx);
+        ctx.Send(TBase::Self->SelfId(), new TEvents::TEvPoisonPill());
     }
 
     TExtendedTransactionBase(TShard* self, const TString& txInfo = Default<TString>())

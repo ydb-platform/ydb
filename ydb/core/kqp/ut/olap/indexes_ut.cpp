@@ -491,14 +491,14 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 ui32 requestsCount = 300;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
-                    const auto query = [](const TString& res, const TString& /* uid */, const ui32 /* level */) {
+                    const auto query = [](const TString& res) {
                         TStringBuilder sb;
                         sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
                         sb << "WHERE" << Endl;
                         sb << "resource_id LIKE '%" << res << "%'" << Endl;
                         return sb;
                     };
-                    ExecuteSQL(query(resourceIds[idx], uids[idx], levels[idx]), "[[1u;]]");
+                    ExecuteSQL(query(resourceIds[idx]), "[[1u;]]");
                 }
 //                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart)(
 //                    "approved", csController->GetIndexesApprovedOnSelect().Val() - ApproveStart)(
@@ -509,14 +509,14 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 ui32 requestsCount = 300;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
-                    const auto query = [](const TString& res, const TString& /* uid */, const ui32 /* level */) {
+                    const auto query = [](const TString& res) {
                         TStringBuilder sb;
                         sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
                         sb << "WHERE" << Endl;
                         sb << "resource_id LIKE '" << res << "%'" << Endl;
                         return sb;
                     };
-                    ExecuteSQL(query(resourceIds[idx], uids[idx], levels[idx]), "[[1u;]]");
+                    ExecuteSQL(query(resourceIds[idx]), "[[1u;]]");
                 }
 //                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart)(
 //                    "approved", csController->GetIndexesApprovedOnSelect().Val() - ApproveStart)(
@@ -527,14 +527,14 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 ui32 requestsCount = 300;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
-                    const auto query = [](const TString& res, const TString& /* uid */, const ui32 /* level */) {
+                    const auto query = [](const TString& res) {
                         TStringBuilder sb;
                         sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
                         sb << "WHERE" << Endl;
                         sb << "resource_id LIKE '%" << res << "'" << Endl;
                         return sb;
                     };
-                    ExecuteSQL(query(resourceIds[idx], uids[idx], levels[idx]), "[[1u;]]");
+                    ExecuteSQL(query(resourceIds[idx]), "[[1u;]]");
                 }
 //                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart)(
 //                    "approved", csController->GetIndexesApprovedOnSelect().Val() - ApproveStart)(

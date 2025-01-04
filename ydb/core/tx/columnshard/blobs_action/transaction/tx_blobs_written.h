@@ -12,9 +12,9 @@ namespace NKikimr::NColumnShard {
 
 class TColumnShard;
 
-class TTxBlobsWritingFinished: public TExtendedTransactionBase<TColumnShard> {
+class TTxBlobsWritingFinished: public TExtendedTransactionBase {
 private:
-    using TBase = TExtendedTransactionBase<TColumnShard>;
+    using TBase = TExtendedTransactionBase;
     std::vector<TInsertedPortions> Packs;
     const std::shared_ptr<NOlap::IBlobsWritingAction> WritingActions;
     std::optional<NOlap::TSnapshot> CommitSnapshot;
@@ -51,9 +51,9 @@ public:
     }
 };
 
-class TTxBlobsWritingFailed: public TExtendedTransactionBase<TColumnShard> {
+class TTxBlobsWritingFailed: public TExtendedTransactionBase {
 private:
-    using TBase = TExtendedTransactionBase<TColumnShard>;
+    using TBase = TExtendedTransactionBase;
     const NKikimrProto::EReplyStatus PutBlobResult;
     std::vector<TInsertedPortions> Packs;
 

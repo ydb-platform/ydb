@@ -59,9 +59,9 @@ void TInFlightReadsTracker::AddToInFlightRequest(
 }
 
 namespace {
-class TTransactionSavePersistentSnapshots: public TExtendedTransactionBase<NColumnShard::TColumnShard> {
+class TTransactionSavePersistentSnapshots: public TExtendedTransactionBase {
 private:
-    using TBase = TExtendedTransactionBase<NColumnShard::TColumnShard>;
+    using TBase = TExtendedTransactionBase;
     const std::set<NOlap::TSnapshot> SaveSnapshots;
     const std::set<NOlap::TSnapshot> RemoveSnapshots;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override {

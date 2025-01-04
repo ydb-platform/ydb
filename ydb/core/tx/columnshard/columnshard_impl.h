@@ -11,7 +11,7 @@
 #include "blobs_action/events/delete_blobs.h"
 #include "counters/columnshard.h"
 #include "counters/counters_manager.h"
-#include "data_sharing/common/transactions/tx_extension.h"
+#include "tablet/ext_tx_base.h"
 #include "data_sharing/destination/events/control.h"
 #include "data_sharing/destination/events/transfer.h"
 #include "data_sharing/manager/sessions.h"

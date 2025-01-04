@@ -94,33 +94,7 @@ def test_create_table(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
     driver.scheme_client.make_directory(os.path.join(database, "dirA1"))
     driver.scheme_client.make_directory(os.path.join(database, "dirA1", "dirB1"))
 
-    # with ydb.SessionPool(driver) as pool:
     with ydb.QuerySessionPool(driver) as pool:
-        # def create_table(session, path):
-        #     create_table_query = f"""
-        #     CREATE TABLE `{path}`
-        #     (
-        #     id UInt64,
-        #     value_string Utf8,
-        #     value_num UInt64,
-        #     PRIMARY KEY (id)
-        #     );
-        #     """
-
-        #     with session.transaction().execute(
-        #         create_table_query,
-        #         commit_tx=True,
-        #     ) as _:
-        #         pass
-
-        #     # session.create_table(
-        #     #     path,
-        #     #     ydb.TableDescription()
-        #     #     .with_column(ydb.Column('id', ydb.OptionalType(ydb.DataType.Uint64)))
-        #     #     .with_column(ydb.Column('value_string', ydb.OptionalType(ydb.DataType.Utf8)))
-        #     #     .with_column(ydb.Column('value_num', ydb.OptionalType(ydb.DataType.Uint64)))
-        #     #     .with_primary_key('id')
-        #     # )
         
         pool.execute_with_retries(
             f"""
@@ -144,20 +118,6 @@ def test_create_table(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
             );
             """
         )
-        # pool.retry_operation_sync(create_table, None, os.path.join(database, "dirA1", "dirB1", "table"))
-        # pool.retry_operation_sync(create_table, None, os.path.join(database, "dirA1", "dirB1", "table1"))
-
-        # def write_some_data(session, path):
-        #     session.transaction().execute(
-        #         """
-        #         UPSERT INTO `{}` (id, value_string, value_num)
-        #                    VALUES (1u, "Ok", 0u),
-        #                           (2u, "Also_Ok", 0u),
-        #                           (3u, "And_Ok_With_Locks", 0u);
-        #                           """.format(path),
-        #         commit_tx=True)
-
-        # pool.retry_operation_sync(write_some_data, None, os.path.join(database, "dirA1", "dirB1", "table"))
 
         pool.execute_with_retries(
             f"""UPSERT INTO `{os.path.join(database, "dirA1", "dirB1", "table")}` (id, value_string, value_num)
@@ -166,21 +126,9 @@ def test_create_table(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
                                   (3u, "And_Ok_With_Locks", 0u);"""
         )
 
-        # def drop_table(session, path):
-        #     drop_table_query = f"DROP TABLE `{path}`;"
-        #     with session.transaction().execute(
-        #         drop_table_query,
-        #         commit_tx=True,
-        #     ) as _:
-        #         pass
-            
-        #     # session.drop_table(
-        #     #     path
-        #     # )
         pool.execute_with_retries(
             f"DROP TABLE `{os.path.join(database, "dirA1", "dirB1", "table")}`;"
         )
-        # pool.retry_operation_sync(drop_table, None, os.path.join(database, "dirA1", "dirB1", "table"))
 
 
 def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, ydb_endpoint, metering_file_path, ydb_private_client):
@@ -204,7 +152,6 @@ def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, yd
     driver.scheme_client.make_directory(os.path.join(database, "dirA1"))
     driver.scheme_client.make_directory(os.path.join(database, "dirA1", "dirB1"))
 
-    # with ydb.SessionPool(driver) as pool:
     with ydb.QuerySessionPool(driver) as pool:
         def create_table(session, path):
             create_table_query = f"""
@@ -223,14 +170,6 @@ def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, yd
             ) as _:
                 pass
 
-            # session.create_table(
-            #     path,
-            #     ydb.TableDescription()
-            #     .with_column(ydb.Column('id', ydb.OptionalType(ydb.DataType.Uint64)))
-            #     .with_column(ydb.Column('value_string', ydb.OptionalType(ydb.DataType.Utf8)))
-            #     .with_column(ydb.Column('value_num', ydb.OptionalType(ydb.DataType.Uint64)))
-            #     .with_primary_key('id')
-            # )
 
         pool.execute_with_retries(
             f"""
@@ -254,18 +193,6 @@ def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, yd
             );
             """
         )
-        # pool.retry_operation_sync(create_table, None, os.path.join(database, "dirA1", "dirB1", "table"))
-        # pool.retry_operation_sync(create_table, None, os.path.join(database, "dirA1", "dirB1", "table1"))
-
-        # def write_some_data(session, path):
-        #     session.transaction().execute(
-        #         """
-        #         UPSERT INTO `{}` (id, value_string, value_num)
-        #                    VALUES (1u, "Ok", 0u),
-        #                           (2u, "Also_Ok", 0u),
-        #                           (3u, "And_Ok_With_Locks", 0u);
-        #                           """.format(path),
-        #         commit_tx=True)
 
         pool.execute_with_retries(
             f"""UPSERT INTO `{os.path.join(database, "dirA1", "dirB1", "table")}` (id, value_string, value_num)
@@ -274,7 +201,6 @@ def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, yd
                                   (3u, "And_Ok_With_Locks", 0u);"""
         )
         
-        # pool.retry_operation_sync(write_some_data, None, os.path.join(database, "dirA1", "dirB1", "table"))
 
         ydb_private_client.add_config_item("FeatureFlags { AllowServerlessStorageBillingForSchemeShard: true }")
         while True:
@@ -286,24 +212,12 @@ def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, yd
                 logger.info(" wait data in metering file %s", metering_file_path)
                 time.sleep(15)
 
-        # def drop_table(session, path):
-        #     drop_table_query = f"DROP TABLE `{path}`;"
-        #     with session.transaction().execute(
-        #         drop_table_query,
-        #         commit_tx=True,
-        #     ) as _:
-        #         pass
-
-            # session.drop_table(
-            #     path
-            # )
 
         
         
         pool.execute_with_retries(
             f"DROP TABLE `{os.path.join(database, "dirA1", "dirB1", "table")}`;"
         )
-        # pool.retry_operation_sync(drop_table, None, os.path.join(database, "dirA1", "dirB1", "table"))
 
 
 def test_create_table_with_quotas(ydb_hostel_db, ydb_quoted_serverless_db, ydb_endpoint):
@@ -324,37 +238,7 @@ def test_create_table_with_quotas(ydb_hostel_db, ydb_quoted_serverless_db, ydb_e
 
     driver.scheme_client.make_directory(os.path.join(database, "dirA0"))
 
-    # def create_table(session, path):
-    #     logger.debug("creating table %s", path)
-    #     create_table_query = f"""
-    #         CREATE TABLE `{path}`
-    #         (
-    #         id UInt64,
-    #         value_string Utf8,
-    #         value_num UInt64,
-    #         PRIMARY KEY (id)
-    #         );
-    #         """
-
-    #     with session.transaction().execute(
-    #         create_table_query,
-    #         commit_tx=True,
-    #     ) as _:
-    #         pass
-
-
-        # session.create_table(
-        #     path,
-        #     ydb.TableDescription()
-        #     .with_column(ydb.Column('id', ydb.OptionalType(ydb.DataType.Uint64)))
-        #     .with_column(ydb.Column('value_string', ydb.OptionalType(ydb.DataType.Utf8)))
-        #     .with_column(ydb.Column('value_num', ydb.OptionalType(ydb.DataType.Uint64)))
-        #     .with_primary_key('id')
-        # )
-
-    # with ydb.SessionPool(driver) as pool:
     with ydb.QuerySessionPool(driver) as pool:
-        # pool.retry_operation_sync(create_table, None, os.path.join(database, "dirA0", "table"))
         pool.execute_with_retries(
             f"""
             CREATE TABLE `{os.path.join(database, "dirA0", "table")}`
@@ -392,8 +276,6 @@ def test_create_table_with_quotas(ydb_hostel_db, ydb_quoted_serverless_db, ydb_e
                     );
                     """
                 )
-                # create_table(session, os.path.join(database, "dirA0", "table2"))
-                # create_table(session, os.path.join(database, "dirA0", "table3"))
             assert "exceeded a limit" in str(excinfo.value)
 
 
@@ -444,18 +326,8 @@ def test_create_table_with_alter_quotas(ydb_hostel_db, ydb_serverless_db, ydb_en
             pass
 
 
-        # session.create_table(
-        #     path,
-        #     ydb.TableDescription()
-        #     .with_column(ydb.Column('id', ydb.OptionalType(ydb.DataType.Uint64)))
-        #     .with_column(ydb.Column('value_string', ydb.OptionalType(ydb.DataType.Utf8)))
-        #     .with_column(ydb.Column('value_num', ydb.OptionalType(ydb.DataType.Uint64)))
-        #     .with_primary_key('id')
-        # )
 
-    # with ydb.SessionPool(driver) as pool:
     with ydb.QuerySessionPool(driver) as pool:
-        # pool.retry_operation_sync(create_table, None, os.path.join(database, "dirA0", "table"))
         pool.execute_with_retries(
             f"""
             CREATE TABLE `{os.path.join(database, "dirA0", "table")}`
@@ -493,8 +365,6 @@ def test_create_table_with_alter_quotas(ydb_hostel_db, ydb_serverless_db, ydb_en
                     );
                     """
                 )
-                # create_table(session, os.path.join(database, "dirA0", "table2"))
-                # create_table(session, os.path.join(database, "dirA0", "table3"))
             assert "exceeded a limit" in str(excinfo.value)
 
 
@@ -513,34 +383,6 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
 
     driver = ydb.Driver(driver_config)
     driver.wait(120)
-
-    # def create_table(session, path):
-    #     logger.debug("creating table %s", path)
-    #     create_table_query = f"""
-    #         CREATE TABLE `{path}`
-    #         (
-    #         id UInt64,
-    #         value_string Utf8,
-    #         value_num UInt64,
-    #         PRIMARY KEY (id)
-    #         );
-    #         """
-        
-    #     with session.transaction().execute(
-    #         create_table_query,
-    #         commit_tx=True,
-    #     ) as _:
-    #         pass
-
-
-        # session.create_table(
-        #     path,
-        #     ydb.TableDescription()
-        #     .with_column(ydb.Column('id', ydb.OptionalType(ydb.DataType.Uint64)))
-        #     .with_column(ydb.Column('value_string', ydb.OptionalType(ydb.DataType.Utf8)))
-        #     .with_column(ydb.Column('value_num', ydb.OptionalType(ydb.DataType.Uint64)))
-        #     .with_primary_key('id')
-        # )
 
     sessions = []
 
@@ -655,10 +497,8 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         yield driver.table_client.async_bulk_upsert(path, rows, column_types)
 
     driver.scheme_client.make_directory(os.path.join(database, "dirA0"))
-    # with ydb.SessionPool(driver) as pool:
     with ydb.QuerySessionPool(driver) as pool:
         path = os.path.join(database, "dirA0", "table")
-        # pool.retry_operation_sync(create_table, None, path)
         pool.execute_with_retries(
             f"""
             CREATE TABLE `{path}`
@@ -807,48 +647,9 @@ def test_create_table_using_exclusive_nodes(ydb_serverless_db_with_exclusive_nod
     dir_path = os.path.join(database, "dir")
     driver.scheme_client.make_directory(dir_path)
 
-    # with ydb.SessionPool(driver) as pool:
     with ydb.QuerySessionPool(driver) as pool:
-        # def create_table(session, path):
-        #     create_table_query = f"""
-        #     CREATE TABLE `{path}`
-        #     (
-        #     id UInt64,
-        #     PRIMARY KEY (id)
-        #     );
-        #     """
-        #     with session.transaction().execute(
-        #         create_table_query,
-        #         commit_tx=True,
-        #     ) as _:
-        #         pass
-
-
-            # session.create_table(
-            #     path,
-            #     ydb.TableDescription()
-            #     .with_column(ydb.Column("id", ydb.OptionalType(ydb.DataType.Uint64)))
-            #     .with_primary_key("id")
-            # )
-
-        # def write_some_data(session, path):
-        #     session.transaction().execute(
-        #         f"UPSERT INTO `{path}` (id) VALUES (1), (2), (3);",
-        #         commit_tx=True)
-
-        # def drop_table(session, path):
-        #     drop_table_query = f"DROP TABLE `{path}`;"
-        #     with session.transaction().execute(
-        #         drop_table_query,
-        #         commit_tx=True,
-        #     ) as _:
-        #         pass
-            # session.drop_table(
-            #     path
-            # )
 
         table_path = os.path.join(dir_path, "create_table_with_exclusive_nodes_table")
-        # pool.retry_operation_sync(create_table, None, table_path)
         pool.execute_with_retries(
             f"""
             CREATE TABLE `{table_path}`
@@ -860,11 +661,9 @@ def test_create_table_using_exclusive_nodes(ydb_serverless_db_with_exclusive_nod
             );
             """
         )
-        # pool.retry_operation_sync(write_some_data, None, table_path)
         pool.execute_with_retries(
             f"UPSERT INTO `{table_path}` (id) VALUES (1), (2), (3);"
         )
-        # pool.retry_operation_sync(drop_table, None, table_path)
         pool.execute_with_retries(
             f"DROP TABLE `{table_path}`;"
         )
@@ -898,12 +697,6 @@ def test_seamless_migration_to_exclusive_nodes(ydb_serverless_db_with_exclusive_
         pass
 
     
-    # session.create_table(
-    #     path,
-    #     ydb.TableDescription()
-    #     .with_column(ydb.Column("id", ydb.OptionalType(ydb.DataType.Uint64)))
-    #     .with_primary_key("id")
-    # )
 
     session.transaction().execute(
         f"UPSERT INTO `{path}` (id) VALUES (1), (2), (3);",

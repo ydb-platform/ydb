@@ -9,9 +9,9 @@
 
 namespace NKikimr::NOlap::NDataSharing {
 
-class TTxDataFromSource: public NColumnShard::TExtendedTransactionBase<NColumnShard::TColumnShard> {
+class TTxDataFromSource: public NColumnShard::TExtendedTransactionBase {
 private:
-    using TBase = NColumnShard::TExtendedTransactionBase<NColumnShard::TColumnShard>;
+    using TBase = NColumnShard::TExtendedTransactionBase;
     std::shared_ptr<TDestinationSession> Session;
     THashMap<ui64, NEvents::TPathIdData> PortionsByPathId;
     THashMap<TString, THashSet<NBlobCache::TUnifiedBlobId>> SharedBlobIds;

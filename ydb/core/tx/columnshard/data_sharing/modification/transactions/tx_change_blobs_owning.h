@@ -7,9 +7,9 @@ namespace NKikimr::NOlap::NDataSharing {
 
 class TTaskForTablet;
 
-class TTxApplyLinksModification: public NColumnShard::TExtendedTransactionBase<NColumnShard::TColumnShard> {
+class TTxApplyLinksModification: public NColumnShard::TExtendedTransactionBase {
 private:
-    using TBase = NColumnShard::TExtendedTransactionBase<NColumnShard::TColumnShard>;
+    using TBase = NColumnShard::TExtendedTransactionBase;
     std::shared_ptr<TTaskForTablet> Task;
     const TTabletId InitiatorTabletId;
     const TString SessionId;

@@ -66,14 +66,14 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
     }
 
     auto g = context.EngineLogs.GranulesStorage->GetStats()->StartPackModification();
-    for (auto& portionBuilder : AppendedPortions) {
-        context.EngineLogs.AppendPortion(portionBuilder.GetPortionResult());
-    }
-
     if (PortionsToRemove.GetSize() || PortionsToMove.GetSize()) {
         PortionsToRemove.ApplyOnComplete(self, context, *FetchedDataAccessors);
         PortionsToMove.ApplyOnComplete(self, context, *FetchedDataAccessors);
     }
+    for (auto& portionBuilder : AppendedPortions) {
+        context.EngineLogs.AppendPortion(portionBuilder.GetPortionResult());
+    }
+
 }
 
 void TChangesWithAppend::DoCompile(TFinalizationContext& context) {

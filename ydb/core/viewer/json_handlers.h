@@ -9,11 +9,11 @@ class TJsonHandlerBase {
 public:
     virtual ~TJsonHandlerBase() = default;
 
-    virtual IActor* CreateRequestActor(IViewer* viewer, NMon::TEvHttpInfo::TPtr& event) {
+    virtual IActor* CreateRequestActor(IViewer* /* viewer */, NMon::TEvHttpInfo::TPtr& /* event */) {
         return nullptr;
     }
 
-    virtual IActor* CreateRequestActor(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& event) {
+    virtual IActor* CreateRequestActor(IViewer* /* viewer */, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& /* event */) {
         return nullptr;
     }
 

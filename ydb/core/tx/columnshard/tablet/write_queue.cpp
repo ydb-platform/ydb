@@ -6,7 +6,7 @@
 
 namespace NKikimr::NColumnShard {
 
-bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) {
+bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) {
     auto overloadStatus = owner->CheckOverloadedWait(PathId);
     if (overloadStatus != TColumnShard::EOverloadStatus::None) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "wait_overload")("status", overloadStatus);

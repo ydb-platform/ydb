@@ -118,7 +118,7 @@ private:
         return true;
     }
 
-    bool HandleLoginAuth(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, NIceDb::TNiceDb& db, const TActorContext& ctx) {
+    bool HandleLoginAuth(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, NIceDb::TNiceDb& db, const TActorContext& /* ctx */) {
         auto row = db.Table<Schema::LoginSids>().Key(loginRequest.User).Select();
         if (!row.IsReady()) {
             return false;
@@ -186,11 +186,11 @@ private:
         ResetFailedAttemptCount(loginRequest, db);
     }
 
-    void HandleLoginAuthSuccess(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, const NLogin::TLoginProvider::TLoginUserResponse& loginResponse, NIceDb::TNiceDb& db) {
+    void HandleLoginAuthSuccess(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, const NLogin::TLoginProvider::TLoginUserResponse& /* loginResponse */, NIceDb::TNiceDb& db) {
         db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::LastSuccessfulAttempt, Schema::LoginSids::FailedAttemptCount>(TAppData::TimeProvider->Now().MicroSeconds(), Schema::LoginSids::FailedAttemptCount::Default);
     }
 
-    void HandleLoginAuthInvalidPassword(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, const NLogin::TLoginProvider::TLoginUserResponse& loginResponse, NIceDb::TNiceDb& db) {
+    void HandleLoginAuthInvalidPassword(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, const NLogin::TLoginProvider::TLoginUserResponse& /* loginResponse */, NIceDb::TNiceDb& db) {
         db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::LastFailedAttempt, Schema::LoginSids::FailedAttemptCount>(TAppData::TimeProvider->Now().MicroSeconds(), CurrentFailedAttemptCount + 1);
     }
 };

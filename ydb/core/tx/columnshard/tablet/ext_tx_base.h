@@ -2,8 +2,9 @@
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/library/actors/core/actor.h>
 
-namespace NKikimr::NOlap::NDataSharing {
+namespace NKikimr::NColumnShard {
 
+//Base class for LocalDB transactions with ColumnShard specific
 template <class TShard>
 class TExtendedTransactionBase: public NTabletFlatExecutor::TTransactionBase<TShard> {
 private:
@@ -32,4 +33,4 @@ public:
     }
 };
 
-}
+} //namespace NKikimr::NColumnShard

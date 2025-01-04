@@ -3,7 +3,7 @@
 #include "sync.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/data_sharing/common/transactions/tx_extension.h>
+#include <ydb/core/tx/columnshard/tablet/ext_tx_base.h>
 
 #include <util/string/join.h>
 
@@ -77,9 +77,9 @@ private:
     virtual TString DoDebugString() const override {
         return "EV_WRITE_PRIMARY";
     }
-    class TTxWriteReceivedBrokenFlag: public NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard> {
+    class TTxWriteReceivedBrokenFlag: public TExtendedTransactionBase<TColumnShard> {
     private:
-        using TBase = NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard>;
+        using TBase = TExtendedTransactionBase<TColumnShard>;
         const ui64 TxId;
         const ui64 TabletId;
         const bool BrokenFlag;
@@ -126,9 +126,9 @@ private:
         return std::make_unique<TTxWriteReceivedBrokenFlag>(owner, GetTxId(), sendTabletId, broken);
     }
 
-    class TTxWriteReceivedResultAck: public NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard> {
+    class TTxWriteReceivedResultAck: public TExtendedTransactionBase<TColumnShard> {
     private:
-        using TBase = NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard>;
+        using TBase = TExtendedTransactionBase<TColumnShard>;
         const ui64 TxId;
         const ui64 TabletId;
 
@@ -222,9 +222,9 @@ private:
         CheckFinished(owner);
     }
 
-    class TTxStartPreparation: public NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard> {
+    class TTxStartPreparation: public TExtendedTransactionBase<TColumnShard> {
     private:
-        using TBase = NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard>;
+        using TBase = TExtendedTransactionBase<TColumnShard>;
         const ui64 TxId;
 
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {

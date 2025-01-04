@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/data_sharing/common/transactions/tx_extension.h>
+#include <ydb/core/tx/columnshard/tablet/ext_tx_base.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
@@ -12,9 +12,9 @@ namespace NKikimr::NColumnShard {
 
 class TColumnShard;
 
-class TTxBlobsWritingFinished: public NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard> {
+class TTxBlobsWritingFinished: public TExtendedTransactionBase<TColumnShard> {
 private:
-    using TBase = NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard>;
+    using TBase = TExtendedTransactionBase<TColumnShard>;
     std::vector<TInsertedPortions> Packs;
     const std::shared_ptr<NOlap::IBlobsWritingAction> WritingActions;
     std::optional<NOlap::TSnapshot> CommitSnapshot;
@@ -51,9 +51,9 @@ public:
     }
 };
 
-class TTxBlobsWritingFailed: public NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard> {
+class TTxBlobsWritingFailed: public TExtendedTransactionBase<TColumnShard> {
 private:
-    using TBase = NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard>;
+    using TBase = TExtendedTransactionBase<TColumnShard>;
     const NKikimrProto::EReplyStatus PutBlobResult;
     std::vector<TInsertedPortions> Packs;
 

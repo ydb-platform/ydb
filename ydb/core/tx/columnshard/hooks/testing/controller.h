@@ -285,7 +285,7 @@ public:
     }
 
     void SetRestartOnLocalTxCommitted(std::optional<TString> txInfo) {
-        RestartOnLocalDbTxCommitted = txInfo;
+        RestartOnLocalDbTxCommitted = std::move(txInfo);
     }
 
     virtual void OnAfterLocalTxCommitted(const NActors::TActorContext& ctx, const ::NKikimr::NColumnShard::TColumnShard& shard, const TString& txInfo) override;

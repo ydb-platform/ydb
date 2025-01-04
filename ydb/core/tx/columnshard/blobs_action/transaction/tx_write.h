@@ -5,9 +5,9 @@
 
 namespace NKikimr::NColumnShard {
 
-class TTxWrite: public TExtendedTransactionBase<TColumnShard> {
+class TTxWrite: public TExtendedTransactionBase {
 private:
-    using TBase = TExtendedTransactionBase<TColumnShard>;
+    using TBase = TExtendedTransactionBase;
 
 public:
     TTxWrite(TColumnShard* self, const TEvPrivate::TEvWriteBlobsResult::TPtr& putBlobResult)

@@ -135,7 +135,12 @@ private:
 public:
     ui64 GetTargetCompactionLevel() const {
         if (MemoryUsage > ((ui64)1 << 30)) {
-            AFL_VERIFY(TargetCompactionLevel);
+            if (TargetCompactionLevel) {
+                return TargetCompactionLevel - 1;
+            } else {
+                AFL_VERIFY(false);
+                return 0;
+            }
             return TargetCompactionLevel - 1;
         } else {
             return TargetCompactionLevel;

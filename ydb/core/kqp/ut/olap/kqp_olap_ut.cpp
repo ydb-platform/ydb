@@ -2653,7 +2653,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         //        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
 
         {
             auto alterQuery = TStringBuilder() <<
@@ -2738,7 +2737,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         //        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
@@ -2794,7 +2792,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
 
         testHelper.CreateTestOlapTable();

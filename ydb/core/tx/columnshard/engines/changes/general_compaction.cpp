@@ -149,8 +149,8 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     NChanges::TGeneralCompactionCounters::OnRepackPortions(insertedPortions + compactedPortions);
     NChanges::TGeneralCompactionCounters::OnRepackInsertedPortions(insertedPortions);
     NChanges::TGeneralCompactionCounters::OnRepackCompactedPortions(compactedPortions);
-    if (TargetCompactionLevel) {
-        NChanges::TGeneralCompactionCounters::OnRepackPortionsByLevel(portionGroups, *TargetCompactionLevel);
+    if (GetPortionsToMove().GetTargetCompactionLevel()) {
+        NChanges::TGeneralCompactionCounters::OnRepackPortionsByLevel(portionGroups, *GetPortionsToMove().GetTargetCompactionLevel());
     }
 
     {

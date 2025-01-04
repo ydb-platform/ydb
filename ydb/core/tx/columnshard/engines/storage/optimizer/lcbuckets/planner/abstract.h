@@ -141,7 +141,6 @@ public:
                 AFL_VERIFY(false);
                 return 0;
             }
-            return TargetCompactionLevel - 1;
         } else {
             return TargetCompactionLevel;
         }

@@ -23,7 +23,7 @@ target_link_libraries(tx-columnshard-tablet PUBLIC
 )
 
 target_sources(tx-columnshard-tablet PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/tablet/ext_tx_base.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/tablet/write_queue.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/tablet/ext_tx_base.h
 )
 

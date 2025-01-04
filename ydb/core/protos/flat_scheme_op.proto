@@ -484,6 +484,7 @@ message TCompactionLevelConstructorContainer {
     message TZeroLevel {
         optional uint32 PortionsLiveDurationSeconds = 1;
         optional uint64 ExpectedBlobsSize = 2;
+        optional uint64 PortionsCountAvailable = 3;
     }
 
     oneof Implementation {

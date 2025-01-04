@@ -105,12 +105,6 @@ protected:
     virtual TDuration DoGetActualizationTasksLag(const TDuration defaultValue) const {
         return defaultValue;
     }
-    virtual ui64 DoGetReduceMemoryIntervalLimit(const ui64 defaultValue) const {
-        return defaultValue;
-    }
-    virtual ui64 DoGetRejectMemoryIntervalLimit(const ui64 defaultValue) const {
-        return defaultValue;
-    }
     virtual ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 defaultValue) const {
         return defaultValue;
     }
@@ -221,14 +215,6 @@ public:
         return DoGetActualizationTasksLag(defaultValue);
     }
 
-    ui64 GetReduceMemoryIntervalLimit() const {
-        const ui64 defaultValue = NOlap::TGlobalLimits::DefaultReduceMemoryIntervalLimit;
-        return DoGetReduceMemoryIntervalLimit(defaultValue);
-    }
-    ui64 GetRejectMemoryIntervalLimit() const {
-        const ui64 defaultValue = NOlap::TGlobalLimits::DefaultRejectMemoryIntervalLimit;
-        return DoGetRejectMemoryIntervalLimit(defaultValue);
-    }
     ui64 GetMetadataRequestSoftMemoryLimit() const {
         const ui64 defaultValue = 100 * (1 << 20);
         return DoGetMetadataRequestSoftMemoryLimit(defaultValue);

@@ -51,6 +51,8 @@ class TChangesWithAppend;
 class TCompactColumnEngineChanges;
 class TInsertColumnEngineChanges;
 class TStoragesManager;
+class TRemovePortionsChange;
+class TMovePortionsChange;
 
 namespace NReader {
 class TTxScan;
@@ -206,6 +208,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NOlap::NReader::TTxInternalScan;
     friend class NOlap::NReader::NPlain::TIndexScannerConstructor;
     friend class NOlap::NReader::NSimple::TIndexScannerConstructor;
+    friend class NOlap::TRemovePortionsChange;
+    friend class NOlap::TMovePortionsChange;
 
     class TStoragesManager;
     friend class TTxController;

@@ -283,6 +283,31 @@ std::set<ui32> ISnapshotSchema::GetColumnsWithDifferentDefaults(
     return result;
 }
 
+class TSchemaIterator {
+private:
+    std::vector<std::shared_ptr<arrow::Field>> Fields;
+    std::vector<std::shared_ptr<arrow::Field>>::const_iterator Current;
+
+public:
+    bool IsValid() const {
+        return Current != Fields.end();
+    }
+
+    const std::shared_ptr<arrow::Field>& GetValue() const {
+        AFL_VERIFY(IsValid());
+        return *Current;
+    }
+};
+
+TConclusion<std::shared_ptr<arrow::Schema>> ISnapshotSchema::MergeSortedSchemas(std::vector<std::shared_ptr<arrow::Schema>>& schemas) const {
+    std::vector<TSchemaIterator> iterators;
+    for (auto&& i : schemas) {
+        iterators.emplace_back(i);
+    }
+    auto itIndex = GetIndexInfo().ArrowSchema().begin();
+    auto itIndexEnd = GetIndexInfo().ArrowSchema().end();
+}
+
 TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const ui64 pathId,
     const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
     const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const {
@@ -316,10 +341,8 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
                 saver.Apply(rbToWrite), arrToWrite, TChunkAddress(columnId, 0), columnFeatures) };
             AFL_VERIFY(chunks.emplace(columnId, std::move(columnChunks)).second);
             ++itIncoming;
-            ++itIndex;
-        } else {
-            ++itIndex;
         }
+        ++itIndex;
     }
     AFL_VERIFY(itIncoming == itIncomingEnd);
 

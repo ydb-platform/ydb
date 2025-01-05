@@ -49,9 +49,14 @@ TConclusionStatus TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*t
         case NEvWrite::EModificationType::Upsert: {
             const std::vector<std::shared_ptr<arrow::Field>> defaultFields = Context.GetActualSchema()->GetAbsentFields(batch->schema());
             if (defaultFields.empty()) {
-                std::shared_ptr<NConveyor::ITask> task =
-                    std::make_shared<NOlap::TBuildSlicesTask>(BufferActorId, std::move(WriteData), batch, Context);
-                NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+                if (!WriteData.GetWritePortions()) {
+                    std::shared_ptr<NConveyor::ITask> task =
+                        std::make_shared<NOlap::TBuildSlicesTask>(BufferActorId, std::move(WriteData), batch, Context);
+                    NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+                } else {
+                    NActors::TActivationContext::ActorSystem()->Send(
+                        BufferActorId, new NWritingPortions::TEvAddInsertedDataToBuffer(WriteData, batch, Context));
+                }
                 return TConclusionStatus::Success();
             } else {
                 auto insertionConclusion = Context.GetActualSchema()->CheckColumnsDefault(defaultFields);
@@ -76,9 +81,14 @@ TConclusionStatus TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*t
         }
         case NEvWrite::EModificationType::Replace:
         case NEvWrite::EModificationType::Delete: {
-            std::shared_ptr<NConveyor::ITask> task =
-                std::make_shared<NOlap::TBuildSlicesTask>(BufferActorId, std::move(WriteData), batch, Context);
-            NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+            if (!WriteData.GetWritePortions()) {
+                std::shared_ptr<NConveyor::ITask> task =
+                    std::make_shared<NOlap::TBuildSlicesTask>(BufferActorId, std::move(WriteData), batch, Context);
+                NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+            } else {
+                NActors::TActivationContext::ActorSystem()->Send(
+                    BufferActorId, new NWritingPortions::TEvAddInsertedDataToBuffer(WriteData, batch, Context));
+            }
             return TConclusionStatus::Success();
         }
     }

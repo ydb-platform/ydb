@@ -93,39 +93,29 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
     TMemoryProfileGuard mpg("TEvWritePortionResult");
     NActors::TLogContextGuard gLogging =
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)("tablet_id", TabletID())("event", "TEvWritePortionResult");
-    std::vector<TNoDataWrite> noDataWrites = ev->Get()->DetachNoDataWrites();
-    for (auto&& i : noDataWrites) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "no_data_write_finished")("writing_size", i.GetDataSize())(
-            "writing_id", i.GetWriteMeta().GetId());
-        Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
-    }
+    TInsertedPortions writtenData = ev->Get()->DetachInsertedData();
     if (ev->Get()->GetWriteStatus() == NKikimrProto::OK) {
-        std::vector<TInsertedPortions> writtenPacks = ev->Get()->DetachInsertedPacks();
         const TMonotonic now = TMonotonic::Now();
-        for (auto&& i : writtenPacks) {
+        for (auto&& i: writtenData.GetWriteResults()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", i.GetDataSize())("event", "data_write_finished")(
                 "writing_id", i.GetWriteMeta().GetId());
             Counters.OnWritePutBlobsSuccess(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount());
             Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
         }
         Execute(new TTxBlobsWritingFinished(
-                    this, ev->Get()->GetWriteStatus(), ev->Get()->GetWriteAction(), std::move(writtenPacks), std::move(noDataWrites)),
+                    this, ev->Get()->GetWriteStatus(), ev->Get()->GetWriteAction(), std::move(writtenData)),
             ctx);
     } else {
-        if (noDataWrites.size()) {
-            Execute(new TTxBlobsWritingFinished(this, NKikimrProto::OK, ev->Get()->GetWriteAction(), {}, std::move(noDataWrites)), ctx);
-        }
-
-        std::vector<TInsertedPortions> writtenPacks = ev->Get()->DetachInsertedPacks();
         const TMonotonic now = TMonotonic::Now();
-        for (auto&& i : writtenPacks) {
+        for (auto&& i : writtenData.GetWriteResults()) {
             Counters.OnWritePutBlobsFailed(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount());
             Counters.GetCSCounters().OnWritePutBlobsFail(now - i.GetWriteMeta().GetWriteStartInstant());
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", i.GetDataSize())("event", "data_write_error")(
                 "writing_id", i.GetWriteMeta().GetId());
             Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
         }
-        Execute(new TTxBlobsWritingFailed(this, ev->Get()->GetWriteStatus(), std::move(writtenPacks)), ctx);
+
+        Execute(new TTxBlobsWritingFailed(this, ev->Get()->GetWriteStatus(), std::move(writtenData)), ctx);
     }
 }
 
@@ -577,6 +567,11 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
             TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
         OverloadWriteFail(overloadStatus, NEvWrite::TWriteMeta(0, pathId, source, {}, TGUID::CreateTimebased().AsGuidString()),
             arrowData->GetSize(), cookie, std::move(result), ctx);
+        return;
+    }
+
+    if (!AppDataVerified().ColumnShardConfig.GetWritingEnabled()) {
+        sendError("writing disabled", NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
         return;
     }
 

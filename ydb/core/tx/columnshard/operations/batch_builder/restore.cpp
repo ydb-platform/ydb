@@ -46,9 +46,14 @@ NKikimr::TConclusionStatus TModificationRestoreTask::DoOnFinished() {
     }
 
     auto batchResult = Merger->BuildResultBatch();
-    std::shared_ptr<NConveyor::ITask> task =
-        std::make_shared<NOlap::TBuildSlicesTask>(BufferActorId, std::move(WriteData), batchResult, Context);
-    NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+    if (!WriteData.GetWritePortions()) {
+        std::shared_ptr<NConveyor::ITask> task =
+            std::make_shared<NOlap::TBuildSlicesTask>(BufferActorId, std::move(WriteData), batchResult, Context);
+        NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+    } else {
+        NActors::TActivationContext::ActorSystem()->Send(
+            BufferActorId, new NWritingPortions::TEvAddInsertedDataToBuffer(WriteData, batchResult, Context));
+    }
     return TConclusionStatus::Success();
 }
 

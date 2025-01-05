@@ -53,8 +53,19 @@ private:
     YDB_ACCESSOR(TMonotonic, WriteMiddle5StartInstant, TMonotonic::Now());
     YDB_ACCESSOR(TMonotonic, WriteMiddle6StartInstant, TMonotonic::Now());
     std::optional<ui64> LockId;
+    std::optional<EOperationBehaviour> Behaviour;
 
 public:
+    EOperationBehaviour GetBehaviour() const {
+        AFL_VERIFY(!!Behaviour);
+        return Behaviour;
+    }
+
+    void SetBehaviour(const EOperationBehaviour value) {
+        AFL_VERIFY(!Behaviour);
+        Behaviour = value;
+    }
+
     void SetLockId(const ui64 lockId) {
         LockId = lockId;
     }

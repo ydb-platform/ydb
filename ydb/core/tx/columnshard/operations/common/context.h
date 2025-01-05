@@ -18,6 +18,15 @@ private:
     const std::shared_ptr<const TAtomicCounter> ActivityChecker;
 
 public:
+    void MergeFrom(const TWritingContext& newContext) {
+        AFL_VERIFY(TabletId == newContext.TabletId);
+        AFL_VERIFY(TabletActorId == newContext.TabletActorId);
+        AFL_VERIFY(ActualSchema->GetVersion() == newContext.ActualSchema->GetVersion());
+        if (ApplyToSnapshot < newContext.ApplyToSnapshot) {
+            ApplyToSnapshot = newContext.ApplyToSnapshot;
+        }
+    }
+
     bool IsActive() const {
         return ActivityChecker->Val();
     }

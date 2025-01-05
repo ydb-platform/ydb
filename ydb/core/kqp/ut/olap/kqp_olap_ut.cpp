@@ -2991,6 +2991,36 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 .GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
     }
+
+    Y_UNIT_TEST_TWIN(DeleteAbsent, Reboot) {
+        //This test tries to DELETE from a table with WHERE condition that matches no rows
+        //It corresponds to a SCAN, then NO write then COMMIT
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+        NKikimrConfig::TAppConfig appConfig;
+        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("value").SetType(NScheme::NTypeIds::Int32).SetNullable(true),
+        };
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ttt").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        if (Reboot) {
+            csController->SetRestartOnLocalTxCommitted("TProposeWriteTransaction");
+        }
+        auto client = testHelper.GetKikimr().GetQueryClient();
+        const auto resultDelete =
+            client
+                .ExecuteQuery(
+                    "DELETE from `/Root/ttt` WHERE value % 2 == 1;",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .GetValueSync();
+        UNIT_ASSERT_C(resultDelete.IsSuccess(), resultDelete.GetIssues().ToString());
+    }
 }
 
 }

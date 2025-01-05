@@ -11,6 +11,7 @@ bool TExtendedTransactionBase::Execute(NTabletFlatExecutor::TTransactionContext&
 void TExtendedTransactionBase::Complete(const NActors::TActorContext& ctx) {
     NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", Self->TabletID())("local_tx_no", TabletTxNo)("method", "complete")("tx_info", TxInfo);
     DoComplete(ctx);
+    NYDBTest::TControllers::GetColumnShardController()->OnAfterLocalTxCommitted(ctx, *Self, TxInfo);
 }
 
 TExtendedTransactionBase::TExtendedTransactionBase(TColumnShard* self, const TString& txInfo)

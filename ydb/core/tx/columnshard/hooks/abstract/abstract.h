@@ -322,6 +322,13 @@ public:
     virtual void OnCleanupActors(const ui64 tabletId) {
         Y_UNUSED(tabletId);
     }
+
+    virtual void OnAfterLocalTxCommitted(const NActors::TActorContext& ctx, const NColumnShard::TColumnShard& shard, const TString& txInfo) {
+        Y_UNUSED(ctx);
+        Y_UNUSED(shard);
+        Y_UNUSED(txInfo);
+    }
+
 };
 
 class TControllers {

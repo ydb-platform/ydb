@@ -376,19 +376,19 @@ private:
     ui64 ArbiterColumnShard = 0;
 };
 
-class TProposeWriteTransaction: public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
+class TProposeWriteTransaction: public TExtendedTransactionBase {
 private:
-    using TBase = NTabletFlatExecutor::TTransactionBase<TColumnShard>;
+    using TBase = TExtendedTransactionBase;
 
 public:
     TProposeWriteTransaction(TColumnShard* self, TCommitOperation::TPtr op, const TActorId source, const ui64 cookie)
-        : TBase(self)
+        : TBase(self, "TProposeWriteTransaction")
         , WriteCommit(op)
         , Source(source)
         , Cookie(cookie) {
     }
 
-    virtual bool Execute(TTransactionContext& txc, const TActorContext&) override {
+    virtual bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
         NKikimrTxColumnShard::TCommitWriteTxBody proto;
         NKikimrTxColumnShard::ETransactionKind kind;
         if (WriteCommit->NeedSyncLocks()) {
@@ -407,7 +407,7 @@ public:
         return true;
     }
 
-    virtual void Complete(const TActorContext& ctx) override {
+    virtual void DoComplete(const TActorContext& ctx) override {
         Self->GetProgressTxController().FinishProposeOnComplete(WriteCommit->GetTxId(), ctx);
     }
     TTxType GetTxType() const override {

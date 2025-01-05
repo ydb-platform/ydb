@@ -26,7 +26,7 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) {
     writeOperation->SetBehaviour(Behaviour);
     NOlap::TWritingContext wContext(owner->TabletID(), owner->SelfId(), Schema, owner->StoragesManager,
         owner->Counters.GetIndexationCounters().SplitterCounters, owner->Counters.GetCSCounters().WritingCounters, NOlap::TSnapshot::Max(),
-        writeOperation->GetActivityChecker());
+        writeOperation->GetActivityChecker(), Behaviour == EOperationBehaviour::NoTxWrite);
     ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId)->GetBucketPositions());
     writeOperation->Start(*owner, ArrowData, SourceId, wContext);
     return true;

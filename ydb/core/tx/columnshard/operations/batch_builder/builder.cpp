@@ -49,7 +49,7 @@ TConclusionStatus TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*t
         case NEvWrite::EModificationType::Upsert: {
             const std::vector<std::shared_ptr<arrow::Field>> defaultFields = Context.GetActualSchema()->GetAbsentFields(batch->schema());
             if (defaultFields.empty()) {
-                if (!WriteData.GetWritePortions()) {
+                if (!WriteData.GetWritePortions() || !Context.GetNoTxWrite()) {
                     std::shared_ptr<NConveyor::ITask> task =
                         std::make_shared<NOlap::TBuildSlicesTask>(BufferActorId, std::move(WriteData), batch, Context);
                     NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
@@ -81,7 +81,7 @@ TConclusionStatus TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*t
         }
         case NEvWrite::EModificationType::Replace:
         case NEvWrite::EModificationType::Delete: {
-            if (!WriteData.GetWritePortions()) {
+            if (!WriteData.GetWritePortions() || !Context.GetNoTxWrite()) {
                 std::shared_ptr<NConveyor::ITask> task =
                     std::make_shared<NOlap::TBuildSlicesTask>(BufferActorId, std::move(WriteData), batch, Context);
                 NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);

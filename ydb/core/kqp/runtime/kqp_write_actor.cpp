@@ -775,7 +775,7 @@ public:
 
     void OnMessageReceived(const ui64 shardId) {
         if (auto it = SendTime.find(shardId); it != std::end(SendTime)) {
-            Counters->WriteActorWritesLatencyHistogram->Collect((TInstant::Now() - it->second).MilliSeconds());
+            Counters->WriteActorWritesLatencyHistogram->Collect((TInstant::Now() - it->second).MicroSeconds());
             SendTime.erase(it);
         }
     }
@@ -1586,7 +1586,6 @@ public:
                 Send<ESendingType::Tail>(AckQueue.front().ForwardActorId, result.release());
                 AckQueue.pop();
             } else {
-                YQL_ENSURE(false);
                 return;
             }
         }
@@ -2186,7 +2185,7 @@ public:
 
     void OnMessageReceived(const ui64 shardId) {
         if (auto it = SendTime.find(shardId); it != std::end(SendTime)) {
-            Counters->WriteActorWritesLatencyHistogram->Collect((TInstant::Now() - it->second).MilliSeconds());
+            Counters->WriteActorWritesLatencyHistogram->Collect((TInstant::Now() - it->second).MicroSeconds());
             SendTime.erase(it);
         }
     }
@@ -2471,7 +2470,7 @@ private:
         EgressStats.Resume();
 
         Counters->ForwardActorWritesSizeHistogram->Collect(DataSize);
-        Counters->ForwardActorWritesLatencyHistogram->Collect((TInstant::Now() - SendTime).MilliSeconds());
+        Counters->ForwardActorWritesLatencyHistogram->Collect((TInstant::Now() - SendTime).MicroSeconds());
 
         WriteToken = result->Get()->Token;
         DataSize = 0;

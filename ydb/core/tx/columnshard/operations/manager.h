@@ -16,12 +16,12 @@ namespace NKikimr::NColumnShard {
 class TColumnShard;
 class TLockFeatures;
 
-class TLockSharingInfo {
+class TLockSharingInfo: TMoveOnly {
 private:
     const ui64 LockId;
     const ui64 Generation;
     TAtomicCounter InternalGenerationCounter = 0;
-    TAtomicCounter Broken = 0;
+    std::atomic<bool> Broken = false;
     TAtomicCounter WritesCounter = 0;
     friend class TLockFeatures;
 
@@ -33,9 +33,10 @@ public:
         return Generation;
     }
 
-    TLockSharingInfo(const ui64 lockId, const ui64 generation)
+    TLockSharingInfo(const ui64 lockId, const ui64 generation, const bool broken)
         : LockId(lockId)
-        , Generation(generation) {
+        , Generation(generation)
+        , Broken(broken) {
     }
 
     bool HasWrites() const {
@@ -43,7 +44,7 @@ public:
     }
 
     bool IsBroken() const {
-        return Broken.Val();
+        return Broken;
     }
 
     ui64 GetCounter() const {
@@ -108,10 +109,10 @@ public:
         }
     }
 
-    TLockFeatures(const ui64 lockId, const ui64 gen)
+    TLockFeatures(const ui64 lockId, const ui64 gen, const bool broken)
         : LockId(lockId)
         , Generation(gen) {
-        SharingInfo = std::make_shared<TLockSharingInfo>(lockId, gen);
+        SharingInfo = std::make_shared<TLockSharingInfo>(lockId, gen, broken);
     }
 };
 
@@ -194,7 +195,7 @@ public:
         if (LockFeatures.contains(lockId)) {
             return false;
         } else {
-            LockFeatures.emplace(lockId, TLockFeatures(lockId, generationId));
+            LockFeatures.emplace(lockId, TLockFeatures(lockId, generationId, false));
             return true;
         }
     }

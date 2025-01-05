@@ -37,7 +37,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             AFL_VERIFY(Operations.emplace(operation->GetWriteId(), operation).second);
             auto it = LockFeatures.find(lockId);
             if (it == LockFeatures.end()) {
-                it = LockFeatures.emplace(lockId, TLockFeatures(lockId, 0)).first;
+                it = LockFeatures.emplace(lockId, TLockFeatures(lockId, 0, false)).first;
             }
             it->second.MutableWriteOperations().emplace_back(operation);
             LastWriteId = std::max(LastWriteId, operation->GetWriteId());
@@ -55,7 +55,10 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         while (!rowset.EndOfSet()) {
             const ui64 lockId = rowset.GetValue<Schema::OperationTxIds::LockId>();
             const ui64 txId = rowset.GetValue<Schema::OperationTxIds::TxId>();
-            AFL_VERIFY(LockFeatures.contains(lockId))("lock_id", lockId);
+            auto it = LockFeatures.find(lockId);
+            if (it == LockFeatures.end()) { //No write operation found, recover the lock as a broken
+                it = LockFeatures.emplace(lockId, TLockFeatures(lockId, 0, true)).first;
+            }
             AFL_VERIFY(Tx2Lock.emplace(txId, lockId).second);
             if (!rowset.Next()) {
                 return false;

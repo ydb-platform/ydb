@@ -24,6 +24,7 @@ struct TQueryRequest {
 struct TCreateSessionRequest {
     std::unique_ptr<NKikimr::NKqp::TEvKqp::TEvCreateSessionRequest> Event;
     ui32 TargetNode;
+    ui8 VerboseLevel;
 };
 
 struct TEvPrivate {

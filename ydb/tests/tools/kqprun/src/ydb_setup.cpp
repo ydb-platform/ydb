@@ -65,7 +65,7 @@ private:
 
 class TSessionState {
 public:
-    explicit TSessionState(NActors::TTestActorRuntime* runtime, ui32 targetNodeIndex, const TString& database, const TString& traceId)
+    explicit TSessionState(NActors::TTestActorRuntime* runtime, ui32 targetNodeIndex, const TString& database, const TString& traceId, ui8 verboseLevel)
         : Runtime_(runtime)
         , TargetNodeIndex_(targetNodeIndex)
     {
@@ -78,7 +78,8 @@ public:
         auto closePromise = NThreading::NewPromise<void>();
         SessionHolderActor_ = Runtime_->Register(CreateSessionHolderActor(TCreateSessionRequest{
             .Event = std::move(event),
-            .TargetNode = Runtime_->GetNodeId(targetNodeIndex)
+            .TargetNode = Runtime_->GetNodeId(targetNodeIndex),
+            .VerboseLevel = verboseLevel
         }, openPromise, closePromise));
 
         SessionId_ = openPromise.GetFuture().GetValueSync();
@@ -210,7 +211,7 @@ private:
         serverSettings.SetYtGateway(Settings_.YtGateway);
         serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
         serverSettings.SetInitializeFederatedQuerySetupFactory(true);
-        serverSettings.SetVerbose(false);
+        serverSettings.SetVerbose(Settings_.VerboseLevel >= 2);
 
         SetLoggerSettings(serverSettings);
         SetFunctionRegistry(serverSettings);
@@ -355,13 +356,13 @@ public:
         InitializeServer(grpcPort);
         WaitResourcesPublishing();
 
-        if (Settings_.MonitoringEnabled) {
+        if (Settings_.MonitoringEnabled && Settings_.VerboseLevel >= 1) {
             for (ui32 nodeIndex = 0; nodeIndex < Settings_.NodeCount; ++nodeIndex) {
                 Cout << CoutColors_.Cyan() << "Monitoring port" << (Settings_.NodeCount > 1 ? TStringBuilder() << " for node " << nodeIndex + 1 : TString()) << ": " << CoutColors_.Default() << Server_->GetRuntime()->GetMonPort(nodeIndex) << Endl;
             }
         }
 
-        if (Settings_.GrpcEnabled) {
+        if (Settings_.GrpcEnabled && Settings_.VerboseLevel >= 1) {
             Cout << CoutColors_.Cyan() << "Domain gRPC port: " << CoutColors_.Default() << grpcPort << Endl;
         }
     }
@@ -516,7 +517,7 @@ private:
 
         if (Settings_.SameSession) {
             if (!SessionState_) {
-                SessionState_ = TSessionState(GetRuntime(), targetNodeIndex, database, query.TraceId);
+                SessionState_ = TSessionState(GetRuntime(), targetNodeIndex, database, query.TraceId, Settings_.VerboseLevel);
             }
             request->SetSessionId(SessionState_->GetSessionId());
         }

@@ -299,6 +299,7 @@ public:
     TSessionHolderActor(TCreateSessionRequest request, NThreading::TPromise<TString> openPromise, NThreading::TPromise<void> closePromise)
         : TargetNode_(request.TargetNode)
         , TraceId_(request.Event->Record.GetTraceId())
+        , VerboseLevel_(request.VerboseLevel)
         , Request_(std::move(request.Event))
         , OpenPromise_(openPromise)
         , ClosePromise_(closePromise)
@@ -317,7 +318,9 @@ public:
         }
 
         SessionId_ = response.GetResponse().GetSessionId();
-        Cout << CoutColors_.Cyan() << "Created new session on node " << TargetNode_ << " with id " << SessionId_ << "\n";
+        if (VerboseLevel_ >= 1) {
+            Cout << CoutColors_.Cyan() << "Created new session on node " << TargetNode_ << " with id " << SessionId_ << "\n";
+        }
 
         PingSession();
     }
@@ -393,6 +396,7 @@ private:
 private:
     const ui32 TargetNode_;
     const TString TraceId_;
+    const ui8 VerboseLevel_;
     const NColorizer::TColors CoutColors_ = NColorizer::AutoColors(Cout);
 
     std::unique_ptr<NKikimr::NKqp::TEvKqp::TEvCreateSessionRequest> Request_;

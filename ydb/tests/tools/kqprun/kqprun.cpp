@@ -649,6 +649,11 @@ protected:
             {"each-query", TAsyncQueriesSettings::EVerbose::EachQuery},
             {"final", TAsyncQueriesSettings::EVerbose::Final}
         });
+
+        options.AddLongOption("verbose", "Common verbose level (max level 2)")
+            .RequiredArgument("uint")
+            .DefaultValue(1)
+            .StoreResult(&RunnerOptions.YdbSettings.VerboseLevel);
         options.AddLongOption("async-verbose", "Verbose type for async queries")
             .RequiredArgument("type")
             .DefaultValue("each-query")

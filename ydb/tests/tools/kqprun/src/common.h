@@ -46,6 +46,7 @@ struct TYdbSetupSettings {
 
     bool TraceOptEnabled = false;
     TString LogOutputFile;
+    ui8 VerboseLevel = 1;
 
     TString YqlToken;
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;

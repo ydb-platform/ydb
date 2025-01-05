@@ -80,6 +80,7 @@ struct TRunnerOptions {
     EResultOutputFormat ResultOutputFormat = EResultOutputFormat::RowsJson;
     NYdb::NConsoleClient::EDataFormat PlanOutputFormat = NYdb::NConsoleClient::EDataFormat::Default;
     ETraceOptType TraceOptType = ETraceOptType::Disabled;
+    std::optional<size_t> TraceOptScriptId;
 
     TDuration ScriptCancelAfter;
 
@@ -95,6 +96,7 @@ struct TRequestOptions {
     TString UserSID;
     TString Database;
     TDuration Timeout;
+    size_t QueryId = 0;
 };
 
 }  // namespace NKqpRun

@@ -22,6 +22,10 @@
 #include <yql/essentials/public/udf/udf_static_registry.h>
 
 
+namespace NKqpRun {
+
+namespace {
+
 struct TExecutionOptions {
     enum class EExecutionCase {
         GenericScript,
@@ -77,7 +81,7 @@ struct TExecutionOptions {
         return GetValue(index, ScriptQueryActions, NKikimrKqp::EQueryAction::QUERY_ACTION_EXECUTE);
     }
 
-    NKqpRun::TRequestOptions GetSchemeQueryOptions() const {
+    TRequestOptions GetSchemeQueryOptions() const {
         TString sql = SchemeQuery;
         if (UseTemplates) {
             ReplaceYqlTokenTemplate(sql);
@@ -94,7 +98,7 @@ struct TExecutionOptions {
         };
     }
 
-    NKqpRun::TRequestOptions GetScriptQueryOptions(size_t index, size_t queryId, TInstant startTime) const {
+    TRequestOptions GetScriptQueryOptions(size_t index, size_t queryId, TInstant startTime) const {
         Y_ABORT_UNLESS(index < ScriptQueries.size());
 
         TString sql = ScriptQueries[index];
@@ -110,11 +114,12 @@ struct TExecutionOptions {
             .PoolId = GetValue(index, PoolIds, TString()),
             .UserSID = GetValue(index, UserSIDs, TString(BUILTIN_ACL_ROOT)),
             .Database = GetValue(index, Databases, TString()),
-            .Timeout = GetValue(index, Timeouts, TDuration::Zero())
+            .Timeout = GetValue(index, Timeouts, TDuration::Zero()),
+            .QueryId = queryId
         };
     }
 
-    void Validate(const NKqpRun::TRunnerOptions& runnerOptions) const {
+    void Validate(const TRunnerOptions& runnerOptions) const {
         if (!SchemeQuery && ScriptQueries.empty() && !runnerOptions.YdbSettings.MonitoringEnabled && !runnerOptions.YdbSettings.GrpcEnabled) {
             ythrow yexception() << "Nothing to execute and is not running as daemon";
         }
@@ -123,7 +128,7 @@ struct TExecutionOptions {
         ValidateSchemeQueryOptions(runnerOptions);
         ValidateScriptExecutionOptions(runnerOptions);
         ValidateAsyncOptions(runnerOptions.YdbSettings.AsyncQueriesSettings);
-        ValidateTraceOpt(runnerOptions.TraceOptType);
+        ValidateTraceOpt(runnerOptions);
     }
 
 private:
@@ -143,7 +148,7 @@ private:
         checker(Timeouts.size(), "timeouts");
     }
 
-    void ValidateSchemeQueryOptions(const NKqpRun::TRunnerOptions& runnerOptions) const {
+    void ValidateSchemeQueryOptions(const TRunnerOptions& runnerOptions) const {
         if (SchemeQuery) {
             return;
         }
@@ -152,7 +157,7 @@ private:
         }
     }
 
-    void ValidateScriptExecutionOptions(const NKqpRun::TRunnerOptions& runnerOptions) const {
+    void ValidateScriptExecutionOptions(const TRunnerOptions& runnerOptions) const {
         if (runnerOptions.YdbSettings.SameSession && HasExecutionCase(EExecutionCase::AsyncQuery)) {
             ythrow yexception() << "Same session can not be used with async quries";
         }
@@ -194,7 +199,7 @@ private:
         }
     }
 
-    void ValidateAsyncOptions(const NKqpRun::TAsyncQueriesSettings& asyncQueriesSettings) const {
+    void ValidateAsyncOptions(const TAsyncQueriesSettings& asyncQueriesSettings) const {
         if (asyncQueriesSettings.InFlightLimit && !HasExecutionCase(EExecutionCase::AsyncQuery)) {
             ythrow yexception() << "In flight limit can not be used without async queries";
         }
@@ -205,26 +210,41 @@ private:
         }
     }
 
-    void ValidateTraceOpt(NKqpRun::TRunnerOptions::ETraceOptType traceOptType) const {
-        switch (traceOptType) {
-            case NKqpRun::TRunnerOptions::ETraceOptType::Scheme: {
+    void ValidateTraceOpt(const TRunnerOptions& runnerOptions) const {
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        switch (runnerOptions.TraceOptType) {
+            case TRunnerOptions::ETraceOptType::Scheme: {
                 if (!SchemeQuery) {
                     ythrow yexception() << "Trace opt type scheme cannot be used without scheme query";
                 }
                 break;
             }
-            case NKqpRun::TRunnerOptions::ETraceOptType::Script: {
+            case TRunnerOptions::ETraceOptType::Script: {
                 if (ScriptQueries.empty()) {
                     ythrow yexception() << "Trace opt type script cannot be used without script queries";
                 }
             }
-            case NKqpRun::TRunnerOptions::ETraceOptType::All: {
+            case TRunnerOptions::ETraceOptType::All: {
                 if (!SchemeQuery && ScriptQueries.empty()) {
                     ythrow yexception() << "Trace opt type all cannot be used without any queries";
                 }
             }
-            case NKqpRun::TRunnerOptions::ETraceOptType::Disabled: {
+            case TRunnerOptions::ETraceOptType::Disabled: {
                 break;
+            }
+        }
+
+        if (const auto traceOptId = runnerOptions.TraceOptScriptId) {
+            if (runnerOptions.TraceOptType != TRunnerOptions::ETraceOptType::Script) {
+                ythrow yexception() << "Trace opt id allowed only for trace opt type script (used " << runnerOptions.TraceOptType << ")";
+            }
+
+            const ui64 numberScripts = ScriptQueries.size() * LoopCount;
+            if (*traceOptId >= numberScripts) {
+                ythrow yexception() << "Invalid trace opt id " << *traceOptId << ", it should be less than number of scipt queries " << numberScripts;
+            }
+            if (numberScripts == 1) {
+                Cout << colors.Red() << "Warning: trace opt id is not necessary for single script mode, use -T script" << Endl;
             }
         }
     }
@@ -239,8 +259,8 @@ private:
     }
 
     static void ReplaceYqlTokenTemplate(TString& sql) {
-        const TString variableName = TStringBuilder() << "${" << NKqpRun::YQL_TOKEN_VARIABLE << "}";
-        if (const TString& yqlToken = GetEnv(NKqpRun::YQL_TOKEN_VARIABLE)) {
+        const TString variableName = TStringBuilder() << "${" << YQL_TOKEN_VARIABLE << "}";
+        if (const TString& yqlToken = GetEnv(YQL_TOKEN_VARIABLE)) {
             SubstGlobal(sql, variableName, yqlToken);
         } else if (sql.Contains(variableName)) {
             ythrow yexception() << "Failed to replace ${YQL_TOKEN} template, please specify YQL_TOKEN environment variable\n";
@@ -249,7 +269,7 @@ private:
 };
 
 
-void RunArgumentQuery(size_t index, size_t queryId, TInstant startTime, const TExecutionOptions& executionOptions, NKqpRun::TKqpRunner& runner) {
+void RunArgumentQuery(size_t index, size_t queryId, TInstant startTime, const TExecutionOptions& executionOptions, TKqpRunner& runner) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
     switch (executionOptions.GetExecutionCase(index)) {
@@ -292,7 +312,7 @@ void RunArgumentQuery(size_t index, size_t queryId, TInstant startTime, const TE
 }
 
 
-void RunArgumentQueries(const TExecutionOptions& executionOptions, NKqpRun::TKqpRunner& runner) {
+void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& runner) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
     if (executionOptions.SchemeQuery) {
@@ -354,11 +374,11 @@ void RunAsDaemon() {
 }
 
 
-void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunnerOptions& runnerOptions) {
+void RunScript(const TExecutionOptions& executionOptions, const TRunnerOptions& runnerOptions) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
     Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Initialization of kqp runner..." << colors.Default() << Endl;
-    NKqpRun::TKqpRunner runner(runnerOptions);
+    TKqpRunner runner(runnerOptions);
 
     try {
         RunArgumentQueries(executionOptions, runner);
@@ -403,11 +423,11 @@ TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistr
 
 
 class TMain : public TMainClassArgs {
-    inline static const TString YqlToken = GetEnv(NKqpRun::YQL_TOKEN_VARIABLE);
+    inline static const TString YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
     inline static std::vector<std::unique_ptr<TFileOutput>> FileHolders;
 
     TExecutionOptions ExecutionOptions;
-    NKqpRun::TRunnerOptions RunnerOptions;
+    TRunnerOptions RunnerOptions;
 
     THashMap<TString, TString> TablesMapping;
     TVector<TString> UdfsPaths;
@@ -524,13 +544,13 @@ protected:
                     std::remove(file.c_str());
                 }
             });
-        TChoices<NKqpRun::TRunnerOptions::ETraceOptType> traceOpt({
-            {"all", NKqpRun::TRunnerOptions::ETraceOptType::All},
-            {"scheme", NKqpRun::TRunnerOptions::ETraceOptType::Scheme},
-            {"script", NKqpRun::TRunnerOptions::ETraceOptType::Script},
-            {"disabled", NKqpRun::TRunnerOptions::ETraceOptType::Disabled}
+        TChoices<TRunnerOptions::ETraceOptType> traceOpt({
+            {"all", TRunnerOptions::ETraceOptType::All},
+            {"scheme", TRunnerOptions::ETraceOptType::Scheme},
+            {"script", TRunnerOptions::ETraceOptType::Script},
+            {"disabled", TRunnerOptions::ETraceOptType::Disabled}
         });
-        options.AddLongOption('T', "trace-opt", "print AST in the begin of each transformation")
+        options.AddLongOption('T', "trace-opt", "print AST in the begin of each transformation (use script@<query id> for tracing one -p query)")
             .RequiredArgument("trace-opt-query")
             .DefaultValue("disabled")
             .Choices(traceOpt.GetChoices())
@@ -539,6 +559,9 @@ protected:
                 RunnerOptions.YdbSettings.TraceOptEnabled = traceOptType != NKqpRun::TRunnerOptions::ETraceOptType::Disabled;
                 return traceOptType;
             });
+        options.AddLongOption('I', "trace-opt-index", "index of -p query to use --trace-opt, starts from zero")
+            .RequiredArgument("uint")
+            .StoreResult(&RunnerOptions.TraceOptScriptId);
         options.AddLongOption("trace-id", "Trace id for -p queries")
             .RequiredArgument("id")
             .EmplaceTo(&ExecutionOptions.TraceIds);
@@ -551,10 +574,10 @@ protected:
             .RequiredArgument("uint")
             .DefaultValue(0)
             .StoreResult(&ExecutionOptions.ResultsRowsLimit);
-        TChoices<NKqpRun::TRunnerOptions::EResultOutputFormat> resultFormat({
-            {"rows", NKqpRun::TRunnerOptions::EResultOutputFormat::RowsJson},
-            {"full-json", NKqpRun::TRunnerOptions::EResultOutputFormat::FullJson},
-            {"full-proto", NKqpRun::TRunnerOptions::EResultOutputFormat::FullProto}
+        TChoices<TRunnerOptions::EResultOutputFormat> resultFormat({
+            {"rows", TRunnerOptions::EResultOutputFormat::RowsJson},
+            {"full-json", TRunnerOptions::EResultOutputFormat::FullJson},
+            {"full-proto", TRunnerOptions::EResultOutputFormat::FullProto}
         });
         options.AddLongOption('R', "result-format", "Script query result format")
             .RequiredArgument("result-format")
@@ -620,9 +643,9 @@ protected:
             .RequiredArgument("uint")
             .DefaultValue(0)
             .StoreResult(&RunnerOptions.YdbSettings.AsyncQueriesSettings.InFlightLimit);
-        TChoices<NKqpRun::TAsyncQueriesSettings::EVerbose> verbose({
-            {"each-query", NKqpRun::TAsyncQueriesSettings::EVerbose::EachQuery},
-            {"final", NKqpRun::TAsyncQueriesSettings::EVerbose::Final}
+        TChoices<TAsyncQueriesSettings::EVerbose> verbose({
+            {"each-query", TAsyncQueriesSettings::EVerbose::EachQuery},
+            {"final", TAsyncQueriesSettings::EVerbose::Final}
         });
         options.AddLongOption("async-verbose", "Verbose type for async queries")
             .RequiredArgument("type")
@@ -814,13 +837,16 @@ void SegmentationFaultHandler(int) {
     abort();
 }
 
+}  // anonymous namespace
+
+}  // namespace NKqpRun
 
 int main(int argc, const char* argv[]) {
-    std::set_terminate(KqprunTerminateHandler);
-    signal(SIGSEGV, &SegmentationFaultHandler);
+    std::set_terminate(NKqpRun::KqprunTerminateHandler);
+    signal(SIGSEGV, &NKqpRun::SegmentationFaultHandler);
 
     try {
-        TMain().Run(argc, argv);
+        NKqpRun::TMain().Run(argc, argv);
     } catch (...) {
         NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
 

@@ -10,6 +10,8 @@ PEERDIR(
     ydb/core/testlib
 )
 
+GENERATE_ENUM_SERIALIZATION(common.h)
+
 YQL_LAST_ABI_VERSION()
 
 END()

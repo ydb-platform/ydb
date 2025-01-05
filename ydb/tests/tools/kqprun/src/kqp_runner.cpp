@@ -120,7 +120,7 @@ public:
     }
 
     bool ExecuteScript(const TRequestOptions& script) {
-        StartScriptTraceOpt();
+        StartScriptTraceOpt(script.QueryId);
 
         TRequestResult status = YdbSetup_.ScriptRequest(script, ExecutionOperation_);
 
@@ -136,7 +136,7 @@ public:
     }
 
     bool ExecuteQuery(const TRequestOptions& query, EQueryType queryType) {
-        StartScriptTraceOpt();
+        StartScriptTraceOpt(query.QueryId);
         StartTime_ = TInstant::Now();
 
         TString queryTypeStr;
@@ -267,6 +267,8 @@ private:
             Sleep(getOperationPeriod);
         }
 
+        TYdbSetup::StopTraceOpt();
+
         PrintScriptAst(ExecutionMeta_.Ast);
         PrintScriptProgress(ExecutionMeta_.Plan);
         PrintScriptPlan(ExecutionMeta_.Plan);
@@ -290,8 +292,14 @@ private:
         }
     }
 
-    void StartScriptTraceOpt() const {
-        if (Options_.TraceOptType == TRunnerOptions::ETraceOptType::All || Options_.TraceOptType == TRunnerOptions::ETraceOptType::Script) {
+    void StartScriptTraceOpt(size_t queryId) const {
+        bool startTraceOpt = Options_.TraceOptType == TRunnerOptions::ETraceOptType::All;
+
+        if (Options_.TraceOptType == TRunnerOptions::ETraceOptType::Script) {
+            startTraceOpt |= !Options_.TraceOptScriptId || *Options_.TraceOptScriptId == queryId;
+        }
+
+        if (startTraceOpt) {
             YdbSetup_.StartTraceOpt();
         }
     }

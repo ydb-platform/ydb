@@ -72,10 +72,10 @@ struct TRunnerOptions {
 
     IOutputStream* ResultOutput = nullptr;
     IOutputStream* SchemeQueryAstOutput = nullptr;
-    IOutputStream* ScriptQueryAstOutput = nullptr;
-    IOutputStream* ScriptQueryPlanOutput = nullptr;
-    TString ScriptQueryTimelineFile;
-    TString InProgressStatisticsOutputFile;
+    std::vector<IOutputStream*> ScriptQueryAstOutputs;
+    std::vector<IOutputStream*> ScriptQueryPlanOutputs;
+    std::vector<TString> ScriptQueryTimelineFiles;
+    std::vector<TString> InProgressStatisticsOutputFiles;
 
     EResultOutputFormat ResultOutputFormat = EResultOutputFormat::RowsJson;
     NYdb::NConsoleClient::EDataFormat PlanOutputFormat = NYdb::NConsoleClient::EDataFormat::Default;
@@ -98,5 +98,13 @@ struct TRequestOptions {
     TDuration Timeout;
     size_t QueryId = 0;
 };
+
+template <typename TValue>
+static TValue GetValue(size_t index, const std::vector<TValue>& values, TValue defaultValue) {
+    if (values.empty()) {
+        return defaultValue;
+    }
+    return values[std::min(index, values.size() - 1)];
+}
 
 }  // namespace NKqpRun

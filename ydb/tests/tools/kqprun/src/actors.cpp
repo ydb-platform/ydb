@@ -14,6 +14,7 @@ class TRunScriptActorMock : public NActors::TActorBootstrapped<TRunScriptActorMo
 public:
     TRunScriptActorMock(TQueryRequest request, NThreading::TPromise<TQueryResponse> promise, TProgressCallback progressCallback)
         : TargetNode_(request.TargetNode)
+        , QueryId_(request.QueryId)
         , Request_(std::move(request.Event))
         , Promise_(promise)
         , ResultRowsLimit_(std::numeric_limits<ui64>::max())
@@ -83,12 +84,14 @@ public:
 
     void Handle(NKikimr::NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
         if (ProgressCallback_) {
-            ProgressCallback_(ev->Get()->Record);
+            ProgressCallback_(QueryId_, ev->Get()->Record);
         }
     }
 
 private:
-    ui32 TargetNode_ = 0;
+    const ui32 TargetNode_ = 0;
+    const size_t QueryId_ = 0;
+
     std::unique_ptr<NKikimr::NKqp::TEvKqp::TEvQueryRequest> Request_;
     NThreading::TPromise<TQueryResponse> Promise_;
     ui64 ResultRowsLimit_;

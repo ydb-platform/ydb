@@ -124,7 +124,7 @@ struct TExecutionOptions {
             ythrow yexception() << "Nothing to execute and is not running as daemon";
         }
 
-        ValidateOptionsSizes();
+        ValidateOptionsSizes(runnerOptions);
         ValidateSchemeQueryOptions(runnerOptions);
         ValidateScriptExecutionOptions(runnerOptions);
         ValidateAsyncOptions(runnerOptions.YdbSettings.AsyncQueriesSettings);
@@ -132,7 +132,7 @@ struct TExecutionOptions {
     }
 
 private:
-    void ValidateOptionsSizes() const {
+    void ValidateOptionsSizes(const TRunnerOptions& runnerOptions) const {
         const auto checker = [numberQueries = ScriptQueries.size()](size_t checkSize, const TString& optionName) {
             if (checkSize > numberQueries) {
                 ythrow yexception() << "Too many " << optionName << ". Specified " << checkSize << ", when number of queries is " << numberQueries;
@@ -146,6 +146,10 @@ private:
         checker(PoolIds.size(), "pool ids");
         checker(UserSIDs.size(), "user SIDs");
         checker(Timeouts.size(), "timeouts");
+        checker(runnerOptions.ScriptQueryAstOutputs.size(), "ast output files");
+        checker(runnerOptions.ScriptQueryPlanOutputs.size(), "plan output files");
+        checker(runnerOptions.ScriptQueryTimelineFiles.size(), "timeline files");
+        checker(runnerOptions.InProgressStatisticsOutputFiles.size(), "statistics files");
     }
 
     void ValidateSchemeQueryOptions(const TRunnerOptions& runnerOptions) const {
@@ -180,7 +184,7 @@ private:
         if (ResultsRowsLimit) {
             ythrow yexception() << "Result rows limit can not be used without script queries";
         }
-        if (runnerOptions.InProgressStatisticsOutputFile) {
+        if (!runnerOptions.InProgressStatisticsOutputFiles.empty()) {
             ythrow yexception() << "Script statistics can not be used without script queries";
         }
 
@@ -188,10 +192,10 @@ private:
         if (HasExecutionCase(EExecutionCase::YqlScript)) {
             return;
         }
-        if (runnerOptions.ScriptQueryAstOutput) {
+        if (!runnerOptions.ScriptQueryAstOutputs.empty()) {
             ythrow yexception() << "Script query AST output can not be used without script/yql queries";
         }
-        if (runnerOptions.ScriptQueryPlanOutput) {
+        if (!runnerOptions.ScriptQueryPlanOutputs.empty()) {
             ythrow yexception() << "Script query plan output can not be used without script/yql queries";
         }
         if (runnerOptions.YdbSettings.SameSession) {
@@ -250,14 +254,6 @@ private:
     }
 
 private:
-    template <typename TValue>
-    static TValue GetValue(size_t index, const std::vector<TValue>& values, TValue defaultValue) {
-        if (values.empty()) {
-            return defaultValue;
-        }
-        return values[std::min(index, values.size() - 1)];
-    }
-
     static void ReplaceYqlTokenTemplate(TString& sql) {
         const TString variableName = TStringBuilder() << "${" << YQL_TOKEN_VARIABLE << "}";
         if (const TString& yqlToken = GetEnv(YQL_TOKEN_VARIABLE)) {
@@ -591,18 +587,23 @@ protected:
 
         options.AddLongOption("script-ast-file", "File with script query ast (use '-' to write in stdout)")
             .RequiredArgument("file")
-            .StoreMappedResultT<TString>(&RunnerOptions.ScriptQueryAstOutput, &GetDefaultOutput);
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                RunnerOptions.ScriptQueryAstOutputs.emplace_back(GetDefaultOutput(TString(option->CurValOrDef())));
+            });
 
         options.AddLongOption("script-plan-file", "File with script query plan (use '-' to write in stdout)")
             .RequiredArgument("file")
-            .StoreMappedResultT<TString>(&RunnerOptions.ScriptQueryPlanOutput, &GetDefaultOutput);
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                RunnerOptions.ScriptQueryPlanOutputs.emplace_back(GetDefaultOutput(TString(option->CurValOrDef())));
+            });
         options.AddLongOption("script-statistics", "File with script inprogress statistics")
             .RequiredArgument("file")
-            .StoreMappedResultT<TString>(&RunnerOptions.InProgressStatisticsOutputFile, [](const TString& file) {
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                const TString file(option->CurValOrDef());
                 if (file == "-") {
                     ythrow yexception() << "Script in progress statistics cannot be printed to stdout, please specify file name";
                 }
-                return file;
+                RunnerOptions.InProgressStatisticsOutputFiles.emplace_back(file);
             });
         TChoices<NYdb::NConsoleClient::EDataFormat> planFormat({
             {"pretty", NYdb::NConsoleClient::EDataFormat::Pretty},
@@ -617,11 +618,12 @@ protected:
 
         options.AddLongOption("script-timeline-file", "File with script query timline in svg format")
             .RequiredArgument("file")
-            .StoreMappedResultT<TString>(&RunnerOptions.ScriptQueryTimelineFile, [](const TString& file) {
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                const TString file(option->CurValOrDef());
                 if (file == "-") {
                     ythrow yexception() << "Script timline cannot be printed to stdout, please specify file name";
                 }
-                return file;
+                RunnerOptions.ScriptQueryTimelineFiles.emplace_back(file);
             });
 
         // Pipeline settings

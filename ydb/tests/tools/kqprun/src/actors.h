@@ -18,6 +18,7 @@ struct TQueryRequest {
     ui32 TargetNode;
     ui64 ResultRowsLimit;
     ui64 ResultSizeLimit;
+    size_t QueryId;
 };
 
 struct TCreateSessionRequest {
@@ -75,7 +76,7 @@ struct TEvPrivate {
     };
 };
 
-using TProgressCallback = std::function<void(const NKikimrKqp::TEvExecuterProgress&)>;
+using TProgressCallback = std::function<void(ui64 queryId, const NKikimrKqp::TEvExecuterProgress& executerProgress)>;
 
 NActors::IActor* CreateRunScriptActorMock(TQueryRequest request, NThreading::TPromise<TQueryResponse> promise, TProgressCallback progressCallback);
 

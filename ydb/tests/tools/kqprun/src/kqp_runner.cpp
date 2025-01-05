@@ -132,7 +132,7 @@ public:
         ExecutionMeta_ = TExecutionMeta();
         ExecutionMeta_.Database = script.Database;
 
-        return WaitScriptExecutionOperation();
+        return WaitScriptExecutionOperation(script.QueryId);
     }
 
     bool ExecuteQuery(const TRequestOptions& query, EQueryType queryType) {
@@ -164,9 +164,9 @@ public:
             meta.Plan = ExecutionMeta_.Plan;
         }
 
-        PrintScriptAst(meta.Ast);
-        PrintScriptProgress(meta.Plan);
-        PrintScriptPlan(meta.Plan);
+        PrintScriptAst(query.QueryId, meta.Ast);
+        PrintScriptProgress(query.QueryId, meta.Plan);
+        PrintScriptPlan(query.QueryId, meta.Plan);
         PrintScriptFinish(meta, queryTypeStr);
 
         if (!status.IsSuccess()) {
@@ -233,7 +233,7 @@ public:
     }
 
 private:
-    bool WaitScriptExecutionOperation() {
+    bool WaitScriptExecutionOperation(ui64 queryId) {
         StartTime_ = TInstant::Now();
 
         TDuration getOperationPeriod = TDuration::Seconds(1);
@@ -244,7 +244,7 @@ private:
         TRequestResult status;
         while (true) {
             status = YdbSetup_.GetScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_, ExecutionMeta_);
-            PrintScriptProgress(ExecutionMeta_.Plan);
+            PrintScriptProgress(queryId, ExecutionMeta_.Plan);
 
             if (ExecutionMeta_.Ready) {
                 break;
@@ -269,9 +269,9 @@ private:
 
         TYdbSetup::StopTraceOpt();
 
-        PrintScriptAst(ExecutionMeta_.Ast);
-        PrintScriptProgress(ExecutionMeta_.Plan);
-        PrintScriptPlan(ExecutionMeta_.Plan);
+        PrintScriptAst(queryId, ExecutionMeta_.Ast);
+        PrintScriptProgress(queryId, ExecutionMeta_.Plan);
+        PrintScriptPlan(queryId, ExecutionMeta_.Plan);
         PrintScriptFinish(ExecutionMeta_, "Script");
 
         if (!status.IsSuccess() || ExecutionMeta_.ExecutionStatus != NYdb::NQuery::EExecStatus::Completed) {
@@ -311,10 +311,10 @@ private:
         }
     }
 
-    void PrintScriptAst(const TString& ast) const {
-        if (Options_.ScriptQueryAstOutput) {
+    void PrintScriptAst(size_t queryId, const TString& ast) const {
+        if (const auto output = GetValue<IOutputStream*>(queryId, Options_.ScriptQueryAstOutputs, nullptr)) {
             Cout << CoutColors_.Cyan() << "Writing script query ast" << CoutColors_.Default() << Endl;
-            Options_.ScriptQueryAstOutput->Write(ast);
+            output->Write(ast);
         }
     }
 
@@ -333,16 +333,16 @@ private:
         printer.Print(plan);
     }
 
-    void PrintScriptPlan(const TString& plan) const {
-        if (Options_.ScriptQueryPlanOutput) {
+    void PrintScriptPlan(size_t queryId, const TString& plan) const {
+        if (const auto output = GetValue<IOutputStream*>(queryId, Options_.ScriptQueryPlanOutputs, nullptr)) {
             Cout << CoutColors_.Cyan() << "Writing script query plan" << CoutColors_.Default() << Endl;
-            PrintPlan(plan, Options_.ScriptQueryPlanOutput);
+            PrintPlan(plan, output);
         }
     }
 
-    void PrintScriptProgress(const TString& plan) const {
-        if (Options_.InProgressStatisticsOutputFile) {
-            TFileOutput outputStream(Options_.InProgressStatisticsOutputFile);
+    void PrintScriptProgress(size_t queryId, const TString& plan) const {
+        if (const auto& output = GetValue<TString>(queryId, Options_.InProgressStatisticsOutputFiles, {})) {
+            TFileOutput outputStream(output);
             outputStream << TInstant::Now().ToIsoStringLocal() << " Script in progress statistics" << Endl;
 
             auto convertedPlan = plan;
@@ -369,8 +369,8 @@ private:
 
             outputStream.Finish();
         }
-        if (Options_.ScriptQueryTimelineFile) {
-            TFileOutput outputStream(Options_.ScriptQueryTimelineFile);
+        if (const auto& output = GetValue<TString>(queryId, Options_.ScriptQueryTimelineFiles, {})) {
+            TFileOutput outputStream(output);
 
             TPlanVisualizer planVisualizer;
             planVisualizer.LoadPlans(plan);
@@ -381,10 +381,10 @@ private:
     }
 
     TProgressCallback GetProgressCallback() {
-        return [this](const NKikimrKqp::TEvExecuterProgress& executerProgress) mutable {
+        return [this](ui64 queryId, const NKikimrKqp::TEvExecuterProgress& executerProgress) mutable {
             const TString& plan = executerProgress.GetQueryPlan();
             ExecutionMeta_.Plan = plan;
-            PrintScriptProgress(plan);
+            PrintScriptProgress(queryId, plan);
         };
     }
 

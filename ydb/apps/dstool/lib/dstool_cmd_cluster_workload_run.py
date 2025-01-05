@@ -143,6 +143,25 @@ def do(args):
                     if not grouptool.check_fail_model(content, group.ErasureSpecies):
                         return False
             return True
+        
+        def can_act_on_pdisk(node_id, pdisk_id):
+            def match(x):
+                return node_id == x[0] and pdisk_id == x[1]
+
+            for group in base_config.Group:
+                if any(map(match, map(common.get_vslot_id, group.VSlotId))):
+                    if not common.is_dynamic_group(group.GroupId):
+                        return False
+    
+                    content = {
+                        common.get_vdisk_id_short(vslot): not match(vslot_id) and vslot.Ready and vdisk_status[vslot_id + common.get_vdisk_id(vslot)]
+                        for vslot_id in map(common.get_vslot_id, group.VSlotId)
+                        for vslot in [vslot_map[vslot_id]]
+                    }
+                    common.print_if_verbose(args, content, file=sys.stderr)
+                    if not grouptool.check_fail_model(content, group.ErasureSpecies):
+                        return False
+            return True
 
         def do_restart(node_id):
             host = node_fqdn_map[node_id]
@@ -276,12 +295,6 @@ def do(args):
                 vdisk_id = '[%08x:%d:%d:%d]' % (vslot.GroupId, vslot.FailRealmIdx, vslot.FailDomainIdx, vslot.VDiskIdx)
                 if vslot_id in vslot_readonly and not args.disable_readonly:
                     unreadonlies.append(('un-readonly vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_readonly, vslot, False)))
-                if can_act_on_vslot(*vslot_id[:2]) and args.enable_restart_pdisks:
-                    pdisk_restarts.append(('restart pdisk node_id: %d, pdisk_id: %d' % (node_id, pdisk_id), (do_restart_pdisk, node_id, pdisk_id)))
-                if can_act_on_vslot(*vslot_id[:2]) and args.enable_readonly_pdisks:
-                    make_pdisks_readonly.append(('readonly pdisk node_id: %d, pdisk_id: %d' % (node_id, pdisk_id), (do_readonly_pdisk, node_id, pdisk_id, True)))
-                if (node_id, pdisk_id) in pdisk_readonly and args.enable_readonly_pdisks:
-                    make_pdisks_not_readonly.append(('un-readonly pdisk node_id: %d, pdisk_id: %d' % (node_id, pdisk_id), (do_readonly_pdisk, node_id, pdisk_id, False)))
                 if can_act_on_vslot(*vslot_id) and (recent_restarts or args.disable_restarts):
                     if not args.disable_evicts:
                         evicts.append(('evict vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_evict, vslot_id)))
@@ -289,6 +302,18 @@ def do(args):
                         wipes.append(('wipe vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_wipe, vslot)))
                     if not args.disable_readonly:
                         readonlies.append(('readonly vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_readonly, vslot, True)))
+
+        for pdisk in base_config.PDisk:
+            node_id, pdisk_id = pdisk.NodeId, pdisk.PDiskId
+
+            if can_act_on_pdisk(node_id, pdisk_id):
+                if args.enable_restart_pdisks:
+                    pdisk_restarts.append(('restart pdisk node_id: %d, pdisk_id: %d' % (node_id, pdisk_id), (do_restart_pdisk, node_id, pdisk_id)))
+                if args.enable_readonly_pdisks:
+                    make_pdisks_readonly.append(('readonly pdisk node_id: %d, pdisk_id: %d' % (node_id, pdisk_id), (do_readonly_pdisk, node_id, pdisk_id, True)))
+            
+            if (node_id, pdisk_id) in pdisk_readonly and args.enable_readonly_pdisks:
+                make_pdisks_not_readonly.append(('un-readonly pdisk node_id: %d, pdisk_id: %d' % (node_id, pdisk_id), (do_readonly_pdisk, node_id, pdisk_id, False)))
 
         def pick(v):
             action_name, action = random.choice(v)

@@ -3809,7 +3809,10 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
             return true;
         case ERequestType::RequestYardSlay: {
             TSlay &req = *static_cast<TSlay*>(request);
-            ActorSystem->Send(sender, new NPDisk::TEvSlayResult(NKikimrProto::CORRUPTED, 0,
+            // We send NOTREADY, since BSController can't handle CORRUPTED or ERROR.
+            // If for some reason the disk will become *not* read-only, the request will be retried and VDisk will be slain.
+            // If not, we will be retrying the request until the disk is replaced during maintenance.
+            ActorSystem->Send(sender, new NPDisk::TEvSlayResult(NKikimrProto::NOTREADY, 0,
                         req.VDiskId, req.SlayOwnerRound, req.PDiskId, req.VSlotId, errorReason));
             return true;
         }

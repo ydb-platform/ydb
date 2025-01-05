@@ -1159,7 +1159,7 @@ Y_UNIT_TEST_SUITE(ReadOnlyPDisk) {
         vdisk.ReadLog(); // Should be able to read log.
     }
 
-    template <class Request, class Response, class... Args>
+    template <class Request, class Response, NKikimrProto::EReplyStatus ExpectedStatus = NKikimrProto::CORRUPTED, class... Args>
     auto CheckReadOnlyRequest(Args&&... args) {
         return [args = std::forward_as_tuple(args...)](TActorTestContext& testCtx) {
             Request* req = std::apply([](auto&&... unpackedArgs) {
@@ -1218,7 +1218,7 @@ Y_UNIT_TEST_SUITE(ReadOnlyPDisk) {
                 vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound + 1
             ),
             // Should fail on slaying vdisk. (ERequestType::RequestYardSlay)
-            CheckReadOnlyRequest<NPDisk::TEvSlay, NPDisk::TEvSlayResult>(
+            CheckReadOnlyRequest<NPDisk::TEvSlay, NPDisk::TEvSlayResult, NKikimrProto::NOTREADY>(
                 vdisk.VDiskID, vdisk.PDiskParams->OwnerRound + 1, 0, 0
             )
         };

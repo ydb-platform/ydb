@@ -356,21 +356,20 @@ namespace NKikimr::NStorage {
 
             const TPDiskKey key(pdisk);
 
-            if (pdisk.HasReadOnly()) {
-                if (auto it = LocalPDisks.find({pdisk.GetNodeID(), pdisk.GetPDiskID()}); it != LocalPDisks.end()) {
-                    auto& record = it->second;
+            auto localPdiskIt = LocalPDisks.find({pdisk.GetNodeID(), pdisk.GetPDiskID()});
+            if (localPdiskIt != LocalPDisks.end()) {
+                auto& record = localPdiskIt->second;
 
-                    if (!record.Record.HasReadOnly() || record.Record.GetReadOnly() != pdisk.GetReadOnly()) {
-                        // Changing read-only flag requires restart.
-                        entityStatus = NKikimrBlobStorage::RESTART;
-                    }
+                if (record.Record.GetReadOnly() != pdisk.GetReadOnly()) {
+                    // Changing read-only flag requires restart.
+                    entityStatus = NKikimrBlobStorage::RESTART;
                 }
             }
 
             switch (entityStatus) {
                 case NKikimrBlobStorage::RESTART:
-                    if (auto it = LocalPDisks.find({pdisk.GetNodeID(), pdisk.GetPDiskID()}); it != LocalPDisks.end()) {
-                        it->second.Record = pdisk;
+                    if (localPdiskIt != LocalPDisks.end()) {
+                        localPdiskIt->second.Record = pdisk;
                     }
                     DoRestartLocalPDisk(pdisk);
                     [[fallthrough]];

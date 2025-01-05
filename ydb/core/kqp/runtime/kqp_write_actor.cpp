@@ -423,7 +423,7 @@ public:
     void ResolveTable() {
         Counters->WriteActorsShardResolve->Inc();
         SchemeEntry.reset();
-        KeyDescription.Reset();
+        Partitioning.reset();
 
         if (ResolveAttempts++ >= MessageSettings.MaxResolveAttempts) {
             CA_LOG_E(TStringBuilder()
@@ -510,9 +510,9 @@ public:
         }
 
         YQL_ENSURE(request->ResultSet.size() == 1);
-        KeyDescription = std::move(request->ResultSet[0].KeyDescription);
+        Partitioning = std::move(request->ResultSet[0].KeyDescription->Partitioning);
 
-        CA_LOG_D("Resolved shards for TableId=" << TableId << ". PartitionsCount=" << KeyDescription->GetPartitions().size() << ".");
+        CA_LOG_D("Resolved shards for TableId=" << TableId << ". PartitionsCount=" << Partitioning->size() << ".");
 
         Prepare();
     }
@@ -971,8 +971,8 @@ public:
                 YQL_ENSURE(SchemeEntry);
                 ShardedWriteController->OnPartitioningChanged(*SchemeEntry);
             } else {
-                ShardedWriteController->OnPartitioningChanged(std::move(KeyDescription));
-                KeyDescription.Reset();
+                ShardedWriteController->OnPartitioningChanged(Partitioning);
+                Partitioning.reset();
             }
         } catch (...) {
             RuntimeError(
@@ -1078,7 +1078,7 @@ public:
     IKqpTableWriterCallbacks* Callbacks;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
-    THolder<TKeyDesc> KeyDescription;
+    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
     ui64 ResolveAttempts = 0;
 
     IKqpTransactionManagerPtr TxManager;

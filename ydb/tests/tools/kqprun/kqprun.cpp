@@ -1,7 +1,5 @@
 #include "src/kqp_runner.h"
 
-#include <cstdio>
-
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
 
 #include <library/cpp/colorizer/colors.h>
@@ -15,11 +13,13 @@
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yaml_config/yaml_config.h>
+
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/public/udf/udf_static_registry.h>
+
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file_comp_nodes.h>
 #include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
-#include <yql/essentials/public/udf/udf_static_registry.h>
 
 
 namespace NKqpRun {
@@ -135,7 +135,7 @@ private:
     void ValidateOptionsSizes(const TRunnerOptions& runnerOptions) const {
         const auto checker = [numberQueries = ScriptQueries.size()](size_t checkSize, const TString& optionName) {
             if (checkSize > numberQueries) {
-                ythrow yexception() << "Too many " << optionName << ". Specified " << checkSize << ", when number of queries is " << numberQueries;
+                ythrow yexception() << "Too many " << optionName << ". Specified " << checkSize << ", when number of script queries is " << numberQueries;
             }
         };
 
@@ -431,6 +431,9 @@ class TMain : public TMainClassArgs {
     bool ExcludeLinkedUdfs = false;
     bool EmulateYt = false;
 
+    std::optional<NActors::NLog::EPriority> DefaultLogPriority;
+    std::unordered_map<NKikimrServices::EServiceKikimr, NActors::NLog::EPriority> LogPriorities;
+
     static TString LoadFile(const TString& file) {
         return TFileInput(file).ReadAll();
     }
@@ -466,6 +469,10 @@ class TMain : public TMainClassArgs {
             return choices;
         }
 
+        bool Contains(const TString& choice) const {
+            return ChoicesMap.contains(choice);
+        }
+
     private:
         const std::map<TString, TResult> ChoicesMap;
     };
@@ -483,11 +490,13 @@ protected:
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 ExecutionOptions.SchemeQuery = LoadFile(option->CurVal());
             });
+
         options.AddLongOption('p', "script-query", "Script query to execute (typically DML query)")
             .RequiredArgument("file")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 ExecutionOptions.ScriptQueries.emplace_back(LoadFile(option->CurVal()));
             });
+
         options.AddLongOption("templates", "Enable templates for -s and -p queries, such as ${YQL_TOKEN} and ${QUERY_ID}")
             .NoArgument()
             .SetFlag(&ExecutionOptions.UseTemplates);
@@ -499,10 +508,10 @@ protected:
                 TStringBuf filePath;
                 TStringBuf(option->CurVal()).Split('@', tableName, filePath);
                 if (tableName.empty() || filePath.empty()) {
-                    ythrow yexception() << "Incorrect table mapping, expected form table@file, e.g. yt.Root/plato.Input@input.txt";
+                    ythrow yexception() << "Incorrect table mapping, expected form table@file, e. g. yt.Root/plato.Input@input.txt";
                 }
                 if (TablesMapping.contains(tableName)) {
-                    ythrow yexception() << "Got duplicate table name: " << tableName;
+                    ythrow yexception() << "Got duplicated table name: " << tableName;
                 }
                 TablesMapping[tableName] = filePath;
             });
@@ -523,9 +532,11 @@ protected:
         options.AddLongOption('u', "udf", "Load shared library with UDF by given path")
             .RequiredArgument("file")
             .EmplaceTo(&UdfsPaths);
+
         options.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory")
             .RequiredArgument("directory")
             .StoreResult(&UdfsDirectory);
+
         options.AddLongOption("exclude-linked-udfs", "Exclude linked udfs when same udf passed from -u or --udfs-dir")
             .NoArgument()
             .SetFlag(&ExcludeLinkedUdfs);
@@ -540,13 +551,51 @@ protected:
                     std::remove(file.c_str());
                 }
             });
+
+        TChoices<NActors::NLog::EPriority> logPriority({
+            {"emerg", NActors::NLog::EPriority::PRI_EMERG},
+            {"alert", NActors::NLog::EPriority::PRI_ALERT},
+            {"crit", NActors::NLog::EPriority::PRI_CRIT},
+            {"error", NActors::NLog::EPriority::PRI_ERROR},
+            {"warn", NActors::NLog::EPriority::PRI_WARN},
+            {"notice", NActors::NLog::EPriority::PRI_NOTICE},
+            {"info", NActors::NLog::EPriority::PRI_INFO},
+            {"debug", NActors::NLog::EPriority::PRI_DEBUG},
+            {"trace", NActors::NLog::EPriority::PRI_TRACE},
+        });
+        options.AddLongOption("log-default", "Default log priority")
+            .RequiredArgument("priority")
+            .Choices(logPriority.GetChoices())
+            .StoreMappedResultT<TString>(&DefaultLogPriority, logPriority);
+
+        options.AddLongOption("log", "Component log priority in format <component>=<priority> (e. g. KQP_YQL=trace)")
+            .RequiredArgument("component priority")
+            .Handler1([this, logPriority](const NLastGetopt::TOptsParser* option) {
+                TStringBuf component;
+                TStringBuf priority;
+                TStringBuf(option->CurVal()).Split('=', component, priority);
+                if (component.empty() || priority.empty()) {
+                    ythrow yexception() << "Incorrect log setting, expected form component=priority, e. g. KQP_YQL=trace";
+                }
+
+                const auto service = GetLogService(TString(component));
+                if (LogPriorities.contains(service)) {
+                    ythrow yexception() << "Got duplicated log service name: " << component;
+                }
+
+                if (!logPriority.Contains(TString(priority))) {
+                    ythrow yexception() << "Incorrect log priority: " << priority;
+                }
+                LogPriorities[service] = logPriority(TString(priority));
+            });
+
         TChoices<TRunnerOptions::ETraceOptType> traceOpt({
             {"all", TRunnerOptions::ETraceOptType::All},
             {"scheme", TRunnerOptions::ETraceOptType::Scheme},
             {"script", TRunnerOptions::ETraceOptType::Script},
             {"disabled", TRunnerOptions::ETraceOptType::Disabled}
         });
-        options.AddLongOption('T', "trace-opt", "print AST in the begin of each transformation (use script@<query id> for tracing one -p query)")
+        options.AddLongOption('T', "trace-opt", "Print AST in the begin of each transformation (use script@<query id> for tracing one -p query)")
             .RequiredArgument("trace-opt-query")
             .DefaultValue("disabled")
             .Choices(traceOpt.GetChoices())
@@ -555,9 +604,11 @@ protected:
                 RunnerOptions.YdbSettings.TraceOptEnabled = traceOptType != NKqpRun::TRunnerOptions::ETraceOptType::Disabled;
                 return traceOptType;
             });
-        options.AddLongOption('I', "trace-opt-index", "index of -p query to use --trace-opt, starts from zero")
+
+        options.AddLongOption('I', "trace-opt-index", "Index of -p query to use --trace-opt, starts from zero")
             .RequiredArgument("uint")
             .StoreResult(&RunnerOptions.TraceOptScriptId);
+
         options.AddLongOption("trace-id", "Trace id for -p queries")
             .RequiredArgument("id")
             .EmplaceTo(&ExecutionOptions.TraceIds);
@@ -566,10 +617,12 @@ protected:
             .RequiredArgument("file")
             .DefaultValue("-")
             .StoreMappedResultT<TString>(&RunnerOptions.ResultOutput, &GetDefaultOutput);
+
         options.AddLongOption('L', "result-rows-limit", "Rows limit for script execution results")
             .RequiredArgument("uint")
             .DefaultValue(0)
             .StoreResult(&ExecutionOptions.ResultsRowsLimit);
+
         TChoices<TRunnerOptions::EResultOutputFormat> resultFormat({
             {"rows", TRunnerOptions::EResultOutputFormat::RowsJson},
             {"full-json", TRunnerOptions::EResultOutputFormat::FullJson},
@@ -596,6 +649,7 @@ protected:
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.ScriptQueryPlanOutputs.emplace_back(GetDefaultOutput(TString(option->CurValOrDef())));
             });
+
         options.AddLongOption("script-statistics", "File with script inprogress statistics")
             .RequiredArgument("file")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
@@ -605,6 +659,7 @@ protected:
                 }
                 RunnerOptions.InProgressStatisticsOutputFiles.emplace_back(file);
             });
+
         TChoices<NYdb::NConsoleClient::EDataFormat> planFormat({
             {"pretty", NYdb::NConsoleClient::EDataFormat::Pretty},
             {"table", NYdb::NConsoleClient::EDataFormat::PrettyTable},
@@ -641,19 +696,21 @@ protected:
                 TString choice(option->CurValOrDef());
                 ExecutionOptions.ExecutionCases.emplace_back(executionCase(choice));
             });
+
         options.AddLongOption("inflight-limit", "In flight limit for async queries (use 0 for unlimited)")
             .RequiredArgument("uint")
             .DefaultValue(0)
             .StoreResult(&RunnerOptions.YdbSettings.AsyncQueriesSettings.InFlightLimit);
-        TChoices<TAsyncQueriesSettings::EVerbose> verbose({
-            {"each-query", TAsyncQueriesSettings::EVerbose::EachQuery},
-            {"final", TAsyncQueriesSettings::EVerbose::Final}
-        });
 
         options.AddLongOption("verbose", "Common verbose level (max level 2)")
             .RequiredArgument("uint")
             .DefaultValue(1)
             .StoreResult(&RunnerOptions.YdbSettings.VerboseLevel);
+
+        TChoices<TAsyncQueriesSettings::EVerbose> verbose({
+            {"each-query", TAsyncQueriesSettings::EVerbose::EachQuery},
+            {"final", TAsyncQueriesSettings::EVerbose::Final}
+        });
         options.AddLongOption("async-verbose", "Verbose type for async queries")
             .RequiredArgument("type")
             .DefaultValue("each-query")
@@ -690,10 +747,12 @@ protected:
             .RequiredArgument("uint")
             .DefaultValue(ExecutionOptions.LoopCount)
             .StoreResult(&ExecutionOptions.LoopCount);
+
         options.AddLongOption("loop-delay", "Delay in milliseconds between loop steps")
             .RequiredArgument("uint")
             .DefaultValue(0)
             .StoreMappedResultT<ui64>(&ExecutionOptions.LoopDelay, &TDuration::MilliSeconds<ui64>);
+
         options.AddLongOption("continue-after-fail", "Don't not stop requests execution after fails")
             .NoArgument()
             .SetFlag(&ExecutionOptions.ContinueAfterFail);
@@ -803,12 +862,19 @@ protected:
 
         RunnerOptions.YdbSettings.YqlToken = YqlToken;
         RunnerOptions.YdbSettings.FunctionRegistry = CreateFunctionRegistry(UdfsDirectory, UdfsPaths, ExcludeLinkedUdfs).Get();
+
+        auto& appConfig = RunnerOptions.YdbSettings.AppConfig;
         if (ExecutionOptions.ResultsRowsLimit) {
-            RunnerOptions.YdbSettings.AppConfig.MutableQueryServiceConfig()->SetScriptResultRowsLimit(ExecutionOptions.ResultsRowsLimit);
+            appConfig.MutableQueryServiceConfig()->SetScriptResultRowsLimit(ExecutionOptions.ResultsRowsLimit);
         }
 
+        if (DefaultLogPriority) {
+            appConfig.MutableLogConfig()->SetDefaultLevel(*DefaultLogPriority);
+        }
+        ModifyLogPriorities(LogPriorities, *appConfig.MutableLogConfig());
+
         if (EmulateYt) {
-            const auto& fileStorageConfig = RunnerOptions.YdbSettings.AppConfig.GetQueryServiceConfig().GetFileStorage();
+            const auto& fileStorageConfig = appConfig.GetQueryServiceConfig().GetFileStorage();
             auto fileStorage = WithAsync(CreateFileStorage(fileStorageConfig, {MakeYtDownloader(fileStorageConfig)}));
             auto ytFileServices = NYql::NFile::TYtFileServices::Make(RunnerOptions.YdbSettings.FunctionRegistry.Get(), TablesMapping, fileStorage);
             RunnerOptions.YdbSettings.YtGateway = NYql::CreateYtFileGateway(ytFileServices);

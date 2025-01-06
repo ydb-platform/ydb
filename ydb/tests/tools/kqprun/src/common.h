@@ -1,14 +1,18 @@
 #pragma once
 
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
+
+#include <ydb/library/actors/core/log_iface.h>
+#include <ydb/library/services/services.pb.h>
+
+#include <ydb/public/api/protos/ydb_cms.pb.h>
+#include <ydb/public/lib/ydb_cli/common/formats.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
-#include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
 
-#include <ydb/public/lib/ydb_cli/common/formats.h>
+#include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
 
 
 namespace NKqpRun {
@@ -101,11 +105,14 @@ struct TRequestOptions {
 };
 
 template <typename TValue>
-static TValue GetValue(size_t index, const std::vector<TValue>& values, TValue defaultValue) {
+TValue GetValue(size_t index, const std::vector<TValue>& values, TValue defaultValue) {
     if (values.empty()) {
         return defaultValue;
     }
     return values[std::min(index, values.size() - 1)];
 }
+
+NKikimrServices::EServiceKikimr GetLogService(const TString& serviceName);
+void ModifyLogPriorities(std::unordered_map<NKikimrServices::EServiceKikimr, NActors::NLog::EPriority> logPriorities, NKikimrConfig::TLogConfig& logConfig);
 
 }  // namespace NKqpRun

@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     actors.cpp
+    common.cpp
     kqp_runner.cpp
     ydb_setup.cpp
 )

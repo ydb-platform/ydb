@@ -150,13 +150,8 @@ private:
                 }
             }
 
-            for (auto setting : Settings_.AppConfig.GetLogConfig().get_arr_entry()) {
-                NKikimrServices::EServiceKikimr service;
-                if (!NKikimrServices::EServiceKikimr_Parse(setting.GetComponent(), &service)) {
-                    ythrow yexception() << "Invalid kikimr service name " << setting.GetComponent();
-                }
-
-                runtime.SetLogPriority(service, NActors::NLog::EPriority(setting.GetLevel()));
+            for (const auto& setting : Settings_.AppConfig.GetLogConfig().get_arr_entry()) {
+                runtime.SetLogPriority(GetLogService(setting.GetComponent()), NActors::NLog::EPriority(setting.GetLevel()));
             }
 
             runtime.SetLogBackendFactory([this]() { return CreateLogBackend(); });
@@ -316,21 +311,7 @@ private:
             return;
         }
 
-        bool found = false;
-        for (auto& entry : *Settings_.AppConfig.MutableLogConfig()->MutableEntry()) {
-            if (entry.GetComponent() == "KQP_YQL") {
-                entry.SetLevel(NActors::NLog::PRI_TRACE);
-                found = true;
-                break;
-            }
-        }
-
-        if (!found) {
-            auto entry = Settings_.AppConfig.MutableLogConfig()->AddEntry();
-            entry->SetComponent("KQP_YQL");
-            entry->SetLevel(NActors::NLog::PRI_TRACE);
-        }
-
+        ModifyLogPriorities({{NKikimrServices::EServiceKikimr::KQP_YQL, NActors::NLog::PRI_TRACE}}, *Settings_.AppConfig.MutableLogConfig());
         NYql::NLog::InitLogger(NActors::CreateNullBackend());
     }
 

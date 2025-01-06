@@ -10,6 +10,7 @@
 #include <util/system/env.h>
 
 #include <ydb/core/base/backtrace.h>
+#include <ydb/core/blob_depot/mon_main.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yaml_config/yaml_config.h>
@@ -20,6 +21,10 @@
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file_comp_nodes.h>
 #include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+#include <library/cpp/lfalloc/alloc_profiler/profiler.h>
+#endif
 
 
 namespace NKqpRun {
@@ -248,7 +253,7 @@ private:
                 ythrow yexception() << "Invalid trace opt id " << *traceOptId << ", it should be less than number of scipt queries " << numberScripts;
             }
             if (numberScripts == 1) {
-                Cout << colors.Red() << "Warning: trace opt id is not necessary for single script mode, use -T script" << Endl;
+                Cout << colors.Red() << "Warning: trace opt id is not necessary for single script mode" << Endl;
             }
         }
     }
@@ -421,6 +426,8 @@ TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistr
 class TMain : public TMainClassArgs {
     inline static const TString YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
     inline static std::vector<std::unique_ptr<TFileOutput>> FileHolders;
+    inline static IOutputStream* ProfileAllocationsOutput = nullptr;
+    inline static NColorizer::TColors CoutColors = NColorizer::AutoColors(Cout);
 
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
@@ -476,6 +483,21 @@ class TMain : public TMainClassArgs {
     private:
         const std::map<TString, TResult> ChoicesMap;
     };
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+public:
+    static void FinishProfileMemoryAllocations() {
+        if (ProfileAllocationsOutput) {
+            NAllocProfiler::StopAllocationSampling(*ProfileAllocationsOutput);
+        } else {
+            TString output;
+            TStringOutput stream(output);
+            NAllocProfiler::StopAllocationSampling(stream);
+
+            Cout << CoutColors.Red() << "Warning: profile memory allocations output is not specified, please use flag `--profile-output` for writing profile info (dump size " << NKikimr::NBlobDepot::FormatByteSize(output.size()) << ")" << CoutColors.Default() << Endl;
+        }
+    }
+#endif
 
 protected:
     void RegisterOptions(NLastGetopt::TOpts& options) override {
@@ -681,6 +703,10 @@ protected:
                 RunnerOptions.ScriptQueryTimelineFiles.emplace_back(file);
             });
 
+        options.AddLongOption("profile-output", "File with profile memory allocations output (use '-' to write in stdout)")
+            .RequiredArgument("file")
+            .StoreMappedResultT<TString>(&ProfileAllocationsOutput, &GetDefaultOutput);
+
         // Pipeline settings
 
         TChoices<TExecutionOptions::EExecutionCase> executionCase({
@@ -883,7 +909,26 @@ protected:
             ythrow yexception() << "Tables mapping is not supported without emulate YT mode";
         }
 
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+        if (RunnerOptions.YdbSettings.VerboseLevel >= 1) {
+            Cout << CoutColors.Cyan() << "Starting profile memory allocations" << CoutColors.Default() << Endl;
+        }
+        NAllocProfiler::StartAllocationSampling(true);
+#else
+        if (ProfileAllocationsOutput) {
+            ythrow yexception() << "Profile memory allocations disabled, please rebuild kqprun with flag `-D PROFILE_MEMORY_ALLOCATIONS`";
+        }
+#endif
+
         RunScript(ExecutionOptions, RunnerOptions);
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+        if (RunnerOptions.YdbSettings.VerboseLevel >= 1) {
+            Cout << CoutColors.Cyan() << "Finishing profile memory allocations" << CoutColors.Default() << Endl;
+        }
+        FinishProfileMemoryAllocations();
+#endif
+
         return 0;
     }
 };
@@ -910,6 +955,17 @@ void SegmentationFaultHandler(int) {
     abort();
 }
 
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+void InterruptHandler(int) {
+    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+
+    Cout << colors.Red() << "Execution interrupted, finishing profile memory allocations..." << colors.Default() << Endl;
+    TMain::FinishProfileMemoryAllocations();
+
+    abort();
+}
+#endif
+
 }  // anonymous namespace
 
 }  // namespace NKqpRun
@@ -917,6 +973,10 @@ void SegmentationFaultHandler(int) {
 int main(int argc, const char* argv[]) {
     std::set_terminate(NKqpRun::KqprunTerminateHandler);
     signal(SIGSEGV, &NKqpRun::SegmentationFaultHandler);
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+    signal(SIGINT, &NKqpRun::InterruptHandler);
+#endif
 
     try {
         NKqpRun::TMain().Run(argc, argv);

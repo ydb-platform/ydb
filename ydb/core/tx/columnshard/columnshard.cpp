@@ -7,6 +7,7 @@
 #include "data_accessor/manager.h"
 #include "engines/column_engine_logs.h"
 #include "engines/writer/buffer/actor.h"
+#include "engines/writer/buffer/actor2.h"
 #include "hooks/abstract/abstract.h"
 #include "resource_subscriber/actor.h"
 #include "transactions/locks/read_finished.h"
@@ -33,7 +34,8 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     }
     InFlightReadsTracker.Stop(this);
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
-    ctx.Send(BufferizationWriteActorId, new TEvents::TEvPoisonPill);
+    ctx.Send(BufferizationInsertionWriteActorId, new TEvents::TEvPoisonPill);
+    ctx.Send(BufferizationPortionsWriteActorId, new TEvents::TEvPoisonPill);
     ctx.Send(DataAccessorsControlActorId, new TEvents::TEvPoisonPill);
     if (!!OperationsManager) {
         OperationsManager->StopWriting();
@@ -120,7 +122,8 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Limits.RegisterControls(icb);
     Settings.RegisterControls(icb);
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
-    BufferizationWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));
+    BufferizationInsertionWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));
+    BufferizationPortionsWriteActorId = ctx.Register(new NOlap::NWritingPortions::TActor(TabletID(), SelfId()));
     DataAccessorsControlActorId = ctx.Register(new NOlap::NDataAccessorControl::TActor(TabletID(), SelfId()));
     DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(DataAccessorsControlActorId, SelfId()),
 

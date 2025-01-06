@@ -31,9 +31,6 @@ private:
 
     EOptimizerCompactionWeightControl CompactionControl = EOptimizerCompactionWeightControl::Force;
 
-    YDB_ACCESSOR(std::optional<ui64>, OverrideReduceMemoryIntervalLimit, 1024);
-    YDB_ACCESSOR_DEF(std::optional<ui64>, OverrideRejectMemoryIntervalLimit);
-
     std::optional<ui32> ExpectedShardsCount;
 
     THashMap<ui64, const ::NKikimr::NColumnShard::TColumnShard*> ShardActuals;
@@ -135,6 +132,8 @@ private:
     void CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& shard, TCheckContext& context) const;
 
     THashSet<TString> SharingIds;
+
+    std::optional<TString> RestartOnLocalDbTxCommitted;
 protected:
     virtual const NOlap::NSplitter::TSplitSettings& DoGetBlobSplitSettings(const NOlap::NSplitter::TSplitSettings& defaultValue) const override {
         if (OverrideBlobSplitSettings) {
@@ -201,12 +200,6 @@ protected:
     }
     virtual TDuration DoGetMaxReadStaleness(const TDuration def) const override {
         return OverrideMaxReadStaleness.value_or(def);
-    }
-    virtual ui64 DoGetReduceMemoryIntervalLimit(const ui64 def) const override {
-        return OverrideReduceMemoryIntervalLimit.value_or(def);
-    }
-    virtual ui64 DoGetRejectMemoryIntervalLimit(const ui64 def) const override {
-        return OverrideRejectMemoryIntervalLimit.value_or(def);
     }
     virtual ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 def) const override {
         return 0;
@@ -290,6 +283,13 @@ public:
         TGuard<TMutex> g(ActiveTabletsMutex);
         return ActiveTablets.contains(tabletId);
     }
+
+    void SetRestartOnLocalTxCommitted(std::optional<TString> txInfo) {
+        RestartOnLocalDbTxCommitted = std::move(txInfo);
+    }
+
+    virtual void OnAfterLocalTxCommitted(const NActors::TActorContext& ctx, const ::NKikimr::NColumnShard::TColumnShard& shard, const TString& txInfo) override;
+
 };
 
 }

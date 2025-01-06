@@ -439,8 +439,7 @@ class TLocalTableWriter
                 const auto version = TRowVersion(record->GetStep(), record->GetTxId());
 
                 if (record->GetKind() == NChangeExchange::IChangeRecord::EKind::CdcHeartbeat) {
-                    TxIds.erase(TxIds.begin(), TxIds.upper_bound(version));
-                    Send(Worker, new TEvService::TEvHeartbeat(version));
+                    PendingHeartbeat = version;
                     continue;
                 } else if (record->GetKind() != NChangeExchange::IChangeRecord::EKind::CdcDataChange) {
                     Y_ABORT("Unexpected record kind");
@@ -467,6 +466,12 @@ class TLocalTableWriter
             EnqueueRecords(std::move(records));
         } else if (PendingTxId.empty()) {
             Y_ABORT_UNLESS(PendingRecords.empty());
+
+            if (const auto maxVersion = std::exchange(PendingHeartbeat, TRowVersion::Min())) {
+                TxIds.erase(TxIds.begin(), TxIds.upper_bound(maxVersion));
+                Send(Worker, new TEvService::TEvHeartbeat(maxVersion));
+            }
+
             Send(Worker, new TEvWorker::TEvPoll());
         }
     }
@@ -522,6 +527,11 @@ class TLocalTableWriter
         }
 
         if (PendingRecords.empty() && PendingTxId.empty()) {
+            if (const auto maxVersion = std::exchange(PendingHeartbeat, TRowVersion::Min())) {
+                TxIds.erase(TxIds.begin(), TxIds.upper_bound(maxVersion));
+                Send(Worker, new TEvService::TEvHeartbeat(maxVersion));
+            }
+
             Send(Worker, new TEvWorker::TEvPoll());
         }
     }
@@ -617,6 +627,7 @@ private:
     TMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
     TMap<TRowVersion, ui64> TxIds; // key is non-inclusive right hand edge
     TMap<TRowVersion, TVector<NChangeExchange::IChangeRecord::TPtr>> PendingTxId;
+    TRowVersion PendingHeartbeat = TRowVersion::Min();
 
 }; // TLocalTableWriter
 

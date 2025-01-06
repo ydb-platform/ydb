@@ -3,7 +3,7 @@
 #include "sync.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/data_sharing/common/transactions/tx_extension.h>
+#include <ydb/core/tx/columnshard/tablet/ext_tx_base.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -58,9 +58,9 @@ private:
     virtual TString DoDebugString() const override {
         return "EV_WRITE_SECONDARY";
     }
-    class TTxWriteReceivedAck: public NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard> {
+    class TTxWriteReceivedAck: public TExtendedTransactionBase {
     private:
-        using TBase = NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard>;
+        using TBase = TExtendedTransactionBase;
         const ui64 TxId;
         bool NeedContinueFlag = false;
 
@@ -99,9 +99,9 @@ private:
         return std::make_unique<TTxWriteReceivedAck>(owner, GetTxId());
     }
 
-    class TTxWriteReceivedBrokenFlag: public NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard> {
+    class TTxWriteReceivedBrokenFlag: public TExtendedTransactionBase {
     private:
-        using TBase = NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard>;
+        using TBase = TExtendedTransactionBase;
         const ui64 TxId;
         const bool BrokenFlag;
 
@@ -170,9 +170,9 @@ private:
         }
     }
 
-    class TTxStartPreparation: public NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard> {
+    class TTxStartPreparation: public TExtendedTransactionBase {
     private:
-        using TBase = NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard>;
+        using TBase = TExtendedTransactionBase;
         const ui64 TxId;
 
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {

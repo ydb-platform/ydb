@@ -300,7 +300,11 @@ def deduce_components_from_args(args, cluster_details):
     if 'dynamic_slots' in result:
         result['dynamic_slots'] = ['all']
 
-    result['confirm'] = args.confirm
+    if hasattr(args, "confirm"):
+        confirm = args.confirm
+    else:
+        confirm = True
+    result['confirm'] = confirm
 
     logger.debug("active components is '%s'", result)
     return result
@@ -541,7 +545,8 @@ def cluster_type_args():
     args = argparse.ArgumentParser(add_help=False)
     available_erasure_types = [
         "block-4-2-8-nodes",
-        "mirror-3-dc-3-nodes-in-memory",
+        "block-4-2-4-nodes",
+        "block-4-2-2-nodes",
         "mirror-3-dc-3-nodes",
         "mirror-3-dc-9-nodes",
     ]
@@ -748,10 +753,17 @@ def add_clear_mode(modes, walle_provider):
 
     mode = modes.add_parser(
         "clear",
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
+        parents=[
+            direct_nodes_args(),
+            cluster_description_args(),
+            binaries_args(),
+            component_args(),
+            ssh_args(),
+            with_confirmation(),
+        ],
         description="Stop all ydbd instances at the nodes, format all ydbd drives, shutdown dynamic slots. "
-                    "And don't start nodes after it. "
-                    "Use --hosts to specify particular hosts."
+        "And don't start nodes after it. "
+        "Use --hosts to specify particular hosts.",
     )
     mode.set_defaults(handler=_run)
 
@@ -785,6 +797,10 @@ def add_sample_config_mode(modes):
         template_path = ""
         if cluster_type == "block-4-2-8-nodes":
             template_path = "/ydbd_slice/baremetal/templates/block-4-2-8-nodes.yaml"
+        elif cluster_type == "block-4-2-4-nodes":
+            template_path = "/ydbd_slice/baremetal/templates/block-4-2-4-nodes.yaml"
+        elif cluster_type == "block-4-2-2-nodes":
+            template_path = "/ydbd_slice/baremetal/templates/block-4-2-2-nodes.yaml"
         elif cluster_type == "mirror-3-dc-3-nodes-in-memory":
             pass
         elif cluster_type == "mirror-3-dc-3-nodes":

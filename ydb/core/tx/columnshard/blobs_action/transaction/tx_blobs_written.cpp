@@ -94,6 +94,9 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
     }
     std::set<ui64> pathIds;
     for (auto&& writeResult : Pack.GetWriteResults()) {
+        if (writeResult.GetNoDataToWrite()) {
+            continue;
+        }
         const auto& writeMeta = writeResult.GetWriteMeta();
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         pathIds.emplace(op->GetPathId());

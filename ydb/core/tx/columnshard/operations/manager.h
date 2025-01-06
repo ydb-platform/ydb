@@ -33,10 +33,9 @@ public:
         return Generation;
     }
 
-    TLockSharingInfo(const ui64 lockId, const ui64 generation, const bool broken)
+    TLockSharingInfo(const ui64 lockId, const ui64 generation)
         : LockId(lockId)
-        , Generation(generation)
-        , Broken(broken) {
+        , Generation(generation) {
     }
 
     bool HasWrites() const {
@@ -109,10 +108,10 @@ public:
         }
     }
 
-    TLockFeatures(const ui64 lockId, const ui64 gen, const bool broken)
+    TLockFeatures(const ui64 lockId, const ui64 gen)
         : LockId(lockId)
         , Generation(gen) {
-        SharingInfo = std::make_shared<TLockSharingInfo>(lockId, gen, broken);
+        SharingInfo = std::make_shared<TLockSharingInfo>(lockId, gen);
     }
 };
 
@@ -195,7 +194,7 @@ public:
         if (LockFeatures.contains(lockId)) {
             return false;
         } else {
-            LockFeatures.emplace(lockId, TLockFeatures(lockId, generationId, false));
+            LockFeatures.emplace(lockId, TLockFeatures(lockId, generationId));
             return true;
         }
     }

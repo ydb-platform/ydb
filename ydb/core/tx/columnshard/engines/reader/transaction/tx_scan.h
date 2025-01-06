@@ -4,7 +4,6 @@
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 
 namespace NKikimr::NOlap::NReader {
-//NB. Not a transaction actually, does not touch local db. TODO consider to rewrite
 class TTxScan: public NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard> {
 private:
     using TBase = NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard>;

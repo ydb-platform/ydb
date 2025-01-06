@@ -3009,7 +3009,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         testTable.SetName("/Root/ttt").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema).SetMinPartitionsCount(shardCount);
         testHelper.CreateTable(testTable);
         auto client = testHelper.GetKikimr().GetQueryClient();
-        //1. Insert exactlly onr row into a table, so the only shard will contain a row
+        //1. Insert exactlly one row into a table, so the only shard will contain a row
         const auto result = client
             .ExecuteQuery(
                 R"(
@@ -3036,7 +3036,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         if (reboot) {
             csController->SetRestartOnLocalTxCommitted("TProposeWriteTransaction");
         }
-        //DELETE 1 row from one shard and 0 rows from anothers
+        //DELETE 1 row from one shard and 0 rows from others
         const auto resultDelete =
             client
                 .ExecuteQuery(

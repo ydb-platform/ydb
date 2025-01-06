@@ -9,6 +9,9 @@
 #include <ydb/core/testlib/test_client.h>
 
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
+
+#include <ydb/tests/tools/kqprun/src/proto/storage_meta.pb.h>
+
 #include <yql/essentials/utils/log/log.h>
 
 
@@ -173,15 +176,46 @@ private:
     }
 
     void SetStorageSettings(NKikimr::Tests::TServerSettings& serverSettings) const {
+        TString diskPath;
+        if (Settings_.PDisksPath && *Settings_.PDisksPath != "-") {
+            diskPath = TStringBuilder() << *Settings_.PDisksPath << "/";
+        }
+
+        bool formatDisk = true;
+        NKqpRun::TStorageMeta storageMeta;
+        if (diskPath) {
+            TFsPath storageMetaPath(diskPath);
+            storageMetaPath.MkDirs();
+
+            storageMetaPath = storageMetaPath.Child("kqprun_storage_meta.conf");
+            if (storageMetaPath.Exists() && !Settings_.FormatStorage) {
+                if (!google::protobuf::TextFormat::ParseFromString(TFileInput(storageMetaPath.GetPath()).ReadAll(), &storageMeta)) {
+                    ythrow yexception() << "Storage meta is corrupted, please use --format-storage";
+                }
+                storageMeta.SetStorageGeneration(storageMeta.GetStorageGeneration() + 1);
+                formatDisk = false;
+            }
+
+            TString storageMetaStr;
+            google::protobuf::TextFormat::PrintToString(storageMeta, &storageMetaStr);
+
+            TFileOutput storageMetaOutput(storageMetaPath.GetPath());
+            storageMetaOutput.Write(storageMetaStr);
+            storageMetaOutput.Finish();
+        }
+
         const NKikimr::NFake::TStorage storage = {
-            .UseDisk = Settings_.UseRealPDisks,
+            .UseDisk = !!Settings_.PDisksPath,
             .SectorSize = NKikimr::TTestStorageFactory::SECTOR_SIZE,
-            .ChunkSize = Settings_.UseRealPDisks ? NKikimr::TTestStorageFactory::CHUNK_SIZE : NKikimr::TTestStorageFactory::MEM_CHUNK_SIZE,
-            .DiskSize = Settings_.DiskSize
+            .ChunkSize = Settings_.PDisksPath ? NKikimr::TTestStorageFactory::CHUNK_SIZE : NKikimr::TTestStorageFactory::MEM_CHUNK_SIZE,
+            .DiskSize = Settings_.DiskSize,
+            .FormatDisk = formatDisk,
+            .DiskPath = diskPath
         };
 
-        serverSettings.SetEnableMockOnSingleNode(!Settings_.DisableDiskMock && !Settings_.UseRealPDisks);
+        serverSettings.SetEnableMockOnSingleNode(!Settings_.DisableDiskMock && !Settings_.PDisksPath);
         serverSettings.SetCustomDiskParams(storage);
+        serverSettings.SetStorageGeneration(storageMeta.GetStorageGeneration());
     }
 
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {

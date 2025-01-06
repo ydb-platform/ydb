@@ -18,6 +18,8 @@ namespace NFake {
         ui64 SectorSize = 0;
         ui64 ChunkSize = 0;
         ui64 DiskSize = 0;
+        bool FormatDisk = true;
+        TString DiskPath;
     };
 
     struct INode {

@@ -9,6 +9,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/testlib
+
+    ydb/tests/tools/kqprun/src/proto
 )
 
 GENERATE_ENUM_SERIALIZATION(common.h)

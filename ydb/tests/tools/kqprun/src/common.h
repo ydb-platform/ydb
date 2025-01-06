@@ -39,7 +39,8 @@ struct TYdbSetupSettings {
     bool SameSession = false;
 
     bool DisableDiskMock = false;
-    bool UseRealPDisks = false;
+    bool FormatStorage = false;
+    std::optional<TString> PDisksPath;
     ui64 DiskSize = 32_GB;
 
     bool MonitoringEnabled = false;

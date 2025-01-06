@@ -614,6 +614,7 @@ namespace Tests {
 
         NKikimrBlobStorage::TDefineBox boxConfig;
         boxConfig.SetBoxId(Settings->BOX_ID);
+        boxConfig.SetItemConfigGeneration(Settings->StorageGeneration);
 
         ui32 nodeId = Runtime->GetNodeId(0);
         Y_ABORT_UNLESS(nodesInfo->Nodes[0].NodeId == nodeId);
@@ -621,11 +622,13 @@ namespace Tests {
 
         NKikimrBlobStorage::TDefineHostConfig hostConfig;
         hostConfig.SetHostConfigId(nodeId);
+        hostConfig.SetItemConfigGeneration(Settings->StorageGeneration);
         TString path;
         if (Settings->UseSectorMap) {
             path ="SectorMap:test-client[:2000]";
         } else {
-            path = TStringBuilder() << Runtime->GetTempDir() << "pdisk_1.dat";
+            TString diskPath = Settings->CustomDiskParams.DiskPath;
+            path = TStringBuilder() << (diskPath ? diskPath : Runtime->GetTempDir()) << "pdisk_1.dat";
         }
         hostConfig.AddDrive()->SetPath(path);
         if (Settings->Verbose) {
@@ -641,7 +644,9 @@ namespace Tests {
 
         for (const auto& [poolKind, storagePool] : Settings->StoragePoolTypes) {
             if (storagePool.GetNumGroups() > 0) {
-                bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(storagePool);
+                auto* command = bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool();
+                command->CopyFrom(storagePool);
+                command->SetItemConfigGeneration(Settings->StorageGeneration);
             }
         }
 

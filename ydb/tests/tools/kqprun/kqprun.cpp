@@ -134,6 +134,7 @@ struct TExecutionOptions {
         ValidateScriptExecutionOptions(runnerOptions);
         ValidateAsyncOptions(runnerOptions.YdbSettings.AsyncQueriesSettings);
         ValidateTraceOpt(runnerOptions);
+        ValidateStorageSettings(runnerOptions.YdbSettings);
     }
 
 private:
@@ -255,6 +256,19 @@ private:
             if (numberScripts == 1) {
                 Cout << colors.Red() << "Warning: trace opt id is not necessary for single script mode" << Endl;
             }
+        }
+    }
+
+    static void ValidateStorageSettings(const TYdbSetupSettings& ydbSettings) {
+        if (ydbSettings.DisableDiskMock) {
+            if (ydbSettings.NodeCount + ydbSettings.SharedTenants.size() + ydbSettings.DedicatedTenants.size() > 1) {
+                ythrow yexception() << "Disable disk mock cannot be used for multi node clusters (already disabled)";
+            } else if (ydbSettings.PDisksPath) {
+                ythrow yexception() << "Disable disk mock cannot be used with real PDisks (already disabled)";
+            }
+        }
+        if (ydbSettings.FormatStorage && !ydbSettings.PDisksPath) {
+            ythrow yexception() << "Cannot format storage without real PDisks, please use --storage-path";
         }
     }
 
@@ -857,9 +871,13 @@ protected:
                 return static_cast<ui64>(diskSize) << 30;
             });
 
-        options.AddLongOption("real-pdisks", "Use real PDisks instead of in memory PDisks (also disable disk mock)")
+        options.AddLongOption("storage-path", "Use real PDisks by specified path instead of in memory PDisks (also disable disk mock), use '-' to use temp directory")
+            .RequiredArgument("directory")
+            .StoreResult(&RunnerOptions.YdbSettings.PDisksPath);
+
+        options.AddLongOption("format-storage", "Clear storage if it exists on --storage-path")
             .NoArgument()
-            .SetFlag(&RunnerOptions.YdbSettings.UseRealPDisks);
+            .SetFlag(&RunnerOptions.YdbSettings.FormatStorage);
 
         options.AddLongOption("disable-disk-mock", "Disable disk mock on single node cluster")
             .NoArgument()
@@ -881,10 +899,6 @@ protected:
 
     int DoRun(NLastGetopt::TOptsParseResult&&) override {
         ExecutionOptions.Validate(RunnerOptions);
-
-        if (RunnerOptions.YdbSettings.DisableDiskMock && RunnerOptions.YdbSettings.NodeCount + RunnerOptions.YdbSettings.SharedTenants.size() + RunnerOptions.YdbSettings.DedicatedTenants.size() > 1) {
-            ythrow yexception() << "Disable disk mock cannot be used for multi node clusters";
-        }
 
         RunnerOptions.YdbSettings.YqlToken = YqlToken;
         RunnerOptions.YdbSettings.FunctionRegistry = CreateFunctionRegistry(UdfsDirectory, UdfsPaths, ExcludeLinkedUdfs).Get();

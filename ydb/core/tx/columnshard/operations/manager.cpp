@@ -55,7 +55,11 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         while (!rowset.EndOfSet()) {
             const ui64 lockId = rowset.GetValue<Schema::OperationTxIds::LockId>();
             const ui64 txId = rowset.GetValue<Schema::OperationTxIds::TxId>();
-            AFL_VERIFY(LockFeatures.contains(lockId))("lock_id", lockId);
+            if (auto it = LockFeatures.find(lockId); it == LockFeatures.end()) {
+                auto lock = TLockFeatures(lockId, 0);
+                lock.SetBroken();
+                LockFeatures.emplace(lockId, std::move(lock));
+            }
             AFL_VERIFY(Tx2Lock.emplace(txId, lockId).second);
             if (!rowset.Next()) {
                 return false;

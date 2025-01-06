@@ -185,8 +185,8 @@ public:
         return StartTxIds.empty() && FinishTxIds.empty() && IntervalTxIds.empty();
     }
 
-    void ProvideTxIdsFrom(const TPointInfo& previouse) {
-        for (auto&& i : previouse.IntervalTxIds) {
+    void ProvideTxIdsFrom(const TPointInfo& previous) {
+        for (auto&& i : previous.IntervalTxIds) {
             auto provided = i.second;
             {
                 auto it = StartTxIds.find(i.first);

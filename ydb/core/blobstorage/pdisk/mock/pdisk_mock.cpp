@@ -447,8 +447,17 @@ public:
     void Handle(NPDisk::TEvSlay::TPtr ev) {
         auto *msg = ev->Get();
         PDISK_MOCK_LOG(INFO, PDM17, "received TEvSlay", (Msg, msg->ToString()));
+
         auto res = std::make_unique<NPDisk::TEvSlayResult>(NKikimrProto::OK, GetStatusFlags(), msg->VDiskId,
                 msg->SlayOwnerRound, msg->PDiskId, msg->VSlotId, TString());
+
+        if (Impl.IsDiskReadOnly) {
+            res->Status = NKikimrProto::NOTREADY;
+            res->ErrorReason = "PDisk is in read-only mode";
+            Send(ev->Sender, res.release());
+            return;
+        }
+        
         bool found = false;
         for (auto& [ownerId, owner] : Impl.Owners) {
             if (!owner.VDiskId.SameExceptGeneration(msg->VDiskId)) {

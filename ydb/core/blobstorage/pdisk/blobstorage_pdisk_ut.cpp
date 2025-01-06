@@ -1359,34 +1359,74 @@ Y_UNIT_TEST_SUITE(ReadOnlyPDisk) {
 
         vdisk.Init(); // Should start ok.
         vdisk.ReadLog(); // Should be able to read log.
-        {
-            // Should fail on writing log.
-            auto evLog = MakeHolder<NPDisk::TEvLog>(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(1)),
-                TLsnSeg(), nullptr);
-            auto res = testCtx.TestResponse<NPDisk::TEvLogResult>(evLog.Release(), NKikimrProto::CORRUPTED);
-                
-            UNIT_ASSERT_STRING_CONTAINS(res->ErrorReason, "PDisk is in read-only mode");
-        }
-        {
-            // Should fail on reserving chunk.
-            auto res = testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(
-                new NPDisk::TEvChunkReserve(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 1),
-                NKikimrProto::CORRUPTED);
+    }
 
-            UNIT_ASSERT_STRING_CONTAINS(res->ErrorReason, "PDisk is in read-only mode");
-        }
-        {
-            // Should fail on writing chunk.
-            TString chunkWriteData = PrepareData(1);
-            auto counter = MakeIntrusive<::NMonitoring::TCounterForPtr>();
-            TMemoryConsumer consumer(counter);
-            TTrackableBuffer buffer(std::move(consumer), chunkWriteData.data(), chunkWriteData.size());
-            auto res = testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
-                new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
-                    0, 0, new NPDisk::TEvChunkWrite::TBufBackedUpParts(std::move(buffer)), nullptr, false, 0),
-                NKikimrProto::CORRUPTED); 
+    template <class Request, class Response, NKikimrProto::EReplyStatus ExpectedStatus = NKikimrProto::CORRUPTED, class... Args>
+    auto CheckReadOnlyRequest(Args&&... args) {
+        return [args = std::make_tuple(std::forward<Args>(args)...)](TActorTestContext& testCtx) {
+            Request* req = std::apply([](auto&&... unpackedArgs) {
+                return new Request(std::forward<decltype(unpackedArgs)>(unpackedArgs)...);
+            }, args);
 
+            THolder<Response> res = testCtx.TestResponse<Response>(req);
+
+            UNIT_ASSERT_VALUES_EQUAL(res->Status, ExpectedStatus);
             UNIT_ASSERT_STRING_CONTAINS(res->ErrorReason, "PDisk is in read-only mode");
+        };
+    }
+
+    Y_UNIT_TEST(ReadOnlyPDiskEvents) {
+        TActorTestContext testCtx{{}};
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+
+        auto cfg = testCtx.GetPDiskConfig();
+        cfg->ReadOnly = true;
+        testCtx.UpdateConfigRecreatePDisk(cfg);
+
+        vdisk.Init(); 
+        vdisk.ReadLog();
+
+        std::vector<std::function<void(TActorTestContext&)>> eventSenders = {
+            // Should fail on writing log. (ERequestType::RequestLogWrite)
+            CheckReadOnlyRequest<NPDisk::TEvLog, NPDisk::TEvLogResult>(
+                vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 0, 
+                TRcBuf(PrepareData(1)), TLsnSeg(), nullptr
+            ),
+            // Should fail on writing chunk. (ERequestType::RequestChunkWrite)
+            CheckReadOnlyRequest<NPDisk::TEvChunkWrite, NPDisk::TEvChunkWriteResult>(
+                vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                0, 0, nullptr, nullptr, false, 0
+            ),
+            // Should fail on reserving chunk. (ERequestType::RequestChunkReserve)
+            CheckReadOnlyRequest<NPDisk::TEvChunkReserve, NPDisk::TEvChunkReserveResult>(
+                vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 1
+            ),
+            // Should fail on chunk lock. (ERequestType::RequestChunkLock)
+            CheckReadOnlyRequest<NPDisk::TEvChunkLock, NPDisk::TEvChunkLockResult>(
+                NPDisk::TEvChunkLock::ELockFrom::LOG, 0, NKikimrBlobStorage::TPDiskSpaceColor::YELLOW
+            ),
+            // Should fail on chunk unlock. (ERequestType::RequestChunkUnlock)
+            CheckReadOnlyRequest<NPDisk::TEvChunkUnlock, NPDisk::TEvChunkUnlockResult>(
+                NPDisk::TEvChunkLock::ELockFrom::LOG
+            ),
+            // Should fail on chunk forget. (ERequestType::RequestChunkForget)
+            CheckReadOnlyRequest<NPDisk::TEvChunkForget, NPDisk::TEvChunkForgetResult>(
+                vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound + 1
+            ),
+            // Should fail on harakiri. (ERequestType::RequestHarakiri)
+            CheckReadOnlyRequest<NPDisk::TEvHarakiri, NPDisk::TEvHarakiriResult>(
+                vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound + 1
+            ),
+            // Should fail on slaying vdisk. (ERequestType::RequestYardSlay)
+            CheckReadOnlyRequest<NPDisk::TEvSlay, NPDisk::TEvSlayResult, NKikimrProto::NOTREADY>(
+                vdisk.VDiskID, vdisk.PDiskParams->OwnerRound + 1, 0, 0
+            )
+        };
+
+        for (auto sender : eventSenders) {
+            sender(testCtx);
         }
     }
 }

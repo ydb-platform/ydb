@@ -7,6 +7,9 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
+#include <util/digest/numeric.h>
+#include <util/generic/string_hash.h>
+
 namespace NKikimr::NOlap::NWritingPortions {
 
 class TAggregationId {
@@ -15,14 +18,15 @@ private:
     const ui64 SchemaVersion;
     const NEvWrite::EModificationType ModificationType;
     const TString SchemaDescription;
+    const ui64 SchemaDescriptionHash;
 
 public:
-    TAggregationId(const ui64 pathId, const ui64 schemaVersion, const NEvWrite::EModificationType mType,
-        const TString& schemaDescription)
+    TAggregationId(const ui64 pathId, const ui64 schemaVersion, const NEvWrite::EModificationType mType, const TString& schemaDescription)
         : PathId(pathId)
         , SchemaVersion(schemaVersion)
         , ModificationType(mType)
-        , SchemaDescription(schemaDescription) {
+        , SchemaDescription(schemaDescription)
+        , SchemaDescriptionHash(MurmurHash<ui64>(SchemaDescription.data(), SchemaDescription.size())) {
     }
 
     bool operator==(const TAggregationId& item) const {
@@ -31,7 +35,8 @@ public:
     }
 
     operator size_t() const {
-        return 0;
+        return CombineHashes<ui64>(
+            CombineHashes<ui64>(CombineHashes<ui64>(PathId, SchemaVersion), (ui64)ModificationType), SchemaDescriptionHash);
     }
 };
 
@@ -96,4 +101,4 @@ public:
     }
 };
 
-}   // namespace NKikimr::NColumnShard::NWritingPortions
+}   // namespace NKikimr::NOlap::NWritingPortions

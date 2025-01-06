@@ -2,9 +2,11 @@ ydb/core/blobstorage/dsproxy/ut TBlobStorageProxySequenceTest.TestBlock42PutWith
 ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
 ydb/core/client/ut TClientTest.PromoteFollower
 ydb/core/client/ut TClientTest.ReadFromFollower
+ydb/core/client/ut/TFlatTest.AutoSplitBySize
 ydb/core/client/ut TFlatTest.AutoSplitMergeQueue
 ydb/core/cms/ut_sentinel_unstable *
 ydb/core/external_sources *
+ydb/core/http_proxy/ut/inside_ydb_ut TestHttpProxy.TestChangeMessageVisibilityBatch
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.*
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
@@ -43,6 +45,7 @@ ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ManySession_ex
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ReadNotEmptyPartitions_AutoscaleAwareSDK
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ReadNotEmptyPartitions_BeforeAutoscaleAwareSDK
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.ReadingAfterSplitTest_PreferedPartition_AutoscaleAwareSDK
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.ReadFromTimestamp_AutoscaleAwareSDK
 ydb/core/persqueue/ut/ut_with_sdk [4/10] chunk chunk
 ydb/core/persqueue/ut/ut_with_sdk [6/10] chunk chunk
 ydb/core/persqueue/ut/ut_with_sdk [7/10] chunk chunk
@@ -104,6 +107,7 @@ ydb/tests/fq/control_plane_storage *
 ydb/tests/fq/s3 test_bindings_1.py.TestBindings.test_pg_binding[v2-client0]
 ydb/tests/fq/s3 test_bindings_1.py.TestBindings.test_count_for_pg_binding[v2-pg_syntax-client0]
 ydb/tests/fq/s3 test_format_setting.py.TestS3.test_precompute_with_pg_binding[v2-pg_types-pg_syntax-client0]
+ydb/tests/fq/pq_async_io TDqPqReadActorTest.LoadCorruptedState
 ydb/tests/functional/audit *
 ydb/tests/functional/blobstorage test_replication.py.TestReplicationAfterNodesRestart.test_replication*
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx

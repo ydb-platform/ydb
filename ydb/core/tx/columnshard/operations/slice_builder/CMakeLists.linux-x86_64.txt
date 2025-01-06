@@ -29,5 +29,6 @@ target_link_libraries(columnshard-operations-slice_builder PUBLIC
 
 target_sources(columnshard-operations-slice_builder PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/operations/slice_builder/builder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/operations/slice_builder/pack_builder.cpp
 )
 

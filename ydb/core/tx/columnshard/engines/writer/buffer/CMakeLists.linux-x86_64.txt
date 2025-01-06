@@ -30,6 +30,7 @@ target_link_libraries(engines-writer-buffer PUBLIC
 
 target_sources(engines-writer-buffer PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/writer/buffer/actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/writer/buffer/actor2.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/writer/buffer/events.cpp
 )
 

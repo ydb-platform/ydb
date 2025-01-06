@@ -150,6 +150,18 @@ public:
         ShardsInfo.at(shardId).State = state;
     }
 
+    void SetPartitioning(const TTableId tableId, const std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>& partitioning) override {
+        TablePartitioning[tableId] = partitioning;
+    }
+
+    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> GetPartitioning(const TTableId tableId) const override {
+        auto iterator = TablePartitioning.find(tableId);
+        if (iterator != std::end(TablePartitioning)) {
+            return iterator->second;
+        }
+        return nullptr;
+    }
+
     void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) override {
         TopicOperations = std::move(topicOperations);
     }
@@ -471,6 +483,8 @@ private:
     THashSet<ui64> ShardsIds;
     THashMap<ui64, TShardInfo> ShardsInfo;
     std::unordered_set<TString> TablePathes;
+
+    THashMap<TTableId, std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>> TablePartitioning;
 
     bool ReadOnly = true;
     bool ValidSnapshot = false;

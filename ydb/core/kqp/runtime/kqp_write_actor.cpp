@@ -254,7 +254,14 @@ public:
 
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
-        Resolve();
+        const auto partitioning = TxManager->GetPartitioning(TableId);
+        if (!partitioning) {
+            YQL_ENSURE(IsOlap);
+            Resolve();
+        } else {
+            Partitioning = partitioning;
+            Prepare();
+        }
         Become(&TKqpTableWriteActor::StateProcessing);
     }
 

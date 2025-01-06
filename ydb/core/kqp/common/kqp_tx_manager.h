@@ -51,6 +51,9 @@ public:
     virtual EShardState GetState(ui64 shardId) const = 0;
     virtual void SetState(ui64 shardId, EShardState state) = 0;
 
+    virtual void SetPartitioning(const TTableId tableId, const std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>& partitioning) = 0;
+    virtual std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> GetPartitioning(const TTableId tableId) const = 0;
+
     virtual void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) = 0;
     virtual const NTopic::TTopicOperations& GetTopicOperations() const = 0;
 

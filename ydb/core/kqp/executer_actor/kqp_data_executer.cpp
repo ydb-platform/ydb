@@ -2188,6 +2188,14 @@ private:
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
 
+        if (TxManager) {
+            for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
+                if (stageInfo.Meta.ShardKey) {
+                    TxManager->SetPartitioning(stageInfo.Meta.TableId, stageInfo.Meta.ShardKey->Partitioning);
+                }
+            }
+        }
+
         if (StreamResult || EnableReadsMerge || AllowOlapDataQuery) {
             TSet<ui64> shardIds;
             for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {

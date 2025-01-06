@@ -19,15 +19,15 @@ std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpSt
 
     YQL_ENSURE(partitionInfo);
 
+    // Binary search of the index to start with.
     size_t idxStart = 0;
     size_t idxFinish = partitionInfo->size();
     while ((idxFinish - idxStart) > 1) {
         size_t idxCur = (idxFinish + idxStart) / 2;
-        int cmp = CompareTypedCellVectors
-            ( (*partitionInfo)[idxCur].Range->EndKeyPrefix.GetCells().data(),
-              range.From.data(),
-              keyColumnTypes.data(),
-              keyColumnTypes.size() );
+        const auto& partCur = (*partitionInfo)[idxCur].Range->EndKeyPrefix.GetCells();
+        YQL_ENSURE(partCur.size() <= keyColumnTypes.size());
+        int cmp = CompareTypedCellVectors(partCur.data(), range.From.data(), keyColumnTypes.data(),
+                                          std::min(partCur.size(), range.From.size()));
         if (cmp < 0) {
             idxStart = idxCur + 1;
         } else {

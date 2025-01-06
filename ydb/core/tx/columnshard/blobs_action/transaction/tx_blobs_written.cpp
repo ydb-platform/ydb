@@ -17,17 +17,30 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
     auto& index = Self->MutableIndexAs<NOlap::TColumnEngineForLogs>();
     const auto minReadSnapshot = Self->GetMinReadSnapshot();
 
+    std::optional<EOperationBehaviour> packBehaviour;
+    for (auto&& writeResult : Pack.GetWriteResults()) {
+        const auto& writeMeta = writeResult.GetWriteMeta();
+        AFL_VERIFY(!writeMeta.HasLongTxId());
+        auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
+        if (!packBehaviour) {
+            packBehaviour = op->GetBehaviour();
+        } else {
+            AFL_VERIFY(packBehaviour == op->GetBehaviour());
+        }
+    }
+    AFL_VERIFY(!!packBehaviour);
+    std::vector<TInsertWriteId> insertWriteIds;
     auto& granule = index.MutableGranuleVerified(Pack.GetPathId());
     for (auto&& portion : Pack.MutablePortions()) {
-        if (Pack.GetBehaviour() == EOperationBehaviour::NoTxWrite) {
+        if (packBehaviour == EOperationBehaviour::NoTxWrite) {
             static TAtomicCounter Counter = 0;
             portion.GetPortionInfoConstructor()->MutablePortionConstructor().SetInsertWriteId((TInsertWriteId)Counter.Inc());
         } else {
             portion.GetPortionInfoConstructor()->MutablePortionConstructor().SetInsertWriteId(Self->InsertTable->BuildNextWriteId(txc));
         }
-        pack.AddInsertWriteId(portion.GetPortionInfoConstructor()->GetPortionConstructor().GetInsertWriteIdVerified());
+        insertWriteIds.emplace_back(portion.GetPortionInfoConstructor()->GetPortionConstructor().GetInsertWriteIdVerified());
         portion.Finalize(Self, txc);
-        if (Pack.GetBehaviour() == EOperationBehaviour::NoTxWrite) {
+        if (packBehaviour == EOperationBehaviour::NoTxWrite) {
             granule.CommitImmediateOnExecute(txc, *CommitSnapshot, portion.GetPortionInfo());
         } else {
             granule.InsertPortionOnExecute(txc, portion.GetPortionInfo());
@@ -46,10 +59,9 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             continue;
         }
         AFL_VERIFY(Self->TablesManager.IsReadyForFinishWrite(writeMeta.GetTableId(), minReadSnapshot));
-        AFL_VERIFY(operation->GetBehaviour() == Pack.GetBehaviour());
         Y_ABORT_UNLESS(operation->GetStatus() == EOperationStatus::Started);
-        operation->OnWriteFinish(txc, pack.GetInsertWriteIds(), operation->GetBehaviour() == EOperationBehaviour::NoTxWrite);
-        Self->OperationsManager->LinkInsertWriteIdToOperationWriteId(pack.GetInsertWriteIds(), operation->GetWriteId());
+        operation->OnWriteFinish(txc, insertWriteIds, operation->GetBehaviour() == EOperationBehaviour::NoTxWrite);
+        Self->OperationsManager->LinkInsertWriteIdToOperationWriteId(insertWriteIds, operation->GetWriteId());
         if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
@@ -83,16 +95,24 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
     std::set<ui64> pathIds;
     for (auto&& writeResult : Pack.GetWriteResults()) {
         const auto& writeMeta = writeResult.GetWriteMeta();
-        AFL_VERIFY(!writeMeta.HasLongTxId());
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         pathIds.emplace(op->GetPathId());
         if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock || op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
             if (op->GetBehaviour() != EOperationBehaviour::NoTxWrite || Self->GetOperationsManager().HasReadLocks(writeMeta.GetTableId())) {
                 auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(
-                    writeMeta.GetTableId(), writeResult.GetPKBatch(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
+                    writeMeta.GetTableId(), writeResult.GetPKBatchVerified(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
                 Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
             }
         }
+    }
+    auto& index = Self->MutableIndexAs<NOlap::TColumnEngineForLogs>();
+    auto& granule = index.MutableGranuleVerified(Pack.GetPathId());
+    for (auto&& portion : Pack.GetPortions()) {
+        granule.InsertPortionOnComplete(portion.GetPortionInfo(), index);
+    }
+    for (auto&& writeResult : Pack.GetWriteResults()) {
+        const auto& writeMeta = writeResult.GetWriteMeta();
+        auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         if (op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
             AFL_VERIFY(CommitSnapshot);
             Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
@@ -102,18 +122,13 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
         Self->Counters.GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
         Self->Counters.GetCSCounters().OnSuccessWriteResponse();
     }
-    auto& index = Self->MutableIndexAs<NOlap::TColumnEngineForLogs>();
-    auto& granule = index.MutableGranuleVerified(op->GetPathId());
-    for (auto&& portion : Pack.GetPortions()) {
-        granule.InsertPortionOnComplete(portion.GetPortionInfo(), index);
-    }
     Self->SetupCompaction(pathIds);
 }
 
 TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKikimrProto::EReplyStatus writeStatus,
     const std::shared_ptr<NOlap::IBlobsWritingAction>& writingActions, TInsertedPortions&& pack)
     : TBase(self, "TTxBlobsWritingFinished")
-    , Packs(std::move(pack))
+    , Pack(std::move(pack))
     , WritingActions(writingActions) {
 }
 

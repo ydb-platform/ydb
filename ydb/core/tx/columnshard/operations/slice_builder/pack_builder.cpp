@@ -1,5 +1,7 @@
 #include "pack_builder.h"
 
+#include <ydb/core/formats/arrow/reader/merger.h>
+#include <ydb/core/formats/arrow/reader/result_builder.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/defs.h>
@@ -8,37 +10,7 @@
 #include <ydb/core/tx/columnshard/engines/writer/buffer/events.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 
-namespace NKikimr::NOlap {
-
-std::optional<std::vector<NKikimr::NArrow::TSerializedBatch>> TBuildPackSlicesTask::BuildSlices() {
-    if (!OriginalBatch->num_rows()) {
-        return std::vector<NKikimr::NArrow::TSerializedBatch>();
-    }
-    NArrow::TBatchSplitttingContext context(NColumnShard::TLimits::GetMaxBlobSize());
-    context.SetFieldsForSpecialKeys(WriteData.GetPrimaryKeySchema());
-    auto splitResult = NArrow::SplitByBlobSize(OriginalBatch, context);
-    if (splitResult.IsFail()) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_WRITE)(
-            "event", TStringBuilder() << "cannot split batch in according to limits: " + splitResult.GetErrorMessage());
-        return {};
-    }
-    auto result = splitResult.DetachResult();
-    if (result.size() > 1) {
-        for (auto&& i : result) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "strange_blobs_splitting")("blob", i.DebugString())(
-                "original_size", WriteData.GetSize());
-        }
-    }
-    return result;
-}
-
-void TBuildPackSlicesTask::ReplyError(const TString& message, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass) {
-    auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
-    TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
-    auto result =
-        NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), message, errorClass);
-    TActorContext::AsActorContext().Send(Context.GetTabletActorId(), result.release());
-}
+namespace NKikimr::NOlap::NWritingPortions {
 
 class TPortionWriteController: public NColumnShard::IWriteController,
                                public NColumnShard::TMonitoringObjectsCounter<TIndexedWriteController, true> {
@@ -58,7 +30,7 @@ public:
             return std::move(Portion);
         }
         TInsertPortion(TWritePortionInfoWithBlobsResult&& portion)
-            : Portion(std::move(portion)){
+            : Portion(std::move(portion)) {
         }
     };
 
@@ -67,15 +39,14 @@ private:
     std::vector<TInsertPortion> Portions;
     std::vector<NColumnShard::TWriteResult> WriteResults;
     TActorId DstActor;
-    const ui64 DataSize;
     void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override {
         std::vector<NColumnShard::TInsertedPortion> portions;
         for (auto&& i : Portions) {
             portions.emplace_back(i.ExtractPortion());
         }
         NColumnShard::TInsertedPortions pack(std::move(WriteResults), std::move(portions));
-        auto result = std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(
-            putResult->GetPutStatus(), Action, std::move(pack));
+        auto result =
+            std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(putResult->GetPutStatus(), Action, std::move(pack));
         ctx.Send(DstActor, result.release());
     }
     virtual void DoOnStartSending() override {
@@ -111,7 +82,7 @@ public:
         , ModificationType(modificationType) {
     }
 
-    void Add(const std::shared_ptr<arrow::RecordBatch>& rb, const std::shared_ptr<TWriteData>& data) {
+    void Add(const std::shared_ptr<arrow::RecordBatch>& rb, const std::shared_ptr<NEvWrite::TWriteData>& data) {
         if (!rb) {
             return;
         }
@@ -120,13 +91,13 @@ public:
         Schemas.emplace_back(rb->schema());
     }
 
-    void Finalize(const TWritingContext& context, std::vector<TPortionWriteController::TInsertPortion>& result) {
+    void Finalize(const NOlap::TWritingContext& context, std::vector<TPortionWriteController::TInsertPortion>& result) {
         if (Batches.size() == 0) {
             return;
         }
         if (Batches.size() == 1) {
-            auto portionConclusion = Context.GetActualSchema()->PrepareForWrite(
-                Context.GetActualSchema(), PathId, Batches.front(), ModificationType, Context->GetStoragesManager(), Context->GetSplitterCounters());
+            auto portionConclusion = context.GetActualSchema()->PrepareForWrite(context.GetActualSchema(), PathId, Batches.front(),
+                ModificationType, context.GetStoragesManager(), context.GetSplitterCounters());
             result.emplace_back(portionConclusion.DetachResult());
         } else {
             ui32 idx = 0;
@@ -134,40 +105,39 @@ public:
             ui32 recordsCountSum = 0;
             const std::shared_ptr<arrow::Schema> dataSchema = Batches.front()->schema();
             for (auto&& i : Batches) {
-                auto gContainer = std::make_shared<TGeneralContainer>(i);
+                auto gContainer = std::make_shared<NArrow::TGeneralContainer>(i);
                 recordsCountSum += i->num_rows();
-                gContainer->AddField(IIndexInfo::GetWriteIdField(),
-                    NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt64Scalar(SequentialWriteId[idx]), i->num_rows())));
+                gContainer
+                    ->AddField(IIndexInfo::GetWriteIdField(), NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(
+                                                                  arrow::UInt64Scalar(SequentialWriteId[idx]), i->num_rows())))
+                    .Validate();
                 ++idx;
                 containers.emplace_back(gContainer);
             }
-            NArrow::NMerger::TMergePartialStream stream(context.GetActualSchema()->GetIndexInfo().GetReplaceKey(), dataSchema,
-                false, { IIndexInfo::GetWriteIdField()->name() });
+            NArrow::NMerger::TMergePartialStream stream(
+                context.GetActualSchema()->GetIndexInfo().GetReplaceKey(), dataSchema, false, { IIndexInfo::GetWriteIdField()->name() });
             for (auto&& i : containers) {
                 stream.AddSource(i, nullptr);
             }
             NArrow::NMerger::TRecordBatchBuilder rbBuilder(dataSchema->fields(), recordsCountSum);
             stream.DrainAll(rbBuilder);
-            auto portionConclusion = Context.GetActualSchema()->PrepareForWrite(Context.GetActualSchema(), PathId, rbBuilder.Finalize(),
-                ModificationType, Context->GetStoragesManager(), Context->GetSplitterCounters());
+            auto portionConclusion = context.GetActualSchema()->PrepareForWrite(context.GetActualSchema(), PathId, rbBuilder.Finalize(),
+                ModificationType, context.GetStoragesManager(), context.GetSplitterCounters());
             result.emplace_back(portionConclusion.DetachResult());
         }
     }
 };
 
 TConclusionStatus TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
-    const NActors::TLogContextGuard g =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)("tablet_id", TabletId)("parent_id",
-            Context.GetTabletActorId())("write_id", WriteData.GetWriteMeta().GetWriteId())("table_id", WriteData.GetWriteMeta().GetTableId());
+    const NActors::TLogContextGuard g = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)("tablet_id", TabletId)(
+        "parent_id", Context.GetTabletActorId())("path_id", PathId);
     if (!Context.IsActive()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "abort_execution");
-        ReplyError("execution aborted", NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
         return TConclusionStatus::Fail("execution aborted");
     }
-    NColumnShard::TInsertedPortions portions;
     NArrow::NMerger::TIntervalPositions splitPositions;
     for (auto&& unit : WriteUnits) {
-        splitPositions = splitPositions.Merge(WriteData.GetData()->GetSeparationPoints());
+        splitPositions.Merge(unit.GetData()->GetData()->GetSeparationPoints());
     }
     std::vector<TSliceToMerge> slicesToMerge;
     slicesToMerge.resize(splitPositions.GetPointsCount() + 1, TSliceToMerge(PathId, ModificationType));
@@ -175,14 +145,14 @@ TConclusionStatus TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& 
     for (auto&& unit : WriteUnits) {
         const auto& originalBatch = unit.GetBatch();
         if (originalBatch->num_rows() == 0) {
-            writeResults.emplace_back(i.GetData()->GetWriteMeta(), i.GetData()->GetDataSize(), nullptr, true);
+            writeResults.emplace_back(unit.GetData()->GetWriteMeta(), unit.GetData()->GetSize(), nullptr, true, 0);
             continue;
         }
         auto batches = NArrow::NMerger::TRWSortableBatchPosition::SplitByBordersInIntervalPositions(
             originalBatch, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->field_names(), splitPositions);
         std::shared_ptr<arrow::RecordBatch> pkBatch =
-            NArrow::TColumnOperator().Extract(batch, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->fields());
-        writeResults.emplace_back(i.GetData()->GetWriteMeta(), i.GetData()->GetDataSize(), pkBatch, false);
+            NArrow::TColumnOperator().Extract(originalBatch, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->fields());
+        writeResults.emplace_back(unit.GetData()->GetWriteMeta(), unit.GetData()->GetSize(), pkBatch, false, originalBatch->num_rows());
         ui32 idx = 0;
         for (auto&& batch : batches) {
             if (!!batch) {
@@ -196,7 +166,7 @@ TConclusionStatus TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& 
         i.Finalize(Context, portionsToWrite);
     }
     auto actions = WriteUnits.front().GetData()->GetBlobsAction();
-    auto writeController = std::make_shared<NOlap::TPortionWriteController>(
+    auto writeController = std::make_shared<TPortionWriteController>(
         Context.GetTabletActorId(), actions, std::move(writeResults), std::move(portionsToWrite));
     if (actions->NeedDraftTransaction()) {
         TActorContext::AsActorContext().Send(

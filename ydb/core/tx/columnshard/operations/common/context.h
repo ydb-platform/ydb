@@ -9,6 +9,8 @@ namespace NKikimr::NOlap {
 class TWritingContext {
 private:
     YDB_READONLY(ui64, TabletId, 0);
+    YDB_READONLY(NActors::TActorId, BufferizationInsertionActorId, NActors::TActorId());
+    YDB_READONLY(NActors::TActorId, BufferizationPortionsActorId, NActors::TActorId());
     YDB_READONLY(NActors::TActorId, TabletActorId, NActors::TActorId());
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ActualSchema);
     YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, StoragesManager);
@@ -35,8 +37,11 @@ public:
     TWritingContext(const ui64 tabletId, const NActors::TActorId& tabletActorId, const std::shared_ptr<ISnapshotSchema>& actualSchema,
         const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters,
         const std::shared_ptr<NColumnShard::TWriteCounters>& writingCounters, const TSnapshot& applyToSnapshot,
-        const std::shared_ptr<const TAtomicCounter>& activityChecker, const bool noTxWrite)
+        const std::shared_ptr<const TAtomicCounter>& activityChecker, const bool noTxWrite,
+        const NActors::TActorId& bufferizationInsertionActorId, const NActors::TActorId& bufferizationPortionsActorId)
         : TabletId(tabletId)
+        , BufferizationInsertionActorId(bufferizationInsertionActorId)
+        , BufferizationPortionsActorId(bufferizationPortionsActorId)
         , TabletActorId(tabletActorId)
         , ActualSchema(actualSchema)
         , StoragesManager(operators)

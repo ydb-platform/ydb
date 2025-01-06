@@ -29,6 +29,7 @@ private:
     YDB_READONLY(ui64, DataSize, 0);
     YDB_READONLY(bool, NoDataToWrite, false);
     std::shared_ptr<arrow::RecordBatch> PKBatch;
+    ui32 RecordsCount;
 
 public:
     const std::shared_ptr<arrow::RecordBatch>& GetPKBatchVerified() const {
@@ -36,17 +37,22 @@ public:
         return PKBatch;
     }
 
+    ui32 GetRecordsCount() const {
+        return RecordsCount;
+    }
+
     const NEvWrite::TWriteMeta& GetWriteMeta() const {
         return WriteMeta;
     }
 
-    TWriteResult(const NEvWrite::TWriteMeta& writeMeta, const ui64 dataSize, const std::shared_ptr<arrow::RecordBatch>& pkBatch, const bool noDataToWrite)
+    TWriteResult(const NEvWrite::TWriteMeta& writeMeta, const ui64 dataSize, const std::shared_ptr<arrow::RecordBatch>& pkBatch,
+        const bool noDataToWrite, const ui32 recordsCount)
         : WriteMeta(writeMeta)
         , DataSize(dataSize)
         , NoDataToWrite(noDataToWrite)
         , PKBatch(pkBatch)
+        , RecordsCount(recordsCount)
     {
-
     }
 };
 
@@ -54,32 +60,24 @@ class TInsertedPortions {
 private:
     YDB_ACCESSOR_DEF(std::vector<TWriteResult>, WriteResults);
     YDB_ACCESSOR_DEF(std::vector<TInsertedPortion>, Portions);
-    std::optional<EOperationBehaviour> Behaviour;
+    YDB_READONLY(ui64, PathId, 0);
 
 public:
-    EOperationBehaviour GetBehaviour() const {
-        AFL_VERIFY(!!Behaviour);
-        return *Behaviour;
-    }
-
     TInsertedPortions(std::vector<TWriteResult>&& writeResults, std::vector<TInsertedPortion>&& portions)
         : WriteResults(std::move(writeResults))
         , Portions(std::move(portions)) {
+        AFL_VERIFY(WriteResults.size());
+        std::optional<ui64> pathId;
         for (auto&& i : WriteResults) {
             AFL_VERIFY(!i.GetWriteMeta().HasLongTxId());
-            if (!Behaviour) {
-                Behaviour = i.GetWriteMeta().GetBehaviour();
+            if (!pathId) {
+                pathId = i.GetWriteMeta().GetTableId();
             } else {
-                AFL_VERIFY(Behaviour == i.GetWriteMeta().GetBehaviour());
+                AFL_VERIFY(pathId == i.GetWriteMeta().GetTableId());
             }
         }
-        AFL_VERIFY(Behaviour);
-        if (Behaviour == EOperationBehaviour::NoTxWrite) {
-
-        } else {
-            AFL_VERIFY(Behaviour == EOperationBehaviour::WriteWithLock)("behaviour", Behaviour);
-            AFL_VERIFY(WriteResults.size() == 1)("size", WriteResults.size());
-        }
+        AFL_VERIFY(pathId);
+        PathId = *pathId;
     }
 };
 

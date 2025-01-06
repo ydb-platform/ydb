@@ -467,6 +467,33 @@ private:
 public:
     using const_iterator = std::vector<TIntervalPosition>::const_iterator;
 
+    void Merge(const TIntervalPositions& from) {
+        auto itSelf = Positions.begin();
+        auto itFrom = from.Positions.begin();
+        while (itSelf != Positions.end() && itFrom != from.Positions.end()) {
+            if (*itSelf < *itFrom) {
+                Positions.emplace_back(*itSelf);
+                ++itSelf;
+            } else if (*itFrom < *itSelf) {
+                Positions.emplace_back(*itFrom);
+                ++itFrom;
+            } else {
+                Positions.emplace_back(*itFrom);
+                ++itSelf;
+                ++itFrom;
+            }
+        }
+        if (itSelf == Positions.end()) {
+            Positions.insert(Positions.end(), itFrom, from.Positions.end());
+        } else {
+            Positions.insert(Positions.end(), itSelf, Positions.end());
+        }
+    }
+
+    ui32 GetPointsCount() const {
+        return Positions.size();
+    }
+
     bool IsEmpty() const {
         return Positions.empty();
     }

@@ -2,6 +2,7 @@
 
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/operations/common/context.h>
 #include <ydb/core/tx/data_events/write_data.h>
 
 #include <ydb/library/actors/core/event_local.h>
@@ -35,7 +36,7 @@ public:
 
 }   // namespace NKikimr::NColumnShard::NWriting
 
-namespace NKikimr::NColumnShard::NWritingPortions {
+namespace NKikimr::NOlap::NWritingPortions {
 
 class TEvAddInsertedDataToBuffer
     : public NActors::TEventLocal<TEvAddInsertedDataToBuffer, NColumnShard::TEvPrivate::EEv::EvWritingPortionsAddDataToBuffer> {
@@ -49,8 +50,7 @@ public:
         const std::shared_ptr<arrow::RecordBatch>& recordBatch, const std::shared_ptr<NOlap::TWritingContext>& context)
         : WriteData(writeData)
         , RecordBatch(recordBatch)
-        , Context(context)
-    {
+        , Context(context) {
         AFL_VERIFY(!!WriteData);
         AFL_VERIFY(!!RecordBatch);
         AFL_VERIFY(!!Context);
@@ -65,4 +65,4 @@ private:
 public:
 };
 
-}   // namespace NKikimr::NColumnShard::NWritingPortions
+}   // namespace NKikimr::NOlap::NWritingPortions

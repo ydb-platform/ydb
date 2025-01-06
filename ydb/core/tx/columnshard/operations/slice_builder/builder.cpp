@@ -69,10 +69,9 @@ private:
     NColumnShard::TWriteResult WriteResult;
     TActorId DstActor;
     void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override {
-        NColumnShard::TInsertedPortions insertedData;
         std::vector<NColumnShard::TInsertedPortion> portions;
         for (auto&& i : Portions) {
-            portions.emplace_back(i.ExtractPortion(), i.GetPKBatch());
+            portions.emplace_back(i.ExtractPortion());
         }
         NColumnShard::TInsertedPortions pack({ WriteResult }, std::move(portions));
         auto result = std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(
@@ -114,7 +113,7 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
     }
     if (WriteData.GetWritePortions()) {
         if (OriginalBatch->num_rows() == 0) {
-            NColumnShard::TWriteResult wResult(WriteData.GetWriteMeta(), WriteData.GetSize(), nullptr, true);
+            NColumnShard::TWriteResult wResult(WriteData.GetWriteMeta(), WriteData.GetSize(), nullptr, true, 0);
             NColumnShard::TInsertedPortions pack({ wResult }, {});
             auto result = std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(
                 NKikimrProto::EReplyStatus::OK, nullptr, std::move(pack));
@@ -124,7 +123,7 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
                 NArrow::TColumnOperator().Extract(OriginalBatch, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->fields());
             auto batches = NArrow::NMerger::TRWSortableBatchPosition::SplitByBordersInIntervalPositions(OriginalBatch,
                 Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->field_names(), WriteData.GetData()->GetSeparationPoints());
-            NColumnShard::TWriteResult wResult(WriteData.GetWriteMeta(), WriteData.GetSize(), pkBatch, false);
+            NColumnShard::TWriteResult wResult(WriteData.GetWriteMeta(), WriteData.GetSize(), pkBatch, false, OriginalBatch->num_rows());
             std::vector<TPortionWriteController::TInsertPortion> portions;
             for (auto&& batch : batches) {
                 if (!batch) {
@@ -184,7 +183,7 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
             std::shared_ptr<arrow::RecordBatch> pkBatch =
                 NArrow::TColumnOperator().Extract(OriginalBatch, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->fields());
             auto result = std::make_unique<NColumnShard::NWriting::TEvAddInsertedDataToBuffer>(writeDataPtr, std::move(*batches), pkBatch);
-            TActorContext::AsActorContext().Send(BufferActorId, result.release());
+            TActorContext::AsActorContext().Send(Context.GetBufferizationInsertionActorId(), result.release());
         } else {
             ReplyError("Cannot slice input to batches", NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
             return TConclusionStatus::Fail("Cannot slice input to batches");

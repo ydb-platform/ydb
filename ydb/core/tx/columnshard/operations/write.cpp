@@ -34,11 +34,9 @@ void TWriteOperation::Start(
     NEvWrite::TWriteMeta writeMeta((ui64)WriteId, GetPathId(), source, GranuleShardingVersionId, GetIdentifier());
     writeMeta.SetLockId(LockId);
     writeMeta.SetModificationType(ModificationType);
-    writeMeta.SetBehaviour(Behaviour);
     NEvWrite::TWriteData writeData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(),
         owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR), WritePortions);
-    std::shared_ptr<NConveyor::ITask> task =
-        std::make_shared<NOlap::TBuildBatchesTask>(owner.BufferizationWriteActorId, std::move(writeData), context);
+    std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(std::move(writeData), context);
     NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
 
     Status = EOperationStatus::Started;

@@ -279,9 +279,10 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         writeData.MutableWriteMeta().SetWriteMiddle1StartInstant(TMonotonic::Now());
 
         NOlap::TWritingContext context(TabletID(), SelfId(), snapshotSchema, StoragesManager, Counters.GetIndexationCounters().SplitterCounters,
-            Counters.GetCSCounters().WritingCounters, GetLastTxSnapshot(), std::make_shared<TAtomicCounter>(1));
+            Counters.GetCSCounters().WritingCounters, GetLastTxSnapshot(), std::make_shared<TAtomicCounter>(1), true,
+            BufferizationInsertionWriteActorId, BufferizationPortionsWriteActorId);
         std::shared_ptr<NConveyor::ITask> task =
-            std::make_shared<NOlap::TBuildBatchesTask>(BufferizationWriteActorId, std::move(writeData), context);
+            std::make_shared<NOlap::TBuildBatchesTask>(std::move(writeData), context);
         NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
     }
 }

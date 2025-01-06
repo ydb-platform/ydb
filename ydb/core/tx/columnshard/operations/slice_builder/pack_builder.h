@@ -6,16 +6,30 @@
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/data_events/write_data.h>
 
-namespace NKikimr::NOlap {
+namespace NKikimr::NOlap::NWritingPortions {
 
-class TBuildPackSlicesTask: public NConveyor::ITask, public NColumnShard::TMonitoringObjectsCounter<TBuildSlicesTask> {
+class TWriteUnit {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<NEvWrite::TWriteData>, Data);
+    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
+
+public:
+    TWriteUnit(const std::shared_ptr<NEvWrite::TWriteData>& data, const std::shared_ptr<arrow::RecordBatch>& batch)
+        : Data(data)
+        , Batch(batch) {
+        AFL_VERIFY(Data->GetWritePortions());
+        AFL_VERIFY(Batch);
+    }
+};
+
+class TBuildPackSlicesTask: public NConveyor::ITask, public NColumnShard::TMonitoringObjectsCounter<TBuildPackSlicesTask> {
 private:
     const ui64 PathId;
-    const EModificationType ModificationType;
+    const ui64 TabletId;
+    const NEvWrite::EModificationType ModificationType;
     const std::vector<TWriteUnit> WriteUnits;
-    const TWritingContext Context;
+    const NOlap::TWritingContext Context;
     std::optional<std::vector<NArrow::TSerializedBatch>> BuildSlices();
-    void ReplyError(const TString& message, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass);
 
 protected:
     virtual TConclusionStatus DoExecute(const std::shared_ptr<ITask>& taskPtr) override;
@@ -25,8 +39,10 @@ public:
         return "Write::ConstructBlobs::PackSlices";
     }
 
-    TBuildPackSlicesTask(std::vector<TWriteUnit>&& writeUnits, const TWritingContext& context, const ui64 pathId, const EModificationType modificationType)
+    TBuildPackSlicesTask(std::vector<TWriteUnit>&& writeUnits, const NOlap::TWritingContext& context, const ui64 pathId, const ui64 tabletId,
+        const NEvWrite::EModificationType modificationType)
         : PathId(pathId)
+        , TabletId(tabletId)
         , ModificationType(modificationType)
         , WriteUnits(std::move(writeUnits))
         , Context(context) {

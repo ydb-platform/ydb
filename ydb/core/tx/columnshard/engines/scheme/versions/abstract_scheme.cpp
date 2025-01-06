@@ -299,15 +299,6 @@ public:
     }
 };
 
-TConclusion<std::shared_ptr<arrow::Schema>> ISnapshotSchema::MergeSortedSchemas(std::vector<std::shared_ptr<arrow::Schema>>& schemas) const {
-    std::vector<TSchemaIterator> iterators;
-    for (auto&& i : schemas) {
-        iterators.emplace_back(i);
-    }
-    auto itIndex = GetIndexInfo().ArrowSchema().begin();
-    auto itIndexEnd = GetIndexInfo().ArrowSchema().end();
-}
-
 TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const ui64 pathId,
     const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
     const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const {

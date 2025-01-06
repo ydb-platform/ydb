@@ -1,29 +1,31 @@
-#include "actor.h"
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
-#include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include "actor2.h"
 
-namespace NKikimr::NColumnShard::NWritingPortions {
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
+
+namespace NKikimr::NOlap::NWritingPortions {
 
 TActor::TActor(ui64 tabletId, const TActorId& parent)
     : TabletId(tabletId)
-    , ParentActorId(parent)
-{
-
+    , ParentActorId(parent) {
 }
 
 void TActor::Bootstrap() {
     Become(&TThis::StateWait);
-    Schedule(FlushDuration, new TEvFlushBuffer);
     if (AppDataVerified().ColumnShardConfig.HasWritingBufferDurationMs()) {
         FlushDuration = TDuration::MilliSeconds(AppDataVerified().ColumnShardConfig.GetWritingBufferDurationMs());
     } else {
         FlushDuration = std::nullopt;
     }
+    if (FlushDuration) {
+        Schedule(*FlushDuration, new TEvFlushBuffer);
+    }
 }
 
 void TActor::Flush() {
     for (auto&& i : Aggregations) {
-        i.second.Flush();
+        i.second.Flush(TabletId);
     }
     Aggregations.clear();
     SumSize = 0;
@@ -46,10 +48,10 @@ void TActor::Handle(TEvAddInsertedDataToBuffer::TPtr& ev) {
     AFL_VERIFY(evBase->GetWriteData()->GetBlobsAction()->GetStorageId() == NOlap::IStoragesManager::DefaultStorageId);
 
     SumSize += evBase->GetWriteData()->GetSize();
-    const ui64 pathId = evBase->GetWriteData()->GetWriteMeta().GetPathId();
-    const ui64 schemaVersion = evBase->GetContext()->GetSchemaVersion();
+    const ui64 pathId = evBase->GetWriteData()->GetWriteMeta().GetTableId();
+    const ui64 schemaVersion = evBase->GetContext()->GetActualSchema()->GetVersion();
     TAggregationId aggrId(pathId, schemaVersion, evBase->GetWriteData()->GetWriteMeta().GetModificationType(),
-        evBase->GetWriteData()->GetWriteMeta().GetBehaviour(), evBase->GetRecordBatch()->schema()->ToString());
+        evBase->GetRecordBatch()->schema()->ToString());
     auto it = Aggregations.find(aggrId);
     if (it == Aggregations.end()) {
         it = Aggregations
@@ -60,9 +62,15 @@ void TActor::Handle(TEvAddInsertedDataToBuffer::TPtr& ev) {
     }
     it->second.AddUnit(TWriteUnit(evBase->GetWriteData(), evBase->GetRecordBatch()));
     if (it->second.GetSumSize() > 16 * 1024 * 1024 || !FlushDuration) {
-        it->second.Flush();
+        it->second.Flush(TabletId);
     }
 }
 
-
+void TWriteAggregation::Flush(const ui64 tabletId) {
+    std::shared_ptr<NConveyor::ITask> task =
+        std::make_shared<TBuildPackSlicesTask>(std::move(Units), Context, PathId, tabletId, ModificationType);
+    NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+    Units.clear();
 }
+
+}   // namespace NKikimr::NColumnShard::NWritingPortions

@@ -61,7 +61,7 @@ void TActor::Handle(TEvAddInsertedDataToBuffer::TPtr& ev) {
         it->second.MergeContext(*evBase->GetContext());
     }
     it->second.AddUnit(TWriteUnit(evBase->GetWriteData(), evBase->GetRecordBatch()));
-    if (it->second.GetSumSize() > 16 * 1024 * 1024 || !FlushDuration) {
+    if (it->second.GetSumSize() > (ui64)AppDataVerified().ColumnShardConfig.GetWritingBufferVolumeMb() * 1024 * 1024 || !FlushDuration) {
         it->second.Flush(TabletId);
     }
 }

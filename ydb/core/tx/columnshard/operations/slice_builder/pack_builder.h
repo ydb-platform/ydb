@@ -46,6 +46,7 @@ public:
         , ModificationType(modificationType)
         , WriteUnits(std::move(writeUnits))
         , Context(context) {
+        AFL_VERIFY(WriteUnits.size());
     }
 };
 }   // namespace NKikimr::NOlap

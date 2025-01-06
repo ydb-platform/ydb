@@ -37,6 +37,44 @@ public:
         SetShardingMethod("HASH_FUNCTION_CONSISTENCY_64");
     }
 
+    class TWritingGuard {
+    private:
+        TKikimrRunner& KikimrRunner;
+        const TString TablePath;
+        mutable std::atomic<size_t> Responses = 0;
+        void SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch,
+            const Ydb::StatusIds_StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) const;
+
+        void WaitWritings();
+
+    public:
+        TWritingGuard(TKikimrRunner& kikimrRunner, const TString& tablePath)
+            : KikimrRunner(kikimrRunner)
+            , TablePath(tablePath)
+        {
+        }
+
+        template <class TFiller>
+        void FillTable(const TFiller& fillPolicy, const double pkKff = 0, const ui32 numRows = 800000) const {
+            std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
+            builders.emplace_back(
+                NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>::BuildNotNullable(
+                    "pk_int", numRows * pkKff));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<TFiller>>("field", fillPolicy));
+            NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
+            std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
+            SendDataViaActorSystem(TablePath, batch, Ydb::StatusIds::SUCCESS);
+        }
+
+        void Finalize() {
+            WaitWritings();
+        }
+    };
+
+    TWritingGuard StartWriting(const TString& tablePath) {
+        return TWritingGuard(KikimrRunner, tablePath);
+    }
+
     void ExecuteSchemeQuery(const TString& alterQuery, const NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS) const;
 
     TString GetQueryResult(const TString& request) const;

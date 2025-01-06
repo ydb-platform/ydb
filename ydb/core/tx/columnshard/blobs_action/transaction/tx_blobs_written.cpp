@@ -60,7 +60,15 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
         }
         AFL_VERIFY(Self->TablesManager.IsReadyForFinishWrite(writeMeta.GetTableId(), minReadSnapshot));
         Y_ABORT_UNLESS(operation->GetStatus() == EOperationStatus::Started);
-        operation->OnWriteFinish(txc, insertWriteIds, operation->GetBehaviour() == EOperationBehaviour::NoTxWrite);
+        if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
+            if (operationIds.size() == 1) {
+                operation->OnWriteFinish(txc, insertWriteIds, true);
+            } else {
+                operation->OnWriteFinish(txc, {}, true);
+            }
+        } else {
+            operation->OnWriteFinish(txc, insertWriteIds, false);
+        }
         Self->OperationsManager->LinkInsertWriteIdToOperationWriteId(insertWriteIds, operation->GetWriteId());
         if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());

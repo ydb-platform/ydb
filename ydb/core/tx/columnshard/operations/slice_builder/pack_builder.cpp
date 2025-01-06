@@ -106,6 +106,7 @@ public:
             const std::shared_ptr<arrow::Schema> dataSchema = Batches.front()->schema();
             for (auto&& i : Batches) {
                 auto gContainer = std::make_shared<NArrow::TGeneralContainer>(i);
+//                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)("data", NArrow::DebugJson(i, 5, 5))("write_id", SequentialWriteId[idx]);
                 recordsCountSum += i->num_rows();
                 gContainer
                     ->AddField(IIndexInfo::GetWriteIdField(), NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(

@@ -67,10 +67,12 @@ void TActor::Handle(TEvAddInsertedDataToBuffer::TPtr& ev) {
 }
 
 void TWriteAggregation::Flush(const ui64 tabletId) {
-    std::shared_ptr<NConveyor::ITask> task =
-        std::make_shared<TBuildPackSlicesTask>(std::move(Units), Context, PathId, tabletId, ModificationType);
-    NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
-    Units.clear();
+    if (Units.size()) {
+        std::shared_ptr<NConveyor::ITask> task =
+            std::make_shared<TBuildPackSlicesTask>(std::move(Units), Context, PathId, tabletId, ModificationType);
+        NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+        Units.clear();
+    }
 }
 
 }   // namespace NKikimr::NColumnShard::NWritingPortions

@@ -16,12 +16,12 @@ namespace NKikimr::NColumnShard {
 class TColumnShard;
 class TLockFeatures;
 
-class TLockSharingInfo {
+class TLockSharingInfo: TMoveOnly {
 private:
     const ui64 LockId;
     const ui64 Generation;
     TAtomicCounter InternalGenerationCounter = 0;
-    TAtomicCounter Broken = 0;
+    std::atomic<bool> Broken = false;
     TAtomicCounter WritesCounter = 0;
     friend class TLockFeatures;
 
@@ -43,7 +43,7 @@ public:
     }
 
     bool IsBroken() const {
-        return Broken.Val();
+        return Broken;
     }
 
     ui64 GetCounter() const {

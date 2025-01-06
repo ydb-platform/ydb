@@ -1363,14 +1363,14 @@ Y_UNIT_TEST_SUITE(ReadOnlyPDisk) {
 
     template <class Request, class Response, NKikimrProto::EReplyStatus ExpectedStatus = NKikimrProto::CORRUPTED, class... Args>
     auto CheckReadOnlyRequest(Args&&... args) {
-        return [args = std::forward_as_tuple(args...)](TActorTestContext& testCtx) {
+        return [args = std::make_tuple(std::forward<Args>(args)...)](TActorTestContext& testCtx) {
             Request* req = std::apply([](auto&&... unpackedArgs) {
                 return new Request(std::forward<decltype(unpackedArgs)>(unpackedArgs)...);
             }, args);
 
             THolder<Response> res = testCtx.TestResponse<Response>(req);
 
-            UNIT_ASSERT_VALUES_EQUAL(res->Status, NKikimrProto::CORRUPTED);
+            UNIT_ASSERT_VALUES_EQUAL(res->Status, ExpectedStatus);
             UNIT_ASSERT_STRING_CONTAINS(res->ErrorReason, "PDisk is in read-only mode");
         };
     }

@@ -35,6 +35,7 @@ target_sources(ydb-mvp-oidc_proxy PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/mvp/oidc_proxy/oidc_client.cpp
   ${PROJECT_SOURCE_DIR}/ydb/mvp/oidc_proxy/openid_connect.cpp
   ${PROJECT_SOURCE_DIR}/ydb/mvp/oidc_proxy/oidc_settings.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/oidc_proxy/oidc_cleanup_page.cpp
   ${PROJECT_SOURCE_DIR}/ydb/mvp/oidc_proxy/oidc_impersonate_start_page_nebius.cpp
   ${PROJECT_SOURCE_DIR}/ydb/mvp/oidc_proxy/oidc_impersonate_stop_page_nebius.cpp
   ${PROJECT_SOURCE_DIR}/ydb/mvp/oidc_proxy/oidc_protected_page_handler.cpp

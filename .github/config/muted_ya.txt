@@ -2,7 +2,7 @@ ydb/core/blobstorage/dsproxy/ut TBlobStorageProxySequenceTest.TestBlock42PutWith
 ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
 ydb/core/client/ut TClientTest.PromoteFollower
 ydb/core/client/ut TClientTest.ReadFromFollower
-ydb/core/client/ut/TFlatTest.AutoSplitBySize
+ydb/core/client/ut TFlatTest.AutoSplitBySize
 ydb/core/client/ut TFlatTest.AutoSplitMergeQueue
 ydb/core/cms/ut_sentinel_unstable *
 ydb/core/external_sources *

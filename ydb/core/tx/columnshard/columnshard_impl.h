@@ -11,7 +11,7 @@
 #include "blobs_action/events/delete_blobs.h"
 #include "counters/columnshard.h"
 #include "counters/counters_manager.h"
-#include "data_sharing/common/transactions/tx_extension.h"
+#include "tablet/ext_tx_base.h"
 #include "data_sharing/destination/events/control.h"
 #include "data_sharing/destination/events/transfer.h"
 #include "data_sharing/manager/sessions.h"
@@ -51,6 +51,8 @@ class TChangesWithAppend;
 class TCompactColumnEngineChanges;
 class TInsertColumnEngineChanges;
 class TStoragesManager;
+class TRemovePortionsChange;
+class TMovePortionsChange;
 
 namespace NReader {
 class TTxScan;
@@ -90,6 +92,7 @@ class TGeneralCompactColumnEngineChanges;
 
 namespace NKikimr::NColumnShard {
 
+class TArrowData;
 class TEvWriteCommitPrimaryTransactionOperator;
 class TEvWriteCommitSecondaryTransactionOperator;
 class TTxFinishAsyncTransaction;
@@ -99,6 +102,8 @@ class TOperationsManager;
 class TWaitEraseTablesTxSubscriber;
 class TTxBlobsWritingFinished;
 class TTxBlobsWritingFailed;
+class TWriteTasksQueue;
+class TWriteTask;
 
 namespace NLoading {
 class TInsertTableInitializer;
@@ -203,6 +208,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NOlap::NReader::TTxInternalScan;
     friend class NOlap::NReader::NPlain::TIndexScannerConstructor;
     friend class NOlap::NReader::NSimple::TIndexScannerConstructor;
+    friend class NOlap::TRemovePortionsChange;
+    friend class NOlap::TMovePortionsChange;
 
     class TStoragesManager;
     friend class TTxController;
@@ -228,6 +235,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NLoading::TInFlightReadsInitializer;
     friend class NLoading::TSpecialValuesInitializer;
     friend class NLoading::TTablesManagerInitializer;
+    friend class TWriteTasksQueue;
+    friend class TWriteTask;
 
     class TTxProgressTx;
     class TTxProposeCancel;
@@ -373,7 +382,8 @@ public:
 private:
     void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize, const ui64 cookie,
         std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
-    EOverloadStatus CheckOverloaded(const ui64 tableId) const;
+    EOverloadStatus CheckOverloadedImmediate(const ui64 tableId) const;
+    EOverloadStatus CheckOverloadedWait(const ui64 tableId) const;
 
 protected:
     STFUNC(StateInit) {
@@ -464,6 +474,7 @@ protected:
 private:
     std::unique_ptr<TTabletCountersBase> TabletCountersHolder;
     TCountersManager Counters;
+    std::unique_ptr<TWriteTasksQueue> WriteTasksQueue;
 
     std::unique_ptr<TTxController> ProgressTxController;
     std::unique_ptr<TOperationsManager> OperationsManager;
@@ -510,7 +521,8 @@ private:
     TInstant LastStatsReport;
 
     TActorId ResourceSubscribeActor;
-    TActorId BufferizationWriteActorId;
+    TActorId BufferizationInsertionWriteActorId;
+    TActorId BufferizationPortionsWriteActorId;
     TActorId DataAccessorsControlActorId;
     NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
 

@@ -12,7 +12,6 @@ class TModificationRestoreTask: public NDataReader::IRestoreTask, public NColumn
 private:
     using TBase = NDataReader::IRestoreTask;
     NEvWrite::TWriteData WriteData;
-    const NActors::TActorId BufferActorId;
     std::shared_ptr<IMerger> Merger;
     const ui64 LocalPathId;
     const TSnapshot Snapshot;
@@ -32,7 +31,7 @@ public:
 
     virtual TDuration GetTimeout() const override;
 
-    TModificationRestoreTask(const NActors::TActorId bufferActorId, NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger,
+    TModificationRestoreTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger,
         const TSnapshot actualSnapshot, const std::shared_ptr<arrow::RecordBatch>& incomingData, const TWritingContext& context);
 };
 

@@ -118,6 +118,4 @@ ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-
 ydb/tests/tools/pq_read/test test_timeout.py.TestTimeout.test_timeout
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
-db/core/kqp/ut/olap KqpOlapIndexes.IndexesInBS
-db/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
 ydb/tests/functional/rename [test_rename.py */10] chunk chunk

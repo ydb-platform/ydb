@@ -143,7 +143,7 @@ def do(args):
                     if not grouptool.check_fail_model(content, group.ErasureSpecies):
                         return False
             return True
-        
+
         def can_act_on_pdisk(node_id, pdisk_id):
             def match(x):
                 return node_id == x[0] and pdisk_id == x[1]
@@ -152,7 +152,7 @@ def do(args):
                 if any(map(match, map(common.get_vslot_id, group.VSlotId))):
                     if not common.is_dynamic_group(group.GroupId):
                         return False
-    
+
                     content = {
                         common.get_vdisk_id_short(vslot): not match(vslot_id) and vslot.Ready and vdisk_status[vslot_id + common.get_vdisk_id(vslot)]
                         for vslot_id in map(common.get_vslot_id, group.VSlotId)
@@ -183,7 +183,7 @@ def do(args):
                 raise Exception('failed to perform restart request: %s' % e)
             if not response.Success:
                 raise Exception('Unexpected error from BSC: %s' % response.ErrorDescription)
-            
+
         def do_readonly_pdisk(node_id, pdisk_id, readonly):
             assert can_act_on_vslot(node_id, pdisk_id)
             request = common.kikimr_bsconfig.TConfigRequest(IgnoreDegradedGroupsChecks=True)
@@ -311,7 +311,7 @@ def do(args):
                     pdisk_restarts.append(('restart pdisk node_id: %d, pdisk_id: %d' % (node_id, pdisk_id), (do_restart_pdisk, node_id, pdisk_id)))
                 if args.enable_readonly_pdisks:
                     make_pdisks_readonly.append(('readonly pdisk node_id: %d, pdisk_id: %d' % (node_id, pdisk_id), (do_readonly_pdisk, node_id, pdisk_id, True)))
-            
+
             if (node_id, pdisk_id) in pdisk_readonly and args.enable_readonly_pdisks:
                 make_pdisks_not_readonly.append(('un-readonly pdisk node_id: %d, pdisk_id: %d' % (node_id, pdisk_id), (do_readonly_pdisk, node_id, pdisk_id, False)))
 

@@ -37,6 +37,7 @@ private:
         }
     };
 
+    std::vector<TInsertWriteId> InsertWriteIds;
     std::vector<TReplyInfo> Results;
 
 public:

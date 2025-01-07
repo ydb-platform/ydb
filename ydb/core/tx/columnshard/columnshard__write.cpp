@@ -315,8 +315,7 @@ public:
         LockId = lock.GetLockId();
         SendingShards = std::set<ui64>(locks.GetSendingShards().begin(), locks.GetSendingShards().end());
         ReceivingShards = std::set<ui64>(locks.GetReceivingShards().begin(), locks.GetReceivingShards().end());
-        if (ReceivingShards.size()) {
-            AFL_VERIFY(SendingShards.size());
+        if (ReceivingShards.size() && SendingShards.size()) {
             if (!locks.HasArbiterColumnShard()) {
                 ArbiterColumnShard = *ReceivingShards.begin();
                 if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
@@ -330,7 +329,7 @@ public:
                 }
             }
         } else {
-            AFL_VERIFY(!SendingShards.size());
+            AFL_VERIFY(!SendingShards.size() && !ReceivingShards.size());
         }
 
         Generation = lock.GetGeneration();

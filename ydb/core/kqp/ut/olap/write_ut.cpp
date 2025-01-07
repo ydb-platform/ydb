@@ -254,10 +254,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
 
         auto tableClient = kikimr.GetTableClient();
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
-        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("count")), 400000);
-        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("field")), "aaa");
-        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("count")), 200000);
-        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[1].at("field")), "bbb");
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("count")), 200000);
+        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("field")), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("count")), 400000);
+        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[1].at("field")), "aaa");
         UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("count")), 800000);
         UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[2].at("field")), "ccc");
     }

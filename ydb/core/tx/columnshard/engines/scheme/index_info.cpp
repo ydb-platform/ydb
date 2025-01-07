@@ -639,7 +639,7 @@ TConclusion<std::shared_ptr<arrow::Array>> TIndexInfo::BuildDefaultColumn(
     const ui32 fieldIndex, const ui32 rowsCount, const bool force) const {
     auto defaultValue = GetColumnExternalDefaultValueByIndexVerified(fieldIndex);
     auto f = ArrowSchemaWithSpecials()->GetFieldByIndexVerified(fieldIndex);
-    if (!defaultValue && !IsNullableVerified(fieldIndex)) {
+    if (!defaultValue && !IsNullableVerifiedByIndex(fieldIndex)) {
         if (force) {
             defaultValue = NArrow::DefaultScalar(f->type());
         } else {

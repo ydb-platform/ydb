@@ -16,7 +16,7 @@ TString TTypedLocalHelper::GetTestTableSchema() const {
         result = R"(Columns { Name: "field" Type: ")" + TypeName + "\"}";
     }
     if (TypeName1) {
-        result = R"(Columns { Name: "field1" Type: ")" + TypeName1 + "\"}";
+        result += R"(Columns { Name: "field1" Type: ")" + TypeName1 + "\"}";
     }
     result += R"(
             Columns { Name: "pk_int" Type: "Int64" NotNull: true }

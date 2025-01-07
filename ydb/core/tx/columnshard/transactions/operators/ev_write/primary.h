@@ -63,7 +63,6 @@ private:
         for (auto&& i : protoData.GetWaitShardsResultAck()) {
             WaitShardsResultAck.emplace(i);
         }
-        AFL_VERIFY(ReceivingShards.empty() == SendingShards.empty());
         if (protoData.HasTxBroken()) {
             TxBroken = protoData.GetTxBroken();
         }
@@ -160,8 +159,7 @@ private:
     };
 
     virtual bool IsTxBroken() const override {
-        AFL_VERIFY(TxBroken);
-        return *TxBroken;
+        return TxBroken.value_or(false);
     }
 
     void InitializeRequests(TColumnShard& owner) {

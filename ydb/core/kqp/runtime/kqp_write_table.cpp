@@ -278,10 +278,14 @@ private:
             ? NYql::NUdf::TStringRef(cellInfo.PgBinaryValue)
             : cellInfo.Value.AsStringRef();
 
-        char* initialPtr = dataPtr;
-        std::memcpy(initialPtr, ref.Data(), ref.Size());
-        dataPtr += ref.Size();
-        return TCell(initialPtr, ref.Size());
+        if (TCell::CanInline(ref.Size())) {
+            return TCell(ref.Data(), ref.Size());
+        } else {
+            char* initialPtr = dataPtr;
+            std::memcpy(initialPtr, ref.Data(), ref.Size());
+            dataPtr += ref.Size();
+            return TCell(initialPtr, ref.Size());
+        }
     }
 
     size_t GetCellSize(const TCellInfo& cellInfo) const {

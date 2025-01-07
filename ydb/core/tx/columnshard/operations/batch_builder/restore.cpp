@@ -60,7 +60,7 @@ NKikimr::TConclusionStatus TModificationRestoreTask::DoOnFinished() {
 }
 
 TModificationRestoreTask::TModificationRestoreTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger,
-    const TSnapshot actualSnapshot, const TContainerWithIndexes<arrow::RecordBatch>& incomingData,
+    const TSnapshot actualSnapshot, const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incomingData,
     const TWritingContext& context)
     : TBase(context.GetTabletId(), context.GetTabletActorId(),
           writeData.GetWriteMeta().GetId() + "::" + ::ToString(writeData.GetWriteMeta().GetWriteId()))

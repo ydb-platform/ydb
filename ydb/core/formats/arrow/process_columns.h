@@ -1,7 +1,9 @@
 #pragma once
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+
 #include <functional>
 
 namespace NKikimr::NArrow {
@@ -17,6 +19,8 @@ private:
     YDB_ACCESSOR_DEF(std::shared_ptr<TDataContainer>, Container);
 
 public:
+    TContainerWithIndexes() = default;
+
     TContainerWithIndexes(const std::vector<ui32>& columnIndexes, const std::shared_ptr<TDataContainer>& container)
         : ColumnIndexes(columnIndexes)
         , Container(container) {
@@ -28,6 +32,10 @@ public:
         for (i32 i = 0; i < Container->num_columns(); ++i) {
             ColumnIndexes.emplace_back(i);
         }
+    }
+
+    bool operator!() const {
+        return !HasContainer();
     }
 
     bool HasContainer() const {
@@ -48,9 +56,7 @@ public:
         public:
             TIterator(const std::vector<ui32>& indexes)
                 : ItCurrent(indexes.begin())
-                , ItFinish(indexes.end())
-            {
-
+                , ItFinish(indexes.end()) {
             }
 
             bool operator<(const TIterator& item) const {

@@ -637,15 +637,16 @@ TIndexInfo TIndexInfo::BuildDefault() {
 
 TConclusion<std::shared_ptr<arrow::Array>> TIndexInfo::BuildDefaultColumn(
     const ui32 fieldIndex, const ui32 rowsCount, const bool force) const {
-    auto defaultValue = GetExternalDefaultValueByIndexVerified(fieldIndex);
-    if (!defaultValue && !GetIndexInfo().IsNullableVerified(columnId)) {
+    auto defaultValue = GetColumnExternalDefaultValueByIndexVerified(fieldIndex);
+    auto f = ArrowSchemaWithSpecials()->GetFieldByIndexVerified(fieldIndex);
+    if (!defaultValue && !IsNullableVerified(fieldIndex)) {
         if (force) {
-            defaultValue = NArrow::DefaultScalar(GetFieldByIndexVerified(fieldIndex)->type());
+            defaultValue = NArrow::DefaultScalar(f->type());
         } else {
-            return TConclusionStatus::Fail("not nullable field with no default: " + GetFieldByIndexVerified(fieldIndex)->name());
+            return TConclusionStatus::Fail("not nullable field with no default: " + f->name());
         }
     }
-    columns.emplace_back(NArrow::TThreadSimpleArraysCache::Get(GetFieldByIndexVerified(fieldIndex)->type(), defaultValue, rowsCount));
+    return NArrow::TThreadSimpleArraysCache::Get(f->type(), defaultValue, rowsCount);
 }
 
 }   // namespace NKikimr::NOlap

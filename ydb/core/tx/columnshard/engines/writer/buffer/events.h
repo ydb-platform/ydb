@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/formats/arrow/process_columns.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/operations/common/context.h>

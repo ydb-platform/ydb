@@ -19,7 +19,7 @@ protected:
     bool IncomingFinished = false;
 public:
     IMerger(const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema)
-        : IncomingPosition(incoming, 0, actualSchema->GetPKColumnNames(), incoming->schema()->field_names(), false)
+        : IncomingPosition(incoming.GetContainer(), 0, actualSchema->GetPKColumnNames(), incoming->schema()->field_names(), false)
         , Schema(actualSchema)
         , IncomingData(incoming) {
         IncomingFinished = !IncomingPosition.InitPosition(0);
@@ -94,7 +94,7 @@ private:
 public:
     virtual NArrow::TContainerWithIndexes<arrow::RecordBatch> BuildResultBatch() override {
         auto resultBatch = Builder.Finalize();
-        AFL_VERIFY(Schema->num_fields() == resultBatch->num_columns());
+        AFL_VERIFY(Schema->GetColumnsCount() == (ui32)resultBatch->num_columns());
         return NArrow::TContainerWithIndexes<arrow::RecordBatch>(resultBatch);
     }
 

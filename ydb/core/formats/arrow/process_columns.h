@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/accessor/validator_simple.h>
 #include <ydb/library/conclusion/result.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
@@ -12,26 +13,44 @@ class TSchemaSubset;
 class TSchemaLite;
 class TSchemaLiteView;
 
-template <class TDataContainer>
-class TContainerWithIndexes {
+class TOrderedColumnIndexesImpl {
 private:
     YDB_READONLY_DEF(std::vector<ui32>, ColumnIndexes);
+
+public:
+    TOrderedColumnIndexesImpl() = default;
+
+    TOrderedColumnIndexesImpl(const ui32 columnsCount);
+    TOrderedColumnIndexesImpl(const std::vector<ui32>& columnIndexes);
+    TOrderedColumnIndexesImpl(std::vector<ui32>&& columnIndexes);
+};
+
+template <class TDataContainer>
+class TContainerWithIndexes: public TOrderedColumnIndexesImpl {
+private:
+    using TBase = TOrderedColumnIndexesImpl;
     YDB_ACCESSOR_DEF(std::shared_ptr<TDataContainer>, Container);
 
 public:
     TContainerWithIndexes() = default;
 
     TContainerWithIndexes(const std::vector<ui32>& columnIndexes, const std::shared_ptr<TDataContainer>& container)
-        : ColumnIndexes(columnIndexes)
+        : TBase(columnIndexes)
         , Container(container) {
+        if (Container) {
+            Y_ABORT_UNLESS((ui32)Container->num_columns() == columnIndexes.size());
+        } else {
+            Y_ABORT_UNLESS(!columnIndexes.size());
+        }
     }
 
     TContainerWithIndexes(const std::shared_ptr<TDataContainer>& container)
-        : Container(container) {
-        ColumnIndexes.reserve(Container->num_columns());
-        for (i32 i = 0; i < Container->num_columns(); ++i) {
-            ColumnIndexes.emplace_back(i);
-        }
+        : TBase(TSimpleValidator::CheckNotNull(Container)->num_columns())
+        , Container(container) {
+    }
+
+    TContainerWithIndexes<TDataContainer> BuildWithAnotherContainer(const std::shared_ptr<TDataContainer>& container) const {
+        return TContainerWithIndexes<TDataContainer>(GetColumnIndexes(), container);
     }
 
     bool operator!() const {
@@ -46,8 +65,8 @@ public:
         return Container.get();
     }
 
-    template <class TData>
-    static std::vector<ui32> MergeColumnIdxs(const std::vector<TContainerWithIndexes<TDataContainer>>& sources) {
+    template <class TDataContainerMerge>
+    static std::vector<ui32> MergeColumnIdxs(const std::vector<TContainerWithIndexes<TDataContainerMerge>>& sources) {
         class TIterator {
         private:
             std::vector<ui32>::const_iterator ItCurrent;
@@ -67,14 +86,18 @@ public:
                 return ItCurrent != ItFinish;
             }
 
-            void Next() {
-                ++ItCurrent;
+            ui32 operator*() const {
+                return *ItCurrent;
+            }
+
+            bool Next() {
+                return ++ItCurrent != ItFinish;
             }
         };
 
         std::vector<TIterator> heapToMerge;
         for (auto&& i : sources) {
-            heapToMerge.emplace_back(TIterator(i));
+            heapToMerge.emplace_back(TIterator(i.GetColumnIndexes()));
             if (!heapToMerge.back().IsValid()) {
                 heapToMerge.pop_back();
             }
@@ -83,13 +106,13 @@ public:
         std::vector<ui32> result;
         while (heapToMerge.size()) {
             std::pop_heap(heapToMerge.begin(), heapToMerge.end());
-            if (result.empty() || result.back() != heapToMerge.back().Value()) {
-                result.emplace_back(heapToMerge.back().Value());
-                if (!heapToMerge.back().Next()) {
-                    heapToMerge.pop_back();
-                } else {
-                    std::push_heap(heapToMerge.begin(), heapToMerge.end());
-                }
+            if (result.empty() || result.back() != *heapToMerge.back()) {
+                result.emplace_back(*heapToMerge.back());
+            }
+            if (!heapToMerge.back().Next()) {
+                heapToMerge.pop_back();
+            } else {
+                std::push_heap(heapToMerge.begin(), heapToMerge.end());
             }
         }
         return result;

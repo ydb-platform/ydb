@@ -201,14 +201,48 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("Utf8", kikimr);
         helper.CreateTestOlapTable();
-        auto writeSession = helper.StartWriting("/Root/olapStore/olapTable");
-        writeSession.FillTable(NArrow::NConstruction::TStringPoolFiller(1, 1, "aaa", 1), 0, 800000);
+        auto writeGuard = helper.StartWriting("/Root/olapStore/olapTable");
+        writeGuard.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "aaa", 1), 0, 800000);
         Sleep(TDuration::Seconds(1));
-        writeSession.FillTable(NArrow::NConstruction::TStringPoolFiller(1, 1, "bbb", 1), 0.5, 800000);
+        writeGuard.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "bbb", 1), 0.5, 800000);
         Sleep(TDuration::Seconds(1));
-        writeSession.FillTable(NArrow::NConstruction::TStringPoolFiller(1, 1, "ccc", 1), 0.75, 800000);
+        writeGuard.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "ccc", 1), 0.75, 800000);
         Sleep(TDuration::Seconds(1));
         writeSession.Finalize();
+
+        auto selectQuery = TString(R"(
+                SELECT
+                    field, count(*) as count,
+                FROM `/Root/olapStore/olapTable`
+                GROUP BY field
+                ORDER BY field
+            )");
+
+        auto tableClient = kikimr.GetTableClient();
+        auto rows = ExecuteScanQuery(tableClient, selectQuery);
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("count")), 400000);
+        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("field")), "aaa");
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("count")), 200000);
+        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[1].at("field")), "bbb");
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("count")), 800000);
+        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[2].at("field")), "ccc");
+    }
+
+    Y_UNIT_TEST(MultiWriteInTimeDiffSchemas) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(15000);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTypedLocalHelper helper("Utf8", "Utf8", kikimr);
+        helper.CreateTestOlapTable();
+        auto writeGuard = helper.StartWriting("/Root/olapStore/olapTable");
+        writeGuard.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "aaa", 1), 0, 800000);
+        Sleep(TDuration::Seconds(1));
+        writeGuard.FillTable("field1", NArrow::NConstruction::TStringPoolFiller(1, 1, "bbb", 1), 0.5, 800000);
+        Sleep(TDuration::Seconds(1));
+        writeGuard.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "ccc", 1), 0.75, 800000);
+        Sleep(TDuration::Seconds(1));
+        writeGuard.Finalize();
 
         auto selectQuery = TString(R"(
                 SELECT

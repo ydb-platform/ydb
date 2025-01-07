@@ -254,10 +254,6 @@ std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetExternalDefaultValueVerified(
     return GetIndexInfo().GetColumnExternalDefaultValueVerified(columnId);
 }
 
-std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetExternalDefaultValueByIndexVerified(const ui32 columnIdx) const {
-    return GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(columnIdx);
-}
-
 bool ISnapshotSchema::IsSpecialColumnId(const ui32 columnId) const {
     return GetIndexInfo().IsSpecialColumn(columnId);
 }

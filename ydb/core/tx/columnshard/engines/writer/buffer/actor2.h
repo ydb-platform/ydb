@@ -26,8 +26,7 @@ public:
     }
 
     bool operator==(const TAggregationId& item) const {
-        return PathId == item.PathId && SchemaVersion == item.SchemaVersion && ModificationType == item.ModificationType &&
-               SchemaDescription == item.SchemaDescription;
+        return PathId == item.PathId && SchemaVersion == item.SchemaVersion && ModificationType == item.ModificationType;
     }
 
     operator size_t() const {

@@ -94,7 +94,7 @@ public:
             return TConclusionStatus::Success();
         }
         if (Batches.size() == 1) {
-            auto portionConclusion = context.GetActualSchema()->PrepareForWrite(context.GetActualSchema(), PathId, Batches.front(),
+            auto portionConclusion = context.GetActualSchema()->PrepareForWrite(context.GetActualSchema(), PathId, Batches.front().GetContainer(),
                 ModificationType, context.GetStoragesManager(), context.GetSplitterCounters());
             result.emplace_back(portionConclusion.DetachResult());
         } else {
@@ -106,26 +106,27 @@ public:
             const auto& indexInfo = context.GetActualSchema()->GetIndexInfo();
             for (auto&& i : Batches) {
                 std::shared_ptr<NArrow::TGeneralContainer> gContainer;
-                if (i.GetIndexes().size() == indexes.size()) {
+                if (i.GetColumnIndexes().size() == indexes.size()) {
                     if (!dataSchema) {
                         dataSchema = i->schema();
                     }
                     gContainer = std::make_shared<NArrow::TGeneralContainer>(i.GetContainer());
                 } else {
                     gContainer = std::make_shared<NArrow::TGeneralContainer>(i->num_rows());
-                    auto itBatchIndexes = i.GetIndexes().begin();
-                    AFL_VERIFY(i.GetIndexes().size() < indexes.size());
+                    auto itBatchIndexes = i.GetColumnIndexes().begin();
+                    AFL_VERIFY(i.GetColumnIndexes().size() < indexes.size());
                     for (auto itAllIndexes = indexes.begin(); itAllIndexes != indexes.end(); ++itAllIndexes) {
-                        if (itBatchIndexes == i.GetIndexes().end() || *itAllIndexes < *itBatchIndexes) {
+                        if (itBatchIndexes == i.GetColumnIndexes().end() || *itAllIndexes < *itBatchIndexes) {
                             auto defaultColumn = indexInfo.BuildDefaultColumn(*itAllIndexes, i->num_rows(), false);
                             if (defaultColumn.IsFail()) {
                                 return defaultColumn;
                             }
-                            gContainer.AddField(context.GetActualSchema()->GetFieldByIndexVerified(*itAllIndexes), defaultColumn.DetachResult());
+                            gContainer->AddField(context.GetActualSchema()->GetFieldByIndexVerified(*itAllIndexes), defaultColumn.DetachResult()).Validate();
                         } else {
                             AFL_VERIFY(*itAllIndexes == *itBatchIndexes);
-                            gContainer.AddColumn(context.GetActualSchema()->GetFieldByIndexVerified(*itAllIndexes),
-                                i->column(itBatchIndexes - i.GetIndexes().begin()));
+                            gContainer->AddField(context.GetActualSchema()->GetFieldByIndexVerified(*itAllIndexes),
+                                    i->column(itBatchIndexes - i.GetColumnIndexes().begin()))
+                                .Validate();
                             ++itBatchIndexes;
                         }
                     }
@@ -178,21 +179,21 @@ TConclusionStatus TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& 
             continue;
         }
         auto batches = NArrow::NMerger::TRWSortableBatchPosition::SplitByBordersInIntervalPositions(
-            originalBatch, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->field_names(), splitPositions);
+            originalBatch.GetContainer(), Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->field_names(), splitPositions);
         std::shared_ptr<arrow::RecordBatch> pkBatch =
-            NArrow::TColumnOperator().Extract(originalBatch, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->fields());
+            NArrow::TColumnOperator().Extract(originalBatch.GetContainer(), Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->fields());
         writeResults.emplace_back(unit.GetData()->GetWriteMeta(), unit.GetData()->GetSize(), pkBatch, false, originalBatch->num_rows());
         ui32 idx = 0;
         for (auto&& batch : batches) {
             if (!!batch) {
-                slicesToMerge[idx].Add(batch, unit.GetData());
+                slicesToMerge[idx].Add(originalBatch.BuildWithAnotherContainer(batch), unit.GetData());
             }
             ++idx;
         }
     }
     std::vector<TPortionWriteController::TInsertPortion> portionsToWrite;
     for (auto&& i : slicesToMerge) {
-        i.Finalize(Context, portionsToWrite);
+        i.Finalize(Context, portionsToWrite).Validate();
     }
     auto actions = WriteUnits.front().GetData()->GetBlobsAction();
     auto writeController =

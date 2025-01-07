@@ -138,6 +138,27 @@ TConclusion<std::shared_ptr<TDataContainer>> ReorderImpl(
 
 }   // namespace
 
+TOrderedColumnIndexesImpl::TOrderedColumnIndexesImpl(const std::vector<ui32>& columnIndexes)
+    : ColumnIndexes(columnIndexes) {
+    for (ui32 i = 0; i + 1 < columnIndexes.size(); ++i) {
+        AFL_VERIFY(ColumnIndexes[i] < ColumnIndexes[i + 1]);
+    }
+}
+
+TOrderedColumnIndexesImpl::TOrderedColumnIndexesImpl(std::vector<ui32>&& columnIndexes)
+    : ColumnIndexes(std::move(columnIndexes)) {
+    for (ui32 i = 0; i + 1 < ColumnIndexes.size(); ++i) {
+        AFL_VERIFY(ColumnIndexes[i] < ColumnIndexes[i + 1]);
+    }
+}
+
+TOrderedColumnIndexesImpl::TOrderedColumnIndexesImpl(const ui32 columnsCount) {
+    ColumnIndexes.reserve(columnsCount);
+    for (ui32 i = 0; i < columnsCount; ++i) {
+        ColumnIndexes.emplace_back(i);
+    }
+}
+
 std::shared_ptr<arrow::RecordBatch> TColumnOperator::Extract(
     const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<std::string>& columnNames) {
     return ExtractImpl(AbsentColumnPolicy, incoming, columnNames);

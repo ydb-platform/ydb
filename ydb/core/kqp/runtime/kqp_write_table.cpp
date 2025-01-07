@@ -305,7 +305,8 @@ private:
         if (cellInfo.Type.GetTypeId() == NScheme::NTypeIds::Pg) {
             return cellInfo.PgBinaryValue.size();
         }
-        return cellInfo.Value.AsStringRef().Size();
+        const auto s = cellInfo.Value.AsStringRef().Size();
+        return TCell::CanInline(s) ? 0 : s;
     }
 
     TCharVectorPtr Allocate(size_t size) {

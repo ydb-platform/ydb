@@ -315,6 +315,9 @@ public:
         LockId = lock.GetLockId();
         SendingShards = std::set<ui64>(locks.GetSendingShards().begin(), locks.GetSendingShards().end());
         ReceivingShards = std::set<ui64>(locks.GetReceivingShards().begin(), locks.GetReceivingShards().end());
+        if (SendingShards.empty() != ReceivingShards.empty()) {
+            return TConclusionStatus::Fail("incorrect synchronization data (send/receiving lists)");
+        }
         if (ReceivingShards.size() && SendingShards.size()) {
             if (!locks.HasArbiterColumnShard()) {
                 ArbiterColumnShard = *ReceivingShards.begin();
@@ -328,8 +331,6 @@ public:
                     return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
                 }
             }
-        } else {
-            AFL_VERIFY(!SendingShards.size() && !ReceivingShards.size());
         }
 
         Generation = lock.GetGeneration();

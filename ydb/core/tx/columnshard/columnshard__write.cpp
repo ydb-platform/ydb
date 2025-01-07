@@ -304,7 +304,7 @@ public:
     using TPtr = std::shared_ptr<TCommitOperation>;
 
     bool NeedSyncLocks() const {
-        return SendingShards.size() && ReceivingShards.size();
+        return SendingShards.size() || ReceivingShards.size();
     }
 
     bool IsPrimary() const {
@@ -355,7 +355,6 @@ public:
 
     std::unique_ptr<NColumnShard::TEvWriteCommitSyncTransactionOperator> CreateTxOperator(
         const NKikimrTxColumnShard::ETransactionKind kind) const {
-        AFL_VERIFY(ReceivingShards.size());
         if (IsPrimary()) {
             return std::make_unique<NColumnShard::TEvWriteCommitPrimaryTransactionOperator>(
                 TFullTxInfo::BuildFake(kind), LockId, ReceivingShards, SendingShards);

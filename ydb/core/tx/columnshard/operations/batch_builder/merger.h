@@ -94,7 +94,8 @@ private:
 public:
     virtual NArrow::TContainerWithIndexes<arrow::RecordBatch> BuildResultBatch() override {
         auto resultBatch = Builder.Finalize();
-        AFL_VERIFY(Schema->GetColumnsCount() == (ui32)resultBatch->num_columns());
+        AFL_VERIFY(Schema->GetColumnsCount() == (ui32)resultBatch->num_columns() + IIndexInfo::GetSnapshotColumnIds().size())("schema", Schema->GetColumnsCount())(
+                                                  "result", resultBatch->num_columns());
         return NArrow::TContainerWithIndexes<arrow::RecordBatch>(resultBatch);
     }
 

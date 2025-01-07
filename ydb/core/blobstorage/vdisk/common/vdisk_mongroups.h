@@ -729,7 +729,7 @@ public:                                                                         
             COUNTER_DEF(PutUserData);
             COUNTER_DEF(PutAsyncBlob);
             
-            ::NMonitoring::TDeprecatedCounter &GetCounter(const std::optional<NKikimrBlobStorage::EGetHandleClass>& handleClass = std::nullopt) {
+            ::NMonitoring::TDeprecatedCounter &GetCounter(const std::optional<NKikimrBlobStorage::EGetHandleClass>& handleClass) {
                 if (!handleClass) {
                     return Undefined();
                 }
@@ -746,7 +746,7 @@ public:                                                                         
                         return Undefined();
                 }
             }
-            ::NMonitoring::TDeprecatedCounter &GetCounter(const std::optional<NKikimrBlobStorage::EPutHandleClass>& handleClass = std::nullopt) {
+            ::NMonitoring::TDeprecatedCounter &GetCounter(const std::optional<NKikimrBlobStorage::EPutHandleClass>& handleClass) {
                 if (!handleClass) {
                     return Undefined();
                 }
@@ -760,6 +760,10 @@ public:                                                                         
                     default:
                         return Undefined();
                 }
+            }
+
+            ::NMonitoring::TDeprecatedCounter &GetCounter() {
+                return Undefined();
             }
         };
 
@@ -797,7 +801,7 @@ public:                                                                         
                     case NKikimrProto::ERROR:
                         return ResponsesWithStatusError.GetCounter(handleClass);
                     case NKikimrProto::RACE:
-                        return ResponsesWithStatusRace.GetCounter(handleClass);
+                        return ResponsesWithStatusRace.GetCounter();
                     case NKikimrProto::BLOCKED:
                         return ResponsesWithStatusBlocked.GetCounter(handleClass);
                     case NKikimrProto::OUT_OF_SPACE:
@@ -805,10 +809,10 @@ public:                                                                         
                     case NKikimrProto::DEADLINE:
                         return ResponsesWithStatusDeadline.GetCounter(handleClass);
                     case NKikimrProto::NOTREADY:
-                        return ResponsesWithStatusNotReady.GetCounter(handleClass);
+                        return ResponsesWithStatusNotReady.GetCounter();
                     case NKikimrProto::VDISK_ERROR_STATE:
-                        return ResponsesWithStatusVdiskErrorState.GetCounter(handleClass);
-                    default: return Undefined.GetCounter(handleClass);
+                        return ResponsesWithStatusVdiskErrorState.GetCounter();
+                    default: return Undefined.GetCounter();
                 }
             }
 

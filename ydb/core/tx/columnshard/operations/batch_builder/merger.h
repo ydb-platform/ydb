@@ -92,12 +92,7 @@ private:
         }
     }
 public:
-    virtual NArrow::TContainerWithIndexes<arrow::RecordBatch> BuildResultBatch() override {
-        auto resultBatch = Builder.Finalize();
-        AFL_VERIFY(Schema->GetColumnsCount() == (ui32)resultBatch->num_columns() + IIndexInfo::GetSnapshotColumnIds().size())("schema", Schema->GetColumnsCount())(
-                                                  "result", resultBatch->num_columns());
-        return NArrow::TContainerWithIndexes<arrow::RecordBatch>(resultBatch);
-    }
+    virtual NArrow::TContainerWithIndexes<arrow::RecordBatch> BuildResultBatch() override;
 
     TUpdateMerger(const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema,
         const TString& insertDenyReason, const std::optional<NArrow::NMerger::TSortableBatchPosition>& defaultExists = {});

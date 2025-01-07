@@ -89,7 +89,7 @@ TUpdateMerger::TUpdateMerger(const NArrow::TContainerWithIndexes<arrow::RecordBa
 
 NArrow::TContainerWithIndexes<arrow::RecordBatch> TUpdateMerger::BuildResultBatch() {
     auto resultBatch = Builder.Finalize();
-    AFL_VERIFY(Schema->GetColumnsCount() == (ui32)resultBatch->num_columns() + IIndexInfo::GetSnapshotColumnIds().size())("schema",
+    AFL_VERIFY(Schema->GetColumnsCount() == (ui32)resultBatch->num_columns() + IIndexInfo::SpecialColumnsCount)("schema",
                                                                                Schema->GetColumnsCount())("result", resultBatch->num_columns());
     return NArrow::TContainerWithIndexes<arrow::RecordBatch>(resultBatch);
 }

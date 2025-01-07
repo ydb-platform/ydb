@@ -45,7 +45,7 @@ public:
     }
 
     TContainerWithIndexes(const std::shared_ptr<TDataContainer>& container)
-        : TBase(TSimpleValidator::CheckNotNull(Container)->num_columns())
+        : TBase(TSimpleValidator::CheckNotNull(container)->num_columns())
         , Container(container) {
     }
 

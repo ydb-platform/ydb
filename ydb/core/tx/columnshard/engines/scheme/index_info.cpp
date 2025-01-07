@@ -165,10 +165,24 @@ std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldVerified(const ui32 colu
 }
 
 std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchema(const std::set<ui32>& columnIds) const {
-    Y_ABORT_UNLESS(columnIds.size());
+    AFL_VERIFY(columnIds.size());
     std::vector<std::shared_ptr<arrow::Field>> fields;
     for (auto&& i : columnIds) {
         fields.emplace_back(GetColumnFieldVerified(i));
+    }
+    return std::make_shared<arrow::Schema>(fields);
+}
+
+std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchemaByOrderedIndexes(const std::vector<ui32>& columnIdxs) const {
+    AFL_VERIFY(columnIdxs.size());
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::optional<ui32> predColumnIdx;
+    for (auto&& i : columnIdxs) {
+        if (predColumnIdx) {
+            AFL_VERIFY(*predColumnIdx < i);
+        }
+        predColumnIdx = i;
+        fields.emplace_back(ArrowSchemaWithSpecials()->GetFieldByIndexVerified(i));
     }
     return std::make_shared<arrow::Schema>(fields);
 }
@@ -619,6 +633,19 @@ TIndexInfo TIndexInfo::BuildDefault() {
     result.CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
     result.MetadataManagerConstructor = NDataAccessorControl::IManagerConstructor::BuildDefault();
     return result;
+}
+
+TConclusion<std::shared_ptr<arrow::Array>> TIndexInfo::BuildDefaultColumn(
+    const ui32 fieldIndex, const ui32 rowsCount, const bool force) const {
+    auto defaultValue = GetExternalDefaultValueByIndexVerified(fieldIndex);
+    if (!defaultValue && !GetIndexInfo().IsNullableVerified(columnId)) {
+        if (force) {
+            defaultValue = NArrow::DefaultScalar(GetFieldByIndexVerified(fieldIndex)->type());
+        } else {
+            return TConclusionStatus::Fail("not nullable field with no default: " + GetFieldByIndexVerified(fieldIndex)->name());
+        }
+    }
+    columns.emplace_back(NArrow::TThreadSimpleArraysCache::Get(GetFieldByIndexVerified(fieldIndex)->type(), defaultValue, rowsCount));
 }
 
 }   // namespace NKikimr::NOlap

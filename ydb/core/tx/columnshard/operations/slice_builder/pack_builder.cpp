@@ -70,9 +70,8 @@ public:
 
 class TSliceToMerge {
 private:
-    YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::RecordBatch>>, Batches);
+    YDB_READONLY_DEF(std::vector<NArrow::TContainerWithIndexes<arrow::RecordBatch>>, Batches);
     std::vector<ui64> SequentialWriteId;
-    std::vector<std::shared_ptr<arrow::Schema>> Schemas;
     const ui64 PathId;
     const NEvWrite::EModificationType ModificationType;
 
@@ -82,18 +81,17 @@ public:
         , ModificationType(modificationType) {
     }
 
-    void Add(const std::shared_ptr<arrow::RecordBatch>& rb, const std::shared_ptr<NEvWrite::TWriteData>& data) {
+    void Add(const NArrow::TContainerWithIndexes<arrow::RecordBatch>& rb, const std::shared_ptr<NEvWrite::TWriteData>& data) {
         if (!rb) {
             return;
         }
         Batches.emplace_back(rb);
         SequentialWriteId.emplace_back(data->GetWriteMeta().GetWriteId());
-        Schemas.emplace_back(rb->schema());
     }
 
-    void Finalize(const NOlap::TWritingContext& context, std::vector<TPortionWriteController::TInsertPortion>& result) {
+    [[nodiscard]] TConclusionStatus Finalize(const NOlap::TWritingContext& context, std::vector<TPortionWriteController::TInsertPortion>& result) {
         if (Batches.size() == 0) {
-            return;
+            return TConclusionStatus::Success();
         }
         if (Batches.size() == 1) {
             auto portionConclusion = context.GetActualSchema()->PrepareForWrite(context.GetActualSchema(), PathId, Batches.front(),
@@ -103,10 +101,36 @@ public:
             ui32 idx = 0;
             std::vector<std::shared_ptr<NArrow::TGeneralContainer>> containers;
             ui32 recordsCountSum = 0;
-            const std::shared_ptr<arrow::Schema> dataSchema = Batches.front()->schema();
+            auto indexes = NArrow::TContainerWithIndexes<arrow::RecordBatch>::MergeColumnIdxs(Batches);
+            std::shared_ptr<arrow::Schema> dataSchema;
+            const auto& indexInfo = context.GetActualSchema()->GetIndexInfo();
             for (auto&& i : Batches) {
-                auto gContainer = std::make_shared<NArrow::TGeneralContainer>(i);
-//                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)("data", NArrow::DebugJson(i, 5, 5))("write_id", SequentialWriteId[idx]);
+                std::shared_ptr<NArrow::TGeneralContainer> gContainer;
+                if (i.GetIndexes().size() == indexes.size()) {
+                    if (!dataSchema) {
+                        dataSchema = i->schema();
+                    }
+                    gContainer = std::make_shared<NArrow::TGeneralContainer>(i.GetContainer());
+                } else {
+                    gContainer = std::make_shared<NArrow::TGeneralContainer>(i->num_rows());
+                    auto itBatchIndexes = i.GetIndexes().begin();
+                    AFL_VERIFY(i.GetIndexes().size() < indexes.size());
+                    for (auto itAllIndexes = indexes.begin(); itAllIndexes != indexes.end(); ++itAllIndexes) {
+                        if (itBatchIndexes == i.GetIndexes().end() || *itAllIndexes < *itBatchIndexes) {
+                            auto defaultColumn = indexInfo.BuildDefaultColumn(*itAllIndexes, i->num_rows(), false);
+                            if (defaultColumn.IsFail()) {
+                                return defaultColumn;
+                            }
+                            gContainer.AddField(context.GetActualSchema()->GetFieldByIndexVerified(*itAllIndexes), defaultColumn.DetachResult());
+                        } else {
+                            AFL_VERIFY(*itAllIndexes == *itBatchIndexes);
+                            gContainer.AddColumn(context.GetActualSchema()->GetFieldByIndexVerified(*itAllIndexes),
+                                i->column(itBatchIndexes - i.GetIndexes().begin()));
+                            ++itBatchIndexes;
+                        }
+                    }
+                }
+                //                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)("data", NArrow::DebugJson(i, 5, 5))("write_id", SequentialWriteId[idx]);
                 recordsCountSum += i->num_rows();
                 gContainer
                     ->AddField(IIndexInfo::GetWriteIdField(), NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(
@@ -114,6 +138,9 @@ public:
                     .Validate();
                 ++idx;
                 containers.emplace_back(gContainer);
+            }
+            if (!dataSchema) {
+                dataSchema = indexInfo.GetColumnsSchemaByOrderedIndexes(indexes);
             }
             NArrow::NMerger::TMergePartialStream stream(
                 context.GetActualSchema()->GetIndexInfo().GetReplaceKey(), dataSchema, false, { IIndexInfo::GetWriteIdField()->name() });
@@ -126,6 +153,7 @@ public:
                 ModificationType, context.GetStoragesManager(), context.GetSplitterCounters());
             result.emplace_back(portionConclusion.DetachResult());
         }
+        return TConclusionStatus::Success();
     }
 };
 
@@ -167,8 +195,8 @@ TConclusionStatus TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& 
         i.Finalize(Context, portionsToWrite);
     }
     auto actions = WriteUnits.front().GetData()->GetBlobsAction();
-    auto writeController = std::make_shared<TPortionWriteController>(
-        Context.GetTabletActorId(), actions, std::move(writeResults), std::move(portionsToWrite));
+    auto writeController =
+        std::make_shared<TPortionWriteController>(Context.GetTabletActorId(), actions, std::move(writeResults), std::move(portionsToWrite));
     if (actions->NeedDraftTransaction()) {
         TActorContext::AsActorContext().Send(
             Context.GetTabletActorId(), std::make_unique<NColumnShard::TEvPrivate::TEvWriteDraft>(writeController));
@@ -177,4 +205,4 @@ TConclusionStatus TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& 
     }
     return TConclusionStatus::Success();
 }
-}   // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap::NWritingPortions

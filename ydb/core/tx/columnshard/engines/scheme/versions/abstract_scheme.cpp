@@ -22,6 +22,13 @@ std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByIndex(const int index) 
     }
     return schema->field(index);
 }
+
+std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByIndexVerified(const int index) const {
+    auto schema = GetSchema();
+    AFL_VERIFY(!!schema && index >= 0 && index < schema->num_fields());
+    return schema->field(index);
+}
+
 std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnIdOptional(const ui32 columnId) const {
     return GetFieldByIndex(GetFieldIndex(columnId));
 }
@@ -68,7 +75,7 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
     return result;
 }
 
-TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModification(
+TConclusion<TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::PrepareForModification(
     const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const {
     if (!incomingBatch) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "DeserializeBatch() failed");
@@ -134,9 +141,10 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
     if (pkColumnsCount < pkColumns.size()) {
         return TConclusionStatus::Fail("not enough pk fields");
     }
-    auto batch = NArrow::SortBatch(batchConclusion.DetachResult(), pkColumns, true);
-    Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, GetIndexInfo().GetPrimaryKey()));
-    return batch;
+    auto result = batchConclusion.DetachResult();
+    result.MutableContainer() = NArrow::SortBatch(result.GetContainer(), pkColumns, true);
+    Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(result.GetContainer(), GetIndexInfo().GetPrimaryKey()));
+    return result;
 }
 
 std::set<ui32> ISnapshotSchema::GetColumnIdsToDelete(const ISnapshotSchema::TPtr& targetSchema) const {
@@ -244,6 +252,10 @@ std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetExternalDefaultValueVerified(
 
 std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetExternalDefaultValueVerified(const ui32 columnId) const {
     return GetIndexInfo().GetColumnExternalDefaultValueVerified(columnId);
+}
+
+std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetExternalDefaultValueByIndexVerified(const ui32 columnIdx) const {
+    return GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(columnIdx);
 }
 
 bool ISnapshotSchema::IsSpecialColumnId(const ui32 columnId) const {

@@ -259,7 +259,7 @@ TConclusion<TSchemaSubset> TColumnOperator::BuildSequentialSubset(
 }
 namespace {
 template <class TDataContainer>
-TConclusion<std::shared_ptr<TDataContainer>> AdaptIncomingToDestinationExtImpl(const std::shared_ptr<TDataContainer>& incoming,
+TConclusion<TContainerWithIndexes<TDataContainer>> AdaptIncomingToDestinationExtImpl(const std::shared_ptr<TDataContainer>& incoming,
     const TSchemaLiteView& dstSchema, const std::function<TConclusionStatus(const ui32, const i32)>& checker,
     const std::function<i32(const std::string&)>& nameResolver, const TColumnOperator::ECheckFieldTypesPolicy differentColumnTypesPolicy,
     const TColumnOperator::EAbsentFieldPolicy absentColumnPolicy) {
@@ -318,14 +318,17 @@ TConclusion<std::shared_ptr<TDataContainer>> AdaptIncomingToDestinationExtImpl(c
     std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> columns;
     columns.reserve(resultColumns.size());
     fields.reserve(resultColumns.size());
+    std::vector<ui32> indexes;
     for (auto&& i : resultColumns) {
         fields.emplace_back(dstSchema.field(i.Index));
         columns.emplace_back(i.Column);
+        indexes.emplace_back(i.Index);
     }
-    return NAdapter::TDataBuilderPolicy<TDataContainer>::Build(std::make_shared<arrow::Schema>(fields), std::move(columns), incoming->num_rows());
+    return TContainerWithIndexes<TDataContainer>(indexes,
+        NAdapter::TDataBuilderPolicy<TDataContainer>::Build(std::make_shared<arrow::Schema>(fields), std::move(columns), incoming->num_rows()));
 }
 }   // namespace
-TConclusion<std::shared_ptr<arrow::RecordBatch>> TColumnOperator::AdaptIncomingToDestinationExt(
+TConclusion<TContainerWithIndexes<arrow::RecordBatch>> TColumnOperator::AdaptIncomingToDestinationExt(
     const std::shared_ptr<arrow::RecordBatch>& incoming, const TSchemaLiteView& dstSchema,
     const std::function<TConclusionStatus(const ui32, const i32)>& checker, const std::function<i32(const std::string&)>& nameResolver) const {
     return AdaptIncomingToDestinationExtImpl(incoming, dstSchema, checker, nameResolver, DifferentColumnTypesPolicy, AbsentColumnPolicy);

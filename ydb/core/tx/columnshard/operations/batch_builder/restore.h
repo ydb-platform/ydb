@@ -15,7 +15,7 @@ private:
     std::shared_ptr<IMerger> Merger;
     const ui64 LocalPathId;
     const TSnapshot Snapshot;
-    std::shared_ptr<arrow::RecordBatch> IncomingData;
+    TContainerWithIndexes<arrow::RecordBatch> IncomingData;
     const TWritingContext Context;
     virtual std::unique_ptr<TEvColumnShard::TEvInternalScan> DoBuildRequestInitiator() const override;
 
@@ -31,8 +31,8 @@ public:
 
     virtual TDuration GetTimeout() const override;
 
-    TModificationRestoreTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger,
-        const TSnapshot actualSnapshot, const std::shared_ptr<arrow::RecordBatch>& incomingData, const TWritingContext& context);
+    TModificationRestoreTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger, const TSnapshot actualSnapshot,
+        const TContainerWithIndexes<arrow::RecordBatch>& incomingData, const TWritingContext& context);
 };
 
 }   // namespace NKikimr::NOlap

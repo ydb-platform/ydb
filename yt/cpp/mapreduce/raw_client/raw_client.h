@@ -210,6 +210,7 @@ public:
         const TSkyShareTableOptions& options = {}) override;
 
     // Files
+
     std::unique_ptr<IInputStream> ReadFile(
         const TTransactionId& transactionId,
         const TRichYPath& path,

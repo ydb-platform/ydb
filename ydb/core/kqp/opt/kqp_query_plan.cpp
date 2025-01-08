@@ -1239,7 +1239,7 @@ private:
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
-    std::variant<ui32, TArgContext> Visit(const TCoWideCombiner& combiner, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoWideCombiner& /* combiner */, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Aggregate";
         // op.Properties["GroupBy"] = NPlanUtils::PrettyExprStr(combiner.KeyExtractor());

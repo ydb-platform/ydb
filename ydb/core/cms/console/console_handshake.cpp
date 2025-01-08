@@ -29,14 +29,14 @@ public:
         Become(&TThis::StateWork);
     }
 
-    void Handle(TEvConsole::TEvReplaceYamlConfigResponse::TPtr& ev) {
+    void Handle(TEvConsole::TEvReplaceYamlConfigResponse::TPtr& /* ev */) {
         auto response = std::make_unique<TEvBlobStorage::TEvControllerConsoleCommitResponse>();
         response->Record.SetStatus(NKikimrBlobStorage::TEvControllerConsoleCommitResponse::Committed);
         SendInReply(SenderId, InterconnectSession, std::move(response));
         PassAway();
     }
 
-    void Handle(TEvConsole::TEvGenericError::TPtr& ev) {
+    void Handle(TEvConsole::TEvGenericError::TPtr& /* ev */) {
         auto response = std::make_unique<TEvBlobStorage::TEvControllerConsoleCommitResponse>();
         response->Record.SetStatus(NKikimrBlobStorage::TEvControllerConsoleCommitResponse::NotCommitted);
         SendInReply(SenderId, InterconnectSession, std::move(response));
@@ -114,7 +114,7 @@ void TConfigsManager::Handle(TEvBlobStorage::TEvControllerProposeConfigRequest::
     SendInReply(ev->Sender, ev->InterconnectSession, std::move(response));
 }
 
-void TConfigsManager::Handle(TEvBlobStorage::TEvControllerConsoleCommitRequest::TPtr &ev, const TActorContext &ctx) {
+void TConfigsManager::Handle(TEvBlobStorage::TEvControllerConsoleCommitRequest::TPtr& ev, const TActorContext& /* ctx */) {
     auto response = std::make_unique<TEvBlobStorage::TEvControllerConsoleCommitResponse>();
     const auto& yamlConfig = ev->Get()->Record.GetYAML();
     if (!CheckSession(*ev, response, NKikimrBlobStorage::TEvControllerConsoleCommitResponse::SessionMismatch)) {
@@ -125,7 +125,7 @@ void TConfigsManager::Handle(TEvBlobStorage::TEvControllerConsoleCommitRequest::
     CommitActor = Register(actor);
 }
 
-void TConfigsManager::Handle(TEvBlobStorage::TEvControllerValidateConfigRequest::TPtr &ev, const TActorContext &ctx) {
+void TConfigsManager::Handle(TEvBlobStorage::TEvControllerValidateConfigRequest::TPtr& ev, const TActorContext& /* ctx */) {
     auto response = std::make_unique<TEvBlobStorage::TEvControllerValidateConfigResponse>();
     auto requestRecord = ev->Get()->Record;
     response->Record.SetSkipBSCValidation(requestRecord.GetSkipBSCValidation());

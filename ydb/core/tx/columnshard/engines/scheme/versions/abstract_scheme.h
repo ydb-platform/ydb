@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/process_columns.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/save_load/saver.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
@@ -60,6 +61,7 @@ public:
 
     ui32 GetColumnId(const std::string& columnName) const;
     std::shared_ptr<arrow::Field> GetFieldByIndex(const int index) const;
+    std::shared_ptr<arrow::Field> GetFieldByIndexVerified(const int index) const;
     std::shared_ptr<arrow::Field> GetFieldByColumnIdOptional(const ui32 columnId) const;
     std::shared_ptr<arrow::Field> GetFieldByColumnIdVerified(const ui32 columnId) const;
 
@@ -80,11 +82,12 @@ public:
 
     [[nodiscard]] TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> NormalizeBatch(const ISnapshotSchema& dataSchema,
         const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::set<ui32>& restoreColumnIds) const;
-    [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> PrepareForModification(
+    [[nodiscard]] TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> PrepareForModification(
         const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const;
     [[nodiscard]] TConclusion<TWritePortionInfoWithBlobsResult> PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const ui64 pathId,
         const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
-        const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const;
+        const std::shared_ptr<IStoragesManager>& storagesManager,
+        const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const;
     void AdaptBatchToSchema(NArrow::TGeneralContainer& batch, const ISnapshotSchema::TPtr& targetSchema) const;
     std::set<ui32> GetColumnIdsToDelete(const ISnapshotSchema::TPtr& targetSchema) const;
     std::vector<ui32> ConvertColumnIdsToIndexes(const std::set<ui32>& idxs) const;

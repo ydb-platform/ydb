@@ -10,6 +10,8 @@
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <util/string/join.h>
 
@@ -22,6 +24,13 @@ std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByIndex(const int index) 
     }
     return schema->field(index);
 }
+
+std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByIndexVerified(const int index) const {
+    auto schema = GetSchema();
+    AFL_VERIFY(!!schema && index >= 0 && index < schema->num_fields());
+    return schema->field(index);
+}
+
 std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnIdOptional(const ui32 columnId) const {
     return GetFieldByIndex(GetFieldIndex(columnId));
 }
@@ -68,7 +77,7 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
     return result;
 }
 
-TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModification(
+TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::PrepareForModification(
     const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const {
     if (!incomingBatch) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "DeserializeBatch() failed");
@@ -92,36 +101,31 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
         if (targetIdx == -1) {
             return TConclusionStatus::Success();
         }
+        const auto hasNull = NArrow::HasNulls(incomingBatch->column(incomingIdx));
         const std::optional<i32> pkFieldIdx = GetIndexInfo().GetPKColumnIndexByIndexVerified(targetIdx);
-        if (!NArrow::HasNulls(incomingBatch->column(incomingIdx))) {
-            if (pkFieldIdx) {
-                AFL_VERIFY(*pkFieldIdx < (i32)pkColumns.size());
-                AFL_VERIFY(!pkColumns[*pkFieldIdx]);
-                pkColumns[*pkFieldIdx] = incomingBatch->column(incomingIdx);
-                ++pkColumnsCount;
-            }
-            return TConclusionStatus::Success();
-        }
-        if (pkFieldIdx) {
+        if (pkFieldIdx && hasNull && !AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK()) {
             return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema.field(targetIdx)->name() + "'");
         }
-        switch (mType) {
-            case NEvWrite::EModificationType::Replace:
-            case NEvWrite::EModificationType::Insert:
-            case NEvWrite::EModificationType::Upsert: {
-                if (GetIndexInfo().IsNullableVerifiedByIndex(targetIdx)) {
-                    return TConclusionStatus::Success();
-                }
-                if (GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(targetIdx)) {
-                    return TConclusionStatus::Success();
-                } else {
-                    return TConclusionStatus::Fail("empty field for non-default column: '" + dstSchema.field(targetIdx)->name() + "'");
-                }
+        if (hasNull) {
+            switch (mType) {
+                case NEvWrite::EModificationType::Replace:
+                case NEvWrite::EModificationType::Insert:
+                case NEvWrite::EModificationType::Upsert: {
+                    if (!GetIndexInfo().IsNullableVerifiedByIndex(targetIdx) && !GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(targetIdx))
+                        return TConclusionStatus::Fail("empty field for non-default column: '" + dstSchema.field(targetIdx)->name() + "'");
+                    }
+                case NEvWrite::EModificationType::Delete:
+                case NEvWrite::EModificationType::Update:
+                    break;
             }
-            case NEvWrite::EModificationType::Delete:
-            case NEvWrite::EModificationType::Update:
-                return TConclusionStatus::Success();
         }
+        if (pkFieldIdx) {
+            AFL_VERIFY(*pkFieldIdx < (i32)pkColumns.size());
+            AFL_VERIFY(!pkColumns[*pkFieldIdx]);
+            pkColumns[*pkFieldIdx] = incomingBatch->column(incomingIdx);
+            ++pkColumnsCount;
+        }
+        return TConclusionStatus::Success();
     };
     const auto nameResolver = [&](const std::string& fieldName) -> i32 {
         return GetIndexInfo().GetColumnIndexOptional(fieldName).value_or(-1);
@@ -134,9 +138,10 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
     if (pkColumnsCount < pkColumns.size()) {
         return TConclusionStatus::Fail("not enough pk fields");
     }
-    auto batch = NArrow::SortBatch(batchConclusion.DetachResult(), pkColumns, true);
-    Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, GetIndexInfo().GetPrimaryKey()));
-    return batch;
+    auto result = batchConclusion.DetachResult();
+    result.MutableContainer() = NArrow::SortBatch(result.GetContainer(), pkColumns, true);
+    Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(result.GetContainer(), GetIndexInfo().GetPrimaryKey()));
+    return result;
 }
 
 std::set<ui32> ISnapshotSchema::GetColumnIdsToDelete(const ISnapshotSchema::TPtr& targetSchema) const {

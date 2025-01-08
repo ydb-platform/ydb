@@ -759,7 +759,7 @@ public:
         CancelSubscriber = std::move(ev);
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvRequestCancelled::TPtr& ev) {
+    void Handle(NHttp::TEvHttpProxy::TEvRequestCancelled::TPtr& /* ev */) {
         if (CancelSubscriber) {
             Send(CancelSubscriber->Sender, new NHttp::TEvHttpProxy::TEvRequestCancelled(), 0, CancelSubscriber->Cookie);
         }
@@ -900,7 +900,7 @@ public:
         }
     }
 
-    void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+    void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& /* ev */) {
         if (CurrentResponse) {
             Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk("NodeDisconnected"), 0, Event->Cookie);
         } else {
@@ -1009,7 +1009,7 @@ public:
         Become(&THttpMonInitializator::StateWork);
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvConfirmListen::TPtr& ev) {
+    void Handle(NHttp::TEvHttpProxy::TEvConfirmListen::TPtr& /* ev */) {
         Promise.set_value();
         PassAway();
     }

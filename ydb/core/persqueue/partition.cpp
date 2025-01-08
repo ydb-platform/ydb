@@ -1009,7 +1009,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const 
     PendingEvents.emplace_back(ev->ReleaseBase().Release());
 }
 
-void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx)
+void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& /* ctx */)
 {
     PQ_LOG_D("HandleOnInit TEvPQ::TEvGetWriteInfoRequest");
 
@@ -1019,7 +1019,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TAc
     PendingEvents.emplace_back(ev->ReleaseBase().Release());
 }
 
-void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext& ctx)
+void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext& /* ctx */)
 {
     PQ_LOG_D("HandleOnInit TEvPQ::TEvGetWriteInfoResponse");
 
@@ -1028,7 +1028,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TA
     PendingEvents.emplace_back(ev->ReleaseBase().Release());
 }
 
-void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& ctx)
+void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& /* ctx */)
 {
     PQ_LOG_D("HandleOnInit TEvPQ::TEvGetWriteInfoError");
 

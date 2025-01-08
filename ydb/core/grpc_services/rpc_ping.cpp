@@ -221,7 +221,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void DoGrpcProxyPing(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+void DoGrpcProxyPing(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& /* f */) {
     // we are in the GRPC proxy already (or in the check actor in case of auth check),
     // thus ready to reply right here
     using TRequest = TGrpcRequestNoOperationCall<Debug::GrpcProxyRequest, Debug::GrpcProxyResponse>;

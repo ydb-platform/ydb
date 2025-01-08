@@ -46,7 +46,7 @@ namespace NKikimr::NBsController {
         MakeGetBlock();
     }
 
-    void TBlobStorageController::TConsoleInteraction::MakeCommitToConsole(TString& config, ui32 configVersion) {
+    void TBlobStorageController::TConsoleInteraction::MakeCommitToConsole(TString& /* config */, ui32 /* configVersion */) {
         auto ev = MakeHolder<TEvBlobStorage::TEvControllerConsoleCommitRequest>();
         ev->Record.SetYAML(Self.YamlConfig);
         NTabletPipe::SendData(Self.SelfId(), ConsolePipe, ev.Release());
@@ -163,7 +163,7 @@ namespace NKikimr::NBsController {
         Self.Send(ev->Sender, validateConfigResponse.release());
     }
 
-    bool TBlobStorageController::TConsoleInteraction::ParseConfig(const TString& config, ui32& configVersion, NKikimrBlobStorage::TStorageConfig& storageConfig) {
+    bool TBlobStorageController::TConsoleInteraction::ParseConfig(const TString& config, ui32& /* configVersion */, NKikimrBlobStorage::TStorageConfig& storageConfig) {
         NKikimrConfig::TAppConfig appConfig;
         try {
             appConfig = NKikimr::NYaml::Parse(config);
@@ -174,7 +174,7 @@ namespace NKikimr::NBsController {
         return success;
     }
 
-    TBlobStorageController::TConsoleInteraction::TCommitConfigResult::EStatus TBlobStorageController::TConsoleInteraction::CheckConfig(const TString& config, ui32& configVersion, bool skipBSCValidation, 
+    TBlobStorageController::TConsoleInteraction::TCommitConfigResult::EStatus TBlobStorageController::TConsoleInteraction::CheckConfig(const TString& config, ui32& configVersion, bool skipBSCValidation,
                                                                                                                                        NKikimrBlobStorage::TStorageConfig& storageConfig) {
         if (!ParseConfig(config, configVersion, storageConfig)) {
             return TConsoleInteraction::TCommitConfigResult::EStatus::ParseError;
@@ -188,7 +188,7 @@ namespace NKikimr::NBsController {
         return TConsoleInteraction::TCommitConfigResult::EStatus::Success;
     }
 
-    void TBlobStorageController::TConsoleInteraction::Handle(TBlobStorageController::TConsoleInteraction::TEvPrivate::TEvValidationTimeout::TPtr &ev) {
+    void TBlobStorageController::TConsoleInteraction::Handle(TBlobStorageController::TConsoleInteraction::TEvPrivate::TEvValidationTimeout::TPtr& /* ev */) {
         if (TActivationContext::Now() < ValidationTimeout) {
             return;
         }

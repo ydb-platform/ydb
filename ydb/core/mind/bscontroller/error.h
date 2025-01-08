@@ -105,6 +105,11 @@ namespace NKikimr::NBsController {
                 << TErrorParams::IcPort(std::get<1>(hostKey));
         }
 
+        TExHostNotFound(ui32 nodeId) {
+            *this << "Host not found"
+                << TErrorParams::NodeId(nodeId);
+        }
+
         NKikimrBlobStorage::TConfigResponse::TStatus::EFailReason GetFailReason() const override {
             return NKikimrBlobStorage::TConfigResponse::TStatus::kHostNotFound;
         }
@@ -126,9 +131,9 @@ namespace NKikimr::NBsController {
                 << TErrorParams::PDiskId(pdiskId);
         }
 
-        TExPDiskNotFound(ui32 nodeId, TString path) {
+        TExPDiskNotFound(const TString& fqdn, TString path) {
             *this << "PDisk not found"
-                << TErrorParams::NodeId(nodeId)
+                << TErrorParams::Fqdn(fqdn)
                 << TErrorParams::Path(path);
         }
 

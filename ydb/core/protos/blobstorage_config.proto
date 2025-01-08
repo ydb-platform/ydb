@@ -400,25 +400,25 @@ message TWipeVDisk {
     NKikimrBlobStorage.TVDiskID VDiskId = 2;
 }
 
+message TPDiskLocation {
+    string Fqdn = 1; // fully qualified domain name of the host
+    string Path = 2; // absolute path to the device as enlisted in PDisk configuration
+}
+
 message TRestartPDisk {
     NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
-    string Path = 2;
-    string Fqdn = 3;
-    int32 IcPort = 4;
+    TPDiskLocation TargetPDiskLocation = 2;
 }
 
 message TSetPDiskReadOnly {
     NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
-    bool Value = 2;
-    string Path = 3;
-    string Fqdn = 4;
-    int32 IcPort = 5;
+    TPDiskLocation TargetPDiskLocation = 2;
+    bool Value = 3;
 }
 
 message TStopPDisk {
-    THostKey HostKey = 1; // host on which we are looking for the drive
-    string Path = 2; // absolute path to the device as enlisted in PDisk configuration
-    uint32 PDiskId = 3; // may be set instead of path to identify PDisk
+    NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+    TPDiskLocation TargetPDiskLocation = 2;
 }
 
 message TSetScrubPeriodicity {

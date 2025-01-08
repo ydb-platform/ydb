@@ -1280,9 +1280,9 @@ void CheckRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TStr
             }
         }
 
-        UNIT_ASSERT_C(!(has ^ mustHave), "" << record.GetPath() << " " << (mustHave ? "no " : "") << "ace found"
+        UNIT_ASSERT_C(!(has ^ mustHave), "" << record.GetPath() << "ace check fail"
             << ", got " << src.ShortDebugString()
-            << ", required " << required.ShortDebugString());
+            << ", required " << (mustHave ? "" : "no ") << required.ShortDebugString());
     }
 }
 

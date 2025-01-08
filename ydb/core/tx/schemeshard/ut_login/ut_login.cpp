@@ -157,12 +157,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         auto resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
 
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1/DirSub1");
+
         CreateAlterLoginCreateGroup(runtime, ++txId, "/MyRoot", "group");
         AlterLoginAddGroupMembership(runtime, ++txId, "/MyRoot", "user1", "group");
         AlterLoginAddGroupMembership(runtime, ++txId, "/MyRoot", "user2", "group");
-
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
             {NLs::HasGroup("group", {"user1", "user2"})});
+
+        NACLib::TDiffACL diffACL;
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "group");
+        AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),{
+            NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"),
+            NLs::HasRight("+U:group"), NLs::HasEffectiveRight("+U:group")});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),{
+            NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"),
+            NLs::HasNoRight("+U:group"), NLs::HasEffectiveRight("+U:group")});
 
         CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1");
 
@@ -170,6 +182,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         {
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
             {NLs::HasGroup("group", {"user2"})});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),{
+                NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"),
+                NLs::HasRight("+U:group"), NLs::HasEffectiveRight("+U:group")});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),{
+                NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"),
+                NLs::HasNoRight("+U:group"), NLs::HasEffectiveRight("+U:group")});
             auto resultLogin = Login(runtime, "user1", "password1");
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user: user1");
         }

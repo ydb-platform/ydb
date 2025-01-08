@@ -22,7 +22,7 @@ ui64 TPositiveControlInteger::Sub(const ui64 value) {
     return Value;
 }
 
-ui64 TPositiveControlInteger::GetDec() {
+ui64 TPositiveControlInteger::GetDec() const {
     if (Value) {
         return Value - 1;
     } else {

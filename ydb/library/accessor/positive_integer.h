@@ -21,7 +21,7 @@ public:
     ui64 Dec() {
         return Sub(1);
     }
-    ui64 GetDec();
+    ui64 GetDec() const;
     ui64 Val() const;
     bool operator!() const {
         return !Value;

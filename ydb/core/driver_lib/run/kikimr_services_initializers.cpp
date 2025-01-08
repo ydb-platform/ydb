@@ -1714,6 +1714,18 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             endpoints.push_back(std::move(desc));
         }
 
+        if (Config.GetKafkaProxyConfig().GetEnableKafkaProxy()) {
+            const auto& kakfaConfig = Config.GetKafkaProxyConfig();
+            TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
+            desc->Address = config.GetPublicHost() ? config.GetPublicHost() : address;
+            desc->Port = kakfaConfig.GetListeningPort();
+            desc->Ssl = kakfaConfig.HasSslCertificate();
+
+            TVector<TString> services = {"datastreams", "pq", "pqv1"};
+            desc->ServedServices.insert(desc->ServedServices.end(), services.begin(), services.end());
+            desc->EndpointId = NGRpcService::KafkaEndpointId;
+        }
+
         for (auto &sx : config.GetExtEndpoints()) {
             const TString &localAddress = sx.GetHost() ? (sx.GetHost() != "[::]" ? sx.GetHost() : FQDNHostName()) : address;
             if (const ui32 port = sx.GetPort()) {

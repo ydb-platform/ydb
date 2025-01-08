@@ -2,8 +2,11 @@
 
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
+#include <ydb/core/grpc_services/grpc_endpoint.h>
+#include <ydb/core/base/statestorage.h>
 
 namespace NKafka {
+using namespace NKikimr;
 using namespace NKikimr::NGRpcProxy::V1;
 
 NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context,
@@ -19,6 +22,8 @@ void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
 
     if (WithProxy) {
         AddProxyNodeToBrokers();
+    } else {
+        SendDiscoveryRequest();
     }
 
     if (Message->Topics.size() == 0 && !WithProxy) {
@@ -28,14 +33,89 @@ void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
     if (Message->Topics.size() != 0) {
         ProcessTopics();
     }
-    
+
     Become(&TKafkaMetadataActor::StateWork);
     RespondIfRequired(ctx);
 }
 
 void TKafkaMetadataActor::AddCurrentNodeToBrokers() {
+    NeedCurrentNode = true;
+    if (!DiscoveryRequested) {
+        RequestICNodeCache();
+    }
+}
+
+void TKafkaMetadataActor::SendDiscoveryRequest() {
+    DiscoveryRequested = true;
+    if (!DiscoveryCacheActor) {
+        DiscoveryCacheActor = Register(CreateDiscoveryCache(NGRpcService::KafkaEndpointId));
+    }
     PendingResponses++;
-    Send(NKikimr::NIcNodeCache::CreateICNodesInfoCacheServiceId(), new NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoRequest());
+    Register(CreateDiscoverer(&MakeEndpointsBoardPath, Context->DatabasePath, SelfId(), DiscoveryCacheActor));
+}
+
+
+void TKafkaMetadataActor::HandleDiscoveryError(TEvDiscovery::TEvError::TPtr& ev) {
+    PendingResponses--;
+    if (NeedCurrentNode) {
+        RequestICNodeCache();
+    }
+    DiscoveryRequested = false;
+    for (auto& [index, ev] : PendingTopicResponses) {
+        auto& topic = Response->Topics[index];
+        AddTopicResponse(topic, ev->Get());
+    }
+    PendingTopicResponses.clear();
+    RespondIfRequired(ActorContext());
+}
+
+void TKafkaMetadataActor::HandleDiscoveryData(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const NActors::TActorContext& ctx) {
+    PendingResponses--;
+    auto res = ProcessDiscoveryData(ev);
+    if (res) {
+        RespondIfRequired(ctx);
+    } else if (NeedCurrentNode) {
+        RequestICNodeCache();
+    }
+    DiscoveryRequested = false;
+    for (auto& [index, ev] : PendingTopicResponses) {
+        auto& topic = Response->Topics[index];
+        AddTopicResponse(topic, ev->Get());
+    }
+    PendingTopicResponses.clear();
+    RespondIfRequired(ActorContext());
+}
+
+bool TKafkaMetadataActor::ProcessDiscoveryData(TEvDiscovery::TEvDiscoveryData::TPtr& ev) {
+    bool expectSsl = Context->Config.HasSslCertificate();
+
+    Ydb::Discovery::ListEndpointsResponse leResponse;
+    Ydb::Discovery::ListEndpointsResult leResult;
+    TString const* cachedMessage;
+    if (expectSsl) {
+        cachedMessage = &ev->Get()->CachedMessageData->CachedMessageSsl;
+    } else {
+        cachedMessage = &ev->Get()->CachedMessageData->CachedMessage;
+    }
+    auto ok = leResponse.ParseFromString(*cachedMessage);
+    if (ok) {
+        ok = leResponse.operation().result().UnpackTo(&leResult);
+    }
+    if (!ok)
+        return false;
+
+    for (auto& endpoint : leResult.endpoints()) {
+        Nodes.insert({endpoint.node_id(), endpoint.port()});
+    }
+    if (NeedCurrentNode) {
+        return Nodes.count(SelfId().NodeId());
+    }
+    return true;
+}
+
+void TKafkaMetadataActor::RequestICNodeCache() {
+    PendingResponses++;
+    Send(NKikimr::NIcNodeCache::CreateICNodesInfoCacheServiceId(), new NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoRequest());
 }
 
 void TKafkaMetadataActor::AddProxyNodeToBrokers() {
@@ -97,7 +177,7 @@ TActorId TKafkaMetadataActor::SendTopicRequest(const TMetadataRequestData::TMeta
     PendingResponses++;
 
     return Register(new TPartitionsLocationActor(locationRequest, SelfId()));
-} 
+}
 
 void TKafkaMetadataActor::AddTopicError(
     TMetadataResponseData::TMetadataResponseTopic& topic, EKafkaErrors errorCode
@@ -134,7 +214,11 @@ void TKafkaMetadataActor::AddTopicResponse(TMetadataResponseData::TMetadataRespo
                 auto broker = TMetadataResponseData::TMetadataResponseBroker{};
                 broker.NodeId = part.NodeId;
                 broker.Host = hostname;
-                broker.Port = Context->Config.GetListeningPort();
+                auto nodeIter = Nodes.find(part.NodeId);
+                if (nodeIter.IsEnd())
+                    broker.Port = Context->Config.GetListeningPort();
+                else
+                    broker.Port = nodeIter->second;
                 Response->Brokers.emplace_back(std::move(broker));
             }
         }
@@ -147,7 +231,7 @@ void TKafkaMetadataActor::HandleResponse(TEvLocationResponse::TPtr ev, const TAc
     auto* r = ev->Get();
     auto actorIter = TopicIndexes.find(ev->Sender);
 
-    Y_DEBUG_ABORT_UNLESS(!actorIter.IsEnd()); 
+    Y_DEBUG_ABORT_UNLESS(!actorIter.IsEnd());
     Y_DEBUG_ABORT_UNLESS(!actorIter->second.empty());
 
     if (actorIter.IsEnd()) {
@@ -160,23 +244,26 @@ void TKafkaMetadataActor::HandleResponse(TEvLocationResponse::TPtr ev, const TAc
 
         return RespondIfRequired(ctx);
     }
-    
+
     for (auto index : actorIter->second) {
         auto& topic = Response->Topics[index];
         if (r->Status == Ydb::StatusIds::SUCCESS) {
             KAFKA_LOG_D("Describe topic '" << topic.Name << "' location finishied successful");
-            AddTopicResponse(topic, r);
+            if (DiscoveryRequested) {
+                PendingTopicResponses.insert(std::make_pair(index, ev));
+            } else {
+                AddTopicResponse(topic, r);
+            }
         } else {
             KAFKA_LOG_ERROR("Describe topic '" << topic.Name << "' location finishied with error: Code=" << r->Status << ", Issues=" << r->Issues.ToOneLineString());
             AddTopicError(topic, ConvertErrorCode(r->Status));
         }
     }
-
     RespondIfRequired(ActorContext());
 }
 
 void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
-    if (PendingResponses == 0) {
+    if (PendingResponses == 0 && !PendingTopicResponses) {
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, ErrorCode));
         Die(ctx);
     }

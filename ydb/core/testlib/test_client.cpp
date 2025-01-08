@@ -1095,7 +1095,9 @@ namespace Tests {
         if (Settings->AppConfig->GetKafkaProxyConfig().GetEnableKafkaProxy()) {
             NKafka::TListenerSettings settings;
             settings.Port = Settings->AppConfig->GetKafkaProxyConfig().GetListeningPort();
+            bool ssl = false;
             if (Settings->AppConfig->GetKafkaProxyConfig().HasSslCertificate()) {
+                ssl = true;
                 settings.SslCertificatePem = Settings->AppConfig->GetKafkaProxyConfig().GetSslCertificate();
             }
 
@@ -1106,6 +1108,27 @@ namespace Tests {
             IActor* metricsActor = CreateKafkaMetricsActor(NKafka::TKafkaMetricsSettings{Runtime->GetAppData().Counters->GetSubgroup("counters", "kafka_proxy")});
             TActorId metricsActorId = Runtime->Register(metricsActor, nodeIdx, userPoolId);
             Runtime->RegisterService(NKafka::MakeKafkaMetricsServiceID(), metricsActorId, nodeIdx);
+
+            {
+                auto& appData = Runtime->GetAppData(0);
+
+                TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
+                NYdbGrpc::TServerOptions options{};
+                desc->Address = options.Host; // Just use a host from default TServerOptions constructor instead of hard-coding localhost.
+                desc->Port = settings.Port;
+                desc->Ssl = ssl;
+                desc->EndpointId = NGRpcService::KafkaEndpointId;
+
+                TVector<TString> rootDomains;
+                if (const auto& domain = appData.DomainsInfo->Domain) {
+                    rootDomains.emplace_back("/" + domain->Name);
+                }
+                desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
+
+                TVector<TString> grpcServices = {"datastreams", "pq", "pqv1"};
+                desc->ServedServices.insert(desc->ServedServices.end(), grpcServices.begin(), grpcServices.end());
+                Runtime->GetActorSystem(0)->Register(NGRpcService::CreateGrpcEndpointPublishActor(desc.Get()), TMailboxType::ReadAsFilled, appData.UserPoolId);
+            }
         }
 
         if (Settings->EnableYq) {

@@ -1,4 +1,6 @@
+#include <chrono>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tablet_flat/util_fmt_basic.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr;
@@ -8,16 +10,17 @@ using namespace NSchemeShardUT_Private;
 struct TLogStopwatch {
     TLogStopwatch(TString message)
         : Message(std::move(message))
-        , Started(TAppData::TimeProvider->Now())
+        , Started(std::chrono::steady_clock::now())
     {}
     
     ~TLogStopwatch() {
-        Cerr << "[STOPWATCH] " << Message << " in " << (TAppData::TimeProvider->Now() - Started).MilliSeconds() << "ms" << Endl;
+        std::chrono::steady_clock::time_point ended = std::chrono::steady_clock::now();
+        Cerr << "[STOPWATCH] " << Message << " in " << NFmt::TDelay(TDuration::MicroSeconds(std::chrono::duration_cast<std::chrono::microseconds>(ended - Started).count())) << Endl;
     }
 
 private:
     TString Message;
-    TInstant Started;
+    std::chrono::steady_clock::time_point Started;
 };
 
 Y_UNIT_TEST_SUITE(TSchemeShardLoginLargeTest) {

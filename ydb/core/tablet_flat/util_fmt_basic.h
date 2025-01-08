@@ -1,6 +1,7 @@
 #pragma once
 
 #include "util_fmt_desc.h"
+#include <util/datetime/base.h>
 
 namespace NKikimr {
 namespace NFmt {

@@ -126,6 +126,12 @@ namespace NKikimr::NBsController {
                 << TErrorParams::PDiskId(pdiskId);
         }
 
+        TExPDiskNotFound(ui32 nodeId, TString path) {
+            *this << "PDisk not found"
+                << TErrorParams::NodeId(nodeId)
+                << TErrorParams::Path(path);
+        }
+
         NKikimrBlobStorage::TConfigResponse::TStatus::EFailReason GetFailReason() const override {
             return NKikimrBlobStorage::TConfigResponse::TStatus::kPDiskNotFound;
         }

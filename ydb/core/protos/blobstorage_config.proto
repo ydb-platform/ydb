@@ -402,11 +402,17 @@ message TWipeVDisk {
 
 message TRestartPDisk {
     NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+    string Path = 2;
+    string Fqdn = 3;
+    int32 IcPort = 4;
 }
 
 message TSetPDiskReadOnly {
     NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
     bool Value = 2;
+    string Path = 3;
+    string Fqdn = 4;
+    int32 IcPort = 5;
 }
 
 message TStopPDisk {

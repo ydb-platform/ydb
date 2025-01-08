@@ -226,10 +226,54 @@ namespace NKikimr::NBsController {
         boxes.erase(cmd.GetOriginBoxId());
     }
 
-    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TRestartPDisk& cmd, TStatus& /*status*/) {
-        auto targetPDiskId = cmd.GetTargetPDiskId();
+    TPDiskId GetPDiskId(const TBlobStorageController::TConfigState& state, const TString& fqdn, ui32 icPort, ui32 nodeId, const TString& diskPath, ui32 pdiskId) {
+        ui32 targetNodeId = nodeId;
 
-        TPDiskId pdiskId(targetPDiskId.GetNodeId(), targetPDiskId.GetPDiskId());
+        bool foundNode = false;
+
+        if (!nodeId) {
+            const TBlobStorageController::THostId key(fqdn, icPort);
+            if (const auto& nodeId = state.HostRecords->ResolveNodeId(key)) {
+                targetNodeId = *nodeId;
+                foundNode = true;
+            }
+        } else if (!fqdn && !icPort) {
+            if (const auto& hostId = state.HostRecords->GetHostId(nodeId)) {
+                foundNode = true;
+            }
+        } else {
+            // when both fqdn:port and node id were filled, we have to ensure that they match each other
+            foundNode = state.HostRecords->GetHostId(nodeId) == std::make_tuple(fqdn, icPort);
+        }
+
+        if (!foundNode) {
+            throw TExHostNotFound({fqdn, icPort}) << " HostKey# " << fqdn << ":" << icPort << " incorrect";
+        }
+
+        TPDiskId res;
+
+        if (pdiskId) {
+            if (diskPath) {
+                throw TExError() << "TUpdateDriveStatus.Path and PDiskId are mutually exclusive";
+            }
+            res = TPDiskId(targetNodeId, pdiskId);
+            if (!state.PDisks.Find(res) || state.PDisksToRemove.count(res)) {
+                throw TExPDiskNotFound(targetNodeId, pdiskId);
+            }
+        } else {
+            const std::optional<TPDiskId> found = state.FindPDiskByLocation(targetNodeId, diskPath);
+            if (found && !state.PDisksToRemove.count(*found)) {
+                res = *found;
+            } else {
+                throw TExPDiskNotFound(nodeId, diskPath);
+            }
+        }
+
+        return res;
+    }
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TRestartPDisk& cmd, TStatus& /*status*/) {
+        TPDiskId pdiskId = GetPDiskId(*this, cmd.GetFqdn(), cmd.GetIcPort(), cmd.GetTargetPDiskId().GetNodeId(), cmd.GetPath(), cmd.GetTargetPDiskId().GetPDiskId());
 
         TPDiskInfo *pdisk = PDisks.FindForUpdate(pdiskId);
 
@@ -252,9 +296,7 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TSetPDiskReadOnly& cmd, TStatus& /*status*/) {
-        auto targetPDiskId = cmd.GetTargetPDiskId();
-
-        TPDiskId pdiskId(targetPDiskId.GetNodeId(), targetPDiskId.GetPDiskId());
+        TPDiskId pdiskId = GetPDiskId(*this, cmd.GetFqdn(), cmd.GetIcPort(), cmd.GetTargetPDiskId().GetNodeId(), cmd.GetPath(), cmd.GetTargetPDiskId().GetPDiskId());
 
         TPDiskInfo *pdisk = PDisks.FindForUpdate(pdiskId);
 
@@ -281,25 +323,7 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TStopPDisk& cmd, TStatus& /*status*/) {
-        const auto& host = NormalizeHostKey(cmd.GetHostKey());
-
-        TPDiskId pdiskId;
-        if (cmd.GetPDiskId()) {
-            if (cmd.GetPath()) {
-                throw TExError() << "TUpdateDriveStatus.Path and PDiskId are mutually exclusive";
-            }
-            pdiskId = TPDiskId(host.GetNodeId(), cmd.GetPDiskId());
-            if (!PDisks.Find(pdiskId) || PDisksToRemove.count(pdiskId)) {
-                throw TExPDiskNotFound(host, cmd.GetPDiskId(), TString());
-            }
-        } else {
-            const std::optional<TPDiskId> found = FindPDiskByLocation(host.GetNodeId(), cmd.GetPath());
-            if (found && !PDisksToRemove.count(*found)) {
-                pdiskId = *found;
-            } else {
-                throw TExPDiskNotFound(host, 0, cmd.GetPath());
-            }
-        }
+        TPDiskId pdiskId = GetPDiskId(*this, cmd.GetHostKey().GetFqdn(), cmd.GetHostKey().GetIcPort(), cmd.GetHostKey().GetNodeId(), cmd.GetPath(), cmd.GetPDiskId());
 
         TPDiskInfo *pdisk = PDisks.FindForUpdate(pdiskId);
 

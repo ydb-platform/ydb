@@ -17,26 +17,20 @@ private:
     const ui64 PathId;
     const ui64 SchemaVersion;
     const NEvWrite::EModificationType ModificationType;
-    const TString SchemaDescription;
-    const ui64 SchemaDescriptionHash;
 
 public:
-    TAggregationId(const ui64 pathId, const ui64 schemaVersion, const NEvWrite::EModificationType mType, const TString& schemaDescription)
+    TAggregationId(const ui64 pathId, const ui64 schemaVersion, const NEvWrite::EModificationType mType)
         : PathId(pathId)
         , SchemaVersion(schemaVersion)
-        , ModificationType(mType)
-        , SchemaDescription(schemaDescription)
-        , SchemaDescriptionHash(MurmurHash<ui64>(SchemaDescription.data(), SchemaDescription.size())) {
+        , ModificationType(mType) {
     }
 
     bool operator==(const TAggregationId& item) const {
-        return PathId == item.PathId && SchemaVersion == item.SchemaVersion && ModificationType == item.ModificationType &&
-               SchemaDescription == item.SchemaDescription;
+        return PathId == item.PathId && SchemaVersion == item.SchemaVersion && ModificationType == item.ModificationType;
     }
 
     operator size_t() const {
-        return CombineHashes<ui64>(
-            CombineHashes<ui64>(CombineHashes<ui64>(PathId, SchemaVersion), (ui64)ModificationType), SchemaDescriptionHash);
+        return CombineHashes<ui64>(CombineHashes<ui64>(PathId, SchemaVersion), (ui64)ModificationType);
     }
 };
 

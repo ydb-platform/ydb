@@ -11,14 +11,14 @@ namespace NKikimr::NOlap::NWritingPortions {
 class TWriteUnit {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NEvWrite::TWriteData>, Data);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
+    YDB_READONLY_DEF(NArrow::TContainerWithIndexes<arrow::RecordBatch>, Batch);
 
 public:
-    TWriteUnit(const std::shared_ptr<NEvWrite::TWriteData>& data, const std::shared_ptr<arrow::RecordBatch>& batch)
+    TWriteUnit(const std::shared_ptr<NEvWrite::TWriteData>& data, const NArrow::TContainerWithIndexes<arrow::RecordBatch>& batch)
         : Data(data)
         , Batch(batch) {
         AFL_VERIFY(Data->GetWritePortions());
-        AFL_VERIFY(Batch);
+        AFL_VERIFY(Batch.HasContainer());
     }
 };
 

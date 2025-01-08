@@ -207,7 +207,7 @@ public:
             if (acl.HasAccess(user)) {
                 auto pathStr = TPath::Init(pathId, context.SS).PathString();
                 return {.Error = TStringBuilder() << 
-                    "User " << user << " has ACL record on " << pathStr << " and can't be removed"};
+                    "User " << user << " has an ACL record on " << pathStr << " and can't be removed"};
             }
         }
 

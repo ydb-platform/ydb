@@ -263,7 +263,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
 
         CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1",
-            TVector<TExpectedResult>{{NKikimrScheme::StatusPreconditionFailed, "User user1 has ACL record on /MyRoot/Dir1 and can't be removed"}});
+            TVector<TExpectedResult>{{NKikimrScheme::StatusPreconditionFailed, "User user1 has an ACL record on /MyRoot/Dir1 and can't be removed"}});
 
         // check user still exists and has their rights:
         {

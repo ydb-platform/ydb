@@ -201,12 +201,12 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("Utf8", kikimr);
         helper.CreateTestOlapTable();
-        auto writeGuard = helper.StartWriting("/Root/olapStore/olapTable");
-        writeGuard.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "aaa", 1), 0, 800000);
+        auto writeSession = helper.StartWriting("/Root/olapStore/olapTable");
+        writeSession.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "aaa", 1), 0, 800000);
         Sleep(TDuration::Seconds(1));
-        writeGuard.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "bbb", 1), 0.5, 800000);
+        writeSession.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "bbb", 1), 0.5, 800000);
         Sleep(TDuration::Seconds(1));
-        writeGuard.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "ccc", 1), 0.75, 800000);
+        writeSession.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "ccc", 1), 0.75, 800000);
         Sleep(TDuration::Seconds(1));
         writeSession.Finalize();
 

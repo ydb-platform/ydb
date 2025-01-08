@@ -99,7 +99,7 @@ public:
         , DsGroupSelector(dsGroupSelector) {
     }
 
-    void Bootstrap(const TActorContext& ctx) {
+    void Bootstrap(const TActorContext& /* ctx */) {
         WaitingCount = 0;
 
         for (auto it = Channels.begin(); it != Channels.end(); ++it) {

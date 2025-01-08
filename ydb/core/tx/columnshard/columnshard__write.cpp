@@ -64,7 +64,7 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const ui64 pathI
     return EOverloadStatus::None;
 }
 
-TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedImmediate(const ui64 pathId) const {
+TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedImmediate(const ui64 /* pathId */) const {
     if (IsAnyChannelYellowStop()) {
         return EOverloadStatus::Disk;
     }
@@ -295,7 +295,7 @@ public:
     using TPtr = std::shared_ptr<TCommitOperation>;
 
     bool NeedSyncLocks() const {
-        return SendingShards.size() && ReceivingShards.size();
+        return SendingShards.size() || ReceivingShards.size();
     }
 
     bool IsPrimary() const {
@@ -308,29 +308,28 @@ public:
     }
 
     TConclusionStatus Parse(const NEvents::TDataEvents::TEvWrite& evWrite) {
-        AFL_VERIFY(evWrite.Record.GetLocks().GetLocks().size() >= 1);
-        auto& locks = evWrite.Record.GetLocks();
-        auto& lock = evWrite.Record.GetLocks().GetLocks()[0];
+        TxId = evWrite.Record.GetTxId();
+        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tx_id", TxId);
+        const auto& locks = evWrite.Record.GetLocks();
+        AFL_VERIFY(!locks.GetLocks().empty());
+        auto& lock = locks.GetLocks()[0];
+        LockId = lock.GetLockId();
         SendingShards = std::set<ui64>(locks.GetSendingShards().begin(), locks.GetSendingShards().end());
         ReceivingShards = std::set<ui64>(locks.GetReceivingShards().begin(), locks.GetReceivingShards().end());
-        if (!ReceivingShards.size() || !SendingShards.size()) {
-            ReceivingShards.clear();
-            SendingShards.clear();
-        } else if (!locks.HasArbiterColumnShard()) {
-            ArbiterColumnShard = *ReceivingShards.begin();
+        const bool singleShardTx = SendingShards.empty() && ReceivingShards.empty();
+        if (!singleShardTx) {
             if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
-                return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
+                return TConclusionStatus::Fail("shard is absent in sending and receiving lists");
             }
-        } else {
-            ArbiterColumnShard = locks.GetArbiterColumnShard();
+            if (locks.HasArbiterColumnShard()) {
+                ArbiterColumnShard = locks.GetArbiterColumnShard();
+            } else {
+                AFL_VERIFY(!ReceivingShards.empty());
+                ArbiterColumnShard = *ReceivingShards.begin();
+            }
             AFL_VERIFY(ArbiterColumnShard);
-            if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
-                return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
-            }
         }
 
-        TxId = evWrite.Record.GetTxId();
-        LockId = lock.GetLockId();
         Generation = lock.GetGeneration();
         InternalGenerationCounter = lock.GetCounter();
         if (!GetLockId()) {
@@ -339,7 +338,7 @@ public:
         if (!TxId) {
             return TConclusionStatus::Fail("not initialized TxId for commit event");
         }
-        if (evWrite.Record.GetLocks().GetOp() != NKikimrDataEvents::TKqpLocks::Commit) {
+        if (locks.GetOp() != NKikimrDataEvents::TKqpLocks::Commit) {
             return TConclusionStatus::Fail("incorrect message type");
         }
         return TConclusionStatus::Success();
@@ -347,7 +346,6 @@ public:
 
     std::unique_ptr<NColumnShard::TEvWriteCommitSyncTransactionOperator> CreateTxOperator(
         const NKikimrTxColumnShard::ETransactionKind kind) const {
-        AFL_VERIFY(ReceivingShards.size());
         if (IsPrimary()) {
             return std::make_unique<NColumnShard::TEvWriteCommitPrimaryTransactionOperator>(
                 TFullTxInfo::BuildFake(kind), LockId, ReceivingShards, SendingShards);

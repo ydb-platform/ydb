@@ -15,7 +15,7 @@ std::shared_ptr<NDataLocks::ILock> TRemovePortionsChange::DoBuildDataLock(
 }
 
 void TRemovePortionsChange::DoApplyOnExecute(
-    NColumnShard::TColumnShard* self, TWriteIndexContext& context, const TDataAccessorsResult& fetchedDataAccessors) {
+    NColumnShard::TColumnShard* /* self */, TWriteIndexContext& context, const TDataAccessorsResult& fetchedDataAccessors) {
     THashSet<ui64> usedPortionIds;
     auto schemaPtr = context.EngineLogs.GetVersionedIndex().GetLastSchema();
     for (auto&& [_, i] : Portions) {

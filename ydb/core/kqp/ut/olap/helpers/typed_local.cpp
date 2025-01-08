@@ -15,6 +15,9 @@ TString TTypedLocalHelper::GetTestTableSchema() const {
     if (TypeName) {
         result = R"(Columns { Name: "field" Type: ")" + TypeName + "\"}";
     }
+    if (TypeName1) {
+        result += R"(Columns { Name: "field1" Type: ")" + TypeName1 + "\"}";
+    }
     result += R"(
             Columns { Name: "pk_int" Type: "Int64" NotNull: true }
             Columns { Name: "ts" Type: "Timestamp" }
@@ -191,7 +194,7 @@ void TTypedLocalHelper::GetStats(std::vector<NJson::TJsonValue>& stats, const bo
     }
 }
 
-void TTypedLocalHelper::TWritingGuard::SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch,
+void TTypedLocalHelper::TSimultaneousWritingSession::SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch,
     const Ydb::StatusIds_StatusCode expectedStatus /*= = Ydb::StatusIds::SUCCESS*/) const {
     auto* runtime = KikimrRunner.GetTestServer().GetRuntime();
 
@@ -224,7 +227,9 @@ void TTypedLocalHelper::TWritingGuard::SendDataViaActorSystem(TString testTable,
     });
 }
 
-void TTypedLocalHelper::TWritingGuard::WaitWritings() {
+void TTypedLocalHelper::TSimultaneousWritingSession::Finalize() {
+    AFL_VERIFY(!Finished);
+    Finished = true;
     auto* runtime = KikimrRunner.GetTestServer().GetRuntime();
     TDispatchOptions options;
     options.CustomFinalCondition = [&]() {

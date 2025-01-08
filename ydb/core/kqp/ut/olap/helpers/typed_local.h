@@ -17,6 +17,7 @@ class TTypedLocalHelper: public Tests::NCS::THelper {
 private:
     using TBase = Tests::NCS::THelper;
     const TString TypeName;
+    const TString TypeName1;
     TKikimrRunner& KikimrRunner;
     const TString TablePath;
     const TString TableName;
@@ -37,42 +38,51 @@ public:
         SetShardingMethod("HASH_FUNCTION_CONSISTENCY_64");
     }
 
-    class TWritingGuard {
+    TTypedLocalHelper(const TString& typeName, const TString& typeName1, TKikimrRunner& kikimrRunner, const TString& tableName = "olapTable",
+        const TString& storeName = "olapStore")
+        : TBase(kikimrRunner.GetTestServer())
+        , TypeName(typeName)
+        , TypeName1(typeName1)
+        , KikimrRunner(kikimrRunner)
+        , TablePath(storeName.empty() ? "/Root/" + tableName : "/Root/" + storeName + "/" + tableName)
+        , TableName(tableName)
+        , StoreName(storeName) {
+        SetShardingMethod("HASH_FUNCTION_CONSISTENCY_64");
+    }
+
+    class TSimultaneousWritingSession {
     private:
+        bool Finished = false;
         TKikimrRunner& KikimrRunner;
         const TString TablePath;
         mutable std::atomic<size_t> Responses = 0;
         void SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch,
             const Ydb::StatusIds_StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) const;
 
-        void WaitWritings();
-
     public:
-        TWritingGuard(TKikimrRunner& kikimrRunner, const TString& tablePath)
+        TSimultaneousWritingSession(TKikimrRunner& kikimrRunner, const TString& tablePath)
             : KikimrRunner(kikimrRunner)
             , TablePath(tablePath)
         {
         }
 
         template <class TFiller>
-        void FillTable(const TFiller& fillPolicy, const double pkKff = 0, const ui32 numRows = 800000) const {
+        void FillTable(const TString& fieldName, const TFiller& fillPolicy, const double pkKff = 0, const ui32 numRows = 800000) const {
             std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
             builders.emplace_back(
                 NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>::BuildNotNullable(
                     "pk_int", numRows * pkKff));
-            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<TFiller>>("field", fillPolicy));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<TFiller>>(fieldName, fillPolicy));
             NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
             std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
             SendDataViaActorSystem(TablePath, batch, Ydb::StatusIds::SUCCESS);
         }
 
-        void Finalize() {
-            WaitWritings();
-        }
+        void Finalize();
     };
 
-    TWritingGuard StartWriting(const TString& tablePath) {
-        return TWritingGuard(KikimrRunner, tablePath);
+    TSimultaneousWritingSession StartWriting(const TString& tablePath) {
+        return TSimultaneousWritingSession(KikimrRunner, tablePath);
     }
 
     void ExecuteSchemeQuery(const TString& alterQuery, const NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS) const;

@@ -135,7 +135,7 @@ private:
 public:
     ui64 GetTargetCompactionLevel() const {
         if (MemoryUsage > ((ui64)1 << 30)) {
-            return TargetCompactionLevel - 1;
+            return TargetCompactionLevel.GetDec();
         } else {
             return TargetCompactionLevel;
         }

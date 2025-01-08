@@ -21,6 +21,7 @@ public:
     ui64 Dec() {
         return Sub(1);
     }
+    ui64 GetDec();
     ui64 Val() const;
     bool operator!() const {
         return !Value;
@@ -34,8 +35,6 @@ public:
     ui64 operator--() {
         return Dec();
     }
-    TPositiveControlInteger operator-(const ui64 val) const;
-    TPositiveControlInteger operator+(const ui64 val) const;
 };
 
 }

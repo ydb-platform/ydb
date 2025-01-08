@@ -14,9 +14,21 @@ ui64 TPositiveControlInteger::Add(const ui64 value) {
 }
 
 ui64 TPositiveControlInteger::Sub(const ui64 value) {
-    AFL_VERIFY(value <= Value)("base", Value)("delta", value);
-    Value -= value;
+    if (value <= Value) {
+        Value -= value;
+    } else {
+        AFL_VERIFY(false)("base", Value)("delta", value);
+    }
     return Value;
+}
+
+ui64 TPositiveControlInteger::GetDec() {
+    if (Value) {
+        return Value - 1;
+    } else {
+        AFL_VERIFY(false);
+    }
+    return 0;
 }
 
 ui64 TPositiveControlInteger::Val() const {
@@ -24,8 +36,12 @@ ui64 TPositiveControlInteger::Val() const {
 }
 
 TPositiveControlInteger TPositiveControlInteger::operator-(const ui64 val) const {
-    AFL_VERIFY(val <= Value);
-    return Value - val;
+    if (val <= Value) {
+        return Value - val;
+    } else {
+        AFL_VERIFY(false)("base", Value)("delta", value);
+    }
+    return 0;
 }
 
 TPositiveControlInteger TPositiveControlInteger::operator+(const ui64 val) const {

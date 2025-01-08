@@ -2,6 +2,7 @@
 #include <ydb/core/tx/limiter/grouped_memory/service/counters.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/log.h>
@@ -113,9 +114,9 @@ public:
         if (HardLimit < Usage.Val() + volume) {
             Counters->OnCannotAllocate();
             AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", Name)("event", "cannot_allocate")("limit", HardLimit)(
-                "usage", Usage.Val())(
-                "delta", volume);
-            return TConclusionStatus::Fail(TStringBuilder() << Name << "::(limit:" << HardLimit << ";val:" << Usage.Val() << ";delta=" << volume << ");");
+                "usage", Usage.Val())("delta", volume);
+            return TConclusionStatus::Fail(
+                TStringBuilder() << Name << "::(limit:" << HardLimit << ";val:" << Usage.Val() << ";delta=" << volume << ");");
         }
         Usage.Add(volume);
         AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", Name)("event", "allocate")("usage", Usage.Val())("delta", volume);

@@ -3,7 +3,7 @@
 #include "source.h"
 
 #include <util/string/builder.h>
-#include <yql/essentials/minikql/mkql_terminator.h>
+#include <ydb/library/yql/minikql/mkql_terminator.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 

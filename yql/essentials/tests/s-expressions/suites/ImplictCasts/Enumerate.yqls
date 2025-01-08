@@ -1,6 +1,5 @@
 (
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 (let res_sink (DataSink 'result))
 (let data (Enumerate (AsList (String 'a) (String 'b)) (Int64 '2) (Uint32 '1)))

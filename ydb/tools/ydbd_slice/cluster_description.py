@@ -35,7 +35,7 @@ class ClusterDetails(ClusterDetailsProvider):
         self._cluster_description_file = cluster_description_path
         self._walle_provider = walle_provider
 
-        super(ClusterDetails, self).__init__(self.template, self._walle_provider)
+        super(ClusterDetails, self).__init__(self.template, self._walle_provider, use_new_style_cfg=True)
 
     @property
     def template(self):

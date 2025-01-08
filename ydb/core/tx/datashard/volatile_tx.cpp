@@ -64,6 +64,10 @@ namespace NKikimr::NDataShard {
                     if (txc.DB.HasOpenTx(tid, commitTxId)) {
                         txc.DB.CommitTx(tid, commitTxId, info->Version);
                         Self->GetConflictsCache().GetTableCache(tid).RemoveUncommittedWrites(commitTxId, txc.DB);
+                    } else if (txc.DB.HasRemovedTx(tid, commitTxId)) {
+                        LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                            "Committing removed changes txId# " << commitTxId << " tid# " << tid << " shard# " << Self->TabletID());
+                        Self->IncCounter(COUNTER_REMOVED_COMMITTED_TXS);
                     }
                 }
             }

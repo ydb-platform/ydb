@@ -12,6 +12,8 @@
 
 #include <library/cpp/yt/memory/ref.h>
 
+#include <library/cpp/yt/logging/logger.h>
+
 namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////

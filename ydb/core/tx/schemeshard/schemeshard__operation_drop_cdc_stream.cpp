@@ -210,7 +210,7 @@ protected:
         auto table = context.SS->Tables.at(pathId);
 
         auto& notice = *tx.MutableDropCdcStreamNotice();
-        PathIdFromPathId(pathId, notice.MutablePathId());
+        pathId.ToProto(notice.MutablePathId());
         notice.SetTableSchemaVersion(table->AlterVersion + 1);
 
         bool found = false;
@@ -223,11 +223,11 @@ protected:
             }
 
             Y_VERIFY_S(!found, "Too many cdc streams are planned to drop"
-                << ": found# " << PathIdFromPathId(notice.GetStreamPathId())
+                << ": found# " << TPathId::FromProto(notice.GetStreamPathId())
                 << ", another# " << childPathId);
             found = true;
 
-            PathIdFromPathId(childPathId, notice.MutableStreamPathId());
+            childPathId.ToProto(notice.MutableStreamPathId());
         }
     }
 

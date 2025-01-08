@@ -25,6 +25,10 @@ message TJsonParserConfig {
     uint64 BufferCellCount = 3;  // (number rows) * (number columns) limit, default 10^6
 }
 
+message TCompileServiceConfig {
+    uint64 ParallelCompilationLimit = 1;  // 1 by default
+}
+
 message TRowDispatcherConfig {
     bool Enabled = 1;
     uint64 TimeoutBeforeStartSessionSec = 2;
@@ -32,5 +36,6 @@ message TRowDispatcherConfig {
     uint64 MaxSessionUsedMemory = 4; 
     bool WithoutConsumer = 5;
     TJsonParserConfig JsonParser = 7;
+    TCompileServiceConfig CompileService = 8;
     TRowDispatcherCoordinatorConfig Coordinator = 6;
 }

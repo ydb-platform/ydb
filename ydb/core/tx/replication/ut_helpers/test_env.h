@@ -171,6 +171,10 @@ public:
         Server.GetRuntime()->Send(new IEventHandle(recipient, Sender, ev));
     }
 
+    void SendAsync(const TActorId& recipient, THolder<IEventBase> ev) {
+        SendAsync(recipient, ev.Release());
+    }
+
     template <typename TEvResponse>
     auto Send(const TActorId& recipient, IEventBase* ev) {
         SendAsync(recipient, ev);
@@ -184,6 +188,10 @@ public:
 
     void SendAsync(ui64 tabletId, IEventBase* ev) {
         ForwardToTablet(*Server.GetRuntime(), tabletId, Sender, ev);
+    }
+
+    void SendAsync(ui64 tabletId, THolder<IEventBase> ev) {
+        SendAsync(tabletId, ev.Release());
     }
 
     template <typename TEvResponse>

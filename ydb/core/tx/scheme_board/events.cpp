@@ -38,7 +38,7 @@ TOpaquePathDescription MakeOpaquePathDescription(::NKikimrSchemeBoard::TEvUpdate
             .PathId = TPathId(update.GetPathOwnerId(), update.GetLocalPathId()),
             .Path = update.GetPath(),
             .PathVersion = update.GetPathDirEntryPathVersion(),
-            .SubdomainPathId = PathIdFromPathId(update.GetPathSubdomainPathId()),
+            .SubdomainPathId = TPathId::FromProto(update.GetPathSubdomainPathId()),
             .PathAbandonedTenantsSchemeShards = TSet<ui64>(
                 update.GetPathAbandonedTenantsSchemeShards().begin(),
                 update.GetPathAbandonedTenantsSchemeShards().end()
@@ -102,7 +102,7 @@ NInternalEvents::TEvUpdateBuilder::TEvUpdateBuilder(
     Record.SetLocalPathId(pathDescription.PathId.LocalPathId);
 
     Record.SetPathDirEntryPathVersion(pathDescription.PathVersion);
-    PathIdFromPathId(pathDescription.SubdomainPathId, Record.MutablePathSubdomainPathId());
+    pathDescription.SubdomainPathId.ToProto(Record.MutablePathSubdomainPathId());
 
     Record.MutablePathAbandonedTenantsSchemeShards()->Assign(
         pathDescription.PathAbandonedTenantsSchemeShards.begin(),
@@ -141,7 +141,7 @@ NInternalEvents::TEvNotifyBuilder::TEvNotifyBuilder(const TString& path, const T
 
 void NInternalEvents::TEvNotifyBuilder::SetPathDescription(const TOpaquePathDescription& pathDescription) {
     Record.SetDescribeSchemeResultSerialized(pathDescription.DescribeSchemeResultSerialized);
-    PathIdFromPathId(pathDescription.SubdomainPathId, Record.MutablePathSubdomainPathId());
+    pathDescription.SubdomainPathId.ToProto(Record.MutablePathSubdomainPathId());
     Record.MutablePathAbandonedTenantsSchemeShards()->Assign(
         pathDescription.PathAbandonedTenantsSchemeShards.begin(),
         pathDescription.PathAbandonedTenantsSchemeShards.end()

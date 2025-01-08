@@ -2,8 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import pytest
-import uuid
-import time
 
 from hamcrest import assert_that, equal_to
 
@@ -36,28 +34,8 @@ class QueueWithoutVersionTest(KikimrSqsTestBase):
         queue_tables_path = self.get_table_path()
         session = self._driver.table_client.session().create()
 
-        now = int(1000*time.time())
-        shards = 1 if is_fifo else 2
-        tablet_id = self.chose_tablet()
+        shards = 1 if is_fifo else 4
         create_queue_tables(queue_tables_path, is_fifo, self._driver, session, shards)
-
-        queues_table = self.sqs_root + '/.Queues'
-        fill_queue_state_query = f'''UPSERT INTO `{queues_table}`
-                (Account, QueueName, QueueId, QueueState, FifoQueue, DeadLetterQueue, Shards, MasterTabletId, CreatedTimestamp, FolderId, DlqName, Partitions)
-                VALUES
-                ("{self._username}", "{self.queue_name}", "{uuid.uuid1()}", 1, {is_fifo}, false, {shards}, {tablet_id}, {now}, "", "", 1);
-                '''
-
-        for shard in range(shards):
-            fill_queue_state_query += f'''UPSERT INTO `{self.get_table_path("State")}`
-                (State, MessageCount, InflyCount, ReadOffset, WriteOffset, CreatedTimestamp, LastModifiedTimestamp, CleanupTimestamp, RetentionBoundary)
-                VALUES({shard}, 0, 0, 0, 0, {now}, {now}, {now}, {now});
-                '''
-
-        fill_queue_state_query += f'''UPSERT INTO `{self.get_table_path("Attributes")}`
-            (State, MessageRetentionPeriod, VisibilityTimeout, MaximumMessageSize, FifoQueue, ContentBasedDeduplication, ReceiveMessageWaitTime, DelaySeconds, MaxReceiveCount)
-            VALUES (0, 345600000, 30000, 262144, {is_fifo}, false, 0, 0, 0);'''
-        self._execute_yql_query(fill_queue_state_query)
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     def test_common(self, is_fifo):
@@ -65,7 +43,7 @@ class QueueWithoutVersionTest(KikimrSqsTestBase):
 
         created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
         got_queue_url = self._sqs_api.get_queue_url(self.queue_name)
-        assert_that(got_queue_url, equal_to(created_queue_url.decode('utf-8')))
+        assert_that(got_queue_url, equal_to(created_queue_url))
 
         self.seq_no += 1
         message_id = self._send_message_and_assert(

@@ -331,13 +331,14 @@ std::vector<TIntrusivePtr<T>> CloneYsonStructs(const std::vector<TIntrusivePtr<T
     return clonedObjs;
 }
 
-template <class T>
-THashMap<TString, TIntrusivePtr<T>> CloneYsonStructs(const THashMap<TString, TIntrusivePtr<T>>& objs)
+template <class TKey, class TValue>
+THashMap<TKey, TIntrusivePtr<TValue>> CloneYsonStructs(const THashMap<TKey, TIntrusivePtr<TValue>>& objs)
 {
-    THashMap<TString, TIntrusivePtr<T>> clonedObjs;
+    THashMap<TKey, TIntrusivePtr<TValue>> clonedObjs;
     clonedObjs.reserve(objs.size());
     for (const auto& [key, obj] : objs) {
-        clonedObjs.emplace(key, CloneYsonStruct(obj));
+        // TODO(babenko): switch to std::string
+        clonedObjs.emplace(TString(key), CloneYsonStruct(obj));
     }
     return clonedObjs;
 }

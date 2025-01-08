@@ -59,6 +59,13 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& ev) {
     PassAway();
 }
 
+void TActor::HandleExecute(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+    SwitchStage(std::nullopt, EStage::Finished);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "problem_on_event_undelivered")("reason", ev->Get()->Reason);
+    RestoreTask->OnError("cannot delivery event: " + ::ToString(ev->Get()->Reason));
+    PassAway();
+}
+
 void TActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
     if (!CheckActivity()) {
         TBase::Send(*ScanActorId, new NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, "external task aborted"));

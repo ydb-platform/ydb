@@ -3,9 +3,12 @@
 #include "helpers.h"
 
 #include <yt/yt/client/api/distributed_table_session.h>
+#include <yt/yt/client/api/table_writer.h>
 
 #include <yt/yt/client/formats/config.h>
 #include <yt/yt/client/formats/parser.h>
+
+#include <yt/yt/client/signature/signature.h>
 
 #include <yt/yt/client/ypath/public.h>
 
@@ -37,12 +40,12 @@ void TStartDistributedWriteSessionCommand::DoExecute(ICommandContextPtr context)
 {
     auto transaction = AttachTransaction(context, /*required*/ false);
 
-    auto session = WaitFor(context->GetClient()->StartDistributedWriteSession(
+    auto sessionAndCookies = WaitFor(context->GetClient()->StartDistributedWriteSession(
         Path,
         Options));
 
-    ProduceOutput(context, [session = std::move(session)] (IYsonConsumer* consumer) {
-        Serialize(session, consumer);
+    ProduceOutput(context, [sessionAndCookies = std::move(sessionAndCookies)] (IYsonConsumer* consumer) {
+        Serialize(sessionAndCookies, consumer);
     });
 }
 
@@ -51,15 +54,20 @@ void TStartDistributedWriteSessionCommand::DoExecute(ICommandContextPtr context)
 void TFinishDistributedWriteSessionCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("session", &TThis::Session);
+    registrar.Parameter("results", &TThis::Results);
 }
 
 // -> Nothing
 void TFinishDistributedWriteSessionCommand::DoExecute(ICommandContextPtr context)
 {
-    auto session = ConvertTo<TDistributedWriteSessionPtr>(Session);
+    auto session = ConvertTo<TSignedDistributedWriteSessionPtr>(Session);
+    auto results = ConvertTo<std::vector<NTableClient::TSignedWriteFragmentResultPtr>>(Results);
 
     WaitFor(context->GetClient()->FinishDistributedWriteSession(
-        std::move(session),
+        TDistributedWriteSessionWithResults{
+            .Session = std::move(session),
+            .Results = std::move(results),
+        },
         Options))
             .ThrowOnError();
 
@@ -70,33 +78,43 @@ void TFinishDistributedWriteSessionCommand::DoExecute(ICommandContextPtr context
 
 void TWriteTableFragmentCommand::Execute(ICommandContextPtr context)
 {
-    TTypedCommand<NApi::TFragmentTableWriterOptions>::Execute(std::move(context));
+    TTypedCommand<NApi::TTableFragmentWriterOptions>::Execute(std::move(context));
 }
 
-void TWriteTableFragmentCommand::Register(TRegistrar /*registrar*/)
-{ }
-
-TFuture<NApi::ITableWriterPtr> TWriteTableFragmentCommand::CreateTableWriter(
-    const ICommandContextPtr& context) const
+void TWriteTableFragmentCommand::Register(TRegistrar registrar)
 {
-    PutMethodInfoInTraceContext("participant_write_table");
+    registrar.Parameter("cookie", &TThis::Cookie);
+}
 
-    return context
+NApi::ITableWriterPtr TWriteTableFragmentCommand::CreateTableWriter(
+    const ICommandContextPtr& context)
+{
+    PutMethodInfoInTraceContext("write_table_fragment");
+
+    auto tableWriter = WaitFor(context
         ->GetClient()
-        ->CreateFragmentTableWriter(
-            StaticPointerCast<TFragmentWriteCookie>(ResultingCookie),
-            TTypedCommand<TFragmentTableWriterOptions>::Options);
+        ->CreateTableFragmentWriter(
+            ConvertTo<TSignedWriteFragmentCookiePtr>(Cookie),
+            TTypedCommand<TTableFragmentWriterOptions>::Options))
+                .ValueOrThrow();
+
+    TableWriter = tableWriter;
+    return tableWriter;
 }
 
 // -> Cookie
 void TWriteTableFragmentCommand::DoExecute(ICommandContextPtr context)
 {
-    auto cookie = ConvertTo<TFragmentWriteCookiePtr>(Cookie);
-    ResultingCookie = StaticPointerCast<TRefCounted>(std::move(cookie));
+    auto cookie = ConvertTo<TSignedWriteFragmentCookiePtr>(Cookie);
 
     DoExecuteImpl(context);
-    ProduceOutput(context, [cookie = std::move(ResultingCookie)] (IYsonConsumer* consumer) {
-        Serialize(StaticPointerCast<TFragmentWriteCookie>(cookie), consumer);
+
+    // Sadly, we are plagued by virtual bases :/.
+    auto writer = DynamicPointerCast<NApi::ITableFragmentWriter>(TableWriter);
+    ProduceOutput(context, [result = writer->GetWriteFragmentResult()] (IYsonConsumer* consumer) {
+        Serialize(
+            *result.Underlying(),
+            consumer);
     });
 }
 

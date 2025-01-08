@@ -78,12 +78,12 @@ struct TRowDispatcherReadActorMetrics {
     explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
         : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
         , Counters(counters) {
-        SubGroup = Counters->GetSubgroup("sink", "RdPqRead");
-        auto sink = SubGroup->GetSubgroup("tx_id", TxId);
-        ReInit = sink->GetCounter("ReInit", true);
-        auto task = sink->GetSubgroup("task_id", ToString(taskId));
+        SubGroup = Counters->GetSubgroup("source", "RdPqRead");
+        auto source = SubGroup->GetSubgroup("tx_id", TxId);
+        auto task = source->GetSubgroup("task_id", ToString(taskId));
         InFlyGetNextBatch = task->GetCounter("InFlyGetNextBatch");
         InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
+        ReInit = task->GetCounter("ReInit", true);
     }
 
     ~TRowDispatcherReadActorMetrics() {

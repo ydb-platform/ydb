@@ -5,11 +5,4 @@
 {%- set has_junit5_test = extra_targets|selectattr('junit5_test') -%}
 {%- set has_errorprone = target.use_errorprone and not disable_errorprone and target.consumer|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length -%}
 
-{%- if not target.required_jdk -%}
-{%-     set has_required_jdk = false -%}
-{#-     If no required JDK, set default JDK for Kotlin parts -#}
-{%-     set required_jdk = '17' -%}
-{%- else -%}
-{%-     set has_required_jdk = true -%}
-{%-     set required_jdk = target.required_jdk -%}
-{%- endif -%}
+{%- include "[generator]/jdk.jinja" -%}

@@ -102,7 +102,7 @@ public:
                 context.OnComplete.WaitShardCreated(shard.Idx, OperationId);
             } else {
                 auto ev = MakeHolder<NReplication::TEvController::TEvCreateReplication>();
-                PathIdFromPathId(pathId, ev->Record.MutablePathId());
+                pathId.ToProto(ev->Record.MutablePathId());
                 ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
                 ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
                 ev->Record.MutableConfig()->CopyFrom(alterData->Description.GetConfig());

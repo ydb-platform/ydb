@@ -10,8 +10,10 @@ PEERDIR(
 
 SRCS(
     model.proto
+
     sampler.cpp
-    GLOBAL tracer.cpp
+    tracer.cpp
+    GLOBAL configure_tracer.cpp
 )
 
 END()

@@ -44,8 +44,11 @@ namespace NActors {
         bool IsNeededToWaitNextActivation = true;
         i64 HPStart = 0;
         ui32 ExecutedEvents = 0;
+        ui32 OverwrittenEventsPerMailbox = 0;
+        ui64 OverwrittenTimePerMailboxTs = 0;
         TSharedExecutorThreadCtx *SharedThread = nullptr;
         TCpuSensor CpuSensor;
+        TStackVec<TActorId, 1> PreemptionSubscribed;
 
         TMailboxCache MailboxCache;
 

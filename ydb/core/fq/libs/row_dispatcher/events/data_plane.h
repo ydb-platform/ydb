@@ -53,6 +53,7 @@ struct TEvRowDispatcher {
         EvGetInternalStateResponse,
         EvPurecalcCompileRequest,
         EvPurecalcCompileResponse,
+        EvPurecalcCompileAbort,
         EvEnd,
     };
 
@@ -199,6 +200,8 @@ struct TEvRowDispatcher {
         NYql::NDqProto::StatusIds::StatusCode Status;
         NYql::TIssues Issues;
     };
+
+    struct TEvPurecalcCompileAbort : public NActors::TEventLocal<TEvPurecalcCompileAbort, EEv::EvPurecalcCompileAbort> {};
 };
 
 } // namespace NFq

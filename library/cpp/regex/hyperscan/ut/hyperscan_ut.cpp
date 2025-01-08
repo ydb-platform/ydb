@@ -210,7 +210,6 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
             ERuntime::Core2,
             ERuntime::Corei7,
             ERuntime::AVX2,
-            ERuntime::AVX512
         };
 
         // Unfortunately, we cannot emulate runtimes with more capabilities than current machine.

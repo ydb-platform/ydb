@@ -121,6 +121,22 @@ TString GetReadFileCommand(const TString& apiVersion)
     return apiVersion == "v2" ? "download" : "read_file";
 }
 
+TString GetDefaultTransactionTitle()
+{
+    const auto processState = TProcessState::Get();
+    TStringStream res;
+
+    res << "User transaction. Created by: " << processState->UserName << " on " << processState->FqdnHostName
+        << " client: " << processState->ClientVersion << " pid: " << processState->Pid;
+    res << " program: " << processState->BinaryName;
+
+#ifndef NDEBUG
+    res << " build: debug";
+#endif
+
+    return res.Str();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

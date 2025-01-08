@@ -265,8 +265,6 @@ public:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusCmsRequest, NMsgBusProxy::TBusCmsResponse>(&NGRpcProxy::TGRpcClient::CmsRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_CHOOSE_PROXY:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusChooseProxy>(&NGRpcProxy::TGRpcClient::ChooseProxy, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_SQS_REQUEST:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusSqsRequest, NMsgBusProxy::TBusSqsResponse>(&NGRpcProxy::TGRpcClient::SqsRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_INTERCONNECT_DEBUG:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusInterconnectDebug>(&NGRpcProxy::TGRpcClient::InterconnectDebug, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST:

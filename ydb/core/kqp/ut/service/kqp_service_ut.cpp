@@ -153,6 +153,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
                 tx = result.GetTransaction();
             }
         }, 0, SessionsCount + 1, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
+        WaitForZeroReadIterators(kikimr->GetTestServer(), "/Root/EightShard");
     }
 
     TVector<TAsyncDataQueryResult> simulateSessionBusy(ui32 count, TSession& session) {

@@ -320,17 +320,20 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
     if (!request.ExternalAuth) {
         auto itUser = Sids.find(request.User);
         if (itUser == Sids.end() || itUser->second.Type != ESidType::USER) {
+            response.Status = TLoginUserResponse::EStatus::INVALID_USER;
             response.Error = "Invalid user";
             return response;
         }
 
         if (!Impl->VerifyHash(request.Password, itUser->second.Hash)) {
+            response.Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
             response.Error = "Invalid password";
             return response;
         }
     }
 
     if (Keys.empty() || Keys.back().PrivateKey.empty()) {
+        response.Status = TLoginUserResponse::EStatus::UNAVAILABLE_KEY;
         response.Error = "No key to generate token";
         return response;
     }
@@ -372,6 +375,7 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
 
     response.Token = TString(encoded_token);
     response.SanitizedToken = SanitizeJwtToken(response.Token);
+    response.Status = TLoginUserResponse::EStatus::SUCCESS;
 
     return response;
 }

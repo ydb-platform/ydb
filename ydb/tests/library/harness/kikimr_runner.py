@@ -5,8 +5,11 @@ import shutil
 import tempfile
 import time
 import itertools
+import threading
 from importlib_resources import read_binary
 from google.protobuf import text_format
+
+from six.moves.queue import Queue
 
 import yatest
 
@@ -430,17 +433,23 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         return ret
 
     def stop(self, kill=False):
-        saved_exceptions = []
+        saved_exceptions_queue = Queue()
 
-        for slot in self.slots.values():
-            exception = self.__stop_node(slot, kill)
-            if exception is not None:
-                saved_exceptions.append(exception)
-
-        for node in self.nodes.values():
+        def stop_node(node, kill):
             exception = self.__stop_node(node, kill)
             if exception is not None:
-                saved_exceptions.append(exception)
+                saved_exceptions_queue.put(exception)
+
+        # do in parallel to faster stopping (important for tests)
+        threads = []
+        for node in list(self.slots.values()) + list(self.nodes.values()):
+            thread = threading.Thread(target=stop_node, args=(node, kill))
+            thread.start()
+            threads.append(thread)
+        for thread in threads:
+            thread.join()
+
+        saved_exceptions = list(saved_exceptions_queue.queue)
 
         self.__port_allocator.release_ports()
 

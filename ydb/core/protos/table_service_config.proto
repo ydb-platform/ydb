@@ -313,7 +313,7 @@ message TTableServiceConfig {
     optional string EnableSpillingNodes = 67 [ default = "All" ];
 
     message TComputeSchedulerSettings {
-        optional uint64 AdvanceTimeIntervalUsec = 1 [default = 50000];
+        optional uint64 AdvanceTimeIntervalUsec = 1 [default = 500000];
         optional uint64 ForgetOverflowTimeoutUsec = 2 [default = 2000000];
         optional uint64 ActivePoolPollingSec = 3 [default = 10];
     }
@@ -356,4 +356,6 @@ message TTableServiceConfig {
     // This value used for `arrow::Array`s built inside TDqOutputHashPartitionConsumerBlock -
     // if the underlying array buffer is filled less than this value, then the buffer's capacity gets shrunk to actual size.
     // Otherwise, we potentially don't track the real buffer capacity and it may lead to OOM situations inside DqOutputChannel's.
+
+    optional bool EnableSnapshotIsolationRW = 76 [default = false];
 };

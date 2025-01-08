@@ -21,9 +21,10 @@ message TPDiskState {
         OpenFileError = 11;
         ChunkQuotaError = 12;
         DeviceIoError = 13;
-        Reserved14 = 14;
+        Stopped = 14;
         Reserved15 = 15;
         Reserved16 = 16;
+        Reserved17 = 17;
 
         Missing = 252;
         Timeout = 253;

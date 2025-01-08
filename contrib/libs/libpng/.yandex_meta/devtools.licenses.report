@@ -218,18 +218,6 @@ BELONGS ya.make
     Files with this license:
         CHANGES [2692:2692]
 
-KEEP     libpng-2.0           70f7ac29617c1f96c3c72a8706953d6f
-BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: LICENSE at line 1
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: libpng-2.0
-        Score           : 95.76
-        Match type      : TEXT
-        Links           : http://www.libpng.org/pub/png/src/libpng-LICENSE.txt, https://spdx.org/licenses/libpng-2.0
-    Files with this license:
-        LICENSE [1:42]
-
 SKIP     LicenseRef-scancode-free-unknown 7223032bb9df755f6ce7298a13e95cee
 BELONGS ya.make
     # we have no contrib in libpng directory
@@ -421,6 +409,18 @@ BELONGS ya.make
         Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
     Files with this license:
         png.h [73:94]
+
+KEEP     libpng-2.0           d964429a132bf678731f5df030520bfb
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 1
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: libpng-2.0
+        Score           : 95.76
+        Match type      : TEXT
+        Links           : http://www.libpng.org/pub/png/src/libpng-LICENSE.txt, https://spdx.org/licenses/libpng-2.0
+    Files with this license:
+        LICENSE [1:42]
 
 KEEP     Libpng               e9bb4f8fbab91484ba62ccb1611b70bb
 BELONGS ya.make

@@ -7,6 +7,9 @@ from devtools.yamaker.project import GNUMakeNixProject
 
 def post_install(self):
     with self.yamakes["."] as libpng:
+        # libpng generates export script, but we are going to link statically
+        os.remove(f"{self.dstdir}/libpng.vers")
+
         # libpng generates config.h but does not use any of its defines.
         os.remove(f"{self.dstdir}/config.h")
         libpng.CFLAGS.remove("-DHAVE_CONFIG_H")

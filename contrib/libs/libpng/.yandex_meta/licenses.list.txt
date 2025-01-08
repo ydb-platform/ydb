@@ -1,16 +1,4 @@
 ====================COPYRIGHT====================
-      "Copyright (c) 2018-2023 Cosmin Truta" PNG_STRING_NEWLINE \
-      "Copyright (c) 1998-2002,2004,2006-2018 Glenn Randers-Pehrson" \
-      PNG_STRING_NEWLINE \
-      "Copyright (c) 1996-1997 Andreas Dilger" PNG_STRING_NEWLINE \
-      "Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc." \
-      PNG_STRING_NEWLINE \
-      "Portions Copyright (c) 2006-2007 Andrew Smith" PNG_STRING_NEWLINE \
-      "Portions Copyright (c) 2008-2023 Max Stepin" PNG_STRING_NEWLINE ;
-#endif
-
-
-====================COPYRIGHT====================
  * Copyright (c) 1995-2023 The PNG Reference Library Authors.
  * Copyright (c) 2018-2023 Cosmin Truta.
  * Copyright (c) 2000-2002, 2004, 2006-2018 Glenn Randers-Pehrson.
@@ -118,7 +106,7 @@
 
 
 ====================COPYRIGHT====================
-Copyright (c) 2006-2007 Andrew Smith, Copyright (c) 2008-2023 Max Stepin,
+Copyright (c) 2006-2007 Andrew Smith, Copyright (c) 2008-2024 Max Stepin,
 and are delimited by "#ifdef PNG_APNG_SUPPORTED / #endif" directives
 surrounding them in the modified libpng source files.
 
@@ -611,7 +599,7 @@ COPYRIGHT NOTICE, DISCLAIMER, and LICENSE
 
 This modified version of libpng code adds animated PNG support and is
 released under the libpng license described below. The modifications are
-Copyright (c) 2006-2007 Andrew Smith, Copyright (c) 2008-2023 Max Stepin,
+Copyright (c) 2006-2007 Andrew Smith, Copyright (c) 2008-2024 Max Stepin,
 and are delimited by "#ifdef PNG_APNG_SUPPORTED / #endif" directives
 surrounding them in the modified libpng source files.
 
@@ -1065,7 +1053,7 @@ COPYRIGHT NOTICE, DISCLAIMER, and LICENSE
 
 This modified version of libpng code adds animated PNG support and is
 released under the libpng license described below. The modifications are
-Copyright (c) 2006-2007 Andrew Smith, Copyright (c) 2008-2023 Max Stepin,
+Copyright (c) 2006-2007 Andrew Smith, Copyright (c) 2008-2024 Max Stepin,
 and are delimited by "#ifdef PNG_APNG_SUPPORTED / #endif" directives
 surrounding them in the modified libpng source files.
 

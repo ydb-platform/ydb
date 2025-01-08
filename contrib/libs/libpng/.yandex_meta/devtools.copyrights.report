@@ -151,30 +151,6 @@ BELONGS ya.make
         powerpc/filter_vsx_intrinsics.c [3:5]
         powerpc/powerpc_init.c [4:6]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 45a151e61f5d9f2924b225327a93f376
-BELONGS ya.make
-    License text:
-        Copyright (c) 2006-2007 Andrew Smith, Copyright (c) 2008-2023 Max Stepin,
-        and are delimited by "#ifdef PNG_APNG_SUPPORTED / #endif" directives
-        surrounding them in the modified libpng source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        LICENSE [6:8]
-        png.h [29:31]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 4644b73a371ed2c05c5ac0b3899bd563
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        png.c [819:827]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 4ab05cc7c9d27c8a3fbcc6350cf56230
 BELONGS ya.make
     License text:
@@ -212,7 +188,7 @@ BELONGS ya.make
     Files with this license:
         LICENSE [13:17]
         png.c [4:7]
-        png.c [819:827]
+        png.c [819:825]
         png.h [6:9]
         png.h [36:40]
         pngget.c [4:7]
@@ -238,7 +214,7 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL 5fc45730df09b1e4ad9f9d6a2d097232
 BELONGS ya.make
     License text:
-        Copyright (c) 2006-2007 Andrew Smith, Copyright (c) 2008-2023 Max Stepin,
+        Copyright (c) 2006-2007 Andrew Smith, Copyright (c) 2008-2024 Max Stepin,
         and are delimited by "#ifdef PNG_APNG_SUPPORTED / #endif" directives
         surrounding them in the modified libpng source files.
     Scancode info:
@@ -260,7 +236,7 @@ BELONGS ya.make
         LICENSE [13:17]
         LICENSE [87:91]
         png.c [4:7]
-        png.c [819:827]
+        png.c [819:825]
         png.h [6:9]
         png.h [36:40]
         png.h [110:114]
@@ -293,7 +269,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         png.c [4:7]
-        png.c [819:827]
+        png.c [819:825]
         png.h [6:9]
         pngget.c [4:7]
         pnglibconf.h [5:6]
@@ -306,6 +282,20 @@ BELONGS ya.make
         pngtrans.c [4:7]
         pngwrite.c [4:7]
         pngwutil.c [4:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9524c4c0aaaea5b1ba2ffbc048713d9e
+BELONGS ya.make
+    License text:
+        Copyright (c) 2006-2007 Andrew Smith, Copyright (c) 2008-2024 Max Stepin,
+        and are delimited by "#ifdef PNG_APNG_SUPPORTED / #endif" directives
+        surrounding them in the modified libpng source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [6:8]
+        png.h [29:31]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a590c93284482861546eac4b62974abf
 BELONGS ya.make
@@ -331,7 +321,7 @@ BELONGS ya.make
         LICENSE [13:17]
         LICENSE [103:104]
         png.c [4:7]
-        png.c [819:827]
+        png.c [819:825]
         png.h [6:9]
         png.h [36:40]
         png.h [126:127]
@@ -380,16 +370,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         pngset.c [4:7]
-
-KEEP     COPYRIGHT_SERVICE_LABEL ba5441522ec42a475b4efc4c19d96da2
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        png.c [819:827]
 
 KEEP     COPYRIGHT_SERVICE_LABEL c486f222c872d0101647b08aaad5c74c
 BELONGS ya.make

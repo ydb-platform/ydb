@@ -447,8 +447,17 @@ public:
     void Handle(NPDisk::TEvSlay::TPtr ev) {
         auto *msg = ev->Get();
         PDISK_MOCK_LOG(INFO, PDM17, "received TEvSlay", (Msg, msg->ToString()));
+
         auto res = std::make_unique<NPDisk::TEvSlayResult>(NKikimrProto::OK, GetStatusFlags(), msg->VDiskId,
                 msg->SlayOwnerRound, msg->PDiskId, msg->VSlotId, TString());
+
+        if (Impl.IsDiskReadOnly) {
+            res->Status = NKikimrProto::NOTREADY;
+            res->ErrorReason = "PDisk is in read-only mode";
+            Send(ev->Sender, res.release());
+            return;
+        }
+        
         bool found = false;
         for (auto& [ownerId, owner] : Impl.Owners) {
             if (!owner.VDiskId.SameExceptGeneration(msg->VDiskId)) {
@@ -853,6 +862,19 @@ public:
         }
     }
 
+    void Handle(NPDisk::TEvYardControl::TPtr &ev) {
+        auto *msg = ev->Get();
+
+        switch (msg->Action) {
+            case NPDisk::TEvYardControl::PDiskStop:
+                Impl.StateErrorReason = "Stopped by control message";
+                Become(&TThis::StateError);
+                break;
+            default:
+                break;
+        }
+    }
+
     void Handle(NPDisk::TEvConfigureScheduler::TPtr ev) {
         auto *msg = ev->Get();
         auto res = std::make_unique<NPDisk::TEvConfigureSchedulerResult>(NKikimrProto::OK, TString());
@@ -982,6 +1004,7 @@ public:
         hFunc(NPDisk::TEvHarakiri, Handle);
         hFunc(NPDisk::TEvConfigureScheduler, Handle);
         hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
+        hFunc(NPDisk::TEvYardControl, Handle);
         cFunc(TEvents::TSystem::Wakeup, ReportMetrics);
         hFunc(NPDisk::TEvReadMetadata, Handle);
         hFunc(NPDisk::TEvWriteMetadata, Handle);

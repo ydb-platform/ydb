@@ -1982,15 +1982,13 @@ namespace NKikimr {
                     this->PrivateHandle(ev, ctx);
                 };
                 NMonGroup::TSkeletonOverloadGroup overloadMonGroup(VCtx->VDiskCounters, "subsystem", "emergency");
-                OverloadHandler = std::make_unique<TOverloadHandler>(VCtx, PDiskCtx, Hull,
+                OverloadHandler = std::make_unique<TOverloadHandler>(Config, VCtx, PDiskCtx, Hull,
                     std::move(overloadMonGroup), std::move(vMovedPatch), std::move(vPatchStart), std::move(vput),
                     std::move(vMultiPutHandler), std::move(loc), std::move(aoput));
                 ScheduleWakeupEmergencyPutQueue(ctx);
 
                 // actualize weights before we start
                 OverloadHandler->ActualizeWeights(ctx, AllEHullDbTypes, true);
-
-                OverloadHandler->RegisterIcbControls(AppData()->Icb);
 
                 // run Anubis
                 if (Config->RunAnubis && !Config->BaseInfo.DonorMode) {

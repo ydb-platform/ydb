@@ -439,8 +439,7 @@ class TLocalTableWriter
                 const auto version = TRowVersion(record->GetStep(), record->GetTxId());
 
                 if (record->GetKind() == NChangeExchange::IChangeRecord::EKind::CdcHeartbeat) {
-                    TxIds.erase(TxIds.begin(), TxIds.upper_bound(version));
-                    Send(Worker, new TEvService::TEvHeartbeat(version));
+                    PendingHeartbeat = version;
                     continue;
                 } else if (record->GetKind() != NChangeExchange::IChangeRecord::EKind::CdcDataChange) {
                     Y_ABORT("Unexpected record kind");
@@ -465,6 +464,15 @@ class TLocalTableWriter
 
         if (records) {
             EnqueueRecords(std::move(records));
+        } else if (PendingTxId.empty()) {
+            Y_ABORT_UNLESS(PendingRecords.empty());
+
+            if (const auto maxVersion = std::exchange(PendingHeartbeat, TRowVersion::Min())) {
+                TxIds.erase(TxIds.begin(), TxIds.upper_bound(maxVersion));
+                Send(Worker, new TEvService::TEvHeartbeat(maxVersion));
+            }
+
+            Send(Worker, new TEvWorker::TEvPoll());
         }
     }
 
@@ -474,7 +482,7 @@ class TLocalTableWriter
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
 
         for (const auto& kv : ev->Get()->Record.GetVersionTxIds()) {
-            const auto version = TRowVersion::Parse(kv.GetVersion());
+            const auto version = TRowVersion::FromProto(kv.GetVersion());
             TxIds.emplace(version, kv.GetTxId());
 
             for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
@@ -518,7 +526,12 @@ class TLocalTableWriter
             PendingRecords.erase(record);
         }
 
-        if (PendingRecords.empty()) {
+        if (PendingRecords.empty() && PendingTxId.empty()) {
+            if (const auto maxVersion = std::exchange(PendingHeartbeat, TRowVersion::Min())) {
+                TxIds.erase(TxIds.begin(), TxIds.upper_bound(maxVersion));
+                Send(Worker, new TEvService::TEvHeartbeat(maxVersion));
+            }
+
             Send(Worker, new TEvWorker::TEvPoll());
         }
     }
@@ -614,6 +627,7 @@ private:
     TMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
     TMap<TRowVersion, ui64> TxIds; // key is non-inclusive right hand edge
     TMap<TRowVersion, TVector<NChangeExchange::IChangeRecord::TPtr>> PendingTxId;
+    TRowVersion PendingHeartbeat = TRowVersion::Min();
 
 }; // TLocalTableWriter
 

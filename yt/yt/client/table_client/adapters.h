@@ -21,6 +21,9 @@ IUnversionedWriterPtr CreateSchemalessFromApiWriterAdapter(
 NApi::ITableWriterPtr CreateApiFromSchemalessWriterAdapter(
     IUnversionedWriterPtr underlyingWriter);
 
+NApi::ITableFragmentWriterPtr CreateApiFromSchemalessWriterAdapter(
+    IUnversionedTableFragmentWriterPtr underlyingWriter);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TPipeReaderToWriterOptions

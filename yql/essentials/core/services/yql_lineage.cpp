@@ -310,12 +310,12 @@ private:
         }
 
         if (auto itFlatten = flattenColumns.find(&node); itFlatten != flattenColumns.end()) {
-            return it->second = *(*src->Fields).FindPtr(itFlatten->second);
+            return it->second = (*src->Fields).at(itFlatten->second);
         }
 
         if (node.IsCallable("Member")) {
             if (&node.Head() == arg && src) {
-                return it->second = *(*src->Fields).FindPtr(node.Tail().Content());
+                return it->second = (*src->Fields).at(node.Tail().Content());
             }
 
             if (node.Head().IsCallable("Head")) {
@@ -337,7 +337,7 @@ private:
 
             if (inner->StructItems) {
                 TFieldsLineage result;
-                result.Items = *(*inner->StructItems).FindPtr(node.Tail().Content());
+                result.Items = (*inner->StructItems).at(node.Tail().Content());
                 return it->second = result;
             }
         }
@@ -438,7 +438,7 @@ private:
                 }
             } else if (root->IsCallable("Member") && &root->Head() == &arg) {
                 auto fieldName = root->Tail().Content();
-                const auto& in = *(*src.Fields).FindPtr(fieldName);
+                const auto& in = (*src.Fields).at(fieldName);
                 dst.StructItems = in.StructItems;
             }
         }
@@ -451,9 +451,9 @@ private:
         TMaybe<TString> oneField;
         if (value && value->IsCallable("Member") && &value->Head() == &arg) {
             TString field(value->Tail().Content());
-            auto f = innerLineage.Fields->FindPtr(field);
-            if (f->StructItems) {
-                for (const auto& x : *f->StructItems) {
+            auto& f = innerLineage.Fields->at(field);
+            if (f.StructItems) {
+                for (const auto& x : *f.StructItems) {
                     auto& res = (*lineage.Fields)[x.first];
                     res.Items = x.second;
                 }
@@ -811,15 +811,15 @@ private:
 
             TStringBuf table, column;
             SplitTableName(originalName, table, column);
-            ui32 index = *inputLabels.FindPtr(table);
+            ui32 index = inputLabels.at(table);
             auto& res = (*lineage.Fields)[field->GetName()];
-            auto f = (*inners[index].Fields).FindPtr(column);
-            for (const auto& i: f->Items) {
+            auto& f = (*inners[index].Fields).at(column);
+            for (const auto& i: f.Items) {
                 res.Items.insert(i);
             }
 
             auto& h = hasStructItems[field->GetName()];
-            if (f->StructItems || f->Items.empty()) {
+            if (f.StructItems || f.Items.empty()) {
                 if (!h) {
                     h = true;
                 }
@@ -836,17 +836,17 @@ private:
 
             TStringBuf table, column;
             SplitTableName(originalName, table, column);
-            ui32 index = *inputLabels.FindPtr(table);
+            ui32 index = inputLabels.at(table);
             auto& res = (*lineage.Fields)[field->GetName()];
-            auto f = (*inners[index].Fields).FindPtr(column);
+            auto& f = (*inners[index].Fields).at(column);
             auto& h = hasStructItems[field->GetName()];
             if (h && *h) {
                 if (!res.StructItems) {
                     res.StructItems.ConstructInPlace();
                 }
 
-                if (f->StructItems) {
-                    for (const auto& i: *f->StructItems) {
+                if (f.StructItems) {
+                    for (const auto& i: *f.StructItems) {
                         for (const auto& x : i.second) {
                             (*res.StructItems)[i.first].insert(x);
                         }
@@ -914,7 +914,7 @@ private:
             writer.OnKeyedItem(f);
             writer.OnBeginList();
             TVector<TFieldLineage> items;
-            for (const auto& i : lineage.Fields->FindPtr(f)->Items) {
+            for (const auto& i : lineage.Fields->at(f).Items) {
                 items.push_back(i);
             }
 

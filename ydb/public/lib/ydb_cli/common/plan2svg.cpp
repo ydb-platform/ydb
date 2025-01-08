@@ -418,6 +418,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         }
     }
 
+    stage->StatsNode = node.GetValueByPath("Stats");
     auto operators = node.GetValueByPath("Operators");
 
     if (operators) {
@@ -619,11 +620,39 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 if (est) {
                     stage->Info.push_back(est);
                 }
+
+                if (name == "TableFullScan" && stage->StatsNode) {
+                    if (stage->IngressName) {
+                        ythrow yexception() << "Plan stage already has Ingress [" << stage->IngressName << "]";
+                    }
+                    stage->IngressName = name;
+                    TString tablePath;
+                    if (auto* pathNode = subNode.GetValueByPath("Path")) {
+                        tablePath = pathNode->GetStringSafe();
+                    } else if (auto* tableNode = subNode.GetValueByPath("Table")) {
+                        tablePath = tableNode->GetStringSafe();
+                    }
+                    if (tablePath) {
+                        if (auto* tableArrayNode = stage->StatsNode->GetValueByPath("Table")) {
+                            for (const auto& tableNode : tableArrayNode->GetArray()) {
+                                if (auto* pathNode = tableNode.GetValueByPath("Path")) {
+                                    if (tablePath == pathNode->GetStringSafe()) {
+                                        if (auto* bytesNode = tableNode.GetValueByPath("ReadBytes")) {
+                                            stage->IngressBytes = std::make_shared<TSingleMetric>(IngressBytes, *bytesNode);
+                                        }
+                                        if (auto* rowsNode = tableNode.GetValueByPath("ReadRows")) {
+                                            stage->IngressRows = std::make_shared<TSingleMetric>(IngressRows, *rowsNode);
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
-
-    stage->StatsNode = node.GetValueByPath("Stats");
 
     const NJson::TJsonValue* inputNode = nullptr;
 
@@ -856,34 +885,30 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 }
             } else if (planNodeType == "") {
                 if (subNodeType == "Source") {
-                    if (stage->Source) {
-                        ythrow yexception() << "Plan stage already has linked Source [" << stage->Source->NodeType << "]";
+                    if (stage->IngressName) {
+                        ythrow yexception() << "Plan stage already has Ingress [" << stage->IngressName << "]";
                     }
-                    stage->Source = std::make_shared<TSource>(subNodeType);
-                    LoadSource(stage->Source, plan);
-                    if (!stage->Source->Info.empty()) {
-                        stage->Info.insert(stage->Info.end(), stage->Source->Info.begin(), stage->Source->Info.end());
-                    }
+                    stage->IngressName = subNodeType;
+                    LoadSource(plan, stage->Info);
 
                     if (stage->StatsNode) {
                         if (auto* ingressTopNode = stage->StatsNode->GetValueByPath("Ingress")) {
                             if (auto* ingressNode = (*ingressTopNode)[0].GetValueByPath("Ingress")) {
                                 if (auto* bytesNode = ingressNode->GetValueByPath("Bytes")) {
-                                    stage->Source->IngressBytes = std::make_shared<TSingleMetric>(IngressBytes,
+                                    stage->IngressBytes = std::make_shared<TSingleMetric>(IngressBytes,
                                         *bytesNode,
                                         ingressNode->GetValueByPath("FirstMessageMs"),
                                         ingressNode->GetValueByPath("LastMessageMs"),
                                         ingressNode->GetValueByPath("WaitTimeUs.History")
                                     );
-                                    MaxTime = std::max(MaxTime, stage->Source->IngressBytes->MaxTime);
+                                    MaxTime = std::max(MaxTime, stage->IngressBytes->MaxTime);
                                 }
                                 if (auto* rowsNode = ingressNode->GetValueByPath("Rows")) {
-                                    stage->Source->IngressRows = std::make_shared<TSingleMetric>(IngressRows, *rowsNode);
+                                    stage->IngressRows = std::make_shared<TSingleMetric>(IngressRows, *rowsNode);
                                 }
                             }
                         }
                     }
-
                 } else {
                     stage->Connections.push_back(std::make_shared<TConnection>("Implicit", stage->PlanNodeId));
                     Stages.push_back(std::make_shared<TStage>(subNodeType));
@@ -897,7 +922,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
     }
 }
 
-void TPlan::LoadSource(std::shared_ptr<TSource> source, const NJson::TJsonValue& node) {
+void TPlan::LoadSource(const NJson::TJsonValue& node, std::vector<std::string>& info) {
 
     auto operators = node.GetValueByPath("Operators");
 
@@ -924,11 +949,11 @@ void TPlan::LoadSource(std::shared_ptr<TSource> source, const NJson::TJsonValue&
                 }
             }
             builder << ")";
-            source->Info.push_back(builder);
+            info.push_back(builder);
 
             auto est = GetEstimation(subNode);
             if (est) {
-                source->Info.push_back(est);
+                info.push_back(est);
             }
             break;
         }
@@ -941,7 +966,7 @@ void TPlan::MarkStageIndent(ui32 indent, ui32& offsetY, std::shared_ptr<TStage> 
     }
 
     stage->OffsetY = offsetY;
-    ui32 height = std::max<ui32>(stage->Connections.size() + (stage->Source ? 1 : 0) + 3, 4) * (INTERNAL_HEIGHT + INTERNAL_GAP_Y) + INTERNAL_GAP_Y;
+    ui32 height = std::max<ui32>(stage->Connections.size() + (stage->IngressName ? 1 : 0) + 3, 4) * (INTERNAL_HEIGHT + INTERNAL_GAP_Y) + INTERNAL_GAP_Y;
     stage->Height = height;
     stage->IndentY = stage->OffsetY + height;
     offsetY += (height + GAP_Y);
@@ -1535,46 +1560,46 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
             }
         }
 
-        if (s->Source && s->Source->IngressBytes) {
-            auto textSum = FormatBytes(s->Source->IngressBytes->Details.Sum);
+        if (s->IngressBytes) {
+            auto textSum = FormatBytes(s->IngressBytes->Details.Sum);
             TStringBuilder tooltip;
             tooltip
                 << "Ingress "
-                << s->Source->IngressBytes->Details.Sum * 100 / s->Source->IngressBytes->Summary->Value << "%, \u2211"
-                << textSum << ", " << FormatBytes(s->Source->IngressBytes->Details.Min) << " | "
-                << FormatBytes(s->Source->IngressBytes->Details.Avg) << " | " << FormatBytes(s->Source->IngressBytes->Details.Max);
-            if (s->Source->IngressRows && s->Source->IngressRows->Details.Sum) {
+                << s->IngressBytes->Details.Sum * 100 / s->IngressBytes->Summary->Value << "%, \u2211"
+                << textSum << ", " << FormatBytes(s->IngressBytes->Details.Min) << " | "
+                << FormatBytes(s->IngressBytes->Details.Avg) << " | " << FormatBytes(s->IngressBytes->Details.Max);
+            if (s->IngressRows && s->IngressRows->Details.Sum) {
             tooltip
                 << ", Rows \u2211"
-                << FormatIntegerValue(s->Source->IngressRows->Details.Sum) << ", " << FormatIntegerValue(s->Source->IngressRows->Details.Min) << " | "
-                << FormatIntegerValue(s->Source->IngressRows->Details.Avg) << " | " << FormatIntegerValue(s->Source->IngressRows->Details.Max)
-                << ", Width " << FormatBytes(s->Source->IngressBytes->Details.Sum / s->Source->IngressRows->Details.Sum);
+                << FormatIntegerValue(s->IngressRows->Details.Sum) << ", " << FormatIntegerValue(s->IngressRows->Details.Min) << " | "
+                << FormatIntegerValue(s->IngressRows->Details.Avg) << " | " << FormatIntegerValue(s->IngressRows->Details.Max)
+                << ", Width " << FormatBytes(s->IngressBytes->Details.Sum / s->IngressRows->Details.Sum);
             }
-            PrintStageSummary(background, canvas, y0, s->Source->IngressBytes, Config.Palette.IngressMedium, Config.Palette.IngressLight, textSum, tooltip);
+            PrintStageSummary(background, canvas, y0, s->IngressBytes, Config.Palette.IngressMedium, Config.Palette.IngressLight, textSum, tooltip);
 
-            if (s->Source->IngressBytes->Details.Count != taskCount) {
+            if (s->IngressBytes->Details.Count != taskCount) {
                 canvas
                 << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageTextHighlight << "' x='" << Config.HeaderWidth
-                << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << s->Source->IngressBytes->Details.Count << "</text>" << Endl;
+                << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << s->IngressBytes->Details.Count << "</text>" << Endl;
             }
 
-            auto d = s->Source->IngressBytes->MaxTime - s->Source->IngressBytes->MinTime;
+            auto d = s->IngressBytes->MaxTime - s->IngressBytes->MinTime;
             TStringBuilder title;
             title << "Ingress";
             if (d) {
-                title << " " << FormatBytes(s->Source->IngressBytes->Details.Sum * 1000 / d) << "/s";
-                if (s->Source->IngressRows) {
-                    title << ", Rows " << FormatIntegerValue(s->Source->IngressRows->Details.Sum / d) << "/s";
+                title << " " << FormatBytes(s->IngressBytes->Details.Sum * 1000 / d) << "/s";
+                if (s->IngressRows) {
+                    title << ", Rows " << FormatIntegerValue(s->IngressRows->Details.Sum / d) << "/s";
                 }
             }
-            PrintTimeline(background, canvas, title, s->Source->IngressBytes->FirstMessage, s->Source->IngressBytes->LastMessage, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.IngressMedium);
+            PrintTimeline(background, canvas, title, s->IngressBytes->FirstMessage, s->IngressBytes->LastMessage, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.IngressMedium);
 
-            if (!s->Source->IngressBytes->WaitTime.Deriv.empty()) {
-                PrintWaitTime(background, s->Source->IngressBytes, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.IngressLight);
+            if (!s->IngressBytes->WaitTime.Deriv.empty()) {
+                PrintWaitTime(background, s->IngressBytes, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.IngressLight);
             }
 
-            if (!s->Source->IngressBytes->History.Deriv.empty()) {
-                PrintDeriv(canvas, s->Source->IngressBytes->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.IngressDark);
+            if (!s->IngressBytes->History.Deriv.empty()) {
+                PrintDeriv(canvas, s->IngressBytes->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.IngressDark);
             }
 
             y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;

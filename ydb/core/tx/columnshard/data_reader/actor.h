@@ -78,6 +78,7 @@ protected:
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev);
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev);
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& ev);
+    void HandleExecute(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void HandleExecute(NActors::TEvents::TEvWakeup::TPtr& ev);
 
 public:
@@ -95,6 +96,7 @@ public:
                 hFunc(NKqp::TEvKqpCompute::TEvScanInitActor, HandleExecute);
                 hFunc(NKqp::TEvKqpCompute::TEvScanData, HandleExecute);
                 hFunc(NKqp::TEvKqpCompute::TEvScanError, HandleExecute);
+                hFunc(NActors::TEvents::TEvUndelivered, HandleExecute);
                 hFunc(NActors::TEvents::TEvWakeup, HandleExecute);
                 default:
                     AFL_VERIFY(false)("type", ev->GetTypeName());

@@ -30,10 +30,10 @@ struct TNamedColumnarStatistics
     TNamedColumnarStatistics& operator +=(const TNamedColumnarStatistics& other);
 };
 
-typedef THyperLogLog<
+using TColumnarHyperLogLogDigest = THyperLogLog<
     // Precision = 4, or 16 registers
     4
-> TColumnarHyperLogLogDigest;
+>;
 
 //! This struct includes large per-column statistics too big to fit together with basic stats
 struct TLargeColumnarStatistics
@@ -41,7 +41,7 @@ struct TLargeColumnarStatistics
     //! Per-column HyperLogLog digest to approximate number of unique values in the column.
     std::vector<TColumnarHyperLogLogDigest> ColumnHyperLogLogDigests;
 
-    bool Empty() const;
+    bool IsEmpty() const;
     void Clear();
     void Resize(int columnCount);
 

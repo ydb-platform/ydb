@@ -10,7 +10,7 @@ from collections.abc import Awaitable
 from ipaddress import IPv6Address, ip_address
 from os import PathLike, chmod
 from socket import AddressFamily, SocketKind
-from typing import Any, Literal, cast, overload
+from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
 from .. import to_thread
 from ..abc import (
@@ -31,8 +31,18 @@ from ._resources import aclose_forcefully
 from ._synchronization import Event
 from ._tasks import create_task_group, move_on_after
 
+if TYPE_CHECKING:
+    from _typeshed import FileDescriptorLike
+else:
+    FileDescriptorLike = object
+
 if sys.version_info < (3, 11):
     from exceptiongroup import ExceptionGroup
+
+if sys.version_info < (3, 13):
+    from typing_extensions import deprecated
+else:
+    from warnings import deprecated
 
 IPPROTO_IPV6 = getattr(socket, "IPPROTO_IPV6", 41)  # https://bugs.python.org/issue29515
 
@@ -186,6 +196,14 @@ async def connect_tcp(
     try:
         addr_obj = ip_address(remote_host)
     except ValueError:
+        addr_obj = None
+
+    if addr_obj is not None:
+        if isinstance(addr_obj, IPv6Address):
+            target_addrs = [(socket.AF_INET6, addr_obj.compressed)]
+        else:
+            target_addrs = [(socket.AF_INET, addr_obj.compressed)]
+    else:
         # getaddrinfo() will raise an exception if name resolution fails
         gai_res = await getaddrinfo(
             target_host, remote_port, family=family, type=socket.SOCK_STREAM
@@ -194,7 +212,7 @@ async def connect_tcp(
         # Organize the list so that the first address is an IPv6 address (if available)
         # and the second one is an IPv4 addresses. The rest can be in whatever order.
         v6_found = v4_found = False
-        target_addrs: list[tuple[socket.AddressFamily, str]] = []
+        target_addrs = []
         for af, *rest, sa in gai_res:
             if af == socket.AF_INET6 and not v6_found:
                 v6_found = True
@@ -204,11 +222,6 @@ async def connect_tcp(
                 target_addrs.insert(1, (af, sa[0]))
             else:
                 target_addrs.append((af, sa[0]))
-    else:
-        if isinstance(addr_obj, IPv6Address):
-            target_addrs = [(socket.AF_INET6, addr_obj.compressed)]
-        else:
-            target_addrs = [(socket.AF_INET, addr_obj.compressed)]
 
     oserrors: list[OSError] = []
     async with create_task_group() as tg:
@@ -588,12 +601,13 @@ def getnameinfo(sockaddr: IPSockAddrType, flags: int = 0) -> Awaitable[tuple[str
     return get_async_backend().getnameinfo(sockaddr, flags)
 
 
+@deprecated("This function is deprecated; use `wait_readable` instead")
 def wait_socket_readable(sock: socket.socket) -> Awaitable[None]:
     """
-    Wait until the given socket has data to be read.
+    .. deprecated:: 4.7.0
+       Use :func:`wait_readable` instead.
 
-    This does **NOT** work on Windows when using the asyncio backend with a proactor
-    event loop (default on py3.8+).
+    Wait until the given socket has data to be read.
 
     .. warning:: Only use this on raw sockets that have not been wrapped by any higher
         level constructs like socket streams!
@@ -605,11 +619,15 @@ def wait_socket_readable(sock: socket.socket) -> Awaitable[None]:
         to become readable
 
     """
-    return get_async_backend().wait_socket_readable(sock)
+    return get_async_backend().wait_readable(sock.fileno())
 
 
+@deprecated("This function is deprecated; use `wait_writable` instead")
 def wait_socket_writable(sock: socket.socket) -> Awaitable[None]:
     """
+    .. deprecated:: 4.7.0
+       Use :func:`wait_writable` instead.
+
     Wait until the given socket can be written to.
 
     This does **NOT** work on Windows when using the asyncio backend with a proactor
@@ -625,7 +643,58 @@ def wait_socket_writable(sock: socket.socket) -> Awaitable[None]:
         to become writable
 
     """
-    return get_async_backend().wait_socket_writable(sock)
+    return get_async_backend().wait_writable(sock.fileno())
+
+
+def wait_readable(obj: FileDescriptorLike) -> Awaitable[None]:
+    """
+    Wait until the given object has data to be read.
+
+    On Unix systems, ``obj`` must either be an integer file descriptor, or else an
+    object with a ``.fileno()`` method which returns an integer file descriptor. Any
+    kind of file descriptor can be passed, though the exact semantics will depend on
+    your kernel. For example, this probably won't do anything useful for on-disk files.
+
+    On Windows systems, ``obj`` must either be an integer ``SOCKET`` handle, or else an
+    object with a ``.fileno()`` method which returns an integer ``SOCKET`` handle. File
+    descriptors aren't supported, and neither are handles that refer to anything besides
+    a ``SOCKET``.
+
+    On backends where this functionality is not natively provided (asyncio
+    ``ProactorEventLoop`` on Windows), it is provided using a separate selector thread
+    which is set to shut down when the interpreter shuts down.
+
+    .. warning:: Don't use this on raw sockets that have been wrapped by any higher
+        level constructs like socket streams!
+
+    :param obj: an object with a ``.fileno()`` method or an integer handle
+    :raises ~anyio.ClosedResourceError: if the object was closed while waiting for the
+        object to become readable
+    :raises ~anyio.BusyResourceError: if another task is already waiting for the object
+        to become readable
+
+    """
+    return get_async_backend().wait_readable(obj)
+
+
+def wait_writable(obj: FileDescriptorLike) -> Awaitable[None]:
+    """
+    Wait until the given object can be written to.
+
+    :param obj: an object with a ``.fileno()`` method or an integer handle
+    :raises ~anyio.ClosedResourceError: if the object was closed while waiting for the
+        object to become writable
+    :raises ~anyio.BusyResourceError: if another task is already waiting for the object
+        to become writable
+
+    .. seealso:: See the documentation of :func:`wait_readable` for the definition of
+       ``obj`` and notes on backend compatibility.
+
+    .. warning:: Don't use this on raw sockets that have been wrapped by any higher
+        level constructs like socket streams!
+
+    """
+    return get_async_backend().wait_writable(obj)
 
 
 #

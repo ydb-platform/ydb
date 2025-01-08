@@ -1,7 +1,6 @@
 (
 #comment
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 (let vt1 (VariantType (TupleType (DataType 'Int32) (DataType 'String))))
 (let vt2 (VariantType (StructType '('x (DataType 'Int32)) '('y (DataType 'String)))))
@@ -46,7 +45,7 @@
 (Variant (Int32 '7) '0 vt1)
 (Variant (String 'qwe) 'y vt2)
 ))
-(let world (Write! world res_sink (Key) data '()))
+(let world (Write! world res_sink (Key) data '('('type))))
 (let world (Commit! world res_sink))
 (return world)
 )

@@ -21,6 +21,8 @@
 
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
 
+#include <yt/yt/client/signature/signature.h>
+
 #include <yt/yt/client/table_client/name_table.h>
 #include <yt/yt/client/table_client/row_base.h>
 #include <yt/yt/client/table_client/row_buffer.h>
@@ -35,6 +37,8 @@
 #include <yt/yt/core/net/address.h>
 
 #include <yt/yt/core/ytree/attribute_filter.h>
+
+#include <library/cpp/iterator/zip.h>
 
 namespace NYT::NApi::NRpcProxy {
 
@@ -57,10 +61,10 @@ using NYT::FromProto;
 constexpr i64 MaxTracingTagLength = 1'000;
 static const TString DisabledSelectQueryTracingTag = "Tag is disabled, look for enable_select_query_tracing_tag parameter";
 
-TString SanitizeTracingTag(const TString& originalTag)
+std::string SanitizeTracingTag(TStringBuf originalTag)
 {
     if (originalTag.size() <= MaxTracingTagLength) {
-        return originalTag;
+        return std::string(originalTag);
     }
     return Format("%v ... TRUNCATED", originalTag.substr(0, MaxTracingTagLength));
 }
@@ -790,7 +794,7 @@ TFuture<ITableWriterPtr> TClientBase::CreateTableWriter(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TFuture<TDistributedWriteSessionPtr> TClientBase::StartDistributedWriteSession(
+TFuture<TDistributedWriteSessionWithCookies> TClientBase::StartDistributedWriteSession(
     const NYPath::TRichYPath& path,
     const TDistributedWriteSessionStartOptions& options)
 {
@@ -802,21 +806,28 @@ TFuture<TDistributedWriteSessionPtr> TClientBase::StartDistributedWriteSession(
     FillRequest(req.Get(), path, options);
 
     return req->Invoke()
-        .ApplyUnique(BIND([] (TRsp&& result) -> TDistributedWriteSessionPtr {
-            return ConvertTo<TDistributedWriteSessionPtr>(TYsonString(result->session()));
+        .ApplyUnique(BIND([] (TRsp&& result) -> TDistributedWriteSessionWithCookies {
+            std::vector<TSignedWriteFragmentCookiePtr> cookies;
+            cookies.reserve(result->signed_cookies().size());
+            for (const auto& cookie : result->signed_cookies()) {
+                cookies.push_back(ConvertTo<TSignedWriteFragmentCookiePtr>(TYsonString(cookie)));
+            }
+            return TDistributedWriteSessionWithCookies{
+                .Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(result->signed_session())),
+                .Cookies = std::move(cookies),
+            };
         }));
 }
 
 TFuture<void> TClientBase::FinishDistributedWriteSession(
-    TDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionWithResults& sessionWithResults,
     const TDistributedWriteSessionFinishOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.FinishDistributedWriteSession();
 
-    FillRequest(req.Get(), std::move(session), options);
-
+    FillRequest(req.Get(), sessionWithResults, options);
     return req->Invoke().AsVoid();
 }
 
@@ -835,15 +846,20 @@ TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
     req->SetTimeout(options.Timeout.value_or(GetRpcProxyConnection()->GetConfig()->DefaultLookupRowsTimeout));
 
     req->set_path(path);
-    if (NTracing::IsCurrentTraceContextRecorded()) {
-        req->TracingTags().emplace_back("yt.table_path", path);
-    }
     req->Attachments() = SerializeRowset(nameTable, keys, req->mutable_rowset_descriptor());
 
     if (!options.ColumnFilter.IsUniversal()) {
         for (auto id : options.ColumnFilter.GetIndexes()) {
-            req->add_columns(TString(nameTable->GetName(id)));
+            auto columnName = nameTable->GetName(id);
+            req->add_columns(TString(columnName));
         }
+    }
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        req->TracingTags().emplace_back("yt.table_path", path);
+        std::string columnsTag = options.ColumnFilter.IsUniversal()
+            ? "universal"
+            : SanitizeTracingTag(ConvertToYsonString(req->columns()).ToString());
+        req->TracingTags().emplace_back("yt.column_filter", std::move(columnsTag));
     }
     req->set_timestamp(options.Timestamp);
     req->set_retention_timestamp(options.RetentionTimestamp);
@@ -882,15 +898,20 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
     req->SetTimeout(options.Timeout.value_or(GetRpcProxyConnection()->GetConfig()->DefaultLookupRowsTimeout));
 
     req->set_path(path);
-    if (NTracing::IsCurrentTraceContextRecorded()) {
-        req->TracingTags().emplace_back("yt.table_path", path);
-    }
     req->Attachments() = SerializeRowset(nameTable, keys, req->mutable_rowset_descriptor());
 
     if (!options.ColumnFilter.IsUniversal()) {
         for (auto id : options.ColumnFilter.GetIndexes()) {
             req->add_columns(TString(nameTable->GetName(id)));
         }
+    }
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        req->TracingTags().emplace_back("yt.table_path", path);
+
+        std::string columnsTag = options.ColumnFilter.IsUniversal()
+            ? "universal"
+            : SanitizeTracingTag(ConvertToYsonString(req->columns()).ToString());
+        req->TracingTags().emplace_back("yt.column_filter", std::move(columnsTag));
     }
     req->set_timestamp(options.Timestamp);
     req->set_keep_missing_rows(options.KeepMissingRows);
@@ -954,12 +975,22 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
     }
 
     if (NTracing::IsCurrentTraceContextRecorded()) {
-        std::vector<TString> paths;
+        std::vector<std::string> paths;
         paths.reserve(subrequests.size());
-        for (const auto& subrequest : subrequests) {
+
+        std::vector<std::string> columnFilterTags;
+        int columnFiltersTagLength = 0;
+        for (const auto& [subrequest, protoSubrequest] : Zip(subrequests, req->subrequests())) {
             paths.emplace_back(subrequest.Path);
+            if (columnFiltersTagLength <= MaxTracingTagLength) {
+                std::string columnsTag = subrequest.Options.ColumnFilter.IsUniversal()
+                    ? "universal"
+                    : SanitizeTracingTag(NYson::ConvertToYsonString(protoSubrequest.columns()).ToString());
+                columnFiltersTagLength += columnFilterTags.emplace_back(std::move(columnsTag)).size();
+            }
         }
         req->TracingTags().emplace_back("yt.table_paths", SanitizeTracingTag(NYson::ConvertToYsonString(paths).ToString()));
+        req->TracingTags().emplace_back("yt.column_filters", SanitizeTracingTag(NYson::ConvertToYsonString(columnFilterTags).ToString()));
     }
 
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));

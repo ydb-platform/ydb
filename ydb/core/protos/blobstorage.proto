@@ -1011,6 +1011,7 @@ message TNodeWardenServiceSet {
         optional TSerialManagementStage.E ManagementStage = 12;
         optional TPDiskSpaceColor.E SpaceColorBorder = 13;
         optional bool ReadOnly = 14;
+        optional bool Stop = 15;
     }
 
     message TVDisk {
@@ -1358,4 +1359,78 @@ message TEvNodeWardenQueryGroupInfo {
 message TEvNodeWardenGroupInfo {
     optional TGroupInfo Group = 1;
     repeated uint32 StartedGroupIds = 2;
+}
+
+message TEvControllerProposeConfigRequest {
+    optional uint64 ConfigHash = 1;
+    optional uint64 ConfigVersion = 2;
+}
+
+message TEvControllerProposeConfigResponse {
+    enum EStatus {
+        HashMismatch = 0;
+        UnexpectedConfig = 1;
+        CommitIsNeeded = 2;
+        CommitIsNotNeeded = 3;
+    }
+    optional EStatus Status = 1;
+    optional uint64 ProposedConfigHash = 2;
+    optional uint64 ConsoleConfigHash = 3;
+    optional uint32 ProposedConfigVersion = 4;
+    optional uint32 ConsoleConfigVersion = 5;
+}
+
+message TEvControllerConsoleCommitRequest {
+    optional string YAML = 1;
+    optional uint32 ConfigVersion = 2;
+}
+
+message TEvControllerConsoleCommitResponse {
+    enum EStatus {
+        SessionMismatch = 0;
+        NotCommitted = 1;
+        Committed = 2;
+    }
+    optional EStatus Status = 1;
+}
+
+message TEvControllerReplaceConfigRequest {
+    optional string YAML = 1;
+    optional uint32 ConfigVersion = 2;
+    optional bool OverwriteFlag = 3;
+    optional bool SkipBSCValidation = 4;
+    optional bool SkipConsoleValidation = 5;
+}
+
+message TEvControllerReplaceConfigResponse {
+    enum EStatus {
+        OngoingCommit = 0;
+        ValidationTimeout = 1;
+        ConsoleInvalidConfig = 2;
+        BSCInvalidConfig = 3;
+        SessionClosed = 4;
+        Success = 5;
+    }
+    optional EStatus Status = 1;
+}
+
+message TEvControllerValidateConfigRequest {
+    optional string YAML = 1;
+    optional bool SkipBSCValidation = 2;
+    optional uint32 ConfigVersion = 3;
+}
+
+message TEvControllerValidateConfigResponse {
+    enum EStatus {
+        IdPipeServerMismatch = 0;
+        ConfigNotValid = 1;
+        ConfigIsValid = 2;
+    }
+    optional EStatus Status = 1;
+    optional bool SkipBSCValidation = 2;
+    optional string YAML = 3;
+    optional uint32 ConfigVersion = 4;
+}
+
+message TEvControllerValidationTimeout {
 }

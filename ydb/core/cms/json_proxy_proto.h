@@ -17,7 +17,7 @@
 
 #include <util/generic/serialized_enum.h>
 
-#include <iostream>
+#include <unordered_map>
 
 namespace NKikimr::NCms {
 
@@ -33,6 +33,7 @@ public:
     TJsonProxyProto(NMon::TEvHttpInfo::TPtr &event)
         : RequestEvent(event)
     {
+        RegisterDescriptor(NKikimrConfig::TImmediateControlsConfig::descriptor());
     }
 
     void Bootstrap(const TActorContext &ctx) {
@@ -62,30 +63,13 @@ protected:
                 return ReplyWithEnumDescription(*NKikimrBlobStorage::TPDiskState::E_descriptor(), ctx);
         } else if (cgi.Has("type")) {
             TString name = cgi.Get("type");
-            if (name == ".NKikimrConfig.TImmediateControlsConfig")
-                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::descriptor(), ctx);
-            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TDataShardControls")
-                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TDataShardControls::descriptor(), ctx);
-            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TDataShardControls.TExecutionProfileOptions")
-                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TDataShardControls::TExecutionProfileOptions::descriptor(), ctx);
-            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TTxLimitControls")
-                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTxLimitControls::descriptor(), ctx);
-            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TCoordinatorControls")
-                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TCoordinatorControls::descriptor(), ctx);
-            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TSchemeShardControls")
-                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TSchemeShardControls::descriptor(), ctx);
-            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TTCMallocControls")
-                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTCMallocControls::descriptor(), ctx);
-            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TVDiskControls")
-                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TVDiskControls::descriptor(), ctx);
-            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TPDiskControls")
-                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TPDiskControls::descriptor(), ctx);
-            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TTabletControls")
-                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTabletControls::descriptor(), ctx);
-            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TDSProxyControls")
-                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TDSProxyControls::descriptor(), ctx);
-            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TBlobStorageControllerControls")
-                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TBlobStorageControllerControls::descriptor(), ctx);
+            if (name.length() > 1) {
+                name = name.substr(1);
+
+                if (auto it = TypeRegistry.find(name); it != TypeRegistry.end()) {
+                    return ReplyWithTypeDescription(*it->second, ctx);
+                }
+            }
         }
 
         ctx.Send(RequestEvent->Sender,
@@ -195,7 +179,27 @@ protected:
                                                                 NMon::IEvHttpInfoRes::EContentType::Custom));
     }
 
+    void RegisterDescriptor(const google::protobuf::Descriptor* desc) {
+        if (!desc) {
+            return;
+        }
+
+        if (TypeRegistry.contains(desc->full_name())) {
+            return;
+        }
+
+        TypeRegistry[desc->full_name()] = desc;
+
+        for (int i = 0; i < desc->field_count(); ++i) {
+            auto* field = desc->field(i);
+            if (const auto* message = field->message_type(); message) {
+                RegisterDescriptor(message);
+            }
+        }
+    }
+
     NMon::TEvHttpInfo::TPtr RequestEvent;
+    std::unordered_map<TString, const google::protobuf::Descriptor*> TypeRegistry;
 };
 
 } // namespace NKikimr::NCms

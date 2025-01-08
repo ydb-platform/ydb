@@ -7,6 +7,7 @@
 #include <ydb/core/tx/tiering/tier/object.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_types/s3_settings.h>
+#include <ydb/library/accessor/positive_integer.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>
 
@@ -77,7 +78,7 @@ private:
     IActor* Actor = nullptr;
     TManagers Managers;
 
-    using TTierRefCount = THashMap<TString, ui64>;
+    using TTierRefCount = THashMap<TString, TPositiveControlInteger>;
     using TTierRefsByPathId = THashMap<ui64, std::vector<TTierRefGuard>>;
     YDB_READONLY_DEF(TTierRefCount, TierRefCount);
     YDB_READONLY_DEF(TTierRefsByPathId, UsedTiers);

@@ -45,6 +45,9 @@ void TSolomonExporterConfig::Register(TRegistrar registrar)
     registrar.Parameter("convert_counters_to_delta_gauge", &TThis::ConvertCountersToDeltaGauge)
         .Default(false);
 
+    registrar.Parameter("enable_histogram_compat", &TThis::EnableHistogramCompat)
+        .Default(false);
+
     registrar.Parameter("export_summary", &TThis::ExportSummary)
         .Default(false);
     registrar.Parameter("export_summary_as_max", &TThis::ExportSummaryAsMax)

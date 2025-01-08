@@ -4,21 +4,17 @@
 #include "error.h"
 #endif
 
-namespace NYT::NToAttributeValueImpl {
+namespace NYT::NAttributeValueConversionImpl {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-NYson::TYsonString TagInvoke(TTagInvokeTag<ToAttributeValue>, const T& value)
+    requires (!CPrimitiveConvertible<T>)
+std::string TagInvoke(TTagInvokeTag<ToErrorAttributeValue>, const T& value)
 {
-    return NYson::ConvertToYsonString(value);
-}
-
-inline NYson::TYsonString TagInvoke(TTagInvokeTag<ToAttributeValue>, const NYson::TYsonString& value)
-{
-    return value;
+    return std::string(NYson::ConvertToYsonString(value, NYson::EYsonFormat::Text).ToString());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NToAttributeValueImpl
+} // namespace NYT::NAttributeValueConversionImpl

@@ -818,6 +818,12 @@ public:
         QueryState->TxCtx->SetIsolationLevel(settings);
         QueryState->TxCtx->OnBeginQuery();
 
+        if (QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
+                && !Settings.TableService.GetEnableSnapshotIsolationRW()) {
+            ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
+                << "Writes aren't supported for Snapshot Isolation";
+        }
+
         if (!Transactions.CreateNew(QueryState->TxId.GetValue(), QueryState->TxCtx)) {
             std::vector<TIssue> issues{
                 YqlIssue({}, TIssuesIds::KIKIMR_TOO_MANY_TRANSACTIONS)};
@@ -893,9 +899,12 @@ public:
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
         const bool hasOlapWrite = ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery);
         const bool hasOltpWrite = ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
-        QueryState->TxCtx->HasOlapTable |= hasOlapWrite || ::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery);
-        QueryState->TxCtx->HasOltpTable |= hasOltpWrite || ::NKikimr::NKqp::HasOltpTableReadInTx(phyQuery);
+        const bool hasOlapRead = ::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery);
+        const bool hasOltpRead = ::NKikimr::NKqp::HasOltpTableReadInTx(phyQuery);
+        QueryState->TxCtx->HasOlapTable |= hasOlapWrite || hasOlapRead;
+        QueryState->TxCtx->HasOltpTable |= hasOltpWrite || hasOltpRead;
         QueryState->TxCtx->HasTableWrite |= hasOlapWrite || hasOltpWrite;
+        QueryState->TxCtx->HasTableRead |= hasOlapRead || hasOltpRead;
         if (QueryState->TxCtx->HasOlapTable && QueryState->TxCtx->HasOltpTable && QueryState->TxCtx->HasTableWrite
                 && !Settings.TableService.GetEnableHtapTx() && !QueryState->IsSplitted()) {
             ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
@@ -1130,8 +1139,8 @@ public:
             return;
         }
 
-        if (QueryState->TxCtx->ShouldExecuteDeferredEffects()) {
-            ExecuteDeferredEffectsImmediately();
+        if (QueryState->TxCtx->ShouldExecuteDeferredEffects(tx)) {
+            ExecuteDeferredEffectsImmediately(tx);
         } else if (auto commit = QueryState->ShouldCommitWithCurrentTx(tx); commit || tx) {
             ExecutePhyTx(tx, commit);
         } else {
@@ -1139,8 +1148,8 @@ public:
         }
     }
 
-    void ExecuteDeferredEffectsImmediately() {
-        YQL_ENSURE(QueryState->TxCtx->ShouldExecuteDeferredEffects());
+    void ExecuteDeferredEffectsImmediately(const TKqpPhyTxHolder::TConstPtr& tx) {
+        YQL_ENSURE(QueryState->TxCtx->ShouldExecuteDeferredEffects(tx));
 
         auto& txCtx = *QueryState->TxCtx;
         auto request = PrepareRequest(/* tx */ nullptr, /* literal */ false, QueryState.get());
@@ -1160,6 +1169,9 @@ public:
         txCtx.ClearDeferredEffects();
 
         SendToExecuter(QueryState->TxCtx.Get(), std::move(request));
+        if (!tx) {
+            ++QueryState->CurrentTx;
+        }
     }
 
     bool ExecutePhyTx(const TKqpPhyTxHolder::TConstPtr& tx, bool commit) {
@@ -1366,6 +1378,7 @@ public:
             && !txCtx->BufferActorId
             && (txCtx->HasTableWrite || request.TopicOperations.GetSize() != 0)) {
             txCtx->TxManager->SetTopicOperations(std::move(request.TopicOperations));
+            txCtx->TxManager->AddTopicsToShards();
 
             TKqpBufferWriterSettings settings {
                 .SessionActorId = SelfId(),
@@ -1376,6 +1389,9 @@ public:
             };
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);
+        } else if (Settings.TableService.GetEnableOltpSink() && txCtx->BufferActorId) {
+            txCtx->TxManager->SetTopicOperations(std::move(request.TopicOperations));
+            txCtx->TxManager->AddTopicsToShards();
         }
 
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,

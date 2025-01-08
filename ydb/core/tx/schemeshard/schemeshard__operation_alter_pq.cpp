@@ -214,7 +214,7 @@ public:
             if (alterConfig.HasOffloadConfig()) {
                 // TODO: check validity
                 auto* pathId = alterConfig.MutableOffloadConfig()->MutableIncrementalBackup()->MutableDstPathId();
-                PathIdFromPathId(TPath::Resolve(alterConfig.GetOffloadConfig().GetIncrementalBackup().GetDstPath(), context.SS).Base()->PathId, pathId);
+                TPath::Resolve(alterConfig.GetOffloadConfig().GetIncrementalBackup().GetDstPath(), context.SS).Base()->PathId.ToProto(pathId);
             }
 
             alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema());

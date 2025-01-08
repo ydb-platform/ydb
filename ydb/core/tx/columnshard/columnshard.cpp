@@ -7,12 +7,14 @@
 #include "data_accessor/manager.h"
 #include "engines/column_engine_logs.h"
 #include "engines/writer/buffer/actor.h"
+#include "engines/writer/buffer/actor2.h"
 #include "hooks/abstract/abstract.h"
 #include "resource_subscriber/actor.h"
 #include "transactions/locks/read_finished.h"
 
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
+#include <ydb/core/tx/columnshard/tablet/write_queue.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/tiering/manager.h>
 
@@ -32,7 +34,8 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     }
     InFlightReadsTracker.Stop(this);
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
-    ctx.Send(BufferizationWriteActorId, new TEvents::TEvPoisonPill);
+    ctx.Send(BufferizationInsertionWriteActorId, new TEvents::TEvPoisonPill);
+    ctx.Send(BufferizationPortionsWriteActorId, new TEvents::TEvPoisonPill);
     ctx.Send(DataAccessorsControlActorId, new TEvents::TEvPoisonPill);
     if (!!OperationsManager) {
         OperationsManager->StopWriting();
@@ -67,11 +70,10 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "skip_switch_to_work")("reason", "db_reading_not_finished");
         return;
     }
-
     ProgressTxController->OnTabletInit();
     {
-        const TLogContextGuard gLogging =
-            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId())("process", "SwitchToWork");
+        const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())(
+            "self_id", SelfId())("process", "SwitchToWork");
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SwitchToWork");
         Become(&TThis::StateWork);
         SignalTabletActive(ctx);
@@ -120,7 +122,8 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Limits.RegisterControls(icb);
     Settings.RegisterControls(icb);
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
-    BufferizationWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));
+    BufferizationInsertionWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));
+    BufferizationPortionsWriteActorId = ctx.Register(new NOlap::NWritingPortions::TActor(TabletID(), SelfId()));
     DataAccessorsControlActorId = ctx.Register(new NOlap::NDataAccessorControl::TActor(TabletID(), SelfId()));
     DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(DataAccessorsControlActorId, SelfId()),
 
@@ -251,6 +254,8 @@ void TColumnShard::Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorCon
         const TMonotonic now = TMonotonic::Now();
         GetProgressTxController().PingTimeouts(now);
         ctx.Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup(0));
+    } else if (ev->Get()->Tag == 1) {
+        WriteTasksQueue->Drain(true, ctx);
     }
 }
 

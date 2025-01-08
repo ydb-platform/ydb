@@ -49,6 +49,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/local/base_write_multi_usage_key_script_script/Temp",
                                                         "ReadColumns": [
                                                             "Name",
                                                             "Value"
@@ -117,6 +118,7 @@
                                             }
                                         ],
                                         "Name": "Upsert",
+                                        "Path": "/local/base_write_multi_usage_key_script_script/Temp",
                                         "Table": "base_write_multi_usage_key_script_script/Temp"
                                     },
                                     {
@@ -168,6 +170,7 @@
                                                             {
                                                                 "Inputs": [],
                                                                 "Name": "TableFullScan",
+                                                                "Path": "/local/base_write_multi_usage_key_script_script/Input1",
                                                                 "ReadColumns": [
                                                                     "Amount",
                                                                     "Name"

@@ -27,7 +27,7 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& e
     , Event(ev)
 {
     TCgiParameters params = Event->Get()->Request.GetParams();
-    if (Event->Get()->Request.GetHeader("Content-Type") == "application/json") {
+    if (NHttp::Trim(Event->Get()->Request.GetHeader("Content-Type").Before('?'), ' ') == "application/json") {
         NJson::TJsonValue jsonData;
         if (NJson::ReadJsonTree(Event->Get()->Request.GetPostContent(), &jsonData)) {
             if (jsonData.IsMap()) {
@@ -73,6 +73,61 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& e
         Span = {TComponentTracingLevels::THttp::TopLevel, std::move(traceId), handlerName ? "http " + handlerName : "http viewer", NWilson::EFlags::AUTO_END};
         Span.Attribute("request_type", TString(Event->Get()->Request.GetUri().Before('?')));
         Span.Attribute("request_params", TString(Event->Get()->Request.GetUri().After('?')));
+    }
+}
+
+TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev, const TString& handlerName)
+    : Viewer(viewer)
+    , HttpEvent(ev)
+{
+    TCgiParameters params(HttpEvent->Get()->Request->URL.After('?'));
+    NHttp::THeaders headers(HttpEvent->Get()->Request->Headers);
+    if (NHttp::Trim(headers.Get("Content-Type").Before(';'), ' ') == "application/json") {
+        NJson::TJsonValue jsonData;
+        if (NJson::ReadJsonTree(HttpEvent->Get()->Request->Body, &jsonData)) {
+            if (jsonData.IsMap()) {
+                for (const auto& [key, value] : jsonData.GetMap()) {
+                    switch (value.GetType()) {
+                        case NJson::EJsonValueType::JSON_STRING:
+                        case NJson::EJsonValueType::JSON_INTEGER:
+                        case NJson::EJsonValueType::JSON_UINTEGER:
+                        case NJson::EJsonValueType::JSON_DOUBLE:
+                        case NJson::EJsonValueType::JSON_BOOLEAN:
+                            params.InsertUnescaped(key, value.GetStringRobust());
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+        }
+    }
+    InitConfig(params);
+    NWilson::TTraceId traceId;
+    TStringBuf traceparent = headers.Get("traceparent");
+    if (traceparent) {
+        traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, TComponentTracingLevels::ProductionVerbose);
+    }
+    TStringBuf wantTrace = headers.Get("X-Want-Trace");
+    TStringBuf traceVerbosity = headers.Get("X-Trace-Verbosity");
+    TStringBuf traceTTL = headers.Get("X-Trace-TTL");
+    if (!traceId && (FromStringWithDefault<bool>(wantTrace) || !traceVerbosity.empty() || !traceTTL.empty())) {
+        ui8 verbosity = TComponentTracingLevels::ProductionVerbose;
+        if (traceVerbosity) {
+            verbosity = FromStringWithDefault<ui8>(traceVerbosity, verbosity);
+            verbosity = std::min(verbosity, NWilson::TTraceId::MAX_VERBOSITY);
+        }
+        ui32 ttl = Max<ui32>();
+        if (traceTTL) {
+            ttl = FromStringWithDefault<ui32>(traceTTL, ttl);
+            ttl = std::min(ttl, NWilson::TTraceId::MAX_TIME_TO_LIVE);
+        }
+        traceId = NWilson::TTraceId::NewTraceId(verbosity, ttl);
+    }
+    if (traceId) {
+        Span = {TComponentTracingLevels::THttp::TopLevel, std::move(traceId), handlerName ? "http " + handlerName : "http viewer", NWilson::EFlags::AUTO_END};
+        Span.Attribute("request_type", TString(HttpEvent->Get()->Request->GetURI()));
+        Span.Attribute("request_params", TString(HttpEvent->Get()->Request->URL.After('?')));
     }
 }
 
@@ -573,8 +628,11 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
 void TViewerPipeClient::RequestTxProxyDescribe(const TString& path) {
     THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
     request->Record.MutableDescribePath()->SetPath(path);
-    if (!Event->Get()->UserToken.empty()) {
+    if (Event && !Event->Get()->UserToken.empty()) {
         request->Record.SetUserToken(Event->Get()->UserToken);
+    }
+    if (HttpEvent && !HttpEvent->Get()->UserToken.empty()) {
+        request->Record.SetUserToken(HttpEvent->Get()->UserToken);
     }
     SendRequest(MakeTxProxyID(), request.Release());
 }
@@ -675,12 +733,24 @@ ui32 TViewerPipeClient::FailPipeConnect(NNodeWhiteboard::TTabletId tabletId) {
 }
 
 TRequestState TViewerPipeClient::GetRequest() const {
-    return {Event->Get(), Span.GetTraceId()};
+    if (Event) {
+        return {Event->Get(), Span.GetTraceId()};
+    } else if (HttpEvent) {
+        return {HttpEvent->Get(), Span.GetTraceId()};
+    }
+    return {};
 }
 
 void TViewerPipeClient::ReplyAndPassAway(TString data, const TString& error) {
     TString message = error;
-    Send(Event->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+
+    if (Event) {
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+    } else if (HttpEvent) {
+        auto response = HttpEvent->Get()->Request->CreateResponseString(data);
+        Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response.Release()));
+    }
+
     if (message.empty()) {
         TStringBuf dataParser(data);
         if (dataParser.NextTok(' ') == "HTTP/1.1") {
@@ -834,8 +904,9 @@ void TViewerPipeClient::RedirectToDatabase(const TString& database) {
 }
 
 bool TViewerPipeClient::NeedToRedirect() {
-    if (Event) {
-        Direct |= !Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
+    auto request = GetRequest();
+    if (request) {
+        Direct |= !request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
         Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
         if (Database && !Direct) {
             RedirectToDatabase(Database); // to find some dynamic node and redirect query there

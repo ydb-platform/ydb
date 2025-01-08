@@ -309,6 +309,9 @@ public:
     }
 
     arrow::Status OnRecordBatchDecoded(std::shared_ptr<arrow::RecordBatch> batch) override {
+        NKikimr::NMiniKQL::TScopedAlloc scope(__LOCATION__);
+        TThrowingBindTerminator t;
+
         YQL_ENSURE(batch);
         MKQL_ADD_STAT(JobStats_, BlockCount, 1);
         std::vector<arrow::Datum> result;
@@ -368,7 +371,7 @@ public:
         LocalListeners_.reserve(Inputs_.size());
         for (size_t i = 0; i < Inputs_.size(); ++i) {
             auto& decoder = Settings_->Specs->Inputs[Settings_->OriginalIndexes[i]];
-            bool native = decoder->NativeYtTypeFlags && !decoder->FieldsVec[i].ExplicitYson;
+            bool native = decoder->NativeYtTypeFlags;
             LocalListeners_.emplace_back(std::make_shared<TLocalListener>(Listener_, Settings_->ColumnNameMapping, ptr, types, *Settings_->Pool, Settings_->PgBuilder, native, jobStats));
             LocalListeners_.back()->Init(LocalListeners_.back());
         }

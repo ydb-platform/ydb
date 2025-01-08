@@ -99,19 +99,19 @@ public:
 
         if (const auto sort = path.Table().Ref().GetConstraint<TSortedConstraintNode>()) {
             if (const auto filtered = sort->FilterFields(ctx, filter)) {
-                path.Ptr()->AddConstraint(filtered);
+                path.Ptr()->AddConstraint(filtered->GetSimplifiedForType(*path.Ref().GetTypeAnn(), ctx));
             }
         }
 
         if (const auto uniq = path.Table().Ref().GetConstraint<TUniqueConstraintNode>()) {
             if (const auto filtered = uniq->FilterFields(ctx, filter)) {
-                path.Ptr()->AddConstraint(filtered);
+                path.Ptr()->AddConstraint(filtered->GetSimplifiedForType(*path.Ref().GetTypeAnn(), ctx));
             }
         }
 
         if (const auto dist = path.Table().Ref().GetConstraint<TDistinctConstraintNode>()) {
             if (const auto filtered = dist->FilterFields(ctx, filter)) {
-                path.Ptr()->AddConstraint(filtered);
+                path.Ptr()->AddConstraint(filtered->GetSimplifiedForType(*path.Ref().GetTypeAnn(), ctx));
             }
         }
 

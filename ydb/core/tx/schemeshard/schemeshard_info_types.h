@@ -2316,6 +2316,7 @@ struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> {
             const auto alterSpace = GetFileStoreSpace(*AlterConfig);
             space.SSD = Max(space.SSD, alterSpace.SSD);
             space.HDD = Max(space.HDD, alterSpace.HDD);
+            space.SSDSystem = Max(space.SSDSystem, alterSpace.SSDSystem);
         }
 
         return space;
@@ -2329,7 +2330,11 @@ private:
         TFileStoreSpace space;
         switch (config.GetStorageMediaKind()) {
             case 1: // STORAGE_MEDIA_SSD
-                space.SSD += blockCount * blockSize;
+                if (config.GetIsSystem()) {
+                    space.SSDSystem += blockCount * blockSize;
+                } else {
+                    space.SSD += blockCount * blockSize;
+                }
                 break;
             case 2: // STORAGE_MEDIA_HYBRID
             case 3: // STORAGE_MEDIA_HDD
@@ -2703,6 +2708,8 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
 
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
+
+    bool EnableChecksums = false;
 
     explicit TExportInfo(
             const ui64 id,

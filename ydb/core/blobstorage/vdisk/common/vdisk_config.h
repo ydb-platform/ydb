@@ -242,6 +242,15 @@ namespace NKikimr {
         bool UseCostTracker = true;
         TCostMetricsParametersByMedia CostMetricsParametersByMedia;
 
+        ///////////// THROTTLING SETTINGS //////////////////
+        TControlWrapper ThrottlingDeviceSpeed;
+        TControlWrapper ThrottlingMinSstCount;
+        TControlWrapper ThrottlingMaxSstCount;
+        TControlWrapper ThrottlingMinInplacedSize;
+        TControlWrapper ThrottlingMaxInplacedSize;
+        TControlWrapper ThrottlingMinOccupancyPerMille;
+        TControlWrapper ThrottlingMaxOccupancyPerMille;
+
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;
 

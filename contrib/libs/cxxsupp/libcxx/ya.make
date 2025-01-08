@@ -170,6 +170,7 @@ ELSEIF (CXX_RT == "glibcxx_dynamic")
     ENABLE(NEED_CXX_RT_ADDINCL)
 ELSEIF (CXX_RT == "libcxxabi")
     PEERDIR(
+        contrib/libs/cxxsupp/builtins
         contrib/libs/cxxsupp/libcxxabi
     )
     ADDINCL(

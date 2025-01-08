@@ -175,6 +175,7 @@ public:
     void AddFullBackup(TFullBackupMetadata::TPtr fullBackup);
     void AddLog(TLogMetadata::TPtr log);
     void SetConsistencyKey(const TString& key);
+    void SetVersion(ui64 version);
 
     TString Serialize() const;
     static TMetadata Deserialize(const TString& metadata);
@@ -182,6 +183,7 @@ private:
     TString ConsistencyKey;
     TMap<TVirtualTimestamp, TFullBackupMetadata::TPtr> FullBackups;
     TMap<TVirtualTimestamp, TLogMetadata::TPtr> Logs;
+    ui64 Version = 0;
 };
 
 } // NBackupRestore

@@ -1,7 +1,6 @@
 (
 # read data from Input table
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 (let res_sink (DataSink 'result))
 
@@ -15,22 +14,22 @@
 (let cond (>= (RandomNumber) (Uint64 '0)))
 
 (let res (FlatMap (OptionalIf cond str1) (lambda '(r) (OptionalIf (>= (Member r 'b) (String 'a)) r))))
-(let world (Write! world res_sink (Key) res '()))
+(let world (Write! world res_sink (Key) res '('('type))))
 
 (let res (FlatMap (OptionalIf cond str1) (lambda '(r) (AsList r r))))
-(let world (Write! world res_sink (Key) res '()))
+(let world (Write! world res_sink (Key) res '('('type))))
 
 (let res (FlatMap (OptionalIf cond str1) (lambda '(r) (ToStream (Just r) (DependsOn r)))))
-(let world (Write! world res_sink (Key) (ForwardList res) '()))
+(let world (Write! world res_sink (Key) (ForwardList res) '('('type))))
 
 (let res (FlatMap (ListIf cond str1) (lambda '(r) (OptionalIf (>= (Member r 'b) (String 'a)) r))))
-(let world (Write! world res_sink (Key) res '()))
+(let world (Write! world res_sink (Key) res '('('type))))
 
 (let res (FlatMap (ListIf cond str1) (lambda '(r) (AsList r r))))
-(let world (Write! world res_sink (Key) res '()))
+(let world (Write! world res_sink (Key) res '('('type))))
 
 (let res (FlatMap (ListIf cond str1) (lambda '(r) (ToStream (Just r) (DependsOn r)))))
-(let world (Write! world res_sink (Key) res '()))
+(let world (Write! world res_sink (Key) res '('('type))))
 
 (let world (Commit! world res_sink))
 (return world)

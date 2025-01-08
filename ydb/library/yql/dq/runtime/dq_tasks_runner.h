@@ -20,6 +20,8 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_watermark.h>
 
+#include <yql/essentials/public/udf/udf_value_builder.h>
+
 #include <library/cpp/monlib/metrics/histogram_collector.h>
 
 #include <util/generic/size_literals.h>
@@ -145,7 +147,7 @@ public:
         const NKikimr::NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        TVector<IDqOutput::TPtr>&& outputs) const = 0;
+        TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* pgBuilder) const = 0;
 
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const = 0;
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const = 0;
@@ -162,7 +164,7 @@ public:
         const NKikimr::NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        TVector<IDqOutput::TPtr>&& outputs) const override;
+        TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* pgBuilder) const override;
 };
 
 class TDqTaskRunnerExecutionContextDefault : public TDqTaskRunnerExecutionContextBase {
@@ -210,7 +212,11 @@ struct TDqTaskRunnerMemoryLimits {
 };
 
 NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, const NKikimr::NMiniKQL::TType* type,
-    TVector<IDqInputChannel::TPtr>&& channels, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
+    TVector<IDqInputChannel::TPtr>&& channels, const NKikimr::NMiniKQL::THolderFactory& holderFactory, NUdf::IPgBuilder* pgBuilder);
+
+IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NKikimr::NMiniKQL::TType* type,
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    TVector<IDqOutput::TPtr>&& channels, NUdf::IPgBuilder* pgBuilder, TMaybe<ui8> minFillPercentage = {});
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NKikimr::NMiniKQL::TType* type,
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,

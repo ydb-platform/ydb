@@ -5,6 +5,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 SRCS(
     config.cpp
     tcmalloc_manager.cpp
+    GLOBAL configure_tcmalloc_manager.cpp
 )
 
 PEERDIR(

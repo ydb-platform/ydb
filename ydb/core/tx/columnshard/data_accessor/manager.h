@@ -134,7 +134,7 @@ private:
     };
 
     std::deque<TPortionToAsk> PortionsAsk;
-    ui64 PortionsAskInFlight = 0;
+    TPositiveControlInteger PortionsAskInFlight;
 
     void DrainQueue();
 

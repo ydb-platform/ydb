@@ -7,6 +7,7 @@ PEERDIR(
 SRCS(
     accessor.cpp
     validator.cpp
+    positive_integer.cpp
 )
 
 END()

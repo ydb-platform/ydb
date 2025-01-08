@@ -37,7 +37,9 @@ private:
         }
     };
 
+    std::vector<TInsertWriteId> InsertWriteIds;
     std::vector<TReplyInfo> Results;
+    std::optional<EOperationBehaviour> PackBehaviour;
 
 public:
     TTxBlobsWritingFinished(TColumnShard* self, const NKikimrProto::EReplyStatus writeStatus,

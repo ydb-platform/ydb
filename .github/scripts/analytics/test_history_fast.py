@@ -4,7 +4,6 @@ import ydb
 import configparser
 import os
 
-
 # Load configuration
 dir = os.path.dirname(__file__)
 config = configparser.ConfigParser()
@@ -132,9 +131,6 @@ def main():
         credentials=ydb.credentials_from_env_variables()
     ) as driver:
         driver.wait(timeout=10, fail_fast=True)
-        session = ydb.retry_operation_sync(
-            lambda: driver.table_client.session().create()
-        )
         with ydb.SessionPool(driver) as pool:
             prepared_for_upload_rows = get_missed_data_for_upload(driver)
             print(f'Preparing to upsert: {len(prepared_for_upload_rows)} rows')

@@ -50,7 +50,7 @@ public:
         SetShardingMethod("HASH_FUNCTION_CONSISTENCY_64");
     }
 
-    class TWritingGuard {
+    class TSimultaneousWritingSession {
     private:
         bool Finished = false;
         TKikimrRunner& KikimrRunner;

@@ -20,53 +20,12 @@ private:
 public:
     TOrderedColumnIndexesImpl() = default;
 
-    TOrderedColumnIndexesImpl(const ui32 columnsCount);
-    TOrderedColumnIndexesImpl(const std::vector<ui32>& columnIndexes);
-    TOrderedColumnIndexesImpl(std::vector<ui32>&& columnIndexes);
-};
+    explicit TOrderedColumnIndexesImpl(const ui32 columnsCount);
+    explicit TOrderedColumnIndexesImpl(const std::vector<ui32>& columnIndexes);
+    explicit TOrderedColumnIndexesImpl(std::vector<ui32>&& columnIndexes);
 
-template <class TDataContainer>
-class TContainerWithIndexes: public TOrderedColumnIndexesImpl {
-private:
-    using TBase = TOrderedColumnIndexesImpl;
-    YDB_ACCESSOR_DEF(std::shared_ptr<TDataContainer>, Container);
-
-public:
-    TContainerWithIndexes() = default;
-
-    TContainerWithIndexes(const std::vector<ui32>& columnIndexes, const std::shared_ptr<TDataContainer>& container)
-        : TBase(columnIndexes)
-        , Container(container) {
-        if (Container) {
-            Y_ABORT_UNLESS((ui32)Container->num_columns() == columnIndexes.size());
-        } else {
-            Y_ABORT_UNLESS(!columnIndexes.size());
-        }
-    }
-
-    TContainerWithIndexes(const std::shared_ptr<TDataContainer>& container)
-        : TBase(TSimpleValidator::CheckNotNull(container)->num_columns())
-        , Container(container) {
-    }
-
-    TContainerWithIndexes<TDataContainer> BuildWithAnotherContainer(const std::shared_ptr<TDataContainer>& container) const {
-        return TContainerWithIndexes<TDataContainer>(GetColumnIndexes(), container);
-    }
-
-    bool operator!() const {
-        return !HasContainer();
-    }
-
-    bool HasContainer() const {
-        return !!Container;
-    }
-
-    const TDataContainer* operator->() const {
-        return Container.get();
-    }
-
-    template <class TDataContainerMerge>
-    static std::vector<ui32> MergeColumnIdxs(const std::vector<TContainerWithIndexes<TDataContainerMerge>>& sources) {
+    template <class TContainerWithIndexes>
+    static std::vector<ui32> MergeColumnIdxs(const std::vector<TContainerWithIndexes>& sources) {
         class TIterator {
         private:
             std::vector<ui32>::const_iterator ItCurrent;
@@ -117,6 +76,48 @@ public:
         }
         return result;
     }
+};
+
+template <class TDataContainer>
+class TContainerWithIndexes: public TOrderedColumnIndexesImpl {
+private:
+    using TBase = TOrderedColumnIndexesImpl;
+    YDB_ACCESSOR_DEF(std::shared_ptr<TDataContainer>, Container);
+
+public:
+    TContainerWithIndexes() = default;
+
+    TContainerWithIndexes(const std::vector<ui32>& columnIndexes, const std::shared_ptr<TDataContainer>& container)
+        : TBase(columnIndexes)
+        , Container(container) {
+        if (Container) {
+            Y_ABORT_UNLESS((ui32)Container->num_columns() == columnIndexes.size());
+        } else {
+            Y_ABORT_UNLESS(!columnIndexes.size());
+        }
+    }
+
+    explicit TContainerWithIndexes(const std::shared_ptr<TDataContainer>& container)
+        : TBase(TSimpleValidator::CheckNotNull(container)->num_columns())
+        , Container(container) {
+    }
+
+    TContainerWithIndexes<TDataContainer> BuildWithAnotherContainer(const std::shared_ptr<TDataContainer>& container) const {
+        return TContainerWithIndexes<TDataContainer>(GetColumnIndexes(), container);
+    }
+
+    bool operator!() const {
+        return !HasContainer();
+    }
+
+    bool HasContainer() const {
+        return !!Container;
+    }
+
+    const TDataContainer* operator->() const {
+        return Container.get();
+    }
+
 };
 
 class TColumnOperator {

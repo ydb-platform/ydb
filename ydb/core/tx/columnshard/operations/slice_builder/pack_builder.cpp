@@ -101,7 +101,7 @@ public:
             ui32 idx = 0;
             std::vector<std::shared_ptr<NArrow::TGeneralContainer>> containers;
             ui32 recordsCountSum = 0;
-            auto indexes = NArrow::TContainerWithIndexes<arrow::RecordBatch>::MergeColumnIdxs(Batches);
+            auto indexes = NArrow::TOrderedColumnIndexesImpl::MergeColumnIdxs(Batches);
             std::shared_ptr<arrow::Schema> dataSchema;
             const auto& indexInfo = context.GetActualSchema()->GetIndexInfo();
             for (auto&& i : Batches) {

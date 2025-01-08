@@ -10,6 +10,8 @@
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <util/string/join.h>
 
@@ -99,36 +101,31 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
         if (targetIdx == -1) {
             return TConclusionStatus::Success();
         }
+        const auto hasNull = NArrow::HasNulls(incomingBatch->column(incomingIdx));
         const std::optional<i32> pkFieldIdx = GetIndexInfo().GetPKColumnIndexByIndexVerified(targetIdx);
-        if (!NArrow::HasNulls(incomingBatch->column(incomingIdx))) {
-            if (pkFieldIdx) {
-                AFL_VERIFY(*pkFieldIdx < (i32)pkColumns.size());
-                AFL_VERIFY(!pkColumns[*pkFieldIdx]);
-                pkColumns[*pkFieldIdx] = incomingBatch->column(incomingIdx);
-                ++pkColumnsCount;
-            }
-            return TConclusionStatus::Success();
-        }
-        if (pkFieldIdx) {
+        if (pkFieldIdx && hasNull && !AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK()) {
             return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema.field(targetIdx)->name() + "'");
         }
-        switch (mType) {
-            case NEvWrite::EModificationType::Replace:
-            case NEvWrite::EModificationType::Insert:
-            case NEvWrite::EModificationType::Upsert: {
-                if (GetIndexInfo().IsNullableVerifiedByIndex(targetIdx)) {
-                    return TConclusionStatus::Success();
-                }
-                if (GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(targetIdx)) {
-                    return TConclusionStatus::Success();
-                } else {
-                    return TConclusionStatus::Fail("empty field for non-default column: '" + dstSchema.field(targetIdx)->name() + "'");
-                }
+        if (hasNull) {
+            switch (mType) {
+                case NEvWrite::EModificationType::Replace:
+                case NEvWrite::EModificationType::Insert:
+                case NEvWrite::EModificationType::Upsert: {
+                    if (!GetIndexInfo().IsNullableVerifiedByIndex(targetIdx) && !GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(targetIdx))
+                        return TConclusionStatus::Fail("empty field for non-default column: '" + dstSchema.field(targetIdx)->name() + "'");
+                    }
+                case NEvWrite::EModificationType::Delete:
+                case NEvWrite::EModificationType::Update:
+                    break;
             }
-            case NEvWrite::EModificationType::Delete:
-            case NEvWrite::EModificationType::Update:
-                return TConclusionStatus::Success();
         }
+        if (pkFieldIdx) {
+            AFL_VERIFY(*pkFieldIdx < (i32)pkColumns.size());
+            AFL_VERIFY(!pkColumns[*pkFieldIdx]);
+            pkColumns[*pkFieldIdx] = incomingBatch->column(incomingIdx);
+            ++pkColumnsCount;
+        }
+        return TConclusionStatus::Success();
     };
     const auto nameResolver = [&](const std::string& fieldName) -> i32 {
         return GetIndexInfo().GetColumnIndexOptional(fieldName).value_or(-1);

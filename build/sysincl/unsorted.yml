@@ -103,7 +103,6 @@
   - opcdef.h
   - paper.h
   - pire/config.h
-  - pngusr.h
   - pth.h
   - rtl.h
   - shlib-compat.h

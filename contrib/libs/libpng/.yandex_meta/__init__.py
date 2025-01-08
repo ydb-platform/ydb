@@ -40,6 +40,8 @@ libpng = GNUMakeNixProject(
     ],
     disable_includes=[
         "config.h",
+        "pngusr.h",
+        "mem.h",
         "PNG_MIPS_MSA_FILE",
         "PNG_POWERPC_VSX_FILE",
         "PNG_ARM_NEON_FILE",

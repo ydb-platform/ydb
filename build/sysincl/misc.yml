@@ -219,7 +219,7 @@
   includes:
     - lzo/lzo1x.h
 
-- source_filter: "^contrib/libs/(libpng|opencv)"
+- source_filter: "^contrib/libs/opencv"
   includes:
     - mem.h
 

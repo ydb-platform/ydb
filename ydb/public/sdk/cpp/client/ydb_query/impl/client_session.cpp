@@ -8,12 +8,27 @@
 
 namespace NYdb::NQuery {
 
-TSession::TImpl::TImpl(TStreamProcessorPtr ptr, const TString& sessionId, const TString& endpoint)
+void TSession::TImpl::StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISessionClient> client) {
+    auto resp = std::make_shared<Ydb::Query::SessionState>();
+    ptr->Read(resp.get(), [resp, ptr, this, client](NYdbGrpc::TGrpcStatus grpcStatus) mutable {
+        switch (grpcStatus.GRpcStatusCode) {
+            case grpc::StatusCode::OK:
+                StartAsyncRead(ptr, client);
+                break;
+            case grpc::StatusCode::OUT_OF_RANGE:
+                CloseFromServer(client);
+                break;
+        }
+    });
+}
+
+TSession::TImpl::TImpl(TStreamProcessorPtr ptr, const TString& sessionId, const TString& endpoint, std::weak_ptr<ISessionClient> client)
     : TKqpSessionCommon(sessionId, endpoint, true)
     , StreamProcessor_(ptr)
 {
     MarkActive();
     SetNeedUpdateActiveCounter(true);
+    StartAsyncRead(StreamProcessor_, client);
 }
 
 TSession::TImpl::~TImpl()
@@ -53,7 +68,7 @@ void TSession::TImpl::NewSmartShared(TStreamProcessorPtr ptr,
             std::move(st),
             TSession(
                 args->Client,
-                new TSession::TImpl(ptr, args->SessionId, args->Endpoint)
+                new TSession::TImpl(ptr, args->SessionId, args->Endpoint, args->SessionClient)
             )
         )
     );

@@ -14,6 +14,15 @@ namespace NYdb {
 ////////////////////////////////////////////////////////////////////////////////
 ui64 GetNodeIdFromSession(const TStringType& sessionId);
 
+class TKqpSessionCommon;
+
+class IServerCloseHandler {
+public:
+    virtual ~IServerCloseHandler() = default;
+    // called when session should be closed by server signal
+    virtual void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient>) = 0;
+};
+
 class TKqpSessionCommon : public TEndpointObj {
 public:
     TKqpSessionCommon(const TStringType& sessionId, const TStringType& endpoint,
@@ -55,6 +64,12 @@ public:
     static std::function<void(TKqpSessionCommon*)>
         GetSmartDeleter(std::shared_ptr<ISessionClient> client);
 
+    // Shoult be called under session pool lock
+    void UpdateServerCloseHandler(IServerCloseHandler*);
+
+    // Called asynchronously from grpc thread.
+    void CloseFromServer(std::weak_ptr<ISessionClient> client);
+
 protected:
     TAdaptiveLock Lock_;
 
@@ -64,15 +79,20 @@ private:
     const bool IsOwnedBySessionPool_;
 
     EState State_;
-    TInstant TimeToTouch_;
+    // This time is used during async close session handling which does not lock the session
+    // so we need to be able ro read this value atomicaly
+    std::atomic<TInstant> TimeToTouch_;
     TInstant TimeInPast_;
     // Is used to implement progressive timeout for settler keep alive call
     TDuration TimeInterval_;
+
+    std::atomic<IServerCloseHandler*> CloseHandler_;
     // Indicate session was in active state, but state was changed
     // (need to decrement active session counter)
     // TODO: suboptimal because need lock for atomic change from interceptor
     // Rewrite with bit field
     bool NeedUpdateActiveCounter_;
+
 };
 
 } // namespace NYdb

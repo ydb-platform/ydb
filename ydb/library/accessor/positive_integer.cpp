@@ -35,17 +35,4 @@ ui64 TPositiveControlInteger::Val() const {
     return Value;
 }
 
-TPositiveControlInteger TPositiveControlInteger::operator-(const ui64 val) const {
-    if (val <= Value) {
-        return Value - val;
-    } else {
-        AFL_VERIFY(false)("base", Value)("delta", value);
-    }
-    return 0;
-}
-
-TPositiveControlInteger TPositiveControlInteger::operator+(const ui64 val) const {
-    return Value + val;
-}
-
 }

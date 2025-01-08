@@ -73,7 +73,7 @@ void TLocalManager::DrainQueue() {
             }
         }
     }
-    PortionsAskInFlight += countToFlight;
+    PortionsAskInFlight.Add(countToFlight);
     Counters.FetchingCount->Set(PortionsAskInFlight);
     Counters.QueueSize->Set(PortionsAsk.size());
 }

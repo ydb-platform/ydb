@@ -51,12 +51,23 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
 };
 
 class TFixture : public NUnitTest::TBaseFixture {
-
+    const ui64 NodesCount = 2;
 public:
     TFixture()
-    : Runtime(2) {}
+    : Runtime(NodesCount) {}
 
     void SetUp(NUnitTest::TTestContext&) override {
+        TIntrusivePtr<TTableNameserverSetup> nameserverTable(new TTableNameserverSetup());
+        TPortManager pm;
+        for (ui32 i = 0; i < NodesCount; ++i) {
+            nameserverTable->StaticNodeTable[Runtime.GetNodeId(i)] = std::pair<TString, ui32>("127.0.0." + std::to_string(i + 1), pm.GetPort(12001 + i));
+        }
+        const TActorId nameserviceId = GetNameserviceActorId();
+        for (ui32 i = 0; i < NodesCount; ++i) {
+            TActorSetupCmd nameserviceSetup(CreateNameserverTable(nameserverTable), TMailboxType::Simple, 0);
+            Runtime.AddLocalService(nameserviceId, std::move(nameserviceSetup), i);
+        }
+
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_TRACE);
@@ -172,6 +183,7 @@ public:
     void MockGetNextBatch(ui64 partitionId, TActorId readActorId, ui64 generation) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvGetNextBatch>();
         event->Record.SetPartitionId(partitionId);
+        event->Record.MutableTransportMeta()->SetSeqNo(2);
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, generation));
     }
 
@@ -428,18 +440,16 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ExpectStopSession(session2, PartitionId0);
     }
 
-    // TODO: not working GrabEdgeEvent()
-    // Y_UNIT_TEST_F(StopSessionWithWrongSessionFlag, TFixture) {
-    //     MockAddSession(Source1, PartitionId0, ReadActorId3);
-    //     auto topicSessionId = ExpectRegisterTopicSession();
-    //     ExpectStartSessionAck(ReadActorId3);
-    //     ExpectStartSession(topicSessionId);
+    Y_UNIT_TEST_F(StopSessionWithWrongSessionFlag, TFixture) {
+        MockAddSession(Source1, PartitionId0, ReadActorId3);
+        auto topicSessionId = ExpectRegisterTopicSession();
+        ExpectStartSessionAck(ReadActorId3);
+        ExpectStartSession(topicSessionId);
+        ProcessData(ReadActorId3, PartitionId0, topicSessionId);
 
-    //     ProcessData(ReadActorId3, PartitionId0, topicSessionId);
-
-    //     MockStopSession(Source1, PartitionId0, ReadActorId3, NFq::NRowDispatcherProto::TEvStopSession::WRONG_SESSION);
-    //     ExpectStopSession(topicSessionId, PartitionId0);
-    // }
+        MockStopSession(Source1, PartitionId0, ReadActorId3, NFq::NRowDispatcherProto::TEvStopSession::WRONG_SESSION);
+        ExpectStopSession(topicSessionId, PartitionId0);
+    }
 }
 
 }

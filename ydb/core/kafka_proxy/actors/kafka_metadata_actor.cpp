@@ -18,7 +18,7 @@ NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context,
 void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
     Response->Topics.resize(Message->Topics.size());
     Response->ClusterId = "ydb-cluster";
-    Response->ControllerId = Context->Config.HasProxy() ? ProxyNodeId : ctx.SelfID.NodeId();
+    Response->ControllerId = 1;
 
     if (WithProxy) {
         AddProxyNodeToBrokers();
@@ -48,6 +48,7 @@ void TKafkaMetadataActor::AddCurrentNodeToBrokers() {
 void TKafkaMetadataActor::SendDiscoveryRequest() {
     DiscoveryRequested = true;
     if (!DiscoveryCacheActor) {
+        OwnDiscoveryCache = true;
         DiscoveryCacheActor = Register(CreateDiscoveryCache(NGRpcService::KafkaEndpointId));
     }
     PendingResponses++;
@@ -71,11 +72,15 @@ void TKafkaMetadataActor::HandleDiscoveryError(TEvDiscovery::TEvError::TPtr& ev)
 
 void TKafkaMetadataActor::HandleDiscoveryData(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const NActors::TActorContext& ctx) {
     PendingResponses--;
-    auto res = ProcessDiscoveryData(ev);
-    if (res) {
-        RespondIfRequired(ctx);
-    } else if (NeedCurrentNode) {
-        RequestICNodeCache();
+    ProcessDiscoveryData(ev);
+    if (NeedCurrentNode) {
+        auto currNodeIter = Nodes.find(SelfId().NodeId());
+        if (currNodeIter == Nodes.end()) {
+            RequestICNodeCache();
+        } else {
+            Y_ABORT_UNLESS(!CurrentNodeHostname.empty());
+            AddBroker(ctx.SelfID.NodeId(), CurrentNodeHostname, currNodeIter->second);
+        }
     }
     DiscoveryRequested = false;
     for (auto& [index, ev] : PendingTopicResponses) {
@@ -104,11 +109,14 @@ bool TKafkaMetadataActor::ProcessDiscoveryData(TEvDiscovery::TEvDiscoveryData::T
     if (!ok)
         return false;
 
+    //ToDo: remove
+    Cerr << "Discovery message: " << leResponse.DebugString() << Endl;
+
     for (auto& endpoint : leResult.endpoints()) {
         Nodes.insert({endpoint.node_id(), endpoint.port()});
-    }
-    if (NeedCurrentNode) {
-        return Nodes.count(SelfId().NodeId());
+        if (NeedCurrentNode && endpoint.node_id() == SelfId().NodeId()) {
+            CurrentNodeHostname = endpoint.address();
+        }
     }
     return true;
 }
@@ -119,11 +127,7 @@ void TKafkaMetadataActor::RequestICNodeCache() {
 }
 
 void TKafkaMetadataActor::AddProxyNodeToBrokers() {
-    auto broker = TMetadataResponseData::TMetadataResponseBroker{};
-    broker.NodeId = ProxyNodeId;
-    broker.Host = Context->Config.GetProxy().GetHostname();
-    broker.Port = Context->Config.GetProxy().GetPort();
-    Response->Brokers.emplace_back(std::move(broker));
+    AddBroker(ProxyNodeId, Context->Config.GetProxy().GetHostname(), Context->Config.GetProxy().GetPort());
 }
 
 void TKafkaMetadataActor::ProcessTopics() {
@@ -155,23 +159,26 @@ void TKafkaMetadataActor::HandleNodesResponse(NKikimr::NIcNodeCache::TEvICNodesI
     Y_ABORT_UNLESS(!iter.IsEnd());
 	auto host = (*ev->Get()->Nodes)[iter->second].Host;
     KAFKA_LOG_D("Incoming TEvGetAllNodesInfoResponse. Host#: " << host);
-
-    auto broker = TMetadataResponseData::TMetadataResponseBroker{};
-    broker.NodeId = ctx.SelfID.NodeId();
-    broker.Host = host;
-    broker.Port = Context->Config.GetListeningPort();
-    Response->Brokers.emplace_back(std::move(broker));
+    AddBroker(ctx.SelfID.NodeId(), host, Context->Config.GetListeningPort());
 
     --PendingResponses;
     RespondIfRequired(ctx);
 }
 
+void TKafkaMetadataActor::AddBroker(ui64 nodeId, const TString& host, ui64 port) {
+    auto broker = TMetadataResponseData::TMetadataResponseBroker{};
+    broker.NodeId = nodeId;
+    broker.Host = host;
+    broker.Port = port;
+    Response->Brokers.emplace_back(std::move(broker));
+}
+
 TActorId TKafkaMetadataActor::SendTopicRequest(const TMetadataRequestData::TMetadataRequestTopic& topicRequest) {
-    KAFKA_LOG_D("Describe partitions locations for topic '" << *topicRequest.Name << "' for user " << GetUsernameOrAnonymous(Context));
+    KAFKA_LOG_D("Describe partitions locations for topic '" << *topicRequest.Name << "' for user '" << Context->UserToken->GetUserSID() << "'");
 
     TGetPartitionsLocationRequest locationRequest{};
     locationRequest.Topic = NormalizePath(Context->DatabasePath, topicRequest.Name.value());
-    locationRequest.Token = GetUserSerializedToken(Context);
+    locationRequest.Token = Context->UserToken->GetSerializedToken();
     locationRequest.Database = Context->DatabasePath;
 
     PendingResponses++;
@@ -210,16 +217,12 @@ void TKafkaMetadataActor::AddTopicResponse(TMetadataResponseData::TMetadataRespo
                 if (hostname.StartsWith(UnderlayPrefix)) {
                     hostname = hostname.substr(sizeof(UnderlayPrefix) - 1);
                 }
-
-                auto broker = TMetadataResponseData::TMetadataResponseBroker{};
-                broker.NodeId = part.NodeId;
-                broker.Host = hostname;
+                ui64 port = Context->Config.GetListeningPort();
                 auto nodeIter = Nodes.find(part.NodeId);
-                if (nodeIter.IsEnd())
-                    broker.Port = Context->Config.GetListeningPort();
-                else
-                    broker.Port = nodeIter->second;
-                Response->Brokers.emplace_back(std::move(broker));
+                if (!nodeIter.IsEnd())
+                    port = nodeIter->second;
+
+                AddBroker(part.NodeId, hostname, port);
             }
         }
     }
@@ -267,6 +270,14 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, ErrorCode));
         Die(ctx);
     }
+}
+
+void TKafkaMetadataActor::Die(const TActorContext& ctx) {
+    if (OwnDiscoveryCache) {
+        Send(DiscoveryCacheActor, new TEvents::TEvPoison());
+        OwnDiscoveryCache = false;
+    }
+    TActor::Die(ctx);
 }
 
 TString TKafkaMetadataActor::LogPrefix() const {

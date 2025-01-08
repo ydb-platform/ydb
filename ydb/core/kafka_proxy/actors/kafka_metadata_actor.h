@@ -37,6 +37,7 @@ private:
     void RespondIfRequired(const NActors::TActorContext& ctx);
     void AddProxyNodeToBrokers();
     void AddCurrentNodeToBrokers();
+    void AddBroker(ui64 nodeId, const TString& host, ui64 port);
     void RequestICNodeCache();
     void ProcessTopics();
     void SendDiscoveryRequest();
@@ -51,6 +52,7 @@ private:
     }
 
     TString LogPrefix() const;
+    void Die(const TActorContext& ctx) override;
 
 private:
     const TContext::TPtr Context;
@@ -67,7 +69,9 @@ private:
 
     TActorId DiscoveryCacheActor;
     bool NeedCurrentNode = false;
+    TString CurrentNodeHostname;
     bool DiscoveryRequested = false;
+    bool OwnDiscoveryCache = false;
     THashMap<ui64, ui64> Nodes;
     TMap<ui64, TEvLocationResponse::TPtr> PendingTopicResponses;
 };

@@ -3105,14 +3105,21 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         {
             const auto resultSelect = client
                 .ExecuteQuery(
-                    "SELECT * FROM `/Root/ttt`",
+                    "SELECT * FROM `/Root/ttt` ORDER BY pk1, pk2",
                     NYdb::NQuery::TTxControl::BeginTx().CommitTx())
                 .GetValueSync();
             UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
             const auto resultSets = resultSelect.GetResultSets();
             UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
             const auto resultSet = resultSets[0];
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 4);
+            CompareYson(R"(
+                [
+                    [#;#;["value"]];
+                    [#;[2];["value"]];
+                    [[1];#;["value"]];
+                    [[1];[2];["value"]]
+                ]
+            )", FormatResultSetYson(resultSet));
         }
     }
 }

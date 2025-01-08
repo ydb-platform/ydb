@@ -26,5 +26,6 @@ target_sources(ydb-library-accessor PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/accessor/accessor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/accessor/validator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/accessor/positive_integer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/accessor/validator_simple.cpp
 )
 

@@ -77,7 +77,7 @@ private:
     IActor* Actor = nullptr;
     TManagers Managers;
 
-    using TTierRefCount = THashMap<TString, ui64>;
+    using TTierRefCount = THashMap<TString, TPositiveControlInteger>;
     using TTierRefsByPathId = THashMap<ui64, std::vector<TTierRefGuard>>;
     YDB_READONLY_DEF(TTierRefCount, TierRefCount);
     YDB_READONLY_DEF(TTierRefsByPathId, UsedTiers);

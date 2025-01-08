@@ -75,23 +75,6 @@ public:
     ~TAllocationGuard();
 };
 
-class TPositiveControlInteger {
-private:
-    ui64 Value = 0;
-
-public:
-    void Add(const ui64 value) {
-        Value += value;
-    }
-    void Sub(const ui64 value) {
-        AFL_VERIFY(value <= Value)("base", Value)("delta", value);
-        Value -= value;
-    }
-    ui64 Val() const {
-        return Value;
-    }
-};
-
 class TStageFeatures {
 private:
     YDB_READONLY_DEF(TString, Name);

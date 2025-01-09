@@ -1399,7 +1399,7 @@ TStatus TImportFileClient::TImpl::GenerateCreateTableFromCsv(IInputStream& input
     jobInflightManager->WaitForAllJobs();
 
     TStringBuilder res;
-    res << "-- Example CreateTable request text generated based on data in file " << filePath << ":" << Endl;
+    res << "Example CreateTable request text generated based on data in file " << filePath << ":" << Endl << Endl;
     res << "CREATE TABLE " << (relativeTablePath.empty() ? "`new_table`" : "`" + relativeTablePath + "`")<< " (" << Endl;
     auto& possibleTypes = columnTypes.GetColumnPossibleTypes();
     for (size_t i = 0; i < header.size(); ++i) {

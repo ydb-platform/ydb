@@ -25,8 +25,16 @@ namespace NPQ {
         {
         }
 
-        bool operator == (const TBlobId& r) const {
+        bool operator==(const TBlobId& r) const {
             return Partition.IsEqual(r.Partition) && Offset == r.Offset && PartNo == r.PartNo;
+        }
+
+        bool operator<(const TBlobId& r) const {
+            auto makeTuple = [](const TBlobId& v) {
+                return std::make_tuple(v.Partition, v.Offset, v.PartNo, v.Count, v.InternalPartsCount);
+            };
+
+            return makeTuple(*this) < makeTuple(r);
         }
 
         ui64 Hash() const {
@@ -195,7 +203,7 @@ namespace NPQ {
             TCacheValue::TWeakPtr Blob;
         };
 
-        using TMapType = THashMap<TBlobId, TValueL1>;
+        using TMapType = TMap<TBlobId, TValueL1>;
 
         struct TCounters {
             ui64 SizeBytes = 0;

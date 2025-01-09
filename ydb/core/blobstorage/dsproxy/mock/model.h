@@ -139,9 +139,6 @@ namespace NFake {
                     const ui32 offset = size ? query.Shift : 0;
                     response.Buffer = TRope(data.Buffer.Position(offset), data.Buffer.Position(offset + size));
                 } else {
-                    // ensure this blob is not under GC
-                    Y_ABORT_UNLESS(!IsCollectedByBarrier(id), "Id# %s", id.ToString().data());
-
                     // reply with NODATA -- we haven't got this blob
                     response.Status = NKikimrProto::NODATA;
                 }

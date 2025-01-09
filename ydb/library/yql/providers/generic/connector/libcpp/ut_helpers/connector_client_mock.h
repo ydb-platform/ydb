@@ -778,7 +778,7 @@ namespace NYql::NConnector::NTest {
             return TReadSplitsExpectationBuilder(this);
         }
 
-        TDescribeTableAsyncResult DescribeTable(const NApi::TDescribeTableRequest& request) override {
+        TDescribeTableAsyncResult DescribeTable(const NApi::TDescribeTableRequest& request, TDuration = {}) override {
             Cerr << "Call DescribeTable.\n"
                  << request.Utf8DebugString() << Endl;
             auto result = DescribeTableImpl(request);
@@ -792,7 +792,7 @@ namespace NYql::NConnector::NTest {
             return NThreading::MakeFuture(std::move(result));
         }
 
-        TListSplitsStreamIteratorAsyncResult ListSplits(const NApi::TListSplitsRequest& request) override {
+        TListSplitsStreamIteratorAsyncResult ListSplits(const NApi::TListSplitsRequest& request, TDuration = {}) override {
             Cerr << "Call ListSplits.\n"
                  << request.Utf8DebugString() << Endl;
             auto result = ListSplitsImpl(request);
@@ -801,7 +801,7 @@ namespace NYql::NConnector::NTest {
             return NThreading::MakeFuture(std::move(result));
         }
 
-        TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request) override {
+        TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request, TDuration = {}) override {
             Cerr << "Call ReadSplits.\n"
                  << request.Utf8DebugString() << Endl;
             auto result = ReadSplitsImpl(request);

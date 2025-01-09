@@ -89,9 +89,9 @@ namespace NYql::NConnector {
     public:
         using TPtr = std::shared_ptr<IClient>;
 
-        virtual TDescribeTableAsyncResult DescribeTable(const NApi::TDescribeTableRequest& request) = 0;
-        virtual TListSplitsStreamIteratorAsyncResult ListSplits(const NApi::TListSplitsRequest& request) = 0;
-        virtual TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request) = 0;
+        virtual TDescribeTableAsyncResult DescribeTable(const NApi::TDescribeTableRequest& request, TDuration timeout = {}) = 0;
+        virtual TListSplitsStreamIteratorAsyncResult ListSplits(const NApi::TListSplitsRequest& request, TDuration timeout = {}) = 0;
+        virtual TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request, TDuration timeout = {}) = 0;
         virtual ~IClient() = default;
     };
 

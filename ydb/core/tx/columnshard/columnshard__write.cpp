@@ -319,17 +319,14 @@ public:
             return TConclusionStatus::Fail("incorrect synchronization data (send/receiving lists)");
         }
         if (ReceivingShards.size() && SendingShards.size()) {
+            if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
+                return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
+            }
             if (!locks.HasArbiterColumnShard()) {
                 ArbiterColumnShard = *ReceivingShards.begin();
-                if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
-                    return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
-                }
             } else {
                 ArbiterColumnShard = locks.GetArbiterColumnShard();
                 AFL_VERIFY(ArbiterColumnShard);
-                if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
-                    return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
-                }
             }
         }
 

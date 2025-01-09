@@ -27,7 +27,7 @@ namespace NKikimr {
         bool RunDefragBySchedule;
 
         // free up to this number of chunks in one quantum
-        static constexpr ui32 MaxChunksToDefrag = 20u;
+        ui32 MaxChunksToDefrag = 1u;
 
         TDefragCtx(
                 const TIntrusivePtr<TVDiskContext> &vctx,

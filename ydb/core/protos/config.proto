@@ -1373,6 +1373,11 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 260 }];
+        optional uint64 MaxChunksToDefragInflight = 21 [(ControlOptions) = {
+            Description: "Max inflight defragmentation chunks per one chunk size per vdisk",
+            MinValue: 1,
+            MaxValue: 50,
+            DefaultValue: 1 }];
 
         optional uint64 ThrottlingDeviceSpeed = 14 [(ControlOptions) = {
             Description: "Maximum allowed speed when throttling is active",

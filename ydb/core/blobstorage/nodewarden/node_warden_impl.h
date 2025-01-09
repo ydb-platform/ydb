@@ -168,6 +168,7 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxSyncLogChunksInFlightSSD;
         TControlWrapper DefaultHugeGarbagePerMille;
         TControlWrapper HugeDefragFreeSpaceBorderPerMille;
+        TControlWrapper MaxChunksToDefragInflight;
 
         TControlWrapper ThrottlingDeviceSpeed;
         TControlWrapper ThrottlingMinSstCount;

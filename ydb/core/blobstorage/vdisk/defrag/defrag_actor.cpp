@@ -30,6 +30,7 @@ namespace NKikimr {
         , HugeKeeperId(hugeKeeperId)
         , DefragMonGroup(VCtx->VDiskCounters, "subsystem", "defrag")
         , RunDefragBySchedule(runDefrageBySchedule)
+        , MaxChunksToDefrag(vconfig->MaxChunksToDefragInflight)
     {}
 
     TDefragCtx::~TDefragCtx() = default;
@@ -81,11 +82,7 @@ namespace NKikimr {
     }
 
     ui32 MaxInflyghtDefragChunks(const TOutOfSpaceState& oos, ui32 maxChunksToDefrag, ui32 hugeCanBeFreedChunks) {
-        if (oos.GetLocalColor() > TSpaceColor::GREEN) {
-            return Min(maxChunksToDefrag, hugeCanBeFreedChunks - MIN_CAN_BE_FREED_CHUNKS);
-        } else {
-            return 1;
-        }
+        return Min(maxChunksToDefrag, hugeCanBeFreedChunks - MIN_CAN_BE_FREED_CHUNKS);
     }
 
     ////////////////////////////////////////////////////////////////////////////

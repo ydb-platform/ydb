@@ -2,6 +2,7 @@
 #include "table_writer.h"
 #include "worker.h"
 
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 
@@ -9,6 +10,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/printf.h>
+#include <util/string/strip.h>
 
 namespace NKikimr::NReplication::NService {
 
@@ -187,9 +189,6 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         env.Send<TEvService::TEvGetTxId>(writer, new TEvWorker::TEvData("TestSource", {
             TRecord(order++, R"({"key":[1], "update":{"value":"10"}, "ts":[11,0]})"),
             TRecord(order++, R"({"key":[2], "update":{"value":"20"}, "ts":[12,0]})"),
-        }));
-
-        env.Send<TEvService::TEvGetTxId>(writer, new TEvWorker::TEvData("TestSource", {
             TRecord(order++, R"({"key":[1], "update":{"value":"10"}, "ts":[21,0]})"),
             TRecord(order++, R"({"key":[2], "update":{"value":"20"}, "ts":[22,0]})"),
         }));
@@ -211,7 +210,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
     }
 
     Y_UNIT_TEST(WaitTxIds) {
-        class TMockWorker: public TActorBootstrapped<TMockWorker> {
+        class TMockWorker: public TActor<TMockWorker> {
             void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
                 if (ev->Sender == Edge) {
                     ev->Sender = SelfId();
@@ -232,13 +231,10 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
 
         public:
             explicit TMockWorker(const TActorId& writer, const TActorId& edge)
-                : Writer(writer)
+                : TActor(&TThis::StateWork)
+                , Writer(writer)
                 , Edge(edge)
             {}
-
-            void Bootstrap() {
-                Become(&TThis::StateWork);
-            }
 
             STATEFN(StateWork) {
                 switch (ev->GetTypeRewrite()) {
@@ -288,7 +284,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
     }
 
     Y_UNIT_TEST(DataAlongWithHeartbeat) {
-        class TMockWorker: public TActorBootstrapped<TMockWorker> {
+        class TMockWorker: public TActor<TMockWorker> {
             void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
                 if (ev->Sender == Edge) {
                     ev->Sender = SelfId();
@@ -315,13 +311,10 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
 
         public:
             explicit TMockWorker(const TActorId& writer, const TActorId& edge)
-                : Writer(writer)
+                : TActor(&TThis::StateWork)
+                , Writer(writer)
                 , Edge(edge)
             {}
-
-            void Bootstrap() {
-                Become(&TThis::StateWork);
-            }
 
             STATEFN(StateWork) {
                 switch (ev->GetTypeRewrite()) {
@@ -368,6 +361,50 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
             {TRowVersion(10, 0), 1},
         }));
         env.GetRuntime().GrabEdgeEvent<TEvWorker::TEvPoll>(env.GetSender());
+    }
+
+    Y_UNIT_TEST(ApplyInCorrectOrder) {
+        TEnv env;
+        env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
+
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+            .ReplicationConfig = TTestTableDescription::TReplicationConfig{
+                .Mode = TTestTableDescription::TReplicationConfig::MODE_READ_ONLY,
+                .ConsistencyLevel = TTestTableDescription::TReplicationConfig::CONSISTENCY_LEVEL_GLOBAL,
+            },
+        }));
+
+        auto writer = env.GetRuntime().Register(CreateLocalTableWriter(env.GetPathId("/Root/Table"), EWriteMode::Consistent));
+        env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
+
+        env.Send<TEvService::TEvGetTxId>(writer, new TEvWorker::TEvData("TestSource", {
+            TRecord(1, R"({"key":[1], "update":{"value":"10"}, "ts":[1,0]})"),
+        }));
+        env.Send<TEvWorker::TEvPoll>(writer, MakeTxIdResult({
+            {TRowVersion(10, 0), 1},
+        }));
+
+        env.Send<TEvService::TEvGetTxId>(writer, new TEvWorker::TEvData("TestSource", {
+            TRecord(2, R"({"key":[3], "update":{"value":"30"}, "ts":[11,0]})"),
+            TRecord(3, R"({"key":[2], "update":{"value":"20"}, "ts":[2,0]})"),
+            TRecord(4, R"({"resolved":[20,0]})"),
+        }));
+        env.Send<TEvService::TEvHeartbeat>(writer, MakeTxIdResult({
+            {TRowVersion(20, 0), 2},
+        }));
+        env.GetRuntime().GrabEdgeEvent<TEvWorker::TEvPoll>(env.GetSender());
+
+        CommitWrites(env.GetRuntime(), {"/Root/Table"}, 1);
+        CommitWrites(env.GetRuntime(), {"/Root/Table"}, 2);
+
+        auto content = ReadShardedTable(env.GetRuntime(), "/Root/Table");
+        UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "key = 1, value = 10\nkey = 2, value = 20\nkey = 3, value = 30");
     }
 }
 

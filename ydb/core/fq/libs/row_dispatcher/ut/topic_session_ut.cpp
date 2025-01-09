@@ -30,7 +30,7 @@ using namespace NYql::NDq;
 const ui64 TimeoutBeforeStartSessionSec = 3;
 const ui64 GrabTimeoutSec = 4 * TimeoutBeforeStartSessionSec;
 
-
+template<bool MockTopicSession>
 class TFixture : public NTests::TBaseFixture {
 public:
     using TBase = NTests::TBaseFixture;
@@ -45,9 +45,8 @@ public:
         RowDispatcherActorId = Runtime.AllocateEdgeActor();
     }
 
-    void Init(const TString& topicPath, ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max(), bool mockTopicSession = false) {
+    void Init(const TString& topicPath, ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max()) {
         TopicPath = topicPath;
-        MockTopicSession = mockTopicSession;
         Config.SetTimeoutBeforeStartSessionSec(TimeoutBeforeStartSessionSec);
         Config.SetMaxSessionUsedMemory(maxSessionUsedMemory);
         Config.SetSendStatusPeriodSec(2);
@@ -65,15 +64,15 @@ public:
 
         CompileNotifier = Runtime.AllocateEdgeActor();
         const auto compileServiceActorId = Runtime.Register(CreatePurecalcCompileServiceMock(CompileNotifier));
-        if (mockTopicSession) {
+        if (MockTopicSession) {
             MockPqGateway = CreateMockPqGateway();
         }
 
         TopicSession = Runtime.Register(NewTopicSession(
             "read_group",
             topicPath,
-            GetDefaultPqEndpoint(),
-            GetDefaultPqDatabase(),
+            !MockTopicSession ? GetDefaultPqEndpoint() : "endpoint",
+            !MockTopicSession ? GetDefaultPqDatabase() : "database",
             Config,
             RowDispatcherActorId,
             compileServiceActorId,
@@ -117,12 +116,12 @@ public:
 
     NYql::NPq::NProto::TDqPqTopicSource BuildSource(bool emptyPredicate = false, const TString& consumer = DefaultPqConsumer) {
         NYql::NPq::NProto::TDqPqTopicSource settings;
-        settings.SetEndpoint(GetDefaultPqEndpoint());
+        settings.SetEndpoint(!MockTopicSession ? GetDefaultPqEndpoint() : "endpoint");
         settings.SetTopicPath(TopicPath);
         settings.SetConsumerName(consumer);
         settings.SetFormat("json_each_row");
         settings.MutableToken()->SetName("token");
-        settings.SetDatabase(GetDefaultPqDatabase());
+        settings.SetDatabase(!MockTopicSession ? GetDefaultPqDatabase() : "database");
         settings.AddColumns("dt");
         settings.AddColumns("value");
         settings.AddColumnTypes("[DataType; Uint64]");
@@ -228,11 +227,9 @@ public:
     }
 
     void PQWrite2(
-        const std::vector<TString>& sequence,
-        const TString& topic,
-        const TString& endpoint = GetDefaultPqEndpoint()) {
+        const std::vector<TString>& sequence) {
         if (!MockTopicSession) {
-            PQWrite(sequence, topic, endpoint);
+            PQWrite(sequence, TopicPath, GetDefaultPqEndpoint());
         } else {
             static size_t MsgOffset_ = 0; // TODO
             TVector<TMessage> msgs;
@@ -243,7 +240,7 @@ public:
                 size += s.size();
             }
             if (!msgs.empty()) {
-                MockPqGateway->GetEventQueue(topic)->Push(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, CreatePartitionSession()), size);
+                MockPqGateway->GetEventQueue(TopicPath)->Push(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, CreatePartitionSession()), size);
             }
         }
     }
@@ -253,7 +250,6 @@ public:
     }
 
 public:
-    bool MockTopicSession = false;
     TString TopicPath;
     NActors::TActorId TopicSession;
     NActors::TActorId RowDispatcherActorId;
@@ -273,25 +269,14 @@ public:
     const TString Json4 = "{\"dt\":400,\"value\":\"value4\"}";
 };
 
+using TRealTopicFixture = TFixture<false>;
+using TMockTopicFixture = TFixture<true>;
+
 }  // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
-    Y_UNIT_TEST_F(Two222, TFixture) {
-        const TString topicName = "fake_topic";
-        Init(topicName, 1000, true);
-        auto source = BuildSource();
-        StartSession(ReadActorId1, source);
-
-        std::vector<TString> data = { Json1 };
-        PQWrite2(data, topicName);
-        ExpectNewDataArrived({ReadActorId1});
-        ExpectMessageBatch(ReadActorId1, { JsonMessage(1) });
-
-        PassAway();
-    }
-
-    Y_UNIT_TEST_F(TwoSessionsWithoutOffsets, TFixture) {
+    Y_UNIT_TEST_F(TwoSessionsWithoutOffsets, TRealTopicFixture) {
         const TString topicName = "topic1";
         PQCreateStream(topicName);
         Init(topicName);
@@ -322,7 +307,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId2, source);
     }
 
-    Y_UNIT_TEST_F(TwoSessionWithoutPredicate, TFixture) {
+    Y_UNIT_TEST_F(TwoSessionWithoutPredicate, TRealTopicFixture) {
         const TString topicName = "twowithoutpredicate";
         PQCreateStream(topicName);
         Init(topicName);
@@ -343,7 +328,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId2, source2);
     }
 
-    Y_UNIT_TEST_F(SessionWithPredicateAndSessionWithoutPredicate, TFixture) {
+    Y_UNIT_TEST_F(SessionWithPredicateAndSessionWithoutPredicate, TRealTopicFixture) {
         const TString topicName = "topic2";
         PQCreateStream(topicName);
         Init(topicName);
@@ -362,7 +347,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId2, source2);
     }
 
-    Y_UNIT_TEST_F(SecondSessionWithoutOffsetsAfterSessionConnected, TFixture) {
+    Y_UNIT_TEST_F(SecondSessionWithoutOffsetsAfterSessionConnected, TRealTopicFixture) {
         const TString topicName = "topic3";
         PQCreateStream(topicName);
         Init(topicName);
@@ -387,7 +372,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId2, source);
     }
 
-    Y_UNIT_TEST_F(TwoSessionsWithOffsets, TFixture) {
+    Y_UNIT_TEST_F(TwoSessionsWithOffsets, TRealTopicFixture) {
         const TString topicName = "topic4";
         PQCreateStream(topicName);
         Init(topicName);
@@ -415,7 +400,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId2, source);
     }
 
-    Y_UNIT_TEST_F(BadDataSessionError, TFixture) {
+    Y_UNIT_TEST_F(BadDataSessionError, TRealTopicFixture) {
         const TString topicName = "topic5";
         PQCreateStream(topicName);
         Init(topicName);
@@ -429,7 +414,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId1, source);
     }
 
-    Y_UNIT_TEST_F(WrongFieldType, TFixture) {
+    Y_UNIT_TEST_F(WrongFieldType, TRealTopicFixture) {
         const TString topicName = "wrong_field";
         PQCreateStream(topicName);
         Init(topicName);
@@ -455,7 +440,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId2, source);
     }
 
-    Y_UNIT_TEST_F(RestartSessionIfNewClientWithOffset, TFixture) {
+    Y_UNIT_TEST_F(RestartSessionIfNewClientWithOffset, TRealTopicFixture) {
         const TString topicName = "topic6";
         PQCreateStream(topicName);
         Init(topicName);
@@ -481,7 +466,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId2, source);
     }
 
-    Y_UNIT_TEST_F(ReadNonExistentTopic, TFixture) {
+    Y_UNIT_TEST_F(ReadNonExistentTopic, TRealTopicFixture) {
         const TString topicName = "topic7";
         Init(topicName);
         auto source = BuildSource();
@@ -490,7 +475,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId1, source);
     }
 
-    Y_UNIT_TEST_F(SlowSession, TFixture) {
+    Y_UNIT_TEST_F(SlowSession, TRealTopicFixture) {
         const TString topicName = "topic8";
         PQCreateStream(topicName);
         Init(topicName, 40);
@@ -538,7 +523,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId1, source);
     }
 
-    Y_UNIT_TEST_F(TwoSessionsWithDifferentSchemes, TFixture) {
+    Y_UNIT_TEST_F(TwoSessionsWithDifferentSchemes, TRealTopicFixture) {
         const TString topicName = "dif_schemes";
         PQCreateStream(topicName);
         Init(topicName);
@@ -584,7 +569,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId2, source2);
     }
 
-    Y_UNIT_TEST_F(TwoSessionsWithDifferentColumnTypes, TFixture) {
+    Y_UNIT_TEST_F(TwoSessionsWithDifferentColumnTypes, TRealTopicFixture) {
         const TString topicName = "dif_types";
         PQCreateStream(topicName);
         Init(topicName);
@@ -604,6 +589,25 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         source2.AddColumnTypes("[DataType; String]");
         StartSession(ReadActorId2, source2, Nothing(), true);
         ExpectSessionError(ReadActorId2, EStatusId::SCHEME_ERROR, "Use the same column type in all queries via RD, current type for column `field1` is [OptionalType; [DataType; String]] (requested type is [DataType; String])");
+    }
+
+    Y_UNIT_TEST_F(RestartSessionIfQueryStopped, TMockTopicFixture) {
+        Init("fake_topic", 1000);
+        auto source = BuildSource();
+
+        StartSession(ReadActorId1, source);
+        std::vector<TString> data = { Json1, Json2, Json3 };
+        PQWrite2(data);
+        ExpectNewDataArrived({ReadActorId1});
+        ExpectMessageBatch(ReadActorId1, { JsonMessage(1), JsonMessage(2), JsonMessage(3) });
+
+        StartSession(ReadActorId2, source, 1);
+        std::vector<TString> data2 = { Json2, Json3 };
+        PQWrite2(data2);
+        ExpectNewDataArrived({ReadActorId2});
+        ExpectMessageBatch(ReadActorId1, { JsonMessage(2), JsonMessage(3) });
+
+        PassAway();
     }
 }
 

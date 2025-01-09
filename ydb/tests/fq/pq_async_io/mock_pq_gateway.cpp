@@ -11,6 +11,9 @@ public:
     TMockTopicReadSession(NYdb::NTopic::TPartitionSession::TPtr session,  std::shared_ptr<NYql::TBlockingEQueue> queue)
         : Session(std::move(session))
         , Queue(queue) {
+        if (Queue->IsStopped()) {
+            Queue = std::make_shared<NYql::TBlockingEQueue>(4_MB);
+        }
         Pool_.Start(1);
     }
 

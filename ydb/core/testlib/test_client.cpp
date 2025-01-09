@@ -1113,8 +1113,7 @@ namespace Tests {
                 auto& appData = Runtime->GetAppData(0);
 
                 TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
-                NYdbGrpc::TServerOptions options{};
-                desc->Address = options.Host; // Just use a host from default TServerOptions constructor instead of hard-coding localhost.
+                desc->Address = Settings->AppConfig->GetGRpcConfig().GetHost();
                 desc->Port = settings.Port;
                 desc->Ssl = ssl;
                 desc->EndpointId = NGRpcService::KafkaEndpointId;

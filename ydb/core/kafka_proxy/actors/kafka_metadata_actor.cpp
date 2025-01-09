@@ -18,7 +18,7 @@ NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context,
 void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
     Response->Topics.resize(Message->Topics.size());
     Response->ClusterId = "ydb-cluster";
-    Response->ControllerId = 1;
+    Response->ControllerId = Context->Config.HasProxy() ? ProxyNodeId : ctx.SelfID.NodeId();
 
     if (WithProxy) {
         AddProxyNodeToBrokers();
@@ -108,9 +108,6 @@ bool TKafkaMetadataActor::ProcessDiscoveryData(TEvDiscovery::TEvDiscoveryData::T
     }
     if (!ok)
         return false;
-
-    //ToDo: remove
-    Cerr << "Discovery message: " << leResponse.DebugString() << Endl;
 
     for (auto& endpoint : leResult.endpoints()) {
         Nodes.insert({endpoint.node_id(), endpoint.port()});

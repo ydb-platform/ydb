@@ -2623,6 +2623,12 @@ private:
                         if (receivingShardsSet.contains(shardId)) {
                             tx->MutableLocks()->AddReceivingShards(shardId);
                         }
+                        std::sort(
+                            std::begin(*tx->MutableLocks()->MutableSendingShards()),
+                            std::end(*tx->MutableLocks()->MutableSendingShards()));
+                        std::sort(
+                            std::begin(*tx->MutableLocks()->MutableReceivingShards()),
+                            std::end(*tx->MutableLocks()->MutableReceivingShards()));
                     }
                 }
 
@@ -2640,6 +2646,12 @@ private:
                         if (receivingShardsSet.contains(shardId)) {
                             t.tx.AddReceivingShards(shardId);
                         }
+                        std::sort(
+                            std::begin(*t.tx.MutableSendingShards()),
+                            std::end(*t.tx.MutableSendingShards()));
+                        std::sort(
+                            std::begin(*t.tx.MutableReceivingShards()),
+                            std::end(*t.tx.MutableReceivingShards()));
                     }
                     YQL_ENSURE(!arbiter);
                 }

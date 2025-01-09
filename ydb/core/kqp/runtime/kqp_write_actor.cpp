@@ -95,6 +95,12 @@ namespace {
             if (prepareSettings.ReceivingShards.contains(shardId)) {
                 protoLocks->AddReceivingShards(shardId);
             }
+            std::sort(
+                std::begin(*protoLocks->MutableSendingShards()),
+                std::end(*protoLocks->MutableSendingShards()));
+            std::sort(
+                std::begin(*protoLocks->MutableReceivingShards()),
+                std::end(*protoLocks->MutableReceivingShards()));
         }
 
         const auto locks = txManager->GetLocks(shardId);

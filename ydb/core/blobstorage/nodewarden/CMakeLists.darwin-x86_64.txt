@@ -39,6 +39,7 @@ target_sources(core-blobstorage-nodewarden PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/group_stat_aggregator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_binding.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_console.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_dynamic.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_generate.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_fsm.cpp

@@ -2524,7 +2524,7 @@ partitioning_settings {
         gen.Check();
     }
 
-    Y_UNIT_TEST(CdcStreams) {
+    Y_UNIT_TEST(Changefeeds) {
         TTestBasicRuntime runtime;
 
         TPortManager portManager;

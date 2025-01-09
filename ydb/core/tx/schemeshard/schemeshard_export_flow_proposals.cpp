@@ -152,9 +152,15 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
                 ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
             for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
                 auto cdcPathDesc =  GetDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
+                Cerr << "cdcStream name: " << cdcStream.GetName() << Endl;
+                Cerr << "cdcPathDesc.self().GetName(): " << cdcPathDesc.self().GetName() << Endl;
+                Cerr << "cdcPathDesc.self().GetPathId(): " << cdcPathDesc.self().GetPathId() << Endl;
+                Cerr << "cdcStream childs size: " << cdcPathDesc.GetChildren().size() << Endl;
                 for (const auto& child : cdcPathDesc.GetChildren()) {
+                    Cerr << "child type: " << child.GetPathType() << Endl;
                     if (child.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
                         *task.AddChangefeedUnderlyingTopics() = GetDescription(ss, TPathId(child.GetSchemeshardId(), child.GetPathId()));
+                        Cerr << "Added pq in task" << Endl;
                     }
                 }
             }

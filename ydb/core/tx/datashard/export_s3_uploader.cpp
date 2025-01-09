@@ -173,7 +173,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         } else if (!SchemeUploaded) {
             UploadScheme();
         } else if (!ChangefeedsUploaded) {
-            UploadOneChangefeed(0);
+            UploadChangefeed();
         } else {
             this->Become(&TThis::StateUploadData);
 
@@ -231,46 +231,38 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         this->Become(&TThis::StateUploadPermissions);
     }
 
-    void PutChangefeedDescription(const Ydb::Table::ChangefeedDescription& changefeed, const TString& changefeedKeyPattern, const ui64 index) {
+    void PutChangefeedDescription(const Ydb::Table::ChangefeedDescription& changefeed, const TString& changefeedKeyPattern) {
         google::protobuf::TextFormat::PrintToString(changefeed, &Buffer);
         auto request = Aws::S3::Model::PutObjectRequest()
             .WithKey(Settings.GetChangefeedKey(changefeedKeyPattern));
         this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
-        this->Become(TThis::StateUploadOneChangefeed(index));
+        this->Become(&TThis::StateUploadChangefeed);
     }
 
-    void PutTopicDescription(const Ydb::Topic::DescribeTopicResult& topic, const TString& changefeedKeyPattern, const ui64 index) {
+    void PutTopicDescription(const Ydb::Topic::DescribeTopicResult& topic, const TString& changefeedKeyPattern) {
         google::protobuf::TextFormat::PrintToString(topic, &Buffer);
         auto request = Aws::S3::Model::PutObjectRequest()
             .WithKey(Settings.GetTopicKey(changefeedKeyPattern));
         this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
-        this->Become(TThis::StateUploadOneTopic(index));
+        this->Become(&TThis::StateUploadTopic);
     }
 
-    void UploadOneChangefeed(ui64 index) {
-        if (index >= Changefeeds.size()) {
-            //Error!
-            return;
-        }
-        if (index == Changefeeds.size()) {
+    void UploadChangefeed() {
+        if (IndexExportedChangefeed == Changefeeds.size()) {
             ChangefeedsUploaded = true;
             this->Become(&TThis::StateUploadData);
             return;
         }
-        const auto& changefeed = Changefeeds[index].ChangefeedDescription;
+        const auto& changefeed = Changefeeds[IndexExportedChangefeed].ChangefeedDescription;
         const auto changefeedKeyPattern = TStringBuilder() << Settings.ObjectKeyPattern << "/" << changefeed.Getname();
-        PutChangefeedDescription(changefeed, changefeedKeyPattern, index);
+        PutChangefeedDescription(changefeed, changefeedKeyPattern);
     }
 
-    void UploadOneTopic(ui64 index) {
-        if (index >= Changefeeds.size()) {
-            //Error!
-            return;
-        }
-        auto& descs = Changefeeds[index];
+    void UploadTopic() {
+        auto& descs = Changefeeds[IndexExportedChangefeed];
         const auto changefeedKeyPattern = TStringBuilder() << Settings.ObjectKeyPattern << "/" 
             << descs.ChangefeedDescription.Getname();
-        PutTopicDescription(descs.Topic, changefeedKeyPattern, index);
+        PutTopicDescription(descs.Topic, changefeedKeyPattern);
     }
 
     void UploadChangefeeds() {
@@ -331,7 +323,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             if (Scanner) {
                 this->Send(Scanner, new TEvExportScan::TEvFeed());
             }
-            UploadOneChangefeed(0);
+            UploadChangefeed();
         };
 
         if (EnableChecksums) {
@@ -366,42 +358,44 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         }
     }
 
-    auto HandleOneChangefeed(ui64 index) {
-        return [index, this](TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
-            const auto& result = ev->Get()->Result;
+    void HandleChangefeed(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
 
-            EXPORT_LOG_D("HandleMetadata TEvExternalStorage::TEvPutObjectResponse"
-                << ": self# " << this->SelfId()
-                << ", result# " << result);
+        EXPORT_LOG_D("HandleChangefeed TEvExternalStorage::TEvPutObjectResponse"
+            << ": self# " << this->SelfId()
+            << ", result# " << result);
 
-            if (!CheckResult(result, TStringBuf("PutObject (changefeed)"))) {
-                return;
+        if (!CheckResult(result, TStringBuf("PutObject (changefeed)"))) {
+            return;
+        }
+
+        auto nextStep = [this]() {
+            if (IndexExportedChangefeed == Changefeeds.size()) {
+                ChangefeedsUploaded = true;
+                this->Become(&TThis::StateUploadData);
+            } else {
+                UploadTopic();
             }
-
-            auto nextStep = [index, this]() {
-                UploadOneTopic(index);
-            };
-            nextStep();
         };
+        nextStep();
     }
 
-    auto HandleOneTopic(ui64 index) {
-        return [index, this](TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
-            const auto& result = ev->Get()->Result;
+    void HandleTopic(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
 
-            EXPORT_LOG_D("HandleMetadata TEvExternalStorage::TEvPutObjectResponse"
-                << ": self# " << this->SelfId()
-                << ", result# " << result);
+        EXPORT_LOG_D("HandleTopic TEvExternalStorage::TEvPutObjectResponse"
+            << ": self# " << this->SelfId()
+            << ", result# " << result);
 
-            if (!CheckResult(result, TStringBuf("PutObject (topic)"))) {
-                return;
-            }
+        if (!CheckResult(result, TStringBuf("PutObject (topic)"))) {
+            return;
+        }
 
-            auto nextStep = [index, this]() {
-                UploadOneChangefeed(index + 1);
-            };
-            nextStep();
+        auto nextStep = [this]() {
+            ++IndexExportedChangefeed;
+            UploadChangefeed();
         };
+        nextStep();
     }
 
     void HandleMetadata(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
@@ -453,7 +447,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             return PassAway();
         }
 
-        if (ProxyResolved && SchemeUploaded && MetadataUploaded && PermissionsUploaded) {
+        if (ProxyResolved && SchemeUploaded && MetadataUploaded && PermissionsUploaded && ChangefeedsUploaded) {
             this->Send(Scanner, new TEvExportScan::TEvFeed());
         }
     }
@@ -789,6 +783,7 @@ public:
         , Attempt(0)
         , Delay(TDuration::Minutes(1))
         , SchemeUploaded(ShardNum == 0 ? false : true)
+        , ChangefeedsUploaded(ShardNum == 0 ? false : true)
         , MetadataUploaded(ShardNum == 0 ? false : true)
         , PermissionsUploaded(ShardNum == 0 ? false : true)
         , EnableChecksums(task.GetEnableChecksums())
@@ -841,24 +836,20 @@ public:
         }
     }
 
-    std::function<void(TAutoPtr<::NActors::IEventHandle>&)> StateUploadOneChangefeed(ui64 index) {
-        return [index, this](TAutoPtr<::NActors ::IEventHandle> &ev) {
-            switch (ev->GetTypeRewrite()) {
-                hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleOneChangefeed(index));
-            default:
-                return StateBase(ev);
-            }
-        };
+    STATEFN(StateUploadChangefeed) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleChangefeed);
+        default:
+            return StateBase(ev);
+        }
     }
 
-    std::function<void(TAutoPtr<::NActors::IEventHandle>&)> StateUploadOneTopic(ui64 index) {
-        return [index, this](TAutoPtr<::NActors ::IEventHandle> &ev) {
-            switch (ev->GetTypeRewrite()) {
-                hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleOneTopic(index));
-            default:
-                return StateBase(ev);
-            }
-        };
+    STATEFN(StateUploadTopic) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleTopic);
+        default:
+            return StateBase(ev);
+        }
     }
 
     STATEFN(StateUploadMetadata) {
@@ -916,6 +907,7 @@ private:
 
     const ui32 Retries;
     ui32 Attempt;
+    ui64 IndexExportedChangefeed = 0;
 
     TDuration Delay;
     static constexpr TDuration MaxDelay = TDuration::Minutes(10);
@@ -950,8 +942,10 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         : Nothing();
 
     const auto& persQueuesTPathDesc = Task.GetChangefeedUnderlyingTopics();
-
     const auto& cdcStreams = Task.GetTable().GetTable().GetCdcStreams();
+    Cerr << "persQueuesTPathDesc.size(): " << persQueuesTPathDesc.size() << Endl << "cdcStreams.size(): " << cdcStreams.size() << Endl;
+    assert(persQueuesTPathDesc.size() == cdcStreams.size());
+
     const int changefeedsCount = cdcStreams.size();
     TVector <TChangefeedExportDescriptions> changefeedsExportDescs;
     changefeedsExportDescs.reserve(changefeedsCount);

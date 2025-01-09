@@ -19,7 +19,7 @@ items:
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed
-- name: Time to Live (TTL)
+- name: Time to Live (TTL) и вытеснение данных во внешнее хранилище
   href: ttl.md
 - name: Скан запросы
   href: scan_query.md

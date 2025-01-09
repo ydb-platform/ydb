@@ -19,7 +19,7 @@ items:
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed
-- name: Time to Live (TTL)
+- name: Time to Live (TTL) and Eviction to External Storage
   href: ttl.md
 - name: Scan queries
   href: scan_query.md

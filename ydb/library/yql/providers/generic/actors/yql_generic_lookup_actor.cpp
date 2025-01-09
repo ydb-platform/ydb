@@ -29,6 +29,7 @@ namespace NYql::NDq {
 
     namespace {
         constexpr ui32 RequestRetriesLimit = 10; // TODO lookup parameters or PRAGMA?
+        constexpr TDuration RequestTimeout = TDuration::Minutes(3); // TODO lookup parameters or PRAGMA?
 
         const NKikimr::NMiniKQL::TStructType* MergeStructTypes(const NKikimr::NMiniKQL::TTypeEnvironment& env, const NKikimr::NMiniKQL::TStructType* t1, const NKikimr::NMiniKQL::TStructType* t2) {
             Y_ABORT_UNLESS(t1);
@@ -195,7 +196,7 @@ namespace NYql::NDq {
             *readRequest.add_splits() = split;
             readRequest.Setformat(NConnector::NApi::TReadSplitsRequest_EFormat::TReadSplitsRequest_EFormat_ARROW_IPC_STREAMING);
             readRequest.set_filtering(NConnector::NApi::TReadSplitsRequest::FILTERING_MANDATORY);
-            Connector->ReadSplits(readRequest).Subscribe([
+            Connector->ReadSplits(readRequest, RequestTimeout).Subscribe([
                     actorSystem = TActivationContext::ActorSystem(),
                     selfId = SelfId(),
                     retriesRemaining = RetriesRemaining
@@ -284,7 +285,7 @@ namespace NYql::NDq {
             };
 
             splitRequest.Setmax_split_count(1);
-            Connector->ListSplits(splitRequest).Subscribe([
+            Connector->ListSplits(splitRequest, RequestTimeout).Subscribe([
                     actorSystem = TActivationContext::ActorSystem(),
                     selfId = SelfId(),
                     retriesRemaining = RetriesRemaining

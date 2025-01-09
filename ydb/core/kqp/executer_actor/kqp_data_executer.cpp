@@ -2575,7 +2575,13 @@ private:
 
                 for (auto& [shardId, shardTx] : datashardTxs) {
                     shardTx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    if (columnShardArbiter && !sendingShardsSet.empty() && !receivingShards.empty()) {
+                    if (!columnShardArbiter) {
+                        *shardTx->MutableLocks()->MutableSendingShards() = sendingShards;
+                        *shardTx->MutableLocks()->MutableReceivingShards() = receivingShards;
+                        if (arbiter) {
+                            shardTx->MutableLocks()->SetArbiterShard(arbiter);
+                        }
+                    } else if (!sendingShardsSet.empty() && !receivingShards.empty()) {
                         shardTx->MutableLocks()->AddSendingShards(*columnShardArbiter);
                         shardTx->MutableLocks()->AddReceivingShards(*columnShardArbiter);
                         if (sendingShardsSet.contains(shardId)) {
@@ -2585,23 +2591,29 @@ private:
                             shardTx->MutableLocks()->AddReceivingShards(shardId);
                         }
                         AFL_ENSURE(!arbiter);
-                    } else if (!columnShardArbiter) {
-                        *shardTx->MutableLocks()->MutableSendingShards() = sendingShards;
-                        *shardTx->MutableLocks()->MutableReceivingShards() = receivingShards;
-                        if (arbiter) {
-                            shardTx->MutableLocks()->SetArbiterShard(arbiter);
-                        }
                     }
                 }
 
                 for (auto& [shardId, tx] : evWriteTxs) {
                     tx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    if (columnShardArbiter && *columnShardArbiter == shardId
+                    if (!columnShardArbiter) {
+                        *tx->MutableLocks()->MutableSendingShards() = sendingShards;
+                        *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
+                        if (arbiter) {
+                            tx->MutableLocks()->SetArbiterShard(arbiter);
+                        }
+                    } else if (*columnShardArbiter == shardId
                             && !sendingShardsSet.empty() && !receivingShards.empty()) {
                         tx->MutableLocks()->SetArbiterColumnShard(*columnShardArbiter);
                         *tx->MutableLocks()->MutableSendingShards() = sendingShards;
                         *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
-                    } else if (columnShardArbiter && !sendingShardsSet.empty() && !receivingShards.empty()) {
+                        if (!sendingShardsSet.contains(*columnShardArbiter)) {
+                            tx->MutableLocks()->AddSendingShards(**columnShardArbiter);
+                        }
+                        if (!receivingShards.contains(*columnShardArbiter)) {
+                            tx->MutableLocks()->AddReceivingShards(*columnShardArbiter);
+                        }
+                    } else if (!sendingShardsSet.empty() && !receivingShards.empty()) {
                         tx->MutableLocks()->SetArbiterColumnShard(*columnShardArbiter);
                         tx->MutableLocks()->AddSendingShards(*columnShardArbiter);
                         tx->MutableLocks()->AddReceivingShards(*columnShardArbiter);
@@ -2611,18 +2623,15 @@ private:
                         if (receivingShardsSet.contains(shardId)) {
                             tx->MutableLocks()->AddReceivingShards(shardId);
                         }
-                    } else if (!columnShardArbiter) {
-                        *tx->MutableLocks()->MutableSendingShards() = sendingShards;
-                        *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
-                        if (arbiter) {
-                            tx->MutableLocks()->SetArbiterShard(arbiter);
-                        }
                     }
                 }
 
                 for (auto& [shardId, t] : topicTxs) {
                     t.tx.SetOp(NKikimrPQ::TDataTransaction::Commit);
-                    if (columnShardArbiter && !sendingShardsSet.empty() && !receivingShards.empty()) {
+                    if (!columnShardArbiter) {
+                        *t.tx.MutableSendingShards() = sendingShards;
+                        *t.tx.MutableReceivingShards() = receivingShards;
+                    } else (!sendingShardsSet.empty() && !receivingShards.empty()) {
                         t.tx.AddSendingShards(*columnShardArbiter);
                         t.tx.AddReceivingShards(*columnShardArbiter);
                         if (sendingShardsSet.contains(shardId)) {
@@ -2631,9 +2640,6 @@ private:
                         if (receivingShardsSet.contains(shardId)) {
                             t.tx.AddReceivingShards(shardId);
                         }
-                    } else if (!columnShardArbiter) {
-                        *t.tx.MutableSendingShards() = sendingShards;
-                        *t.tx.MutableReceivingShards() = receivingShards;
                     }
                     YQL_ENSURE(!arbiter);
                 }

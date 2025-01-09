@@ -96,6 +96,9 @@ namespace NYql::NDq {
     private:
         void Free() {
             auto guard = Guard(*Alloc);
+            if (Request && InFlight) {
+                InFlight->Dec();
+            }
             Request.reset();
             KeyTypeHelper.reset();
         }

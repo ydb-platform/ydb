@@ -317,21 +317,13 @@ namespace NPQ {
 
         void SaveCmdDelete(const NKikimrClient::TKeyValueRequest& srcRequest, TKvRequest& kvReq, const TActorContext& ctx)
         {
-            kvReq.DeletedBlobs.reserve(srcRequest.CmdRenameSize());
+            kvReq.DeletedBlobs.reserve(srcRequest.CmdDeleteRangeSize());
 
             for (ui32 i = 0; i < srcRequest.CmdDeleteRangeSize(); ++i) {
                 const auto& cmd = srcRequest.GetCmdDeleteRange(i);
                 const auto& range = cmd.GetRange();
-                if (range.GetFrom() != range.GetTo()) {
-                    continue;
-                }
-                if (range.GetIncludeFrom() != range.GetIncludeTo()) {
-                    continue;
-                }
-                if (!range.GetIncludeFrom()) {
-                    continue;
-                }
-                kvReq.DeletedBlobs.emplace_back(range.GetFrom());
+                kvReq.DeletedBlobs.emplace_back(range.GetFrom(), range.GetIncludeFrom(),
+                                                range.GetTo(), range.GetIncludeTo());
             }
 
             Y_UNUSED(ctx);

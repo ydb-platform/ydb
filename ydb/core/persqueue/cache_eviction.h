@@ -51,14 +51,26 @@ namespace NPQ {
             TypeWrite
         };
 
+        struct TDeleteBlobRange {
+            TString Begin;
+            bool IncludeBegin;
+            TString End;
+            bool IncludeEnd;
+        };
+
+        struct TRenameBlob {
+            TString From;
+            TString To;
+        };
+
         ERequestType Type;
         TActorId Sender;
         ui64 CookiePQ;
         TPartitionId Partition;
         ui32 MetadataWritesCount;
         TVector<TRequestedBlob> Blobs;
-        TVector<TString> DeletedBlobs;
-        TVector<std::pair<TString, TString>> RenamedBlobs;
+        TVector<TDeleteBlobRange> DeletedBlobs;
+        TVector<TRenameBlob> RenamedBlobs;
 
         TKvRequest(ERequestType type, TActorId sender, ui64 cookie, const TPartitionId& partition)
         : Type(type)
@@ -255,7 +267,7 @@ namespace NPQ {
 
             SaveBlobs(kvReq, *reqData, ctx);
             RenameBlobs(kvReq, *reqData, ctx);
-            DeleteBlobs(kvReq, *reqData, ctx);
+//            DeleteBlobs(kvReq, *reqData, ctx);
 
             auto l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
             ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
@@ -305,15 +317,15 @@ namespace NPQ {
             }
         }
 
-        void DeleteBlobs(const TKvRequest& kvReq, TCacheL2Request& reqData, const TActorContext& ctx)
-        {
-            for (const auto& key : kvReq.DeletedBlobs) {
-                TBlobId blob = MakeBlobId(key);
-                if (RemoveExists(ctx, blob)) {
-                    reqData.RemovedBlobs.emplace_back(kvReq.Partition, blob.Offset, blob.PartNo, nullptr);
-                }
-            }
-        }
+//        void DeleteBlobs(const TKvRequest& kvReq, TCacheL2Request& reqData, const TActorContext& ctx)
+//        {
+//            for (const auto& key : kvReq.DeletedBlobs) {
+//                TBlobId blob = MakeBlobId(key);
+//                if (RemoveExists(ctx, blob)) {
+//                    reqData.RemovedBlobs.emplace_back(kvReq.Partition, blob.Offset, blob.PartNo, nullptr);
+//                }
+//            }
+//        }
 
         void SavePrefetchBlobs(const TActorContext& ctx, const TKvRequest& kvReq, const TVector<bool>& store)
         {

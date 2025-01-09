@@ -249,9 +249,16 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
     void UploadChangefeed() {
         if (IndexExportedChangefeed == Changefeeds.size()) {
-            ChangefeedsUploaded = true;
-            Cerr << "ChangefeedsUploaded: " << ChangefeedsUploaded << Endl;
-            this->Become(&TThis::StateUploadData);
+            auto nextStep = [this]() {
+                ChangefeedsUploaded = true;
+                Cerr << "ChangefeedsUploaded: " << ChangefeedsUploaded << Endl;
+
+                if (Scanner) {
+                    this->Send(Scanner, new TEvExportScan::TEvFeed());
+                }
+                this->Become(&TThis::StateUploadData);
+            };
+            nextStep();
             return;
         }
         const auto& changefeed = Changefeeds[IndexExportedChangefeed].ChangefeedDescription;
@@ -322,10 +329,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         auto nextStep = [this]() {
             SchemeUploaded = true;
-
-            if (Scanner) {
-                this->Send(Scanner, new TEvExportScan::TEvFeed());
-            }
             UploadChangefeed();
         };
 

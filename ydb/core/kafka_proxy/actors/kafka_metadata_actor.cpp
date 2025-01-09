@@ -46,6 +46,8 @@ void TKafkaMetadataActor::AddCurrentNodeToBrokers() {
 }
 
 void TKafkaMetadataActor::SendDiscoveryRequest() {
+    if (!Context->Config.GetEnableEndpointDiscovery())
+        return;
     DiscoveryRequested = true;
     if (!DiscoveryCacheActor) {
         OwnDiscoveryCache = true;

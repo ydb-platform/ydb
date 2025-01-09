@@ -138,6 +138,7 @@ namespace NKafka::NTests {
             ui16 kafkaPort = pm->GetPort();
             auto serverSettings = NPersQueueTests::PQSettings(0).SetDomainName("Root").SetNodeCount(1);
             serverSettings.AppConfig->MutableKafkaProxyConfig()->SetEnableKafkaProxy(true);
+            serverSettings.AppConfig->MutableKafkaProxyConfig()->SetEnableEndpointDiscovery(true);
             serverSettings.AppConfig->MutableKafkaProxyConfig()->SetListeningPort(kafkaPort);
             NPersQueue::TTestServer server(serverSettings, true, {}, NActors::NLog::PRI_INFO, pm);
 
@@ -178,6 +179,8 @@ namespace NKafka::NTests {
             ui16 kafkaPort = pm->GetPort();
             auto serverSettings = NPersQueueTests::PQSettings(0).SetDomainName("Root").SetNodeCount(1);
             serverSettings.AppConfig->MutableKafkaProxyConfig()->SetEnableKafkaProxy(true);
+            serverSettings.AppConfig->MutableKafkaProxyConfig()->SetEnableEndpointDiscovery(true);
+
             serverSettings.AppConfig->MutableKafkaProxyConfig()->SetListeningPort(kafkaPort);
             NPersQueue::TTestServer server(serverSettings, true, {}, NActors::NLog::PRI_INFO, pm);
 

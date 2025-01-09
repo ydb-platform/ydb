@@ -99,6 +99,7 @@ public:
         cst->SetName("data-transfer2");
 
         appConfig.MutableKafkaProxyConfig()->SetEnableKafkaProxy(true);
+        appConfig.MutableKafkaProxyConfig()->SetEnableEndpointDiscovery(true);
         appConfig.MutableKafkaProxyConfig()->SetListeningPort(Port);
         appConfig.MutableKafkaProxyConfig()->SetMaxMessageSize(1024);
         appConfig.MutableKafkaProxyConfig()->SetMaxInflightSize(2048);

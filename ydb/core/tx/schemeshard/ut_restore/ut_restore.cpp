@@ -4341,6 +4341,54 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::HasNoRight("+R:bob")
         });
     }
+
+    Y_UNIT_TEST(CheckItemProgress) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        env.TestWaitNotification(runtime, txId);
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}});
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+          ImportFromS3Settings {
+            endpoint: "localhost:%d"
+            scheme: HTTP
+            items {
+              source_prefix: ""
+              destination_path: "/MyRoot/Table"
+            }
+          }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        const auto desc = TestGetImport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.ItemsProgressSize(), 1);
+
+        const auto& item = entry.GetItemsProgress(0);
+        UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 1);
+        UNIT_ASSERT(item.has_start_time());
+        UNIT_ASSERT(item.has_end_time());
+    }
 }
 
 Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {

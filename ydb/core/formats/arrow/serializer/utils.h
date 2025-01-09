@@ -9,7 +9,9 @@
 
 namespace NKikimr::NArrow {
 bool SupportsCompressionLevel(const arrow::Compression::type compression);
+bool SupportsCompressionLevel(const arrow::Compression::type compression, const i32 compressionLevel);
 bool SupportsCompressionLevel(const NKikimrSchemeOp::EColumnCodec compression);
+bool SupportsCompressionLevel(const NKikimrSchemeOp::EColumnCodec compression, const i32 compressionLevel);
 
 std::optional<int> MinimumCompressionLevel(const arrow::Compression::type compression);
 std::optional<int> MaximumCompressionLevel(const arrow::Compression::type compression);

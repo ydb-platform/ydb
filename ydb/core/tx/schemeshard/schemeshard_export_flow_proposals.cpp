@@ -153,9 +153,14 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
                 auto cdcPathDesc =  GetDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
                 Cerr << "cdcStream name: " << cdcStream.GetName() << Endl;
+                Cerr << "cdcStream PathId: " << cdcStream.GetPathId() << Endl;
                 Cerr << "cdcPathDesc.self().GetName(): " << cdcPathDesc.self().GetName() << Endl;
                 Cerr << "cdcPathDesc.self().GetPathId(): " << cdcPathDesc.self().GetPathId() << Endl;
                 Cerr << "cdcStream childs size: " << cdcPathDesc.GetChildren().size() << Endl;
+                Cerr << " cdcPathDesc.GetCdcStreamDescription().GetName(): " << cdcPathDesc.GetCdcStreamDescription().GetName() << Endl;
+                Cerr << "cdcPathDesc: " << cdcPathDesc << Endl;
+                Cerr << "cdcPathDesc.GetTable(): " << cdcPathDesc.GetTable() << Endl;
+                Cerr << "cdcPathDesc.GetCdcStreamDescription(): " << cdcPathDesc.GetCdcStreamDescription() << Endl;
                 for (const auto& child : cdcPathDesc.GetChildren()) {
                     Cerr << "child type: " << child.GetPathType() << Endl;
                     if (child.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {

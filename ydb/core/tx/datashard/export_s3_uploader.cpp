@@ -250,11 +250,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     void UploadChangefeed() {
         if (IndexExportedChangefeed == Changefeeds.size()) {
             ChangefeedsUploaded = true;
+            Cerr << "ChangefeedsUploaded: " << ChangefeedsUploaded << Endl;
             this->Become(&TThis::StateUploadData);
             return;
         }
         const auto& changefeed = Changefeeds[IndexExportedChangefeed].ChangefeedDescription;
         const auto changefeedKeyPattern = TStringBuilder() << Settings.ObjectKeyPattern << "/" << changefeed.Getname();
+        Cerr << "Put changefeed index: " << IndexExportedChangefeed << Endl;
         PutChangefeedDescription(changefeed, changefeedKeyPattern);
     }
 
@@ -262,6 +264,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         auto& descs = Changefeeds[IndexExportedChangefeed];
         const auto changefeedKeyPattern = TStringBuilder() << Settings.ObjectKeyPattern << "/" 
             << descs.ChangefeedDescription.Getname();
+        Cerr << "Put topic index: " << IndexExportedChangefeed << Endl;
         PutTopicDescription(descs.Topic, changefeedKeyPattern);
     }
 

@@ -77,9 +77,12 @@ static NKikimrSchemeOp::TPathDescription GetDescription(TSchemeShard* ss, const 
     opts.SetReturnPartitionConfig(true);
     opts.SetReturnBoundaries(true);
     opts.SetReturnIndexTableBoundaries(true);
+    opts.SetShowPrivateTable(true);
 
     auto desc = DescribePath(ss, TlsActivationContext->AsActorContext(), pathId, opts);
     auto record = desc->GetRecord();
+
+    Cerr  << "DescribeSchemeResult: " << record << Endl;
 
     return record.GetPathDescription();
 }
@@ -161,6 +164,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
                 Cerr << "cdcPathDesc: " << cdcPathDesc << Endl;
                 Cerr << "cdcPathDesc.GetTable(): " << cdcPathDesc.GetTable() << Endl;
                 Cerr << "cdcPathDesc.GetCdcStreamDescription(): " << cdcPathDesc.GetCdcStreamDescription() << Endl;
+                Cerr << "cdcPathDesc.GetChildren().size(): " << cdcPathDesc.GetChildren().size() << Endl;
                 for (const auto& child : cdcPathDesc.GetChildren()) {
                     Cerr << "child type: " << child.GetPathType() << Endl;
                     if (child.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {

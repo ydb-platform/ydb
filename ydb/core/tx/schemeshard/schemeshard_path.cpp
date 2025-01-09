@@ -1567,14 +1567,19 @@ TPath TPath::FindOlapStore() const {
 
 bool TPath::IsCommonSensePath() const {
     Y_ABORT_UNLESS(IsResolved());
-
+    Cerr << "el sz: " << Elements.size() << Endl;
     for (auto item = ++Elements.rbegin(); item != Elements.rend(); ++item) {
         // Directories and domain roots are always ok as intermediaries
         bool ok = (*item)->IsDirectory() || (*item)->IsDomainRoot();
+        Cerr << (*item)->Name << " " << (*item)->Owner <<" "<<(*item)->PathId  << Endl;
+        Cerr << "IsTable: " << (*item)->IsTable() << Endl;
+        Cerr << "ok1: " << ok << Endl;
         // Temporarily olap stores are treated like directories
         ok = ok || (*item)->IsOlapStore();
+        Cerr << "ok2: " << ok << Endl;
         // Temporarily backup collections are treated like directories
         ok = ok || (*item)->IsBackupCollection();
+        Cerr << "ok3: " << ok << Endl;
         if (!ok) {
             return false;
         }

@@ -13,9 +13,11 @@ config.read(config_file_path)
 DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
+
 def drop_table(session, table_path):
     print(f"> Dropping table if exists: '{table_path}'")
     session.execute_scheme(f"DROP TABLE IF EXISTS `{table_path}`;")
+
 
 def create_test_history_fast_table(session, table_path):
     print(f"> Creating table: '{table_path}'")
@@ -45,6 +47,7 @@ def create_test_history_fast_table(session, table_path):
         )
     """)
 
+
 def bulk_upsert(table_client, table_path, rows):
     print(f"> Bulk upsert into: {table_path}")
     column_types = (
@@ -64,8 +67,9 @@ def bulk_upsert(table_client, table_path, rows):
         .add_column("status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("status_description", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-    ) 
+    )
     table_client.bulk_upsert(table_path, rows, column_types)
+
 
 def get_missed_data_for_upload(driver):
     results = []
@@ -80,11 +84,11 @@ def get_missed_data_for_upload(driver):
         all_data.run_timestamp as run_timestamp, 
         test_id, 
         suite_folder, 
-        test_name, 
+        test_name,
         cast(suite_folder || '/' || test_name as UTF8)  as full_name, 
-        duration, 
-        status, 
-        status_description, 
+        duration,
+        status,
+        status_description,
         owners
     FROM `test_results/test_runs_column`  as all_data
     LEFT JOIN (
@@ -92,8 +96,8 @@ def get_missed_data_for_upload(driver):
     ) as fast_data_missed
     ON all_data.run_timestamp = fast_data_missed.run_timestamp
     WHERE
-        all_data.run_timestamp >= CurrentUtcDate() - 6*Interval("P1D") AND 
-        fast_data_missed.run_timestamp is NULL 
+        all_data.run_timestamp >= CurrentUtcDate() - 6*Interval("P1D") AND
+        fast_data_missed.run_timestamp is NULL
     """
 
     scan_query = ydb.ScanQuery(query, {})
@@ -136,12 +140,15 @@ def main():
             print(f'Preparing to upsert: {len(prepared_for_upload_rows)} rows')
             if prepared_for_upload_rows:
                 for start in range(0, len(prepared_for_upload_rows), batch_size):
-                    print(f'upserting: {start}-{start + batch_size}/{len(prepared_for_upload_rows)} rows')
-                    batch_rows_for_upload = prepared_for_upload_rows[start:start + batch_size]     
-                    bulk_upsert(driver.table_client, f'{DATABASE_PATH}/{table_path}', batch_rows_for_upload)
+                    print(
+                        f'upserting: {start}-{(start + batch_size) if batch_size <= len(prepared_for_upload_rows) - start else len(prepared_for_upload_rows)}/{len(prepared_for_upload_rows)} rows')
+                    batch_rows_for_upload = prepared_for_upload_rows[start:start + batch_size]
+                    bulk_upsert(
+                        driver.table_client, f'{DATABASE_PATH}/{table_path}', batch_rows_for_upload)
                 print('Tests uploaded')
             else:
                 print('Nothing to upload')
+
 
 if __name__ == "__main__":
     main()

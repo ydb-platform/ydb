@@ -2575,19 +2575,17 @@ private:
 
                 for (auto& [shardId, shardTx] : datashardTxs) {
                     shardTx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    if (columnShardArbiter) {
-                        if (!sendingShardsSet.empty() && !receivingShards.empty()) {
-                            shardTx->MutableLocks()->AddSendingShards(*columnShardArbiter);
-                            shardTx->MutableLocks()->AddReceivingShards(*columnShardArbiter);
-                            if (sendingShardsSet.contains(shardId)) {
-                                shardTx->MutableLocks()->AddSendingShards(shardId);
-                            }
-                            if (receivingShardsSet.contains(shardId)) {
-                                shardTx->MutableLocks()->AddReceivingShards(shardId);
-                            }
+                    if (columnShardArbiter && !sendingShardsSet.empty() && !receivingShards.empty()) {
+                        shardTx->MutableLocks()->AddSendingShards(*columnShardArbiter);
+                        shardTx->MutableLocks()->AddReceivingShards(*columnShardArbiter);
+                        if (sendingShardsSet.contains(shardId)) {
+                            shardTx->MutableLocks()->AddSendingShards(shardId);
+                        }
+                        if (receivingShardsSet.contains(shardId)) {
+                            shardTx->MutableLocks()->AddReceivingShards(shardId);
                         }
                         AFL_ENSURE(!arbiter);
-                    } else {
+                    } else if (!columnShardArbiter) {
                         *shardTx->MutableLocks()->MutableSendingShards() = sendingShards;
                         *shardTx->MutableLocks()->MutableReceivingShards() = receivingShards;
                         if (arbiter) {
@@ -2598,11 +2596,12 @@ private:
 
                 for (auto& [shardId, tx] : evWriteTxs) {
                     tx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    if (columnShardArbiter && *columnShardArbiter == shardId) {
+                    if (columnShardArbiter && *columnShardArbiter == shardId
+                            && !sendingShardsSet.empty() && !receivingShards.empty()) {
                         tx->MutableLocks()->SetArbiterColumnShard(*columnShardArbiter);
                         *tx->MutableLocks()->MutableSendingShards() = sendingShards;
                         *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
-                    } else if (columnShardArbiter) {
+                    } else if (columnShardArbiter && !sendingShardsSet.empty() && !receivingShards.empty()) {
                         tx->MutableLocks()->SetArbiterColumnShard(*columnShardArbiter);
                         tx->MutableLocks()->AddSendingShards(*columnShardArbiter);
                         tx->MutableLocks()->AddReceivingShards(*columnShardArbiter);
@@ -2612,7 +2611,7 @@ private:
                         if (receivingShardsSet.contains(shardId)) {
                             tx->MutableLocks()->AddReceivingShards(shardId);
                         }
-                    } else {
+                    } else if (!columnShardArbiter) {
                         *tx->MutableLocks()->MutableSendingShards() = sendingShards;
                         *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
                         if (arbiter) {
@@ -2623,7 +2622,7 @@ private:
 
                 for (auto& [shardId, t] : topicTxs) {
                     t.tx.SetOp(NKikimrPQ::TDataTransaction::Commit);
-                    if (columnShardArbiter) {
+                    if (columnShardArbiter && !sendingShardsSet.empty() && !receivingShards.empty()) {
                         t.tx.AddSendingShards(*columnShardArbiter);
                         t.tx.AddReceivingShards(*columnShardArbiter);
                         if (sendingShardsSet.contains(shardId)) {
@@ -2632,7 +2631,7 @@ private:
                         if (receivingShardsSet.contains(shardId)) {
                             t.tx.AddReceivingShards(shardId);
                         }
-                    } else {
+                    } else if (!columnShardArbiter) {
                         *t.tx.MutableSendingShards() = sendingShards;
                         *t.tx.MutableReceivingShards() = receivingShards;
                     }

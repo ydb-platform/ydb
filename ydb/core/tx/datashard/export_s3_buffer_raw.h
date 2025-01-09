@@ -14,7 +14,7 @@ class TS3BufferRaw: public NExportScan::IBuffer {
     using TTagToIndex = THashMap<ui32, ui32>; // index in IScan::TRow
 
 public:
-    explicit TS3BufferRaw(const TTagToColumn& columns, ui64 rowsLimit, ui64 bytesLimit);
+    explicit TS3BufferRaw(const TTagToColumn& columns, ui64 rowsLimit, ui64 bytesLimit, bool enableChecksums);
 
     void ColumnsOrder(const TVector<ui32>& tags) override;
     bool Collect(const NTable::IScan::TRow& row) override;
@@ -41,6 +41,8 @@ protected:
     ui64 Rows;
     ui64 BytesRead;
     TBuffer Buffer;
+
+    IExportChecksum::TPtr Checksum;
 
     TString ErrorString;
 }; // TS3BufferRaw

@@ -233,7 +233,7 @@ void TestProposeResultLost(TTestActorRuntime& runtime, TActorId client, const TS
     TActorId executer;
     ui32 droppedEvents = 0;
 
-    runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+    auto prev = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
         if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
             auto* fe = ev.Get()->Get<TEvPipeCache::TEvForward>();
             if (fe->Ev->Type() == TEvDataShard::TEvProposeTransaction::EventType) {
@@ -266,6 +266,8 @@ void TestProposeResultLost(TTestActorRuntime& runtime, TActorId client, const TS
     auto& record = ev->Get()->Record;
     // Cerr << record.DebugString() << Endl;
     fn(record);
+
+    runtime.SetObserverFunc(prev);
 }
 
 Y_UNIT_TEST(ProposeResultLost_RwTx) {
@@ -273,20 +275,26 @@ Y_UNIT_TEST(ProposeResultLost_RwTx) {
     TestProposeResultLost(*fixture.Runtime, fixture.Client,
         Q_(R"(
             upsert into `/Root/table-1` (key, value) VALUES
-                (1, 1), (1073741823, 1073741823), (2147483647, 2147483647), (4294967295, 4294967295)
+                (1, 11), (1073741823, 1073741823), (2147483647, 2147483647), (4294967295, 4294967295)
            )"),
         [](const NKikimrKqp::TEvQueryResponse& record) {
-               UNIT_ASSERT_VALUES_EQUAL_C(record.GetYdbStatus(), Ydb::StatusIds::UNDETERMINED, record.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(record.GetYdbStatus(), Ydb::StatusIds::UNAVAILABLE, record.DebugString());
 
-               TIssues issues;
-               IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-               UNIT_ASSERT_C(HasIssue(issues, NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
-               "State of operation is unknown."), record.GetResponse().DebugString());
-
-               UNIT_ASSERT_C(HasIssue(issues, NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, "", [] (const TIssue& issue) {
-               return issue.GetMessage().StartsWith("Tx state unknown for shard ");
-           }), record.GetResponse().DebugString());
+            TIssues issues;
+            IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
+            UNIT_ASSERT_C(
+                HasIssue(issues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                    "Kikimr cluster or one of its subsystems was unavailable."),
+                record.GetResponse().DebugString());
         });
+
+    // Verify that the transaction didn't commit
+    UNIT_ASSERT_VALUES_EQUAL(
+        KqpSimpleExec(*fixture.Runtime,
+            Q_("SELECT key, value FROM `/Root/table-1` ORDER BY key")),
+        "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+        "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+        "{ items { uint32_value: 3 } items { uint32_value: 3 } }");
 }
 
 } // suite

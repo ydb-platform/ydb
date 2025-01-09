@@ -13,6 +13,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/pq_rl_helpers.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
 #include <util/generic/deque.h>
@@ -116,11 +117,18 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
         TUserWriteRequest Write;
         bool QuotaCheckEnabled;
         bool QuotaAccepted;
+        NWilson::TTraceId TraceId;
+        NWilson::TSpan ReserveBytesSpan;
+        NWilson::TSpan RequestQuotaSpan;
 
-        TRequestHolder(TUserWriteRequest&& write, bool quotaCheckEnabled)
+        TRequestHolder(TUserWriteRequest&& write, bool quotaCheckEnabled, NWilson::TTraceId traceId, NWilson::TSpan reserveBytesSpan, NWilson::TSpan requestQuotaSpan)
             : Write(std::move(write))
             , QuotaCheckEnabled(quotaCheckEnabled)
-            , QuotaAccepted(false) {
+            , QuotaAccepted(false)
+            , TraceId(std::move(traceId))
+            , ReserveBytesSpan(std::move(reserveBytesSpan))
+            , RequestQuotaSpan(std::move(requestQuotaSpan))
+        {
         }
     };
 
@@ -558,7 +566,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
 
         SetWriteId(*record.MutablePartitionRequest());
 
-        Pending.emplace(cookie, TUserWriteRequest(std::move(record)));
+        Pending.emplace(cookie, TRequestHolder(TUserWriteRequest(std::move(record)), false, std::move(ev->TraceId), {}, {}));
 
         return true;
     }
@@ -582,7 +590,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
         while (Pending) {
             auto it = Pending.begin();
 
-            FillHeader(*it->second.Request.MutablePartitionRequest(), PartitionId, PipeClient, OwnerCookie, it->first);
+            FillHeader(*it->second.Write.Request.MutablePartitionRequest(), PartitionId, PipeClient, OwnerCookie, it->first);
             auto ev = MakeRequest(PartitionId, PipeClient, OwnerCookie, it->first);
 
             auto& request = *ev->Record.MutablePartitionRequest();
@@ -591,18 +599,28 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
             SetWriteId(request);
 
             auto& cmd = *request.MutableCmdReserveBytes();
-            cmd.SetSize(it->second.Request.ByteSize());
+            cmd.SetSize(it->second.Write.Request.ByteSize());
             cmd.SetLastRequest(false);
+            it->second.ReserveBytesSpan = NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(it->second.TraceId), "Topic.Writer.ReserveBytes");
+            it->second.ReserveBytesSpan.Attribute("bytes", static_cast<i64>(cmd.GetSize()));
 
             if (needToRequestQuota) {
                 ++processed;
-                PendingQuotaAmount += CalcRuConsumption(it->second.Request.ByteSize()) + (it->second.Request.GetPartitionRequest().GetMeteringV2Enabled() ? 1 : 0);
+                const ui64 quotaAmount = CalcRuConsumption(it->second.Write.Request.ByteSize()) + (it->second.Write.Request.GetPartitionRequest().GetMeteringV2Enabled() ? 1 : 0);
+                PendingQuotaAmount += quotaAmount;
                 PendingQuota.emplace_back(it->first);
+
+                if (!RequestQuotaBatchSpan && it->second.TraceId) {
+                    RequestQuotaBatchSpan = NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId::NewTraceId(it->second.TraceId.GetVerbosity(), Max<ui32>()), "Topic.Writer.RequestQuotaBatch");
+                }
+                it->second.RequestQuotaSpan = NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(it->second.TraceId), "Topic.Writer.RequestQuota");
+                it->second.RequestQuotaSpan.Attribute("amount", static_cast<i64>(quotaAmount));
+                it->second.RequestQuotaSpan.Link(RequestQuotaBatchSpan.GetTraceId());
             }
 
-            NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
+            NTabletPipe::SendData(SelfId(), PipeClient, ev.Release(), 0, it->second.ReserveBytesSpan.GetTraceId());
 
-            PendingReserve.emplace(it->first, TRequestHolder{std::move(it->second), needToRequestQuota});
+            PendingReserve.emplace(it->first, TRequestHolder{std::move(it->second.Write), needToRequestQuota, std::move(it->second.TraceId), std::move(it->second.ReserveBytesSpan), std::move(it->second.RequestQuotaSpan)});
             Pending.erase(it);
 
             if (needToRequestQuota && processed == MAX_QUOTA_INFLIGHT) {
@@ -611,7 +629,8 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
         }
 
         if (needToRequestQuota) {
-            RequestDataQuota(PendingQuotaAmount, ctx);
+            RequestQuotaBatchSpan.Attribute("amount", static_cast<i64>(PendingQuotaAmount));
+            RequestDataQuota(PendingQuotaAmount, ctx, RequestQuotaBatchSpan.GetTraceId());
         }
     }
 
@@ -685,6 +704,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
             }
 
             pit->second.QuotaAccepted = true;
+            pit->second.RequestQuotaSpan.End();
             ++qit;
         }
 
@@ -707,7 +727,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
             request.SetPartition(PartitionId);
         }
 
-        NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
+        NTabletPipe::SendData(SelfId(), PipeClient, ev.Release(), 0, std::move(holder.TraceId));
 
         PendingWrite.emplace_back(cookie);
     }
@@ -744,6 +764,8 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
 
             WriteAccepted(cookie);
             auto& holder = it->second;
+            holder.ReserveBytesSpan.End();
+            holder.ReserveBytesSpan = {};
 
             if ((holder.QuotaCheckEnabled && !holder.QuotaAccepted) || !ReceivedReserve.empty()) {
                 // There may be two situations:
@@ -822,6 +844,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
         OnWakeup(tag);
         switch (tag) {
             case EWakeupTag::RlAllowed:
+                RequestQuotaBatchSpan.EndOk();
                 ReceivedQuota.insert(ReceivedQuota.end(), PendingQuota.begin(), PendingQuota.end());
                 PendingQuota.clear();
 
@@ -830,9 +853,17 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
                 break;
 
             case EWakeupTag::RlNoResource:
+                RequestQuotaBatchSpan.EndError("No resource");
                 // Re-requesting the quota. We do this until we get a quota.
                 // We do not request a quota with a long waiting time because the writer may already be a destroyer, and the quota will still be waiting to be received.
-                RequestDataQuota(PendingQuotaAmount, ctx);
+                if (!PendingReserve.empty()) {
+                    RequestQuotaBatchSpan = NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId::NewTraceId(PendingReserve.begin()->second.TraceId.GetVerbosity(), Max<ui32>()), "Topic.Writer.RequestQuotaBatch");
+                    RequestQuotaBatchSpan.Attribute("amount", static_cast<i64>(PendingQuotaAmount));
+                    for (auto& [_, req] : PendingReserve) {
+                        req.RequestQuotaSpan.Link(RequestQuotaBatchSpan.GetTraceId());
+                    }
+                }
+                RequestDataQuota(PendingQuotaAmount, ctx, RequestQuotaBatchSpan.GetTraceId());
                 break;
 
             default:
@@ -919,12 +950,13 @@ private:
     bool Registered = false;
     ui64 MessageNo = 0;
 
-    TMap<ui64, TUserWriteRequest> Pending;
+    TMap<ui64, TRequestHolder> Pending;
     TMap<ui64, TRequestHolder> PendingReserve;
     TMap<ui64, TRequestHolder> ReceivedReserve;
     TDeque<ui64> PendingQuota;
     ui64 PendingQuotaAmount = 0;
     TDeque<ui64> ReceivedQuota;
+    NWilson::TSpan RequestQuotaBatchSpan;
     TDeque<TSentRequest> PendingWrite;
 
     EErrorCode ErrorCode = EErrorCode::InternalError;

@@ -15,12 +15,13 @@
 namespace NKikimr {
 namespace NDataShard {
 
-TS3BufferRaw::TS3BufferRaw(const TTagToColumn& columns, ui64 rowsLimit, ui64 bytesLimit)
+TS3BufferRaw::TS3BufferRaw(const TTagToColumn& columns, ui64 rowsLimit, ui64 bytesLimit, bool enableChecksums)
     : Columns(columns)
     , RowsLimit(rowsLimit)
     , BytesLimit(bytesLimit)
     , Rows(0)
     , BytesRead(0)
+    , Checksum(enableChecksums ? CreateExportChecksum() : nullptr)
 {
 }
 
@@ -154,7 +155,17 @@ bool TS3BufferRaw::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
 bool TS3BufferRaw::Collect(const NTable::IScan::TRow& row) {
     TBufferOutput out(Buffer);
     ErrorString.clear();
-    return Collect(row, out);
+
+    size_t beforeSize = Buffer.Size();
+    if (!Collect(row, out)) {
+        return false;
+    }
+
+    if (Checksum) {
+        TStringBuf data(Buffer.Data(), Buffer.Size());
+        Checksum->AddData(data.Tail(beforeSize));
+    }
+    return true;
 }
 
 IEventBase* TS3BufferRaw::PrepareEvent(bool last, NExportScan::IBuffer::TStats& stats) {
@@ -167,7 +178,12 @@ IEventBase* TS3BufferRaw::PrepareEvent(bool last, NExportScan::IBuffer::TStats& 
     }
 
     stats.BytesSent = buffer->Size();
-    return new TEvExportScan::TEvBuffer<TBuffer>(std::move(*buffer), last);
+
+    if (Checksum && last) {
+        return new TEvExportScan::TEvBuffer<TBuffer>(std::move(*buffer), last, Checksum->Serialize());
+    } else {
+        return new TEvExportScan::TEvBuffer<TBuffer>(std::move(*buffer), last);
+    }
 }
 
 void TS3BufferRaw::Clear() {
@@ -189,9 +205,9 @@ TMaybe<TBuffer> TS3BufferRaw::Flush(bool) {
 }
 
 NExportScan::IBuffer* CreateS3ExportBufferRaw(
-        const IExport::TTableColumns& columns, ui64 rowsLimit, ui64 bytesLimit)
+        const IExport::TTableColumns& columns, ui64 rowsLimit, ui64 bytesLimit, bool enableChecksums)
 {
-    return new TS3BufferRaw(columns, rowsLimit, bytesLimit);
+    return new TS3BufferRaw(columns, rowsLimit, bytesLimit, enableChecksums);
 }
 
 } // NDataShard

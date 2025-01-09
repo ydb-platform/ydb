@@ -1,6 +1,7 @@
 #pragma once
 
 #include <openssl/sha.h>
+#include <ydb/core/base/appdata.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/core/data_integrity_trails/data_integrity_trails.h>
@@ -44,6 +45,22 @@ inline void LogIntegrityTrails(const NKqp::TEvKqp::TEvQueryRequest::TPtr& reques
         LogKeyValue("Type", "Request", ss);
         LogKeyValue("QueryAction", ToString(request->Get()->GetAction()), ss);
         LogKeyValue("QueryType", ToString(request->Get()->GetType()), ss);
+
+        const auto queryTextLogMode = AppData()->DataIntegrityTrailsConfig.HasQueryTextLogMode()
+            ? AppData()->DataIntegrityTrailsConfig.GetQueryTextLogMode()
+            : NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_HASHED;
+        if (queryTextLogMode == NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_ORIGINAL) {
+            LogKeyValue("QueryText", request->Get()->GetQuery(), ss);
+        } else {
+            std::string hashedQueryText;
+            hashedQueryText.resize(SHA256_DIGEST_LENGTH);
+
+            SHA256_CTX sha256;
+            SHA256_Init(&sha256);
+            SHA256_Update(&sha256, request->Get()->GetQuery().data(), request->Get()->GetQuery().size());
+            SHA256_Final(reinterpret_cast<unsigned char*>(&hashedQueryText[0]), &sha256);
+            LogKeyValue("QueryText", Base64Encode(hashedQueryText), ss);
+        }
 
         if (request->Get()->HasTxControl()) {
             LogTxControl(request->Get()->GetTxControl(), ss);

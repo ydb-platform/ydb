@@ -1,6 +1,5 @@
 (
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 (let list1 (AsList 
   (AsStruct '('a.key1 (Int32 '1)) '('k.value1 (String 'A))) 

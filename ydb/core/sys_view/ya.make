@@ -8,6 +8,7 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/kqp/runtime
+    ydb/core/sys_view/auth
     ydb/core/sys_view/common
     ydb/core/sys_view/nodes
     ydb/core/sys_view/sessions
@@ -24,6 +25,7 @@ YQL_LAST_ABI_VERSION()
 END()
 
 RECURSE(
+    auth
     common
     nodes
     partition_stats

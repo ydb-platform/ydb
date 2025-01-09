@@ -18,6 +18,8 @@ SRCS(
 PEERDIR(
     ydb/apps/version
     ydb/core/blobstorage/dsproxy/mock
+    ydb/core/blobstorage/nodewarden
+    ydb/core/mind
     ydb/core/blobstorage/pdisk/mock
     ydb/core/mind/bscontroller
     ydb/core/tx/scheme_board

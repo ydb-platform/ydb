@@ -1038,13 +1038,18 @@ protected:
         }
     }
 
-    void ValidateString(TStringBuf data, TStringBuf fieldFullName)
+    void ValidateString(TStringBuf data, TStringBuf fieldFullName, std::optional<EUtf8Check> utf8Check)
     {
-        auto config = GetProtobufInteropConfig();
-        if (config->Utf8Check == EUtf8Check::Disable || IsUtf(data)) {
+        // TODO(kmokrov): `.or_else` when C++23 arrives.
+        auto effectiveCheck = utf8Check ? *utf8Check : std::invoke([] {
+            auto config = GetProtobufInteropConfig();
+            return config->Utf8Check;
+        });
+
+        if (effectiveCheck == EUtf8Check::Disable || IsUtf(data)) {
             return;
         }
-        switch (config->Utf8Check) {
+        switch (effectiveCheck) {
             case EUtf8Check::Disable:
                 return;
             case EUtf8Check::LogOnFail:
@@ -1164,7 +1169,7 @@ private:
             const auto* field = FieldStack_.back().Field;
             switch (field->GetType()) {
                 case FieldDescriptor::TYPE_STRING:
-                    ValidateString(value, field->GetFullName());
+                    ValidateString(value, field->GetFullName(), Options_.Utf8Check);
                     [[fallthrough]];
 
                 case FieldDescriptor::TYPE_BYTES:
@@ -2686,7 +2691,7 @@ private:
                         }
                         TStringBuf data(PooledString_.data(), length);
                         if (field->GetType() == FieldDescriptor::TYPE_STRING) {
-                            ValidateString(data, field->GetFullName());
+                            ValidateString(data, field->GetFullName(), Options_.Utf8Check);
                         }
                         ParseScalar([&] {
                             if (field->GetBytesFieldConverter()) {

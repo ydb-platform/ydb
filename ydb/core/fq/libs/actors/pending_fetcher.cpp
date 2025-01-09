@@ -53,6 +53,7 @@
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/fq/libs/metrics/sanitize_label.h>
 #include <ydb/core/fq/libs/private_client/internal_service.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -358,6 +359,16 @@ private:
         const TString folderId = NYdb::NFq::TScope(task.scope()).ParseFolder();
         const TString cloudId = task.sensor_labels().at("cloud_id");
         const TString queryId = task.query_id().value();
+        const bool isStreaming = task.query_type() == FederatedQuery::QueryContent::STREAMING;
+        TString queryIdLabel;
+        TString queryNameLabel = SanitizeLabel(task.query_name());
+        if (task.automatic()) {
+            queryIdLabel = isStreaming ? "streaming" : "analytics";
+        } else if (isStreaming) {
+            queryIdLabel = queryId;
+        } else {
+            queryIdLabel = "manual";
+        }
 
         ::NYql::NCommon::TServiceCounters queryCounters(ServiceCounters);
         auto publicCountersParent = ServiceCounters.PublicCounters;
@@ -365,8 +376,15 @@ private:
         if (cloudId && folderId) {
             publicCountersParent = publicCountersParent->GetSubgroup("cloud_id", cloudId)->GetSubgroup("folder_id", folderId);
         }
-        queryCounters.PublicCounters = publicCountersParent->GetSubgroup("query_id",
-            task.automatic() ? (task.query_name() ? task.query_name() : "automatic") : queryId);
+
+        ::NMonitoring::TDynamicCounterPtr queryPublicCounters = publicCountersParent;
+        // use original query id here
+        queryPublicCounters = queryPublicCounters->GetSubgroup("query_id", queryId);
+
+        if (queryNameLabel) {
+            queryPublicCounters = queryPublicCounters->GetSubgroup("query_name", queryNameLabel);
+        }
+        queryCounters.PublicCounters = queryPublicCounters;
 
         auto rootCountersParent = ServiceCounters.RootCounters;
         std::set<std::pair<TString, TString>> sensorLabels(task.sensor_labels().begin(), task.sensor_labels().end());
@@ -374,9 +392,17 @@ private:
             rootCountersParent = rootCountersParent->GetSubgroup(label, item);
         }
 
-        queryCounters.RootCounters = rootCountersParent->GetSubgroup("query_id",
-            task.automatic() ? (folderId ? "automatic_" + folderId : "automatic") : queryId);
-        queryCounters.Counters = queryCounters.RootCounters;
+        ::NMonitoring::TDynamicCounterPtr queryRootCounters = rootCountersParent;
+        if (queryIdLabel) {
+            queryRootCounters = queryRootCounters->GetSubgroup("query_id", queryIdLabel);
+        }
+
+        if (!task.automatic() && isStreaming && queryNameLabel) {
+            queryRootCounters = queryRootCounters->GetSubgroup("query_name", queryNameLabel);
+        }
+
+        queryCounters.RootCounters = queryRootCounters;
+        queryCounters.Counters = queryRootCounters;
 
         queryCounters.InitUptimeCounter();
         const auto createdAt = TInstant::Now();

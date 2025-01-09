@@ -2649,7 +2649,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         //        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
 
         {
             auto alterQuery = TStringBuilder() <<
@@ -2734,7 +2733,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         //        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
@@ -2790,7 +2788,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
 
         testHelper.CreateTestOlapTable();
@@ -2994,6 +2991,175 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 .GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
     }
+
+    void TestDeleteAbsent(const size_t shardCount, bool reboot) {
+        //This test tries to DELETE from a table when there is no rows to delete at some shard
+        //It corresponds to a SCAN, then NO write then COMMIT on that shard
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+        NKikimrConfig::TAppConfig appConfig;
+        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("value").SetType(NScheme::NTypeIds::Int32).SetNullable(true),
+        };
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ttt").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema).SetMinPartitionsCount(shardCount);
+        testHelper.CreateTable(testTable);
+        auto client = testHelper.GetKikimr().GetQueryClient();
+        //1. Insert exactlly one row into a table, so the only shard will contain a row
+        const auto result = client
+            .ExecuteQuery(
+                R"(
+                 INSERT INTO `/Root/ttt` (id, value) VALUES
+                 (1, 11)
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+            .GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        //2. Ensure that there is actually 1 row in the table
+        {
+            const auto resultSelect = client
+                .ExecuteQuery(
+                    "SELECT * FROM `/Root/ttt`",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .GetValueSync();
+
+            UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
+            const auto resultSets = resultSelect.GetResultSets();
+            UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
+            const auto resultSet = resultSets[0];
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+        }
+        if (reboot) {
+            csController->SetRestartOnLocalTxCommitted("TProposeWriteTransaction");
+        }
+        //DELETE 1 row from one shard and 0 rows from others
+        const auto resultDelete =
+            client
+                .ExecuteQuery(
+                    "DELETE from `/Root/ttt` ",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .GetValueSync();
+        UNIT_ASSERT_C(resultDelete.IsSuccess() != reboot, resultDelete.GetIssues().ToString());
+        {
+            const auto resultSelect = client
+                .ExecuteQuery(
+                    "SELECT * FROM `/Root/ttt`",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .GetValueSync();
+
+            UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
+            const auto resultSets = resultSelect.GetResultSets();
+            UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
+            const auto resultSet = resultSets[0];
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), reboot ? 1 : 0);
+            
+        }
+        //DELETE 0 rows from every shard
+        const auto resultDelete2 =
+            client
+                .ExecuteQuery(
+                    "DELETE from `/Root/ttt` WHERE id < 100",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .GetValueSync();
+        UNIT_ASSERT_C(resultDelete2.IsSuccess() != reboot, result.GetIssues().ToString());
+    }
+    Y_UNIT_TEST_TWIN(DeleteAbsentSingleShard, Reboot) {
+        TestDeleteAbsent(1, Reboot);
+    }
+
+    Y_UNIT_TEST_TWIN(DeleteAbsentMultipleShards, Reboot) {
+        TestDeleteAbsent(2, Reboot);
+    }
+
+    Y_UNIT_TEST(InsertIntoNullablePK) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
+        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("pk1").SetType(NScheme::NTypeIds::Int64).SetNullable(true),
+            TTestHelper::TColumnSchema().SetName("pk2").SetType(NScheme::NTypeIds::Int32).SetNullable(true),
+            TTestHelper::TColumnSchema().SetName("value").SetType(NScheme::NTypeIds::String).SetNullable(true),
+        };
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ttt").SetPrimaryKey({ "pk1", "pk2" }).SetSharding({ "pk1" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        auto client = testHelper.GetKikimr().GetQueryClient();
+        const auto result = client
+            .ExecuteQuery(
+                R"(
+                 INSERT INTO `/Root/ttt` (pk1, pk2, value) VALUES
+                 (1, 2, "value"),
+                 (null, 2, "value"),
+                 (1, null, "value"),
+                 (null, null, "value")
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+            .GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        {
+            const auto resultSelect = client
+                .ExecuteQuery(
+                    "SELECT * FROM `/Root/ttt` ORDER BY pk1, pk2",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .GetValueSync();
+            UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
+            const auto resultSets = resultSelect.GetResultSets();
+            UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
+            const auto resultSet = resultSets[0];
+            CompareYson(R"(
+                [
+                    [#;#;["value"]];
+                    [#;[2];["value"]];
+                    [[1];#;["value"]];
+                    [[1];[2];["value"]]
+                ]
+            )", FormatResultSetYson(resultSet));
+        }
+    }
+
+    Y_UNIT_TEST(InsertEmptyString) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
+        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("value").SetType(NScheme::NTypeIds::String).SetNullable(false),
+        };
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ttt").SetPrimaryKey({ "id", }).SetSharding({ "id" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        auto client = testHelper.GetKikimr().GetQueryClient();
+        const auto result = client
+            .ExecuteQuery(
+                R"(
+                 INSERT INTO `/Root/ttt` (id, value) VALUES
+                 (347, '')
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+            .GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        {
+            const auto resultSelect = client
+                .ExecuteQuery(
+                    "SELECT * FROM `/Root/ttt`",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .GetValueSync();
+            UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
+            const auto resultSets = resultSelect.GetResultSets();
+            UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
+            const auto resultSet = resultSets[0];
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+        }
+    }
+
 }
 
 }

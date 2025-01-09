@@ -447,7 +447,11 @@ public:
             if (mailbox) {
                 *mailbox = &mbox;
             }
-            return mbox.FindActor(actorId.LocalId());
+            IActor *actor = mbox.FindActor(actorId.LocalId());
+            if (!actor) {
+                actor = mbox.FindAlias(actorId.LocalId());
+            }
+            return actor;
         } else {
             return nullptr;
         }
@@ -518,6 +522,24 @@ public:
         return Register(actor, {}, poolId, {}, nodeId);
     }
 
+    TActorId RegisterAlias(ui32 mboxId, IActor* actor, ui32 poolId, ui32 nodeId) {
+        auto it = Mailboxes.find(TMailboxId(nodeId, poolId, mboxId));
+        Y_ABORT_UNLESS(it != Mailboxes.end());
+        TMailboxInfo& mbox = it->second;
+        mbox.AttachAlias(ActorLocalId, actor);
+
+        const TActorId actorId(nodeId, poolId, ActorLocalId, mboxId);
+        ++ActorLocalId;
+        return actorId;
+    }
+
+    void UnregisterAlias(ui32 mboxId, const TActorId &actorId, ui32 poolId, ui32 nodeId) {
+        auto it = Mailboxes.find(TMailboxId(nodeId, poolId, mboxId));
+        Y_ABORT_UNLESS(it != Mailboxes.end());
+        TMailboxInfo& mbox = it->second;
+        mbox.DetachAlias(actorId.LocalId());
+    }
+
     void RegisterService(const TActorId& serviceId, const TActorId& actorId) {
         const ui32 nodeId = actorId.NodeId(); // only at the node with the actor
         GetNode(nodeId)->ActorSystem->RegisterLocalService(serviceId, actorId);
@@ -566,8 +588,12 @@ public:
             if (FilterFunction && !FilterFunction(item->NodeId, event)) { // event is dropped by the filter function
                 continue;
             }
-            const bool success = WrapInActorContext(TransformEvent(event.get(), item->NodeId), [&](IActor *actor) {
+            const bool success = WrapInActorContext(TransformEvent(event.get(), item->NodeId), [&](IActor *actor, bool alias) {
                 TAutoPtr<IEventHandle> ev(event.release());
+
+                if (alias) {
+                    ev->Rewrite(ev->GetTypeRewrite(), actor->SelfId());
+                }
 
                 const ui32 type = ev->GetTypeRewrite();
 
@@ -598,7 +624,16 @@ public:
             return false;
         }
         TMailboxInfo& mbox = mboxIt->second;
-        if (IActor *actor = mbox.FindActor(actorId.LocalId())) {
+        IActor *actor = mbox.FindActor(actorId.LocalId());
+        bool alias = false;
+        if (!actor) {
+            actor = mbox.FindAlias(actorId.LocalId());
+            if (actor) {
+                actorId = actor->SelfId();
+                alias = true;
+            }
+        }
+        if (actor) {
             // obtain node info for this actor
             TPerNodeInfo *info = GetNode(actorId.NodeId());
 
@@ -613,7 +648,9 @@ public:
 
             // invoke the callback
             try {
-                if constexpr (std::is_invocable_v<TCallback, IActor*>) {
+                if constexpr (std::is_invocable_v<TCallback, IActor*, bool>) {
+                    std::invoke(std::forward<TCallback>(callback), actor, alias);
+                } else if constexpr (std::is_invocable_v<TCallback, IActor*>) {
                     std::invoke(std::forward<TCallback>(callback), actor);
                 } else {
                     std::invoke(std::forward<TCallback>(callback));

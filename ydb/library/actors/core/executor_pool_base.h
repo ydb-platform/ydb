@@ -42,6 +42,8 @@ namespace NActors {
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingWriteCounter, const TActorId& parentId) override;
         TActorId Register(IActor* actor, TMailboxCache& cache, ui64 revolvingWriteCounter, const TActorId& parentId) override;
         TActorId Register(IActor* actor, TMailbox* mailbox, const TActorId& parentId) override;
+        TActorId RegisterAlias(TMailbox* mailbox, IActor* actor) override;
+        void UnregisterAlias(TMailbox* mailbox, const TActorId& actorId) override;
         bool Cleanup() override;
     };
 

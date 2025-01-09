@@ -47,6 +47,7 @@ protected:
     NWilson::TSpan Span;
     IViewer* Viewer = nullptr;
     NMon::TEvHttpInfo::TPtr Event;
+    NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr HttpEvent;
     TJsonSettings JsonSettings;
     TProto2JsonConfig Proto2JsonConfig;
     TDuration Timeout = TDuration::Seconds(10);
@@ -177,6 +178,7 @@ protected:
     TViewerPipeClient();
     TViewerPipeClient(NWilson::TTraceId traceId);
     TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev, const TString& handlerName = {});
+    TViewerPipeClient(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev, const TString& handlerName = {});
     TActorId ConnectTabletPipe(TTabletId tabletId);
     void SendEvent(std::unique_ptr<IEventHandle> event);
     void SendRequest(TActorId recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {});

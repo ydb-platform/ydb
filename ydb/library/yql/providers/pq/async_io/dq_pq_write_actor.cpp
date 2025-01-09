@@ -140,7 +140,8 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         IDqComputeActorAsyncOutput::ICallbacks* callbacks,
         const ::NMonitoring::TDynamicCounterPtr& counters,
-        i64 freeSpace)
+        i64 freeSpace,
+        const IPqGateway::TPtr& pqGateway)
         : TActor<TDqPqWriteActor>(&TDqPqWriteActor::StateFunc)
         , OutputIndex(outputIndex)
         , TxId(txId)
@@ -151,7 +152,7 @@ public:
         , Callbacks(callbacks)
         , LogPrefix(TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", TaskId: " << taskId << ", PQ sink. ")
         , FreeSpace(freeSpace)
-        , TopicClient(Driver, GetTopicClientSettings())
+        , PqGateway(pqGateway)
     { 
         EgressStats.Level = statsLevel;
     }
@@ -300,6 +301,13 @@ private:
                 : NYdb::NTopic::ECodec::GZIP);
     }
 
+    ITopicClient& GetTopicClient() {
+        if (!TopicClient) {
+            TopicClient = PqGateway->GetTopicClient(Driver, GetTopicClientSettings());
+        }
+        return *TopicClient;
+    }
+
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() {
         return NYdb::NTopic::TTopicClientSettings()
             .Database(SinkParams.GetDatabase())
@@ -314,7 +322,7 @@ private:
 
     void CreateSessionIfNotExists() {
         if (!WriteSession) {
-            WriteSession = TopicClient.CreateWriteSession(GetWriteSessionSettings());
+            WriteSession = GetTopicClient().CreateWriteSession(GetWriteSessionSettings());
             SubscribeOnNextEvent();
         }
     }
@@ -471,7 +479,7 @@ private:
     i64 FreeSpace = 0;
     bool Finished = false;
 
-    NYdb::NTopic::TTopicClient TopicClient;
+    ITopicClient::TPtr TopicClient;
     std::shared_ptr<NYdb::NTopic::IWriteSession> WriteSession;
     TString SourceId;
     ui64 NextSeqNo = 1;
@@ -482,6 +490,7 @@ private:
     std::queue<TString> Buffer;
     std::queue<TAckInfo> WaitingAcks; // Size of items which are waiting for acks (used to update free space)
     std::queue<std::tuple<ui64, NDqProto::TCheckpoint>> DeferredCheckpoints;
+    IPqGateway::TPtr PqGateway;
 };
 
 std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
@@ -495,6 +504,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     IDqComputeActorAsyncOutput::ICallbacks* callbacks,
     const ::NMonitoring::TDynamicCounterPtr& counters,
+    IPqGateway::TPtr pqGateway,
     i64 freeSpace)
 {
     const TString& tokenName = settings.GetToken().GetName();
@@ -511,13 +521,14 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         callbacks,
         counters,
-        freeSpace);
+        freeSpace,
+        pqGateway);
     return {actor, actor};
 }
 
-void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const ::NMonitoring::TDynamicCounterPtr& counters) {
+void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters) {
     factory.RegisterSink<NPq::NProto::TDqPqTopicSink>("PqSink",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway](
             NPq::NProto::TDqPqTopicSink&& settings,
             IDqAsyncIoFactory::TSinkArguments&& args)
         {
@@ -532,7 +543,8 @@ void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver dri
                 driver,
                 credentialsFactory,
                 args.Callback,
-                counters
+                counters,
+                pqGateway
             );
         });
 }

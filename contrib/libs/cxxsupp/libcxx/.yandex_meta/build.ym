@@ -1,6 +1,6 @@
 {% extends '//builtin/run.ym' %}
 
-{% block current_version %}3b0705827dbe711788c6b6bec3afa94205db1ce8{% endblock %}
+{% block current_version %}9783f28cbb155e4a8d49c12e1c60ce14dcfaf0c7{% endblock %}
 {% block current_date %}2023-12-18{% endblock %}
 
 {% block keep_sources %}
@@ -250,6 +250,7 @@ ELSEIF (CXX_RT == "glibcxx_dynamic")
     ENABLE(NEED_CXX_RT_ADDINCL)
 ELSEIF (CXX_RT == "libcxxabi")
     PEERDIR(
+        contrib/libs/cxxsupp/builtins
         contrib/libs/cxxsupp/libcxxabi
     )
     ADDINCL(

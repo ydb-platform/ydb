@@ -49,6 +49,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableRangeScan",
+                                                        "Path": "/Root/postgres_select.test_plan/onek2",
                                                         "ReadColumns": [
                                                             "stringu1",
                                                             "unique1"

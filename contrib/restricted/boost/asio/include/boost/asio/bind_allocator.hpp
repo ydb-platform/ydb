@@ -16,12 +16,10 @@
 #endif // defined(_MSC_VER) && (_MSC_VER >= 1200)
 
 #include <boost/asio/detail/config.hpp>
+#include <boost/asio/detail/type_traits.hpp>
 #include <boost/asio/associated_allocator.hpp>
-#include <boost/asio/associated_executor.hpp>
 #include <boost/asio/associator.hpp>
 #include <boost/asio/async_result.hpp>
-#include <boost/asio/detail/initiation_base.hpp>
-#include <boost/asio/detail/type_traits.hpp>
 
 #include <boost/asio/detail/push_options.hpp>
 
@@ -363,46 +361,6 @@ private:
   T target_;
 };
 
-/// A function object type that adapts a @ref completion_token to specify that
-/// the completion handler should have the supplied allocator as its associated
-/// allocator.
-/**
- * May also be used directly as a completion token, in which case it adapts the
- * asynchronous operation's default completion token (or boost::asio::deferred
- * if no default is available).
- */
-template <typename Allocator>
-struct partial_allocator_binder
-{
-  /// Constructor that specifies associated allocator.
-  explicit partial_allocator_binder(const Allocator& ex)
-    : allocator_(ex)
-  {
-  }
-
-  /// Adapt a @ref completion_token to specify that the completion handler
-  /// should have the allocator as its associated allocator.
-  template <typename CompletionToken>
-  BOOST_ASIO_NODISCARD inline
-  constexpr allocator_binder<decay_t<CompletionToken>, Allocator>
-  operator()(CompletionToken&& completion_token) const
-  {
-    return allocator_binder<decay_t<CompletionToken>, Allocator>(
-        allocator_, static_cast<CompletionToken&&>(completion_token));
-  }
-
-//private:
-  Allocator allocator_;
-};
-
-/// Create a partial completion token that associates an allocator.
-template <typename Allocator>
-BOOST_ASIO_NODISCARD inline partial_allocator_binder<Allocator>
-bind_allocator(const Allocator& ex)
-{
-  return partial_allocator_binder<Allocator>(ex);
-}
-
 /// Associate an object of type @c T with an allocator of type
 /// @c Allocator.
 template <typename Allocator, typename T>
@@ -480,48 +438,49 @@ public:
   }
 
   template <typename Initiation>
-  struct init_wrapper : detail::initiation_base<Initiation>
+  struct init_wrapper
   {
-    using detail::initiation_base<Initiation>::initiation_base;
+    template <typename Init>
+    init_wrapper(const Allocator& allocator, Init&& init)
+      : allocator_(allocator),
+        initiation_(static_cast<Init&&>(init))
+    {
+    }
 
     template <typename Handler, typename... Args>
-    void operator()(Handler&& handler, const Allocator& a, Args&&... args) &&
+    void operator()(Handler&& handler, Args&&... args)
     {
-      static_cast<Initiation&&>(*this)(
+      static_cast<Initiation&&>(initiation_)(
           allocator_binder<decay_t<Handler>, Allocator>(
-              a, static_cast<Handler&&>(handler)),
+              allocator_, static_cast<Handler&&>(handler)),
           static_cast<Args&&>(args)...);
     }
 
     template <typename Handler, typename... Args>
-    void operator()(Handler&& handler,
-        const Allocator& a, Args&&... args) const &
+    void operator()(Handler&& handler, Args&&... args) const
     {
-      static_cast<const Initiation&>(*this)(
+      initiation_(
           allocator_binder<decay_t<Handler>, Allocator>(
-              a, static_cast<Handler&&>(handler)),
+              allocator_, static_cast<Handler&&>(handler)),
           static_cast<Args&&>(args)...);
     }
+
+    Allocator allocator_;
+    Initiation initiation_;
   };
 
   template <typename Initiation, typename RawCompletionToken, typename... Args>
   static auto initiate(Initiation&& initiation,
       RawCompletionToken&& token, Args&&... args)
     -> decltype(
-      async_initiate<
-        conditional_t<
-          is_const<remove_reference_t<RawCompletionToken>>::value, const T, T>,
-        Signature>(
+      async_initiate<T, Signature>(
         declval<init_wrapper<decay_t<Initiation>>>(),
-        token.get(), token.get_allocator(), static_cast<Args&&>(args)...))
+        token.get(), static_cast<Args&&>(args)...))
   {
-    return async_initiate<
-      conditional_t<
-        is_const<remove_reference_t<RawCompletionToken>>::value, const T, T>,
-      Signature>(
-        init_wrapper<decay_t<Initiation>>(
+    return async_initiate<T, Signature>(
+        init_wrapper<decay_t<Initiation>>(token.get_allocator(),
           static_cast<Initiation&&>(initiation)),
-        token.get(), token.get_allocator(), static_cast<Args&&>(args)...);
+        token.get(), static_cast<Args&&>(args)...);
   }
 
 private:
@@ -529,31 +488,6 @@ private:
   async_result& operator=(const async_result&) = delete;
 
   async_result<T, Signature> target_;
-};
-
-template <typename Allocator, typename... Signatures>
-struct async_result<partial_allocator_binder<Allocator>, Signatures...>
-{
-  template <typename Initiation, typename RawCompletionToken, typename... Args>
-  static auto initiate(Initiation&& initiation,
-      RawCompletionToken&& token, Args&&... args)
-    -> decltype(
-      async_initiate<Signatures...>(
-        static_cast<Initiation&&>(initiation),
-        allocator_binder<
-          default_completion_token_t<associated_executor_t<Initiation>>,
-          Allocator>(token.allocator_,
-            default_completion_token_t<associated_executor_t<Initiation>>{}),
-        static_cast<Args&&>(args)...))
-  {
-    return async_initiate<Signatures...>(
-        static_cast<Initiation&&>(initiation),
-        allocator_binder<
-          default_completion_token_t<associated_executor_t<Initiation>>,
-          Allocator>(token.allocator_,
-            default_completion_token_t<associated_executor_t<Initiation>>{}),
-        static_cast<Args&&>(args)...);
-  }
 };
 
 template <template <typename, typename> class Associator,

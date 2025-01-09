@@ -105,7 +105,7 @@ TResponseInfo RetryRequestWithPolicy(
     TMaybe<TStringBuf> body = {},
     const TRequestConfig& config = TRequestConfig());
 
-TResponseInfo RequestWithoutRetry(
+NHttpClient::IHttpResponsePtr RequestWithoutRetry(
     const TClientContext& context,
     TMutationId& mutationId,
     THttpHeader& header,

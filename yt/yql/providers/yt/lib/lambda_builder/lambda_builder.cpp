@@ -130,6 +130,9 @@ public:
     void Invalidate() final {
         return Graph->Invalidate();
     }
+    void InvalidateCaches() final {
+        return Graph->InvalidateCaches();
+    }
     TMemoryUsageInfo& GetMemInfo() const final {
         return Graph->GetMemInfo();
     }

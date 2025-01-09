@@ -62,6 +62,8 @@ message StaleModeSettings {
 message SnapshotModeSettings {
 }
 
+message SnapshotRWModeSettings {
+}
 
 message TransactionSettings {
     oneof tx_mode {
@@ -69,6 +71,7 @@ message TransactionSettings {
         OnlineModeSettings online_read_only = 2;
         StaleModeSettings stale_read_only = 3;
         SnapshotModeSettings snapshot_read_only = 4;
+        SnapshotRWModeSettings snapshot_read_write = 5;
     }
 }
 

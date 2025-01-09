@@ -1,5 +1,7 @@
 #pragma once
 
+#include "public.h"
+
 #include <library/cpp/yt/global/access.h>
 
 #include <library/cpp/yt/memory/ref.h>
@@ -75,6 +77,14 @@ inline constexpr NGlobal::TVariableTag ExtractFromDictionaryTag = {};
 // because it depends on ytree for now.
 std::optional<TOriginAttributes::TErasedExtensionData> GetExtensionData();
 TString FormatOrigin(const TOriginAttributes& attributes);
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Weak symbol.
+TOriginAttributes ExtractFromDictionary(TErrorAttributes* attributes);
+
+// Default impl of weak symbol.
+TOriginAttributes ExtractFromDictionaryDefault(TErrorAttributes* attributes);
 
 } // namespace NDetail
 

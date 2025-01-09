@@ -9,7 +9,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/tx/columnshard/data_sharing/common/transactions
+    ydb/core/tx/columnshard/tablet
 )
 
 END()

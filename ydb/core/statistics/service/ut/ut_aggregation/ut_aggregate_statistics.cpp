@@ -55,7 +55,7 @@ std::unique_ptr<TEvStatistics::TEvAggregateStatistics> CreateStatisticsRequest(c
     auto& record = ev->Record;
     record.SetRound(data.Round);
 
-    PathIdFromPathId(data.PathId, record.MutablePathId());
+    data.PathId.ToProto(record.MutablePathId());
 
     auto columnTags = record.MutableColumnTags();
     for (auto tag : data.ColumnTags) {

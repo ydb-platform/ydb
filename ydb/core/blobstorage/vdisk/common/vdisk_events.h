@@ -2996,14 +2996,35 @@ namespace NKikimr {
         }
     };
 
+    struct TNodeLayoutInfo : TThrRefBase {
+        // indexed by NodeId
+        TNodeLocation SelfLocation;
+        TVector<TNodeLocation> LocationPerOrderNumber;
+
+        TNodeLayoutInfo(const TNodeLocation& selfLocation, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
+                THashMap<ui32, TNodeLocation>& map)
+            : SelfLocation(selfLocation)
+            , LocationPerOrderNumber(info->GetTotalVDisksNum())
+        {
+            for (ui32 i = 0; i < LocationPerOrderNumber.size(); ++i) {
+                LocationPerOrderNumber[i] = map[info->GetActorId(i).NodeId()];
+            }
+        }
+    };
+
+    using TNodeLayoutInfoPtr = TIntrusivePtr<TNodeLayoutInfo>;
+
     struct TEvBlobStorage::TEvConfigureProxy
         : public TEventLocal<TEvBlobStorage::TEvConfigureProxy, TEvBlobStorage::EvConfigureProxy>
     {
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
+        TNodeLayoutInfoPtr NodeLayoutInfo;
         TIntrusivePtr<TStoragePoolCounters> StoragePoolCounters;
 
-        TEvConfigureProxy(TIntrusivePtr<TBlobStorageGroupInfo> info, TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = nullptr)
+        TEvConfigureProxy(TIntrusivePtr<TBlobStorageGroupInfo> info, TNodeLayoutInfoPtr nodeLayoutInfo,
+                TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = nullptr)
             : Info(std::move(info))
+            , NodeLayoutInfo(std::move(nodeLayoutInfo))
             , StoragePoolCounters(std::move(storagePoolCounters))
         {}
 

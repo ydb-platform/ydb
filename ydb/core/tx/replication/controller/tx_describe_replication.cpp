@@ -187,6 +187,7 @@ public:
         Result = MakeHolder<TEvController::TEvDescribeReplicationResult>();
         Result->Record.SetStatus(NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
         Result->Record.MutableConnectionParams()->CopyFrom(replication->GetConfig().GetSrcConnectionParams());
+        Result->Record.MutableConsistencySettings()->CopyFrom(replication->GetConfig().GetConsistencySettings());
 
         using TInitialScanProgress = NYdb::NTable::TChangefeedDescription::TInitialScanProgress;
         std::optional<TInitialScanProgress> totalScanProgress;

@@ -326,8 +326,8 @@ public:
                 ArbiterColumnShard = *ReceivingShards.begin();
             } else {
                 ArbiterColumnShard = locks.GetArbiterColumnShard();
-                AFL_VERIFY(ArbiterColumnShard);
             }
+            AFL_VERIFY(ArbiterColumnShard);
         }
 
         Generation = lock.GetGeneration();

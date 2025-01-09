@@ -131,6 +131,7 @@ private:
         }
 
         ConvertConnectionParams(record.GetConnectionParams(), *Result.mutable_connection_params());
+        ConvertConsistencySettings(record.GetConsistencySettings(), Result);
         ConvertState(*record.MutableState(), Result);
 
         for (const auto& target : record.GetTargets()) {
@@ -170,6 +171,26 @@ private:
 
     static void ConvertOAuth(const NKikimrReplication::TOAuthToken& from, Ydb::Replication::ConnectionParams::OAuth& to) {
         to.set_token_secret_name(from.GetTokenSecretName());
+    }
+
+    static void ConvertConsistencySettings(const NKikimrReplication::TConsistencySettings& from, Ydb::Replication::DescribeReplicationResult& to) {
+        switch (from.GetLevelCase()) {
+        case NKikimrReplication::TConsistencySettings::kRow:
+            return ConvertRowConsistencySettings(from.GetRow(), *to.mutable_row_consistency());
+        case NKikimrReplication::TConsistencySettings::kGlobal:
+            return ConvertGlobalConsistencySettings(from.GetGlobal(), *to.mutable_global_consistency());
+        default:
+            break;
+        }
+    }
+
+    static void ConvertRowConsistencySettings(const NKikimrReplication::TConsistencySettings::TRowConsistency&, Ydb::Replication::ConsistencyLevelRow&) {
+        // nop
+    }
+
+    static void ConvertGlobalConsistencySettings(const NKikimrReplication::TConsistencySettings::TGlobalConsistency& from, Ydb::Replication::ConsistencyLevelGlobal& to) {
+        *to.mutable_commit_interval() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
+            from.GetCommitIntervalMilliSeconds());
     }
 
     static void ConvertItem(const NKikimrReplication::TReplicationConfig::TTargetSpecific::TTarget& from, Ydb::Replication::DescribeReplicationResult::Item& to) {

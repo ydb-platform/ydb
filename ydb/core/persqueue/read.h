@@ -275,7 +275,7 @@ namespace NPQ {
             request->Record = std::move(srcRequest);
             request->Record.SetCookie(cookie);
 
-            ctx.Send(Tablet, request.Release()); // -> KV
+            ctx.Send(Tablet, request.Release(), 0, 0, std::move(ev->TraceId)); // -> KV
         }
 
         void SaveCmdWrite(const NKikimrClient::TKeyValueRequest& srcRequest, TKvRequest& kvReq, const TActorContext& ctx)
@@ -301,14 +301,6 @@ namespace NPQ {
                     kvReq.MetadataWritesCount++;
                 }
             }
-
-            ui64 cookie = SaveKvRequest(std::move(kvReq));
-
-            auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            request->Record = std::move(srcRequest);
-            request->Record.SetCookie(cookie);
-
-            ctx.Send(Tablet, request.Release(), 0, 0, std::move(ev->TraceId)); // -> KV
         }
 
         void SaveCmdRename(const NKikimrClient::TKeyValueRequest& srcRequest, TKvRequest& kvReq, const TActorContext& ctx)

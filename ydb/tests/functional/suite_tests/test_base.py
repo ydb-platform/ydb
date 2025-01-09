@@ -83,7 +83,7 @@ class StatementDefinition:
 ''' + '\n'.join([f'        {row}' for row in self.text.split('\n')])
 
     @staticmethod
-    def _parse_statement_type(statement_line: str) -> (Type, {TableType}):
+    def _parse_statement_type(statement_line: str, suite: str, at_line: int) -> (Type, {TableType}):
         parts = statement_line.split(' ')
         parts.pop(0)  # skip 'statement' word
         table_types = {}
@@ -98,9 +98,12 @@ class StatementDefinition:
             else:
                 table_types = {StatementDefinition.TableType.Row, StatementDefinition.TableType.Column}
             type = None
-            for t in list(StatementDefinition.Type):
-                if t.value == ' '.join(parts):
-                    type = t
+            if table_types:  # ignore rest of the line for skipped tests
+                for t in list(StatementDefinition.Type):
+                    if t.value == ' '.join(parts):
+                        type = t
+                if type is None:
+                    raise RuntimeError(f'Unknown statement type in {suite}, at line: {at_line}')
         return (type, table_types)
 
     @staticmethod
@@ -118,9 +121,7 @@ class StatementDefinition:
     def parse(suite: str, at_line: int, lines: list[str]):
         if not lines or not lines[0]:
             raise RuntimeError(f'Invalid statement in {suite}, at line: {at_line}')
-        type, table_types = StatementDefinition._parse_statement_type(lines[0])
-        if type is None and table_types:
-            raise RuntimeError(f'Unknown statement type in {suite}, at line: {at_line}')
+        type, table_types = StatementDefinition._parse_statement_type(lines[0], suite, at_line)
         lines.pop(0)
         at_line += 1
         statement_lines = []
@@ -314,7 +315,7 @@ class BaseSuiteRunner(object):
             self.assert_statement(statement)
         return self.files
 
-    def get_table_prefix(self, table_type: StatementDefinition.TableType) -> StatementDefinition.TableType:
+    def get_table_prefix(self, table_type: StatementDefinition.TableType) -> str:
         if table_type == StatementDefinition.TableType.Column:
             return f"{self.table_path_prefix}_{str(table_type.value)}"
         return self.table_path_prefix

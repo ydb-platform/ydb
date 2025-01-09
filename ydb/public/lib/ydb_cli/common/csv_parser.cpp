@@ -307,11 +307,8 @@ public:
     }
 
     bool TryParseBool(const TString& token) const {
-        Y_UNUSED(token);
-        return false;
-        // Bool is not supported as a column type
-        // TODO: case insensitive ?
-        //return token == "true" || token == "false";
+        TString tokenLowerCase = to_lower(token);
+        return tokenLowerCase == "true" || tokenLowerCase == "false";
     }
 
     bool TryParsePrimitive(const TString& token) {

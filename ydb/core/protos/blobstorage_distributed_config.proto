@@ -28,9 +28,8 @@ message TStorageConfig { // contents of storage metadata
     repeated TNodeIdentifier AllNodes = 5; // set of all known nodes
     string ClusterUUID = 6; // cluster GUID as provided in nameservice config
     string SelfAssemblyUUID = 7; // self-assembly UUID generated when config is first created
-    optional bytes StorageConfigCompressedYAML = 12; // compressed stored storage config YAML (if stored)
+    optional bytes ConfigComposite = 12; // compressed stored storage config YAML (if stored)
     NKikimrConfig.TSelfManagementConfig SelfManagementConfig = 13;
-
     TStorageConfig PrevConfig = 100; // previous version of StorageConfig (if any)
 }
 
@@ -196,6 +195,7 @@ message TEvNodeConfigInvokeOnRoot {
 
     message TReplaceStorageConfig {
         string YAML = 1;
+        bool SkipConsoleValidation = 2;
     }
 
     message TBootstrapCluster {

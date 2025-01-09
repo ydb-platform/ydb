@@ -140,11 +140,12 @@ def main():
             print(f'Preparing to upsert: {len(prepared_for_upload_rows)} rows')
             if prepared_for_upload_rows:
                 for start in range(0, len(prepared_for_upload_rows), batch_size):
-                    print(
-                        f'upserting: {start}-{(start + batch_size) if batch_size <= len(prepared_for_upload_rows) - start else len(prepared_for_upload_rows)}/{len(prepared_for_upload_rows)} rows')
+                    if len(prepared_for_upload_rows) - start > batch_size:
+                        print(f'upserting: {start}-{start + batch_size}/{len(prepared_for_upload_rows)} rows')
+                    else:
+                        print(f'upserting: {start}-{len(prepared_for_upload_rows)}/{len(prepared_for_upload_rows)} rows')
                     batch_rows_for_upload = prepared_for_upload_rows[start:start + batch_size]
-                    bulk_upsert(
-                        driver.table_client, f'{DATABASE_PATH}/{table_path}', batch_rows_for_upload)
+                    bulk_upsert(driver.table_client, f'{DATABASE_PATH}/{table_path}', batch_rows_for_upload)
                 print('Tests uploaded')
             else:
                 print('Nothing to upload')

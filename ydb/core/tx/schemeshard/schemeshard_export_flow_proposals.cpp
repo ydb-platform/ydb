@@ -108,6 +108,18 @@ void FillSetValForSequences(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription
     }
 }
 
+void FillPartitioning(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& desc, const TPathId& exportItemPathId) {
+    NKikimrSchemeOp::TDescribeOptions opts;
+    opts.SetReturnPartitionConfig(true);
+    opts.SetReturnBoundaries(true);
+
+    auto copiedPath = DescribePath(ss, TlsActivationContext->AsActorContext(), exportItemPathId, opts);
+    const auto& copiedTable = copiedPath->GetRecord().GetPathDescription().GetTable();
+
+    *desc.MutableSplitBoundary() = copiedTable.GetSplitBoundary();
+    *desc.MutablePartitionConfig()->MutablePartitioningPolicy() = copiedTable.GetPartitionConfig().GetPartitioningPolicy();
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     TSchemeShard* ss,
     TTxId txId,
@@ -137,6 +149,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         if (sourceDescription.HasTable()) {
             FillSetValForSequences(
                 ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
+            FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
         }
         task.MutableTable()->CopyFrom(sourceDescription);
     }

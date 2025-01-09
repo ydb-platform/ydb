@@ -6,6 +6,8 @@
 #include <library/cpp/string_utils/csv/csv.h>
 #include <google/protobuf/text_format.h>
 
+#include <regex>
+
 namespace NYdb {
 namespace NConsoleClient {
 namespace {
@@ -334,24 +336,19 @@ public:
             return TryParseBool(token);
         case EPrimitiveType::Json:
             return token.StartsWith('{') && token.EndsWith('}');
-            //Builder.Json(token);
             break;
         case EPrimitiveType::JsonDocument:
-            //Builder.JsonDocument(token);
             break;
         case EPrimitiveType::Yson:
-            //Builder.Yson(token);
             break;
         case EPrimitiveType::Uuid:
-            return false; // Not supported as a column type
-            //static std::regex uuidRegexTemplate("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
-            //return std::regex_match(token.c_str(), uuidRegexTemplate);
+            static std::regex uuidRegexTemplate("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+            return std::regex_match(token.c_str(), uuidRegexTemplate);
         case EPrimitiveType::Float:
             return TryParseArithmetic<float>(token);
         case EPrimitiveType::Double:
             return TryParseArithmetic<double>(token);
         case EPrimitiveType::DyNumber:
-            //Builder.DyNumber(token);
             break;
         case EPrimitiveType::Date: {
             TInstant date;
@@ -366,7 +363,6 @@ public:
             return TInstant::TryParseIso8601(token, timestamp) || TryParseArithmetic<ui64>(token);
         }
         case EPrimitiveType::Interval:
-            //Builder.Interval(GetArithmetic<i64>(token));
             break;
         case EPrimitiveType::Date32: {
             TInstant date;
@@ -383,13 +379,10 @@ public:
         case EPrimitiveType::Interval64:
             return TryParseArithmetic<i64>(token);
         case EPrimitiveType::TzDate:
-            //Builder.TzDate(token);
             break;
         case EPrimitiveType::TzDatetime:
-            //Builder.TzDatetime(token);
             break;
         case EPrimitiveType::TzTimestamp:
-            //Builder.TzTimestamp(token);
             break;
         default:
             throw TCsvParseException() << "Unsupported primitive type: " << Parser.GetPrimitive();
@@ -408,7 +401,6 @@ public:
             return TryParsePrimitive(TString(token));
         }
         case TTypeParser::ETypeKind::Decimal: {
-            //Builder.Decimal(TDecimalValue(TString(token), Parser.GetDecimal().Precision, Parser.GetDecimal().Scale));
             break;
         }
         default:

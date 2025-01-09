@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    mock_pq_gateway.cpp
     ut_helpers.cpp
 )
 

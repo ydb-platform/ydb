@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    yql_pq_blocking_queue.cpp
     yql_pq_dummy_gateway.cpp
     yql_pq_file_topic_client.cpp
 )

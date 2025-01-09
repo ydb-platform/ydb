@@ -7,74 +7,9 @@
 #include <library/cpp/threading/future/async.h>
 
 #include <util/system/file.h>
+#include "yql_pq_blocking_queue.h"
 
 namespace NYql {
-
-class TBlockingEQueue {
-public:
-    TBlockingEQueue(size_t maxSize):MaxSize_(maxSize) {
-    }
-    void Push(NYdb::NTopic::TReadSessionEvent::TEvent&& e, size_t size) {
-        with_lock(Mutex_) {
-            CanPush_.WaitI(Mutex_, [this] () {return Stopped_ || Size_ < MaxSize_;});
-            Events_.emplace_back(std::move(e), size );
-            Size_ += size;
-        }
-        CanPop_.BroadCast();
-    }
-    
-    void BlockUntilEvent() {
-        with_lock(Mutex_) {
-            CanPop_.WaitI(Mutex_, [this] () {return Stopped_ || !Events_.empty();});
-        }
-    }
-
-    TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> Pop(bool block) {
-        with_lock(Mutex_) {
-            if (block) {
-                CanPop_.WaitI(Mutex_, [this] () {return CanPopPredicate();});
-            } else {
-                if (!CanPopPredicate()) {
-                    return {};
-                }
-            }
-            auto [front, size] = std::move(Events_.front());
-            Events_.pop_front();
-            Size_ -= size;
-            if (Size_ < MaxSize_) {
-                CanPush_.BroadCast();
-            }
-            return front;
-        }
-    }
-
-    void Stop() {
-        with_lock(Mutex_) {
-            Stopped_ = true;
-            CanPop_.BroadCast();
-            CanPush_.BroadCast();
-        }
-    }
-    
-    bool IsStopped() {
-        with_lock(Mutex_) {
-            return Stopped_;
-        }
-    }
-
-private:
-    bool CanPopPredicate() {
-        return !Events_.empty() && !Stopped_;
-    }
-
-    size_t MaxSize_;
-    size_t Size_ = 0;
-    TDeque<std::pair<NYdb::NTopic::TReadSessionEvent::TEvent, size_t>> Events_;
-    bool Stopped_ = false;
-    TMutex Mutex_;
-    TCondVar CanPop_;
-    TCondVar CanPush_;
-};
 
 class TFileTopicReadSession : public NYdb::NTopic::IReadSession {
 

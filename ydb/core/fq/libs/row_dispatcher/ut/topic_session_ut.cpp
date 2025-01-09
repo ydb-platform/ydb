@@ -17,6 +17,8 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <library/cpp/threading/future/async.h>
+#include <ydb/tests/fq/pq_async_io/mock_pq_gateway.h>
+
 
 namespace NFq::NRowDispatcher::NTests {
 
@@ -28,201 +30,6 @@ using namespace NYql::NDq;
 const ui64 TimeoutBeforeStartSessionSec = 3;
 const ui64 GrabTimeoutSec = 4 * TimeoutBeforeStartSessionSec;
 
-
-class TBlockingEQueue {
-public:
-    TBlockingEQueue(size_t maxSize):MaxSize_(maxSize) {
-    }
-    void Push(NYdb::NTopic::TReadSessionEvent::TEvent&& e, size_t size) {
-        with_lock(Mutex_) {
-            CanPush_.WaitI(Mutex_, [this] () {return Stopped_ || Size_ < MaxSize_;});
-            Events_.emplace_back(std::move(e), size );
-            Size_ += size;
-        }
-        CanPop_.BroadCast();
-    }
-    
-    void BlockUntilEvent() {
-        with_lock(Mutex_) {
-            CanPop_.WaitI(Mutex_, [this] () {return Stopped_ || !Events_.empty();});
-        }
-    }
-
-    TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> Pop(bool block) {
-        with_lock(Mutex_) {
-            if (block) {
-                CanPop_.WaitI(Mutex_, [this] () {return CanPopPredicate();});
-            } else {
-                if (!CanPopPredicate()) {
-                    return {};
-                }
-            }
-            auto [front, size] = std::move(Events_.front());
-            Events_.pop_front();
-            Size_ -= size;
-            if (Size_ < MaxSize_) {
-                CanPush_.BroadCast();
-            }
-            return front;
-        }
-    }
-
-    void Stop() {
-        with_lock(Mutex_) {
-            Stopped_ = true;
-            CanPop_.BroadCast();
-            CanPush_.BroadCast();
-        }
-    }
-    
-    bool IsStopped() {
-        with_lock(Mutex_) {
-            return Stopped_;
-        }
-    }
-
-private:
-    bool CanPopPredicate() {
-        return !Events_.empty() && !Stopped_;
-    }
-
-    size_t MaxSize_;
-    size_t Size_ = 0;
-    TDeque<std::pair<NYdb::NTopic::TReadSessionEvent::TEvent, size_t>> Events_;
-    bool Stopped_ = false;
-    TMutex Mutex_;
-    TCondVar CanPop_;
-    TCondVar CanPush_;
-};
-
-TBlockingEQueue Queue{4_MB};
-
-class TMockTopicReadSession : public NYdb::NTopic::IReadSession {
-public:
-    TMockTopicReadSession(NYdb::NTopic::TPartitionSession::TPtr session)
-        : Session_(std::move(session)) {
-        Pool_.Start(1);
-    }
-
-    NThreading::TFuture<void> WaitEvent() override {
-        return NThreading::Async([&] () {
-            Queue.BlockUntilEvent();
-            return NThreading::MakeFuture();
-        }, Pool_);
-    }
-
-    TVector<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount, size_t maxByteSize) override {
-        TVector<NYdb::NTopic::TReadSessionEvent::TEvent> res;
-        for (auto event = Queue.Pop(block); !event.Empty() &&  res.size() <= maxEventsCount.GetOrElse(std::numeric_limits<size_t>::max()); event = Queue.Pop(/*block=*/ false)) {
-            res.push_back(*event);
-        }
-        return res;
-    }
-
-    TVector<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvents(const NYdb::NTopic::TReadSessionGetEventSettings& settings) override {
-        return GetEvents(settings.Block_, settings.MaxEventsCount_, settings.MaxByteSize_);
-    }
-
-    TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvent(bool block, size_t maxByteSize) override {
-        return Queue.Pop(block);
-    }
-
-    TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvent(const NYdb::NTopic::TReadSessionGetEventSettings& settings) override {
-        return GetEvent(settings.Block_, settings.MaxByteSize_);
-    }
-
-    bool Close(TDuration timeout = TDuration::Max()) override {
-        Y_UNUSED(timeout);
-        Queue.Stop();
-        Pool_.Stop();
-        return true;
-    }
-
-    NYdb::NTopic::TReaderCounters::TPtr GetCounters() const override {return nullptr;}
-    TString GetSessionId() const override {return "fake";}
-private:
-    TThreadPool Pool_;
-    NYdb::NTopic::TPartitionSession::TPtr Session_;
-};
-
-struct TDummyPartitionSession: public NYdb::NTopic::TPartitionSession {
-    TDummyPartitionSession() {}
-
-    void RequestStatus() override {
-        // TODO send TPartitionSessionStatusEvent
-    }
-};
-
-struct TMockTopicClient : public NYql::ITopicClient {
-
-    NYdb::TAsyncStatus CreateTopic(const TString& path, const NYdb::NTopic::TCreateTopicSettings& settings = {}) override {return NYdb::TAsyncStatus{};}
-    NYdb::TAsyncStatus AlterTopic(const TString& path, const NYdb::NTopic::TAlterTopicSettings& settings = {}) override {return NYdb::TAsyncStatus{};}
-    NYdb::TAsyncStatus DropTopic(const TString& path, const NYdb::NTopic::TDropTopicSettings& settings = {}) override {return NYdb::TAsyncStatus{};}
-    NYdb::NTopic::TAsyncDescribeTopicResult DescribeTopic(const TString& path, 
-        const NYdb::NTopic::TDescribeTopicSettings& settings = {}) override {return NYdb::NTopic::TAsyncDescribeTopicResult{};}
-
-    NYdb::NTopic::TAsyncDescribeConsumerResult DescribeConsumer(const TString& path, const TString& consumer, 
-        const NYdb::NTopic::TDescribeConsumerSettings& settings = {}) override {return NYdb::NTopic::TAsyncDescribeConsumerResult{};}
-
-    NYdb::NTopic::TAsyncDescribePartitionResult DescribePartition(const TString& path, i64 partitionId, 
-        const NYdb::NTopic::TDescribePartitionSettings& settings = {}) override {return NYdb::NTopic::TAsyncDescribePartitionResult{};}
-
-    std::shared_ptr<NYdb::NTopic::IReadSession> CreateReadSession(const NYdb::NTopic::TReadSessionSettings& settings) override {
-        return std::make_shared<TMockTopicReadSession>(MakeIntrusive<TDummyPartitionSession>());
-    }
-
-    std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(
-        const NYdb::NTopic::TWriteSessionSettings& settings) override {
-            return nullptr;
-    }
-    std::shared_ptr<NYdb::NTopic::IWriteSession> CreateWriteSession(const NYdb::NTopic::TWriteSessionSettings& settings) override {
-        return nullptr;
-    }
-
-    NYdb::TAsyncStatus CommitOffset(const TString& path, ui64 partitionId, const TString& consumerName, ui64 offset,
-        const NYdb::NTopic::TCommitOffsetSettings& settings = {}) override {return NYdb::TAsyncStatus{};}
-};
-
-class TMockPqGateway : public NYql::IPqGateway {
-public:
-    ~TMockPqGateway() {}
-
-    NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override {
-        return NThreading::MakeFuture();
-    }
-    NThreading::TFuture<void> CloseSession(const TString& sessionId) override {
-        return NThreading::MakeFuture();
-    }
-
-    ::NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(
-        const TString& sessionId,
-        const TString& cluster,
-        const TString& database,
-        const TString& path,
-        const TString& token) override {
-            return NPq::NConfigurationManager::TAsyncDescribePathResult{};
-        }
-
-    NThreading::TFuture<TListStreams> ListStreams(
-        const TString& sessionId,
-        const TString& cluster,
-        const TString& database,
-        const TString& token,
-        ui32 limit,
-        const TString& exclusiveStartStreamName = {}) override {
-             return NThreading::TFuture<TListStreams>{};
-        }
-
-    void UpdateClusterConfigs(
-        const TString& clusterName,
-        const TString& endpoint,
-        const TString& database,
-        bool secure) override {}
-    
-    NYql::ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) override {
-        return MakeIntrusive<TMockTopicClient>();
-    }
-};
 
 class TFixture : public NTests::TBaseFixture {
 public:
@@ -239,6 +46,7 @@ public:
     }
 
     void Init(const TString& topicPath, ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max(), bool mockTopicSession = false) {
+        TopicPath = topicPath;
         MockTopicSession = mockTopicSession;
         Config.SetTimeoutBeforeStartSessionSec(TimeoutBeforeStartSessionSec);
         Config.SetMaxSessionUsedMemory(maxSessionUsedMemory);
@@ -257,6 +65,9 @@ public:
 
         CompileNotifier = Runtime.AllocateEdgeActor();
         const auto compileServiceActorId = Runtime.Register(CreatePurecalcCompileServiceMock(CompileNotifier));
+        if (mockTopicSession) {
+            MockPqGateway = CreateMockPqGateway();
+        }
 
         TopicSession = Runtime.Register(NewTopicSession(
             "read_group",
@@ -271,7 +82,7 @@ public:
             CredentialsProviderFactory,
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            !MockTopicSession ? CreatePqNativeGateway(pqServices) : MakeIntrusive<TMockPqGateway>(),
+            !MockTopicSession ? CreatePqNativeGateway(pqServices) : MockPqGateway,
             16000000
             ).release());
         Runtime.EnableScheduleForActor(TopicSession);
@@ -300,14 +111,14 @@ public:
         
         //TVector<TMessage> msgs;
         if (MockTopicSession) {
-            Queue.Push(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(nullptr, 0, 0), 0);
+            MockPqGateway->GetEventQueue(TopicPath)->Push(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(nullptr, 0, 0), 0);
         }
     }
 
-    NYql::NPq::NProto::TDqPqTopicSource BuildSource(TString topic, bool emptyPredicate = false, const TString& consumer = DefaultPqConsumer) {
+    NYql::NPq::NProto::TDqPqTopicSource BuildSource(bool emptyPredicate = false, const TString& consumer = DefaultPqConsumer) {
         NYql::NPq::NProto::TDqPqTopicSource settings;
         settings.SetEndpoint(GetDefaultPqEndpoint());
-        settings.SetTopicPath(topic);
+        settings.SetTopicPath(TopicPath);
         settings.SetConsumerName(consumer);
         settings.SetFormat("json_each_row");
         settings.MutableToken()->SetName("token");
@@ -412,7 +223,7 @@ public:
     }
 
     TMessage MakeNextMessage(const TString& msgBuff, size_t offset) {
-        TMessage msg(msgBuff, nullptr, MakeNextMessageInformation(offset, msgBuff.size()), MakeIntrusive<TDummyPartitionSession>());
+        TMessage msg(msgBuff, nullptr, MakeNextMessageInformation(offset, msgBuff.size()), CreatePartitionSession());
         return msg;
     }
 
@@ -432,7 +243,7 @@ public:
                 size += s.size();
             }
             if (!msgs.empty()) {
-                Queue.Push(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, MakeIntrusive<TDummyPartitionSession>()), size);
+                MockPqGateway->GetEventQueue(topic)->Push(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, MakeIntrusive<TDummyPartitionSession>()), size);
             }
         }
     }
@@ -443,6 +254,7 @@ public:
 
 public:
     bool MockTopicSession = false;
+    TString TopicPath;
     NActors::TActorId TopicSession;
     NActors::TActorId RowDispatcherActorId;
     NActors::TActorId CompileNotifier;
@@ -453,6 +265,7 @@ public:
     NActors::TActorId ReadActorId3;
     ui64 PartitionId = 0;
     NConfig::TRowDispatcherConfig Config;
+    TIntrusivePtr<TMockPqGateway> MockPqGateway;
 
     const TString Json1 = "{\"dt\":100,\"value\":\"value1\"}";
     const TString Json2 = "{\"dt\":200,\"value\":\"value2\"}";
@@ -467,7 +280,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
     Y_UNIT_TEST_F(Two222, TFixture) {
         const TString topicName = "fake_topic";
         Init(topicName, 1000, true);
-        auto source = BuildSource(topicName);
+        auto source = BuildSource();
         StartSession(ReadActorId1, source);
 
         std::vector<TString> data = { Json1 };
@@ -482,7 +295,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const TString topicName = "topic1";
         PQCreateStream(topicName);
         Init(topicName);
-        auto source = BuildSource(topicName);
+        auto source = BuildSource();
         StartSession(ReadActorId1, source);
         StartSession(ReadActorId2, source);
 
@@ -501,7 +314,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         ExpectMessageBatch(ReadActorId2, { JsonMessage(2) });
         ExpectStatisticToReadActor({ReadActorId1, ReadActorId2}, 2);
 
-        auto source2 = BuildSource(topicName, false, "OtherConsumer");
+        auto source2 = BuildSource(false, "OtherConsumer");
         StartSession(ReadActorId3, source2, Nothing(), true);
         ExpectSessionError(ReadActorId3, EStatusId::PRECONDITION_FAILED, "Use the same consumer");
 
@@ -513,8 +326,8 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const TString topicName = "twowithoutpredicate";
         PQCreateStream(topicName);
         Init(topicName);
-        auto source1 = BuildSource(topicName, true);
-        auto source2 = BuildSource(topicName, true);
+        auto source1 = BuildSource(true);
+        auto source2 = BuildSource(true);
         StartSession(ReadActorId1, source1);
         StartSession(ReadActorId2, source2);
 
@@ -534,8 +347,8 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const TString topicName = "topic2";
         PQCreateStream(topicName);
         Init(topicName);
-        auto source1 = BuildSource(topicName, false);
-        auto source2 = BuildSource(topicName, true);
+        auto source1 = BuildSource(false);
+        auto source2 = BuildSource(true);
         StartSession(ReadActorId1, source1);
         StartSession(ReadActorId2, source2);
 
@@ -553,7 +366,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const TString topicName = "topic3";
         PQCreateStream(topicName);
         Init(topicName);
-        auto source = BuildSource(topicName);
+        auto source = BuildSource();
         StartSession(ReadActorId1, source);
 
         const std::vector<TString> data = { Json1 };
@@ -578,7 +391,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const TString topicName = "topic4";
         PQCreateStream(topicName);
         Init(topicName);
-        auto source = BuildSource(topicName);
+        auto source = BuildSource();
         const std::vector<TString> data = { Json1, Json2, Json3};
         PQWrite(data, topicName);
 
@@ -606,7 +419,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const TString topicName = "topic5";
         PQCreateStream(topicName);
         Init(topicName);
-        auto source = BuildSource(topicName);
+        auto source = BuildSource();
         StartSession(ReadActorId1, source);
 
         const std::vector<TString> data = { "not json", "noch einmal / nicht json" };
@@ -621,7 +434,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         PQCreateStream(topicName);
         Init(topicName);
 
-        auto source = BuildSource(topicName);
+        auto source = BuildSource();
         StartSession(ReadActorId1, source);
 
         source.AddColumns("field1");
@@ -646,7 +459,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const TString topicName = "topic6";
         PQCreateStream(topicName);
         Init(topicName);
-        auto source = BuildSource(topicName);
+        auto source = BuildSource();
         StartSession(ReadActorId1, source);
 
         const std::vector<TString> data = { Json1, Json2, Json3 }; // offset 0, 1, 2
@@ -671,7 +484,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
     Y_UNIT_TEST_F(ReadNonExistentTopic, TFixture) {
         const TString topicName = "topic7";
         Init(topicName);
-        auto source = BuildSource(topicName);
+        auto source = BuildSource();
         StartSession(ReadActorId1, source);
         ExpectSessionError(ReadActorId1, EStatusId::SCHEME_ERROR, "no path");
         StopSession(ReadActorId1, source);
@@ -681,7 +494,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const TString topicName = "topic8";
         PQCreateStream(topicName);
         Init(topicName, 40);
-        auto source = BuildSource(topicName);
+        auto source = BuildSource();
         StartSession(ReadActorId1, source);
         StartSession(ReadActorId2, source); // slow session
 
@@ -729,8 +542,8 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const TString topicName = "dif_schemes";
         PQCreateStream(topicName);
         Init(topicName);
-        auto source1 = BuildSource(topicName);
-        auto source2 = BuildSource(topicName);
+        auto source1 = BuildSource();
+        auto source2 = BuildSource();
         source2.AddColumns("field1");
         source2.AddColumnTypes("[DataType; String]");
 
@@ -745,7 +558,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         ExpectMessageBatch(ReadActorId1, { JsonMessage(1), JsonMessage(2) });
         ExpectMessageBatch(ReadActorId2, { JsonMessage(1).AddString("field1"), JsonMessage(2).AddString("field2") });
 
-        auto source3 = BuildSource(topicName);
+        auto source3 = BuildSource();
         source3.AddColumns("field2");
         source3.AddColumnTypes("[DataType; String]");
         auto readActorId3 = Runtime.AllocateEdgeActor();
@@ -776,7 +589,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         PQCreateStream(topicName);
         Init(topicName);
 
-        auto source1 = BuildSource(topicName);
+        auto source1 = BuildSource();
         source1.AddColumns("field1");
         source1.AddColumnTypes("[OptionalType; [DataType; String]]");
         StartSession(ReadActorId1, source1);
@@ -786,7 +599,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         ExpectNewDataArrived({ReadActorId1});
         ExpectMessageBatch(ReadActorId1, { JsonMessage(1).AddString("str", true) });
 
-        auto source2 = BuildSource(topicName);
+        auto source2 = BuildSource();
         source2.AddColumns("field1");
         source2.AddColumnTypes("[DataType; String]");
         StartSession(ReadActorId2, source2, Nothing(), true);

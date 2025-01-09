@@ -1,6 +1,6 @@
-# Time to Live (TTL)
+# Time to Live (TTL) and Eviction to External Storage
 
-This section describes how the TTL mechanism works and what its limits are. It also gives examples of commands and code snippets that can be used to enable, configure, and disable TTL.
+This section describes how the TTL mechanism works and what its limits are.
 
 ## How it works {#how-it-works}
 

@@ -22,9 +22,28 @@ ALTER TABLE `mytable` SET (TTL = Interval("PT1H") ON created_at);
 ALTER TABLE `mytable` SET (TTL = Interval("PT1H") ON modified_at AS SECONDS);
 ```
 
-## Включение вытеснения в Object Storage для существующих таблиц {#enable-tiering-on-existing-tables}
+## Включение вытеснения данных во внешнее S3-совместимое хранилище {#enable-tiering-on-existing-tables}
 
 {% include [OLTP_not_allow_note](../../_includes/not_allow_for_oltp_note.md) %}
+
+Для включения вытеснения требуется объект [external data source](../../concepts/datamodel/external_data_source.md), описывающий подключение к внешнему хранилищу.
+В приведённом ниже примере external data source `/Root/s3_cold_data` будет описывать подключение к бакету `test_cold_data`, расположенному в Yandex Object Storage, с авторизацией через статический ключ доступа.
+
+```yql
+CREATE OBJECT access_key (TYPE SECRET) WITH (value="...");
+CREATE OBJECT secret_key (TYPE SECRET) WITH (value="...");
+
+CREATE EXTERNAL DATA SOURCE `/Root/s3_cold_data` WITH (
+    SOURCE_TYPE="ObjectStorage",
+    AUTH_METHOD="AWS",
+    LOCATION="http://storage.yandexcloud.net/test_cold_data",
+    AWS_ACCESS_KEY_ID_SECRET_NAME="access_key",
+    AWS_SECRET_ACCESS_KEY_SECRET_NAME="secret_key",
+    AWS_REGION="ru-central1"
+)
+```
+
+Используя объект external data source, можно включить вытеснение данных следующим образом.
 
 В следующем примере строки таблицы `mytable` будут переноситься в бакет, описанный во внешнем источнике данных `/Root/s3_cold_data`, спустя час после наступления времени, записанного в колонке `created_at`, а спустя 24 часа будут удаляться:
 
@@ -33,6 +52,17 @@ ALTER TABLE `mytable` SET (
     TTL =
         Interval("PT1H") TO EXTERNAL DATA SOURCE `/Root/s3_cold_data`,
         Interval("PT24H") DELETE
+    ON modified_at AS SECONDS
+);
+```
+
+В следующем примере строки таблицы `mytable` будут переноситься в бакет `/Root/s3_cold` через час и в бакет `/Root/s3_frozen` через 30 дней после наступления времени, записанного в колонке `created_at`:
+
+```yql
+ALTER TABLE `mytable` SET (
+    TTL =
+        Interval("PT1H") TO EXTERNAL DATA SOURCE `/Root/s3_cold`,
+        Interval("PT30D") TO EXTERNAL DATA SOURCE `/Root/s3_frozen`
     ON modified_at AS SECONDS
 );
 ```

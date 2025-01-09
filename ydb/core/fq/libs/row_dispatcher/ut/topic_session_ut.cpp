@@ -16,6 +16,8 @@
 #include <yql/essentials/public/purecalc/common/interface.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#include <library/cpp/threading/future/async.h>
+
 namespace NFq::NRowDispatcher::NTests {
 
 namespace {
@@ -26,15 +28,95 @@ using namespace NYql::NDq;
 const ui64 TimeoutBeforeStartSessionSec = 3;
 const ui64 GrabTimeoutSec = 4 * TimeoutBeforeStartSessionSec;
 
+
+class TBlockingEQueue {
+public:
+    TBlockingEQueue(size_t maxSize):MaxSize_(maxSize) {
+    }
+    void Push(NYdb::NTopic::TReadSessionEvent::TEvent&& e, size_t size) {
+        with_lock(Mutex_) {
+            CanPush_.WaitI(Mutex_, [this] () {return Stopped_ || Size_ < MaxSize_;});
+            Events_.emplace_back(std::move(e), size );
+            Size_ += size;
+        }
+        CanPop_.BroadCast();
+    }
+    
+    void BlockUntilEvent() {
+        with_lock(Mutex_) {
+            CanPop_.WaitI(Mutex_, [this] () {return Stopped_ || !Events_.empty();});
+        }
+    }
+
+    TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> Pop(bool block) {
+        with_lock(Mutex_) {
+            if (block) {
+                CanPop_.WaitI(Mutex_, [this] () {return CanPopPredicate();});
+            } else {
+                if (!CanPopPredicate()) {
+                    return {};
+                }
+            }
+            auto [front, size] = std::move(Events_.front());
+            Events_.pop_front();
+            Size_ -= size;
+            if (Size_ < MaxSize_) {
+                CanPush_.BroadCast();
+            }
+            return front;
+        }
+    }
+
+    void Stop() {
+        with_lock(Mutex_) {
+            Stopped_ = true;
+            CanPop_.BroadCast();
+            CanPush_.BroadCast();
+        }
+    }
+    
+    bool IsStopped() {
+        with_lock(Mutex_) {
+            return Stopped_;
+        }
+    }
+
+private:
+    bool CanPopPredicate() {
+        return !Events_.empty() && !Stopped_;
+    }
+
+    size_t MaxSize_;
+    size_t Size_ = 0;
+    TDeque<std::pair<NYdb::NTopic::TReadSessionEvent::TEvent, size_t>> Events_;
+    bool Stopped_ = false;
+    TMutex Mutex_;
+    TCondVar CanPop_;
+    TCondVar CanPush_;
+};
+
+TBlockingEQueue Queue{4_MB};
+
 class TMockTopicReadSession : public NYdb::NTopic::IReadSession {
+public:
+    TMockTopicReadSession(NYdb::NTopic::TPartitionSession::TPtr session)
+        : Session_(std::move(session)) {
+        Pool_.Start(1);
+    }
 
     NThreading::TFuture<void> WaitEvent() override {
-        auto promise = NThreading::NewPromise<void>();
-        return promise.GetFuture();
+        return NThreading::Async([&] () {
+            Queue.BlockUntilEvent();
+            return NThreading::MakeFuture();
+        }, Pool_);
     }
 
     TVector<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount, size_t maxByteSize) override {
-        return TVector<NYdb::NTopic::TReadSessionEvent::TEvent>{};
+        TVector<NYdb::NTopic::TReadSessionEvent::TEvent> res;
+        for (auto event = Queue.Pop(block); !event.Empty() &&  res.size() <= maxEventsCount.GetOrElse(std::numeric_limits<size_t>::max()); event = Queue.Pop(/*block=*/ false)) {
+            res.push_back(*event);
+        }
+        return res;
     }
 
     TVector<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvents(const NYdb::NTopic::TReadSessionGetEventSettings& settings) override {
@@ -42,16 +124,33 @@ class TMockTopicReadSession : public NYdb::NTopic::IReadSession {
     }
 
     TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvent(bool block, size_t maxByteSize) override {
-        return Nothing();
+        return Queue.Pop(block);
     }
 
     TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvent(const NYdb::NTopic::TReadSessionGetEventSettings& settings) override {
-        return Nothing();
+        return GetEvent(settings.Block_, settings.MaxByteSize_);
     }
 
-    bool Close(TDuration timeout = TDuration::Max()) override {return true;}
+    bool Close(TDuration timeout = TDuration::Max()) override {
+        Y_UNUSED(timeout);
+        Queue.Stop();
+        Pool_.Stop();
+        return true;
+    }
+
     NYdb::NTopic::TReaderCounters::TPtr GetCounters() const override {return nullptr;}
     TString GetSessionId() const override {return "fake";}
+private:
+    TThreadPool Pool_;
+    NYdb::NTopic::TPartitionSession::TPtr Session_;
+};
+
+struct TDummyPartitionSession: public NYdb::NTopic::TPartitionSession {
+    TDummyPartitionSession() {}
+
+    void RequestStatus() override {
+        // TODO send TPartitionSessionStatusEvent
+    }
 };
 
 struct TMockTopicClient : public NYql::ITopicClient {
@@ -69,7 +168,7 @@ struct TMockTopicClient : public NYql::ITopicClient {
         const NYdb::NTopic::TDescribePartitionSettings& settings = {}) override {return NYdb::NTopic::TAsyncDescribePartitionResult{};}
 
     std::shared_ptr<NYdb::NTopic::IReadSession> CreateReadSession(const NYdb::NTopic::TReadSessionSettings& settings) override {
-        return std::make_shared<TMockTopicReadSession>();
+        return std::make_shared<TMockTopicReadSession>(MakeIntrusive<TDummyPartitionSession>());
     }
 
     std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(
@@ -140,6 +239,7 @@ public:
     }
 
     void Init(const TString& topicPath, ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max(), bool mockTopicSession = false) {
+        MockTopicSession = mockTopicSession;
         Config.SetTimeoutBeforeStartSessionSec(TimeoutBeforeStartSessionSec);
         Config.SetMaxSessionUsedMemory(maxSessionUsedMemory);
         Config.SetSendStatusPeriodSec(2);
@@ -171,7 +271,7 @@ public:
             CredentialsProviderFactory,
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            !mockTopicSession ? CreatePqNativeGateway(pqServices) : MakeIntrusive<TMockPqGateway>(),
+            !MockTopicSession ? CreatePqNativeGateway(pqServices) : MakeIntrusive<TMockPqGateway>(),
             16000000
             ).release());
         Runtime.EnableScheduleForActor(TopicSession);
@@ -196,6 +296,11 @@ public:
             // Wait predicate compilation
             const auto ping = Runtime.GrabEdgeEvent<NActors::TEvents::TEvPing>(CompileNotifier);
             UNIT_ASSERT_C(ping, "Compilation is not performed for predicate: " << predicate);
+        }
+        
+        //TVector<TMessage> msgs;
+        if (MockTopicSession) {
+            Queue.Push(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(nullptr, 0, 0), 0);
         }
     }
 
@@ -287,7 +392,57 @@ public:
         return TRow().AddUint64(100 * index).AddString(TStringBuilder() << "value" << index);
     }
 
+    using TMessageInformation = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation; 
+    using TMessage = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage; 
+
+    TMessageInformation MakeNextMessageInformation(size_t offset, size_t uncompressedSize, const TString& messageGroupId = "") { 
+        auto now = TInstant::Now(); 
+        TMessageInformation msgInfo(
+            offset,
+            "ProducerId",
+            0, //SeqNo_,
+            now,
+            now,
+            MakeIntrusive<NYdb::NTopic::TWriteSessionMeta>(),
+            MakeIntrusive<NYdb::NTopic::TMessageMeta>(),
+            uncompressedSize,
+            messageGroupId
+        );
+        return msgInfo;
+    }
+
+    TMessage MakeNextMessage(const TString& msgBuff, size_t offset) {
+        TMessage msg(msgBuff, nullptr, MakeNextMessageInformation(offset, msgBuff.size()), MakeIntrusive<TDummyPartitionSession>());
+        return msg;
+    }
+
+    void PQWrite2(
+        const std::vector<TString>& sequence,
+        const TString& topic,
+        const TString& endpoint = GetDefaultPqEndpoint()) {
+        if (!MockTopicSession) {
+            PQWrite(sequence, topic, endpoint);
+        } else {
+            static size_t MsgOffset_ = 0; // TODO
+            TVector<TMessage> msgs;
+            size_t size = 0;
+            for (const auto& s : sequence) {
+                msgs.emplace_back(MakeNextMessage(s, MsgOffset_));
+                MsgOffset_++;
+                size += s.size();
+            }
+            if (!msgs.empty()) {
+                Queue.Push(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, MakeIntrusive<TDummyPartitionSession>()), size);
+            }
+        }
+    }
+
+    void PassAway() {
+        Runtime.Send(new IEventHandle(TopicSession, RowDispatcherActorId, new NActors::TEvents::TEvPoisonPill));
+    }
+
 public:
+    bool MockTopicSession = false;
     NActors::TActorId TopicSession;
     NActors::TActorId RowDispatcherActorId;
     NActors::TActorId CompileNotifier;
@@ -314,8 +469,15 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         Init(topicName, 1000, true);
         auto source = BuildSource(topicName);
         StartSession(ReadActorId1, source);
+
+        std::vector<TString> data = { Json1 };
+        PQWrite2(data, topicName);
+        ExpectNewDataArrived({ReadActorId1});
         ExpectMessageBatch(ReadActorId1, { JsonMessage(1) });
+
+        PassAway();
     }
+
     Y_UNIT_TEST_F(TwoSessionsWithoutOffsets, TFixture) {
         const TString topicName = "topic1";
         PQCreateStream(topicName);

@@ -1,16 +1,16 @@
-## Table naming rules
+## Database object naming rules {#object-naming-rules}
 
-Every table in {{ ydb-short-name }} has a name. In YQL statements, table names are specified by identifiers that can be enclosed in backticks or not. For more information on identifiers, refer to [{#T}](../../../yql/reference/syntax/lexer.md#keywords-and-ids).
+Every database object in {{ ydb-short-name }}, such as a table, view, topic, index or directory, has a name. In YQL statements, object names are specified by identifiers that can be enclosed in backticks or not. For more information on identifiers, refer to [{#T}](../../../yql/reference/syntax/lexer.md#keywords-and-ids).
 
-Table names in {{ ydb-short-name }} must meet the following requirements:
+Database object names in {{ ydb-short-name }} must meet the following requirements:
 
-- Table names can include the following characters:
+- Object names can include the following characters:
     - uppercase latin characters
     - lowercase latin characters
     - digits
-    - special characters: `-` and `_`.
-- Table name length must not exceed 255 characters.
-- Tables cannot be created in folders, which names start with a dot.
+    - special characters: `.`, `-`, and `_`.
+- Object name length must not exceed 255 characters.
+- Objects cannot be created in folders, which names start with a dot, such as `.sys`, `.medatata`, `.sys_health`.
 
 ## Column naming rules
 

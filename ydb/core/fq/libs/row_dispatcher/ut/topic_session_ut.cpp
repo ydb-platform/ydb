@@ -243,7 +243,7 @@ public:
                 size += s.size();
             }
             if (!msgs.empty()) {
-                MockPqGateway->GetEventQueue(topic)->Push(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, MakeIntrusive<TDummyPartitionSession>()), size);
+                MockPqGateway->GetEventQueue(topic)->Push(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, CreatePartitionSession()), size);
             }
         }
     }
@@ -265,7 +265,7 @@ public:
     NActors::TActorId ReadActorId3;
     ui64 PartitionId = 0;
     NConfig::TRowDispatcherConfig Config;
-    TIntrusivePtr<TMockPqGateway> MockPqGateway;
+    TIntrusivePtr<IMockPqGateway> MockPqGateway;
 
     const TString Json1 = "{\"dt\":100,\"value\":\"value1\"}";
     const TString Json2 = "{\"dt\":200,\"value\":\"value2\"}";

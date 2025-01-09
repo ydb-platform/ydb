@@ -896,7 +896,6 @@ TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath,
             // to prevent copying data in retryFunc in a happy way when there is only one request
             TValue builtValue = prebuiltValue.has_value() ? std::move(prebuiltValue.value()) : buildFunc();
             prebuiltValue = std::nullopt;
-            //Cerr << "built value: \"" << builtValue.GetProto() << "\"" << Endl;
             return tableClient.BulkUpsert(dbPath, std::move(builtValue), UpsertSettings)
                 .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
                     NYdb::TStatus status = bulkUpsertResult.GetValueSync();
@@ -1348,7 +1347,7 @@ TStatus TImportFileClient::TImpl::GenerateCreateTableFromCsv(IInputStream& input
         }
     }
 
-    // Send the rest if buffer is not empty
+    // Check the rest if buffer is not empty
     if (!buffer.empty() && countInput.Counter() > 0 && !Failed) {
         jobsSemaphore.acquire();
         checkCsvFunc(std::move(buffer), row);

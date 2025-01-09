@@ -275,7 +275,7 @@ namespace NPQ {
 
             SaveBlobs(kvReq, *reqData, ctx);
             RenameBlobs(kvReq, *reqData, ctx);
-//            DeleteBlobs(kvReq, *reqData, ctx);
+            DeleteBlobs(kvReq, *reqData, ctx);
 
             auto l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
             ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
@@ -325,15 +325,31 @@ namespace NPQ {
             }
         }
 
-//        void DeleteBlobs(const TKvRequest& kvReq, TCacheL2Request& reqData, const TActorContext& ctx)
-//        {
-//            for (const auto& key : kvReq.DeletedBlobs) {
-//                TBlobId blob = MakeBlobId(key);
-//                if (RemoveExists(ctx, blob)) {
-//                    reqData.RemovedBlobs.emplace_back(kvReq.Partition, blob.Offset, blob.PartNo, nullptr);
-//                }
-//            }
-//        }
+        void DeleteBlobs(const TKvRequest& kvReq, TCacheL2Request& reqData, const TActorContext& ctx)
+        {
+            for (const auto& range : kvReq.DeletedBlobs) {
+                const TBlobId begin = MakeBlobId(range.Begin);
+                auto lowerBound = Cache.lower_bound(begin);
+                if ((lowerBound != Cache.end()) && (lowerBound->first == begin) && !range.IncludeBegin) {
+                    ++lowerBound;
+                }
+
+                const TBlobId end = MakeBlobId(range.End);
+                auto upperBound = Cache.upper_bound(end);
+                if ((upperBound != Cache.end()) && !range.IncludeEnd) {
+                    --upperBound;
+                }
+
+                for (auto i = lowerBound; i != upperBound; ++i) {
+                    const auto& [blob, value] = *i;
+
+                    reqData.RemovedBlobs.emplace_back(kvReq.Partition, blob.Offset, blob.PartNo, nullptr);
+                    Counters.Dec(value);
+                }
+
+                Cache.erase(lowerBound, upperBound);
+            }
+        }
 
         void SavePrefetchBlobs(const TActorContext& ctx, const TKvRequest& kvReq, const TVector<bool>& store)
         {

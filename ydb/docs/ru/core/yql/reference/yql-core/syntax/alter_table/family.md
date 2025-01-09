@@ -16,13 +16,13 @@ ALTER TABLE series_with_families ADD FAMILY family_small (
 
 ## Изменение групп колонок
 
-При помощи команды `ALTER COLUMN` можно изменить группу колонок для указанной колонки. Приведенный ниже код для колонки `release_date` в таблице `series_with_families` сменит группу колонок на `family_small`.
+При помощи команды `ALTER COLUMN` можно изменить группу колонок для указанной колонки. Приведённый ниже код для колонки `release_date` в таблице `series_with_families` сменит группу колонок на `family_small`.
 
 ```yql
 ALTER TABLE series_with_families ALTER COLUMN release_date SET FAMILY family_small;
 ```
 
-Две предыдущие команды можно объединить в один вызов `ALTER TABLE`. Приведенный ниже код создаст в таблице `series_with_families` группу колонок `family_small` и установит её для колонки `release_date`.
+Две предыдущие команды можно объединить в один вызов `ALTER TABLE`. Приведённый ниже код создаст в таблице `series_with_families` группу колонок `family_small` и установит её для колонки `release_date`.
 
 ```yql
 ALTER TABLE series_with_families
@@ -43,7 +43,7 @@ ALTER TABLE series_with_families
 
 {% endif %}
 
-Приведенный ниже код для группы колонок `default` в таблице `series_with_families` сменит тип хранилища на `hdd`:
+Приведённый ниже код для группы колонок `default` в таблице `series_with_families` сменит тип хранилища на `hdd`:
 
 ```yql
 ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
@@ -63,7 +63,7 @@ ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
 
 {% endif %}
 
-Приведенный ниже код для группы колонок `default` в таблице `series_with_families` сменит кодек сжатия на `lz4`:
+Приведённый ниже код для группы колонок `default` в таблице `series_with_families` сменит кодек сжатия на `lz4`:
 
 ```yql
 ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION "lz4";
@@ -77,7 +77,7 @@ ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION "lz4";
 
 {% endif %}
 
-Приведенный ниже код для группы колонок `default` в таблице `series_with_families` сменит уровень кодека сжатия, если он поддерживает различные уровни сжатия:
+Приведённый ниже код для группы колонок `default` в таблице `series_with_families` сменит уровень кодека сжатия, если он поддерживает различные уровни сжатия:
 
 ```yql
 ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION_LEVEL 5;

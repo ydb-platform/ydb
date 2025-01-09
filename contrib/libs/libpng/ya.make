@@ -4,14 +4,15 @@ LIBRARY()
 
 LICENSE(
     Libpng AND
+    MIT AND
     libpng-2.0
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.6.40)
+VERSION(1.6.44)
 
-ORIGINAL_SOURCE(https://github.com/pnggroup/libpng/archive/v1.6.40.tar.gz)
+ORIGINAL_SOURCE(https://github.com/pnggroup/libpng/archive/v1.6.44.tar.gz)
 
 PEERDIR(
     contrib/libs/zlib
@@ -28,6 +29,7 @@ NO_RUNTIME()
 SRCS(
     intel/filter_sse2_intrinsics.c
     intel/intel_init.c
+    mips/filter_mmi_inline_assembly.c
     mips/filter_msa_intrinsics.c
     mips/mips_init.c
     png.c

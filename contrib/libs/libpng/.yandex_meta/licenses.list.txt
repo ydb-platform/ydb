@@ -1,6 +1,6 @@
 ====================COPYRIGHT====================
- * Copyright (c) 1995-2023 The PNG Reference Library Authors.
- * Copyright (c) 2018-2023 Cosmin Truta.
+ * Copyright (c) 1995-2024 The PNG Reference Library Authors.
+ * Copyright (c) 2018-2024 Cosmin Truta.
  * Copyright (c) 2000-2002, 2004, 2006-2018 Glenn Randers-Pehrson.
  * Copyright (c) 1996-1997 Andreas Dilger.
  * Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.
@@ -36,25 +36,6 @@
 
 ====================COPYRIGHT====================
  * Copyright (c) 2018 Cosmin Truta
- * Copyright (c) 1998-2002,2004,2006-2017 Glenn Randers-Pehrson
- * Copyright (c) 1996-1997 Andreas Dilger
- * Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.
-
-
-====================COPYRIGHT====================
- * Copyright (c) 2018 Cosmin Truta
- * Copyright (c) 2014,2017 Glenn Randers-Pehrson
- * Written by Mans Rullgard, 2011.
-
-
-====================COPYRIGHT====================
- * Copyright (c) 2018 Cosmin Truta
- * Copyright (c) 2016 Glenn Randers-Pehrson
- * Written by Mandar Sahastrabuddhe, August 2016.
-
-
-====================COPYRIGHT====================
- * Copyright (c) 2018 Cosmin Truta
  * Copyright (c) 2016-2017 Glenn Randers-Pehrson
  * Written by Mike Klein and Matt Sarett
  * Derived from arm/filter_neon_intrinsics.c
@@ -68,19 +49,12 @@
 
 ====================COPYRIGHT====================
  * Copyright (c) 2018-2019 Cosmin Truta
- * Copyright (c) 1998-2002,2004,2006-2018 Glenn Randers-Pehrson
- * Copyright (c) 1996-1997 Andreas Dilger
- * Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.
-
-
-====================COPYRIGHT====================
- * Copyright (c) 2018-2019 Cosmin Truta
  * Copyright (c) 2017-2018 Arm Holdings. All rights reserved.
 
 
 ====================COPYRIGHT====================
  * Copyright (c) 2018-2022 Cosmin Truta
- * Copyright (c) 1998-2002,2004,2006-2016,2018 Glenn Randers-Pehrson
+ * Copyright (c) 1998-2002,2004,2006-2018 Glenn Randers-Pehrson
  * Copyright (c) 1996-1997 Andreas Dilger
  * Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.
 
@@ -92,17 +66,41 @@
 
 
 ====================COPYRIGHT====================
- * Copyright (c) 2018-2023 Cosmin Truta
+ * Copyright (c) 2018-2024 Cosmin Truta
+ * Copyright (c) 1998-2002,2004,2006-2016,2018 Glenn Randers-Pehrson
+ * Copyright (c) 1996-1997 Andreas Dilger
+ * Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2018-2024 Cosmin Truta
+ * Copyright (c) 1998-2002,2004,2006-2017 Glenn Randers-Pehrson
+ * Copyright (c) 1996-1997 Andreas Dilger
+ * Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2018-2024 Cosmin Truta
  * Copyright (c) 1998-2002,2004,2006-2018 Glenn Randers-Pehrson
  * Copyright (c) 1996-1997 Andreas Dilger
  * Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.
 
 
 ====================COPYRIGHT====================
- * Copyright (c) 2018-2023 Cosmin Truta
+ * Copyright (c) 2018-2024 Cosmin Truta
  * Copyright (c) 1998-2018 Glenn Randers-Pehrson
  * Copyright (c) 1996-1997 Andreas Dilger
  * Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2018-2024 Cosmin Truta
+ * Copyright (c) 2016 Glenn Randers-Pehrson
+ * Written by Mandar Sahastrabuddhe, August 2016
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2024 Cosmin Truta
 
 
 ====================COPYRIGHT====================
@@ -606,8 +604,8 @@ surrounding them in the modified libpng source files.
 PNG Reference Library License version 2
 ---------------------------------------
 
- * Copyright (c) 1995-2023 The PNG Reference Library Authors.
- * Copyright (c) 2018-2023 Cosmin Truta.
+ * Copyright (c) 1995-2024 The PNG Reference Library Authors.
+ * Copyright (c) 2018-2024 Cosmin Truta.
  * Copyright (c) 2000-2002, 2004, 2006-2018 Glenn Randers-Pehrson.
  * Copyright (c) 1996-1997 Andreas Dilger.
  * Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.
@@ -1014,9 +1012,13 @@ other copyright owners, but are released under the libpng license.
 released under the libpng license described below. The modifications are
 
 
+====================MIT====================
+  Relicensed the CI scripts to the MIT License.
+
+
 ====================libpng-2.0====================
- *  * Copyright (c) 1995-2023 The PNG Reference Library Authors.
- *  * Copyright (c) 2018-2023 Cosmin Truta.
+ *  * Copyright (c) 1995-2024 The PNG Reference Library Authors.
+ *  * Copyright (c) 2018-2024 Cosmin Truta.
  *  * Copyright (c) 2000-2002, 2004, 2006-2018 Glenn Randers-Pehrson.
  *  * Copyright (c) 1996-1997 Andreas Dilger.
  *  * Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.
@@ -1060,8 +1062,8 @@ surrounding them in the modified libpng source files.
 PNG Reference Library License version 2
 ---------------------------------------
 
- * Copyright (c) 1995-2023 The PNG Reference Library Authors.
- * Copyright (c) 2018-2023 Cosmin Truta.
+ * Copyright (c) 1995-2024 The PNG Reference Library Authors.
+ * Copyright (c) 2018-2024 Cosmin Truta.
  * Copyright (c) 2000-2002, 2004, 2006-2018 Glenn Randers-Pehrson.
  * Copyright (c) 1996-1997 Andreas Dilger.
  * Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.

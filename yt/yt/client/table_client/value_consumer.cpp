@@ -42,7 +42,7 @@ void TValueConsumerBase::InitializeIdToTypeMapping()
     const auto& nameTable = GetNameTable();
     for (const auto& column : Schema_->Columns()) {
         int id = nameTable->GetIdOrRegisterName(column.Name());
-        if (id >= static_cast<int>(NameTableIdToType_.size())) {
+        if (id >= std::ssize(NameTableIdToType_)) {
             NameTableIdToType_.resize(id + 1, EValueType::Any);
         }
         NameTableIdToType_[id] = column.GetWireType();

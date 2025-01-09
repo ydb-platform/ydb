@@ -170,7 +170,7 @@ private:
 
     void DoInitialize()
     {
-        VERIFY_SPINLOCK_AFFINITY(ConfigLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(ConfigLock_);
         YT_VERIFY(!IsInitialized());
 
         grpc_core::Executor::SetThreadsLimit(Config_->GrpcThreadCount);

@@ -34,8 +34,6 @@ SRCS(
     validate_logical_type_ut.cpp
     wire_protocol_ut.cpp
     ypath_ut.cpp
-    zookeeper_bus_ut.cpp
-    zookeeper_protocol_ut.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)

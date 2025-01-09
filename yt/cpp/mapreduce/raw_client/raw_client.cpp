@@ -493,21 +493,6 @@ IFileReaderPtr THttpRawClient::GetJobFailContext(
     return MakeIntrusive<NHttpClient::THttpResponseStream>(std::move(responseInfo));
 }
 
-TString THttpRawClient::GetJobStderrWithRetries(
-    const TOperationId& operationId,
-    const TJobId& jobId,
-    const TGetJobStderrOptions& /*options*/)
-{
-    TMutationId mutationId;
-    THttpHeader header("GET", "get_job_stderr");
-    header.AddOperationId(operationId);
-    header.AddParameter("job_id", GetGuidAsString(jobId));
-    TRequestConfig config;
-    config.IsHeavy = true;
-    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
-    return responseInfo->GetResponse();
-}
-
 IFileReaderPtr THttpRawClient::GetJobStderr(
     const TOperationId& operationId,
     const TJobId& jobId,

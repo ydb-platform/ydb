@@ -9,7 +9,7 @@ def post_install(self):
         libunwind.NO_RUNTIME = True
         libunwind.NO_SANITIZE = True
         libunwind.NO_SANITIZE_COVERAGE = True
-        # original build uses -f options heavily, keep only necessary subset 
+        # original build uses -f options heavily, keep only necessary subset
         libunwind.CFLAGS += ["-fno-exceptions", "-fno-rtti", "-funwind-tables"]
         libunwind.after("CFLAGS", Switch({"SANITIZER_TYPE == memory": "CFLAGS(-fPIC)"}))
         libunwind.PEERDIR.add("library/cpp/sanitizer/include")

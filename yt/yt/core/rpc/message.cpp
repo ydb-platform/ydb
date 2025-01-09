@@ -389,17 +389,17 @@ bool TryParseStreamingFeedbackHeader(
 
 i64 GetMessageHeaderSize(const TSharedRefArray& message)
 {
-    return message.Size() >= 1 ? static_cast<i64>(message[0].Size()) : 0;
+    return message.Size() >= 1 ? std::ssize(message[0]) : 0;
 }
 
 i64 GetMessageBodySize(const TSharedRefArray& message)
 {
-    return message.Size() >= 2 ? static_cast<i64>(message[1].Size()) : 0;
+    return message.Size() >= 2 ? std::ssize(message[1]) : 0;
 }
 
 int GetMessageAttachmentCount(const TSharedRefArray& message)
 {
-    return std::max(static_cast<int>(message.Size()) - 2, 0);
+    return std::max<int>(std::ssize(message) - 2, 0);
 }
 
 i64 GetTotalMessageAttachmentSize(const TSharedRefArray& message)

@@ -945,7 +945,7 @@ TFuture<void> TTransaction::DoAbort(
     TGuard<NThreading::TSpinLock>* guard,
     const TTransactionAbortOptions& /*options*/)
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
     if (AbortPromise_) {
         return AbortPromise_.ToFuture();
@@ -1110,7 +1110,7 @@ void TTransaction::ValidateActive()
 
 void TTransaction::DoValidateActive()
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
     if (State_ != ETransactionState::Active) {
         THROW_ERROR_EXCEPTION(
             NTransactionClient::EErrorCode::InvalidTransactionState,
@@ -1128,7 +1128,7 @@ TApiServiceProxy::TReqBatchModifyRowsPtr TTransaction::CreateBatchModifyRowsRequ
 
 TFuture<void> TTransaction::InvokeBatchModifyRowsRequest()
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
     YT_VERIFY(BatchModifyRowsRequest_);
 
     TApiServiceProxy::TReqBatchModifyRowsPtr batchRequest;
@@ -1145,7 +1145,7 @@ TFuture<void> TTransaction::InvokeBatchModifyRowsRequest()
 
 std::vector<TFuture<void>> TTransaction::FlushModifyRowsRequests()
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
     auto futures = std::move(BatchModifyRowsFutures_);
     if (BatchModifyRowsRequest_) {

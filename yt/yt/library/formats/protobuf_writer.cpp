@@ -929,7 +929,7 @@ public:
 private:
     void DoWrite(TRange<TUnversionedRow> rows) override
     {
-        int rowCount = static_cast<int>(rows.Size());
+        int rowCount = std::ssize(rows);
         for (int index = 0; index < rowCount; ++index) {
             auto row = rows[index];
 

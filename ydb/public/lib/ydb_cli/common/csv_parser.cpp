@@ -4,7 +4,6 @@
 #include <ydb/public/lib/ydb_cli/common/common.h>
 
 #include <library/cpp/string_utils/csv/csv.h>
-#include <google/protobuf/text_format.h>
 
 #include <regex>
 

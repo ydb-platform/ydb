@@ -256,8 +256,14 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
                 records = loadBillingRecords(meteringLogFilePath);
             }
         };
-
-        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueTags = NJson::TJsonMap{
+            {"k1", "v1"},
+            {"k2", "v2"},
+        };
+        auto json = CreateQueue({
+            {"QueueName", "ExampleQueueName"},
+            {"Tags", queueTags}
+        });
         auto queueUrl = GetByPath<TString>(json, "QueueUrl");
         waitBillingRecords();
 
@@ -287,7 +293,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
         waitBillingRecords();
 
-        auto makeTags = [](TVector<std::pair<TString, TString>> pairs) {
+        auto makeRecordTags = [](TVector<std::pair<TString, TString>> pairs) {
             NSc::TValue tags;
             tags.SetDict();
             for (auto const& [k, v] : pairs) {
@@ -295,7 +301,18 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             }
             return tags;
         };
-        auto makeRecord = [&makeTags](TString type, TString resourceId, size_t quantity, TVector<std::pair<TString, TString>> tags) {
+        NSc::TValue queueTagsDict;
+        queueTagsDict.SetDict();
+        for (auto const& [k, v] : queueTags.GetMapSafe()) {
+            queueTagsDict[k] = v.GetString();
+        }
+        auto makeRecord = [&makeRecordTags](
+            TString type,
+            TString resourceId,
+            size_t quantity,
+            TVector<std::pair<TString, TString>> tags,
+            NSc::TValue queueTags = {}
+        ) {
             return NKikimr::NSQS::CreateMeteringBillingRecord(
                 "folder4",
                 resourceId,
@@ -304,18 +321,9 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
                 TInstant::Now(),
                 quantity,
                 type == "ymq.traffic.v1" ? "byte" : "request",
-                makeTags(tags)
+                makeRecordTags(tags),
+                queueTags
             );
-        };
-        auto asExpected = [](NSc::TValue record, NSc::TValue expected) {
-            return record["folder_id"] == expected["folder_id"] &&
-                   record["resource_id"] == expected["resource_id"] &&
-                   record["schema"] == expected["schema"] &&
-                   record["usage"]["unit"] == expected["usage"]["unit"] &&
-                   (record["schema"] != "ymq.requests.v1" || record["usage"]["quantity"] == expected["usage"]["quantity"]) &&
-                   record["tags"]["direction"] == expected["tags"]["direction"] &&
-                   record["tags"]["type"] == expected["tags"]["type"] &&
-                   record["tags"]["queue_type"] == expected["tags"]["queue_type"];
         };
 
         TVector<NSc::TValue> expectedRecords{
@@ -325,24 +333,36 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             makeRecord("ymq.requests.v1", "", 1, {{"queue_type", "other"}}),
 
             // SendMessage 1 KB
-            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}, {"type", "inet"}}),
-            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}, {"type", "inet"}}),
-            makeRecord("ymq.requests.v1", "000000000000000101v0", 1, {{"queue_type", "std"}}),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}}, queueTagsDict),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}}, queueTagsDict),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 1, {{"queue_type", "std"}}, queueTagsDict),
 
             // ReceiveMessage 1 KB
-            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}, {"type", "inet"}}),
-            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}, {"type", "inet"}}),
-            makeRecord("ymq.requests.v1", "000000000000000101v0", 1, {{"queue_type", "std"}}),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}}, queueTagsDict),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}}, queueTagsDict),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 1, {{"queue_type", "std"}}, queueTagsDict),
 
             // SendMessage 150 KB
-            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}, {"type", "inet"}}),
-            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}, {"type", "inet"}}),
-            makeRecord("ymq.requests.v1", "000000000000000101v0", 3, {{"queue_type", "std"}}),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}}, queueTagsDict),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}}, queueTagsDict),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 3, {{"queue_type", "std"}}, queueTagsDict),
 
             // ReceiveMessage 150 KB
-            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}, {"type", "inet"}}),
-            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}, {"type", "inet"}}),
-            makeRecord("ymq.requests.v1", "000000000000000101v0", 3, {{"queue_type", "std"}}),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}}, queueTagsDict),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}}, queueTagsDict),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 3, {{"queue_type", "std"}}, queueTagsDict),
+        };
+
+        auto asExpected = [](NSc::TValue record, NSc::TValue expected) {
+            return record["folder_id"] == expected["folder_id"] &&
+                   record["resource_id"] == expected["resource_id"] &&
+                   record["schema"] == expected["schema"] &&
+                   record["usage"]["unit"] == expected["usage"]["unit"] &&
+                   (record["schema"] != "ymq.requests.v1" || record["usage"]["quantity"] == expected["usage"]["quantity"]) &&
+                   record["tags"]["direction"] == expected["tags"]["direction"] &&
+                   record["tags"]["queue_type"] == expected["tags"]["queue_type"] &&
+                   record["labels"]["k1"] == expected["labels"]["k1"] &&
+                   record["labels"]["k2"] == expected["labels"]["k2"];
         };
         for (size_t i = 0; i < records.size(); ++i) {
             UNIT_ASSERT(asExpected(records[i], expectedRecords[i]));

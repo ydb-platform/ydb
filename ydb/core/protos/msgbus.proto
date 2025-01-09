@@ -604,6 +604,8 @@ message TSqsResponse {
     optional string FolderId = 31;
     optional string ResourceId = 32;
     optional bool IsFifo = 33;
+
+    repeated NKikimr.NSQS.TQueueTag QueueTags = 34;
 }
 
 message TSqsActionCounterChanged {

@@ -92,7 +92,16 @@ namespace NKikimr::NYmq::V1 {
                 Request->RaiseIssue(issue);
                 Request->ReplyWithYdbStatus(Ydb::StatusIds_StatusCode_STATUS_CODE_UNSPECIFIED);
             } else {
-                Request->SendResult(this->GetResult(resp), Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS);
+                Ydb::Operations::Operation operation;
+                operation.set_ready(true);
+                operation.set_status(Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS);
+                Ydb::Ymq::V1::QueueTags queueTags;
+                for (const auto& t: resp.GetQueueTags()) {
+                    queueTags.mutable_tags()->emplace(t.GetKey(), t.GetValue());
+                }
+                operation.mutable_metadata()->PackFrom(queueTags);
+                operation.mutable_result()->PackFrom(this->GetResult(resp));
+                Request->SendOperation(operation);
             }
         }
 

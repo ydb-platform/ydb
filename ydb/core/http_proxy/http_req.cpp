@@ -308,6 +308,14 @@ namespace NKikimr::NHttpProxy {
                             NYdb::EStatus(response.operation().status()),
                             std::move(issues)
                         );
+                        Ydb::Ymq::V1::QueueTags queueTags;
+                        response.operation().metadata().UnpackTo(&queueTags);
+                        for (const auto& [k, v] : queueTags.GetTags()) {
+                            if (!result->QueueTags.Get()) {
+                                result->QueueTags = MakeHolder<THashMap<TString, TString>>();
+                            }
+                            result->QueueTags->emplace(k, v);
+                        }
                         actorSystem->Send(actorId, result.Release());
                     }
                 );
@@ -374,6 +382,9 @@ namespace NKikimr::NHttpProxy {
                     );
                     HttpContext.ResponseData.IsYmq = true;
                     HttpContext.ResponseData.YmqHttpCode = 200;
+                    if (ev->Get()->QueueTags) {
+                        HttpContext.ResponseData.QueueTags = std::move(*ev->Get()->QueueTags);
+                    }
                     ReplyToHttpContext(ctx);
                 } else {
                     auto retryClass = NYdb::NTopic::GetRetryErrorClass(ev->Get()->Status->GetStatus());
@@ -1235,6 +1246,9 @@ namespace NKikimr::NHttpProxy {
             requestAttributes.SourceAddress = SourceAddress;
             requestAttributes.ResourceId = ResourceId;
             requestAttributes.Action = NSQS::ActionFromString(MethodName);
+            for (const auto& [k, v] : ResponseData.QueueTags) {
+                requestAttributes.QueueTags[k] = v;
+            }
 
             LOG_SP_DEBUG_S(
                 ctx,

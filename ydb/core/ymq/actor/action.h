@@ -309,6 +309,13 @@ protected:
             Response_.SetFolderId(FolderId_);
             Response_.SetIsFifo(IsFifo_ ? *IsFifo_ : false);
             Response_.SetResourceId(GetQueueName());
+            if (QueueTags_.Defined()) {
+                for (const auto& [k, v] : *QueueTags_) {
+                    auto* tag = Response_.AddQueueTags();
+                    tag->SetKey(k);
+                    tag->SetValue(v);
+                }
+            }
         }
 
         AuditLog();

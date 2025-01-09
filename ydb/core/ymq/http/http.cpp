@@ -75,10 +75,12 @@ public:
         response.FolderId = resp.GetFolderId();
         response.IsFifo = resp.GetIsFifo();
         response.ResourceId = resp.GetResourceId();
+        for (const auto& tag : resp.GetQueueTags()) {
+            response.QueueTags[tag.GetKey()] = tag.GetValue();
+        }
 
         Request_->SendResponse(response);
     }
-
 
 private:
     TString LogString(const TSqsResponse& resp) const {
@@ -163,6 +165,7 @@ void THttpRequest::WriteResponse(const TReplyParams& replyParams, const TSqsHttp
         requestAttributes.SourceAddress = SourceAddress_;
         requestAttributes.ResourceId = response.ResourceId;
         requestAttributes.Action = Action_;
+        requestAttributes.QueueTags = response.QueueTags;
 
         RLOG_SQS_BASE_DEBUG(*Parent_->ActorSystem_,
             TStringBuilder() << "Send metering event."

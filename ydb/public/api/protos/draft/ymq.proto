@@ -339,3 +339,6 @@ message UntagQueueResponse {
 message UntagQueueResult {
 }
 
+message QueueTags {
+    map<string,string> Tags = 1;
+}

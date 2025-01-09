@@ -491,14 +491,13 @@ class TLocalTableWriter
             const auto version = TRowVersion::FromProto(kv.GetVersion());
             TxIds.emplace(version, kv.GetTxId());
 
-            auto f1 = PendingTxId.begin(), l1 = PendingTxId.end();
-            auto f2 = BlockedRecords.begin(), l2 = BlockedRecords.end();
+            auto pendingIt = PendingTxId.begin();
+            auto blockedIt = BlockedRecords.begin();
 
-            auto process1 = [this, &records, &f1, &version, txId = kv.GetTxId()]() -> bool {
-                auto it = PendingRecords.find(*f1);
-                Y_ABORT_UNLESS(it != PendingRecords.end());
+            auto processPending = [this, &records, &version, txId = kv.GetTxId()](auto& it) -> bool {
+                Y_ABORT_UNLESS(PendingRecords.contains(*it));
+                auto& record = PendingRecords.at(*it);
 
-                auto& record = it->second;
                 if (TRowVersion(record->GetStep(), record->GetTxId()) >= version) {
                     return false;
                 }
@@ -506,41 +505,40 @@ class TLocalTableWriter
                 record->RewriteTxId(txId);
                 records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
 
-                f1 = PendingTxId.erase(f1);
+                it = PendingTxId.erase(it);
                 return true;
             };
 
-            auto process2 = [this, &records, &f2]() {
-                auto it = PendingRecords.find(*f2);
-                Y_ABORT_UNLESS(it != PendingRecords.end());
+            auto processBlocked = [this, &records](auto& it) {
+                Y_ABORT_UNLESS(PendingRecords.contains(*it));
+                auto& record = PendingRecords.at(*it);
 
-                auto& record = it->second;
                 records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
 
-                f2 = BlockedRecords.erase(f2);
+                it = BlockedRecords.erase(it);
             };
 
-            while (f1 != l1 && f2 != l2) {
-                if (*f1 < *f2) {
-                    if (!process1()) {
+            while (pendingIt != PendingTxId.end() && blockedIt != BlockedRecords.end()) {
+                if (*pendingIt < *blockedIt) {
+                    if (!processPending(pendingIt)) {
                         break;
                     }
                 } else {
-                    process2();
+                    processBlocked(blockedIt);
                 }
             }
 
-            if (f2 == l2) {
-                for (; f1 != l1;) {
-                    if (!process1()) {
+            if (blockedIt == BlockedRecords.end()) {
+                for (; pendingIt != PendingTxId.end();) {
+                    if (!processPending(pendingIt)) {
                         break;
                     }
                 }
             }
 
-            if (f1 == l1) {
-                for (; f2 != l2;) {
-                    process2();
+            if (pendingIt == PendingTxId.end()) {
+                for (; blockedIt != BlockedRecords.end();) {
+                    processBlocked(blockedIt);
                 }
             }
         }

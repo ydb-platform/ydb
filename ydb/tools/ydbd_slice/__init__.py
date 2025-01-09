@@ -549,6 +549,7 @@ def cluster_type_args():
         "block-4-2-2-nodes",
         "mirror-3-dc-3-nodes",
         "mirror-3-dc-9-nodes",
+        "none-1-node",
     ]
     args.add_argument(
         "--cluster-type",
@@ -801,8 +802,8 @@ def add_sample_config_mode(modes):
             template_path = "/ydbd_slice/baremetal/templates/block-4-2-4-nodes.yaml"
         elif cluster_type == "block-4-2-2-nodes":
             template_path = "/ydbd_slice/baremetal/templates/block-4-2-2-nodes.yaml"
-        elif cluster_type == "mirror-3-dc-3-nodes-in-memory":
-            pass
+        elif cluster_type == "none-1-node":
+            template_path = "/ydbd_slice/baremetal/templates/none-1-node.yaml"
         elif cluster_type == "mirror-3-dc-3-nodes":
             template_path = "/ydbd_slice/baremetal/templates/mirror-3-dc-3-nodes.yaml"
         elif cluster_type == "mirror-3-dc-9-nodes":

@@ -228,6 +228,10 @@ namespace NKikimr::NBsController {
 
     template <class T>
     TPDiskId GetPDiskId(const TBlobStorageController::TConfigState& state, const T& command) {
+        if (command.HasTargetPDiskId() && command.HasTargetPDiskLocation()) {
+            throw TExError() << "Only one of TargetPDiskId or PDiskLocation can be specified";
+        }
+
         if (command.HasTargetPDiskId()) {
             const NKikimrBlobStorage::TPDiskId& pdiskId = command.GetTargetPDiskId();
             ui32 targetNodeId = pdiskId.GetNodeId();
@@ -244,7 +248,7 @@ namespace NKikimr::NBsController {
             const NKikimrBlobStorage::TPDiskLocation& pdiskLocation = command.GetTargetPDiskLocation();
             const TString& targetFqdn = pdiskLocation.GetFqdn();
             const TString& targetDiskPath = pdiskLocation.GetPath();
-            // iterate over state.HostRecords map using iterator (->begin() and ->end())
+            
             for (auto it = state.HostRecords->begin(); it != state.HostRecords->end(); ++it) {
                 const auto& [hostId, hostRecord] = *it;
 

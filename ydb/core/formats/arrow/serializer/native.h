@@ -54,10 +54,10 @@ protected:
     virtual TConclusionStatus DoDeserializeFromRequest(NYql::TFeaturesExtractor& features) override;
 
     static arrow::Compression::type GetDefaultCompressionType() {
-        if (!HasAppData() && !AppDataVerified().ColumnShardConfig.HasDefaultCompression()) {
+        if (!HasAppData() && !AppData()->ColumnShardConfig.HasDefaultCompression()) {
             return arrow::Compression::ZSTD;
         }
-        return CompressionFromProto(AppDataVerified().ColumnShardConfig.GetDefaultCompression()).value();
+        return CompressionFromProto(AppData()->ColumnShardConfig.GetDefaultCompression()).value();
     }
 
     static std::shared_ptr<arrow::util::Codec> GetDefaultCodec() {

@@ -309,6 +309,9 @@ namespace NPQ {
 
             for (ui32 i = 0; i < srcRequest.CmdRenameSize(); ++i) {
                 const auto& cmd = srcRequest.GetCmdRename(i);
+                if (!IsDataKey(cmd.GetOldKey()) || !IsDataKey(cmd.GetNewKey())) {
+                    continue;
+                }
                 kvReq.RenamedBlobs.emplace_back(cmd.GetOldKey(), cmd.GetNewKey());
             }
 
@@ -322,11 +325,23 @@ namespace NPQ {
             for (ui32 i = 0; i < srcRequest.CmdDeleteRangeSize(); ++i) {
                 const auto& cmd = srcRequest.GetCmdDeleteRange(i);
                 const auto& range = cmd.GetRange();
+                if (!IsDataKey(range.GetFrom()) || !IsDataKey(range.GetTo())) {
+                    continue;
+                }
+                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "CacheProxy. from=" << range.GetFrom() << ", to=" << range.GetTo());
                 kvReq.DeletedBlobs.emplace_back(range.GetFrom(), range.GetIncludeFrom(),
                                                 range.GetTo(), range.GetIncludeTo());
             }
 
             Y_UNUSED(ctx);
+        }
+
+        bool IsDataKey(const TString& key) const {
+            if (key.empty()) {
+                return false;
+            }
+            const char type = std::tolower(key.front());
+            return type == TKeyPrefix::TypeData; // TypeData || ServiceTypeData
         }
 
         void Handle(TEvPqCache::TEvCacheL2Response::TPtr& ev, const TActorContext& ctx)

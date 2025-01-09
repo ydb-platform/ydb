@@ -1,0 +1,66 @@
+#include "auth_scan_base.h"
+#include "owners.h"
+
+#include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/scan_actor_base_impl.h>
+#include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/library/login/protos/login.pb.h>
+
+#include <ydb/library/actors/core/hfunc.h>
+
+namespace NKikimr::NSysView::NAuth {
+
+using namespace NSchemeShard;
+using namespace NActors;
+
+class TOwnersScan : public TAuthScanBase<TOwnersScan> {
+public:
+    using TScanBase = TScanActorBase<TOwnersScan>;
+    using TAuthBase = TAuthScanBase<TOwnersScan>;
+
+    TOwnersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+        : TAuthBase(ownerId, scanId, tableId, tableRange, columns)
+    {
+    }
+
+protected:
+    void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TNavigate::TEntry& entry) override {
+        Y_ABORT_UNLESS(entry.Status == TNavigate::EStatus::Ok);
+        
+        TVector<TCell> cells(::Reserve(Columns.size()));
+
+        // TODO: add rows according to request's sender user rights
+
+        auto entryPath = CanonizePath(entry.Path);
+        auto entryOwner = entry.Self->Info.GetOwner();
+
+        for (auto& column : Columns) {
+            switch (column.Tag) {
+            case Schema::AuthOwners::Path::ColumnId:
+                cells.push_back(TCell(entryPath.data(), entryPath.size()));
+                break;
+            case Schema::AuthOwners::Sid::ColumnId:
+                cells.push_back(TCell(entryOwner.data(), entryOwner.size()));
+                break;
+            default:
+                cells.emplace_back();
+            }
+        }
+
+        TArrayRef<const TCell> ref(cells);
+        batch.Rows.emplace_back(TOwnedCellVec::Make(ref));
+        cells.clear();
+
+        batch.Finished = false;
+    }
+};
+
+THolder<NActors::IActor> CreateOwnersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+{
+    return MakeHolder<TOwnersScan>(ownerId, scanId, tableId, tableRange, columns);
+}
+
+}

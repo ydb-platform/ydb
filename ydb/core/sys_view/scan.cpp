@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 
+#include <ydb/core/sys_view/auth/owners.h>
 #include <ydb/core/sys_view/auth/users.h>
 #include <ydb/core/sys_view/auth/groups.h>
 #include <ydb/core/sys_view/auth/group_members.h>
@@ -251,6 +252,9 @@ THolder<NActors::IActor> CreateSystemViewScan(
         }
         if (tableId.SysViewInfo == GroupMembersName) {
             return NAuth::CreateGroupMembersScan(ownerId, scanId, tableId, tableRange, columns);
+        }
+        if (tableId.SysViewInfo == OwnersName) {
+            return NAuth::CreateOwnersScan(ownerId, scanId, tableId, tableRange, columns);
         }
     }
 

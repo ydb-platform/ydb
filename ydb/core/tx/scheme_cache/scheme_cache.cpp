@@ -75,7 +75,7 @@ TString TDomainInfo::TGroup::ToString() const {
 }
 
 TString TSchemeCacheNavigate::TEntry::ToString() const {
-    return TStringBuilder() << "{"
+    auto out = TStringBuilder() << "{"
         << " Path: " << JoinPath(Path)
         << " TableId: " << TableId
         << " RequestType: " << RequestType
@@ -85,8 +85,22 @@ TString TSchemeCacheNavigate::TEntry::ToString() const {
         << " SyncVersion: " << (SyncVersion ? "true" : "false")
         << " Status: " << Status
         << " Kind: " << Kind
-        << " DomainInfo " << (DomainInfo ? DomainInfo->ToString() : "<null>")
-    << " }";
+        << " DomainInfo " << (DomainInfo ? DomainInfo->ToString() : "<null>");
+    
+    if (ListNodeEntry) {
+        out << " Children [";
+        for (ui32 i = 0; i < ListNodeEntry->Children.size(); ++i) {
+            if (i) {
+                out << ",";
+            }
+
+            out << ListNodeEntry->Children.at(i).Name;
+        }
+        out << "]";
+    }
+    
+    out << " }";
+    return out;
 }
 
 TString TSchemeCacheNavigate::TEntry::ToString(const NScheme::TTypeRegistry& typeRegistry) const {

@@ -2326,6 +2326,98 @@ Y_UNIT_TEST_SUITE(SystemView) {
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
     }
+
+    Y_UNIT_TEST(AuthOwners) {
+        TTestEnv env;
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
+        CreateTenantsAndTables(env, true);
+        TTableClient client(env.GetDriver());
+
+        env.GetClient().CreateUser("/Root", "user1", "password1");
+        env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
+        env.GetClient().CreateUser("/Root/Tenant2", "user3", "password3");
+        env.GetClient().CreateUser("/Root/Tenant2", "user4", "password4");
+        env.GetClient().CreateGroup("/Root/Tenant2", "group1");
+        env.GetClient().AddGroupMembership("/Root", "group1", "user3");
+        env.GetClient().AddGroupMembership("/Root", "group1", "user4");
+
+        env.GetClient().MkDir("/Root", "Dir1/SubDir1");
+        env.GetClient().ModifyOwner("/Root", "Dir1", "user1");
+        env.GetClient().ModifyOwner("/Root/Dir1", "SubDir1", "user1");
+
+        env.GetClient().MkDir("/Root/Tenant1", "Dir2/SubDir2");
+        env.GetClient().ModifyOwner("/Root/Tenant1", "Dir2", "user2");
+        env.GetClient().ModifyOwner("/Root/Tenant1/Dir2", "SubDir2", "user2");
+
+        env.GetClient().MkDir("/Root/Tenant2", "Dir3/SubDir33");
+        env.GetClient().MkDir("/Root/Tenant2", "Dir3/SubDir34");
+        env.GetClient().MkDir("/Root/Tenant2", "Dir4/SubDir45");
+        env.GetClient().MkDir("/Root/Tenant2", "Dir4/SubDir46");
+        env.GetClient().ModifyOwner("/Root/Tenant2", "Dir3", "user3");
+        env.GetClient().ModifyOwner("/Root/Tenant2", "Dir4", "user4");
+        env.GetClient().ModifyOwner("/Root/Tenant2/Dir3", "SubDir33", "group1");
+        env.GetClient().ModifyOwner("/Root/Tenant2/Dir4", "SubDir46", "user4");
+
+        // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
+        // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant2").DebugString() << Endl;
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/.sys/auth_owners`
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["/Root"];["root@builtin"]];
+                [["/Root/.metadata"];["metadata@system"]];
+                [["/Root/.metadata/workload_manager"];["metadata@system"]];
+                [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
+                [["/Root/Dir1"];["user1"]];
+                [["/Root/Dir1/SubDir1"];["user1"]];
+                [["/Root/Table0"];["root@builtin"]];
+            ])";
+
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/Tenant1/.sys/auth_owners`
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["/Root/Tenant1"];["root@builtin"]];
+                [["/Root/Tenant1/Dir2"];["user2"]];
+                [["/Root/Tenant1/Dir2/SubDir2"];["user2"]];
+                [["/Root/Tenant1/Table1"];["root@builtin"]];
+            ])";
+
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/Tenant2/.sys/auth_owners`
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["/Root/Tenant2"];["root@builtin"]];
+                [["/Root/Tenant2/Dir3"];["user3"]];
+                [["/Root/Tenant2/Dir3/SubDir33"];["group1"]];
+                [["/Root/Tenant2/Dir3/SubDir34"];["root@builtin"]];
+                [["/Root/Tenant2/Dir4"];["user4"]];
+                [["/Root/Tenant2/Dir4/SubDir45"];["root@builtin"]];
+                [["/Root/Tenant2/Dir4/SubDir46"];["user4"]];
+                [["/Root/Tenant2/Table2"];["root@builtin"]];
+            ])";
+
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+    }
 }
 
 } // NSysView

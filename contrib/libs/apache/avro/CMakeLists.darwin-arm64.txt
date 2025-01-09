@@ -17,17 +17,20 @@ add_library(libs-apache-avro)
 
 target_compile_options(libs-apache-avro PRIVATE
   -DAVRO_SOURCE
-  -DAVRO_VERSION="1.11.3"
+  -DAVRO_VERSION="1.12.0"
   -DSNAPPY_CODEC_AVAILABLE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 
 target_include_directories(libs-apache-avro PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/api
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/include/avro
 )
 
 target_link_libraries(libs-apache-avro PUBLIC
   contrib-libs-cxxsupp
+  contrib-libs-fmt
   contrib-libs-snappy
   restricted-boost-any
   restricted-boost-asio

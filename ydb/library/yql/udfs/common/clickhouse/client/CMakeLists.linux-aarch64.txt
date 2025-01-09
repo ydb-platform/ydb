@@ -44,7 +44,7 @@ target_include_directories(clickhouse_client_udf INTERFACE
   ${PROJECT_SOURCE_DIR}/contrib/libs/pdqsort
   ${PROJECT_SOURCE_DIR}/contrib/libs/lz4
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/arrow/src
-  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/include
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/include
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random
@@ -112,7 +112,7 @@ target_include_directories(clickhouse_client_udf.global PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/libs/pdqsort
   ${PROJECT_SOURCE_DIR}/contrib/libs/lz4
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/arrow/src
-  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/include
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/include
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random

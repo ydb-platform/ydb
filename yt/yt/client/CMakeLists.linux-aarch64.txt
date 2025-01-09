@@ -219,9 +219,6 @@ target_sources(yt-yt-client PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/client/complex_types/time_text.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/complex_types/uuid_text.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/complex_types/yson_format_conversion.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/client/zookeeper/packet.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/client/zookeeper/protocol.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/client/zookeeper/requests.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/kafka/packet.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/kafka/protocol.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/kafka/requests.cpp

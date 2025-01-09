@@ -26,7 +26,6 @@ target_link_libraries(yt-library-program PUBLIC
   yutil
   yt-yt-core
   library-profiling-tcmalloc
-  library-profiling-perf
   yt-library-ytprof
   yt-library-tcmalloc
   cpp-yt-string

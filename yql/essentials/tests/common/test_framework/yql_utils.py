@@ -976,6 +976,27 @@ def normalize_result(res, sort):
     return res
 
 
+def is_sorted_table(table):
+    assert table.attr is not None
+    for column in cyson.loads(table.attr)[b'schema']:
+        if b'sort_order' in column:
+            return True
+    return False
+
+
+def is_unordered_result(res):
+    path = res.results_file
+    assert os.path.exists(path)
+    with open(path, 'rb') as f:
+        res = f.read()
+    res = cyson.loads(res)
+    for r in res:
+        for data in r[b'Write']:
+            if b'Unordered' in data:
+                return True
+    return False
+
+
 def stable_write(writer, node):
     if hasattr(node, 'attributes'):
         writer.begin_attributes()

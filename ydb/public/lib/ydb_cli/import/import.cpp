@@ -1428,8 +1428,7 @@ WITH (
     --, UNIFORM_PARTITIONS = 100,
     --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100,
     --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1000
-);
-)";
+);)";
     output << res;
     if (Failed) {
         return *ErrorStatus;

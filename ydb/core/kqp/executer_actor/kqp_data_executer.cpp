@@ -2576,13 +2576,15 @@ private:
                 for (auto& [shardId, shardTx] : datashardTxs) {
                     shardTx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
                     if (columnShardArbiter) {
-                        shardTx->MutableLocks()->AddSendingShards(*columnShardArbiter);
-                        shardTx->MutableLocks()->AddReceivingShards(*columnShardArbiter);
-                        if (sendingShardsSet.contains(shardId)) {
-                            shardTx->MutableLocks()->AddSendingShards(shardId);
-                        }
-                        if (receivingShardsSet.contains(shardId)) {
-                            shardTx->MutableLocks()->AddReceivingShards(shardId);
+                        if (!sendingShardsSet.empty() && !receivingShards.empty()) {
+                            shardTx->MutableLocks()->AddSendingShards(*columnShardArbiter);
+                            shardTx->MutableLocks()->AddReceivingShards(*columnShardArbiter);
+                            if (sendingShardsSet.contains(shardId)) {
+                                shardTx->MutableLocks()->AddSendingShards(shardId);
+                            }
+                            if (receivingShardsSet.contains(shardId)) {
+                                shardTx->MutableLocks()->AddReceivingShards(shardId);
+                            }
                         }
                         AFL_ENSURE(!arbiter);
                     } else {

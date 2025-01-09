@@ -65,18 +65,11 @@ class Slice:
         self.nodes._check_async_execution(tasks)
 
     def slice_format(self):
-        if not self.__confirm():
-            print("Aborting slice formatting")
-            return
         self.slice_stop()
         self._format_drives()
         self.slice_start()
 
     def slice_clear(self):
-        if not self.__confirm():
-            print("Aborting slice formatting")
-            return
-
         self.slice_stop()
 
         if 'dynamic_slots' in self.components:
@@ -120,34 +113,7 @@ class Slice:
             )
         )
 
-    def __confirm(self) -> bool:
-        if self.components['confirm']:
-            return True
-
-        confirm = input(
-            "You are trying to setup or format slice. Note, that during setup or format all previous data will be erased.\n"
-            + "Press [y] to continue or [n] to abort installation/formatting: "
-        )
-        for i in range(0, 3):
-            lw = confirm.strip().lower()
-            if lw == "n":
-                return False
-            if lw == "y":
-                return True
-            confirm = input("Enter [y] or [n]")
-        lw = confirm.strip().lower()
-        if lw == "n":
-            return False
-        if lw == "y":
-            return True
-
-        return False
-
     def slice_install(self):
-        if not self.__confirm():
-            print("Aborting installation")
-            return
-
         self._ensure_berkanavt_exists()
         self.slice_stop()
 

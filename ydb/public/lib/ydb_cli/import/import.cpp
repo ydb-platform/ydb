@@ -514,8 +514,7 @@ private:
     TStatus GenerateCreateTableFromCsv(IInputStream& input,
                     const TString& relativeTablePath,
                     const TString& filePath,
-                    std::shared_ptr<TJobInFlightManager> jobInflightManager,
-                    TStringBuilder& output);
+                    TString& suggestion);
     TStatus SuggestCreateTableRequest(const TVector<TString>& filePaths, const TString& relativeTablePath,
                                       TString& suggestion);
 
@@ -808,6 +807,9 @@ TStatus TImportFileClient::TImpl::SuggestCreateTableRequest(const TVector<TStrin
         const TString& relativeTablePath, TString& suggestion) {
     // All files should have the same scheme so probably no need to analyze more than one file
     CurrentFileCount = 1;
+    size_t filePathsSize = 1;
+    const auto& filePath = filePaths[0];
+
     if (Settings.Format_ == EDataFormat::Tsv && Settings.Delimiter_ != "\t") {
         return MakeStatus(EStatus::BAD_REQUEST,
             TStringBuilder() << "Illegal delimiter for TSV format, only tab is allowed");
@@ -817,102 +819,56 @@ TStatus TImportFileClient::TImpl::SuggestCreateTableRequest(const TVector<TStrin
         .OperationTimeout(Settings.OperationTimeout_)
         .ClientTimeout(Settings.ClientTimeout_);
 
-    size_t filePathsSize = 1;
-
     auto pool = CreateThreadPool(filePathsSize);
     TVector<NThreading::TFuture<TStatus>> asyncResults;
 
-    // If the single empty filename passed, read from stdin, else from the file
+    std::unique_ptr<TFileInput> fileInput;
+    std::optional<ui64> fileSizeHint;
 
-    std::vector<std::shared_ptr<TJobInFlightManager>> inflightManagers;
-    std::mutex inflightManagersLock;
-    if ((Settings.Format_ == EDataFormat::Tsv || Settings.Format_ == EDataFormat::Csv) && !Settings.NewlineDelimited_) {
-        inflightManagers.reserve(filePathsSize);
-        // <maxInFlight> requests in flight on server and <maxThreads> threads building TValue
-        size_t maxJobInflight = Settings.Threads_ + Settings.MaxInFlightRequests_;
-        for (size_t i = 0; i < filePathsSize; ++i) {
-            inflightManagers.push_back(std::make_shared<TJobInFlightManager>(i, filePathsSize, maxJobInflight));
+    if (!filePath.empty()) {
+        const TFsPath dataFile(filePath);
+
+        if (!dataFile.Exists()) {
+            return MakeStatus(EStatus::BAD_REQUEST,
+                TStringBuilder() << "File does not exist: " << filePath);
         }
-    }
 
-    TStringBuilder result;
-
-    for (size_t fileOrderNumber = 0; fileOrderNumber < filePathsSize; ++fileOrderNumber) {
-        const auto& filePath = filePaths[fileOrderNumber];
-        auto func = [&, fileOrderNumber, this] {
-            std::unique_ptr<TFileInput> fileInput;
-            std::optional<ui64> fileSizeHint;
-
-            if (!filePath.empty()) {
-                const TFsPath dataFile(filePath);
-
-                if (!dataFile.Exists()) {
-                    return MakeStatus(EStatus::BAD_REQUEST,
-                        TStringBuilder() << "File does not exist: " << filePath);
-                }
-
-                if (!dataFile.IsFile()) {
-                    return MakeStatus(EStatus::BAD_REQUEST,
-                        TStringBuilder() << "Not a file: " << filePath);
-                }
-
-                TFile file(filePath, OpenExisting | RdOnly | Seq);
-                i64 fileLength = file.GetLength();
-                if (fileLength && fileLength >= 0) {
-                    fileSizeHint = fileLength;
-                }
-
-                fileInput = std::make_unique<TFileInput>(file, Settings.FileBufferSize_);
-            }
-
-            IInputStream& input = fileInput ? *fileInput : Cin;
-
-            try {
-                switch (Settings.Format_) {
-                    case EDataFormat::Default:
-                    case EDataFormat::Csv:
-                    case EDataFormat::Tsv:
-                    {
-                        auto status = GenerateCreateTableFromCsv(input, relativeTablePath, filePath,
-                            inflightManagers.at(fileOrderNumber), result);
-                        std::lock_guard<std::mutex> lock(inflightManagersLock);
-                        inflightManagers[fileOrderNumber]->Finish();
-                        size_t informedManagers = 0;
-                        for (auto& inflightManager : inflightManagers) {
-                            if (inflightManager->OnAnotherFileFinished(informedManagers)) {
-                                ++informedManagers;
-                            }
-                        }
-                        return status;
-                    }
-                    case EDataFormat::Json:
-                    case EDataFormat::JsonUnicode:
-                    case EDataFormat::JsonBase64:
-                    case EDataFormat::Parquet:
-                    default:
-                        break;
-                }
-
-                return MakeStatus(EStatus::BAD_REQUEST,
-                            TStringBuilder() << "Unsupported file format #" << (int) Settings.Format_);
-            } catch (const std::exception& e) {
-                return MakeStatus(EStatus::INTERNAL_ERROR,
-                        TStringBuilder() << "Error: " << e.what());
-            }
-        };
-        asyncResults.push_back(NThreading::Async(std::move(func), *pool));
-    }
-
-    NThreading::WaitAll(asyncResults).GetValueSync();
-    for (const auto& asyncResult : asyncResults) {
-        auto result = asyncResult.GetValueSync();
-        if (!result.IsSuccess()) {
-            return result;
+        if (!dataFile.IsFile()) {
+            return MakeStatus(EStatus::BAD_REQUEST,
+                TStringBuilder() << "Not a file: " << filePath);
         }
-    }
-    suggestion = result;
 
-    return MakeStatus(EStatus::SUCCESS);
+        TFile file(filePath, OpenExisting | RdOnly | Seq);
+        i64 fileLength = file.GetLength();
+        if (fileLength && fileLength >= 0) {
+            fileSizeHint = fileLength;
+        }
+
+        fileInput = std::make_unique<TFileInput>(file, Settings.FileBufferSize_);
+    }
+
+    IInputStream& input = fileInput ? *fileInput : Cin;
+
+    try {
+        switch (Settings.Format_) {
+            case EDataFormat::Default:
+            case EDataFormat::Csv:
+            case EDataFormat::Tsv:
+                return GenerateCreateTableFromCsv(input, relativeTablePath, filePath, suggestion);
+            case EDataFormat::Json:
+            case EDataFormat::JsonUnicode:
+            case EDataFormat::JsonBase64:
+            case EDataFormat::Parquet:
+            default:
+                break;
+        }
+
+        return MakeStatus(EStatus::BAD_REQUEST,
+                    TStringBuilder() << "Unsupported file format #" << (int) Settings.Format_);
+    } catch (const std::exception& e) {
+        return MakeStatus(EStatus::INTERNAL_ERROR,
+                TStringBuilder() << "Error: " << e.what());
+    }
 }
 
 inline
@@ -1289,10 +1245,12 @@ TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
 TStatus TImportFileClient::TImpl::GenerateCreateTableFromCsv(IInputStream& input,
                     const TString& relativeTablePath,
                     const TString& filePath,
-                    std::shared_ptr<TJobInFlightManager> jobInflightManager,
-                    TStringBuilder& output) {
+                    TString& suggestion) {
     TCountingInput countInput(&input);
     NCsvFormat::TLinesSplitter splitter(countInput);
+
+    size_t maxJobInflight = Settings.Threads_;
+    std::counting_semaphore<> jobsSemaphore(maxJobInflight);
 
     TCsvParser parser;
     bool removeLastDelimiter = false;
@@ -1332,7 +1290,7 @@ TStatus TImportFileClient::TImpl::GenerateCreateTableFromCsv(IInputStream& input
     std::vector<TAsyncStatus> inFlightRequests;
     std::vector<TString> buffer;
 
-    auto checkCsvFunc = [&, jobInflightManager](std::vector<TString>&& buffer, ui64 row) {
+    auto checkCsvFunc = [&](std::vector<TString>&& buffer, ui64 row) {
         TPossibleTypes typesCopy = columnTypes.GetCopy();
         try {
             for (auto& line : buffer) {
@@ -1342,11 +1300,11 @@ TStatus TImportFileClient::TImpl::GenerateCreateTableFromCsv(IInputStream& input
             if (!Failed.exchange(true)) {
                 ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
             }
-            jobInflightManager->ReleaseJob();
+            jobsSemaphore.release();
             throw;
         }
         columnTypes.MergeWith(typesCopy);
-        jobInflightManager->ReleaseJob();
+        jobsSemaphore.release();
     };
 
     while (TString line = splitter.ConsumeLine()) {
@@ -1379,7 +1337,7 @@ TStatus TImportFileClient::TImpl::GenerateCreateTableFromCsv(IInputStream& input
         batchBytes = 0;
         buffer.clear();
 
-        jobInflightManager->AcquireJob();
+        jobsSemaphore.acquire();
 
         if (!ProcessingPool->AddFunc(workerFunc)) {
             return MakeStatus(EStatus::INTERNAL_ERROR, "Couldn't add worker func");
@@ -1392,11 +1350,13 @@ TStatus TImportFileClient::TImpl::GenerateCreateTableFromCsv(IInputStream& input
 
     // Send the rest if buffer is not empty
     if (!buffer.empty() && countInput.Counter() > 0 && !Failed) {
-        jobInflightManager->AcquireJob();
+        jobsSemaphore.acquire();
         checkCsvFunc(std::move(buffer), row);
     }
 
-    jobInflightManager->WaitForAllJobs();
+    for (size_t i = 0; i < maxJobInflight; ++i) {
+        jobsSemaphore.acquire();
+    }
 
     TStringBuilder res;
     res << "Example CreateTable request text generated based on data in file " << filePath << ":" << Endl << Endl;
@@ -1429,7 +1389,7 @@ WITH (
     --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100
     --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1000
 );)";
-    output << res;
+    suggestion = res;
     if (Failed) {
         return *ErrorStatus;
     } else {

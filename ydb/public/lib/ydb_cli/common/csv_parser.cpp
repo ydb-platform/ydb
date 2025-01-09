@@ -596,7 +596,6 @@ TValue TCsvParser::BuildList(std::vector<TString>& lines, const TString& filenam
             ++row.value();
         }
     }
-    //Cerr << "TValue: `" <<  listValue.DebugString() << "`" << Endl;
     return TValue(ResultListType.value(), std::move(listValue));
 }
 
@@ -622,47 +621,23 @@ void TCsvParser::BuildLineType() {
 }
 namespace {
 static const std::vector<TType> availableTypes = {
-    //TTypeBuilder().Primitive(EPrimitiveType::Bool).Build(),
-
-    //TTypeBuilder().Primitive(EPrimitiveType::Uint8).Build(),
-    //TTypeBuilder().Primitive(EPrimitiveType::Int8).Build(),
-    //TTypeBuilder().Primitive(EPrimitiveType::Uint16).Build(),
-    //TTypeBuilder().Primitive(EPrimitiveType::Int16).Build(),
-    //TTypeBuilder().Primitive(EPrimitiveType::Uint32).Build(),
-    //TTypeBuilder().Primitive(EPrimitiveType::Int32).Build(),
+    TTypeBuilder().Primitive(EPrimitiveType::Bool).Build(),
     TTypeBuilder().Primitive(EPrimitiveType::Uint64).Build(),
     TTypeBuilder().Primitive(EPrimitiveType::Int64).Build(),
-
-    //TTypeBuilder().Primitive(EPrimitiveType::Float).Build(),
     TTypeBuilder().Primitive(EPrimitiveType::Double).Build(),
-
     TTypeBuilder().Primitive(EPrimitiveType::Date).Build(),
     TTypeBuilder().Primitive(EPrimitiveType::Datetime).Build(),
     TTypeBuilder().Primitive(EPrimitiveType::Timestamp).Build(),
-
-    //TTypeBuilder().Primitive(EPrimitiveType::TzTimestamp).Build(),
-    //TTypeBuilder().Primitive(EPrimitiveType::TzDatetime).Build(),
-    //TTypeBuilder().Primitive(EPrimitiveType::TzDate).Build(),
-
-    TTypeBuilder().Primitive(EPrimitiveType::Yson).Build(),
-    //TTypeBuilder().Primitive(EPrimitiveType::Uuid).Build(),
     TTypeBuilder().Primitive(EPrimitiveType::Json).Build(),
-    TTypeBuilder().Primitive(EPrimitiveType::JsonDocument).Build(),
 
     TTypeBuilder().Primitive(EPrimitiveType::Interval).Build(),
     TTypeBuilder().Primitive(EPrimitiveType::Date32).Build(),
     TTypeBuilder().Primitive(EPrimitiveType::Datetime64).Build(),
     TTypeBuilder().Primitive(EPrimitiveType::Timestamp64).Build(),
     TTypeBuilder().Primitive(EPrimitiveType::Interval64).Build(),
-    TTypeBuilder().Primitive(EPrimitiveType::DyNumber).Build(),
-
-    // No need to parse to string
-    //TTypeBuilder().Primitive(EPrimitiveType::Utf8).Build(),
-    //TTypeBuilder().Primitive(EPrimitiveType::String).Build(),
-    //TTypeBuilder().Decimal(const TDecimalType &decimalType)
 };
 
-static auto availableTypesEnd = availableTypes.end();
+static const auto availableTypesEnd = availableTypes.end();
 
 } // namespace
 

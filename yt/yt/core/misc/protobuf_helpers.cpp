@@ -89,7 +89,7 @@ bool TryDeserializeProto(google::protobuf::MessageLite* message, TRef data)
     // to find out more about protobuf message size limits.
     CodedInputStream codedInputStream(
         reinterpret_cast<const ui8*>(data.Begin()),
-        static_cast<int>(data.Size()));
+        std::ssize(data));
     codedInputStream.SetTotalBytesLimit(data.Size() + 1);
 
     // Raise recursion limit.

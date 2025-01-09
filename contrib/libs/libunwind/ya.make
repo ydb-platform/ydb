@@ -34,7 +34,6 @@ NO_SANITIZE()
 NO_SANITIZE_COVERAGE()
 
 CFLAGS(
-    GLOBAL -D_libunwind_
     -fno-exceptions
     -fno-rtti
     -funwind-tables

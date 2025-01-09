@@ -1,5 +1,5 @@
 from devtools.yamaker.project import CMakeNinjaNixProject
-from devtools.yamaker.modules import GLOBAL, Linkable, Switch
+from devtools.yamaker.modules import Linkable, Switch
 
 
 def post_install(self):
@@ -10,7 +10,6 @@ def post_install(self):
         libunwind.NO_SANITIZE = True
         libunwind.NO_SANITIZE_COVERAGE = True
         libunwind.ADDINCL = [f"{self.arcdir}/include"]
-        libunwind.CFLAGS = [GLOBAL("-D_libunwind_")]
         libunwind.CFLAGS += ["-fno-exceptions", "-fno-rtti", "-funwind-tables"]
         libunwind.after("CFLAGS", Switch({"SANITIZER_TYPE == memory": "CFLAGS(-fPIC)"}))
         libunwind.PEERDIR.add("library/cpp/sanitizer/include")

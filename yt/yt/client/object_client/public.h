@@ -344,7 +344,7 @@ DEFINE_ENUM(EObjectType,
     ((ClusterProxyNode)                            (1500))
 
     // Zookeeper stuff
-    ((ZookeeperShard)                              (1400))
+    // COMPAT(babenko): drop completely
     ((ZookeeperShardMap)                           (1401))
 
     // Flow stuff

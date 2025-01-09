@@ -20,7 +20,7 @@ inline i64 DecodeStringOffset(
     ui32 avgLength,
     i64 index)
 {
-    YT_ASSERT(index >= 0 && index <= static_cast<i64>(offsets.Size()));
+    YT_ASSERT(index >= 0 && index <= std::ssize(offsets));
     return index == 0
         ? 0
         : static_cast<ui32>(avgLength * index + ZigZagDecode64(offsets[index - 1]));
@@ -93,7 +93,7 @@ void DecodeVectorRleImpl(
             }
             currentDecodedValue = TValueDecoder<WithBaseValue, WithZigZag, T>::Run(currentValue, baseValue);
             ++currentRleIndex;
-            thresholdIndex = currentRleIndex < static_cast<i64>(rleIndexes.Size())
+            thresholdIndex = currentRleIndex < std::ssize(rleIndexes)
                 ? std::min(static_cast<i64>(rleIndexes[currentRleIndex]), endIndex)
                 : endIndex;
         }

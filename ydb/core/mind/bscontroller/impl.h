@@ -2098,7 +2098,10 @@ public:
         SignalTabletActive(TActivationContext::AsActorContext());
         Loaded = true;
         ApplyStorageConfig();
-        StartConsoleInteraction();
+
+        if (!ConsoleInteraction) { // maybe we are in distconf mode, no console interaction yet started
+            StartConsoleInteraction();
+        }
 
         for (const auto& [id, info] : GroupMap) {
             if (info->VirtualGroupState) {

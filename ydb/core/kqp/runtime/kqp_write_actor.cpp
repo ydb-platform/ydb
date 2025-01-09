@@ -78,17 +78,11 @@ namespace {
                     && !prepareSettings.SendingShards.empty()
                     && !prepareSettings.ReceivingShards.empty()) {
             protoLocks->SetArbiterColumnShard(*prepareSettings.ArbiterColumnShard);
-            protoLocks->AddSendingShards(*prepareSettings.ArbiterColumnShard);
-            protoLocks->AddReceivingShards(*prepareSettings.ArbiterColumnShard);
             for (const ui64 sendingShardId : prepareSettings.SendingShards) {
-                if (sendingShardId != *prepareSettings.ArbiterColumnShard) {
-                    protoLocks->AddSendingShards(sendingShardId);
-                }
+                protoLocks->AddSendingShards(sendingShardId);
             }
             for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
-                if (receivingShardId != *prepareSettings.ArbiterColumnShard) {
-                    protoLocks->AddReceivingShards(receivingShardId);
-                }
+                protoLocks->AddReceivingShards(receivingShardId);
             }
         } else if (!prepareSettings.SendingShards.empty()
                     && !prepareSettings.ReceivingShards.empty()) {

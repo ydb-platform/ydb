@@ -2590,6 +2590,12 @@ private:
                         if (receivingShardsSet.contains(shardId)) {
                             shardTx->MutableLocks()->AddReceivingShards(shardId);
                         }
+                        std::sort(
+                            std::begin(*shardTx->MutableLocks()->MutableSendingShards()),
+                            std::end(*shardTx->MutableLocks()->MutableSendingShards()));
+                        std::sort(
+                            std::begin(*shardTx->MutableLocks()->MutableReceivingShards()),
+                            std::end(*shardTx->MutableLocks()->MutableReceivingShards()));
                         AFL_ENSURE(!arbiter);
                     }
                 }
@@ -2603,17 +2609,11 @@ private:
                             tx->MutableLocks()->SetArbiterShard(arbiter);
                         }
                     } else if (*columnShardArbiter == shardId
-                            && !sendingShardsSet.empty() && !receivingShards.empty()) {
+                            && !sendingShardsSet.empty() && !receivingShardsSet.empty()) {
                         tx->MutableLocks()->SetArbiterColumnShard(*columnShardArbiter);
                         *tx->MutableLocks()->MutableSendingShards() = sendingShards;
                         *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
-                        if (!sendingShardsSet.contains(*columnShardArbiter)) {
-                            tx->MutableLocks()->AddSendingShards(**columnShardArbiter);
-                        }
-                        if (!receivingShards.contains(*columnShardArbiter)) {
-                            tx->MutableLocks()->AddReceivingShards(*columnShardArbiter);
-                        }
-                    } else if (!sendingShardsSet.empty() && !receivingShards.empty()) {
+                    } else if (!sendingShardsSet.empty() && !receivingShardsSet.empty()) {
                         tx->MutableLocks()->SetArbiterColumnShard(*columnShardArbiter);
                         tx->MutableLocks()->AddSendingShards(*columnShardArbiter);
                         tx->MutableLocks()->AddReceivingShards(*columnShardArbiter);
@@ -2631,7 +2631,7 @@ private:
                     if (!columnShardArbiter) {
                         *t.tx.MutableSendingShards() = sendingShards;
                         *t.tx.MutableReceivingShards() = receivingShards;
-                    } else (!sendingShardsSet.empty() && !receivingShards.empty()) {
+                    } else if (!sendingShardsSet.empty() && !receivingShardsSet.empty()) {
                         t.tx.AddSendingShards(*columnShardArbiter);
                         t.tx.AddReceivingShards(*columnShardArbiter);
                         if (sendingShardsSet.contains(shardId)) {

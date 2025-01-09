@@ -396,7 +396,7 @@ namespace NYql::NDq {
         }
 
         static void SendRetryOrError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NYdbGrpc::TGrpcStatus& status, ui32 retriesRemaining) {
-            if (NConnector::GrpcStatusNeedsRetry(status)) {
+            if (NConnector::GrpcStatusNeedsRetry(status) || status.GRpcStatusCode == grpc::DEADLINE_EXCEEDED) {
                 if (retriesRemaining) {
                     const auto retry = RequestRetriesLimit - retriesRemaining;
                     const auto delay = TDuration::MilliSeconds(1u << retry); // Exponential delay from 1ms to ~0.5s

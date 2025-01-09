@@ -32,7 +32,7 @@ void TActor::Flush() {
 }
 
 void TActor::Handle(TEvFlushBuffer::TPtr& /*ev*/) {
-    if (AppDataVerified().ColumnShardConfig.HasWritingBufferDurationMs()) {
+    if (AppDataVerified().ColumnShardConfig.HasWritingBufferDurationMs() && AppDataVerified().ColumnShardConfig.GetWritingBufferDurationMs()) {
         FlushDuration = TDuration::MilliSeconds(AppDataVerified().ColumnShardConfig.GetWritingBufferDurationMs());
     } else {
         FlushDuration = std::nullopt;

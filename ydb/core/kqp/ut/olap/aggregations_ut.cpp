@@ -236,8 +236,10 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
 
             auto plan = CollectStreamResult(res);
 
-            bool hasWideCombiner = plan.QueryStats->Getquery_ast().Contains("WideCombiner");
-            UNIT_ASSERT_C(hasWideCombiner == AllowSpilling, plan.QueryStats->Getquery_ast());
+            const auto expectedAggregateNodeName = AllowSpilling ? "WideCombiner" : "BlockMergeFinalizeHashed";
+
+            bool hasExpectedAggregateNode = plan.QueryStats->Getquery_ast().Contains(expectedAggregateNodeName);
+            UNIT_ASSERT_C(hasExpectedAggregateNode, plan.QueryStats->Getquery_ast());
         }
     }
 

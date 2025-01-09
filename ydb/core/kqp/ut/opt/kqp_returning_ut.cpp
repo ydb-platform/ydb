@@ -162,6 +162,18 @@ Y_UNIT_TEST(ReplaceSerial) {
 
         CompareYson(R"([[1;[1]];[2;[2]];[3;[3]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    {
+        const auto query = Q_(R"(
+            --!syntax_v1
+            select key, value from ReturningTable order by key asc;
+        )");
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+
+        CompareYson(R"([[1;[1]];[2;[2]];[3;[3]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
 
 Y_UNIT_TEST(ReturningSerial) {

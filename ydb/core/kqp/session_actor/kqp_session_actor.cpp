@@ -1292,6 +1292,7 @@ public:
                 }
             } else {
                 AFL_ENSURE(!tx || !txCtx.HasOlapTable);
+                AFL_ENSURE(txCtx.DeferredEffects.Empty() || !txCtx.HasOlapTable);
                 if (hasLocks || txCtx.TopicOperations.HasOperations()) {
                     bool hasUncommittedEffects = false;
                     for (auto& [lockId, lock] : txCtx.Locks.LocksMap) {
@@ -1299,7 +1300,7 @@ public:
                         request.DataShardLocks[dsLock.GetDataShard()].emplace_back(dsLock);
                         hasUncommittedEffects |=  dsLock.GetHasWrites();
                     }
-                    if (!txCtx.GetSnapshot().IsValid() || (tx && txCtx.TxHasEffects()) || hasUncommittedEffects || txCtx.TopicOperations.HasOperations()) {
+                    if (!txCtx.GetSnapshot().IsValid() || (tx && txCtx.TxHasEffects()) || !txCtx.DeferredEffects.Empty() || hasUncommittedEffects || txCtx.TopicOperations.HasOperations()) {
                         LOG_D("TExecPhysicalRequest, tx has commit locks");
                         request.LocksOp = ELocksOp::Commit;
                     } else {

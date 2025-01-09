@@ -199,7 +199,7 @@ public:
             }
         }
 
-        if (!FindNode(input.Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable(TCoDataSource::CallableName()); })) {
+        if (!FindNode(input.Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable(TDqCnUnionAll::CallableName()); })) {
             YQL_CLOG(INFO, ProviderS3) << "Rewrite pure S3WriteObject `" << cluster << "`.`" << target.Path().StringValue() << "` as stage with sink.";
             return keys.empty() ?
                 Build<TDqStage>(ctx, writePos)

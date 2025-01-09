@@ -302,6 +302,13 @@ private:
                         << "INSERT OR IGNORE is not yet supported for Kikimr."));
                     return TStatus::Error;
                 } else if (mode == "update") {
+                    if (settings.PerRow) {
+                        if (SessionCtx->Tables().GetTables().size() != 0) {
+                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Update per row is not supported for multiple tables."));
+                            return TStatus::Error;
+                        }
+                    }
+
                     if (!settings.PgFilter) {
                         if (!settings.Filter) {
                             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table update."));
@@ -315,6 +322,13 @@ private:
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else if (mode == "delete") {
+                    if (settings.PerRow) {
+                        if (SessionCtx->Tables().GetTables().size() != 0) {
+                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Delete per row is not supported for multiple tables."));
+                            return TStatus::Error;
+                        }
+                    }
+
                     if (!settings.Filter && !settings.PgFilter) {
                         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table delete."));
                         return TStatus::Error;

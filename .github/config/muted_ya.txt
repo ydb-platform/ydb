@@ -11,6 +11,7 @@ ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
 ydb/core/blobstorage/ut_vdisk TBsLocalRecovery.WriteRestartReadHugeDecreased
 ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
 ydb/core/blobstorage/ut_vdisk [*/*] chunk chunk
+ydb/core/blobstorage/ut_vdisk2 VDiskTest.HugeBlobWrite
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
 ydb/core/cms/ut_sentinel_unstable sole chunk chunk
 ydb/core/cms/ut_sentinel_unstable sole+chunk+chunk

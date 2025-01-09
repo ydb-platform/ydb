@@ -730,6 +730,15 @@ public:
         dstPath.Base()->IncShardsInside(shardsToCreate);
         parentPath.Base()->IncAliveChildren();
 
+        LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TCreateTable Propose creating new table"
+                << " opId# " << OperationId
+                << " path# " << dstPath.PathString()
+                << " pathId# " << newTable->PathId
+                << " schemeshard# " << ssId
+                << " tx# " << Transaction.DebugString()
+                );
+
         SetState(NextState());
         return result;
     }

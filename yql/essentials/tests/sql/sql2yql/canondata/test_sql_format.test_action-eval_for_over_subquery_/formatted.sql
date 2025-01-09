@@ -13,5 +13,6 @@ DEFINE ACTION $echo($x) AS
         $x;
 END DEFINE;
 
-EVALUATE FOR $a IN $list
-    DO $echo($a);
+EVALUATE FOR $a IN $list DO
+    $echo($a)
+;

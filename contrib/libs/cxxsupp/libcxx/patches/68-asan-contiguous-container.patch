@@ -1,39 +1,52 @@
 diff --git a/include/__config b/include/__config
-index 6e3b0e3..c0af95d 100644
+index a067add..2b93653 100644
 --- a/include/__config
 +++ b/include/__config
-@@ -1062,7 +1062,7 @@ _LIBCPP_BEGIN_NAMESPACE_STD _LIBCPP_END_NAMESPACE_STD
+@@ -1039,10 +1039,12 @@ typedef __char32_t char32_t;
  #  ifndef _LIBCPP_HAS_NO_ASAN
      extern "C" _LIBCPP_EXPORTED_FROM_ABI void
      __sanitizer_annotate_contiguous_container(const void*, const void*, const void*, const void*);
--#    if _LIBCPP_CLANG_VER >= 1600
-+#    if _LIBCPP_CLANG_VER >= 1600 && !defined(_LIBCPP_NO_ASAN_CONTIGUOUS_CONTAINER_FEATURES)
++#    if !defined(_LIBCPP_NO_ASAN_CONTIGUOUS_CONTAINER_FEATURES)
  extern "C" _LIBCPP_EXPORTED_FROM_ABI void __sanitizer_annotate_double_ended_contiguous_container(
      const void*, const void*, const void*, const void*, const void*, const void*);
  extern "C" _LIBCPP_EXPORTED_FROM_ABI int
+ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, const void*, const void*);
++#    endif
+ #  endif
+ 
+ // Try to find out if RTTI is disabled.
 diff --git a/include/deque b/include/deque
-index 951bab9..d4ffc7f 100644
+index a093349..3f80a17 100644
 --- a/include/deque
 +++ b/include/deque
-@@ -968,7 +968,7 @@ public:
- // __asan_annotate_container_with_allocator to false.
- // For more details, see the "Using libc++" documentation page or
- // the documentation for __sanitizer_annotate_contiguous_container.
--#if !defined(_LIBCPP_HAS_NO_ASAN) && _LIBCPP_CLANG_VER >= 1600
-+#if !defined(_LIBCPP_HAS_NO_ASAN) && _LIBCPP_CLANG_VER >= 1600 && !defined(_LIBCPP_NO_ASAN_CONTIGUOUS_CONTAINER_FEATURES)
-     // TODO LLVM18: Remove the special-casing
-     _LIBCPP_HIDE_FROM_ABI void __annotate_double_ended_contiguous_container(
-         const void* __beg,
-diff --git a/include/vector b/include/vector
-index 659b035..3153e89 100644
---- a/include/vector
-+++ b/include/vector
-@@ -861,7 +861,7 @@ private:
-     // __asan_annotate_container_with_allocator to false.
-     // For more details, see the "Using libc++" documentation page or
-     // the documentation for __sanitizer_annotate_contiguous_container.
+@@ -981,7 +981,7 @@ public:
+         (void)__old_con_end;
+         (void)__new_con_beg;
+         (void)__new_con_end;
 -#ifndef _LIBCPP_HAS_NO_ASAN
 +#if !defined(_LIBCPP_HAS_NO_ASAN) && !defined(_LIBCPP_NO_ASAN_CONTIGUOUS_CONTAINER_FEATURES)
-     _LIBCPP_CONSTEXPR_SINCE_CXX20
-     void __annotate_contiguous_container(const void *__beg, const void *__end,
-                                          const void *__old_mid,
+         if (__beg != nullptr && __asan_annotate_container_with_allocator<_Allocator>::value)
+             __sanitizer_annotate_double_ended_contiguous_container(
+                 __beg, __end, __old_con_beg, __old_con_end, __new_con_beg, __new_con_end);
+@@ -1153,7 +1153,7 @@ public:
+                 __block_start, __block_end, __block_start, __block_start, __block_start, __block_end);
+         }
+     }
+-#if !defined(_LIBCPP_HAS_NO_ASAN)
++#if !defined(_LIBCPP_HAS_NO_ASAN) && !defined(_LIBCPP_NO_ASAN_CONTIGUOUS_CONTAINER_FEATURES)
+ 
+   public:
+     _LIBCPP_HIDE_FROM_ABI
+diff --git a/include/vector b/include/vector
+index 15297a1..34de662 100644
+--- a/include/vector
++++ b/include/vector
+@@ -876,7 +876,7 @@ private:
+       (void)__end;
+       (void)__old_mid;
+       (void)__new_mid;
+-#ifndef _LIBCPP_HAS_NO_ASAN
++#if !defined(_LIBCPP_HAS_NO_ASAN) && !defined(_LIBCPP_NO_ASAN_CONTIGUOUS_CONTAINER_FEATURES)
+       if (!__libcpp_is_constant_evaluated() && __beg != nullptr && __asan_annotate_container_with_allocator<_Allocator>::value)
+         __sanitizer_annotate_contiguous_container(__beg, __end, __old_mid, __new_mid);
+ #endif

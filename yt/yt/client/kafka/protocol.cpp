@@ -319,7 +319,7 @@ public:
         WriteString(ToString(value));
     }
 
-    void WriteErrorCode(EErrorCode value) override
+    void WriteErrorCode(NKafka::EErrorCode value) override
     {
         DoWriteInt(static_cast<int16_t>(value));
     }

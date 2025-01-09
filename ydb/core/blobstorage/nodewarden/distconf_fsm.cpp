@@ -54,6 +54,7 @@ namespace NKikimr::NStorage {
         RootState = ERootState::ERROR_TIMEOUT;
         ErrorReason = reason;
         CurrentProposedStorageConfig.reset();
+        CurrentSelfAssemblyUUID.reset();
         ApplyConfigUpdateToDynamicNodes(true);
         AbortAllScatterTasks(std::nullopt);
         const TDuration timeout = TDuration::FromValue(ErrorTimeout.GetValue() * (25 + RandomNumber(51u)) / 50);
@@ -104,6 +105,32 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::ProcessCollectConfigs(TEvGather::TCollectConfigs *res) {
+        TOverloaded handler{
+            [&](std::monostate&&) {
+                STLOG(PRI_DEBUG, BS_NODE, NWDC61, "ProcessCollectConfigs: monostate");
+                RootState = ERootState::RELAX;
+            },
+            [&](TString&& error) {
+                STLOG(PRI_DEBUG, BS_NODE, NWDC63, "ProcessCollectConfigs: error", (Error, error));
+                SwitchToError(error);
+            },
+            [&](NKikimrBlobStorage::TStorageConfig&& proposedConfig) {
+                STLOG(PRI_DEBUG, BS_NODE, NWDC64, "ProcessCollectConfigs: proposed new config",
+                    (ProposedConfig, proposedConfig));
+                TEvScatter task;
+                task.SetTaskId(RandomNumber<ui64>());
+                auto *propose = task.MutableProposeStorageConfig();
+                Y_ABORT_UNLESS(!CurrentProposedStorageConfig);
+                CurrentProposedStorageConfig.emplace(proposedConfig);
+                propose->MutableConfig()->Swap(&proposedConfig);
+                IssueScatterTask(TActorId(), std::move(task));
+            }
+        };
+        std::visit(handler, ProcessCollectConfigs(res, nullptr));
+    }
+
+    TDistributedConfigKeeper::TProcessCollectConfigsResult TDistributedConfigKeeper::ProcessCollectConfigs(
+            TEvGather::TCollectConfigs *res, const TString *selfAssemblyUUID) {
         auto generateSuccessful = [&](auto&& callback) {
             for (const auto& item : res->GetNodes()) {
                 for (const auto& node : item.GetNodeIds()) {
@@ -137,7 +164,7 @@ namespace NKikimr::NStorage {
         STLOG(PRI_DEBUG, BS_NODE, NWDC31, "ProcessCollectConfigs", (RootState, RootState), (NodeQuorum, nodeQuorum),
             (ConfigQuorum, configQuorum), (Res, *res));
         if (!nodeQuorum || !configQuorum) {
-            return SwitchToError("no quorum for CollectConfigs");
+            return "no quorum for CollectConfigs";
         }
 
         // TODO: validate self-assembly UUID
@@ -185,7 +212,8 @@ namespace NKikimr::NStorage {
             STLOG(PRI_CRIT, BS_NODE, NWDC08, "Multiple nonintersecting node sets have quorum of BaseConfig",
                 (BaseConfigs.size, baseConfigs.size()));
             Y_DEBUG_ABORT("Multiple nonintersecting node sets have quorum of BaseConfig");
-            return Halt();
+            Halt();
+            return "Multiple nonintersecting node sets have quorum of BaseConfig";
         }
         NKikimrBlobStorage::TStorageConfig *baseConfig = nullptr;
         for (auto& [meta, info] : baseConfigs) {
@@ -250,13 +278,14 @@ namespace NKikimr::NStorage {
                 STLOG(PRI_CRIT, BS_NODE, NWDC37, "Multiple nonintersecting node sets have quorum of persistent config",
                     (Generation, generation), (Configs, configs));
                 Y_DEBUG_ABORT("Multiple nonintersecting node sets have quorum of persistent config");
-                return Halt();
+                Halt();
+                return "Multiple nonintersecting node sets have quorum of persistent config";
             }
             Y_ABORT_UNLESS(configs.size() == 1);
             persistedConfig = configs.front();
         }
         if (maxSeenGeneration && (!persistedConfig || persistedConfig->GetGeneration() < maxSeenGeneration)) {
-            return SwitchToError("couldn't obtain quorum for configuration that was seen in effect");
+            return "couldn't obtain quorum for configuration that was seen in effect";
         }
 
         // let's try to find possibly proposed config, but without a quorum, and try to reconstruct it
@@ -271,7 +300,8 @@ namespace NKikimr::NStorage {
                         STLOG(PRI_CRIT, BS_NODE, NWDC62, "persistently proposed config has too big generation",
                             (PersistentConfig, *persistedConfig), (ProposedConfig, config));
                         Y_DEBUG_ABORT("persistently proposed config has too big generation");
-                        return Halt();
+                        Halt();
+                        return "persistently proposed config has too big generation";
                     }
                 }
                 if (proposedConfig && (proposedConfig->GetGeneration() != config.GetGeneration() ||
@@ -319,9 +349,23 @@ namespace NKikimr::NStorage {
             if (UpdateConfig(persistedConfig)) {
                 configToPropose = persistedConfig;
             }
-        } else if (baseConfig && !baseConfig->GetGeneration()) { // we have no committed storage config, but we can create one
-            propositionBase.emplace(*baseConfig);
-            if (GenerateFirstConfig(baseConfig)) {
+        } else if (baseConfig && !baseConfig->GetGeneration()) {
+            bool canBootstrapAutomatically = false;
+            if (baseConfig->HasBlobStorageConfig()) {
+                if (const auto& bsConfig = baseConfig->GetBlobStorageConfig(); bsConfig.HasAutoconfigSettings()) {
+                    const auto& autoconfigSettings = bsConfig.GetAutoconfigSettings();
+                    canBootstrapAutomatically = autoconfigSettings.GetAutomaticBootstrap();
+                }
+            }
+            if (canBootstrapAutomatically || selfAssemblyUUID) {
+                if (!selfAssemblyUUID) {
+                    if (!CurrentSelfAssemblyUUID) {
+                        CurrentSelfAssemblyUUID.emplace(CreateGuidAsString());
+                    }
+                    selfAssemblyUUID = &CurrentSelfAssemblyUUID.value();
+                }
+                propositionBase.emplace(*baseConfig);
+                GenerateFirstConfig(baseConfig, *selfAssemblyUUID);
                 configToPropose = baseConfig;
             }
         }
@@ -347,12 +391,12 @@ namespace NKikimr::NStorage {
 
             if (error) {
                 Y_DEBUG_ABORT("incorrect config proposition");
-                return SwitchToError("incorrect config proposition");
+                return "incorrect config proposition";
             }
 
             if (propositionBase) {
                 if (auto error = ValidateConfig(*propositionBase)) {
-                    return SwitchToError(TStringBuilder() << "failed to propose configuration, base config contains errors: " << *error);
+                    return TStringBuilder() << "failed to propose configuration, base config contains errors: " << *error;
                 }
                 if (auto error = ValidateConfigUpdate(*propositionBase, *configToPropose)) {
                     Y_FAIL_S("incorrect config proposed: " << *error);
@@ -363,16 +407,10 @@ namespace NKikimr::NStorage {
                 }
             }
 
-            TEvScatter task;
-            task.SetTaskId(RandomNumber<ui64>());
-            auto *propose = task.MutableProposeStorageConfig();
-            Y_ABORT_UNLESS(!CurrentProposedStorageConfig);
-            CurrentProposedStorageConfig.emplace(*configToPropose);
-            propose->MutableConfig()->Swap(configToPropose);
-            IssueScatterTask(TActorId(), std::move(task));
-        } else {
-            RootState = ERootState::RELAX; // nothing to do right now, just relax
+            return std::move(*configToPropose);
         }
+
+        return {};
     }
 
     std::optional<TString> TDistributedConfigKeeper::ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res) {

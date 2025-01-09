@@ -8,9 +8,9 @@ using namespace NSchemeShard;
 
 Y_UNIT_TEST_SUITE(TSchemeShardTTLUtility) {
     void TestValidateTiers(const std::vector<NKikimrSchemeOp::TTTLSettings::TTier>& tiers, const TConclusionStatus& expectedResult) {
-        NKikimrSchemeOp::TTTLSettings::TEnabled input;
+        google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TTTLSettings_TTier> input;
         for (const auto& tier : tiers) {
-            *input.AddTiers() = tier;
+            input.Add()->CopyFrom(tier);
         }
 
         TString error;

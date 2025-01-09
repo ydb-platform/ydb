@@ -41,6 +41,16 @@ using namespace NNodes::NDq;
 
 namespace {
 
+void ScanWorlds(const TExprNode::TPtr& node, TSyncMap& syncList) {
+    VisitExpr(node, [&syncList](const TExprNode::TPtr& n) {
+        if (n->GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
+            syncList.emplace(n, syncList.size());
+            return false;
+        }
+        return true;
+    });
+}
+
 bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TString* usedCluster, bool supportsDq, TNodeSet& visited) {
     if (!visited.insert(&lambdaBody).second) {
         return true;
@@ -86,28 +96,47 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
         return true;
     }
 
-    if (auto maybeContent = TMaybeNode<TDqReadWrapBase>(&lambdaBody)) {
+    if (auto maybeDqRead = TMaybeNode<TDqReadWrapBase>(&lambdaBody)) {
         if (!supportsDq) {
             return false;
         }
-        if (auto maybeRead = maybeContent.Input().Maybe<TYtReadTable>()) {
+        if (auto maybeRead = maybeDqRead.Input().Maybe<TYtReadTable>()) {
             auto read = maybeRead.Cast();
             if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
                 return false;
             }
             syncList.emplace(read.Ptr(), syncList.size());
         }
-        if (auto maybeOutput = maybeContent.Input().Maybe<TYtOutput>()) {
+        else if (auto maybeOutput = maybeDqRead.Input().Maybe<TYtOutput>()) {
             auto output = maybeOutput.Cast();
             if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{GetOutputOp(output).DataSink().Cluster().Value()})) {
                 return false;
             }
             syncList.emplace(output.Operation().Ptr(), syncList.size());
         }
+        else {
+            ScanWorlds(maybeDqRead.Input().Cast().Ptr(), syncList);
+        }
         return true;
     }
 
-    if (!supportsDq && (TDqConnection::Match(&lambdaBody) || TDqPhyPrecompute::Match(&lambdaBody) || TDqStageBase::Match(&lambdaBody) || TDqSourceWrapBase::Match(&lambdaBody))) {
+    if (auto maybeDqSource = TMaybeNode<TDqSourceWrapBase>(&lambdaBody)) {
+        if (!supportsDq) {
+            return false;
+        }
+        ScanWorlds(maybeDqSource.Input().Cast().Ptr(), syncList);
+        return true;
+    }
+
+    if (auto maybeDqSource = TMaybeNode<TDqSource>(&lambdaBody)) {
+        if (!supportsDq) {
+            return false;
+        }
+        ScanWorlds(maybeDqSource.Settings().Cast().Ptr(), syncList);
+        return true;
+    }
+
+    if (!supportsDq && (TDqConnection::Match(&lambdaBody) || TDqPhyPrecompute::Match(&lambdaBody) || TDqStageBase::Match(&lambdaBody))) {
         return false;
     }
 

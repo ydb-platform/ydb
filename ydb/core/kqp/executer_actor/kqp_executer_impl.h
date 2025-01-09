@@ -1793,7 +1793,8 @@ protected:
 
         LOG_E("Sending timeout response to: " << Target);
 
-        this->Shutdown();
+        // Pass away immediately, since we already sent response - don't wait for stats.
+        this->PassAway();
     }
 
     virtual void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status,

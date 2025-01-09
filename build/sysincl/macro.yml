@@ -1126,8 +1126,10 @@
       - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/unique.h
 
     - THRUST_MR_STD_MR_HEADER:
-      # this macro has a second value <memory_resource> that will not be used
-      - contrib/libs/cxxsupp/libcxx/include/experimental/memory_resource
+      # this macro could be resolved to <memory_resource> or <experimental/memory_resource> of stl
+      - contrib/libs/cxxsupp/libcxx/include/memory_resource
+      - contrib/libs/cxxsupp/libcxxcuda11/include/memory_resource
+      - contrib/libs/cxxsupp/libcxxcuda11/include/experimental/memory_resource
 
 - source_filter: "^contrib/libs/unixodbc/libltdl"
   includes:

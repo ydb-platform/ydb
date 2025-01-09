@@ -246,7 +246,7 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
         return "ALTER RESOURCE POOL";
     // incremental backup
-    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups:
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
         return "RESTORE";
     // backup collection
@@ -261,6 +261,8 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "BACKUP";
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
         return "BACKUP INCREMENTAL";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
+        return "RESTORE";
     }
     Y_ABORT("switch should cover all operation types");
 }
@@ -568,10 +570,12 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
         result.emplace_back(tx.GetCreateResourcePool().GetName());
         break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups:
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreIncrementalBackup().GetSrcTableName()}));
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreIncrementalBackup().GetDstTableName()}));
+        for (const auto& table : tx.GetRestoreMultipleIncrementalBackups().GetSrcTableNames()) {
+            result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), table}));
+        }
+        result.emplace_back(tx.GetRestoreMultipleIncrementalBackups().GetDstTablePath());
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateBackupCollection().GetName()}));
@@ -588,6 +592,9 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupIncrementalBackupCollection().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()}));
         break;
     }
 

@@ -4,12 +4,12 @@ from devtools.yamaker.modules import Linkable, Switch
 
 def post_install(self):
     with self.yamakes["."] as libunwind:
-        libunwind.DISABLE.add("USE_LTO")
         libunwind.NO_COMPILER_WARNINGS = False
+        libunwind.NO_LTO = True
         libunwind.NO_RUNTIME = True
         libunwind.NO_SANITIZE = True
         libunwind.NO_SANITIZE_COVERAGE = True
-        libunwind.ADDINCL = [f"{self.arcdir}/include"]
+        # original build uses -f options heavily, keep only necessary subset 
         libunwind.CFLAGS += ["-fno-exceptions", "-fno-rtti", "-funwind-tables"]
         libunwind.after("CFLAGS", Switch({"SANITIZER_TYPE == memory": "CFLAGS(-fPIC)"}))
         libunwind.PEERDIR.add("library/cpp/sanitizer/include")

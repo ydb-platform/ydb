@@ -97,6 +97,7 @@ namespace NYql::NDq {
         void Free() {
             auto guard = Guard(*Alloc);
             if (Request && InFlight) {
+                // If request fails on (unrecoverable) error or cancelled, we may end up with non-zero InFlight (when request successfully completed, @Request is nullptr)
                 InFlight->Dec();
             }
             Request.reset();

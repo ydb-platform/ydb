@@ -804,26 +804,6 @@ std::shared_ptr<TProgressFile> TImportFileClient::TImpl::LoadOrStartImportProgre
     return progressFile;
 }
 
-std::shared_ptr<TProgressFile> TImportFileClient::TImpl::LoadOrStartImportProgress(const TString& filePath) {
-    std::shared_ptr<TProgressFile> progressFile;
-    if (Settings.Format_ == EDataFormat::Csv || Settings.Format_ == EDataFormat::Tsv) {
-        progressFile = std::make_shared<TProgressFile>(filePath);
-        if (progressFile->Load()) {
-            if (progressFile->IsCompleted()) { // File was already fully imported in an interrupted import
-                ++FilesPreviouslyCompleted;
-                --CurrentFileCount;
-            } else if (progressFile->HasLastImportedLine()) { // File hase saved progress from previous import
-                ++FilesPreviouslyStarted;
-                if (!PreviouslyStartedProgressFile) {
-                    PreviouslyStartedProgressFile = progressFile;
-                }
-            }
-        }
-        ProgressFiles.push_back(progressFile);
-    }
-    return progressFile;
-}
-
 TStatus TImportFileClient::TImpl::SuggestCreateTableRequest(const TVector<TString>& filePaths,
         const TString& relativeTablePath, TString& suggestion) {
     // All files should have the same scheme so probably no need to analyze more than one file

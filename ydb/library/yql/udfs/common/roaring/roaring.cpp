@@ -285,9 +285,8 @@ namespace {
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
+            auto* bitmap = roaring_bitmap_create();
             try {
-                auto* bitmap = roaring_bitmap_create();
-
                 const auto vector = args[0];
                 const auto* elements = vector.GetElements();
                 if (elements) {
@@ -304,6 +303,7 @@ namespace {
 
                 return TUnboxedValuePod(new TRoaringWrapper(bitmap));
             } catch (const std::exception& e) {
+                roaring_bitmap_free(bitmap);
                 UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
         }

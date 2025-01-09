@@ -52,7 +52,6 @@ struct TImportFileSettings : public TOperationRequestSettings<TImportFileSetting
     FLUENT_SETTING_DEFAULT(ui64, Threads, std::thread::hardware_concurrency() > 1 ? std::thread::hardware_concurrency() - 1 : 1);
     // Settings below are for CSV format only
     FLUENT_SETTING_DEFAULT(ui32, SkipRows, 0);
-    FLUENT_SETTING(std::optional<ui32>, RowsToAnalyze);
     FLUENT_SETTING_DEFAULT(bool, Header, false);
     FLUENT_SETTING_DEFAULT(bool, NewlineDelimited, false);
     FLUENT_SETTING_DEFAULT(TString, HeaderRow, "");

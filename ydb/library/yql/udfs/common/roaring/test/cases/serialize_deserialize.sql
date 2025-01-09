@@ -13,3 +13,6 @@ FROM Input;
 
 SELECT ListTake(ListSkip(Roaring::Uint32List(Roaring::Deserialize(binaryString)), 10), 1) AS EmptyList
 FROM Input;
+
+SELECT Roaring::Uint32List(Roaring::FromUint32List(AsList(10, 567, 42))) AS DeserializedList
+FROM Input;

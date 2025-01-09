@@ -113,10 +113,18 @@ Y_UNIT_TEST_SUITE(EventHolderPool) {
     }
 
     Y_UNIT_TEST(MemConsumptionSmall) {
-        MemComsumption(100'000, 4);
+        size_t repeats = 100'000;
+#ifdef _san_enabled_
+        repeats /= 100;
+#endif
+        MemComsumption(repeats, 4);
     }
 
     Y_UNIT_TEST(MemConsumptionLarge) {
-        MemComsumption(10'000, 1024*1024);
+        size_t repeats = 10'000;
+#ifdef _san_enabled_
+        repeats /= 100;
+#endif
+        MemComsumption(repeats, 1024*1024);
     }
 }

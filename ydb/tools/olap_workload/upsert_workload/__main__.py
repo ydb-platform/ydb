@@ -5,6 +5,7 @@ import time
 import os
 import random
 import string
+from threading import Thread
 
 ydb.interceptor.monkey_patch_event_handler()
 
@@ -30,7 +31,7 @@ def random_value(type):
     if isinstance(type, ydb.OptionalType):
         return random_value(type.item)
     if type == ydb.PrimitiveType.Int64:
-        return random.randint(0, 1 << 31)
+        return random.randint(0, 60)
     if type == ydb.PrimitiveType.String:
         return random_string(random.randint(1, 32))
 
@@ -64,7 +65,19 @@ class Workload(object):
                 f"""
                 CREATE TABLE {table_name} (
                 id Int64 NOT NULL,
-                i64Val Int64,
+                a Int64,
+                b Int64,
+                c Int64,
+                d Int64,
+                e Int64,
+                f Int64,
+                g Int64,
+                h Int64,
+                i Int64,
+                j Int64,
+                k Int64,
+                l Int64,
+                m Int64,
                 PRIMARY KEY(id)
                 )
                 PARTITION BY HASH(id)
@@ -92,14 +105,6 @@ class Workload(object):
 
         self.run_query_ignore_errors(callee)
 
-    def drop_column(self, table_name, col_name):
-        print(f"Drop column {table_name}.{col_name}")
-
-        def callee(session):
-            session.execute_scheme(f"ALTER TABLE {table_name} DROP COLUMN {col_name}")
-
-        self.run_query_ignore_errors(callee)
-
     def generate_batch(self, schema):
         data = []
 
@@ -120,71 +125,46 @@ class Workload(object):
 
         self.driver.table_client.bulk_upsert(self.database + "/" + table_name, batch, column_types)
 
-    def list_tables(self):
-        db = self.driver.scheme_client.list_directory(self.database)
-        return [t.name for t in db.children if t.type == ydb.SchemeEntryType.COLUMN_TABLE]
-
     def list_columns(self, table_name):
         path = self.database + "/" + table_name
-
         def callee(session):
             return session.describe_table(path).columns
-
         return self.pool.retry_operation_sync(callee)
-
-    def rows_count(self, table_name):
-        return self.driver.table_client.scan_query(f"SELECT count(*) FROM {table_name}").next().result_set.rows[0][0]
 
     def select_n(self, table_name, limit):
         print(f"Select {limit} from {table_name}")
         self.driver.table_client.scan_query(f"SELECT * FROM {table_name} limit {limit}").next()
 
-    def drop_all_tables(self):
-        for t in self.list_tables():
-            if t.startswith("column_table_"):
-                self.drop_table(t)
-
-    def drop_all_columns(self, table_name):
-        for c in self.list_columns(table_name):
-            if c.name != "id":
-                self.drop_column(table_name, c.name)
-
-    def queries_while_alter(self):
-        table_name = "queries_while_alter"
-
+    def run_many_upserts(self, thread_id, iters):
+        table_name = "multi_upsert"
         schema = self.list_columns(table_name)
+        for i in range(iters):
+            self.add_batch(table_name, schema)
+            self.select_n(table_name, 3)
+            print(f'thread #{thread_id}: {i} of {iters} passed')
 
-        self.select_n(table_name, 1000)
-        self.add_batch(table_name, schema)
-        self.select_n(table_name, 100)
-        self.add_batch(table_name, schema)
-        self.select_n(table_name, 300)
-
-        if len(schema) > 50:
-            self.drop_all_columns(table_name)
-
-        if self.rows_count(table_name) > 100000:
-            self.drop_table(table_name)
-
-        col = "col_" + str(timestamp())
-        self.add_column(table_name, col, random_type())
-
-    def run(self):
-        started_at = time.time()
-
-        while time.time() - started_at < self.duration:
-            try:
-                self.create_table("queries_while_alter")
-
-                self.drop_all_tables()
-
-                self.queries_while_alter()
-
-                table_name = table_name_with_timestamp()
-                self.create_table(table_name)
-            except Exception as e:
-                print(type(e), e)
-
+def run_workload(endpoint, database, duration, batch_size):
+    with Workload(endpoint, database, duration, batch_size) as workload:
+        time.sleep(1)
+        workload.create_table('multi_upsert')
+        time.sleep(1)
+        start = timestamp()
+        s = set()
+        for i in range(2):
+            s.add(Thread(target=workload.run_many_upserts, args=(i, 100)))
+        
+        for x in s:
+            x.start()
+        for x in s:
+            x.join()
+        
+        end = timestamp()
+        print(f'Elapsed time: {(end - start) / 1000:.2f} sec')
+        
+        workload.drop_table('multi_upsert')
+    
+    # with Workload(endpoint, database, duration, batch_size) as workload:
+    #    workload.run()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -195,5 +175,4 @@ if __name__ == '__main__':
     parser.add_argument('--duration', default=120, type=lambda x: int(x), help='A duration of workload in seconds.')
     parser.add_argument('--batch_size', default=1000, help='Batch size for bulk insert')
     args = parser.parse_args()
-    with Workload(args.endpoint, args.database, args.duration, args.batch_size) as workload:
-        workload.run()
+    run_workload(args.endpoint, args.database, args.duration, args.batch_size)

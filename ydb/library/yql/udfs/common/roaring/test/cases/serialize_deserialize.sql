@@ -16,6 +16,6 @@ FROM Input;
 
 SELECT Roaring::Uint32List(Roaring::FromUint32List(AsList(10, 567, 42))) AS DeserializedList;
 
-SELECT Roaring::Cardinality(Roaring::FromUint32List(ListCollect(UnWrap(ListFromRange(CAST(1 AS Uint32), CAST(1000000 AS Uint32)))))) AS LongList;
+SELECT Roaring::Cardinality(Roaring::FromUint32List(ListCollect(ListFromRange(1u, 1000000u)))) AS LongList;
 
-SELECT Roaring::Cardinality(Roaring::FromUint32List(UnWrap(ListFromRange(CAST(1 AS Uint32), CAST(1000000 AS Uint32))))) AS LongLazyList;
+SELECT Roaring::Cardinality(Roaring::FromUint32List(ListFromRange(1u, 1000000u))) AS LongLazyList;

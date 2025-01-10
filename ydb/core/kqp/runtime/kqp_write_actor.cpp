@@ -74,7 +74,9 @@ namespace {
             if (prepareSettings.Arbiter) {
                 protoLocks->SetArbiterShard(*prepareSettings.Arbiter);
             }
-        } else if (prepareSettings.ArbiterColumnShard == shardId) {
+        } else if (prepareSettings.ArbiterColumnShard == shardId
+                    && !prepareSettings.SendingShards.empty()
+                    && !prepareSettings.ReceivingShards.empty()) {
             protoLocks->SetArbiterColumnShard(*prepareSettings.ArbiterColumnShard);
             for (const ui64 sendingShardId : prepareSettings.SendingShards) {
                 protoLocks->AddSendingShards(sendingShardId);
@@ -82,7 +84,8 @@ namespace {
             for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
                 protoLocks->AddReceivingShards(receivingShardId);
             }
-        } else {
+        } else if (!prepareSettings.SendingShards.empty()
+                    && !prepareSettings.ReceivingShards.empty()) {
             protoLocks->SetArbiterColumnShard(*prepareSettings.ArbiterColumnShard);
             protoLocks->AddSendingShards(*prepareSettings.ArbiterColumnShard);
             protoLocks->AddReceivingShards(*prepareSettings.ArbiterColumnShard);
@@ -92,6 +95,12 @@ namespace {
             if (prepareSettings.ReceivingShards.contains(shardId)) {
                 protoLocks->AddReceivingShards(shardId);
             }
+            std::sort(
+                std::begin(*protoLocks->MutableSendingShards()),
+                std::end(*protoLocks->MutableSendingShards()));
+            std::sort(
+                std::begin(*protoLocks->MutableReceivingShards()),
+                std::end(*protoLocks->MutableReceivingShards()));
         }
 
         const auto locks = txManager->GetLocks(shardId);

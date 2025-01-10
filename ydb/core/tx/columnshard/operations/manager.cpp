@@ -31,11 +31,11 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             auto operation = std::make_shared<TWriteOperation>(0, writeId, lockId, cookie, status, TInstant::Seconds(createdAtSec),
                 granuleShardingVersionId, NEvWrite::EModificationType::Upsert, false);
             operation->FromProto(metaProto);
-            LinkInsertWriteIdToOperationWriteId(operation->GetInsertWriteIds(), operation->GetWriteId());
-            AFL_VERIFY(operation->GetStatus() != EOperationStatus::Draft);
-
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "register_operation_on_load")("operation_id", operation->GetWriteId());
+            AFL_VERIFY(operation->GetStatus() != EOperationStatus::Draft);
             AFL_VERIFY(Operations.emplace(operation->GetWriteId(), operation).second);
+            LinkInsertWriteIdToOperationWriteId(operation->GetInsertWriteIds(), operation->GetWriteId());
+
             auto it = LockFeatures.find(lockId);
             if (it == LockFeatures.end()) {
                 it = LockFeatures.emplace(lockId, TLockFeatures(lockId, 0)).first;

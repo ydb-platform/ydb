@@ -68,7 +68,7 @@ public:
     void UpdateServerCloseHandler(IServerCloseHandler*);
 
     // Called asynchronously from grpc thread.
-    void CloseFromServer(std::weak_ptr<ISessionClient> client);
+    void CloseFromServer(std::weak_ptr<ISessionClient> client) noexcept;
 
 protected:
     TAdaptiveLock Lock_;

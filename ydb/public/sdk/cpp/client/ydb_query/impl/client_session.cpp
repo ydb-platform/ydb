@@ -5,19 +5,84 @@
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
+#include <thread>
 
 namespace NYdb::NQuery {
 
-void TSession::TImpl::StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISessionClient> client) {
+// Custom lock primitive to protect session from destroying
+// during async read execution.
+// The problem is currect grpc stream reader has no method to get guarantee
+// all callback executed and will not be executed until reader dtor called.
+// So we need some way to protect access to row session impl pointer
+// from async reader. We can't use shared/weak ptr here because TSessionImpl
+// stores as uniq ptr inside session pool and as shared ptr in the TSession
+// when user got session.
+
+// Why just not std::mutex? - Requirement do not destroy a mutex while it is locked
+// makes it difficult to use here.
+
+// TODO: Proably we can add sync version of Cancell method in to grpc reader to make sure
+// no more callback will be called.
+
+class TSafeTSessionImplHolder {
+    TSession::TImpl* Ptr;
+    std::atomic_uint32_t Semaphore;
+public:
+    TSafeTSessionImplHolder(TSession::TImpl* p)
+        : Ptr(p)
+        , Semaphore(0)
+    {}
+
+    TSession::TImpl* TrySharedOwning() noexcept {
+        auto old = Semaphore.fetch_add(1); 
+        if (old == 0) {
+            return Ptr;
+        } else {
+            Y_ABORT_UNLESS(old == 1);
+            return nullptr;
+        }
+    }
+
+    void Release() noexcept {
+        Semaphore.store(0);
+    }
+
+    void WhaitAndLock() noexcept {
+        uint32_t cur;
+        uint32_t newVal = 1;
+        do {
+            cur =  Semaphore.load(std::memory_order_relaxed);
+#ifndef NDEBUG
+            if (cur > 1) {
+                Y_ABORT_UNLESS(false, "unexpected semaphore value");
+            }
+#endif
+            if (cur != 0) {
+                std::this_thread::yield();
+                continue;
+            }
+        } while (!Semaphore.compare_exchange_weak(cur, newVal,
+            std::memory_order_release, std::memory_order_relaxed));
+    }
+};
+
+void TSession::TImpl::StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISessionClient> client,
+    std::shared_ptr<TSafeTSessionImplHolder> holder)
+{
     auto resp = std::make_shared<Ydb::Query::SessionState>();
-    ptr->Read(resp.get(), [resp, ptr, this, client](NYdbGrpc::TGrpcStatus grpcStatus) mutable {
+    ptr->Read(resp.get(), [resp, ptr, client, holder](NYdbGrpc::TGrpcStatus grpcStatus) mutable {
         switch (grpcStatus.GRpcStatusCode) {
             case grpc::StatusCode::OK:
-                StartAsyncRead(ptr, client);
+                StartAsyncRead(ptr, client, holder);
                 break;
-            case grpc::StatusCode::OUT_OF_RANGE:
-                CloseFromServer(client);
+            case grpc::StatusCode::OUT_OF_RANGE: {
+                auto impl = holder->TrySharedOwning();
+                if (impl) {
+                    impl->CloseFromServer(client);
+                }
+                holder->Release();
                 break;
+            }
         }
     });
 }
@@ -25,15 +90,17 @@ void TSession::TImpl::StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISes
 TSession::TImpl::TImpl(TStreamProcessorPtr ptr, const TString& sessionId, const TString& endpoint, std::weak_ptr<ISessionClient> client)
     : TKqpSessionCommon(sessionId, endpoint, true)
     , StreamProcessor_(ptr)
+    , SessionHolder(std::make_shared<TSafeTSessionImplHolder>(this))
 {
     MarkActive();
     SetNeedUpdateActiveCounter(true);
-    StartAsyncRead(StreamProcessor_, client);
+    StartAsyncRead(StreamProcessor_, client, SessionHolder);
 }
 
 TSession::TImpl::~TImpl()
 {
     StreamProcessor_->Cancel();
+    SessionHolder->WhaitAndLock();
 }
 
 void TSession::TImpl::MakeImplAsync(TStreamProcessorPtr ptr,

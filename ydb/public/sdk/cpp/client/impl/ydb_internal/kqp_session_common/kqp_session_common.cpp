@@ -148,10 +148,10 @@ TDuration TKqpSessionCommon::GetTimeInterval() const {
 }
 
 void TKqpSessionCommon::UpdateServerCloseHandler(IServerCloseHandler* handler) {
-    CloseHandler_.store(handler, std::memory_order_relaxed);
+    CloseHandler_.store(handler);
 }
 
-void TKqpSessionCommon::CloseFromServer(std::weak_ptr<ISessionClient> client) {
+void TKqpSessionCommon::CloseFromServer(std::weak_ptr<ISessionClient> client) noexcept {
     auto strong = client.lock();
     if (!strong) {
         // Session closed on the server after stopping client - do nothing
@@ -159,7 +159,7 @@ void TKqpSessionCommon::CloseFromServer(std::weak_ptr<ISessionClient> client) {
         return;
     }
 
-    IServerCloseHandler* h = CloseHandler_.load(std::memory_order_relaxed);
+    IServerCloseHandler* h = CloseHandler_.load();
     if (h) {
         h->OnCloseSession(this, strong);
     }

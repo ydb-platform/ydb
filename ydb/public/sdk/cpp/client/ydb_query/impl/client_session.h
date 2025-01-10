@@ -7,6 +7,8 @@
 
 namespace NYdb::NQuery {
 
+class TSafeTSessionImplHolder;
+
 class TSession::TImpl : public TKqpSessionCommon {
 public:
     struct TAttachSessionArgs {
@@ -37,10 +39,11 @@ public:
 private:
     static void NewSmartShared(TStreamProcessorPtr ptr, std::shared_ptr<TAttachSessionArgs> args, NYdb::TStatus status);
 
-    void StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISessionClient> client);
+    static void StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISessionClient> client, std::shared_ptr<TSafeTSessionImplHolder> session);
 
 private:
     TStreamProcessorPtr StreamProcessor_;
+    std::shared_ptr<TSafeTSessionImplHolder> SessionHolder;
 };
 
 }

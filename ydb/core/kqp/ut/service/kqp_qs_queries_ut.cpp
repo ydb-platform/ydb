@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         WaitForZeroSessions(counters);
     }
 
-    void DoClosedSessionRemovedWhileActioveTest(bool withQuery) {
+    void DoClosedSessionRemovedWhileActiveTest(bool withQuery) {
         auto kikimr = DefaultKikimrRunner();
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
@@ -90,6 +90,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 UNIT_ASSERT(result.GetSession().GetId() != id);
             }
+            UNIT_ASSERT_VALUES_EQUAL(db.GetActiveSessionCount(), 0);
         }
         WaitForZeroSessions(counters);
     }
@@ -99,7 +100,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         // - server close it
         // - user executes query (got BAD SESSION)
         // - session should be removed from pool 
-        DoClosedSessionRemovedWhileActioveTest(true);
+        DoClosedSessionRemovedWhileActiveTest(true);
     }
 
 /*  Not implemented in the sdk
@@ -108,7 +109,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         // - server close it
         // - user do not executes any query
         // - session should be removed from pool
-        DoClosedSessionRemovedWhileActioveTest(false);
+        DoClosedSessionRemovedWhileActiveTest(false);
     }
 */
     // Copy paster from table service but with some modifications for query service
@@ -282,7 +283,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         WaitForZeroSessions(counters);
     }
 
-    // Check closed session removed while its in the sessio pool
+    // Check closed session removed while its in the session pool
     Y_UNIT_TEST(ClosedSessionRemovedFromPool) {
         auto kikimr = DefaultKikimrRunner();
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
@@ -291,7 +292,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         {
             auto db = kikimr.GetQueryClient();
 
-            Cerr << "START TEST...." << Endl;
             TString id;
             {
                 auto result = db.GetSession().GetValueSync();
@@ -303,7 +303,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             bool allDoneOk = true;
             NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
-            Cerr << "DELETED: " << id << Endl;
 
             Sleep(TDuration::Seconds(5));
 

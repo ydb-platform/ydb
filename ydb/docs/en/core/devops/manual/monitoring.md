@@ -28,7 +28,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/
 > http://<ydb-server-address>:<ydb-port>/counters/counters=utils
 > ```
 
-You can collect metric values using [Prometheus](https://prometheus.io/), a popular open-source tool. {{ ydb-short-name }} sensor values in [Prometheus format](https://prometheus.io/docs/instrumenting/exposition_formats/) are available at a URL in the following format:
+You can collect metric values using [Prometheus](https://prometheus.io/), a popular open-source observability tool, or any other system compatible with its format. {{ ydb-short-name }} sensor values in [Prometheus format](https://prometheus.io/docs/instrumenting/exposition_formats/) are available at a URL in the following format:
 
 ```http
 http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheus
@@ -36,7 +36,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
 - `<servicename>`: sensor subgroup name.
 
-To visualize data, use any system that supports Prometheus, such as [Zabbix](https://www.zabbix.com/), [Amazon CloudWatch](https://aws.amazon.com/cloudwatch/), or [Grafana](https://grafana.com/):
+To visualize data, use any system that supports Prometheus, such as [Grafana](https://grafana.com/), [[Zabbix](https://www.zabbix.com/), or [AWS CloudWatch](https://aws.amazon.com/cloudwatch/):
 
 ![grafana-actors](../../_assets/grafana-actors.png)
 
@@ -50,7 +50,7 @@ To set up monitoring for a {{ ydb-short-name }} cluster using [Prometheus](https
 
     1. In the `targets` section specify addresses of all servers of the {{ ydb-short-name }} cluster and ports for each nodes (static and dynamic) that runs on the server.
 
-        For example, for the {{ ydb-short-name }} cluster that contains three servers, each server running one static and two dynamic nodes, specify nine addresses for all sensor subgroups, except for the disk subgroups (for disk sensor subgroups, specify only static node addresses):
+        For example, for the {{ ydb-short-name }} cluster that contains three servers, each server running one storage node on port 8765 and two database nodes on ports 8766 and 8767, specify nine addresses for all sensor subgroups except for the disk subgroups (for disk sensor subgroups, specify only storage node addresses):
 
         ```json
         static_configs:
@@ -79,11 +79,10 @@ To set up monitoring for a {{ ydb-short-name }} cluster using [Prometheus](https
            ca_file: '<ydb-prometheus-ca-file>'
        ```
 
-       Skip this step for a local single-node {{ ydb-short-name }} cluster.
 
-1. [Install and start](https://grafana.com/docs/grafana/latest/getting-started/getting-started/) the Grafana.
+1. [Install and start](https://grafana.com/docs/grafana/latest/getting-started/getting-started/) Grafana.
 
-1. [Create](https://prometheus.io/docs/visualization/grafana/#creating-a-prometheus-data-source) a data source of the `prometheus` type in Grafana and attach it to a running Prometheus instance.
+1. [Create](https://prometheus.io/docs/visualization/grafana/#creating-a-prometheus-data-source) a data source of the `prometheus` type in Grafana, and attach it to the running Prometheus instance.
 
 1. Upload [{{ ydb-short-name }} dashboards](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/helm/ydb-prometheus/dashboards) to Grafana.
 

@@ -1,27 +1,81 @@
-#include "yql_pq_dummy_gateway.h"
+#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
-#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
 #include <util/generic/deque.h>
 #include <util/system/condvar.h>
 
 namespace NYql {
 
+template<typename TEvent>
 class TBlockingEQueue {
 public:
-    TBlockingEQueue(size_t maxSize);
-    void Push(NYdb::NTopic::TReadSessionEvent::TEvent&& e, size_t size);
-    void BlockUntilEvent();
-    TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> Pop(bool block);
-    void Stop();
-    bool IsStopped();
+    explicit TBlockingEQueue(size_t maxSize)
+        : MaxSize_(maxSize)
+    {
+    }
+    void Push(TEvent&& e, size_t size = 0) {
+        with_lock(Mutex_) {
+            CanPush_.WaitI(Mutex_, [this] () {return CanPushPredicate();});
+            Events_.emplace_back(std::move(e), size );
+            Size_ += size;
+        }
+        CanPop_.BroadCast();
+    }
+
+    void BlockUntilEvent() {
+        with_lock(Mutex_) {
+            CanPop_.WaitI(Mutex_, [this] () {return CanPopPredicate();});
+        }
+    }
+
+    TMaybe<TEvent> Pop(bool block) {
+        with_lock(Mutex_) {
+            if (block) {
+                CanPop_.WaitI(Mutex_, [this] () {return CanPopPredicate();});
+            } else {
+                if (!CanPopPredicate()) {
+                    return {};
+                }
+            }
+            if (Events_.empty()) {
+                return {};
+            }
+
+            auto [front, size] = std::move(Events_.front());
+            Events_.pop_front();
+            Size_ -= size;
+            if (Size_ < MaxSize_) {
+                CanPush_.BroadCast();
+            }
+            return std::move(front); // cast to TMaybe<>
+        }
+    }
+
+    void Stop() {
+        with_lock(Mutex_) {
+            Stopped_ = true;
+            CanPop_.BroadCast();
+            CanPush_.BroadCast();
+        }
+    }
+
+    bool IsStopped() {
+        with_lock(Mutex_) {
+            return Stopped_;
+        }
+    }
 
 private:
-    bool CanPopPredicate();
-    bool CanPushPredicate();
+    bool CanPopPredicate() const {
+        return !Events_.empty() || Stopped_;
+    }
+
+    bool CanPushPredicate() const {
+        return Size_ < MaxSize_ || Stopped_;
+    }
 
     size_t MaxSize_;
     size_t Size_ = 0;
-    TDeque<std::pair<NYdb::NTopic::TReadSessionEvent::TEvent, size_t>> Events_;
+    TDeque<std::pair<TEvent, size_t>> Events_;
     bool Stopped_ = false;
     TMutex Mutex_;
     TCondVar CanPop_;

@@ -26,7 +26,7 @@ TCommandAdmin::TCommandAdmin()
 {
     MarkDangerous();
     UseOnlyExplicitProfile();
-    AddHiddenCommand(std::make_unique<NDynamicConfig::TCommandConfig>());
+    AddHiddenCommand(std::make_unique<NDynamicConfig::TCommandConfig>(false));
     AddHiddenCommand(std::make_unique<NDynamicConfig::TCommandVolatileConfig>());
     AddHiddenCommand(std::make_unique<NStorageConfig::TCommandStorageConfig>());
     AddCommand(std::make_unique<NCluster::TCommandCluster>());

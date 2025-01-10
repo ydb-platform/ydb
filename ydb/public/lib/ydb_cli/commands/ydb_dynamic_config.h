@@ -9,7 +9,10 @@ namespace NYdb::NConsoleClient::NDynamicConfig {
 
 class TCommandConfig : public TClientCommandTree {
 public:
-    TCommandConfig();
+    TCommandConfig(std::optional<bool> overrideOnlyExplicitProfile = std::nullopt);
+    void PropagateFlags(const TCommandFlags& flags) override;
+private:
+    std::optional<bool> OverrideOnlyExplicitProfile;
 };
 
 class TCommandConfigReplace : public TYdbCommand {

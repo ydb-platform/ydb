@@ -1,5 +1,6 @@
 #include "ydb_cluster.h"
 
+#include "ydb_dynamic_config.h"
 #include <ydb/public/sdk/cpp/client/ydb_bsconfig/ydb_storage_config.h>
 
 using namespace NKikimr;
@@ -10,6 +11,7 @@ TCommandCluster::TCommandCluster()
     : TClientCommandTree("cluster", {}, "Cluster-wide administration")
 {
     AddCommand(std::make_unique<TCommandClusterBootstrap>());
+    AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>());
 }
 
 TCommandClusterBootstrap::TCommandClusterBootstrap()

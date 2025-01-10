@@ -1028,7 +1028,7 @@ bool FillConsumerProto(Ydb::Topic::Consumer* rr, const NKikimrPQ::TPQTabletConfi
 {
     const auto& pqConfig = AppData(ctx)->PQConfig;
 
-    NKikimr::FillConsumerProto(*rr, consumer);
+    NKikimr::FillConsumer(*rr, consumer);
 
     if (!consumer.HasServiceType()) {
         if (pqConfig.GetDisallowDefaultClientServiceType()) {
@@ -1062,6 +1062,11 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
         FillTopicDescription(Result, pqDescr);
 
         const auto &config = pqDescr.GetPQTabletConfig();
+        if (AppData(TActivationContext::ActorContextFor(SelfId()))->FeatureFlags.GetEnableTopicSplitMerge() && NPQ::SplitMergeEnabled(config)) {
+            Result.mutable_partitioning_settings()->set_min_active_partitions(config.GetPartitionStrategy().GetMinPartitionCount());
+        } else {
+            Result.mutable_partitioning_settings()->set_min_active_partitions(pqDescr.GetTotalGroupCount());
+        }
         bool local = config.GetLocalDC();
         const auto &partConfig = config.GetPartitionConfig();
         const auto& pqConfig = AppData(ActorContext())->PQConfig;
@@ -1096,8 +1101,7 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
             if (consumerName == consumer.GetName()) {
                  found = true;
             }
-            auto rr = Result.get_idx_consumers(ind);
-            ++ind;
+            auto rr = Result.get_idx_consumers(ind++);
             Ydb::StatusIds::StatusCode status;
             TString error;
             if (!FillConsumerProto(&rr, consumer, ActorContext(), status, error)) {

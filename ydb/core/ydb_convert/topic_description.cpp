@@ -9,7 +9,7 @@
 
 namespace NKikimr {
 
-void FillConsumerProto(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig::TConsumer& in) {
+void FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig::TConsumer& in) {
     auto consumerName = NPersQueue::ConvertOldConsumerName(in.GetName());
     out.set_name(consumerName);
     out.mutable_read_from()->set_seconds(in.GetReadFromTimestampsMs() / 1000);
@@ -110,7 +110,7 @@ void FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
 
     for (const auto& consumer : config.GetConsumers()) {
         auto rr = out.add_consumers();
-        FillConsumerProto(*rr, consumer);
+        FillConsumer(*rr, consumer);
     }
 
 }

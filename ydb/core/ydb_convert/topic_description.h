@@ -13,7 +13,7 @@ namespace NKikimrSchemeOp {
 
 namespace NKikimr {
 
-void FillConsumerProto(Ydb::Topic::Consumer& out,
+void FillConsumer(Ydb::Topic::Consumer& out,
     const NKikimrPQ::TPQTabletConfig::TConsumer& in);
 void FillTopicDescription(Ydb::Topic::DescribeTopicResult& out,
    const NKikimrSchemeOp::TPersQueueGroupDescription& in);

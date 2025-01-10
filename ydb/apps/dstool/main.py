@@ -1,29 +1,53 @@
-#!/usr/bin/env python3
-
-from ydb.apps.dstool.lib.arg_parser import ArgumentParser
-import ydb.apps.dstool.lib.common as common
-import ydb.apps.dstool.lib.commands as commands
-
 import sys
+import platform
+import subprocess
+from argparse import ArgumentParser
 
 
 def main():
     parser = ArgumentParser(description='YDB Distributed Storage Administration Tool')
 
     # common options
-    common.add_host_access_options(parser)
-    parser.add_argument('--dry-run', '-n', action='store_true', help='Run command without side effects')
-
-    subparsers = parser.add_subparsers(help='Subcommands', dest='global_command', required=True)
-    command_map = commands.make_command_map_by_structure(subparsers)
+    parser.add_argument('--install', '-i', action='store_true', help='Install ydb-dstool')
+    
     args = parser.parse_args()
-    try:
-        common.apply_args(args)
-        commands.run_command(command_map, args)
-    except common.InvalidParameterError as e:
-        e.print()
-        sys.exit(1)
 
+    if args.install:
+        if platform.system() in ['Linux', 'Darwin']:  # Darwin - это macOS
+            command = "curl -sSL 'https://install.ydb.tech/dstool' | bash"
+        elif platform.system() == 'Windows':
+            command = "iex (New-Object System.Net.WebClient).DownloadString('https://install.ydb.tech/dstool-windows')"
+        else:
+            print("Unsupported OS")
+            return
+        
+        print(f"Executing installation command: {command}")
+        result = subprocess.run(command, shell=True)
+        if result.returncode != 0:
+            print("Installation failed. Please check the error messages above.")
+            return
+        print("Installation completed successfully.")
+        print("You may now uninstall the pypi package by running:")
+        print("pip uninstall ydb-dstool")
+        
+        return
+    
+    print("The distribution method for ydb-dstool has changed.")
+    
+    if platform.system() not in ['Linux', 'Darwin', 'Windows']:
+        print("Unsupported operating system. Please refer to the documentation for installation instructions.")
+        return
+    
+    if platform.system() in ['Linux', 'Darwin']:
+        print("To install ydb-dstool, please run the following command:")
+        print(f"curl -sSL 'https://install.ydb.tech/dstool' | bash")
+    elif platform.system() == 'Windows':
+        print("To install ydb-dstool, please run the following command:")
+        print(f"iex (New-Object System.Net.WebClient).DownloadString('https://install.ydb.tech/dstool-windows')")
+
+    print()
+    print("Before installing, you should uninstall the pypi package:")
+    print("pip uninstall ydb-dstool")
 
 if __name__ == '__main__':
     main()

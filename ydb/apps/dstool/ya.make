@@ -8,8 +8,4 @@ PY_SRCS(
     main.py
 )
 
-PEERDIR(
-    ydb/apps/dstool/lib
-)
-
 END()

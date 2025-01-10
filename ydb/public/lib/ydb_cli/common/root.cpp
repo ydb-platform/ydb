@@ -37,8 +37,6 @@ void TClientCommandRootBase::SetCustomUsage(TConfig& config) {
 
 void TClientCommandRootBase::Parse(TConfig& config) {
     TClientCommandTree::Parse(config);
-    ParseCredentials(config);
-    ParseAddress(config);
 
     TClientCommand::TIME_REQUESTS = TimeRequests;
     TClientCommand::PROGRESS_REQUESTS = ProgressRequests;

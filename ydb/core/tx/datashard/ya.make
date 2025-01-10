@@ -254,6 +254,7 @@ PEERDIR(
     library/cpp/l1_distance
     library/cpp/l2_distance
     ydb/core/actorlib_impl
+    ydb/core/backup/common
     ydb/core/base
     ydb/core/change_exchange
     ydb/core/engine

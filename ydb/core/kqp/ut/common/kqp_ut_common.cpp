@@ -132,8 +132,11 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetUseRealThreads(settings.UseRealThreads);
     ServerSettings->SetEnableTablePgTypes(true);
     ServerSettings->SetEnablePgSyntax(true);
-    ServerSettings->SetEnableOlapCompression(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
+
+    if (!settings.FeatureFlags.HasEnableOlapCompression()) {
+        ServerSettings->SetEnableOlapCompression(true);
+    }
 
     if (settings.Storage) {
         ServerSettings->SetCustomDiskParams(*settings.Storage);

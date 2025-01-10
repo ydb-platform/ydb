@@ -146,6 +146,11 @@ public:
         return std::move(*this);
     }
 
+    auto BeforeVersion(auto /*version*/) &&
+    {
+        return std::move(*this);
+    }
+
     auto InVersions(auto /*filter*/) &&
     {
         return std::move(*this);
@@ -346,6 +351,8 @@ template <auto Member, class TThis, class TContext, class TFieldSerializer>
 class PHOENIX_REGISTRAR_NODISCARD TFieldSaveRegistrar
 {
 public:
+    using TVersion = typename TTraits<TThis>::TVersion;
+
     TFieldSaveRegistrar(const TThis* this_, TContext& context)
         : This_(this_)
         , Context_(context)
@@ -359,6 +366,12 @@ public:
 
     auto SinceVersion(auto /*version*/) &&
     {
+        return TFieldSaveRegistrar(std::move(*this));
+    }
+
+    auto BeforeVersion(TVersion version) &&
+    {
+        BeforeVersion_ = version;
         return TFieldSaveRegistrar(std::move(*this));
     }
 
@@ -381,7 +394,7 @@ public:
 
     void operator()() &&
     {
-        if (!VersionFilter_ || VersionFilter_(Context_.GetVersion())) {
+        if (auto version = Context_.GetVersion(); version < BeforeVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
             TFieldSerializer::Save(Context_, This_->*Member);
         }
     }
@@ -394,6 +407,7 @@ private:
     TContext& Context_;
 
     TVersionFilter<TThis> VersionFilter_ = nullptr;
+    TVersion BeforeVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
 };
 
 template <class TThis, class TContext>
@@ -416,6 +430,11 @@ public:
     { }
 
     auto SinceVersion(auto /*version*/) &&
+    {
+        return TVirtualFieldSaveRegistrar(std::move(*this));
+    }
+
+    auto BeforeVersion(auto /*version*/) &&
     {
         return TVirtualFieldSaveRegistrar(std::move(*this));
     }
@@ -548,6 +567,7 @@ public:
         , Context_(other.Context_)
         , Name_(other.Name_)
         , MinVersion_(other.MinVersion_)
+        , BeforeVersion_(other.BeforeVersion_)
         , VersionFilter_(other.VersionFilter_)
         , MissingHandler_(other.MissingHandler_)
     { }
@@ -557,6 +577,12 @@ public:
     auto SinceVersion(TVersion version) &&
     {
         MinVersion_ = version;
+        return TFieldLoadRegistrar(std::move(*this));
+    }
+
+    auto BeforeVersion(TVersion version) &&
+    {
+        BeforeVersion_ = version;
         return TFieldLoadRegistrar(std::move(*this));
     }
 
@@ -581,7 +607,7 @@ public:
 
     void operator()() &&
     {
-        if (auto version = Context_.GetVersion(); version >= MinVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
+        if (auto version = Context_.GetVersion(); version >= MinVersion_ && version < BeforeVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
             Context_.Dumper().SetFieldName(Name_);
             TFieldSerializer::Load(Context_, This_->*Member);
         } else if (MissingHandler_) {
@@ -600,6 +626,7 @@ private:
     const TStringBuf Name_;
 
     TVersion MinVersion_ = static_cast<TVersion>(std::numeric_limits<int>::min());
+    TVersion BeforeVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
     TVersionFilter<TThis> VersionFilter_ = nullptr;
     TFieldMissingHandler<TThis, TContext> MissingHandler_ = nullptr;
 };
@@ -625,6 +652,7 @@ public:
         , Name_(other.Name_)
         , LoadHandler_(other.LoadHandler)
         , MinVersion_(other.MinVersion_)
+        , BeforeVersion_(other.BeforeVersion_)
         , VersionFilter_(other.VersionFilter_)
         , MissingHandler_(other.MissingHandler_)
     { }
@@ -634,6 +662,12 @@ public:
     auto SinceVersion(TVersion version) &&
     {
         MinVersion_ = version;
+        return TFieldLoadRegistrar(std::move(*this));
+    }
+
+    auto BeforeVersion(TVersion version) &&
+    {
+        BeforeVersion_ = version;
         return TFieldLoadRegistrar(std::move(*this));
     }
 
@@ -654,7 +688,7 @@ public:
 
     void operator()() &&
     {
-        if (auto version = Context_.GetVersion(); version >= MinVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
+        if (auto version = Context_.GetVersion(); version >= MinVersion_ && version < BeforeVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
             Context_.Dumper().SetFieldName(Name_);
             LoadHandler_(This_, Context_);
         } else if (MissingHandler_) {
@@ -669,6 +703,7 @@ private:
     const TFieldLoadHandler<TThis, TContext> LoadHandler_;
 
     TVersion MinVersion_ = static_cast<TVersion>(std::numeric_limits<int>::min());
+    TVersion BeforeVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
     TVersionFilter VersionFilter_ = nullptr;
     TFieldMissingHandler<TThis, TContext> MissingHandler_ = nullptr;
 };
@@ -789,6 +824,11 @@ public:
         return std::move(*this);
     }
 
+    auto BeforeVersion(auto /*version*/) &&
+    {
+        return std::move(*this);
+    }
+
     auto InVersions(auto /*filter*/) &&
     {
         return std::move(*this);
@@ -831,6 +871,11 @@ public:
     { }
 
     auto SinceVersion(auto /*version*/) &&
+    {
+        return *this;
+    }
+
+    auto BeforeVersion(auto /*version*/) &&
     {
         return *this;
     }

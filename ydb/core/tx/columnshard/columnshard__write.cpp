@@ -315,18 +315,28 @@ public:
         LockId = lock.GetLockId();
         SendingShards = std::set<ui64>(locks.GetSendingShards().begin(), locks.GetSendingShards().end());
         ReceivingShards = std::set<ui64>(locks.GetReceivingShards().begin(), locks.GetReceivingShards().end());
-        const bool singleShardTx = SendingShards.empty() && ReceivingShards.empty();
-        if (!singleShardTx) {
+        if (SendingShards.empty() != ReceivingShards.empty()) {
+            return TConclusionStatus::Fail("incorrect synchronization data (send/receiving lists)");
+        }
+        if (ReceivingShards.size() && SendingShards.size()) {
             if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
-                return TConclusionStatus::Fail("shard is absent in sending and receiving lists");
+                return TConclusionStatus::Fail("current tablet_id is absent in sending and receiving lists");
             }
-            if (locks.HasArbiterColumnShard()) {
-                ArbiterColumnShard = locks.GetArbiterColumnShard();
-            } else {
-                AFL_VERIFY(!ReceivingShards.empty());
-                ArbiterColumnShard = *ReceivingShards.begin();
+            if (!locks.HasArbiterColumnShard()) {
+                return TConclusionStatus::Fail("no arbiter info in request");
             }
-            AFL_VERIFY(ArbiterColumnShard);
+            ArbiterColumnShard = locks.GetArbiterColumnShard();
+
+            if (IsPrimary() && !ReceivingShards.contains(ArbiterColumnShard)) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect arbiter")("arbiter_id", ArbiterColumnShard)(
+                    "receiving", JoinSeq(", ", ReceivingShards))("sending", JoinSeq(", ", SendingShards));
+                return TConclusionStatus::Fail("arbiter is absent in receiving lists");
+            }
+            if (!IsPrimary() && (!ReceivingShards.contains(ArbiterColumnShard) || !SendingShards.contains(ArbiterColumnShard))) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect arbiter")("arbiter_id", ArbiterColumnShard)(
+                    "receiving", JoinSeq(", ", ReceivingShards))("sending", JoinSeq(", ", SendingShards));
+                return TConclusionStatus::Fail("arbiter is absent in sending or receiving lists");
+            }
         }
 
         Generation = lock.GetGeneration();

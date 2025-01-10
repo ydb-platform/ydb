@@ -320,14 +320,13 @@ public:
         }
         if (ReceivingShards.size() && SendingShards.size()) {
             if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
-                return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
+                return TConclusionStatus::Fail("current tablet_id is absent in sending and receiving lists");
             }
-            if (!locks.HasArbiterColumnShard()) {
-                ArbiterColumnShard = *ReceivingShards.begin();
-            } else {
-                ArbiterColumnShard = locks.GetArbiterColumnShard();
+            AFL_VERIFY(locks.HasArbiterColumnShard());
+            ArbiterColumnShard = locks.GetArbiterColumnShard();
+            if (!ReceivingShards.contains(*ArbiterColumnShard)) {
+                return TConclusionStatus::Fail("arbiter is absent in receiving lists");
             }
-            AFL_VERIFY(ArbiterColumnShard);
         }
 
         Generation = lock.GetGeneration();

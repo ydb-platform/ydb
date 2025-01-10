@@ -315,8 +315,6 @@ public:
             }
         }
 
-        Cerr << "TEST>> PREPARE :: " << receivingColumnShardsSet.size() << " " << sendingColumnShardsSet.size() << Endl;
-
         if (!receivingColumnShardsSet.empty() || !sendingColumnShardsSet.empty()) {
             AFL_ENSURE(!IsVolatile());
             const auto& shards = receivingColumnShardsSet.empty()
@@ -328,8 +326,6 @@ public:
             std::advance(arbiterIterator, index);
             ArbiterColumnShard = *arbiterIterator;
         }
-
-        Cerr << "TEST>> arbiter=" << ArbiterColumnShard << Endl;
 
         ShardsToWaitPrepare = ShardsIds;
 

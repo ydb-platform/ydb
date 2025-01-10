@@ -3291,7 +3291,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Sent = false;
         }
 
-        void Set(ui32 row, ui64 probability, TString data) {
+        void Set(ui64 probability, TString data) {
             Rows.emplace_back(probability, std::move(data));
             MaxProbability = std::max(probability + 1, MaxProbability + 1) - 1;
         }

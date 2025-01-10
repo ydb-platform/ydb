@@ -4589,7 +4589,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_VERIFY_S(buildInfoPtr, "BuildIndex not found: id# " << id);
                     auto& buildInfo = *buildInfoPtr->Get();
                     buildInfo.Sample.Set(
-                        rowset.GetValue<Schema::KMeansTreeSample::Row>(),
                         rowset.GetValue<Schema::KMeansTreeSample::Probability>(),
                         rowset.GetValue<Schema::KMeansTreeSample::Data>()
                     );

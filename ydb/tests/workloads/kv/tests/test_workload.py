@@ -34,7 +34,8 @@ class TestYdbKvWorkload(object):
                 "--init-upserts", "0",
                 "--cols", "5",
                 "--int-cols", "2",
-                "--key-cols", "3"
+                "--key-cols", "3",
+                "--store", "column",
             ],
             wait=True
         )

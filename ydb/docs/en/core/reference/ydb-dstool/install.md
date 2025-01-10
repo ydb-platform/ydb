@@ -21,7 +21,7 @@
         - in **PowerShell**:
 
             ```powershell
-            iex (New-Object System.Net.WebClient).DownloadString('https://install.ydb.tech/dstool-windows1')
+            iex (New-Object System.Net.WebClient).DownloadString('https://install.ydb.tech/dstool-windows')
             ```
 
         - in **CMD**:

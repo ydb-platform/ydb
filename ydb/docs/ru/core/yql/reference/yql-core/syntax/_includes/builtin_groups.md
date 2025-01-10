@@ -17,4 +17,4 @@
 
 Ниже показано, как группы наследуют разрешения друг друга. Например, в `DATA-WRITERS` входят все разрешения `DATA-READERS`:
 
-![builtin_groups](../_assets/builtin_groups.svg)
+{% include notitle [builtin-groups-graph](../../../../../_includes/builtin-groups-graph.md) %}

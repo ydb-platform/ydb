@@ -327,7 +327,7 @@ public:
             }
             ArbiterColumnShard = locks.GetArbiterColumnShard();
             if (!ReceivingShards.contains(ArbiterColumnShard)) {
-                return TConclusionStatus::Fail("arbiter is absent in receiving lists");
+                return TConclusionStatus::Fail("arbiter is absent in receiving lists: " + ::ToString(ArbiterColumnShard) + " in [" + JoinSeq(", ", ReceivingShards) + "]");
             }
         }
 

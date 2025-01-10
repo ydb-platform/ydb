@@ -12,6 +12,9 @@
 #include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/core/security/login_shared_func.h>
 
+#include <ydb/library/aclib/aclib.h>
+#include <ydb/library/login/login.h>
+
 #include <ydb/public/api/protos/ydb_auth.pb.h>
 
 namespace NKikimr {
@@ -126,7 +129,16 @@ public:
             operation.mutable_result()->PackFrom(result);
         }
 
-        AuditLogLogin(Request.Get(), PathToDatabase, *GetProtoRequest(), response, /* errorDetails */ TString(), sanitizedToken);
+        const auto protoRequest = GetProtoRequest();
+        const auto groups = NLogin::TLoginProvider::GetGroupsFromToken(resultToken);
+        NACLib::TUserToken userToken(protoRequest->user(), groups);
+        const auto& adminSids = AppData()->AdministrationAllowedSIDs;
+        auto hasSid = [&userToken](const TString& sid) -> bool {
+            return userToken.IsExist(sid);
+        };
+        const auto isAdmin = std::find_if(adminSids.begin(), adminSids.end(), hasSid) != adminSids.end();
+
+        AuditLogLogin(Request.Get(), PathToDatabase, *protoRequest, response, /* errorDetails */ TString(), sanitizedToken, isAdmin);
 
         return CleanupAndReply(response);
     }

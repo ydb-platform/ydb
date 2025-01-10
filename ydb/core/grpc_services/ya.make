@@ -135,6 +135,8 @@ PEERDIR(
     ydb/library/aclib
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
+    ydb/library/aclib
+    ydb/library/login
     ydb/library/mkql_proto
     ydb/library/persqueue/topic_parser
     ydb/library/yaml_config

@@ -188,6 +188,7 @@ public:
     static TString GetTokenAudience(const TString& token);
     static std::chrono::system_clock::time_point GetTokenExpiresAt(const TString& token);
     static TString SanitizeJwtToken(const TString& token);
+    static TVector<TString> GetGroupsFromToken(const TString& token);
 
 private:
     std::deque<TKeyRecord>::iterator FindKeyIterator(ui64 keyId);

@@ -926,6 +926,10 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
 
     Y_UNIT_TEST(AuditLogLoginSuccess) {
         TTestBasicRuntime runtime;
+        runtime.AddAppDataInit([](ui32, NKikimr::TAppData& appData){
+            appData.AdministrationAllowedSIDs.emplace_back("user1");
+        });
+
         std::vector<std::string> lines;
         runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
         TTestEnv env(runtime);
@@ -964,6 +968,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT(!last.contains("reason"));
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1");
         UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token=");
+        UNIT_ASSERT_STRING_CONTAINS(last, "account_type=admin");
         UNIT_ASSERT(last.find("sanitized_token={none}") == std::string::npos);
     }
 

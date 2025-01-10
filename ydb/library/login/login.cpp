@@ -500,6 +500,27 @@ std::chrono::system_clock::time_point TLoginProvider::GetTokenExpiresAt(const TS
     return {};
 }
 
+TVector<TString> TLoginProvider::GetGroupsFromToken(const TString& token) {
+    try {
+        jwt::decoded_jwt decoded_token = jwt::decode(token);
+        if (decoded_token.has_payload_claim(GROUPS_CLAIM_NAME)) {
+            const jwt::claim& groups = decoded_token.get_payload_claim(GROUPS_CLAIM_NAME);
+            if (groups.get_type() == jwt::claim::type::array) {
+                const picojson::array& array = groups.as_array();
+                TVector<TString> groups;
+                groups.resize(array.size());
+                for (size_t i = 0; i < array.size(); ++i) {
+                    groups[i] = array[i].get<std::string>();
+                }
+                return groups;
+            }
+        }
+    }
+    catch (...) {
+    }
+    return {};
+}
+
 bool TLoginProvider::IsItTimeToRotateKeys() const {
     return Keys.empty()
         || Keys.back().PrivateKey.empty()

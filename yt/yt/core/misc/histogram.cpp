@@ -84,7 +84,8 @@ public:
     }
 
 private:
-    struct TItem {
+    struct TItem
+    {
         i64 Value;
         i64 Count;
 

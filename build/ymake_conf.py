@@ -1070,11 +1070,6 @@ class GnuToolchainOptions(ToolchainOptions):
 
         self.dwarf_tool = self.target.find_in_dict(self.params.get('dwarf_tool'))
 
-        # TODO(somov): Унифицировать формат sys_lib
-        self.sys_lib = self.params.get('sys_lib', {})
-        if isinstance(self.sys_lib, dict):
-            self.sys_lib = self.target.find_in_dict(self.sys_lib, [])
-
         self.os_sdk = preset('OS_SDK') or self._default_os_sdk()
 
         self.os_sdk_local = False
@@ -1718,8 +1713,6 @@ class LD(Linker):
         if self.ld_sdk:
             self.ld_flags.append(self.ld_sdk)
 
-        self.sys_lib = self.tc.sys_lib
-
         if target.is_android:
             # Use toolchain defaults to link with libunwind/clang_rt.builtins
             self.use_stdlib = '-nostdlib++'
@@ -1737,7 +1730,6 @@ class LD(Linker):
         emit('OBJDUMP_TOOL_VENDOR', self.objdump)
 
         emit('_LD_FLAGS', self.ld_flags)
-        emit('_LD_SYS_LIB', self.sys_lib)
         emit('LD_SDK_VERSION', self.ld_sdk)
 
         dwarf_tool = self.tc.dwarf_tool

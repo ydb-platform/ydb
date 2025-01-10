@@ -2455,6 +2455,7 @@ private:
                     auto arbiterIterator = std::begin(shards);
                     std::advance(arbiterIterator, index);
                     columnShardArbiter = *arbiterIterator;
+                    receivingShardsSet.insert(*columnShardArbiter);
                 }
             }
 

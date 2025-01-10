@@ -287,7 +287,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
             return;
         }
 
-        CancelScan(userTable.LocalTid, recCard->ScanId);
+        for (auto scanId : recCard->ScanIds) {
+            CancelScan(userTable.LocalTid, scanId);
+        }
         ScanManager.Drop(id);
     }
 
@@ -346,8 +348,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
                                   0,
                                   scanOpts);
 
-    TScanRecord recCard = {scanId, seqNo};
-    ScanManager.Set(id, recCard);
+    ScanManager.Set(id, seqNo).push_back(scanId);
 }
 
 }

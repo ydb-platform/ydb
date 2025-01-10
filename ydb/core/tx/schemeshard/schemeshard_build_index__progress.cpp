@@ -607,12 +607,24 @@ private:
         ev->Record.SetDoneRounds(0);
         ev->Record.SetNeedsRounds(3); // TODO(mbkkt) should be configurable
 
-        if (buildInfo.KMeans.NeedsAnotherParent()) {
-            ev->Record.SetParent(buildInfo.KMeans.Parent);
+        if (buildInfo.KMeans.Parent == 0 || buildInfo.KMeans.NeedsAnotherParent()) {
+            ev->Record.SetParentFrom(buildInfo.KMeans.Parent);
+            ev->Record.SetParentTo(buildInfo.KMeans.Parent);
+            ev->Record.SetChild(buildInfo.KMeans.ChildBegin);
         } else {
-            ev->Record.SetParent(0);
+            const auto& range = buildInfo.Shards.at(shardIdx).Range;
+            const auto from = range.From.GetCells();
+            const auto to = range.To.GetCells();
+            Y_ASSERT(!from.empty());
+            // TODO(mbkkt) is it precise?
+            const auto parentFrom = from.empty() || from[0].IsNull() ? 1 : from[0].AsValue<ui32>();
+            const auto parentTo = to.empty() || to[0].IsNull() ? buildInfo.KMeans.ParentEnd : to[0].AsValue<ui32>();
+            Y_ASSERT(parentFrom >= 1);
+            Y_ASSERT(parentFrom <= parentTo);
+            ev->Record.SetParentFrom(parentFrom);
+            ev->Record.SetParentTo(parentTo);
+            ev->Record.SetChild(buildInfo.KMeans.ChildBegin - (buildInfo.KMeans.ParentEnd - parentFrom + 1) * buildInfo.KMeans.K);
         }
-        ev->Record.SetChild(buildInfo.KMeans.ChildBegin);
 
         ev->Record.SetPostingName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
         path.Rise().Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);

@@ -18,8 +18,6 @@
 
 #include <aws/core/Aws.h>
 
-#include <format>
-
 using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NWrappers::NTestHelpers;
 

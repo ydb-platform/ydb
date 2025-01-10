@@ -38,8 +38,8 @@ using namespace NBackup;
 using namespace NBackupRestoreTraits;
 
 struct TChangefeedExportDescriptions {
-    Ydb::Table::ChangefeedDescription ChangefeedDescription;
-    Ydb::Topic::DescribeTopicResult Topic;
+    const Ydb::Table::ChangefeedDescription ChangefeedDescription;
+    const Ydb::Topic::DescribeTopicResult Topic;
 };
 
 class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
@@ -757,7 +757,7 @@ public:
             const TActorId& dataShard, ui64 txId,
             const NKikimrSchemeOp::TBackupTask& task,
             TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
-            TVector<TChangefeedExportDescriptions> changefeedsExportDescs,
+            TVector<TChangefeedExportDescriptions> changefeeds,
             TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
             TString&& metadata)
         : ExternalStorageConfig(new TS3ExternalStorageConfig(task.GetS3Settings()))
@@ -769,7 +769,7 @@ public:
         , DataShard(dataShard)
         , TxId(txId)
         , Scheme(std::move(scheme))
-        , Changefeeds(std::move(changefeedsExportDescs))
+        , Changefeeds(std::move(changefeeds))
         , Metadata(std::move(metadata))
         , Permissions(std::move(permissions))
         , Retries(task.GetNumberOfRetries())

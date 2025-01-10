@@ -1567,6 +1567,7 @@ TPath TPath::FindOlapStore() const {
 
 bool TPath::IsCommonSensePath() const {
     Y_ABORT_UNLESS(IsResolved());
+    
     for (auto item = ++Elements.rbegin(); item != Elements.rend(); ++item) {
         // Directories and domain roots are always ok as intermediaries
         bool ok = (*item)->IsDirectory() || (*item)->IsDomainRoot();

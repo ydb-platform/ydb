@@ -2352,7 +2352,9 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
             data.emplace_back(i, msg);
         }
 
-        PQTabletPrepare({.maxCountInPartition=100, .deleteTime=TDuration::Days(2).Seconds(), .partitions=1},
+        static ui32 pqConfigVersion = 1'000;
+
+        PQTabletPrepare({.maxCountInPartition=100, .deleteTime=TDuration::Days(2).Seconds(), .partitions=1, .specVersion=pqConfigVersion++},
                         {{"user1", true}, {"user2", true}}, tc);
         CmdWrite(0, "sourceid1", data, tc, false, {}, true);
 
@@ -2383,7 +2385,7 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
             consumerDeleteRequest.Reset(new TEvPersQueue::TEvUpdateConfig());
             consumerDeleteRequest->MutableRecord()->SetTxId(42);
             auto& cfg = *consumerDeleteRequest->MutableRecord()->MutableTabletConfig();
-            cfg.SetVersion(42);
+            cfg.SetVersion(pqConfigVersion++);
             cfg.AddPartitionIds(0);
             cfg.AddPartitions()->SetPartitionId(0);
             cfg.SetLocalDC(true);

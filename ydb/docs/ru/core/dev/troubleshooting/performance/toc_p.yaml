@@ -7,7 +7,7 @@ items:
     include:
       mode: link
       path: hardware/toc_p.yaml
-  - name: ОС
+  - name: Операционная система
     include:
       mode: link
       path: system/toc_p.yaml

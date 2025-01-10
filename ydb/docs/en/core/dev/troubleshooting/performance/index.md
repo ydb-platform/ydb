@@ -57,9 +57,13 @@ These issues refer to situations when the workload demands more physical resourc
 
 - Actor system pools misconfiguration.
 
-### Client application-related issues
+### Schema design issues
 
-- **Schema design issues**. Inefficient table and index design decisions can significantly impact query performance.
+- **[{#T}](./schemas/overloaded-shards.md)**. Data shards serving row-oriented tables may become overloaded for several reasons. Such overload leads to increased latencies for the transactions that are processed by the affected data shards.
+
+- **[{#T}](./schemas/splits-merges.md)**. {{ ydb-short-name }} supports automatic splitting and merging of data shards which allows it to seamlessly adapt to changes in workloads. However, these operations are not free and might have a short-term negative impact on query latencies.
+
+### Client application-related issues
 
 - **Query design issues**. Inefficiently designed database queries may execute slower than expected.
 

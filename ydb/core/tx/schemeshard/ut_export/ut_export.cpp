@@ -2564,7 +2564,16 @@ partitioning_settings {
             )",
         });
 
-        auto* persqueue = s3Mock.GetData().FindPtr("/update_feed/topic_description.pb");
-        UNIT_ASSERT(persqueue);
+        auto* changefeed = s3Mock.GetData().FindPtr("/update_feed/changefeed_description.pb");
+        UNIT_ASSERT(changefeed);
+
+        auto* topic = s3Mock.GetData().FindPtr("/update_feed/topic_description.pb");
+        UNIT_ASSERT(topic);
+
+        const auto* changefeedChecksum = s3Mock.GetData().FindPtr("/update_feed/changefeed_description.pb.sha256");
+        UNIT_ASSERT(changefeedChecksum);
+
+        const auto* topicChecksum = s3Mock.GetData().FindPtr("/update_feed/topic_description.pb.sha256");
+        UNIT_ASSERT(topicChecksum);
     }
 }

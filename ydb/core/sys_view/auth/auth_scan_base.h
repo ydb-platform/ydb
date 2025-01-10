@@ -18,6 +18,11 @@ using TPath = TVector<TString>;
 
 template <typename TDerived>
 class TAuthScanBase : public TScanActorBase<TDerived> {
+    struct TTraversingChildren {
+        TNavigate::TEntry Entry;
+        size_t Index = 0;
+    };
+
 public:
     using TBase = TScanActorBase<TDerived>;
 
@@ -59,8 +64,8 @@ protected:
             return;
         }
 
-        auto& queue = TraversingPaths.emplace_back();
-        queue.push(SplitPath(TBase::TenantName));
+        auto& last = TraversingStack.emplace_back();
+        last.Index = Max<size_t>(); // tenant
 
         if (TBase::AckReceived) {
             ContinueScan();
@@ -72,15 +77,35 @@ protected:
     }
 
     void ContinueScan() {
-        // Deep First Search: pick the first path from the latest queue
-        Y_ABORT_UNLESS(TraversingPaths);
-        auto& queue = TraversingPaths.back();
-        Y_ABORT_IF(queue.empty());
-        NavigatePath(std::move(queue.front()));
-        queue.pop();
-        if (queue.empty()) {
-            TraversingPaths.pop_back();
+        // Deep First Search: pick the first child from the latest entry
+        
+        while (TraversingStack) {
+            auto& last = TraversingStack.back();
+
+            if (last.Index == Max<size_t>()) { // tenant
+                NavigatePath(SplitPath(TBase::TenantName));
+                TraversingStack.pop_back();
+                return;
+            }
+
+            auto& children = last.Entry.ListNodeEntry->Children;
+            if (last.Index < children.size()) {
+                auto& child = children.at(last.Index++);
+
+                if (child.Kind == TSchemeCacheNavigate::KindExtSubdomain || child.Kind == TSchemeCacheNavigate::KindSubdomain) {
+                    continue;
+                }
+
+                last.Entry.Path.push_back(child.Name);
+                NavigatePath(last.Entry.Path);
+                last.Entry.Path.pop_back();
+                return;
+            } else {
+                TraversingStack.pop_back();
+            }
         }
+
+        TBase::ReplyEmptyAndDie();
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
@@ -102,24 +127,12 @@ protected:
 
         FillBatch(*batch, entry);
 
-        if (!batch->Finished && entry.ListNodeEntry && !entry.ListNodeEntry->Children.empty()) {
-            // Deep First Search: create and fill next level queue
-            auto& queue = TraversingPaths.emplace_back();
-            TPath path = entry.Path;
-            for (const auto& child : entry.ListNodeEntry->Children) {
-                if (child.Kind == TSchemeCacheNavigate::KindExtSubdomain || child.Kind == TSchemeCacheNavigate::KindSubdomain) {
-                    continue;
-                }
-                path.push_back(child.Name);
-                queue.push(path);
-                path.pop_back();
-            }
-            if (queue.empty()) { // all the children are sub domains
-                TraversingPaths.pop_back();
-            }
+        if (!batch->Finished && entry.ListNodeEntry) {
+            // Deep First Search: create and fill next level
+            TraversingStack.emplace_back(std::move(entry));
         }
 
-        batch->Finished = TraversingPaths.empty();
+        batch->Finished = TraversingStack.empty();
 
         TBase::SendBatch(std::move(batch));
     }
@@ -132,7 +145,7 @@ protected:
         TBase::PassAway();
     }
 
-    void NavigatePath(TPath&& path) {
+    void NavigatePath(TPath path) {
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
 
         auto& entry = request->ResultSet.emplace_back();
@@ -150,7 +163,7 @@ protected:
     virtual void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TNavigate::TEntry& entry) = 0;
 
 private:
-    TVector<TQueue<TPath>> TraversingPaths;
+    TVector<TTraversingChildren> TraversingStack;
 };
 
 }

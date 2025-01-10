@@ -58,7 +58,7 @@ void WriteBufferFromFileDescriptor::nextImpl()
             res = ::write(fd, working_buffer.begin() + bytes_written, offset() - bytes_written);
         }
 
-        if ((-1 == res || 0 == res) && errno != EINTR)
+        if ((-1 == res && errno != EINTR) || 0 == res)
         {
             ProfileEvents::increment(ProfileEvents::WriteBufferFromFileDescriptorWriteFailed);
             throwFromErrnoWithPath("Cannot write to file " + getFileName(), getFileName(),

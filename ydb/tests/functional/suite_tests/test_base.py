@@ -6,9 +6,9 @@ import os
 import random
 import string
 import logging
-import time
 import six
 import enum
+from functools import cmp_to_key
 from concurrent import futures
 
 from hamcrest import assert_that, equal_to, raises
@@ -43,12 +43,11 @@ mute_sdk_loggers()
 class StatementDefinition:
     @enum.unique
     class Type(enum.Enum):
-        Skipped = 'statement skipped'
-        Ok = 'statement ok'
-        Error = 'statement error'
-        Query = 'statement query'
-        StreamQuery = 'statement stream query'
-        ImportTableData = 'statement import table data'
+        Ok = 'ok'
+        Error = 'error'
+        Query = 'query'
+        StreamQuery = 'stream query'
+        ImportTableData = 'import table data'
 
     class SqlStatementType(enum.Enum):
         Create = "create"
@@ -59,12 +58,18 @@ class StatementDefinition:
         Delete = "delete"
         Select = "select"
 
-    def __init__(self, suite: str, at_line: int, type: Type, text: [str], sql_statement_type: SqlStatementType):
+    @enum.unique
+    class TableType(enum.Enum):
+        Row = 'row'
+        Column = 'column'
+
+    def __init__(self, suite: str, at_line: int, type: Type, text: [str], sql_statement_type: SqlStatementType, table_types: {TableType}):
         self.suite_name = suite
         self.at_line = at_line
         self.s_type = type
         self.text = text
         self.sql_statement_type = sql_statement_type
+        self.table_types = table_types
 
     def __str__(self):
         return f'''StatementDefinition:
@@ -72,15 +77,33 @@ class StatementDefinition:
     line: {self.at_line}
     type: {self.s_type}
     sql_stmt_tyoe: {self.sql_statement_type}
+    table_types: {', '.join([str(t) for t in self.table_types])}
     text:
 ''' + '\n'.join([f'        {row}' for row in self.text.split('\n')])
 
     @staticmethod
-    def _parse_statement_type(statement_line: str) -> Type:
-        for t in list(StatementDefinition.Type):
-            if t.value in statement_line.lower():
-                return t
-        return None
+    def _parse_statement_type(statement_line: str, suite: str, at_line: int) -> (Type, {TableType}):
+        parts = statement_line.split(' ')
+        parts.pop(0)  # skip 'statement' word
+        table_types = {}
+        if parts[0] == 'error':
+            type = StatementDefinition.Type.Error
+        else:
+            if parts[0] == 'skipped':
+                parts.pop(0)
+            elif parts[0] == 'skipped_cs':
+                table_types = {StatementDefinition.TableType.Row}
+                parts.pop(0)
+            else:
+                table_types = {StatementDefinition.TableType.Row, StatementDefinition.TableType.Column}
+            type = None
+            if table_types:  # ignore rest of the line for skipped tests
+                for t in list(StatementDefinition.Type):
+                    if t.value == ' '.join(parts):
+                        type = t
+                if type is None:
+                    raise RuntimeError(f'Unknown statement type in {suite}, at line: {at_line}')
+        return (type, table_types)
 
     @staticmethod
     def _parse_sql_statement_type(lines: [str]) -> SqlStatementType:
@@ -97,9 +120,7 @@ class StatementDefinition:
     def parse(suite: str, at_line: int, lines: list[str]):
         if not lines or not lines[0]:
             raise RuntimeError(f'Invalid statement in {suite}, at line: {at_line}')
-        type = StatementDefinition._parse_statement_type(lines[0])
-        if type is None:
-            raise RuntimeError(f'Unknown statement type in {suite}, at line: {at_line}')
+        type, table_types = StatementDefinition._parse_statement_type(lines[0], suite, at_line)
         lines.pop(0)
         at_line += 1
         statement_lines = []
@@ -111,7 +132,7 @@ class StatementDefinition:
         sql_statement_type = StatementDefinition._parse_sql_statement_type(statement_lines)
         if sql_statement_type is None:
             raise RuntimeError(f'Unknown sql statement type in {suite}, at line: {at_line}')
-        return StatementDefinition(suite, at_line, type, "\n".join(statement_lines), sql_statement_type)
+        return StatementDefinition(suite, at_line, type, "\n".join(statement_lines), sql_statement_type, table_types)
 
 
 def get_token(length=10):
@@ -162,7 +183,7 @@ def split_by_statement(lines):
                 yield (statement_start_line_idx, statement_lines)
                 statement_lines = []
     if statement_lines:
-        yield (statement_start_line_idx, statement_lines)
+        yield (statement_start_line_idx + 1, statement_lines)
 
 
 def get_statements(suite_path, suite_name):
@@ -172,6 +193,12 @@ def get_statements(suite_path, suite_name):
             statement_start_line_idx,
             statement_lines,
         )
+
+
+def patch_create_table_for_column_table(stmt):
+    if stmt[-1] == ";":
+        stmt = stmt[:-1]
+    return stmt + " WITH (STORE = COLUMN)"
 
 
 def patch_yql_statement(lines_or_statement, table_path_prefix):
@@ -252,6 +279,9 @@ class BaseSuiteRunner(object):
                 disable_iterator_reads=True,
                 disable_iterator_lookups=True,
                 extra_feature_flags=["enable_resource_pools"],
+                column_shard_config={
+                    'allow_nullable_columns_in_pk': True,
+                },
                 # additional_log_configs={'KQP_YQL': 7}
             )
         )
@@ -280,9 +310,14 @@ class BaseSuiteRunner(object):
         self.plan = (kind == 'plan')
         self.query_id = itertools.count(start=1)
         self.table_path_prefix = "/Root/%s" % '_'.join(list(path_pieces) + [kind])
-        for parsed_statement in get_statements(get_source_path(*path_pieces), os.path.join(*path_pieces)):
-            self.assert_statement(parsed_statement)
+        for statement in get_statements(get_source_path(*path_pieces), os.path.join(*path_pieces)):
+            self.assert_statement(statement)
         return self.files
+
+    def get_table_prefix(self, table_type: StatementDefinition.TableType) -> str:
+        if table_type == StatementDefinition.TableType.Column:
+            return f"{self.table_path_prefix}_{str(table_type.value)}"
+        return self.table_path_prefix
 
     def assert_statement_import_table_data(self, statement):
         # insert into {tableName} () VALUES {dataPath}
@@ -307,21 +342,19 @@ class BaseSuiteRunner(object):
         for future in future_results:
             safe_execute(lambda: future.result(), statement)
 
-    def assert_statement(self, parsed_statement):
-        start_time = time.time()
+    def assert_statement(self, statement):
         from_type = {
             StatementDefinition.Type.Ok: self.assert_statement_ok,
             StatementDefinition.Type.Query: self.assert_statement_query,
             StatementDefinition.Type.StreamQuery: self.assert_statement_stream_query,
             StatementDefinition.Type.Error: (lambda x: x),
             StatementDefinition.Type.ImportTableData: self.assert_statement_import_table_data,
-            StatementDefinition.Type.Skipped: lambda x: x
         }
-        assert_method = from_type.get(parsed_statement.s_type)
-        assert_method(parsed_statement)
-        end_time = time.time()
-        logger.info("Executed statement at line %d, suite from %s, in %0.3f seconds" % (
-            parsed_statement.at_line, parsed_statement.suite_name, end_time - start_time))
+        if not statement.table_types:
+            logger.info(f"Skipped statement {statement.suite_name}:{statement.at_line}")
+            return
+        assert_method = from_type.get(statement.s_type)
+        assert_method(statement)
 
     def assert_statement_ok(self, statement):
         actual = safe_execute(lambda: self.execute_query(statement))
@@ -401,7 +434,7 @@ class BaseSuiteRunner(object):
         if self.plan:
             return
 
-        yql_text = patch_yql_statement(statement.text, self.table_path_prefix)
+        yql_text = patch_yql_statement(statement.text, self.get_table_prefix(StatementDefinition.TableType.Row))
         yql_text = "--!syntax_v1\n" + yql_text + "\n\n"
         result = self.execute_scan_query(yql_text)
         file_name = statement.suite_name.split('/')[1] + '.out'
@@ -418,7 +451,7 @@ class BaseSuiteRunner(object):
         )
 
     def explain(self, query):
-        yql_text = patch_yql_statement(query, self.table_path_prefix)
+        yql_text = patch_yql_statement(query, self.get_table_prefix(StatementDefinition.TableType.Row))
         # seems explain not working with query service ?
         """
         result_sets = self.pool.execute_with_retries(yql_text, exec_mode=ydb.query.base.QueryExecMode.EXPLAIN)
@@ -431,16 +464,55 @@ class BaseSuiteRunner(object):
         return self.legacy_pool.retry_operation_sync(lambda s: s.explain(yql_text)).query_plan
 
     def execute_query(self, statement: StatementDefinition, amended_text: str = None):
-        yql_text = amended_text if amended_text is not None else statement.text
-        yql_text = patch_yql_statement(yql_text, self.table_path_prefix)
-        result = self.pool.execute_with_retries(yql_text)
+        text_row = amended_text if amended_text is not None else statement.text
+        if statement.sql_statement_type == StatementDefinition.SqlStatementType.Create:
+            text_column = patch_create_table_for_column_table(text_row)
+        else:
+            text_column = text_row
+        text_row = patch_yql_statement(text_row, self.get_table_prefix(StatementDefinition.TableType.Row))
+        text_column = patch_yql_statement(text_column, self.get_table_prefix(StatementDefinition.TableType.Column))
+        result_row = self.pool.execute_with_retries(text_row)
+        if StatementDefinition.TableType.Column in statement.table_types:
+            result_column = self.pool.execute_with_retries(text_column)
 
         if statement.sql_statement_type == StatementDefinition.SqlStatementType.Select:
-            scan_query_result = self.execute_scan_query(yql_text)
+            scan_query_result = self.execute_scan_query(text_row)
             self.execute_assert(
-                result[0].rows,
+                result_row[0].rows,
                 scan_query_result,
-                "Results are not same",
+                "Scan query and query service produce different results",
             )
+            if StatementDefinition.TableType.Column in statement.table_types:
+                def flatten_result(result_sets):
+                    return [row for result_set in result_sets for row in result_set.rows]
 
-        return result
+                def compare(lhs, rhs):
+                    lhs_keys = sorted(lhs.keys())
+                    rhs_keys = sorted(rhs.keys())
+                    if lhs_keys != rhs_keys:
+                        return -1 if lhs_keys < rhs_keys else 1
+
+                    def cmp_val_none(lhs, rhs):
+                        if lhs is None or rhs is None:
+                            if lhs == rhs:
+                                return 0
+                            return -1 if lhs is None else 1
+                        if lhs == rhs:
+                            return 0
+                        return -1 if lhs < rhs else 1
+
+                    for k in lhs_keys:
+                        c = cmp_val_none(lhs[k], rhs[k])
+                        if c != 0:
+                            return c
+                    return 0
+
+                sorted_result_row = sorted(flatten_result(result_row), key=cmp_to_key(compare))
+                sorted_result_column = sorted(flatten_result(result_column), key=cmp_to_key(compare))
+
+                self.execute_assert(
+                    sorted_result_row,
+                    sorted_result_column,
+                    f"Row table and column table produce different results: \n{sorted_result_row} \n{sorted_result_column}",
+                )
+        return result_row

@@ -456,7 +456,7 @@ TRefCountedTracker::TLocalSlot* TRefCountedTracker::GetLocalSlot(TRefCountedType
 
 TRefCountedTracker::TGlobalSlot* TRefCountedTracker::GetGlobalSlot(TRefCountedTypeCookie cookie)
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
     auto index = cookie.Underlying();
     if (index >= std::ssize(GlobalSlots_)) {
         GlobalSlots_.resize(static_cast<size_t>(index) + 1);

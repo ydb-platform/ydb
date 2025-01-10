@@ -340,7 +340,7 @@ ui64 ComputeNumberOfSlots(ui64 tuplesNum) {
     return (3 * tuplesNum + 1) | 1;
 }
 
-bool TTable::TryToPreallocateMemoryForJoin(TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLeftTuples, bool hasMoreRightTuples) {
+bool TTable::TryToPreallocateMemoryForJoin(TTable & t1, TTable & t2, EJoinKind /* joinKind */, bool hasMoreLeftTuples, bool hasMoreRightTuples) {
     // If the batch is final or the only one, then the buckets are processed sequentially, the memory for the hash tables is freed immediately after processing.
     // So, no preallocation is required.
     if (!hasMoreLeftTuples && !hasMoreRightTuples) return true;

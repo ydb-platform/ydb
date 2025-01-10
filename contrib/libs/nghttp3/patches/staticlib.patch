@@ -1,11 +1,5 @@
 --- a/lib/includes/nghttp3/nghttp3.h
 +++ b/lib/includes/nghttp3/nghttp3.h
-@@ -55,7 +55,7 @@ extern "C" {
- 
- #include <nghttp3/version.h>
- 
+@@ -55,1 +55,1 @@ extern "C" {
 -#ifdef NGHTTP3_STATICLIB
 +#if 1
- #  define NGHTTP3_EXTERN
- #elif defined(WIN32)
- #  ifdef BUILDING_NGHTTP3

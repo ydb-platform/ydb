@@ -193,10 +193,6 @@ SRCS(
     complex_types/uuid_text.cpp
     complex_types/yson_format_conversion.cpp
 
-    zookeeper/packet.cpp
-    zookeeper/protocol.cpp
-    zookeeper/requests.cpp
-
     kafka/packet.cpp
     kafka/protocol.cpp
     kafka/requests.cpp

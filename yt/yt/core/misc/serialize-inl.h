@@ -161,7 +161,7 @@ TSharedRef PackRefs(const T& parts)
 
     WritePod(output, static_cast<i32>(parts.size()));
     for (const auto& ref : parts) {
-        WritePod(output, static_cast<i64>(ref.Size()));
+        WritePod(output, std::ssize(ref));
         WriteRef(output, ref);
     }
 

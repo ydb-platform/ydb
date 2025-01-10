@@ -149,7 +149,7 @@ from (
 )
 order by col2,col3,col1
 
-statement query
+statement skipped_cs query
 select d-e as col1,
        d as col2,
        c as col3,
@@ -455,7 +455,7 @@ select (select count(*) from t1 as x where x.c>t1.c and x.d<t1.d) as col1,
        b-c as col5
 from t1
 
-statement query
+statement skipped_cs query
 select a as col1,
        c as col2
 from t1
@@ -644,7 +644,7 @@ from t1
 where coalesce(a,b,c,d,e)<>0
    and (e>c or e<d)
 
-statement query
+statement skipped_cs query
 select case when a<b-3 then 111 when a<=b then 222
         when a<b+3 then 333 else 444 end as col1
 from t1
@@ -874,7 +874,7 @@ select c-d as col1,
 from t1
 order by col2,col5,col1,col3,col4
 
-statement query
+statement skipped_cs query
 select d-e as col1,
        b-c as col2,
        c as col3
@@ -896,7 +896,7 @@ from t1
 where e+d between a+b-10 and c+130
 order by col2,col1
 
-statement query
+statement skipped_cs query
 select (a+b+c+d+e)/5 as col1
 from t1
 where c between b-2 and d+2
@@ -956,7 +956,7 @@ select a+b*2 as col1,
        abs(b-c) as col7
 from t1
 
-statement query
+statement skipped_cs query
 select case a+1 when b then 111 when c then 222
         when d then 333  when e then 444 else 555 end as col1,
        abs(b-c) as col2
@@ -1292,7 +1292,7 @@ from t1
 where (a>b-2 and a<b+2)
    and exists(select 1 from t1 as x where x.b<t1.b)
 
-statement query
+statement skipped_cs query
 select a-b as col1,
        a+b*2+c*3+d*4 as col2,
        c-d as col3,
@@ -1430,7 +1430,7 @@ select case when a<b-3 then 111 when a<=b then 222
 from t1
 order by col1
 
-statement query
+statement skipped_cs query
 select a+b*2+c*3 as col1,
        abs(a) as col2,
        c as col3,
@@ -2089,7 +2089,7 @@ select (a+b+c+d+e)/5 as col1,
        a as col5
 from t1
 
-statement query
+statement skipped_cs query
 select d as col1,
        c as col2,
        a-b as col3
@@ -2202,7 +2202,7 @@ from (
 where (c<=d-2 or c>=d+2)
 order by col4,col3,col1,col2
 
-statement query
+statement skipped_cs query
 select abs(b-c) as col1
 from t1
 where a is null

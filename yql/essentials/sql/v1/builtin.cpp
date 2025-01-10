@@ -3816,9 +3816,6 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             namedArgs = BuildStructure(pos, {encodeUtf8});
             usedArgs = {positionalArgs, namedArgs};
         } else if (name.StartsWith("From")) {
-            if (usedArgs) {
-                usedArgs.resize(1U);
-            }
             name = "From";
         } else if (name == "GetLength" || name.StartsWith("ConvertTo") || name.StartsWith("Parse") || name.StartsWith("SerializeJson")) {
             if (usedArgs.size() < 2U) {

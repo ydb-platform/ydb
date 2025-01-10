@@ -22,11 +22,24 @@ TString WrapYaml(const TString& yaml) {
     return out.Str();
 }
 
-TCommandStorageConfig::TCommandStorageConfig()
+TCommandStorageConfig::TCommandStorageConfig(std::optional<bool> overrideOnlyExplicitProfile)
     : TClientCommandTree("storage", {}, "Storage config")
+    , OverrideOnlyExplicitProfile(overrideOnlyExplicitProfile)
 {
     AddCommand(std::make_unique<TCommandStorageConfigFetch>());
     AddCommand(std::make_unique<TCommandStorageConfigReplace>());
+}
+
+void TCommandStorageConfig::PropagateFlags(const TCommandFlags& flags) {
+    TClientCommand::PropagateFlags(flags);
+
+    if (OverrideOnlyExplicitProfile) {
+        OnlyExplicitProfile = *OverrideOnlyExplicitProfile;
+    }
+
+    for (auto& [_, cmd] : SubCommands) {
+        cmd->PropagateFlags(TCommandFlags{.Dangerous = Dangerous, .OnlyExplicitProfile = OnlyExplicitProfile});
+    }
 }
 
 TCommandStorageConfigFetch::TCommandStorageConfigFetch()

@@ -28,7 +28,7 @@ TCommandAdmin::TCommandAdmin()
     UseOnlyExplicitProfile();
     AddHiddenCommand(std::make_unique<NDynamicConfig::TCommandConfig>(false));
     AddHiddenCommand(std::make_unique<NDynamicConfig::TCommandVolatileConfig>());
-    AddHiddenCommand(std::make_unique<NStorageConfig::TCommandStorageConfig>());
+    AddHiddenCommand(std::make_unique<NStorageConfig::TCommandStorageConfig>(false));
     AddCommand(std::make_unique<NCluster::TCommandCluster>());
     AddCommand(std::make_unique<TCommandNode>());
     AddCommand(std::make_unique<TCommandDatabase>());

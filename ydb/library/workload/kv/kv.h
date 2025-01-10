@@ -30,6 +30,11 @@ enum KvWorkloadConstants : ui64 {
 
 class TKvWorkloadParams : public TWorkloadParams {
 public:
+    enum class EStoreType {
+        Row     /* "row"    */,
+        Column  /* "column" */,
+    };
+
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
     TString GetWorkloadName() const override;
@@ -52,6 +57,7 @@ public:
     const std::string TableName = "kv_test";
 
     bool StaleRO = KvWorkloadConstants::STALE_RO;
+    YDB_READONLY(EStoreType, StoreType, EStoreType::Row);
 };
 
 class TKvWorkloadGenerator final: public TWorkloadQueryGeneratorBase<TKvWorkloadParams> {

@@ -54,7 +54,7 @@ public:
     ui64 MixedDoReadRows = KvWorkloadConstants::MIXED_DO_READ_ROWS;
     ui64 MixedDoSelect = KvWorkloadConstants::MIXED_DO_SELECT;
 
-    const std::string TableName = "kv_test";
+    std::string TableName = "kv_test";
 
     bool StaleRO = KvWorkloadConstants::STALE_RO;
     YDB_READONLY(EStoreType, StoreType, EStoreType::Row);

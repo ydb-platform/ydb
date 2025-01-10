@@ -507,6 +507,14 @@ TVector<TRow> TKvWorkloadGenerator::GenerateRandomRows(bool randomValues) {
 }
 
 void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
+    opts.AddLongOption('p', "path", "Path where benchmark tables are located")
+        .Optional()
+        .DefaultValue(TableName)
+        .Handler1T<TStringBuf>([this](TStringBuf arg) {
+            while(arg.SkipPrefix("/"));
+            while(arg.ChopSuffix("/"));
+            TableName = arg;
+        });
     switch (commandType) {
     case TWorkloadParams::ECommandType::Init:
         opts.AddLongOption("init-upserts", "count of upserts need to create while table initialization")

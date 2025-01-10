@@ -11,7 +11,6 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
-#include <contrib/libs/xxhash/xxhash.h>
 
 namespace NKikimr::NArrow {
 

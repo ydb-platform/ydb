@@ -21,6 +21,8 @@ message TMemoryLimits
     optional int64 uncompressed_block_cache = 6;
     optional int64 versioned_chunk_meta = 7;
     optional int64 reserved = 8;
+
+    optional int64 query = 9;
 }
 
 message TInstanceResources

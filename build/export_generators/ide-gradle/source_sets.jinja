@@ -1,6 +1,6 @@
 {#- empty string #}
 sourceSets {
-{%- if target.runs|length %}
+{%- if target.runs|length or target.jar_source_set|length %}
     main {
         {#-
             Default by Gradle:
@@ -9,9 +9,15 @@ sourceSets {
             resources.srcDir("src/main/resources")
 
         #}
-{%-     for run in target.runs -%}
-{{         OutDirs(run, '        java.srcDir("', '")') }}
-{%-     endfor %}
+{%-     if target.jar_source_set|length -%}
+{%-         for source_set in target.jar_source_set -%}
+{%-             set srcdir_glob = split(source_set, ':') -%}
+{%-             set out = srcdir_glob[0] -%}
+{%-             if out != 'src/main/java' %}
+        java.srcDir("{{ out }}")
+{%-             endif -%}
+{%-         endfor -%}
+{%-     endif %}
     }
 {%- endif %}
     test {
@@ -30,30 +36,20 @@ sourceSets {
         resources.srcDir("src/testFixtures/resources")
         java.srcDir("src/intTest/java")
         resources.srcDir("src/intTest/resources")
-{%- for extra_target in extra_targets -%}
-{%-     if extra_target.runs|length -%}
-{%-         for run in extra_target.runs -%}
-{{              OutDirs(run, '        java.srcDir("', '")') }}
-{%-         endfor -%}
-{%-     endif -%}
-{%- endfor %}
+
+{%- set extra_target_source_sets = extra_targets|selectattr('jar_source_set')|map(attribute='jar_source_set')|sum|unique -%}
+{%- if extra_target_source_sets|length -%}
+{%-     for source_set in extra_target_source_sets -%}
+{%-         set srcdir_glob = split(source_set, ':') -%}
+{%-         set out = srcdir_glob[0] -%}
+{%-         if out != 'src/test/java' %}
+        java.srcDir("{{ srcdir_glob[0] }}")
+{%-         endif -%}
+{%-     endfor -%}
+{%- endif %}
     }
 }
 
-{%- if target.jar_source_set|length -%}
-{%-     for source_set in target.jar_source_set -%}
-{%-         set srcdir_glob = split(source_set, ':') %}
-
-sourceSets.main.java.srcDirs += "{{ srcdir_glob[0] }}"
-{%-     endfor -%}
-{%- endif -%}
-
-{%  for extra_target in extra_targets -%}
-{%-     if extra_target.jar_source_set|length -%}
-{%-         for source_set in extra_target.jar_source_set -%}
-{%-             set srcdir_glob = split(source_set, ':') %}
-
-sourceSets.main.java.srcDirs += "{{ srcdir_glob[0] }}"
-{%-         endfor -%}
-{%-     endif -%}
-{%- endfor -%}
+tasks.withType<Jar>() {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}

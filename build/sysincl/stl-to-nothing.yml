@@ -145,3 +145,7 @@
   - experimental/string_view:           DO_NOT_INCLUDE_NON_STANDARD_EXPERIMENTAL_STRING_VIEW
   - experimental/system_error:          DO_NOT_INCLUDE_NON_STANDARD_EXPERIMENTAL_SYSTEM_ERROR
   - experimental/tuple:                 DO_NOT_INCLUDE_NON_STANDARD_EXPERIMENTAL_TUPLE
+
+# These headers belong to libc++, yet certain contribs depend libc++ internal structure.
+- includes:
+  - __utility/swap.h

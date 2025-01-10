@@ -39,6 +39,7 @@ void THandlerSessionCreateNebius::ProcessSessionToken(const TString& sessionToke
     BLOG_D("Set session cookie: (" << sessionCookieName << ": " << NKikimr::MaskTicket(sessionCookieValue) << ")");
 
     NHttp::THeadersBuilder responseHeaders;
+    SetCORS(Request, &responseHeaders);
     responseHeaders.Set("Set-Cookie", CreateSecureCookie(sessionCookieName, sessionCookieValue));
     responseHeaders.Set("Location", Context.GetRequestedAddress());
     ReplyAndPassAway(Request->CreateResponse("302", "Cookie set", responseHeaders));

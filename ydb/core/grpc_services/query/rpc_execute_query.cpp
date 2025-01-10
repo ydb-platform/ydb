@@ -64,6 +64,9 @@ bool FillTxSettings(const Ydb::Query::TransactionSettings& from, Ydb::Table::Tra
         case Ydb::Query::TransactionSettings::kSnapshotReadOnly:
             to.mutable_snapshot_read_only();
             break;
+        case Ydb::Query::TransactionSettings::kSnapshotReadWrite:
+            to.mutable_snapshot_read_write();
+            break;
         default:
             issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                 "Invalid tx_settings"));

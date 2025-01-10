@@ -14,6 +14,7 @@ namespace NYT::NArrow {
 
 NApi::NRpcProxy::IRowStreamEncoderPtr CreateArrowRowStreamEncoder(
     NTableClient::TTableSchemaPtr schema,
+    std::optional<std::vector<std::string>> columns,
     NTableClient::TNameTablePtr nameTable,
     NApi::NRpcProxy::IRowStreamEncoderPtr fallbackEncoder,
     NFormats::TControlAttributesConfigPtr controlAttributesConfig);

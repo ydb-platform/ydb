@@ -311,3 +311,94 @@ EXPECTED = json.loads("""
 def test_unistat_conversion(request):
     j = loads(UNISTAT_DATA, from_format='unistat', to_format='json')
     assert json.loads(j) == EXPECTED
+
+
+def test_reset_and_clear_registry():
+    registry = MetricRegistry()
+
+    c = registry.counter({'foo': 'counter'})
+    c.inc()
+
+    g = registry.gauge({'foo': 'gauge'})
+    g.set(20)
+
+    r = registry.rate({'foo': 'rate'})
+    r.add(10)
+
+    out = dumps(registry, format="json")
+    expected = json.loads("""{
+      "sensors":
+        [
+          {
+            "kind":"RATE",
+            "labels":
+              {
+                "foo":"rate"
+              },
+            "value":10
+          },
+          {
+            "kind":"COUNTER",
+            "labels":
+              {
+                "foo":"counter"
+              },
+            "value":1
+          },
+          {
+            "kind":"GAUGE",
+            "labels":
+              {
+                "foo":"gauge"
+              },
+            "value":20
+          }
+        ]
+    }
+    """)
+
+    j = json.loads(out)
+    assert j == expected
+
+    registry.reset()
+
+    out = dumps(registry, format="json")
+    expected = json.loads("""{
+      "sensors":
+        [
+          {
+            "kind":"RATE",
+            "labels":
+              {
+                "foo":"rate"
+              },
+            "value":0
+          },
+          {
+            "kind":"COUNTER",
+            "labels":
+              {
+                "foo":"counter"
+              },
+            "value":0
+          },
+          {
+            "kind":"GAUGE",
+            "labels":
+              {
+                "foo":"gauge"
+              },
+            "value":0
+          }
+        ]
+    }
+    """)
+
+    j = json.loads(out)
+    assert j == expected
+
+    registry.clear()
+
+    out = dumps(registry, format="json")
+    j = json.loads(out)
+    assert j == {}

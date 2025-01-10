@@ -394,9 +394,18 @@ class StaticConfigGenerator(object):
         if self.host_configs:
             normalized_config["host_configs"] = copy.deepcopy(self.host_configs)
             for host_config in normalized_config["host_configs"]:
+                if 'generation' in host_config:
+                    # inside config.yaml we do not use section generation in host_configs
+                    host_config.pop('generation')
                 if 'drives' in host_config:
                     # inside config.yaml we should use field drive in host_configs section
                     host_config['drive'] = host_config.pop('drives')
+                    for drive in host_config['drive']:
+                        if 'expected_slot_count' in drive:
+                            # inside config.yaml we should use pdisk_config section for expected_slot_count
+                            drive['pdisk_config'] = {
+                                'expected_slot_count': drive.pop('expected_slot_count')
+                            }
 
         if self.table_service_config:
             normalized_config["table_service_config"] = self.table_service_config
@@ -412,6 +421,9 @@ class StaticConfigGenerator(object):
 
         if self.__cluster_details.http_proxy_config is not None:
             normalized_config["http_proxy_config"] = self.__cluster_details.http_proxy_config
+
+        if self.__cluster_details.memory_controller_config is not None:
+            normalized_config["memory_controller_config"] = self.__cluster_details.memory_controller_config
 
         if self.__cluster_details.blob_storage_config is not None:
             normalized_config["blob_storage_config"] = self.__cluster_details.blob_storage_config

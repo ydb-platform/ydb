@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
+#include <ydb/core/tx/columnshard/splitter/settings.h>
 #include <ydb/core/tx/tiering/tier/object.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -92,6 +93,9 @@ protected:
     virtual TDuration DoGetUsedSnapshotLivetime(const TDuration defaultValue) const {
         return defaultValue;
     }
+    virtual ui64 DoGetLimitForPortionsMetadataAsk(const ui64 defaultValue) const {
+        return defaultValue;
+    }
     virtual TDuration DoGetOverridenGCPeriod(const TDuration defaultValue) const {
         return defaultValue;
     }
@@ -99,12 +103,6 @@ protected:
         return defaultValue;
     }
     virtual TDuration DoGetActualizationTasksLag(const TDuration defaultValue) const {
-        return defaultValue;
-    }
-    virtual ui64 DoGetReduceMemoryIntervalLimit(const ui64 defaultValue) const {
-        return defaultValue;
-    }
-    virtual ui64 DoGetRejectMemoryIntervalLimit(const ui64 defaultValue) const {
         return defaultValue;
     }
     virtual ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 defaultValue) const {
@@ -140,6 +138,9 @@ protected:
     virtual ui64 DoGetMemoryLimitScanPortion(const ui64 defaultValue) const {
         return defaultValue;
     }
+    virtual const NOlap::NSplitter::TSplitSettings& DoGetBlobSplitSettings(const NOlap::NSplitter::TSplitSettings& defaultValue) const {
+        return defaultValue;
+    }
 
 private:
     inline static const NKikimrConfig::TColumnShardConfig DefaultConfig = {};
@@ -152,6 +153,11 @@ private:
     }
 
 public:
+    const NOlap::NSplitter::TSplitSettings& GetBlobSplitSettings(
+        const NOlap::NSplitter::TSplitSettings& defaultValue = Default<NOlap::NSplitter::TSplitSettings>()) {
+        return DoGetBlobSplitSettings(defaultValue);
+    }
+
     virtual void OnRequestTracingChanges(
         const std::set<NOlap::TSnapshot>& /*snapshotsToSave*/, const std::set<NOlap::TSnapshot>& /*snapshotsToRemove*/) {
     }
@@ -189,6 +195,11 @@ public:
     virtual void OnSelectShardingFilter() {
     }
 
+    ui64 GetLimitForPortionsMetadataAsk() const {
+        const ui64 defaultValue = GetConfig().GetLimitForPortionsMetadataAsk();
+        return DoGetLimitForPortionsMetadataAsk(defaultValue);
+    }
+
     TDuration GetCompactionActualizationLag() const {
         const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetCompactionActualizationLagMs());
         return DoGetCompactionActualizationLag(defaultValue);
@@ -204,14 +215,6 @@ public:
         return DoGetActualizationTasksLag(defaultValue);
     }
 
-    ui64 GetReduceMemoryIntervalLimit() const {
-        const ui64 defaultValue = NOlap::TGlobalLimits::DefaultReduceMemoryIntervalLimit;
-        return DoGetReduceMemoryIntervalLimit(defaultValue);
-    }
-    ui64 GetRejectMemoryIntervalLimit() const {
-        const ui64 defaultValue = NOlap::TGlobalLimits::DefaultRejectMemoryIntervalLimit;
-        return DoGetRejectMemoryIntervalLimit(defaultValue);
-    }
     ui64 GetMetadataRequestSoftMemoryLimit() const {
         const ui64 defaultValue = 100 * (1 << 20);
         return DoGetMetadataRequestSoftMemoryLimit(defaultValue);
@@ -319,6 +322,13 @@ public:
     virtual void OnCleanupActors(const ui64 tabletId) {
         Y_UNUSED(tabletId);
     }
+
+    virtual void OnAfterLocalTxCommitted(const NActors::TActorContext& ctx, const NColumnShard::TColumnShard& shard, const TString& txInfo) {
+        Y_UNUSED(ctx);
+        Y_UNUSED(shard);
+        Y_UNUSED(txInfo);
+    }
+
 };
 
 class TControllers {

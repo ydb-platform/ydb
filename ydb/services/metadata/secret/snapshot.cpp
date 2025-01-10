@@ -65,7 +65,7 @@ bool TSnapshot::CheckSecretAccess(const TSecretIdOrValue& sIdOrValue, const NACL
             }
             return &*findSecrets->begin();
         },
-        [](const TString& value) -> const TSecretId*{
+        [](const TString& /* value */) -> const TSecretId*{
             Y_ABORT();
         }
     ),

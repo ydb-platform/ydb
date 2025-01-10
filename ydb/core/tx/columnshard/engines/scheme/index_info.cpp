@@ -165,10 +165,24 @@ std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldVerified(const ui32 colu
 }
 
 std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchema(const std::set<ui32>& columnIds) const {
-    Y_ABORT_UNLESS(columnIds.size());
+    AFL_VERIFY(columnIds.size());
     std::vector<std::shared_ptr<arrow::Field>> fields;
     for (auto&& i : columnIds) {
         fields.emplace_back(GetColumnFieldVerified(i));
+    }
+    return std::make_shared<arrow::Schema>(fields);
+}
+
+std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchemaByOrderedIndexes(const std::vector<ui32>& columnIdxs) const {
+    AFL_VERIFY(columnIdxs.size());
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::optional<ui32> predColumnIdx;
+    for (auto&& i : columnIdxs) {
+        if (predColumnIdx) {
+            AFL_VERIFY(*predColumnIdx < i);
+        }
+        predColumnIdx = i;
+        fields.emplace_back(ArrowSchemaWithSpecials()->GetFieldByIndexVerified(i));
     }
     return std::make_shared<arrow::Schema>(fields);
 }
@@ -412,14 +426,15 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueVerified
 }
 
 NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData,
-    const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, TSecondaryData& result) const {
+    const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, TSecondaryData& result) const {
     auto it = Indexes.find(indexId);
     AFL_VERIFY(it != Indexes.end());
     auto& index = it->second;
-    std::shared_ptr<IPortionDataChunk> chunk = index->BuildIndex(originalData, *this);
+    std::shared_ptr<IPortionDataChunk> chunk = index->BuildIndex(originalData, recordsCount, *this);
     auto opStorage = operators->GetOperatorVerified(index->GetStorageId());
     if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
-        return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ") bigger than limit (" +
+        return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ":" + ::ToString(chunk->GetPackedSize()) + ":" +
+                                       ::ToString(recordsCount) + ") bigger than limit (" +
                                        ::ToString(opStorage->GetBlobSplitSettings().GetMaxBlobSize()) + ")");
     }
     if (index->GetStorageId() == IStoragesManager::LocalMetadataStorageId) {
@@ -618,6 +633,20 @@ TIndexInfo TIndexInfo::BuildDefault() {
     result.CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
     result.MetadataManagerConstructor = NDataAccessorControl::IManagerConstructor::BuildDefault();
     return result;
+}
+
+TConclusion<std::shared_ptr<arrow::Array>> TIndexInfo::BuildDefaultColumn(
+    const ui32 fieldIndex, const ui32 rowsCount, const bool force) const {
+    auto defaultValue = GetColumnExternalDefaultValueByIndexVerified(fieldIndex);
+    auto f = ArrowSchemaWithSpecials()->GetFieldByIndexVerified(fieldIndex);
+    if (!defaultValue && !IsNullableVerifiedByIndex(fieldIndex)) {
+        if (force) {
+            defaultValue = NArrow::DefaultScalar(f->type());
+        } else {
+            return TConclusionStatus::Fail("not nullable field with no default: " + f->name());
+        }
+    }
+    return NArrow::TThreadSimpleArraysCache::Get(f->type(), defaultValue, rowsCount);
 }
 
 }   // namespace NKikimr::NOlap

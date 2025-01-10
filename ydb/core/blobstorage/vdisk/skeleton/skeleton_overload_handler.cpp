@@ -180,34 +180,11 @@ namespace NKikimr {
     class TThrottlingController {
     private:
         NMonGroup::TSkeletonOverloadGroup& Mon;
-
-        struct TControls {
-            TControlWrapper DeviceSpeed;
-            TControlWrapper MinSstCount;
-            TControlWrapper MaxSstCount;
-            TControlWrapper MinInplacedSize;
-            TControlWrapper MaxInplacedSize;
-
-            TControls()
-                : DeviceSpeed(50 << 20, 1 << 20, 1 << 30)
-                , MinSstCount(100, 1, 1000)
-                , MaxSstCount(250, 1, 1000)
-                , MinInplacedSize(20ull << 30, 0, 500ull < 30)
-                , MaxInplacedSize(60ull << 30, 0, 500ull < 30)
-            {}
-
-            void Register(TIntrusivePtr<TControlBoard> icb) {
-                icb->RegisterSharedControl(DeviceSpeed, "VDiskControls.ThrottlingDeviceSpeed");
-                icb->RegisterSharedControl(MinSstCount, "VDiskControls.ThrottlingMinSstCount");
-                icb->RegisterSharedControl(MaxSstCount, "VDiskControls.ThrottlingMaxSstCount");
-                icb->RegisterSharedControl(MinInplacedSize, "VDiskControls.ThrottlingMinInplacedSize");
-                icb->RegisterSharedControl(MaxInplacedSize, "VDiskControls.ThrottlingMaxInplacedSize");
-            }
-        };
-        TControls Controls;
+        TIntrusivePtr<TVDiskConfig> VCfg;
 
         ui64 CurrentSstCount = 0;
         ui64 CurrentInplacedSize = 0;
+        ui64 CurrentOccupancy = 0;
 
         TInstant CurrentTime;
         ui64 CurrentSpeedLimit = 0;
@@ -228,42 +205,53 @@ namespace NKikimr {
         }
 
         ui64 CalcSstCountSpeedLimit() const {
-            ui64 deviceSpeed = (ui64)Controls.DeviceSpeed;
-            ui64 minSstCount = (ui64)Controls.MinSstCount;
-            ui64 maxSstCount = (ui64)Controls.MaxSstCount;
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            ui64 minSstCount = (ui64)VCfg->ThrottlingMinSstCount;
+            ui64 maxSstCount = (ui64)VCfg->ThrottlingMaxSstCount;
 
             return LinearInterpolation(CurrentSstCount, minSstCount, maxSstCount, deviceSpeed);
         }
 
         ui64 CalcInplacedSizeSpeedLimit() const {
-            ui64 deviceSpeed = (ui64)Controls.DeviceSpeed;
-            ui64 minInplacedSize = (ui64)Controls.MinInplacedSize;
-            ui64 maxInplacedSize = (ui64)Controls.MaxInplacedSize;
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            ui64 minInplacedSize = (ui64)VCfg->ThrottlingMinInplacedSize;
+            ui64 maxInplacedSize = (ui64)VCfg->ThrottlingMaxInplacedSize;
 
             return LinearInterpolation(CurrentInplacedSize, minInplacedSize, maxInplacedSize, deviceSpeed);
+        }
+
+        ui64 CalcOccupancySpeedLimit() const {
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            ui64 minOccupancy = (ui64)VCfg->ThrottlingMinOccupancyPerMille * 1000;
+            ui64 maxOccupancy = (ui64)VCfg->ThrottlingMaxOccupancyPerMille * 1000;
+
+            return LinearInterpolation(CurrentOccupancy, minOccupancy, maxOccupancy, deviceSpeed);
         }
 
         ui64 CalcCurrentSpeedLimit() const {
             ui64 sstCountSpeedLimit = CalcSstCountSpeedLimit();
             ui64 inplacedSizeSpeedLimit = CalcInplacedSizeSpeedLimit();
-            return std::min(sstCountSpeedLimit, inplacedSizeSpeedLimit);
+            ui64 occupancySpeedLimit = CalcOccupancySpeedLimit();
+
+            return std::min(occupancySpeedLimit, std::min(sstCountSpeedLimit, inplacedSizeSpeedLimit));
         }
 
     public:
-        explicit TThrottlingController(NMonGroup::TSkeletonOverloadGroup& mon)
+        explicit TThrottlingController(
+            const TIntrusivePtr<TVDiskConfig> &vcfg,
+            NMonGroup::TSkeletonOverloadGroup& mon)
             : Mon(mon)
+            , VCfg(vcfg)
         {}
 
-        void RegisterIcbControls(TIntrusivePtr<TControlBoard> icb) {
-            Controls.Register(icb);
-        }
-
         bool IsActive() const {
-            ui64 minSstCount = (ui64)Controls.MinSstCount;
-            ui64 minInplacedSize = (ui64)Controls.MinInplacedSize;
+            ui64 minSstCount = (ui64)VCfg->ThrottlingMinSstCount;
+            ui64 minInplacedSize = (ui64)VCfg->ThrottlingMinInplacedSize;
+            ui64 minOccupancy = (ui64)VCfg->ThrottlingMinOccupancyPerMille * 1000;
 
             return CurrentSstCount > minSstCount ||
-                CurrentInplacedSize > minInplacedSize;
+                CurrentInplacedSize > minInplacedSize ||
+                CurrentOccupancy > minOccupancy;
         }
 
         TDuration BytesToDuration(ui64 bytes) const {
@@ -283,7 +271,7 @@ namespace NKikimr {
             return AvailableBytes;
         }
 
-        void UpdateState(TInstant now, ui64 sstCount, ui64 inplacedSize) {
+        void UpdateState(TInstant now, ui64 sstCount, ui64 inplacedSize, float occupancy) {
             bool prevActive = IsActive();
 
             CurrentSstCount = sstCount;
@@ -292,12 +280,15 @@ namespace NKikimr {
             CurrentInplacedSize = inplacedSize;
             Mon.ThrottlingAllLevelsInplacedSize() = inplacedSize;
 
+            CurrentOccupancy = occupancy * 1'000'000;
+            Mon.ThrottlingOccupancyPerMille() = occupancy * 1000;
+
             Mon.ThrottlingIsActive() = (ui64)IsActive();
 
             if (!IsActive()) {
                 CurrentTime = {};
                 AvailableBytes = 0;
-                CurrentSpeedLimit = (ui64)Controls.DeviceSpeed;
+                CurrentSpeedLimit = (ui64)VCfg->ThrottlingDeviceSpeed;
             } else {
                 if (!prevActive) {
                     CurrentTime = now;
@@ -315,8 +306,8 @@ namespace NKikimr {
             }
             auto us = (now - CurrentTime).MicroSeconds();
             AvailableBytes += CurrentSpeedLimit * us / 1000000;
-            ui64 deviceSpeed = (ui64)Controls.DeviceSpeed;
-            AvailableBytes = Min(AvailableBytes, deviceSpeed);
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            AvailableBytes = std::min(AvailableBytes, deviceSpeed);
             CurrentTime = now;
         }
     };
@@ -325,6 +316,7 @@ namespace NKikimr {
     // TOverloadHandler
     ///////////////////////////////////////////////////////////////////////////////////////////////////
     TOverloadHandler::TOverloadHandler(
+            const TIntrusivePtr<TVDiskConfig> &vcfg,
             const TIntrusivePtr<TVDiskContext> &vctx,
             const TPDiskCtxPtr &pdiskCtx,
             std::shared_ptr<THull> hull,
@@ -335,12 +327,13 @@ namespace NKikimr {
             TVMultiPutHandler &&vMultiPut,
             TLocalSyncDataHandler &&loc,
             TAnubisOsirisPutHandler &&aoput)
-        : Hull(std::move(hull))
+        : VCtx(vctx)
+        , Hull(std::move(hull))
         , Mon(std::move(mon))
         , EmergencyQueue(new TEmergencyQueue(Mon, std::move(vMovedPatch), std::move(vPatchStart), std::move(vput),
                 std::move(vMultiPut), std::move(loc), std::move(aoput)))
         , DynamicPDiskWeightsManager(std::make_shared<TDynamicPDiskWeightsManager>(vctx, pdiskCtx))
-        , ThrottlingController(new TThrottlingController(Mon))
+        , ThrottlingController(new TThrottlingController(vcfg, Mon))
     {}
 
     TOverloadHandler::~TOverloadHandler() {}
@@ -382,11 +375,12 @@ namespace NKikimr {
             auto& logoBlobsSnap = snapshot.LogoBlobsSnap; // TLogoBlobsSnapshot
             auto& sliceSnap = logoBlobsSnap.SliceSnap; // TLevelSliceSnapshot
 
-            auto sstCount = sliceSnap.GetLevel0SstsNum();
-            auto dataInplacedSize = logoBlobsSnap.AllLevelsDataInplaced;
+            ui64 sstCount = sliceSnap.GetLevel0SstsNum();
+            ui64 dataInplacedSize = logoBlobsSnap.AllLevelsDataInplaced;
+            float occupancy = 1.f - VCtx->GetOutOfSpaceState().GetFreeSpaceShare();
 
             auto now = ctx.Now();
-            ThrottlingController->UpdateState(now, sstCount, dataInplacedSize);
+            ThrottlingController->UpdateState(now, sstCount, dataInplacedSize, occupancy);
 
             if (ThrottlingController->IsActive()) {
                 ThrottlingController->UpdateTime(now);
@@ -460,10 +454,6 @@ namespace NKikimr {
 
     void TOverloadHandler::OnKickEmergencyPutQueue() {
         KickInFlight = false;
-    }
-
-    void TOverloadHandler::RegisterIcbControls(TIntrusivePtr<TControlBoard> icb) {
-        ThrottlingController->RegisterIcbControls(icb);
     }
 
     template <class TEv>

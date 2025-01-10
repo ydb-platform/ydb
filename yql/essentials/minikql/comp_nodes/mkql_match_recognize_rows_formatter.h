@@ -52,6 +52,9 @@ public:
         const NUdf::TUnboxedValue& partitionKey,
         const TNfaTransitionGraph& graph) = 0;
 
+    virtual void Load(TMrInputSerializer& serializer) = 0;
+    virtual void Save(TMrOutputSerializer& serializer) const = 0;
+
     static TOutputColumnOrder GetOutputColumnOrder(TRuntimeNode outputColumnOrder);
 
     static std::unique_ptr<IRowsFormatter> Create(const TState& state);

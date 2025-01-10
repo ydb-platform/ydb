@@ -266,6 +266,9 @@ TFuture<NConcurrency::IAsyncZeroCopyOutputStreamPtr> CreateRpcClientOutputStream
     TCallback<void(TSharedRef)> metaHandler);
 
 //! This variant additionally allows non-trivial response of streaming request to be handled.
+//! TODO(arkady-e1ppa): Introduce IAsyncZeroCopyOutputStream<TRet> which |Close| returns
+//! TFuture<TRet> instead of TFuture<void> as a way to transfer data via rsp
+//! use it here.
 template <class TRequestMessage, class TResponse>
 TFuture<NConcurrency::IAsyncZeroCopyOutputStreamPtr> CreateRpcClientOutputStream(
     TIntrusivePtr<TTypedClientRequest<TRequestMessage, TResponse>> request,

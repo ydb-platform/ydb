@@ -1592,10 +1592,7 @@ class TYPathServiceContext
     , public IYPathServiceContext
 {
 public:
-    template <class... TArgs>
-    TYPathServiceContext(TArgs&&... args)
-        : TServiceContextBase(std::forward<TArgs>(args)...)
-    { }
+    using TServiceContextBase::TServiceContextBase;
 
     void SetRequestHeader(std::unique_ptr<NRpc::NProto::TRequestHeader> header) override
     {

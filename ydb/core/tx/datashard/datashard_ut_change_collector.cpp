@@ -744,7 +744,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         THashMap<TPathId, TString> streamPathIdToName;
         for (const auto& stream : entry.CdcStreams) {
             const auto& name = stream.GetName();
-            const auto pathId = PathIdFromPathId(stream.GetPathId());
+            const auto pathId = TPathId::FromProto(stream.GetPathId());
             streamPathIdToName.emplace(pathId, name);
         }
 

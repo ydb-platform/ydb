@@ -24,9 +24,9 @@ void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const
 
 class TMon {
 public:
-    using TRequestAuthorizer = std::function<IEventHandle*(const NActors::TActorId& owner, NMonitoring::IMonHttpRequest& request)>;
+    using TRequestAuthorizer = std::function<IEventHandle*(const TActorId& owner, NHttp::THttpIncomingRequest* request)>;
 
-    static NActors::IEventHandle* DefaultAuthorizer(const NActors::TActorId& owner, NMonitoring::IMonHttpRequest& request);
+    static IEventHandle* DefaultAuthorizer(const TActorId& owner, NHttp::THttpIncomingRequest* request);
 
     struct TConfig {
         ui16 Port = 0;
@@ -69,7 +69,22 @@ public:
         const TString& title, bool preTag, TActorSystem* actorSystem, const TActorId& actorId, bool useAuth = true, bool sortPages = true);
     NMonitoring::IMonPage* RegisterCountersPage(const TString& path, const TString& title, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
     NMonitoring::IMonPage* FindPage(const TString& relPath);
-    void RegisterHandler(const TString& path, const TActorId& handler);
+
+    struct TRegisterHandlerFields {
+        TString Path;
+        TActorId Handler;
+        bool UseAuth = true;
+        TVector<TString> AllowedSIDs;
+    };
+
+    void RegisterActorHandler(const TRegisterHandlerFields& fields);
+
+    void RegisterHandler(const TString& path, const TActorId& handler) {
+        RegisterActorHandler({
+            .Path = path,
+            .Handler = handler
+        });
+    }
 
 protected:
     TConfig Config;
@@ -81,7 +96,7 @@ protected:
 
     struct TActorMonPageInfo {
         NMonitoring::TMonPagePtr Page;
-        TActorId Handler;
+        std::optional<TRegisterHandlerFields> Handler;
         TString Path;
     };
 

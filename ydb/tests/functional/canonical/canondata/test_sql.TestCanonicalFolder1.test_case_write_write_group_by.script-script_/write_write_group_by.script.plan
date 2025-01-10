@@ -49,6 +49,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/local/base_write_write_group_by_script_script/Temp",
                                                         "ReadColumns": [
                                                             "Group",
                                                             "MinAmount",
@@ -119,6 +120,7 @@
                                             }
                                         ],
                                         "Name": "Upsert",
+                                        "Path": "/local/base_write_write_group_by_script_script/Temp",
                                         "Table": "base_write_write_group_by_script_script/Temp"
                                     },
                                     {
@@ -195,6 +197,7 @@
                                                                             {
                                                                                 "Inputs": [],
                                                                                 "Name": "TableFullScan",
+                                                                                "Path": "/local/base_write_write_group_by_script_script/Input1",
                                                                                 "ReadColumns": [
                                                                                     "Amount",
                                                                                     "Group"

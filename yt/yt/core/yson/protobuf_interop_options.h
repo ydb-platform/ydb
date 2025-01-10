@@ -39,6 +39,9 @@ struct TProtobufWriterOptions
 
     //! Convert yson keys from snake case to camel case.
     bool ConvertSnakeToCamelCase = false;
+
+    //! Check if string field contains actual UTF-8 string. Overrides option from config if provided.
+    std::optional<EUtf8Check> Utf8Check;
 };
 
 struct TProtobufParserOptions
@@ -50,6 +53,9 @@ struct TProtobufParserOptions
     //! If |true| then required fields not found in protobuf metadata are
     //! silently skipped; otherwise an exception is thrown.
     bool SkipRequiredFields = false;
+
+    //! Check if string field contains actual UTF-8 string. Overrides option from config if provided.
+    std::optional<EUtf8Check> Utf8Check;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

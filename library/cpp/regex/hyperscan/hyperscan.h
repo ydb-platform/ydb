@@ -11,7 +11,6 @@
 namespace NHyperscan {
     using TCPUFeatures = decltype(hs_platform_info_t::cpu_features);
     constexpr TCPUFeatures CPU_FEATURES_AVX2 = HS_CPU_FEATURES_AVX2;
-    constexpr TCPUFeatures CPU_FEATURES_AVX512 = HS_CPU_FEATURES_AVX512 | HS_CPU_FEATURES_AVX2;
 
     template<typename TNativeDeleter, TNativeDeleter NativeDeleter>
     class TDeleter {
@@ -35,7 +34,6 @@ namespace NHyperscan {
             Core2 = 0,
             Corei7 = 1,
             AVX2 = 2,
-            AVX512 = 3
         };
 
         ERuntime DetectCurrentRuntime();

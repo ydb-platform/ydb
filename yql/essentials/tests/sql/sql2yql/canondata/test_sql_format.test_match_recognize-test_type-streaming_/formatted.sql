@@ -1,8 +1,6 @@
 PRAGMA FeatureR010 = 'prototype';
 PRAGMA config.flags('MatchRecognizeStream', 'force');
 
-USE plato;
-
 $data = [<|dt: 4, host: 'fqdn1', key: 14|>];
 
 -- NoPartitionNoMeasure

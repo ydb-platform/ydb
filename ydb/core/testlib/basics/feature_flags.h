@@ -71,6 +71,8 @@ public:
     FEATURE_FLAG_SETTER(EnableParameterizedDecimal)
     FEATURE_FLAG_SETTER(EnableTopicAutopartitioningForCDC)
     FEATURE_FLAG_SETTER(EnableFollowerStats)
+    FEATURE_FLAG_SETTER(EnableExportChecksums)
+    FEATURE_FLAG_SETTER(EnableTopicTransfer)
 
     #undef FEATURE_FLAG_SETTER
 };

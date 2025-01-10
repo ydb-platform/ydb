@@ -17,6 +17,7 @@ public:
 
 private:
     bool CanPopPredicate();
+    bool CanPushPredicate();
 
     size_t MaxSize_;
     size_t Size_ = 0;

@@ -5,12 +5,12 @@
 
 namespace NYql {
 
-TBlockingEQueue::TBlockingEQueue(size_t maxSize):MaxSize_(maxSize) {
+TBlockingEQueue::TBlockingEQueue(size_t maxSize) : MaxSize_(maxSize) {
 }
 
 void TBlockingEQueue::Push(NYdb::NTopic::TReadSessionEvent::TEvent&& e, size_t size) {
     with_lock(Mutex_) {
-        CanPush_.WaitI(Mutex_, [this] () {return Stopped_ || Size_ < MaxSize_;});
+        CanPush_.WaitI(Mutex_, [this] () {return CanPushPredicate();});
         Events_.emplace_back(std::move(e), size );
         Size_ += size;
     }
@@ -19,7 +19,7 @@ void TBlockingEQueue::Push(NYdb::NTopic::TReadSessionEvent::TEvent&& e, size_t s
 
 void TBlockingEQueue::BlockUntilEvent() {
     with_lock(Mutex_) {
-        CanPop_.WaitI(Mutex_, [this] () {return Stopped_ || !Events_.empty();});
+        CanPop_.WaitI(Mutex_, [this] () {return CanPopPredicate();});
     }
 }
 
@@ -32,13 +32,17 @@ TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> TBlockingEQueue::Pop(bool block)
                 return {};
             }
         }
+        if (Events_.empty()) {
+            return {};
+        }
+
         auto [front, size] = std::move(Events_.front());
         Events_.pop_front();
         Size_ -= size;
         if (Size_ < MaxSize_) {
             CanPush_.BroadCast();
         }
-        return front;
+        return std::move(front); // cast to TMaybe<>
     }
 }
 
@@ -58,6 +62,10 @@ bool TBlockingEQueue::IsStopped() {
 
 bool TBlockingEQueue::CanPopPredicate() {
     return !Events_.empty() && !Stopped_;
+}
+
+bool TBlockingEQueue::CanPushPredicate() {
+    return Size_ < MaxSize_ || Stopped_;
 }
 
 }

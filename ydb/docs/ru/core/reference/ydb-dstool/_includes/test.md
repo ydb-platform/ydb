@@ -2,7 +2,7 @@
 ydb-dstool -e <bs_endpoint> cluster list
 ```
 
-* `bs_endpoint` — URI HTTP-эндпоинта кластера — это тот же самый эндпоинт, который обслуживает Embedded UI. Пример: http://localhost:8765.
+* `bs_endpoint` — URI HTTP-эндпоинта кластера — это тот же самый эндпоинт, который обслуживает [Embedded UI](../../embedded-ui/index.md). Пример: `http://localhost:8765`.
 
 Результат:
 

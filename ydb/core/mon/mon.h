@@ -103,6 +103,7 @@ protected:
     TMutex Mutex;
     std::vector<TActorMonPageInfo> ActorMonPages;
     THashMap<TString, TActorId> ActorServices;
+    std::shared_ptr<NMonitoring::IMetricFactory> Metrics;
 
     void RegisterActorMonPage(const TActorMonPageInfo& pageInfo);
 };

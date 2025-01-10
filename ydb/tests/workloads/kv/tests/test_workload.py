@@ -48,7 +48,7 @@ class TestYdbKvWorkload(object):
     def teardown_class(cls):
         cls.cluster.stop()
 
-    @pytest.mark.parametrize("store_type", ["column"])
+    @pytest.mark.parametrize("store_type", ["row", "column"])
     def test(self, store_type):
         init_command = self.init_command_prefix
         init_command.extend([

@@ -1262,6 +1262,8 @@ message TRestoreTask {
     oneof Settings {
         TS3Settings S3Settings = 6;
     }
+
+    optional bool ValidateChecksums = 7; // currently available for s3
 }
 
 message TPersQueueGroupAllocate {

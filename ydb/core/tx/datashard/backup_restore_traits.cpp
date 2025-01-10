@@ -89,10 +89,6 @@ TString DataKeySuffix(ui32 n, EDataFormat format, ECompressionCodec codec) {
     return Sprintf("data_%02d%s", n, ext.c_str());
 }
 
-TString ChecksumKey(const TString& objKey) {
-    return objKey + ".sha256";
-}
-
 } // NBackupRestoreTraits
 } // NDataShard
 } // NKikimr

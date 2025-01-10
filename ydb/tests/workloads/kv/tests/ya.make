@@ -6,7 +6,7 @@ ENV(YDB_ERASURE=mirror_3_dc)
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 
 TEST_SRCS(
-    test_kv_workload.py
+    test_workload.py
 )
 
 IF (SANITIZER_TYPE)

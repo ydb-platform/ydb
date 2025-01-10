@@ -1291,17 +1291,21 @@ public:
                     request.LocksOp = ELocksOp::Commit;
                 }
             } else {
+                AFL_ENSURE(!tx || !txCtx.HasOlapTable);
+                AFL_ENSURE(txCtx.DeferredEffects.Empty() || !txCtx.HasOlapTable);
                 if (hasLocks || txCtx.TopicOperations.HasOperations()) {
-                    if (!txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() || txCtx.TopicOperations.HasOperations()) {
+                    bool hasUncommittedEffects = false;
+                    for (auto& [lockId, lock] : txCtx.Locks.LocksMap) {
+                        auto dsLock = ExtractLock(lock.GetValueRef(txCtx.Locks.LockType));
+                        request.DataShardLocks[dsLock.GetDataShard()].emplace_back(dsLock);
+                        hasUncommittedEffects |=  dsLock.GetHasWrites();
+                    }
+                    if (!txCtx.GetSnapshot().IsValid() || (tx && txCtx.TxHasEffects()) || !txCtx.DeferredEffects.Empty() || hasUncommittedEffects || txCtx.TopicOperations.HasOperations()) {
                         LOG_D("TExecPhysicalRequest, tx has commit locks");
                         request.LocksOp = ELocksOp::Commit;
                     } else {
                         LOG_D("TExecPhysicalRequest, tx has rollback locks");
                         request.LocksOp = ELocksOp::Rollback;
-                    }
-                    for (auto& [lockId, lock] : txCtx.Locks.LocksMap) {
-                        auto dsLock = ExtractLock(lock.GetValueRef(txCtx.Locks.LockType));
-                        request.DataShardLocks[dsLock.GetDataShard()].emplace_back(dsLock);
                     }
                 }
             }

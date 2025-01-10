@@ -230,7 +230,7 @@ namespace NYql::NDq {
             actorSystem->Send(new NActors::IEventHandle(ParentId, SelfId(), errEv.release()));
         }
 
-        void Handle(TEvRetry::TPtr ev) {
+        void Handle(TEvRetry::TPtr) {
             auto guard = Guard(*Alloc);
             Y_ENSURE(RetriesRemaining > 0);
             --RetriesRemaining;

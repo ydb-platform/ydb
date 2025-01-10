@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         DoClosedSessionRemovedWhileActiveTest(false);
     }
 */
-    // Copy paster from table service but with some modifications for query service
+    // Copy paste from table service but with some modifications for query service
     // Checks read iterators/session/sdk counters have expected values  
     Y_UNIT_TEST(CloseSessionsWithLoad) {
         auto kikimr = std::make_shared<TKikimrRunner>();
@@ -194,6 +194,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
                 auto result = session.ExecuteQuery(query, TTxControl::BeginTx()).GetValueSync();
                 if (!result.IsSuccess()) {
+                    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_SESSION);
                     Cerr << "received non-success status for session " << id << Endl;
                     return;
                 }

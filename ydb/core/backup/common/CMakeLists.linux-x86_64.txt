@@ -12,6 +12,33 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(common)
-add_subdirectory(impl)
-add_subdirectory(controller)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
+
+add_library(core-backup-common)
+
+
+target_link_libraries(core-backup-common PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-json
+  ydb-core-base
+  tools-enum_parser-enum_serialization_runtime
+)
+
+target_sources(core-backup-common PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/backup/common/metadata.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/backup/common/checksum.cpp
+)
+
+
+generate_enum_serilization(core-backup-common
+  ${PROJECT_SOURCE_DIR}/ydb/core/backup/common/metadata.h
+  INCLUDE_HEADERS
+  ydb/core/backup/common/metadata.h
+)

@@ -96,6 +96,7 @@ target_link_libraries(core-tx-datashard PUBLIC
   library-cpp-l1_distance
   library-cpp-l2_distance
   ydb-core-actorlib_impl
+  core-backup-common
   ydb-core-base
   ydb-core-change_exchange
   ydb-core-engine
@@ -127,7 +128,6 @@ target_link_libraries(core-tx-datashard PUBLIC
 target_sources(core-tx-datashard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/alter_cdc_stream_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/alter_table_unit.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/backup_restore_common.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/backup_restore_traits.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/backup_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_and_wait_dependencies_unit.cpp
@@ -256,7 +256,6 @@ target_sources(core-tx-datashard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/execute_kqp_scan_tx_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/execute_write_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/execution_unit.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/export_checksum.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/export_common.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/export_iface.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/export_scan.cpp
@@ -438,6 +437,7 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   library-cpp-l1_distance
   library-cpp-l2_distance
   ydb-core-actorlib_impl
+  core-backup-common
   ydb-core-base
   ydb-core-change_exchange
   ydb-core-engine

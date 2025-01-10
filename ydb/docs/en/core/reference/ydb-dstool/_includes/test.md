@@ -2,7 +2,7 @@
 ydb-dstool -e <bs_endpoint> cluster list
 ```
 
-* `bs_endpoint`: URI of the interface for {{ ydb-short-name }} cluster distributed storage management. The interface is accessible over HTTP on any cluster node on port 8765 by default. URI example: `http://localhost:8765`.
+* `bs_endpoint`: URI of the cluster's HTTP endpoint, the same endpoint that serves the [Embedded UI](../../embedded-ui/index.md). Example: `http://localhost:8765`.
 
 Result:
 

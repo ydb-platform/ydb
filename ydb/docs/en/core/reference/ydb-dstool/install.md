@@ -4,41 +4,17 @@
 
 {% list tabs %}
 
-- Linux
+- Linux / macOS
 
     To install the {{ ydb-short-name }} DSTool, follow these steps:
 
     1. Run the command:
 
         ```bash
-        curl -sSL 'https://storage.yandexcloud.net/yandexcloud-ydb-dstool/install.sh' | bash
+        curl -sSL 'https://install.ydb.tech/dstool' | bash
         ```
 
-        The script will install the {{ ydb-short-name }} DSTool and add the executable file path to the `PATH` environment variable.
-
-        {% note info %}
-
-        The script will update the `PATH` variable only if you run it in the bash or zsh command shell. If you run the script in a different shell, add the path to the CLI to the `PATH` variable manually.
-
-        {% endnote %}
-
-    1. To update the environment variables, restart the command shell.
-
-    1. Test it by running the command that shows cluster information:
-
-        {% include [test step](./_includes/test.md) %}
-
-- macOS
-
-    To install the {{ ydb-short-name }} DSTool, follow these steps:
-
-    1. Run the command:
-
-        ```bash
-        curl -sSL 'https://storage.yandexcloud.net/yandexcloud-ydb-dstool/install.sh' | bash
-        ```
-
-        The script will install the {{ ydb-short-name }} DSTool and add the executable file path to the `PATH` environment variable.
+        The script will install the {{ ydb-short-name }} DSTool. If the script is run from a `bash` or `zsh` shell, it will also add the `ydb-dstool` executable to the `PATH` environment variable. Otherwise, you can run it from the `~/ydb-dstool/bin` folder or add it to `PATH` manually.
 
     1. To update the environment variables, restart the command shell.
 
@@ -55,16 +31,16 @@
         - in **PowerShell**:
 
             ```powershell
-            iex (New-Object System.Net.WebClient).DownloadString('https://storage.yandexcloud.net/yandexcloud-ydb-dstool/install.ps1')
+            iex (New-Object System.Net.WebClient).DownloadString('https://install.ydb.tech/dstool-windows1')
             ```
 
         - in **CMD**:
 
             ```cmd
-            @"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://storage.yandexcloud.net/yandexcloud-ydb-dstool/install.ps1'))"
+            @"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://install.ydb.tech/dstool-windows'))"
             ```
 
-    1. Specify whether to add the executable file path to the `PATH` environment variable:
+    1. Specify whether to add `ydb-dstool` to the `PATH` environment variable:
 
         ```text
         Add ydb-dstool installation dir to your PATH? [Y/n]

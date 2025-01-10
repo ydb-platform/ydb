@@ -945,7 +945,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
 
     const auto& persQueuesTPathDesc = Task.GetChangefeedUnderlyingTopics();
     const auto& cdcStreams = Task.GetTable().GetTable().GetCdcStreams();
-    assert(persQueuesTPathDesc.size() == cdcStreams.size());
+    Y_ASSERT(persQueuesTPathDesc.size() == cdcStreams.size());
 
     const int changefeedsCount = cdcStreams.size();
     TVector <TChangefeedExportDescriptions> changefeedsExportDescs;

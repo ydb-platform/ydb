@@ -71,18 +71,35 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
     return propose;
 }
 
-static NKikimrSchemeOp::TPathDescription GetDescription(TSchemeShard* ss, const TPathId& pathId) {
-    NKikimrSchemeOp::TDescribeOptions opts;
+static void SetTableDescriptionOptions(NKikimrSchemeOp::TDescribeOptions& opts) {
     opts.SetReturnPartitioningInfo(false);
     opts.SetReturnPartitionConfig(true);
     opts.SetReturnBoundaries(true);
     opts.SetReturnIndexTableBoundaries(true);
-    opts.SetShowPrivateTable(true);
+}
 
+static void SetChangefeedDescriptionOptions(NKikimrSchemeOp::TDescribeOptions& opts) {
+    SetTableDescriptionOptions(opts);
+    opts.SetShowPrivateTable(true);
+}
+
+static NKikimrSchemeOp::TPathDescription GetDescription(TSchemeShard* ss, const TPathId& pathId, NKikimrSchemeOp::TDescribeOptions& opts) {
     auto desc = DescribePath(ss, TlsActivationContext->AsActorContext(), pathId, opts);
     auto record = desc->GetRecord();
 
     return record.GetPathDescription();
+}
+
+static NKikimrSchemeOp::TPathDescription GetTableDescription(TSchemeShard* ss, const TPathId& pathId) {
+    NKikimrSchemeOp::TDescribeOptions opts;
+    SetTableDescriptionOptions(opts);
+    return GetDescription(ss, pathId, opts);
+}
+
+static NKikimrSchemeOp::TPathDescription GetChangefeedDescription(TSchemeShard* ss, const TPathId& pathId) {
+    NKikimrSchemeOp::TDescribeOptions opts;
+    SetChangefeedDescriptionOptions(opts);
+    return GetDescription(ss, pathId, opts);
 }
 
 void FillSetValForSequences(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& description,
@@ -146,16 +163,15 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     const TPath sourcePath = TPath::Init(exportInfo->Items[itemIdx].SourcePathId, ss);
     const TPath exportItemPath = exportPath.Child(ToString(itemIdx));
     if (sourcePath.IsResolved() && exportItemPath.IsResolved()) {
-        auto sourceDescription = GetDescription(ss, sourcePath.Base()->PathId);
-        Cerr << "srcD: " << sourceDescription.DebugString() << Endl;
+        auto sourceDescription = GetTableDescription(ss, sourcePath.Base()->PathId);
         if (sourceDescription.HasTable()) {
             FillSetValForSequences(
                 ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
             for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
-                auto cdcPathDesc =  GetDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
+                auto cdcPathDesc =  GetChangefeedDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
                 for (const auto& child : cdcPathDesc.GetChildren()) {
                     if (child.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
-                        *task.AddChangefeedUnderlyingTopics() = GetDescription(ss, TPathId(child.GetSchemeshardId(), child.GetPathId()));
+                        *task.AddChangefeedUnderlyingTopics() = GetChangefeedDescription(ss, TPathId(child.GetSchemeshardId(), child.GetPathId()));
                     }
                 }
             }

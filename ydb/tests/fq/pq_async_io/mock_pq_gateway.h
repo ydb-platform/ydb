@@ -30,7 +30,7 @@ struct TEvMockPqEvents {
 
 class IMockPqGateway : public NYql::IPqGateway {
 public:
-    virtual std::shared_ptr<NYql::TBlockingEQueue> GetEventQueue(const TString& topic) = 0;
+    virtual void AddEvent(const TString& topic, NYdb::NTopic::TReadSessionEvent::TEvent&& e, size_t size) = 0;
 };
 
 NYdb::NTopic::TPartitionSession::TPtr CreatePartitionSession();

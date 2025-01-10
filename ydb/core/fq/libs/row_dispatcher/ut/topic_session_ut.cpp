@@ -9,16 +9,13 @@
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/actor_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/tests/fq/pq_async_io/mock_pq_gateway.h>
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 
 #include <yql/essentials/public/purecalc/common/interface.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
-
-#include <library/cpp/threading/future/async.h>
-#include <ydb/tests/fq/pq_async_io/mock_pq_gateway.h>
-
 
 namespace NFq::NRowDispatcher::NTests {
 
@@ -112,7 +109,7 @@ public:
 
         if (MockTopicSession) {
             Runtime.GrabEdgeEvent<NYql::NDq::TEvMockPqEvents::TEvCreateSession>(PqGatewayNotifier, TDuration::Seconds(GrabTimeoutSec));
-            MockPqGateway->GetEventQueue(TopicPath)->Push(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(nullptr, 0, 0), 0);
+            MockPqGateway->AddEvent(TopicPath, NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(nullptr, 0, 0), 0);
         }
     }
 
@@ -207,43 +204,37 @@ public:
     using TMessageInformation = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation; 
     using TMessage = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage; 
 
-    TMessageInformation MakeNextMessageInformation(size_t offset, size_t uncompressedSize, const TString& messageGroupId = "") { 
+    TMessageInformation MakeNextMessageInformation(size_t offset, size_t uncompressedSize) { 
         auto now = TInstant::Now(); 
         TMessageInformation msgInfo(
             offset,
             "ProducerId",
-            0, //SeqNo_,
+            0,
             now,
             now,
             MakeIntrusive<NYdb::NTopic::TWriteSessionMeta>(),
             MakeIntrusive<NYdb::NTopic::TMessageMeta>(),
             uncompressedSize,
-            messageGroupId
+            "messageGroupId"
         );
         return msgInfo;
     }
 
-    TMessage MakeNextMessage(const TString& msgBuff, size_t offset) {
-        TMessage msg(msgBuff, nullptr, MakeNextMessageInformation(offset, msgBuff.size()), CreatePartitionSession());
-        return msg;
-    }
-
-    void PQWrite2(
+    void PQWrite(
         const std::vector<TString>& sequence,
         ui64 firstMessageOffset = 0) {
         if (!MockTopicSession) {
-            PQWrite(sequence, TopicPath, GetDefaultPqEndpoint());
+            NYql::NDq::PQWrite(sequence, TopicPath, GetDefaultPqEndpoint());
         } else {
             ui64 offset = firstMessageOffset;
             TVector<TMessage> msgs;
             size_t size = 0;
             for (const auto& s : sequence) {
-                msgs.emplace_back(MakeNextMessage(s, offset++));
+                TMessage msg(s, nullptr, MakeNextMessageInformation(offset++, s.size()), CreatePartitionSession());
+                msgs.emplace_back(msg);
                 size += s.size();
             }
-            if (!msgs.empty()) {
-                MockPqGateway->GetEventQueue(TopicPath)->Push(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, CreatePartitionSession()), size);
-            }
+            MockPqGateway->AddEvent(TopicPath, NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, CreatePartitionSession()), size);
         }
     }
 
@@ -288,14 +279,14 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StartSession(ReadActorId2, source);
 
         std::vector<TString> data = { Json1 };
-        PQWrite(data, topicName);
+        PQWrite(data);
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         ExpectMessageBatch(ReadActorId1, { JsonMessage(1) });
         ExpectMessageBatch(ReadActorId2, { JsonMessage(1) });
         ExpectStatisticToReadActor({ReadActorId1, ReadActorId2}, 1);
 
         data = { Json2 };
-        PQWrite(data, topicName);
+        PQWrite(data);
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         ExpectStatisticToReadActor({ReadActorId1, ReadActorId2}, 1);
         ExpectMessageBatch(ReadActorId1, { JsonMessage(2) });
@@ -320,7 +311,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StartSession(ReadActorId2, source2);
 
         const std::vector<TString> data = { Json1 };
-        PQWrite(data, topicName);
+        PQWrite(data);
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
         Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, new TEvRowDispatcher::TEvGetNextBatch()));
@@ -341,7 +332,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StartSession(ReadActorId2, source2);
 
         const std::vector<TString> data = { Json1 };
-        PQWrite(data, topicName);
+        PQWrite(data);
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         ExpectMessageBatch(ReadActorId1, { JsonMessage(1) });
         ExpectMessageBatch(ReadActorId2, { JsonMessage(1) });
@@ -358,14 +349,14 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StartSession(ReadActorId1, source);
 
         const std::vector<TString> data = { Json1 };
-        PQWrite(data, topicName);
+        PQWrite(data);
         ExpectNewDataArrived({ReadActorId1});
         ExpectMessageBatch(ReadActorId1, { JsonMessage(1) });
 
         StartSession(ReadActorId2, source);
 
         const std::vector<TString> data2 = { Json2 };
-        PQWrite(data2, topicName);
+        PQWrite(data2);
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
 
         ExpectMessageBatch(ReadActorId1, { JsonMessage(2) });
@@ -381,7 +372,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         Init(topicName);
         auto source = BuildSource();
         const std::vector<TString> data = { Json1, Json2, Json3};
-        PQWrite(data, topicName);
+        PQWrite(data);
 
         StartSession(ReadActorId1, source, 1);
         StartSession(ReadActorId2, source, 2);
@@ -394,7 +385,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         ExpectMessageBatch(ReadActorId2, expected2);
 
         const std::vector<TString> data2 = { Json4 };
-        PQWrite(data2, topicName);
+        PQWrite(data2);
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         ExpectMessageBatch(ReadActorId1, { JsonMessage(4) });
         ExpectMessageBatch(ReadActorId2, { JsonMessage(4) });
@@ -411,7 +402,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StartSession(ReadActorId1, source);
 
         const std::vector<TString> data = { "not json", "noch einmal / nicht json" };
-        PQWrite(data, topicName);
+        PQWrite(data);
 
         ExpectSessionError(ReadActorId1, EStatusId::BAD_REQUEST, "INCORRECT_TYPE: The JSON element does not have the requested type.");
         StopSession(ReadActorId1, source);
@@ -429,12 +420,12 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         source.AddColumnTypes("[DataType; String]");
         StartSession(ReadActorId2, source);
 
-        PQWrite({ Json1 }, topicName);
+        PQWrite({ Json1 });
         ExpectNewDataArrived({ReadActorId1});
         ExpectMessageBatch(ReadActorId1, { JsonMessage(1) });
         ExpectSessionError(ReadActorId2, EStatusId::PRECONDITION_FAILED, "Failed to parse json messages, found 1 missing values");
 
-        PQWrite({ Json2 }, topicName);
+        PQWrite({ Json2 });
         ExpectNewDataArrived({ReadActorId1});
         ExpectMessageBatch(ReadActorId1, { JsonMessage(2) });
         ExpectSessionError(ReadActorId2, EStatusId::PRECONDITION_FAILED, "Failed to parse json messages, found 1 missing values");
@@ -451,7 +442,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StartSession(ReadActorId1, source);
 
         const std::vector<TString> data = { Json1, Json2, Json3 }; // offset 0, 1, 2
-        PQWrite(data, topicName);
+        PQWrite(data);
         ExpectNewDataArrived({ReadActorId1});
         ExpectMessageBatch(ReadActorId1, { JsonMessage(1), JsonMessage(2), JsonMessage(3) });
 
@@ -459,7 +450,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StartSession(ReadActorId2, source, 1);
         ExpectNewDataArrived({ReadActorId2});
 
-        PQWrite({ Json4 }, topicName);
+        PQWrite({ Json4 });
         ExpectNewDataArrived({ReadActorId1});
 
         ExpectMessageBatch(ReadActorId1, { JsonMessage(4) });
@@ -490,7 +481,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         auto writeMessages = [&]() {
             for (size_t i = 0; i < messagesSize; ++i) {
                 const std::vector<TString> data = { Json1 };
-                PQWrite(data, topicName);
+                PQWrite(data);
             }
             Sleep(TDuration::MilliSeconds(100));
             Runtime.DispatchEvents({}, Runtime.GetCurrentTime() - TDuration::MilliSeconds(1));
@@ -541,7 +532,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         TString json1 = "{\"dt\":100,\"value\":\"value1\", \"field1\":\"field1\"}";
         TString json2 = "{\"dt\":200,\"value\":\"value2\", \"field1\":\"field2\"}";
 
-        PQWrite({ json1, json2 }, topicName);
+        PQWrite({ json1, json2 });
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         ExpectMessageBatch(ReadActorId1, { JsonMessage(1), JsonMessage(2) });
         ExpectMessageBatch(ReadActorId2, { JsonMessage(1).AddString("field1"), JsonMessage(2).AddString("field2") });
@@ -553,7 +544,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StartSession(readActorId3, source3);
 
         TString json3 = "{\"dt\":300,\"value\":\"value3\", \"field1\":\"value1_field1\", \"field2\":\"value1_field2\"}";
-        PQWrite({ json3 }, topicName);
+        PQWrite({ json3 });
         ExpectNewDataArrived({ReadActorId1, ReadActorId2, readActorId3});
         ExpectMessageBatch(ReadActorId1, { JsonMessage(3) });
         ExpectMessageBatch(ReadActorId2, { JsonMessage(3).AddString("value1_field1") });
@@ -564,7 +555,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         TString json4 = "{\"dt\":400,\"value\":\"value4\", \"field1\":\"value2_field1\", \"field2\":\"value2_field2\"}";
         TString json5 = "{\"dt\":500,\"value\":\"value5\", \"field1\":\"value3_field1\", \"field2\":\"value3_field2\"}";
-        PQWrite({ json4, json5 }, topicName);
+        PQWrite({ json4, json5 });
         ExpectNewDataArrived({ReadActorId2});
         ExpectMessageBatch(ReadActorId2, { JsonMessage(4).AddString("value2_field1"), JsonMessage(5).AddString("value3_field1") });
 
@@ -583,7 +574,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StartSession(ReadActorId1, source1);
 
         TString json1 = "{\"dt\":100,\"field1\":\"str\",\"value\":\"value1\"}";
-        PQWrite({ json1 }, topicName);
+        PQWrite({ json1 });
         ExpectNewDataArrived({ReadActorId1});
         ExpectMessageBatch(ReadActorId1, { JsonMessage(1).AddString("str", true) });
 
@@ -600,22 +591,22 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         StartSession(ReadActorId1, source);
         std::vector<TString> data = { Json1, Json2, Json3 };
-        PQWrite2(data, 1);
+        PQWrite(data, 1);
         ExpectNewDataArrived({ReadActorId1});
         ExpectMessageBatch(ReadActorId1, { JsonMessage(1), JsonMessage(2), JsonMessage(3) });
 
         StartSession(ReadActorId2, source, 1);
         std::vector<TString> data2 = { Json1 };
-        PQWrite2(data2, 1);
+        PQWrite(data2, 1);
         ExpectNewDataArrived({ReadActorId2});
         ExpectMessageBatch(ReadActorId2, { JsonMessage(1)});
 
         StopSession(ReadActorId2, source);
         Runtime.GrabEdgeEvent<NYql::NDq::TEvMockPqEvents::TEvCreateSession>(PqGatewayNotifier, TDuration::Seconds(GrabTimeoutSec));
-        MockPqGateway->GetEventQueue(TopicPath)->Push(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(nullptr, 0, 0), 0);
+        MockPqGateway->AddEvent(TopicPath, NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(nullptr, 0, 0), 0);
 
         std::vector<TString> data3 = { Json4 };
-        PQWrite2(data3, 4);
+        PQWrite(data3, 4);
         ExpectNewDataArrived({ReadActorId1});
         ExpectMessageBatch(ReadActorId1, { JsonMessage(4) });
 

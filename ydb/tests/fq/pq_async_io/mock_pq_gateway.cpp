@@ -150,12 +150,16 @@ public:
         return MakeIntrusive<TMockTopicClient>(this);
     }
 
-    std::shared_ptr<NYql::TBlockingEQueue> GetEventQueue(const TString& topic) override {
+    std::shared_ptr<NYql::TBlockingEQueue> GetEventQueue(const TString& topic) {
         if (!Queues.contains(topic)) {
             Queues[topic] = std::make_shared<NYql::TBlockingEQueue>(4_MB);
         }
         return Queues[topic];
     }
+
+     void AddEvent(const TString& topic, NYdb::NTopic::TReadSessionEvent::TEvent&& e, size_t size) override {
+        GetEventQueue(topic)->Push(std::move(e), size);
+     }
 
 private:
     std::unordered_map<TString, std::shared_ptr<NYql::TBlockingEQueue>> Queues;

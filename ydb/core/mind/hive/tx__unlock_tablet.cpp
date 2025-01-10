@@ -22,6 +22,7 @@ public:
         , TabletId(rec.GetTabletID())
         , OwnerActor(GetOwnerActor(rec, sender))
         , SeqNo(0)
+        , Reason(NKikimrHive::LOCK_LOST_REASON_UNLOCKED)
         , Sender(sender)
         , Cookie(cookie)
     {

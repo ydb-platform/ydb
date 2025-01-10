@@ -9,6 +9,7 @@
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/common/buffer/buffer.h>
+#include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
@@ -879,6 +880,8 @@ public:
             Counters->WriteActorImmediateWritesRetries->Inc();
         }
 
+        NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWrite->Record.GetTxId(), shardId, TlsActivationContext->AsActorContext(), "WriteActor");
+
         CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", isPrepare=" << isPrepare << ", isImmediateCommit=" << isImmediateCommit << ", TxId=" << evWrite->Record.GetTxId()
             << ", LockTxId=" << evWrite->Record.GetLockTxId() << ", LockNodeId=" << evWrite->Record.GetLockNodeId()
             << ", Locks= " << [&]() {
@@ -1705,6 +1708,8 @@ public:
                 FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
             }
 
+            NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWrite->Record.GetTxId(), shardId, TlsActivationContext->AsActorContext(), "BufferActor");
+
             SendTime[shardId] = TInstant::Now();
             CA_LOG_D("Send EvWrite (external) to ShardID=" << shardId << ", isPrepare=" << !isRollback << ", isImmediateCommit=" << isRollback << ", TxId=" << evWrite->Record.GetTxId()
             << ", LockTxId=" << evWrite->Record.GetLockTxId() << ", LockNodeId=" << evWrite->Record.GetLockNodeId()
@@ -1724,7 +1729,8 @@ public:
                 NKikimr::MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
                 IEventHandle::FlagTrackDelivery,
-                0);
+                0,
+                BufferWriteActor.GetTraceId());
         }
     }
 
@@ -1807,7 +1813,8 @@ public:
             item.SetFlags(shardInfo.AffectedFlags);
         }
 
-        //TODO: NDataIntegrity
+        NDataIntegrity::LogIntegrityTrails("PlannedTx", *TxId, {}, TlsActivationContext->AsActorContext(), "BufferActor");
+
         CA_LOG_D("Execute planned transaction, coordinator: " << commitInfo.Coordinator
             << ", volitale: " << ((transaction.GetFlags() & TEvTxProxy::TEvProposeTransaction::FlagVolatile) != 0)
             << ", shards: " << affectedSet.size());

@@ -72,14 +72,79 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        // check executer logs
-        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 2);
+        // check write actor logs
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: WriteActor"), 1);
         // check session actor logs
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 2);
         // check grpc logs
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY TRACE: Component: Grpc"), 2);
         // check datashard logs
-        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: DataShard"), 4);
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: DataShard"), 2);
+    }
+
+    Y_UNIT_TEST_TWIN(UpsertEvWriteQueryService, isOlap) {
+        NKikimrConfig::TAppConfig AppConfig;
+        if (!isOlap) {
+            AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        } else {
+            AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        }
+        TKikimrSettings serverSettings = TKikimrSettings().SetAppConfig(AppConfig);
+        TStringStream ss;
+        serverSettings.LogStream = &ss;
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            const TString query = Sprintf(R"(
+                CREATE TABLE `/Root/test_evwrite` (
+                    Key Int64 NOT NULL,
+                    Value String,
+                    primary key (Key)
+                ) WITH (STORE=%s);
+            )", isOlap ? "COLUMN" : "ROW");
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        ss.Clear();
+
+        auto result = session.ExecuteQuery(R"(
+            --!syntax_v1
+
+            UPSERT INTO `/Root/test_evwrite` (Key, Value) VALUES
+                (3u, "Value3"),
+                (101u, "Value101"),
+                (201u, "Value201");
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        if (!isOlap) {
+            // check write actor logs
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: WriteActor"), 1);
+            // check session actor logs
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 2);
+            // check grpc logs
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY TRACE: Component: Grpc"), 2);
+            // check datashard logs
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: DataShard"), 2);
+        } else {
+            // check write actor logs
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: WriteActor"), 3);
+            // check executer logs
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 4);
+            // check session actor logs
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 2);
+            // check grpc logs
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY TRACE: Component: Grpc"), 2);
+            // check columnshard logs
+            // ColumnShard doesn't have integrity logs.
+            // UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: ColumnShard"), 6);
+        }
     }
 
     Y_UNIT_TEST(Ddl) {

@@ -13,7 +13,7 @@ PEERDIR(
     library/cpp/testing/unittest
     ydb/core/fq/libs/row_dispatcher/format_handler/ut/common
     ydb/core/fq/libs/row_dispatcher
-    ydb/core/testlib    
+    ydb/core/testlib
     ydb/core/testlib/actors
     ydb/tests/fq/pq_async_io
     yql/essentials/sql/pg_dummy

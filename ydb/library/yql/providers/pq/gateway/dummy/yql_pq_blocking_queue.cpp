@@ -1,9 +1,7 @@
 #include "yql_pq_blocking_queue.h"
 
-#include <thread>
-
 #include <library/cpp/threading/future/async.h>
-
+//#include <thread>
 
 namespace NYql {
 

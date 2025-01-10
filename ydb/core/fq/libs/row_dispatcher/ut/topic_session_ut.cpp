@@ -70,8 +70,8 @@ public:
         TopicSession = Runtime.Register(NewTopicSession(
             "read_group",
             topicPath,
-            !MockTopicSession ? GetDefaultPqEndpoint() : "endpoint",
-            !MockTopicSession ? GetDefaultPqDatabase() : "database",
+            GetDefaultPqEndpoint(),
+            GetDefaultPqDatabase(),
             Config,
             RowDispatcherActorId,
             compileServiceActorId,
@@ -115,12 +115,12 @@ public:
 
     NYql::NPq::NProto::TDqPqTopicSource BuildSource(bool emptyPredicate = false, const TString& consumer = DefaultPqConsumer) {
         NYql::NPq::NProto::TDqPqTopicSource settings;
-        settings.SetEndpoint(!MockTopicSession ? GetDefaultPqEndpoint() : "endpoint");
+        settings.SetEndpoint(GetDefaultPqEndpoint());
         settings.SetTopicPath(TopicPath);
         settings.SetConsumerName(consumer);
         settings.SetFormat("json_each_row");
         settings.MutableToken()->SetName("token");
-        settings.SetDatabase(!MockTopicSession ? GetDefaultPqDatabase() : "database");
+        settings.SetDatabase(GetDefaultPqDatabase());
         settings.AddColumns("dt");
         settings.AddColumns("value");
         settings.AddColumnTypes("[DataType; Uint64]");

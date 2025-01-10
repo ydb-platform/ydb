@@ -16,14 +16,14 @@ public:
             Queue->~TBlockingEQueue();
             new (Queue.get()) NYql::TBlockingEQueue(4_MB);
         }
-        Pool_.Start(1);
+        ThreadPool.Start(1);
     }
 
     NThreading::TFuture<void> WaitEvent() override {
         return NThreading::Async([&] () {
             Queue->BlockUntilEvent();
             return NThreading::MakeFuture();
-        }, Pool_);
+        }, ThreadPool);
     }
 
     TVector<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount, size_t maxByteSize) override {
@@ -49,14 +49,14 @@ public:
     bool Close(TDuration timeout = TDuration::Max()) override {
         Y_UNUSED(timeout);
         Queue->Stop();
-        Pool_.Stop();
+        ThreadPool.Stop();
         return true;
     }
 
     NYdb::NTopic::TReaderCounters::TPtr GetCounters() const override {return nullptr;}
     TString GetSessionId() const override {return "fake";}
 private:
-    TThreadPool Pool_;
+    TThreadPool ThreadPool;
     NYdb::NTopic::TPartitionSession::TPtr Session;
     std::shared_ptr<NYql::TBlockingEQueue> Queue;
 };

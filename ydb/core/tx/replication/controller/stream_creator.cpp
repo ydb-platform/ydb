@@ -65,6 +65,9 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
                 .AppendAddChangefeeds(Changefeed)));
             break;
+        case TReplication::ETargetKind::Topic:
+            // TODO
+            break;
         }
 
         Become(&TThis::StateCreateStream);
@@ -106,6 +109,9 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             return CanonizePath(ChildPath(SplitPath(SrcPath), Changefeed.GetName()));
         case TReplication::ETargetKind::IndexTable:
             return CanonizePath(ChildPath(SplitPath(SrcPath), {"indexImplTable", Changefeed.GetName()}));
+        case TReplication::ETargetKind::Topic:
+            // TODO
+            return CanonizePath(ChildPath(SplitPath(SrcPath), Changefeed.GetName()));
         }
     }
 

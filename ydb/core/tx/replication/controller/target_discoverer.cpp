@@ -42,10 +42,20 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             switch (entry.Type) {
             case NYdb::NScheme::ESchemeEntryType::SubDomain:
             case NYdb::NScheme::ESchemeEntryType::Directory:
-                Pending.erase(it);
-                return ListDirectory(path);
+                if (Type == NKikimrReplication::EReplicationType::REPLICATION_TYPE_REPLICATION) {
+                    Pending.erase(it);
+                    return ListDirectory(path);
+                }
+                break;
             case NYdb::NScheme::ESchemeEntryType::Table:
-                return DescribeTable(ev->Cookie);
+                if (Type == NKikimrReplication::EReplicationType::REPLICATION_TYPE_REPLICATION) {
+                    return DescribeTable(ev->Cookie);
+                }
+                break;
+            case NYdb::NScheme::ESchemeEntryType::Topic:
+                if (Type == NKikimrReplication::EReplicationType::REPLICATION_TYPE_TRANSFER) {
+                    return DescribeTopic(ev->Cookie);
+                }
             default:
                 break;
             }
@@ -124,6 +134,52 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             }
         } else {
             LOG_E("Describe table failed"
+                << ": path# " << path.first
+                << ", status# " << result.GetStatus()
+                << ", issues# " << result.GetIssues().ToOneLineString());
+
+            if (IsRetryableError(result)) {
+                return RetryDescribe(*it);
+            } else {
+                Failed.emplace_back(path.first, result);
+            }
+        }
+
+        Pending.erase(it);
+        MaybeReply();
+    }
+
+    void DescribeTopic(ui32 idx) {
+        Y_ABORT_UNLESS(idx < Paths.size());
+        Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(Paths.at(idx).first, {}), 0, idx);
+        Pending.insert(idx);
+    }
+
+    void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+
+        auto it = Pending.find(ev->Cookie);
+        if (it == Pending.end()) {
+            LOG_W("Unknown describe topic response"
+                << ": cookie# " << ev->Cookie);
+            return;
+        }
+
+        Y_ABORT_UNLESS(*it < Paths.size());
+        const auto& path = Paths.at(*it);
+
+        const auto& result = ev->Get()->Result;
+        if (result.IsSuccess()) {
+            LOG_D("Describe topic succeeded"
+                << ": path# " << path.first);
+
+            const auto& target = ToAdd.emplace_back(path.first, path.second, TReplication::ETargetKind::Topic);
+            LOG_I("Add target"
+                << ": srcPath# " << target.SrcPath
+                << ", dstPath# " << target.DstPath
+                << ", kind# " << target.Kind);
+        } else {
+            LOG_E("Describe topic failed"
                 << ": path# " << path.first
                 << ", status# " << result.GetStatus()
                 << ", issues# " << result.GetIssues().ToOneLineString());
@@ -263,11 +319,12 @@ public:
         return NKikimrServices::TActivity::REPLICATION_CONTROLLER_TARGET_DISCOVERER;
     }
 
-    explicit TTargetDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy, TVector<std::pair<TString, TString>>&& paths)
+    explicit TTargetDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy, TVector<std::pair<TString, TString>>&& paths, const NKikimrReplication::EReplicationType type)
         : Parent(parent)
         , ReplicationId(rid)
         , YdbProxy(proxy)
         , Paths(std::move(paths))
+        , Type(type)
         , LogPrefix("TargetDiscoverer", ReplicationId)
     {
     }
@@ -285,6 +342,7 @@ public:
             hFunc(TEvYdbProxy::TEvDescribePathResponse, Handle);
             hFunc(TEvYdbProxy::TEvListDirectoryResponse, Handle);
             hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
+            hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
             sFunc(TEvents::TEvWakeup, Retry);
             sFunc(TEvents::TEvPoison, PassAway);
         }
@@ -295,6 +353,7 @@ private:
     const ui64 ReplicationId;
     const TActorId YdbProxy;
     TVector<std::pair<TString, TString>> Paths;
+    const NKikimrReplication::EReplicationType Type;
     const TActorLogPrefix LogPrefix;
 
     ui64 NextListingId = 1;
@@ -309,9 +368,9 @@ private:
 }; // TTargetDiscoverer
 
 IActor* CreateTargetDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy,
-    TVector<std::pair<TString, TString>>&& specificPaths)
+    TVector<std::pair<TString, TString>>&& specificPaths, NKikimrReplication::EReplicationType type)
 {
-    return new TTargetDiscoverer(parent, rid, proxy, std::move(specificPaths));
+    return new TTargetDiscoverer(parent, rid, proxy, std::move(specificPaths), type);
 }
 
 }

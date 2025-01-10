@@ -33,7 +33,8 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(),
             TVector<std::pair<TString, TString>>{
                 {"/Root", "/Root/Replicated"},
-            }
+            },
+            NKikimrReplication::EReplicationType::REPLICATION_TYPE_REPLICATION
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(env.GetSender());
@@ -56,7 +57,8 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(),
             TVector<std::pair<TString, TString>>{
                 {"/Root", "/Root/Replicated"},
-            }
+            },
+            NKikimrReplication::EReplicationType::REPLICATION_TYPE_REPLICATION
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(env.GetSender());
@@ -76,7 +78,8 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(),
             TVector<std::pair<TString, TString>>{
                 {"/Root/Table", "/Root/ReplicatedTable"},
-            }
+            },
+            NKikimrReplication::EReplicationType::REPLICATION_TYPE_REPLICATION
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(env.GetSender());
@@ -98,7 +101,8 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(),
             TVector<std::pair<TString, TString>>{
                 {"/Root", "/Root/Replicated"},
-            }
+            },
+            NKikimrReplication::EReplicationType::REPLICATION_TYPE_REPLICATION
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(env.GetSender());
@@ -121,7 +125,8 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(),
             TVector<std::pair<TString, TString>>{
                 {"/Root", "/Root/Replicated"},
-            }
+            },
+            NKikimrReplication::EReplicationType::REPLICATION_TYPE_REPLICATION
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(env.GetSender());
@@ -148,7 +153,8 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, ydbProxy,
             TVector<std::pair<TString, TString>>{
                 {"/Root", "/Root/Replicated"},
-            }
+            },
+            NKikimrReplication::EReplicationType::REPLICATION_TYPE_REPLICATION
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(env.GetSender());

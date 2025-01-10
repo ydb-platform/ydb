@@ -52,6 +52,12 @@ message TConsistencySettings {
     }
 }
 
+enum EReplicationType {
+    REPLICATION_TYPE_UNSPECIFIED = 0;
+    REPLICATION_TYPE_REPLICATION = 1;
+    REPLICATION_TYPE_TRANSFER = 2;
+}
+
 message TReplicationConfig {
     message TTargetEverything {
         optional string DstPrefix = 1;

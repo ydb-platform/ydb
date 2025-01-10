@@ -121,6 +121,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
             break;
         case TReplication::ETargetKind::IndexTable:
+        case TReplication::ETargetKind::Topic:
             Y_ABORT("unreachable");
         }
     }
@@ -364,6 +365,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         case TReplication::ETargetKind::Table:
             return CheckTableScheme(desc.GetTable(), error);
         case TReplication::ETargetKind::IndexTable:
+        case TReplication::ETargetKind::Topic:
             Y_ABORT("unreachable");
         }
     }
@@ -630,6 +632,7 @@ public:
         case TReplication::ETargetKind::Table:
             return Resolve(PathId);
         case TReplication::ETargetKind::IndexTable:
+        case TReplication::ETargetKind::Topic:
             // indexed table will be created along with its indexes
             return SubscribeDstPath();
         }

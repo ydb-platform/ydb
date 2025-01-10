@@ -50,6 +50,9 @@ class TReplication::TImpl: public TLagProvider {
             return new TTargetTable(self, id, std::forward<Args>(args)...);
         case ETargetKind::IndexTable:
             return new TTargetIndexTable(self, id, std::forward<Args>(args)...);
+        case ETargetKind::Topic:
+            // TODO
+            return new TTargetIndexTable(self, id, std::forward<Args>(args)...);
         }
     }
 
@@ -68,7 +71,19 @@ class TReplication::TImpl: public TLagProvider {
                     paths.emplace_back(target.GetSrcPath(), target.GetDstPath());
                 }
 
-                TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, std::move(paths)));
+                TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, std::move(paths),
+                    NKikimrReplication::EReplicationType::REPLICATION_TYPE_REPLICATION));
+                break;
+            }
+
+            case NKikimrReplication::TReplicationConfig::kTransferSpecific: {
+                TVector<std::pair<TString, TString>> paths;
+                for (const auto& target : Config.GetTransferSpecific().GetTargets()) {
+                    paths.emplace_back(target.GetSrcPath(), target.GetDstPath());
+                }
+
+                TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, std::move(paths),
+                    NKikimrReplication::EReplicationType::REPLICATION_TYPE_TRANSFER));
                 break;
             }
 
@@ -125,6 +140,7 @@ public:
                 switch (target->GetKind()) {
                 case ETargetKind::Table:
                 case ETargetKind::IndexTable:
+                case ETargetKind::Topic:
                     TargetTablePaths.push_back(target->GetDstPath());
                     break;
                 }

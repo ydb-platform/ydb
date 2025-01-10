@@ -140,6 +140,9 @@ public:
     }
 
     void LinkInsertWriteIdToOperationWriteId(const std::vector<TInsertWriteId>& insertions, const TOperationWriteId operationId) {
+        const auto op = GetOperationVerified(operationId);
+        AFL_VERIFY(op->GetInsertWriteIds() == insertions)("operation_data", JoinSeq(", ", op->GetInsertWriteIds()))(
+            "expected", JoinSeq(", ", insertions));
         for (auto&& i : insertions) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "add_by_insert_id")("id", i)("operation_id", operationId);
             InsertWriteIdToOpWriteId.emplace(i, operationId);

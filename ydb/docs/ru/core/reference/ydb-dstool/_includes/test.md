@@ -2,7 +2,7 @@
 ydb-dstool -e <bs_endpoint> cluster list
 ```
 
-* `bs_endpoint` — URI интерфейса управления распределенным хранилищем кластера {{ ydb-short-name }}. Интерфейс доступен на любом узле кластера по протоколу HTTP на порте 8765 по умолчанию. Пример URI: `http://localhost:8765`.
+* `bs_endpoint` — URI HTTP-эндпоинта кластера — это тот же самый эндпоинт, который обслуживает Embedded UI. Пример: http://localhost:8765.
 
 Результат:
 

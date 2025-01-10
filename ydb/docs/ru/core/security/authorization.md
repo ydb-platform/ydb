@@ -42,17 +42,33 @@
 
 {% include [!](../_includes/do-not-create-users-in-ldap.md) %}
 
-Отдельно выделяется пользователь `root`. Он создаётся при [первоначальном развёртывании кластера](../devops/manual/initial-deployment.md#initialize-cluster), в ходе которой ему нужно сразу [установить пароль](../devops/manual/initial-deployment.md#security-setup).
+{% note info %}
+
+Отдельно выделяется пользователь `root` с максимальными правами. Он создаётся при первоначальном развёртывании кластера, в ходе которой ему нужно сразу установить пароль. В дальнейшем использование данной учетной записи не рекомендуется и следует завести пользователей с ограниченными правами.
+
+Подробнее про первоначальное развертывание:
+
+* [Ansible](../devops/ansible/initial-deployment.md)
+* [Kubernetes](../devops/kubernetes/initial-deployment.md)
+* [Вручную](../devops/manual/initial-deployment.md)
+
+{% endnote %}
 
 ### Группа {#group}
 
 Группа пользователей — именованное множество пользователей, предназначенное для упрощения конфигурации контроля доступа.
 За группой можно закрепить любые необходимые [права](#right) на произвольный набор [объектов доступа](#object).
 
-Группа пользователей может быть пустой, когда в неё не входит ни один пользователь.
-
 Любого пользователя можно включить в ту или иную группу доступа или исключить из неё. Как только пользователь включается в группу доступа, он получает все права на объекты базы данных, которые предоставлялись группе доступа.
 Так, с помощью групп доступа {{ ydb-short-name }} можно реализовать бизнес-роли пользовательских приложений, заранее настроив требуемые права доступа на нужные объекты.
+
+{% note info %}
+
+Группа пользователей может быть пустой, когда в неё не входит ни один пользователь.
+
+Группы пользователей могут быть вложенными.
+
+{% endnote %}
 
 Для создания, изменения и удаления групп есть следующие виды YQL запросов:
 
@@ -81,20 +97,6 @@
 * [{#T}](../yql/reference/syntax/grant.md).
 * [{#T}](../yql/reference/syntax/revoke.md).
 
-В качестве имен прав доступа в этих командах можно использовать специфичные для {{ ydb-short-name }} права или соответствующие им ключевые слова.
-
-Пример использования c ключевым словом YQL:
-
-```yql
-GRANT CREATE DIRECTORY ON `/Root/db1` TO testuser
-```
-
-Пример использования c именем {{ ydb-short-name }} права:
-
-```yql
-GRANT "ydb.granular.create_directory" ON `/Root/db1` TO testuser
-```
-
 ### Управление правами с помощью CLI
 
 Для управления правами служат следующие CLI-команды:
@@ -105,13 +107,6 @@ GRANT "ydb.granular.create_directory" ON `/Root/db1` TO testuser
 * [set](../reference/ydb-cli/commands/scheme-permissions.md#set)
 * [clear](../reference/ydb-cli/commands/scheme-permissions.md#clear)
 * [list](../reference/ydb-cli/commands/scheme-permissions.md#list)
-
-В CLI используется только стиль из столбца "{{ ydb-short-name }} право".
-Например:
-
-```bash
-{{ ydb-short-name }} scheme permissions grant -p "ydb.granular.create_directory" `/Root/db1` testuser
-```
 
 ### Просмотр прав с помощью CLI
 
@@ -126,12 +121,6 @@ GRANT "ydb.granular.create_directory" ON `/Root/db1` TO testuser
 Для владельца не проверяются ACL права на данный объект. Он имеет полный набор прав на объект.
 
 Сменить владельца можно с помощью CLI команды [`chown`](../reference/ydb-cli/commands/scheme-permissions.md#chown).
-
-Пример команды `chown`:
-
-```bash
-{{ ydb-cli }} scheme permissions chown '/Root/db1' testuser
-```
 
 ## Список разрешений {#acl}
 

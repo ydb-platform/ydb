@@ -282,6 +282,64 @@ class WorkloadInsertDelete(WorkloadBase):
     def get_workload_thread_funcs(self):
         return [self._loop]
 
+class WorkloadUpsert(WorkloadBase):
+    def __init__(self, client, prefix, stop):
+        super().__init__(client, prefix, "upsert", stop)
+        self.upsertions = 0
+        self.current_rows = 0
+        self.table_name = "table"
+        self.lock = threading.Lock()
+        self.table_created = False
+
+        self._init_table()
+    
+    def get_stat(self):
+        with self.lock:
+            return f"Upserted: {self.upsertions}, current rows: {self.current_rows}"
+
+    def _init_table(self):
+        table_path = self.get_table_path(self.table_name)
+        self.client.query(
+            f"""
+                CREATE TABLE IF NOT EXISTS `{table_path}` (
+                id Int64 NOT NULL,
+                value Int64,
+                PRIMARY KEY(id)
+                )
+                PARTITION BY HASH(id)
+                WITH (
+                    STORE = COLUMN
+                )
+            """,
+            True,
+        )
+    
+    def _upsert_loop(self):
+        table_path = self.get_table_path(self.table_name)
+        while not self.is_stop_requested():
+            arr = [f'({random.randint(0, 60)}, {random.randint(0, 60)})' for _ in range(1000)]
+            self.client.query(
+                f"""
+                UPSERT INTO `{table_path}` (`id`, `value`)
+                VALUES
+                {',\n'.join(arr)}
+            """,
+                False,
+            )
+
+            actual = self.client.query(
+                f"""
+                SELECT COUNT(*) as rows, SUM(value) as vals FROM `{table_path}`
+            """,
+                False,
+            )[0].rows[0]
+
+            with self.lock:
+                self.upsertions += 1
+                self.current_rows = actual["rows"]
+
+    def get_workload_thread_funcs(self):
+        return [self._upsert_loop for _ in range(2)]
 
 class WorkloadRunner:
     def __init__(self, client, name, duration, allow_nullables_in_pk):
@@ -303,12 +361,15 @@ class WorkloadRunner:
         deleted = client.remove_recursively(self.tables_prefix)
         print(f"Cleaning up {self.tables_prefix}... done, {deleted} tables deleted")
 
-    def run(self):
+    def run(self, mode):
         stop = threading.Event()
-        workloads = [
-            WorkloadTablesCreateDrop(self.client, self.name, stop, self.allow_nullables_in_pk),
-            WorkloadInsertDelete(self.client, self.name, stop),
-        ]
+        workloads = []
+        if 'create' in mode:
+            workloads.append(WorkloadTablesCreateDrop(self.client, self.name, stop, self.allow_nullables_in_pk))
+        if 'insert' in mode:
+            workloads.append(WorkloadInsertDelete(self.client, self.name, stop))
+        if 'upsert' in mode:
+            workloads.append(WorkloadUpsert(self.client, self.name, stop))
         for w in workloads:
             w.start()
         started_at = started_at = time.time()
@@ -328,13 +389,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="olap stability workload", formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--endpoint", default="localhost:2135", help="An endpoint to be used")
+    parser.add_argument("--endpoint", default="localhost:2136", help="An endpoint to be used")
     parser.add_argument("--database", default="Root/test", help="A database to connect")
     parser.add_argument("--path", default="olap_workload", help="A path prefix for tables")
     parser.add_argument("--duration", default=10 ** 9, type=lambda x: int(x), help="A duration of workload in seconds.")
     parser.add_argument("--allow-nullables-in-pk", default=False, help="Allow nullable types for columns in a Primary Key.")
+    parser.add_argument("--mode", default='create,insert', help="Workload mode: create, insert or upsert")
     args = parser.parse_args()
     client = YdbClient(args.endpoint, args.database, True)
     client.wait_connection()
     with WorkloadRunner(client, args.path, args.duration, args.allow_nullables_in_pk) as runner:
-        runner.run()
+        runner.run(args.mode.split(','))

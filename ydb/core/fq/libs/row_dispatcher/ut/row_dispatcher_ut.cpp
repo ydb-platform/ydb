@@ -136,7 +136,7 @@ public:
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event, 0, generation));
     }
 
-    void MockStopSession(const NYql::NPq::NProto::TDqPqTopicSource& source, ui64 partitionId, TActorId readActorId) {
+    void MockStopSession(const NYql::NPq::NProto::TDqPqTopicSource& source, TActorId readActorId) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
         event->Record.MutableSource()->CopyFrom(source);
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, 1));
@@ -156,7 +156,7 @@ public:
         Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release(), 0, generation));
     }
 
-    void MockSessionError(ui64 partitionId, TActorId topicSessionId, TActorId readActorId) {
+    void MockSessionError(TActorId topicSessionId, TActorId readActorId) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvSessionError>();
         event->ReadActorId = readActorId;
         Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release()));
@@ -206,7 +206,7 @@ public:
         UNIT_ASSERT(eventHolder.Get() != nullptr);
     }
 
-    void ExpectSessionError(NActors::TActorId readActorId, ui64 partitionId) {
+    void ExpectSessionError(NActors::TActorId readActorId) {
         auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvSessionError>(readActorId);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
     }
@@ -254,7 +254,7 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
 
         ProcessData(ReadActorId1, PartitionId0, topicSessionId);
 
-        MockStopSession(Source1, PartitionId0, ReadActorId1);
+        MockStopSession(Source1, ReadActorId1);
         ExpectStopSession(topicSessionId);
     }
 
@@ -271,11 +271,11 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ProcessData(ReadActorId1, PartitionId0, topicSessionId);
         ProcessData(ReadActorId2, PartitionId0, topicSessionId);
 
-        MockSessionError(PartitionId0, topicSessionId, ReadActorId1);
-        ExpectSessionError(ReadActorId1, PartitionId0);
+        MockSessionError(topicSessionId, ReadActorId1);
+        ExpectSessionError(ReadActorId1);
 
-        MockSessionError(PartitionId0, topicSessionId, ReadActorId2);
-        ExpectSessionError(ReadActorId2, PartitionId0);
+        MockSessionError(topicSessionId, ReadActorId2);
+        ExpectSessionError(ReadActorId2);
     }
 
     Y_UNIT_TEST_F(SessionError, TFixture) {
@@ -284,8 +284,8 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ExpectStartSessionAck(ReadActorId1);
         ExpectStartSession(topicSessionId);
 
-        MockSessionError(PartitionId0, topicSessionId, ReadActorId1);
-        ExpectSessionError(ReadActorId1, PartitionId0);
+        MockSessionError(topicSessionId, ReadActorId1);
+        ExpectSessionError(ReadActorId1);
     }
 
     Y_UNIT_TEST_F(CoordinatorSubscribe, TFixture) {
@@ -335,20 +335,20 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ProcessData(ReadActorId2, PartitionId0, topicSession3);
         ProcessData(ReadActorId2, PartitionId1, topicSession4);
 
-        MockSessionError(PartitionId0, topicSession1, ReadActorId1);
-        ExpectSessionError(ReadActorId1, PartitionId0);
+        MockSessionError(topicSession1, ReadActorId1);
+        ExpectSessionError(ReadActorId1);
 
         ProcessData(ReadActorId1, PartitionId1, topicSession2);
         ProcessData(ReadActorId2, PartitionId0, topicSession3);
         ProcessData(ReadActorId2, PartitionId1, topicSession4);
 
-        MockStopSession(Source1, PartitionId1, ReadActorId1);
+        MockStopSession(Source1, ReadActorId1);
         ExpectStopSession(topicSession2);
         
-        MockStopSession(Source2, PartitionId0, ReadActorId2);
+        MockStopSession(Source2, ReadActorId2);
         ExpectStopSession(topicSession3);
 
-        MockStopSession(Source2, PartitionId1, ReadActorId2);
+        MockStopSession(Source2, ReadActorId2);
         ExpectStopSession(topicSession4);
 
         // Ignore data after StopSession
@@ -411,10 +411,10 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ProcessData(ReadActorId1, PartitionId0, session1);
         ProcessData(ReadActorId2, PartitionId0, session2);
 
-        MockStopSession(Source1, PartitionId0, ReadActorId1);
+        MockStopSession(Source1, ReadActorId1);
         ExpectStopSession(session1);
 
-        MockStopSession(Source1Connection2, PartitionId0, ReadActorId2);
+        MockStopSession(Source1Connection2, ReadActorId2);
         ExpectStopSession(session2);
     }
 }

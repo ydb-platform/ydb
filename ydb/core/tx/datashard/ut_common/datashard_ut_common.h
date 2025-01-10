@@ -598,6 +598,10 @@ void ApplyChanges(
             NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK);
 
 TRowVersion CommitWrites(
+        TTestActorRuntime& runtime,
+        const TVector<TString>& tables,
+        ui64 writeTxId);
+TRowVersion CommitWrites(
         Tests::TServer::TPtr server,
         const TVector<TString>& tables,
         ui64 writeTxId);
@@ -725,6 +729,12 @@ struct TReadShardedTableState {
 };
 
 TReadShardedTableState StartReadShardedTable(
+        TTestActorRuntime& runtime,
+        const TString& path,
+        TRowVersion snapshot = TRowVersion::Max(),
+        bool pause = true,
+        bool ordered = true);
+TReadShardedTableState StartReadShardedTable(
         Tests::TServer::TPtr server,
         const TString& path,
         TRowVersion snapshot = TRowVersion::Max(),
@@ -735,6 +745,10 @@ void ResumeReadShardedTable(
         Tests::TServer::TPtr server,
         TReadShardedTableState& state);
 
+TString ReadShardedTable(
+        TTestActorRuntime& runtime,
+        const TString& path,
+        TRowVersion snapshot = TRowVersion::Max());
 TString ReadShardedTable(
         Tests::TServer::TPtr server,
         const TString& path,

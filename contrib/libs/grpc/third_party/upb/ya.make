@@ -2,7 +2,7 @@
 
 LIBRARY()
 
-VERSION(1.54.2)
+VERSION(1.54.3)
 
 LICENSE(
     BSD-3-Clause AND

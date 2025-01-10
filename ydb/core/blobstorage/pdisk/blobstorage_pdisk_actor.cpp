@@ -901,6 +901,9 @@ public:
             break;
         case TEvYardControl::PDiskStop:
             PDisk->Stop();
+            *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::Stopped;
+            *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Stopped;
+            *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::StoppedByYardControl;
             InitError("Received TEvYardControl::PDiskStop");
             Send(ev->Sender, new NPDisk::TEvYardControlResult(NKikimrProto::OK, evControl.Cookie, {}));
             break;
@@ -1220,10 +1223,12 @@ public:
             }
         }
         if (cgi.Has("restartPDisk")) {
-            ui32 cookieIdxPart = NextRestartRequestCookie++;
-            ui64 fullCookie = (((ui64) PCtx->PDiskId) << 32) | cookieIdxPart; // This way cookie will be unique no matter the disk.
+            bool ignoreChecks = "true" == cgi.Get("ignoreChecks");
 
-            Send(NodeWardenServiceId, new TEvBlobStorage::TEvAskWardenRestartPDisk(PCtx->PDiskId), fullCookie);
+            ui32 cookieIdxPart = NextRestartRequestCookie++;
+            ui64 fullCookie = (((ui64) PCtx->PDiskId) << 32) | cookieIdxPart; // This way cookie will be unique regardless of the disk.
+
+            Send(NodeWardenServiceId, new TEvBlobStorage::TEvAskWardenRestartPDisk(PCtx->PDiskId, ignoreChecks), fullCookie);
             // Send responce later when restart command will be received.
             PendingRestartResponse = [this, actor = ev->Sender] (bool restartAllowed, TString& details) {
                 TStringStream jsonBuilder;

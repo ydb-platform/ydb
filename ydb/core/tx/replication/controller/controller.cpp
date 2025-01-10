@@ -82,6 +82,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvService::TEvGetTxId, Handle);
         HFunc(TEvService::TEvHeartbeat, Handle);
         HFunc(TEvTxAllocatorClient::TEvAllocateResult, Handle);
+        HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
         HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
     default:
         HandleDefaultEvents(ev, SelfId());
@@ -131,6 +132,10 @@ void TController::Reset() {
     SysParams.Reset();
     Replications.clear();
     ReplicationsByPathId.clear();
+    AssignedTxIds.clear();
+    Workers.clear();
+    WorkersWithHeartbeat.clear();
+    WorkersByHeartbeat.clear();
 }
 
 void TController::Handle(TEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx) {
@@ -791,7 +796,7 @@ void TController::Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext
 
     const auto& record = ev->Get()->Record;
     const auto id = TWorkerId::Parse(record.GetWorker());
-    const auto version = TRowVersion::Parse(record.GetVersion());
+    const auto version = TRowVersion::FromProto(record.GetVersion());
     PendingHeartbeats[id] = version;
 
     RunTxHeartbeat(ctx);

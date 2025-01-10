@@ -59,6 +59,9 @@ namespace NActors {
         void DropUnregistered();
         const std::vector<THolder<IActor>>& GetUnregistered() const { return DyingActors; }
 
+        TActorId RegisterAlias(TMailbox* mailbox, IActor* actor);
+        void UnregisterAlias(TMailbox* mailbox, const TActorId& actorId);
+
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
         void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
@@ -74,6 +77,12 @@ namespace NActors {
 
         TThreadId GetThreadId() const; // blocks, must be called after Start()
         TWorkerId GetWorkerId() const;
+
+        void SubscribeToPreemption(TActorId actorId);
+        ui32 GetOverwrittenEventsPerMailbox() const;
+        void SetOverwrittenEventsPerMailbox(ui32 value);
+        ui64 GetOverwrittenTimePerMailboxTs() const;
+        void SetOverwrittenTimePerMailboxTs(ui64 value);
 
     protected:
         TProcessingResult ProcessExecutorPool(IExecutorPool *pool);

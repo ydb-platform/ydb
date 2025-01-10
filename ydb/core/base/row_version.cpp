@@ -6,13 +6,23 @@
 
 namespace NKikimr {
 
-TRowVersion TRowVersion::Parse(const NKikimrProto::TRowVersion& proto) {
+TRowVersion TRowVersion::FromProto(const NKikimrProto::TRowVersion& proto) {
     return TRowVersion(proto.GetStep(), proto.GetTxId());
 }
 
-void TRowVersion::Serialize(NKikimrProto::TRowVersion& proto) const {
+void TRowVersion::ToProto(NKikimrProto::TRowVersion& proto) const {
     proto.SetStep(Step);
     proto.SetTxId(TxId);
+}
+
+void TRowVersion::ToProto(NKikimrProto::TRowVersion* proto) const {
+    ToProto(*proto);
+}
+
+NKikimrProto::TRowVersion TRowVersion::ToProto() const {
+    NKikimrProto::TRowVersion proto;
+    ToProto(proto);
+    return proto;
 }
 
 } // NKikimr

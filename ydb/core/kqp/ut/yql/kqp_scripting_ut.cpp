@@ -732,6 +732,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         }
         UNIT_ASSERT(unsuccessStatus);
         WaitForZeroSessions(counters);
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
     }
 
     void DoStreamExecuteYqlScriptTimeoutBruteForce(bool clientTimeout, bool operationTimeout) {
@@ -774,6 +775,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         }
 
         WaitForZeroSessions(counters);
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
     }
 
     Y_UNIT_TEST(StreamExecuteYqlScriptScanCancelAfterBruteForce) {
@@ -816,6 +818,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         }
 
         WaitForZeroSessions(counters);
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
     }
 
     // Check in case of CANCELED status we have no made changes in the table
@@ -866,6 +869,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         }
 
         WaitForZeroSessions(counters);
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
     }
 
     Y_UNIT_TEST(StreamExecuteYqlScriptWriteCancelAfterBruteForced) {
@@ -905,6 +909,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         }
 
         WaitForZeroSessions(counters);
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
     }
 
     Y_UNIT_TEST(StreamExecuteYqlScriptScanClientTimeoutBruteForce) {

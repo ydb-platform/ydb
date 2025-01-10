@@ -2386,7 +2386,7 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
         extraData = tableInfo->SerializeAlterExtraData();
     } else if (txState.TxType == TTxState::TxCopyTable) {
         NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
-        PathIdFromPathId(txState.CdcPathId, proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
+        txState.CdcPathId.ToProto(proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
         bool serializeRes = proto.SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
     }
@@ -2992,6 +2992,31 @@ void TSchemeShard::PersistRemoveExternalDataSource(NIceDb::TNiceDb& db, TPathId 
     }
 
     db.Table<Schema::ExternalDataSource>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+}
+
+void TSchemeShard::PersistExternalDataSourceReference(NIceDb::TNiceDb& db, TPathId pathId, const TPath& referrer) {
+    auto findSource = ExternalDataSources.FindPtr(pathId);
+    Y_ABORT_UNLESS(findSource);
+    auto* ref = (*findSource)->ExternalTableReferences.AddReferences();
+    ref->SetPath(referrer.PathString());
+    referrer->PathId.ToProto(ref->MutablePathId());
+    db.Table<Schema::ExternalDataSource>()
+        .Key(pathId.OwnerId, pathId.LocalPathId)
+        .Update(
+            NIceDb::TUpdate<Schema::ExternalDataSource::ExternalTableReferences>{ (*findSource)->ExternalTableReferences.SerializeAsString() });
+}
+
+void TSchemeShard::PersistRemoveExternalDataSourceReference(NIceDb::TNiceDb& db, TPathId pathId, TPathId referrer) {
+    auto findSource = ExternalDataSources.FindPtr(pathId);
+    Y_ABORT_UNLESS(findSource);
+    EraseIf(*(*findSource)->ExternalTableReferences.MutableReferences(),
+        [referrer](const NKikimrSchemeOp::TExternalTableReferences::TReference& reference) {
+            return TPathId::FromProto(reference.GetPathId()) == referrer;
+        });
+    db.Table<Schema::ExternalDataSource>()
+        .Key(pathId.OwnerId, pathId.LocalPathId)
+        .Update(
+            NIceDb::TUpdate<Schema::ExternalDataSource::ExternalTableReferences>{ (*findSource)->ExternalTableReferences.SerializeAsString() });
 }
 
 void TSchemeShard::PersistView(NIceDb::TNiceDb &db, TPathId pathId) {
@@ -4413,6 +4438,20 @@ TActorId TSchemeShard::TPipeClientFactory::CreateClient(const TActorContext& ctx
     return clientId;
 }
 
+TSchemeShard::TAccountLockout::TAccountLockout(const ::NKikimrProto::TAccountLockout& accountLockout)
+    : AttemptThreshold(accountLockout.GetAttemptThreshold())
+{
+    AttemptResetDuration = TDuration::Zero();
+    if (accountLockout.GetAttemptResetDuration().empty()) {
+        return;
+    }
+    if (TDuration::TryParse(accountLockout.GetAttemptResetDuration(), AttemptResetDuration)) {
+        if (AttemptResetDuration.Seconds() == 0) {
+            AttemptResetDuration = TDuration::Zero();
+        }
+    }
+}
+
 TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
@@ -4451,6 +4490,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
         .SpecialChars = AppData()->AuthConfig.GetPasswordComplexity().GetSpecialChars(),
         .CanContainUsername = AppData()->AuthConfig.GetPasswordComplexity().GetCanContainUsername()
     }))
+    , AccountLockout(AppData()->AuthConfig.GetAccountLockout())
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
                             ESimpleCounters_descriptor,
@@ -6638,7 +6678,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
     proto->SetName(path->Name);
 
     proto->SetId_Deprecated(pathId.LocalPathId);
-    PathIdFromPathId(pathId, proto->MutablePathId());
+    pathId.ToProto(proto->MutablePathId());
 
     for (const auto& col : alterData->Columns) {
         const TTableInfo::TColumn& colInfo = col.second;
@@ -7137,6 +7177,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
 
     if (appConfig.HasAuthConfig()) {
         ConfigureLoginProvider(appConfig.GetAuthConfig(), ctx);
+        ConfigureAccountLockout(appConfig.GetAuthConfig(), ctx);
     }
 
     if (IsSchemeShardConfigured()) {
@@ -7356,6 +7397,17 @@ void TSchemeShard::ConfigureLoginProvider(
                  << ", MinSpecialCharsCount# " << passwordComplexity.MinSpecialCharsCount
                  << ", SpecialChars# " << (passwordComplexityConfig.GetSpecialChars().empty() ? NLogin::TPasswordComplexity::VALID_SPECIAL_CHARS : passwordComplexityConfig.GetSpecialChars())
                  << ", CanContainUsername# " << (passwordComplexity.CanContainUsername ? "true" : "false"));
+}
+
+void TSchemeShard::ConfigureAccountLockout(
+        const ::NKikimrProto::TAuthConfig& config,
+        const TActorContext &ctx)
+{
+    AccountLockout = TAccountLockout(config.GetAccountLockout());
+
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                 "AccountLockout configured: AttemptThreshold# " << AccountLockout.AttemptThreshold
+                 << ", AttemptResetDuration# " << AccountLockout.AttemptResetDuration.ToString());
 }
 
 void TSchemeShard::StartStopCompactionQueues() {

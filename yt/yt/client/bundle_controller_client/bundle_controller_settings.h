@@ -41,6 +41,7 @@ struct TMemoryLimits
     std::optional<i64> UncompressedBlockCache;
     std::optional<i64> VersionedChunkMeta;
     std::optional<i64> Reserved;
+    std::optional<i64> Query;
 
     REGISTER_YSON_STRUCT(TMemoryLimits);
 

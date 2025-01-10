@@ -3,6 +3,8 @@ LIBRARY()
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 SRCS(
+    config.cpp
+    GLOBAL configure_io_dispatcher.cpp
     io_dispatcher.cpp
     pipe.cpp
     process.cpp

@@ -213,6 +213,7 @@ message TEvDescribeReplicationResult {
 
     optional EStatus Status = 1;
     optional TConnectionParams ConnectionParams = 2;
+    optional TConsistencySettings ConsistencySettings = 5;
     repeated TReplicationConfig.TTargetSpecific.TTarget Targets = 3;
     optional TReplicationState State = 4;
 }

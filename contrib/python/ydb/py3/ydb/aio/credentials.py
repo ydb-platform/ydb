@@ -1,11 +1,13 @@
-import time
-
 import abc
 import asyncio
 import logging
-from ydb import issues, credentials
+import time
+
+from ydb import credentials
+from ydb import issues
 
 logger = logging.getLogger(__name__)
+YDB_AUTH_TICKET_HEADER = "x-ydb-auth-ticket"
 
 
 class _OneToManyValue(object):
@@ -63,6 +65,12 @@ class AbstractExpiringTokenCredentials(credentials.AbstractExpiringTokenCredenti
     @abc.abstractmethod
     async def _make_token_request(self):
         pass
+
+    async def get_auth_token(self) -> str:
+        for header, token in await self.auth_metadata():
+            if header == YDB_AUTH_TICKET_HEADER:
+                return token
+        return ""
 
     async def _refresh(self):
         current_time = time.time()

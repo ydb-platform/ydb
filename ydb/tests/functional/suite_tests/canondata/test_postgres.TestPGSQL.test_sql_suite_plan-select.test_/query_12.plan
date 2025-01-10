@@ -67,6 +67,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/postgres_select.test_plan/onek",
                                                         "ReadColumns": [
                                                             "even",
                                                             "fivethous",

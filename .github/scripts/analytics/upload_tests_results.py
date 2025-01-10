@@ -18,6 +18,7 @@ from codeowners import CodeOwners
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
 
+max_characters_for_status_description = int(7340032/4) #workaround for error "cannot split batch in according to limits: there is row with size more then limit (7340032)"
 
 def create_tables(pool,  table_path):
     print(f"> create table if not exists:'{table_path}'")
@@ -121,7 +122,7 @@ def parse_junit_xml(test_results_file, build_type, job_name, job_id, commit, bra
                     "test_name": name,
                     "duration": Decimal(duration),
                     "status": status,
-                    "status_description": status_description.replace("\r\n", ";;").replace("\n", ";;").replace("\"", "'"),
+                    "status_description": status_description.replace("\r\n", ";;").replace("\n", ";;").replace("\"", "'")[:max_characters_for_status_description],
                     "log": "" if testcase.find("properties/property/[@name='url:log']") is None else testcase.find("properties/property/[@name='url:log']").get('value'),
                     "logsdir": "" if testcase.find("properties/property/[@name='url:logsdir']") is None else testcase.find("properties/property/[@name='url:logsdir']").get('value'),
                     "stderr": "" if testcase.find("properties/property/[@name='url:stderr']") is None else testcase.find("properties/property/[@name='url:stderr']").get('value'),
@@ -218,9 +219,9 @@ def main():
             test_results_file, build_type, job_name, job_id, commit, branch, pull, run_timestamp
         )
         result_with_owners = get_codeowners_for_tests(codeowners, results)
-        prepared_for_update_rows = []
+        prepared_for_upload_rows = []
         for index, row in enumerate(result_with_owners):
-            prepared_for_update_rows.append({
+            prepared_for_upload_rows.append({
                 'branch': row['branch'],
                 'build_type': row['build_type'],
                 'commit': row['commit'],
@@ -240,15 +241,19 @@ def main():
                 'test_id': f"{row['pull']}_{row['run_timestamp']}_{index}",
                 'test_name': row['test_name'],
             })
-        print(f'upserting runs: {len(prepared_for_update_rows)} rows')
-        if prepared_for_update_rows:
+        print(f'upserting runs: {len(prepared_for_upload_rows)} rows')
+        if prepared_for_upload_rows:
+            batch_rows_for_upload_size = 1000
             with ydb.SessionPool(driver) as pool:
                 create_tables(pool, test_table_name)
-                bulk_upsert(driver.table_client, full_path,
-                        prepared_for_update_rows)
-                print('tests updated')
+                for start in range(0, len(prepared_for_upload_rows), batch_rows_for_upload_size):
+                    batch_rows_for_upload = prepared_for_upload_rows[start:start + batch_rows_for_upload_size]     
+                    bulk_upsert(driver.table_client, full_path,
+                            batch_rows_for_upload)
+                
+            print('tests uploaded')
         else:
-            print('nothing to upsert')
+            print('nothing to upload')
 
        
 

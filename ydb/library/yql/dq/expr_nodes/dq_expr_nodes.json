@@ -44,7 +44,8 @@
         "Match": {"Type": "Callable", "Name": "DqJoin"},
         "Children": [
             {"Index": 8, "Name": "JoinAlgo", "Type": "TCoAtom"},
-            {"Index": 9, "Name": "Flags", "Type": "TCoAtomList", "Optional": true}
+            {"Index": 9, "Name": "Flags", "Type": "TCoAtomList", "Optional": true},
+            {"Index": 10, "Name": "JoinAlgoOptions", "Type": "TCoNameValueTupleList", "Optional": true}
         ]
     },
     {

@@ -1090,12 +1090,6 @@ class GnuToolchainOptions(ToolchainOptions):
 
     def _default_os_sdk(self):
         if self.target.is_linux:
-            if self.target.is_armv8:
-                return 'ubuntu-16'
-
-            if self.target.is_armv7 and self.target.armv7_float_abi == 'hard':
-                return 'ubuntu-16'
-
             if self.target.is_armv7 and self.target.armv7_float_abi == 'softfp':
                 return 'ubuntu-18'
 

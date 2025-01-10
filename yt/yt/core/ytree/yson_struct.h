@@ -109,7 +109,7 @@ public:
 
     void WriteSchema(NYson::IYsonConsumer* consumer) const;
 
-    // always returns |true| for itself
+    // Always returns |true| for itself
     // else always returns |false| if one of the fields
     // is not equality comparable.
     // See templated operator== for explanation why it was not
@@ -383,8 +383,8 @@ template <class T>
 TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<T>& obj, bool postprocess = true, bool setDefaults = true);
 template <class T>
 std::vector<TIntrusivePtr<T>> CloneYsonStructs(const std::vector<TIntrusivePtr<T>>& objs);
-template <class T>
-THashMap<TString, TIntrusivePtr<T>> CloneYsonStructs(const THashMap<TString, TIntrusivePtr<T>>& objs);
+template <class TKey, class TValue>
+THashMap<TKey, TIntrusivePtr<TValue>> CloneYsonStructs(const THashMap<TKey, TIntrusivePtr<TValue>>& objs);
 
 void Serialize(const TYsonStructBase& value, NYson::IYsonConsumer* consumer);
 void Deserialize(TYsonStructBase& value, INodePtr node);

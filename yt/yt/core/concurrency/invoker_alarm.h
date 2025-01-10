@@ -23,7 +23,7 @@ namespace NYT::NConcurrency {
  *  if so, the callback is invoked synchronously (and its scheduled invocation becomes a no-op).
  *
  *  \note
- *  Thread-affininty: single-threaded (moreover, all methods must be called within the invoker).
+ *  Thread-affinity: single-threaded (moreover, all methods must be called within the invoker).
  */
 class TInvokerAlarm
     : public TRefCounted

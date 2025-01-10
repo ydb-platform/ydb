@@ -23,7 +23,7 @@ TTimestampProviderBase::TTimestampProviderBase(std::optional<TDuration> latestTi
 
 TFuture<TTimestamp> TTimestampProviderBase::GenerateTimestamps(int count, TCellTag clockClusterTag)
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
     YT_LOG_DEBUG("Generating fresh timestamps (Count: %v, ClockClusterTag: %v)",
         count,
@@ -49,7 +49,7 @@ std::atomic<TTimestamp>& TTimestampProviderBase::GetLatestTimestampReferenceByTa
 
 TTimestamp TTimestampProviderBase::GetLatestTimestamp(TCellTag clockClusterTag)
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
     auto result = GetLatestTimestampReferenceByTag(clockClusterTag).load(std::memory_order::relaxed);
 
@@ -99,7 +99,7 @@ TFuture<TTimestamp> TTimestampProviderBase::OnGenerateTimestamps(
 
 void TTimestampProviderBase::UpdateLatestTimestamp()
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
     YT_LOG_DEBUG("Updating latest timestamp");
     GenerateTimestamps(1).Subscribe(BIND([] (const TErrorOr<TTimestamp>& timestampOrError) {

@@ -80,14 +80,14 @@ public:
 
     TFuture<void> GetAvailableFuture() override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         return DoThrottle(0);
     }
 
     TFuture<void> Throttle(i64 amount) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
         // Fast lane.
@@ -100,7 +100,7 @@ public:
 
     bool TryAcquire(i64 amount) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
         // Fast lane (only).
@@ -128,7 +128,7 @@ public:
 
     i64 TryAcquireAvailable(i64 amount) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
         // Fast lane (only).
@@ -157,7 +157,7 @@ public:
 
     void Acquire(i64 amount) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
         // Fast lane (only).
@@ -175,7 +175,7 @@ public:
 
     void Release(i64 amount) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
         if (amount == 0) {
@@ -188,7 +188,7 @@ public:
 
     bool IsOverdraft() override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         // Fast lane (only).
         TryUpdateAvailable();
@@ -202,21 +202,21 @@ public:
 
     void Reconfigure(TThroughputThrottlerConfigPtr config) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         DoReconfigure(config->Limit, config->Period);
     }
 
     void SetLimit(std::optional<double> limit) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         DoReconfigure(limit, Period_);
     }
 
     std::optional<double> GetLimit() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         auto limit = Limit_.load();
         if (limit == -1) {
@@ -228,7 +228,7 @@ public:
 
     i64 GetQueueTotalAmount() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         // Fast lane (only).
         return QueueTotalAmount_;
@@ -236,7 +236,7 @@ public:
 
     TDuration GetEstimatedOverdraftDuration() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         auto queueTotalCount = QueueTotalAmount_.load();
         auto limit = Limit_.load();
@@ -289,7 +289,7 @@ private:
 
     TFuture<void> DoThrottle(i64 amount)
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         ValueCounter_.Increment(amount);
         if (Limit_.load() < 0) {
@@ -396,7 +396,7 @@ private:
 
     void DoReconfigure(std::optional<double> limit, TDuration period)
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         // Slow lane (only).
         auto guard = Guard(SpinLock_);
@@ -438,7 +438,7 @@ private:
 
     void ScheduleUpdate()
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         if (UpdateCookie_) {
             return;
@@ -448,7 +448,8 @@ private:
         YT_VERIFY(limit >= 0);
 
         // Reconfigure clears the update cookie, so infinity is fine.
-        auto delay = limit ? TDuration::MilliSeconds(Max<i64>(0, -Available_ * 1000 / limit)) : TDuration::Max();
+        // NB: Cap by 1 ms from below to somewhat limit the wakeup rate.
+        auto delay = limit ? TDuration::MilliSeconds(Max<i64>(1, -Available_ * 1000 / limit)) : TDuration::Max();
 
         UpdateCookie_ = TDelayedExecutor::Submit(
             BIND_NO_PROPAGATE(&TReconfigurableThroughputThrottler::Update, MakeWeak(this)),
@@ -491,7 +492,7 @@ private:
 
     void Update()
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         auto guard = Guard(SpinLock_);
         UpdateCookie_.Reset();
@@ -502,7 +503,7 @@ private:
 
     void ProcessRequests(TGuard<NThreading::TSpinLock> guard)
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         std::vector<TThrottlerRequestPtr> readyRequests;
 
@@ -593,7 +594,7 @@ public:
 
     TFuture<void> Throttle(i64 amount) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
         ValueCounter_.Increment(amount);
@@ -602,7 +603,7 @@ public:
 
     bool TryAcquire(i64 amount) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
         ValueCounter_.Increment(amount);
@@ -611,7 +612,7 @@ public:
 
     i64 TryAcquireAvailable(i64 amount) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
         ValueCounter_.Increment(amount);
@@ -620,7 +621,7 @@ public:
 
     void Acquire(i64 amount) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
         ValueCounter_.Increment(amount);
@@ -628,7 +629,7 @@ public:
 
     void Release(i64 amount) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
         ReleaseCounter_.Increment(amount);
@@ -636,19 +637,19 @@ public:
 
     bool IsOverdraft() override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return false;
     }
 
     i64 GetQueueTotalAmount() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return 0;
     }
 
     TDuration GetEstimatedOverdraftDuration() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return TDuration::Zero();
     }
 
@@ -659,17 +660,17 @@ public:
 
     void Reconfigure(TThroughputThrottlerConfigPtr /*config*/) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
     }
 
     void SetLimit(std::optional<double> /*limit*/) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
     }
 
     std::optional<double> GetLimit() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         return std::nullopt;
     }
@@ -714,7 +715,7 @@ public:
 
     TFuture<void> Throttle(i64 amount) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
         SelfQueueSize_ += amount;
@@ -743,7 +744,7 @@ public:
 
     void Acquire(i64 amount) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
         for (const auto& throttler : Throttlers_) {
@@ -753,7 +754,7 @@ public:
 
     void Release(i64 amount) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
         for (const auto& throttler : Throttlers_) {
@@ -763,7 +764,7 @@ public:
 
     bool IsOverdraft() override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         for (const auto& throttler : Throttlers_) {
             if (throttler->IsOverdraft()) {
@@ -775,7 +776,7 @@ public:
 
     i64 GetQueueTotalAmount() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         auto totalQueueSize = SelfQueueSize_.load();
         for (const auto& throttler : Throttlers_) {
@@ -916,7 +917,7 @@ public:
 
     TFuture<void> Throttle(i64 amount) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
         TPromise<void> promise;
@@ -948,7 +949,7 @@ public:
 
     bool TryAcquire(i64 amount) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
         {
@@ -966,7 +967,7 @@ public:
 
     i64 TryAcquireAvailable(i64 amount) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
         {
@@ -989,7 +990,7 @@ public:
 
     void Acquire(i64 amount) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
         i64 forecastedAvailable;
@@ -1009,7 +1010,7 @@ public:
 
     void Release(i64 amount) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
         if (amount == 0) {
@@ -1028,7 +1029,7 @@ public:
 
     bool IsOverdraft() override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         auto guard = Guard(Lock_);
 
@@ -1037,21 +1038,21 @@ public:
 
     i64 GetQueueTotalAmount() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         return Underlying_->GetQueueTotalAmount();
     }
 
     TDuration GetEstimatedOverdraftDuration() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         return Underlying_->GetEstimatedOverdraftDuration();
     }
 
     i64 GetAvailable() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         auto guard = Guard(Lock_);
 

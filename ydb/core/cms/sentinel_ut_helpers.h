@@ -31,6 +31,7 @@ static constexpr NCms::EPDiskState ErrorStates[] = {
     NKikimrBlobStorage::TPDiskState::OpenFileError,
     NKikimrBlobStorage::TPDiskState::ChunkQuotaError,
     NKikimrBlobStorage::TPDiskState::DeviceIoError,
+    NKikimrBlobStorage::TPDiskState::Stopped,
 };
 
 constexpr NCms::EPDiskState FaultyStates[] = {

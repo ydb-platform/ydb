@@ -44,7 +44,7 @@ ILocksDb::TLockRange TPointKey::ToSerializedLockRange() const {
 
 bool TPointKey::ParseSerializedLockRange(const ILocksDb::TLockRange& range) {
     if (range.Data) {
-        Key = TOwnedCellVec::Make(TSerializedCellVec(range.Data).GetCells());
+        Key = TOwnedCellVec::FromSerialized(range.Data);
     }
     return true;
 }
@@ -80,10 +80,10 @@ bool TRangeKey::ParseSerializedLockRange(const ILocksDb::TLockRange& range) {
         return false;
     }
     if (protoRange.HasFrom()) {
-        From = TOwnedCellVec::Make(TSerializedCellVec(protoRange.GetFrom()).GetCells());
+        From = TOwnedCellVec::FromSerialized(protoRange.GetFrom());
     }
     if (protoRange.HasTo()) {
-        To = TOwnedCellVec::Make(TSerializedCellVec(protoRange.GetTo()).GetCells());
+        To = TOwnedCellVec::FromSerialized(protoRange.GetTo());
     }
     InclusiveFrom = protoRange.GetFromInclusive();
     InclusiveTo = protoRange.GetToInclusive();

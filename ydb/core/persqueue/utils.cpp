@@ -372,4 +372,8 @@ size_t TLastCounter::Count(const TInstant& expirationTime) {
     });
 }
 
+const TString& TLastCounter::LastValue() const {
+    return Values.back().Value;
+}
+
 } // NKikimr::NPQ

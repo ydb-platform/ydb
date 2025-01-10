@@ -9,6 +9,7 @@
 #include <yt/yt/core/actions/current_invoker.h>
 
 #include <yt/yt/core/misc/finally.h>
+#include <yt/yt/core/misc/hazard_ptr.h>
 #include <yt/yt/core/misc/heap.h>
 #include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
@@ -460,7 +461,7 @@ public:
 
     TExecutionPoolPtr GetOrRegisterPool(TString poolName)
     {
-        VERIFY_SPINLOCK_AFFINITY(MappingLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(MappingLock_);
 
         auto [mappingIt, inserted] = PoolMapping_.emplace(poolName, nullptr);
         if (!inserted) {
@@ -492,7 +493,7 @@ public:
 
     TPoolQueue DetachPool(TExecutionPool* pool)
     {
-        VERIFY_SPINLOCK_AFFINITY(MappingLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(MappingLock_);
 
         YT_LOG_TRACE("Removing pool (PoolName: %v)", pool->PoolName);
 
@@ -507,7 +508,7 @@ public:
 
     TPoolQueue ProceedRetainQueue(TCpuInstant currentInstant)
     {
-        VERIFY_SPINLOCK_AFFINITY(MappingLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(MappingLock_);
 
         YT_LOG_TRACE("ProceedRetainQueue (Size: %v)", RetainPoolQueue_.GetSize());
 
@@ -714,7 +715,9 @@ public:
         while (true) {
             auto cookie = GetEventCount()->PrepareWait();
 
-            auto hasAction = ThreadStates_[index].Action.BucketHolder;
+            auto& threadState = ThreadStates_[index];
+
+            auto hasAction = threadState.Action.BucketHolder;
             int activeThreadDelta = hasAction ? -1 : 0;
 
             auto callback = DoOnExecute(index, fetchNext);
@@ -738,6 +741,7 @@ public:
             }
 
             YT_VERIFY(fetchNext);
+            MaybeRunMaintenance(&threadState, GetCpuInstant(), /*flush*/ true);
             Wait(cookie, isStopping);
         }
     }
@@ -806,6 +810,7 @@ private:
         int LastActionsInQueue;
         TDuration TimeFromStart;
         TDuration TimeFromEnqueue;
+        TCpuInstant LastMaintenanceInstant = {};
     };
 
     static_assert(sizeof(TThreadState) >= CacheLineSize);
@@ -845,7 +850,7 @@ private:
 
     Y_NO_INLINE void ConsumeInvokeQueue()
     {
-        VERIFY_SPINLOCK_AFFINITY(MainLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(MainLock_);
 
         Y_UNUSED(Padding0_);
         Y_UNUSED(Padding1_);
@@ -912,7 +917,7 @@ private:
 
     void ServeBeginExecute(TThreadState* threadState, TCpuInstant currentInstant, TAction action)
     {
-        VERIFY_SPINLOCK_AFFINITY(MainLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(MainLock_);
 
         YT_ASSERT(!threadState->Action.Callback);
         YT_ASSERT(!threadState->Action.BucketHolder);
@@ -925,7 +930,7 @@ private:
 
     void ServeEndExecute(TThreadState* threadState, TCpuInstant /*cpuInstant*/)
     {
-        VERIFY_SPINLOCK_AFFINITY(MainLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(MainLock_);
 
         auto action = std::move(threadState->Action);
         YT_ASSERT(!threadState->Action.Callback);
@@ -952,7 +957,7 @@ private:
 
     Y_NO_INLINE void UpdateExcessTime(TBucket* bucket, TCpuDuration duration, TCpuInstant currentInstant)
     {
-        VERIFY_SPINLOCK_AFFINITY(MainLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(MainLock_);
 
         auto* pool = bucket->Pool.Get();
 
@@ -984,7 +989,7 @@ private:
 
     Y_NO_INLINE bool GetStarvingBucket(TAction* action)
     {
-        VERIFY_SPINLOCK_AFFINITY(MainLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(MainLock_);
 
         YT_LOG_DEBUG_IF(
             VerboseLogging_,
@@ -1043,7 +1048,7 @@ private:
 
     Y_NO_INLINE std::tuple<int, int> ServeCombinedRequests(TCpuInstant currentInstant, int currentThreadIndex)
     {
-        VERIFY_SPINLOCK_AFFINITY(MainLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(MainLock_);
 
         auto threadCount = ThreadCount_.load();
         // Thread pool size can be reconfigures during serving requests.
@@ -1134,7 +1139,7 @@ private:
 
     TCpuInstant GetMinEnqueuedAt()
     {
-        VERIFY_SPINLOCK_AFFINITY(MainLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(MainLock_);
 
         return WaitHeap_.Empty()
             ? std::numeric_limits<TCpuInstant>::max()
@@ -1189,6 +1194,8 @@ private:
                 ReportWaitTime(waitTime);
             }
 
+            MaybeRunMaintenance(&threadState, action.StartedAt, /*flush*/ false);
+
             CumulativeSchedulingTimeCounter_.Add(CpuDurationToDuration(GetCpuInstant() - cpuInstant));
 
             if (!fetchNext) {
@@ -1238,6 +1245,17 @@ private:
     {
         if (IsWaitTimeObserverSet_.load()) {
             WaitTimeObserver_(waitTime);
+        }
+    }
+
+    static void MaybeRunMaintenance(TThreadState* threadState, TCpuInstant now, bool flush)
+    {
+        YT_ASSERT(threadState);
+
+        constexpr i64 MaintenancePeriod = 1'000'000'000;
+        if (flush || now > threadState->LastMaintenanceInstant + MaintenancePeriod) {
+            ReclaimHazardPointers(false);
+            threadState->LastMaintenanceInstant  = now;
         }
     }
 };

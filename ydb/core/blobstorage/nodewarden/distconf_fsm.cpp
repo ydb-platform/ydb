@@ -40,9 +40,14 @@ namespace NKikimr::NStorage {
         task.SetTaskId(RandomNumber<ui64>());
         task.MutableCollectConfigs();
         IssueScatterTask(TActorId(), std::move(task));
+
+        // establish connection to console tablet (if we have means to do it)
+        Y_ABORT_UNLESS(!ConsolePipeId);
+        ConnectToConsole();
     }
 
     void TDistributedConfigKeeper::UnbecomeRoot() {
+        DisconnectFromConsole();
     }
 
     void TDistributedConfigKeeper::SwitchToError(const TString& reason) {
@@ -349,13 +354,8 @@ namespace NKikimr::NStorage {
                 configToPropose = persistedConfig;
             }
         } else if (baseConfig && !baseConfig->GetGeneration()) {
-            bool canBootstrapAutomatically = false;
-            if (baseConfig->HasBlobStorageConfig()) {
-                if (const auto& bsConfig = baseConfig->GetBlobStorageConfig(); bsConfig.HasAutoconfigSettings()) {
-                    const auto& autoconfigSettings = bsConfig.GetAutoconfigSettings();
-                    canBootstrapAutomatically = autoconfigSettings.GetAutomaticBootstrap();
-                }
-            }
+            const bool canBootstrapAutomatically = baseConfig->GetSelfManagementConfig().GetEnabled() &&
+                baseConfig->GetSelfManagementConfig().GetAutomaticBootstrap();
             if (canBootstrapAutomatically || selfAssemblyUUID) {
                 if (!selfAssemblyUUID) {
                     if (!CurrentSelfAssemblyUUID) {
@@ -364,7 +364,9 @@ namespace NKikimr::NStorage {
                     selfAssemblyUUID = &CurrentSelfAssemblyUUID.value();
                 }
                 propositionBase.emplace(*baseConfig);
-                GenerateFirstConfig(baseConfig, *selfAssemblyUUID);
+                if (auto error = GenerateFirstConfig(baseConfig, *selfAssemblyUUID)) {
+                    return *error;
+                }
                 configToPropose = baseConfig;
             }
         }

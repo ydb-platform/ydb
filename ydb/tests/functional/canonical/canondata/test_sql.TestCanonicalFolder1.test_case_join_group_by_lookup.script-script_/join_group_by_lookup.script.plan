@@ -71,6 +71,7 @@
                                                                             "Group"
                                                                         ],
                                                                         "Node Type": "TableLookupJoin",
+                                                                        "Path": "/local/base_join_group_by_lookup_script_script/Temp",
                                                                         "PlanNodeId": 5,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
@@ -120,6 +121,7 @@
                                                                                                             {
                                                                                                                 "Inputs": [],
                                                                                                                 "Name": "TableFullScan",
+                                                                                                                "Path": "/local/base_join_group_by_lookup_script_script/Input1",
                                                                                                                 "ReadColumns": [
                                                                                                                     "Group"
                                                                                                                 ],
@@ -221,6 +223,7 @@
                                             }
                                         ],
                                         "Name": "Upsert",
+                                        "Path": "/local/base_join_group_by_lookup_script_script/Temp",
                                         "Table": "base_join_group_by_lookup_script_script/Temp"
                                     },
                                     {

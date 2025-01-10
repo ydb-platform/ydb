@@ -340,6 +340,17 @@ void TWorker<TBase>::Release() {
     }
 }
 
+template <typename TBase>
+void TWorker<TBase>::Invalidate() {
+    auto& ctx = Graph_.ComputationGraph_->GetContext();
+    for (const auto* selfNode : Graph_.SelfNodes_) {
+        if (selfNode) {
+            selfNode->InvalidateValue(ctx);
+        }
+    }
+    Graph_.ComputationGraph_->InvalidateCaches();
+}
+
 TPullStreamWorker::~TPullStreamWorker() {
     auto guard = Guard(GetScopedAlloc());
     Output_.Clear();

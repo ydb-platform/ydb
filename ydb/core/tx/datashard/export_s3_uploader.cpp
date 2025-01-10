@@ -251,8 +251,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         if (IndexExportedChangefeed == Changefeeds.size()) {
             auto nextStep = [this]() {
                 ChangefeedsUploaded = true;
-                Cerr << "ChangefeedsUploaded: " << ChangefeedsUploaded << Endl;
-
                 if (Scanner) {
                     this->Send(Scanner, new TEvExportScan::TEvFeed());
                 }
@@ -263,7 +261,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         }
         const auto& changefeed = Changefeeds[IndexExportedChangefeed].ChangefeedDescription;
         const auto changefeedKeyPattern = TStringBuilder() << Settings.ObjectKeyPattern << "/" << changefeed.Getname();
-        Cerr << "Put changefeed index: " << IndexExportedChangefeed << Endl;
         PutChangefeedDescription(changefeed, changefeedKeyPattern);
     }
 
@@ -271,7 +268,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         auto& descs = Changefeeds[IndexExportedChangefeed];
         const auto changefeedKeyPattern = TStringBuilder() << Settings.ObjectKeyPattern << "/" 
             << descs.ChangefeedDescription.Getname();
-        Cerr << "Put topic index: " << IndexExportedChangefeed << Endl;
         PutTopicDescription(descs.Topic, changefeedKeyPattern);
     }
 
@@ -949,7 +945,6 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
 
     const auto& persQueuesTPathDesc = Task.GetChangefeedUnderlyingTopics();
     const auto& cdcStreams = Task.GetTable().GetTable().GetCdcStreams();
-    Cerr << "persQueuesTPathDesc.size(): " << persQueuesTPathDesc.size() << Endl << "cdcStreams.size(): " << cdcStreams.size() << Endl;
     assert(persQueuesTPathDesc.size() == cdcStreams.size());
 
     const int changefeedsCount = cdcStreams.size();

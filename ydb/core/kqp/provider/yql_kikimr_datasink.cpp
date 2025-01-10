@@ -307,6 +307,30 @@ private:
                             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Update per row is not supported for multiple tables."));
                             return TStatus::Error;
                         }
+
+                        THashSet<TStringBuf> columnNames;
+                        auto equalStmts = settings.Update.Cast().Ptr()->Child(1);
+
+                        for (const auto& stmt : equalStmts->Children()) {
+                            auto columnName = stmt->Child(0)->Content();
+                            columnNames.insert(columnName);
+                        }
+
+                        bool hasIntersection = false;
+                        for (const auto& stmt : equalStmts->Children()) {
+                            VisitExpr(stmt->Child(1), [&columnNames, &hasIntersection] (const TExprNode::TPtr& node) {
+                                if (node->Content() == "Member" && columnNames.contains(node->Child(1)->Content())) {
+                                    hasIntersection = true;
+                                    return false;
+                                }
+                                return true;
+                            });
+                        }
+
+                        if (hasIntersection) {
+                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Update per row is only supported for idempotent updates."));
+                            return TStatus::Error;
+                        }
                     }
 
                     if (!settings.PgFilter) {

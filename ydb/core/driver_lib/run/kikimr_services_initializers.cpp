@@ -48,6 +48,7 @@
 #include <ydb/core/control/immediate_control_board_actor.h>
 
 #include <ydb/core/driver_lib/version/version.h>
+#include <ydb/core/discovery/discovery.h>
 
 #include <ydb/core/grpc_services/grpc_mon.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
@@ -1721,8 +1722,6 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             desc->Port = kakfaConfig.GetListeningPort();
             desc->Ssl = kakfaConfig.HasSslCertificate();
 
-            TVector<TString> services = {"datastreams", "pq", "pqv1"};
-            desc->ServedServices.insert(desc->ServedServices.end(), services.begin(), services.end());
             desc->EndpointId = NGRpcService::KafkaEndpointId;
         }
 
@@ -2774,10 +2773,18 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         settings.CertificateFile = Config.GetKafkaProxyConfig().GetCert();
         settings.PrivateKeyFile = Config.GetKafkaProxyConfig().GetKey();
 
+        if (Config.GetKafkaProxyConfig().GetEnableEndpointDiscovery()) {
+            setup->LocalServices.emplace_back(
+                NKafka::MakeKafkaDiscoveryCacheID(),
+                TActorSetupCmd(CreateDiscoveryCache(NGRpcService::KafkaEndpointId),
+                    TMailboxType::HTSwap, appData->UserPoolId)
+            );
+        }
         setup->LocalServices.emplace_back(
             TActorId(),
-            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig()),
-                TMailboxType::HTSwap, appData->UserPoolId)
+            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig(),
+                                                       NKafka::MakeKafkaDiscoveryCacheID()),
+                           TMailboxType::HTSwap, appData->UserPoolId)
         );
 
         IActor* metricsActor = CreateKafkaMetricsActor(NKafka::TKafkaMetricsSettings{appData->Counters});

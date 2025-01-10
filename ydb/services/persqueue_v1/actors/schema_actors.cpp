@@ -1519,21 +1519,7 @@ bool TPartitionsLocationActor::ApplyResponse(
     Finalize();
     return true;
 }
-/*
-void TPartitionsLocationActor::SendNodesRequest() const {
-    auto* icEv = new TEvICNodesInfoCache::TEvGetAllNodesInfoRequest();
-    ActorContext().Send(CreateICNodesInfoCacheServiceId(), icEv);
 
-}
-
-void TPartitionsLocationActor::Handle(TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev) {
-    NodesInfoEv = ev;
-    if (GotPartitions)
-        Finalize();
-    else
-        GotNodesInfo = true;
-}
-*/
 void TPartitionsLocationActor::Finalize() {
     if (Settings.Partitions) {
         Y_ABORT_UNLESS(Response->Partitions.size() == Settings.Partitions.size());

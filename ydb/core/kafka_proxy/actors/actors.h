@@ -51,6 +51,8 @@ struct TContext {
 
     NKikimr::NPQ::TRlContext RlContext;
 
+    TActorId DiscoveryCacheActor;
+
     bool Authenticated() { return AuthenticationStep == SUCCESS; }
 };
 

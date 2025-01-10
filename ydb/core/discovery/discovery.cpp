@@ -627,10 +627,6 @@ IActor* CreateDiscoverer(
     return new TDiscoverer(f, database, replyTo, cacheId);
 }
 
-IActor* CreateDiscoveryCache() {
-    return new NDiscoveryPrivate::TDiscoveryCache();
-}
-
 IActor* CreateDiscoveryCache(const TString& endpointId) {
     return new NDiscoveryPrivate::TDiscoveryCache(endpointId);
 }

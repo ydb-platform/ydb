@@ -1101,7 +1101,8 @@ namespace Tests {
                 settings.SslCertificatePem = Settings->AppConfig->GetKafkaProxyConfig().GetSslCertificate();
             }
 
-            IActor* actor = NKafka::CreateKafkaListener(MakePollerActorId(), settings, Settings->AppConfig->GetKafkaProxyConfig());
+            IActor* actor = NKafka::CreateKafkaListener(MakePollerActorId(), settings, Settings->AppConfig->GetKafkaProxyConfig(),
+                                                        TActorId{});
             TActorId actorId = Runtime->Register(actor, nodeIdx, userPoolId);
             Runtime->RegisterService(TActorId{}, actorId, nodeIdx);
 
@@ -1123,9 +1124,6 @@ namespace Tests {
                     rootDomains.emplace_back("/" + domain->Name);
                 }
                 desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
-
-                TVector<TString> grpcServices = {"datastreams", "pq", "pqv1"};
-                desc->ServedServices.insert(desc->ServedServices.end(), grpcServices.begin(), grpcServices.end());
                 Runtime->GetActorSystem(0)->Register(NGRpcService::CreateGrpcEndpointPublishActor(desc.Get()), TMailboxType::ReadAsFilled, appData.UserPoolId);
             }
         }

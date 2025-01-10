@@ -83,7 +83,8 @@ public:
     TKafkaConnection(const TActorId& listenerActorId,
                      TIntrusivePtr<TSocketDescriptor> socket,
                      TNetworkConfig::TSocketAddressType address,
-                     const NKikimrConfig::TKafkaProxyConfig& config)
+                     const NKikimrConfig::TKafkaProxyConfig& config,
+                     const TActorId& discoveryCacheActorId)
         : ListenerActorId(listenerActorId)
         , Socket(std::move(socket))
         , Address(address)
@@ -91,9 +92,11 @@ public:
         , Step(SIZE_READ)
         , Demand(NoDemand)
         , InflightSize(0)
-        , Context(std::make_shared<TContext>(config)) {
+        , Context(std::make_shared<TContext>(config))
+    {
         SetNonBlock();
         IsSslRequired = Socket->IsSslSupported();
+        Context->DiscoveryCacheActor = discoveryCacheActorId;
     }
 
     void Bootstrap() {
@@ -318,7 +321,7 @@ protected:
     TMessagePtr<T> Cast(std::shared_ptr<Msg>& request) {
         return TMessagePtr<T>(request->Buffer, request->Message);
     }
-   
+
     bool ProcessRequest(const TActorContext& ctx) {
         KAFKA_LOG_D("process message: ApiKey=" << Request->Header.RequestApiKey << ", ExpectedSize=" << Request->ExpectedSize
                                                << ", Size=" << Request->Size);
@@ -339,7 +342,7 @@ protected:
         if (Request->Header.ClientId.has_value() && Request->Header.ClientId != "") {
             Context->KafkaClient = Request->Header.ClientId.value();
         }
-        
+
         switch (Request->Header.RequestApiKey) {
             case PRODUCE:
                 HandleMessage(&Request->Header, Cast<TProduceRequestData>(Request), ctx);
@@ -372,7 +375,7 @@ protected:
             case FETCH:
                 HandleMessage(&Request->Header, Cast<TFetchRequestData>(Request));
                 break;
-            
+
             case JOIN_GROUP:
                 HandleMessage(&Request->Header, Cast<TJoinGroupRequestData>(Request), ctx);
                 break;
@@ -388,11 +391,11 @@ protected:
             case HEARTBEAT:
                 HandleMessage(&Request->Header, Cast<THeartbeatRequestData>(Request), ctx);
                 break;
-            
+
             case FIND_COORDINATOR:
                 HandleMessage(&Request->Header, Cast<TFindCoordinatorRequestData>(Request));
                 break;
-            
+
             case OFFSET_FETCH:
                 HandleMessage(&Request->Header, Cast<TOffsetFetchRequestData>(Request));
                 break;
@@ -481,7 +484,7 @@ protected:
     void HandleKillReadSession() {
         if (ReadSessionActorId) {
             Send(ReadSessionActorId, new TEvents::TEvPoison());
-            
+
             TActorId emptyActor;
             ReadSessionActorId = emptyActor;
         }
@@ -714,12 +717,13 @@ protected:
 
     bool RequireAuthentication(EApiKey apiKey) {
         bool configuredToAuthenticate = NKikimr::AppData()->EnforceUserTokenRequirement;
-        bool apiKeyRequiresAuthentication = !(EApiKey::API_VERSIONS == apiKey || 
-                                              EApiKey::SASL_HANDSHAKE == apiKey || 
+        bool apiKeyRequiresAuthentication = !(EApiKey::API_VERSIONS == apiKey ||
+                                              EApiKey::SASL_HANDSHAKE == apiKey ||
                                               EApiKey::SASL_AUTHENTICATE == apiKey);
-                                            
+
         return configuredToAuthenticate && apiKeyRequiresAuthentication;
     }
+
 
     void HandleConnected(TEvPollerReady::TPtr event, const TActorContext& ctx) {
         if (event->Get()->Read) {
@@ -784,8 +788,9 @@ protected:
 NActors::IActor* CreateKafkaConnection(const TActorId& listenerActorId,
                                        TIntrusivePtr<TSocketDescriptor> socket,
                                        TNetworkConfig::TSocketAddressType address,
-                                       const NKikimrConfig::TKafkaProxyConfig& config) {
-    return new TKafkaConnection(listenerActorId, std::move(socket), std::move(address), config);
+                                       const NKikimrConfig::TKafkaProxyConfig& config,
+                                       const TActorId& discoveryCacheActorId) {
+    return new TKafkaConnection(listenerActorId, std::move(socket), std::move(address), config, discoveryCacheActorId);
 }
 
 } // namespace NKafka

@@ -152,8 +152,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
                 auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, errCode);
                 ctx.Send(writeMeta.GetSource(), result.release());
             } else {
-                auto operation = OperationsManager->GetOperation((TOperationWriteId)writeMeta.GetWriteId());
-                Y_ABORT_UNLESS(operation);
+                auto operation = OperationsManager->GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
                 auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), operation->GetLockId(),
                     ev->Get()->GetWriteResultStatus(), ev->Get()->GetErrorMessage() ? ev->Get()->GetErrorMessage() : "put data fails");
                 ctx.Send(writeMeta.GetSource(), result.release(), 0, operation->GetCookie());

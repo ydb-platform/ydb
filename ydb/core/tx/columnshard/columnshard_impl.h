@@ -137,8 +137,6 @@ struct TSettings {
     TControlWrapper CacheDataAfterIndexing;
     TControlWrapper CacheDataAfterCompaction;
     static constexpr ui64 OverloadTxInFlight = 1000;
-    static constexpr ui64 OverloadWritesInFlight = 1000;
-    static constexpr ui64 OverloadWritesSizeInFlight = 128 * 1024 * 1024;
 
     TSettings()
         : BlobWriteGrouppingEnabled(1, 0, 1)

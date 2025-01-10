@@ -32,7 +32,7 @@ void TActor::Flush() {
 }
 
 void TActor::Handle(TEvFlushBuffer::TPtr& /*ev*/) {
-    if (AppDataVerified().ColumnShardConfig.HasWritingBufferDurationMs()) {
+    if (AppDataVerified().ColumnShardConfig.HasWritingBufferDurationMs() && AppDataVerified().ColumnShardConfig.GetWritingBufferDurationMs()) {
         FlushDuration = TDuration::MilliSeconds(AppDataVerified().ColumnShardConfig.GetWritingBufferDurationMs());
     } else {
         FlushDuration = std::nullopt;
@@ -67,10 +67,12 @@ void TActor::Handle(TEvAddInsertedDataToBuffer::TPtr& ev) {
 
 void TWriteAggregation::Flush(const ui64 tabletId) {
     if (Units.size()) {
+        Context.GetWritingCounters()->OnAggregationWrite(Units.size(), SumSize);
         std::shared_ptr<NConveyor::ITask> task =
             std::make_shared<TBuildPackSlicesTask>(std::move(Units), Context, PathId, tabletId, ModificationType);
         NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
         Units.clear();
+        SumSize = 0;
     }
 }
 

@@ -465,54 +465,17 @@ TListJobsResult THttpRawClient::ListJobs(
     return result;
 }
 
-class TResponseReader
-    : public IFileReader
-{
-public:
-    TResponseReader(const TClientContext& context, THttpHeader header)
-    {
-        if (context.ServiceTicketAuth) {
-            header.SetServiceTicket(context.ServiceTicketAuth->Ptr->IssueServiceTicket());
-        } else {
-            header.SetToken(context.Token);
-        }
-
-        if (context.ImpersonationUser) {
-            header.SetImpersonationUser(*context.ImpersonationUser);
-        }
-
-        auto hostName = GetProxyForHeavyRequest(context);
-        auto requestId = CreateGuidAsString();
-
-        UpdateHeaderForProxyIfNeed(hostName, context, header);
-
-        Response_ = context.HttpClient->Request(GetFullUrl(hostName, context, header), requestId, header);
-        ResponseStream_ = Response_->GetResponseStream();
-    }
-
-private:
-    size_t DoRead(void* buf, size_t len) override
-    {
-        return ResponseStream_->Read(buf, len);
-    }
-
-    size_t DoSkip(size_t len) override
-    {
-        return ResponseStream_->Skip(len);
-    }
-
-private:
-    NHttpClient::IHttpResponsePtr Response_;
-    IInputStream* ResponseStream_;
-};
-
 IFileReaderPtr THttpRawClient::GetJobInput(
     const TJobId& jobId,
     const TGetJobInputOptions& /*options*/)
 {
+    TMutationId mutationId;
     THttpHeader header("GET", "get_job_input");
     header.AddParameter("job_id", GetGuidAsString(jobId));
-    return new TResponseReader(Context_, std::move(header));
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    return MakeIntrusive<NHttpClient::THttpResponseStream>(std::move(responseInfo));
 }
 
 IFileReaderPtr THttpRawClient::GetJobFailContext(
@@ -520,13 +483,17 @@ IFileReaderPtr THttpRawClient::GetJobFailContext(
     const TJobId& jobId,
     const TGetJobFailContextOptions& /*options*/)
 {
+    TMutationId mutationId;
     THttpHeader header("GET", "get_job_fail_context");
     header.AddOperationId(operationId);
     header.AddParameter("job_id", GetGuidAsString(jobId));
-    return new TResponseReader(Context_, std::move(header));
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    return MakeIntrusive<NHttpClient::THttpResponseStream>(std::move(responseInfo));
 }
 
-TString THttpRawClient::GetJobStderrWithRetries(
+IFileReaderPtr THttpRawClient::GetJobStderr(
     const TOperationId& operationId,
     const TJobId& jobId,
     const TGetJobStderrOptions& /*options*/)
@@ -537,19 +504,8 @@ TString THttpRawClient::GetJobStderrWithRetries(
     header.AddParameter("job_id", GetGuidAsString(jobId));
     TRequestConfig config;
     config.IsHeavy = true;
-    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, {}, config);
-    return responseInfo->GetResponse();
-}
-
-IFileReaderPtr THttpRawClient::GetJobStderr(
-    const TOperationId& operationId,
-    const TJobId& jobId,
-    const TGetJobStderrOptions& /*options*/)
-{
-    THttpHeader header("GET", "get_job_stderr");
-    header.AddOperationId(operationId);
-    header.AddParameter("job_id", GetGuidAsString(jobId));
-    return new TResponseReader(Context_, std::move(header));
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    return MakeIntrusive<NHttpClient::THttpResponseStream>(std::move(responseInfo));
 }
 
 TJobTraceEvent ParseJobTraceEvent(const TNode& node)
@@ -840,7 +796,7 @@ std::unique_ptr<IInputStream> THttpRawClient::ReadTable(
     THttpHeader header("GET", GetReadTableCommand(Context_.Config->ApiVersion));
     header.SetOutputFormat(format);
     header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
-    header.MergeParameters(NRawClient::SerializeParamsForReadTable(transactionId, Context_.Config->Prefix, path, options));
+    header.MergeParameters(NRawClient::SerializeParamsForReadTable(transactionId, options));
     header.MergeParameters(FormIORequestParameters(path, options));
 
     TRequestConfig config;

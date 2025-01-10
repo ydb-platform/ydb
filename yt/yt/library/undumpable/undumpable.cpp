@@ -4,7 +4,7 @@
 #include <sys/mman.h>
 #endif
 
-#include <util/generic/hash.h>
+#include <yt/yt/library/profiling/sensor.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
 
@@ -13,7 +13,7 @@
 #include <library/cpp/yt/memory/ref_counted.h>
 #include <library/cpp/yt/memory/new.h>
 
-#include <yt/yt/library/profiling/sensor.h>
+#include <util/generic/hash.h>
 
 #include <atomic>
 #include <optional>

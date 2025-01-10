@@ -461,7 +461,7 @@ struct TComplexTypeYsonReaderTraits {
     using TStrings = TStringYsonReader<TStringType, Nullable, OriginalT, Native>;
     using TExtOptional = TExternalOptYsonReader<Native>;
 
-    static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
+    static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* /* pgBuilder */) {
         return BuildPgYsonColumnReader(desc);
     }
 
@@ -681,11 +681,12 @@ std::unique_ptr<IYtColumnConverter> MakeYtColumnConverter(TType* type, const NUd
         case NUdf::EDataSlot::Bool:
             // YT type for bool is arrow::Type::BOOL, but yql type is arrow::Type::UINT8
             return std::make_unique<TTopLevelSimpleCastConverter<arrow::Type::BOOL>>(std::move(settings));
-        case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Json:
-        case NUdf::EDataSlot::Yson: // Yson there is top-level optional
-            // YT type for Yson, Json, String is arrow::Type::BINARY, but yql type is arrow::Type::String
             return std::make_unique<TTopLevelSimpleCastConverter<arrow::Type::BINARY>>(std::move(settings));
+        case NUdf::EDataSlot::JsonDocument:
+        case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Yson:
+        case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Double:
         case NUdf::EDataSlot::Int8:
         case NUdf::EDataSlot::Uint8:

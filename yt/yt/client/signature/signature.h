@@ -26,12 +26,14 @@ public:
     [[nodiscard]] const NYson::TYsonString& Payload() const;
 
 private:
-    NYson::TYsonString Header_;
+    // TODO(arkady-e1ppa): Whenever trivial generator/validators are added
+    // remove initialization.
+    NYson::TYsonString Header_ = NYson::TYsonString(TStringBuf(""));
     NYson::TYsonString Payload_;
     std::vector<std::byte> Signature_;
 
-    friend class TSignatureGenerator;
-    friend class TSignatureValidator;
+    friend class ISignatureGenerator;
+    friend class ISignatureValidator;
 
     friend void Serialize(const TSignature& signature, NYson::IYsonConsumer* consumer);
     friend void Deserialize(TSignature& signature, NYTree::INodePtr node);

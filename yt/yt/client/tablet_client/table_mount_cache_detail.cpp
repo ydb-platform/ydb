@@ -27,7 +27,7 @@ TTabletInfoOwnerCache::TTabletInfoOwnerCache(NLogging::TLogger logger)
 
 void TTabletInfoOwnerCache::DropExpiredOwners(std::vector<TWeakPtr<TTableMountInfo>>* owners)
 {
-    VERIFY_WRITER_SPINLOCK_AFFINITY(MapLock_);
+    YT_ASSERT_WRITER_SPINLOCK_AFFINITY(MapLock_);
 
     std::erase_if(*owners, [] (const auto& owner) {
         return owner.IsExpired();
@@ -139,7 +139,7 @@ void TTabletInfoOwnerCache::SweepExpiredEntries()
 
 void TTabletInfoOwnerCache::ProcessNextGCQueueEntry()
 {
-    VERIFY_SPINLOCK_AFFINITY(MapLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(MapLock_);
 
     auto gcGuard = Guard(GCLock_);
     if (!GCQueue_.empty()) {

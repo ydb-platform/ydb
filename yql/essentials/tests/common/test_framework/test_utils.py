@@ -9,6 +9,7 @@ from yql_utils import get_param as yql_get_param
 from google.protobuf import text_format
 import yql.essentials.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
 
+# FIXME: remove usage from dq_file/hybrid_file/kqp_yt_file
 DATA_PATH = yatest.common.source_path('yql/essentials/tests/sql/suites')
 try:
     SQLRUN_PATH = yatest.common.binary_path('yql/essentials/tools/sql2yql/sql2yql')
@@ -56,21 +57,22 @@ def recursive_glob(root, begin_template=None, end_template=None):
             yield os.path.relpath(path, root)
 
 
-def pytest_generate_tests_by_template(template, metafunc):
+def pytest_generate_tests_by_template(template, metafunc, data_path):
+    assert data_path is not None
+
     argvalues = []
 
-    suites = [name for name in os.listdir(DATA_PATH) if os.path.isdir(os.path.join(DATA_PATH, name))]
+    suites = [name for name in os.listdir(data_path) if os.path.isdir(os.path.join(data_path, name))]
     for suite in suites:
         for case in sorted([sql_query_path[:-len(template)]
-                            for sql_query_path in recursive_glob(os.path.join(DATA_PATH, suite), end_template=template)]):
+                            for sql_query_path in recursive_glob(os.path.join(data_path, suite), end_template=template)]):
             argvalues.append((suite, case))
 
     metafunc.parametrize(['suite', 'case'], argvalues)
 
 
 def pytest_generate_tests_for_run(metafunc, template='.sql', suites=None, currentPart=0, partsCount=1, data_path=None):
-    if data_path is None:
-        data_path = DATA_PATH
+    assert data_path is not None
     argvalues = []
 
     if not suites:
@@ -105,8 +107,13 @@ def pytest_generate_tests_for_run(metafunc, template='.sql', suites=None, curren
     )
 
 
-def pytest_generate_tests_for_part(metafunc, currentPart, partsCount, data_path=None):
-    return pytest_generate_tests_for_run(metafunc, currentPart=currentPart, partsCount=partsCount, data_path=data_path)
+# FIXME make data_path required (dq usage)
+def pytest_generate_tests_for_part(metafunc, currentPart, partsCount, data_path=None, template='.sql'):
+    if data_path is None:
+        data_path = DATA_PATH
+
+    return pytest_generate_tests_for_run(metafunc, currentPart=currentPart, partsCount=partsCount,
+                                         data_path=data_path, template=template)
 
 
 def get_cfg_file(cfg, case):
@@ -125,6 +132,7 @@ def validate_cfg(result):
             "udf",
             "providers",
             "res",
+            "mount",
             "canonize_peephole",
             "canonize_lineage",
             "peephole_use_blocks",
@@ -140,6 +148,7 @@ def validate_cfg(result):
             ), "Unknown command in .cfg: %s" % (r[0])
 
 
+# FIXME make data_path required (dq usage)
 def get_config(suite, case, cfg, data_path=None):
     if data_path is None:
         data_path = DATA_PATH
@@ -165,19 +174,24 @@ def load_json_file_strip_comments(path):
         return '\n'.join([line for line in file.readlines() if not line.startswith('#')])
 
 
-def get_parameters_files(suite, config):
+# FIXME make data_path required (dq usage)
+def get_parameters_files(suite, config, data_path=None):
+    if data_path is None:
+        data_path = DATA_PATH
+
     result = []
     for line in config:
         if len(line) != 3 or not line[0] == "param":
             continue
 
-        result.append((line[1], os.path.join(DATA_PATH, suite, line[2])))
+        result.append((line[1], os.path.join(data_path, suite, line[2])))
 
     return result
 
 
-def get_parameters_json(suite, config):
-    parameters_files = get_parameters_files(suite, config)
+def get_parameters_json(suite, config, data_path):
+    assert data_path is not None
+    parameters_files = get_parameters_files(suite, config, data_path)
     data = {}
     for p in parameters_files:
         value_json = json.loads(load_json_file_strip_comments(p[1]))

@@ -118,6 +118,64 @@ Y_UNIT_TEST(ReturningTwice) {
     }
 }
 
+Y_UNIT_TEST(ReplaceSerial) {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
+    appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
+    auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+    TKikimrRunner kikimr(serverSettings);
+
+    auto client = kikimr.GetTableClient();
+    auto session = client.CreateSession().GetValueSync().GetSession();
+
+    const auto queryCreate = Q_(R"(
+        --!syntax_v1
+        CREATE TABLE ReturningTable (
+        key Serial,
+        value Int32,
+        PRIMARY KEY (key));
+        )");
+
+    auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
+    UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+    {
+        const auto query = Q_(R"(
+            --!syntax_v1
+            REPLACE INTO ReturningTable (key, value) VALUES (2, 10) RETURNING key, value;
+        )");
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+
+        CompareYson(R"([[2;[10]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        const auto query = Q_(R"(
+            --!syntax_v1
+            REPLACE INTO ReturningTable (value) VALUES(1), (2), (3) RETURNING key, value;
+        )");
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+
+        CompareYson(R"([[1;[1]];[2;[2]];[3;[3]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        const auto query = Q_(R"(
+            --!syntax_v1
+            select key, value from ReturningTable order by key asc;
+        )");
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+
+        CompareYson(R"([[1;[1]];[2;[2]];[3;[3]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
 Y_UNIT_TEST(ReturningSerial) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
@@ -299,6 +357,31 @@ Y_UNIT_TEST(ReturningColumnsOrder) {
         Cerr << StreamResultToYson(it);
     }
     
+}
+
+Y_UNIT_TEST(Random) {
+    auto kikimr = DefaultKikimrRunner();
+
+    auto client = kikimr.GetQueryClient();
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .Syntax(NYdb::NQuery::ESyntax::YqlV1)
+        .ConcurrentResultSets(false);
+
+    {
+        auto result = client.ExecuteQuery("CREATE TABLE example (key Uint64, value String, PRIMARY KEY (key));",
+            NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+    }
+
+    {
+        auto result = client.ExecuteQuery(
+            R"(
+            UPSERT INTO example (key, value) VALUES (1, CAST(RandomUuid(1) AS String)) RETURNING *;
+            SELECT * FROM example;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+        CompareYson(FormatResultSetYson(result.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(1)));
+    }
 }
 
 Y_UNIT_TEST(ReturningTypes) {

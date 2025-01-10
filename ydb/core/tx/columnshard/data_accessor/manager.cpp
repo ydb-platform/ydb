@@ -2,12 +2,14 @@
 
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
+#include <ydb/library/accessor/positive_integer.h>
+
 namespace NKikimr::NOlap::NDataAccessorControl {
 
 void TLocalManager::DrainQueue() {
     std::optional<ui64> lastPathId;
     IGranuleDataAccessor* lastDataAccessor = nullptr;
-    ui32 countToFlight = 0;
+    TPositiveControlInteger countToFlight;
     while (PortionsAskInFlight + countToFlight < NYDBTest::TControllers::GetColumnShardController()->GetLimitForPortionsMetadataAsk() &&
            PortionsAsk.size()) {
         THashMap<ui64, std::vector<TPortionInfo::TConstPtr>> portionsToAsk;
@@ -57,20 +59,23 @@ void TLocalManager::DrainQueue() {
                 auto it = RequestsByPortion.find(accessor.GetPortionInfo().GetPortionId());
                 AFL_VERIFY(it != RequestsByPortion.end());
                 for (auto&& i : it->second) {
+                    Counters.ResultFromCache->Add(1);
                     if (!i->IsFetched() && !i->IsAborted()) {
                         i->AddAccessor(accessor);
                     }
                 }
                 RequestsByPortion.erase(it);
-                AFL_VERIFY(countToFlight);
                 --countToFlight;
             }
             if (dataAnalyzed.GetPortionsToAsk().size()) {
+                Counters.ResultAskDirectly->Add(dataAnalyzed.GetPortionsToAsk().size());
                 it->second->AskData(dataAnalyzed.GetPortionsToAsk(), AccessorCallback, "ANALYZE");
             }
         }
     }
-    PortionsAskInFlight += countToFlight;
+    PortionsAskInFlight.Add(countToFlight);
+    Counters.FetchingCount->Set(PortionsAskInFlight);
+    Counters.QueueSize->Set(PortionsAsk.size());
 }
 
 void TLocalManager::DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) {
@@ -82,8 +87,10 @@ void TLocalManager::DoAskData(const std::shared_ptr<TDataAccessorsRequest>& requ
             if (itRequest == RequestsByPortion.end()) {
                 AFL_VERIFY(RequestsByPortion.emplace(i->GetPortionId(), std::vector<std::shared_ptr<TDataAccessorsRequest>>({request})).second);
                 PortionsAsk.emplace_back(i, request->GetAbortionFlag());
+                Counters.AskNew->Add(1);
             } else {
                 itRequest->second.emplace_back(request);
+                Counters.AskDuplication->Add(1);
             }
         }
     }
@@ -113,7 +120,6 @@ void TLocalManager::DoAddPortion(const TPortionDataAccessor& accessor) {
             for (auto&& i : it->second) {
                 i->AddAccessor(accessor);
             }
-            AFL_VERIFY(PortionsAskInFlight);
             --PortionsAskInFlight;
         }
         RequestsByPortion.erase(it);

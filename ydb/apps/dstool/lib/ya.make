@@ -15,6 +15,7 @@ PY_SRCS(
     dstool_cmd_pdisk_list.py
     dstool_cmd_pdisk_remove_by_serial.py
     dstool_cmd_pdisk_set.py
+    dstool_cmd_pdisk_stop.py
 
     dstool_cmd_vdisk_evict.py
     dstool_cmd_vdisk_list.py

@@ -7,7 +7,6 @@ TEST_SRCS(
 )
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
-ENV(SQS_CLIENT_BINARY="ydb/core/ymq/client/bin/sqs")
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
@@ -19,7 +18,6 @@ ENDIF()
 
 DEPENDS(
     ydb/apps/ydbd
-    ydb/core/ymq/client/bin
 )
 
 PEERDIR(

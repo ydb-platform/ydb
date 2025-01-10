@@ -272,7 +272,6 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             , TableClient(Kikimr.GetTableClient()) {
             CSController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
             CSController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-            CSController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
         }
 
         void WaitResharding(const TString& hint = "") {

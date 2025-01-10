@@ -241,6 +241,13 @@ DEFINE_ENUM(ESecondaryIndexKind,
 
 struct TIndexInfo;
 
+DEFINE_ENUM(ETableToIndexCorrespondence,
+    ((Invalid)                  (0))
+    ((Injective)                (1))
+    ((Bijective)                (2))
+    ((Unknown)                  (3))
+);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_REFCOUNTED_CLASS(TTableMountCacheConfig)

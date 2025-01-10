@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(1.6.0)
+VERSION(1.7.0)
 
-ORIGINAL_SOURCE(https://github.com/ngtcp2/nghttp3/releases/download/v1.6.0/nghttp3-1.6.0.tar.xz)
+ORIGINAL_SOURCE(https://github.com/ngtcp2/nghttp3/releases/download/v1.7.0/nghttp3-1.7.0.tar.xz)
 
 LICENSE(
     FSFAP AND
@@ -12,10 +12,6 @@ LICENSE(
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
-PEERDIR(
-    contrib/libs/nghttp2
-)
 
 ADDINCL(
     GLOBAL contrib/libs/nghttp3/lib/includes
@@ -30,6 +26,7 @@ CFLAGS(
     -DBUILDING_NGHTTP3
     -DHAVE_CONFIG_H
     -DNGHTTP3_STATICLIB
+    -Dsfparse_parser_dict=nghttp3_sfparse_parser_dict
 )
 
 SRCS(
@@ -61,6 +58,7 @@ SRCS(
     lib/nghttp3_unreachable.c
     lib/nghttp3_vec.c
     lib/nghttp3_version.c
+    lib/sfparse/sfparse.c
 )
 
 END()

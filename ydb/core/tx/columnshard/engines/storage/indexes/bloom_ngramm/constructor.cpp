@@ -1,3 +1,4 @@
+#include "const.h"
 #include "constructor.h"
 #include "meta.h"
 
@@ -14,10 +15,10 @@ std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
     }
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId), columnId,
-        HashesCount, FilterSizeBytes, NGrammSize);
+        HashesCount, FilterSizeBytes, NGrammSize, RecordsCount);
 }
 
-NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
+TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
     if (!jsonInfo.Has("column_name")) {
         return TConclusionStatus::Fail("column_name have to be in bloom ngramm filter features");
     }
@@ -28,28 +29,38 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson:
         return TConclusionStatus::Fail("empty column_name in bloom ngramm filter features");
     }
 
+    if (!jsonInfo["records_count"].IsUInteger()) {
+        return TConclusionStatus::Fail("records_count have to be in bloom filter features as uint field");
+    }
+    RecordsCount = jsonInfo["records_count"].GetUInteger();
+    if (!TConstants::CheckRecordsCount(RecordsCount)) {
+        return TConclusionStatus::Fail("records_count have to be in bloom ngramm filter in interval " + TConstants::GetRecordsCountIntervalString());
+    }
+
     if (!jsonInfo["ngramm_size"].IsUInteger()) {
         return TConclusionStatus::Fail("ngramm_size have to be in bloom filter features as uint field");
     }
     NGrammSize = jsonInfo["ngramm_size"].GetUInteger();
-    if (NGrammSize < 3 || NGrammSize > 10) {
-        return TConclusionStatus::Fail("ngramm_size have to be in bloom ngramm filter in interval [3, 10]");
+    if (!TConstants::CheckNGrammSize(NGrammSize)) {
+        return TConclusionStatus::Fail("ngramm_size have to be in bloom ngramm filter in interval " + TConstants::GetNGrammSizeIntervalString());
     }
 
     if (!jsonInfo["filter_size_bytes"].IsUInteger()) {
         return TConclusionStatus::Fail("filter_size_bytes have to be in bloom filter features as uint field");
     }
     FilterSizeBytes = jsonInfo["filter_size_bytes"].GetUInteger();
-    if (FilterSizeBytes < 128 || FilterSizeBytes > (1 << 20)) {
-        return TConclusionStatus::Fail("filter_size_bytes have to be in bloom ngramm filter in interval [128, 1Mb]");
+    if (!TConstants::CheckFilterSizeBytes(FilterSizeBytes)) {
+        return TConclusionStatus::Fail(
+            "filter_size_bytes have to be in bloom ngramm filter in interval " + TConstants::GetFilterSizeBytesIntervalString());
     }
 
     if (!jsonInfo["hashes_count"].IsUInteger()) {
         return TConclusionStatus::Fail("hashes_count have to be in bloom filter features as uint field");
     }
     HashesCount = jsonInfo["hashes_count"].GetUInteger();
-    if (HashesCount < 1 || HashesCount > 10) {
-        return TConclusionStatus::Fail("hashes_count have to be in bloom ngramm filter in interval [1, 10]");
+    if (!TConstants::CheckHashesCount(HashesCount)) {
+        return TConclusionStatus::Fail(
+            "hashes_count have to be in bloom ngramm filter in interval " + TConstants::GetHashesCountIntervalString());
     }
     return TConclusionStatus::Success();
 }
@@ -61,17 +72,21 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
         return TConclusionStatus::Fail(errorMessage);
     }
     auto& bFilter = proto.GetBloomNGrammFilter();
+    RecordsCount = bFilter.GetRecordsCount();
+    if (!TConstants::CheckRecordsCount(RecordsCount)) {
+        return TConclusionStatus::Fail("RecordsCount have to be in " + TConstants::GetRecordsCountIntervalString());
+    }
     NGrammSize = bFilter.GetNGrammSize();
-    if (NGrammSize < 3 || NGrammSize > 10) {
-        return TConclusionStatus::Fail("NGrammSize have to be in [3, 10]");
+    if (!TConstants::CheckNGrammSize(NGrammSize)) {
+        return TConclusionStatus::Fail("NGrammSize have to be in " + TConstants::GetNGrammSizeIntervalString());
     }
     FilterSizeBytes = bFilter.GetFilterSizeBytes();
-    if (FilterSizeBytes < 128 || FilterSizeBytes > (1 << 20)) {
-        return TConclusionStatus::Fail("FilterSizeBytes have to be in [128, 1Mb]");
+    if (!TConstants::CheckFilterSizeBytes(FilterSizeBytes)) {
+        return TConclusionStatus::Fail("FilterSizeBytes have to be in " + TConstants::GetFilterSizeBytesIntervalString());
     }
     HashesCount = bFilter.GetHashesCount();
-    if (HashesCount < 1 || HashesCount > 10) {
-        return TConclusionStatus::Fail("HashesCount size have to be in [3, 10]");
+    if (!TConstants::CheckHashesCount(HashesCount)) {
+        return TConclusionStatus::Fail("HashesCount size have to be in " + TConstants::GetHashesCountIntervalString());
     }
     ColumnName = bFilter.GetColumnName();
     if (!ColumnName) {
@@ -83,6 +98,7 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
 void TIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const {
     auto* filterProto = proto.MutableBloomNGrammFilter();
     filterProto->SetColumnName(ColumnName);
+    filterProto->SetRecordsCount(RecordsCount);
     filterProto->SetNGrammSize(NGrammSize);
     filterProto->SetFilterSizeBytes(FilterSizeBytes);
     filterProto->SetHashesCount(HashesCount);

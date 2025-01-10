@@ -168,6 +168,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         }
 
         WaitForZeroSessions(counters);
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
     }
 
     Y_UNIT_TEST(IsNull) {

@@ -103,9 +103,43 @@ class WorkloadBase:
             t.join()
 
 
+supported_pk_types = [
+    # Bool https://github.com/ydb-platform/ydb/issues/13037
+    "Int8",
+    "Int16",
+    "Int32",
+    "Int64",
+    "Uint8",
+    "Uint16",
+    "Uint32",
+    "Uint64",
+    "Decimal(22,9)",
+    # "DyNumber", https://github.com/ydb-platform/ydb/issues/13048
+
+    "String",
+    "Utf8",
+    # Uuid", https://github.com/ydb-platform/ydb/issues/13047
+
+    "Date",
+    "Datetime",
+    "Datetime64",
+    "Timestamp",
+    # "Interval", https://github.com/ydb-platform/ydb/issues/13050
+]
+
+supported_types = supported_pk_types + [
+    "Float",
+    "Double",
+    "Json",
+    "JsonDocument",
+    "Yson"
+]
+
+
 class WorkloadTablesCreateDrop(WorkloadBase):
-    def __init__(self, client, prefix, stop):
+    def __init__(self, client, prefix, stop, allow_nullables_in_pk):
         super().__init__(client, prefix, "create_drop", stop)
+        self.allow_nullables_in_pk = allow_nullables_in_pk
         self.created = 0
         self.deleted = 0
         self.tables = set()
@@ -130,13 +164,27 @@ class WorkloadTablesCreateDrop(WorkloadBase):
 
     def create_table(self, table):
         path = self.get_table_path(table)
+        column_n = random.randint(1, 10000)
+        primary_key_column_n = random.randint(1, column_n)
+        partition_key_column_n = random.randint(1, primary_key_column_n)
+        column_defs = []
+        for i in range(column_n):
+            if i < primary_key_column_n:
+                c = random.choice(supported_pk_types)
+                if not self.allow_nullables_in_pk or random.choice([False, True]):
+                    c += " NOT NULL"
+            else:
+                c = random.choice(supported_types)
+                if random.choice([False, True]):
+                    c += " NOT NULL"
+            column_defs.append(c)
+
         stmt = f"""
                 CREATE TABLE `{path}` (
-                id Int64 NOT NULL,
-                i64Val Int64,
-                PRIMARY KEY(id)
+                    {", ".join(["c" + str(i) + " " + column_defs[i] for i in range(column_n)])},
+                    PRIMARY KEY({", ".join(["c" + str(i) for i in range(primary_key_column_n)])})
                 )
-                PARTITION BY HASH(id)
+                PARTITION BY HASH({", ".join(["c" + str(i) for i in range(partition_key_column_n)])})
                 WITH (
                     STORE = COLUMN
                 )
@@ -236,11 +284,12 @@ class WorkloadInsertDelete(WorkloadBase):
 
 
 class WorkloadRunner:
-    def __init__(self, client, name, duration):
+    def __init__(self, client, name, duration, allow_nullables_in_pk):
         self.client = client
-        self.name = name
+        self.name = args.path
         self.tables_prefix = "/".join([self.client.database, self.name])
-        self.duration = duration
+        self.duration = args.duration
+        self.allow_nullables_in_pk = allow_nullables_in_pk
 
     def __enter__(self):
         self._cleanup()
@@ -257,8 +306,8 @@ class WorkloadRunner:
     def run(self):
         stop = threading.Event()
         workloads = [
-            WorkloadTablesCreateDrop(self.client, self.name, stop),
-            # WorkloadInsertDelete(self.client, self.name, stop), TODO fix https://github.com/ydb-platform/ydb/issues/12871
+            WorkloadTablesCreateDrop(self.client, self.name, stop, self.allow_nullables_in_pk),
+            WorkloadInsertDelete(self.client, self.name, stop),
         ]
         for w in workloads:
             w.start()
@@ -283,8 +332,9 @@ if __name__ == "__main__":
     parser.add_argument("--database", default="Root/test", help="A database to connect")
     parser.add_argument("--path", default="olap_workload", help="A path prefix for tables")
     parser.add_argument("--duration", default=10 ** 9, type=lambda x: int(x), help="A duration of workload in seconds.")
+    parser.add_argument("--allow-nullables-in-pk", default=False, help="Allow nullable types for columns in a Primary Key.")
     args = parser.parse_args()
     client = YdbClient(args.endpoint, args.database, True)
     client.wait_connection()
-    with WorkloadRunner(client, args.path, args.duration) as runner:
+    with WorkloadRunner(client, args.path, args.duration, args.allow_nullables_in_pk) as runner:
         runner.run()

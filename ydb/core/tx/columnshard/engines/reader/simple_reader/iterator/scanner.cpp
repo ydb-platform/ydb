@@ -18,7 +18,7 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
     Context->GetCommonContext()->GetCounters().OnSourceFinished(
         source->GetRecordsCount(), source->GetUsedRawBytes(), tableExt ? tableExt->num_rows() : 0);
 
-    if ((!tableExt || !tableExt->num_rows()) && Context->GetCommonContext()->GetReadMetadata()->HasLimit() && InFlightLimit < MaxInFlight) {
+    if (/*(!tableExt || !tableExt->num_rows()) &&*/ Context->GetCommonContext()->GetReadMetadata()->HasLimit() && InFlightLimit < MaxInFlight) {
         InFlightLimit = 2 * InFlightLimit;
     }
     source->MutableStageResult().SetResultChunk(std::move(tableExt), startIndex, recordsCount);

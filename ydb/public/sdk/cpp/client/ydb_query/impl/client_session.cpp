@@ -80,8 +80,8 @@ void TSession::TImpl::StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISes
                 auto impl = holder->TrySharedOwning();
                 if (impl) {
                     impl->CloseFromServer(client);
+                    holder->Release();
                 }
-                holder->Release();
                 break;
             }
         }

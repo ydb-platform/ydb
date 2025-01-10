@@ -40,15 +40,7 @@ namespace {
     void Run(TTestBasicRuntime& runtime, TTestEnv& env, const std::variant<TVector<TString>, TTablesWithAttrs>& tablesVar, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
             const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "", const TString& peerName = "", 
-<<<<<<< HEAD
-<<<<<<< HEAD
             const TVector<TString>& cdcStreams = {}) {
-=======
-            THashMap<TString, TVector<TString>> cdcStreams = {}) {
->>>>>>> tests
-=======
-            const TVector<TString>& cdcStreams = {}) {
->>>>>>> test
 
         TTablesWithAttrs tables;
 
@@ -140,22 +132,9 @@ namespace {
             env.TestWaitNotification(runtime, txId, schemeshardId);
         }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
         for (const auto& cdcStream : cdcStreams) {
             TestCreateCdcStream(runtime, schemeshardId, ++txId, dbName, cdcStream);
             env.TestWaitNotification(runtime, txId, schemeshardId);
-=======
-        for (const auto& [tablePath, streams] : cdcStreams) {
-            for (const auto& stream : streams) {
-                TestCreateCdcStream(runtime, schemeshardId, ++txId, tablePath, stream);
-            }
->>>>>>> tests
-=======
-        for (const auto& cdcStream : cdcStreams) {
-            TestCreateCdcStream(runtime, schemeshardId, ++txId, dbName, cdcStream);
-            env.TestWaitNotification(runtime, txId, schemeshardId);
->>>>>>> test
         }
 
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
@@ -2480,106 +2459,6 @@ partitioning_settings {
                     );
                 }
             );
-            for (auto x : result) {
-                Cerr << x << Endl;
-            }
-            return result;
-        }
-
-        const ui64 Count;
-        const TS3Mock& S3Mock;
-        const TVector<TString> Changefeeds;
-    };
-
-    Y_UNIT_TEST(Changefeeds) {
-        TTestBasicRuntime runtime;
-
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
-        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
-
-        ChangefeedGenerator gen(3, s3Mock);
-
-        auto request = Sprintf(R"(
-            ExportToS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_path: "/MyRoot/Table"
-                destination_prefix: ""
-              }
-            }
-        )", port);
-
-        TTestEnv env(runtime);
-        Run(runtime, env, TVector<TString>{
-            R"(
-                Name: "Table"
-                Columns { Name: "key" Type: "Utf8" }
-                Columns { Name: "value" Type: "Utf8" }
-                KeyColumnNames: ["key"]
-            )",
-        }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", gen.GetChangefeeds());
-
-        gen.Check();
-    }
-
-    class ChangefeedGenerator {
-    public:
-        ChangefeedGenerator(const ui64 count, const TS3Mock& s3Mock)
-        : Count(count)
-        , S3Mock(s3Mock)
-        , Changefeeds(GenChangefeeds())
-        {}
-
-        const TVector<TString>& GetChangefeeds() {
-            return Changefeeds;
-        }
-
-        void Check() {
-            for (ui64 i = 1; i <= Count; ++i) {
-                auto changefeedDir = "/" + GenChangefeedName(i);
-                auto* changefeed = S3Mock.GetData().FindPtr(changefeedDir + "/changefeed_description.pb");
-                UNIT_ASSERT(changefeed);
-
-                auto* topic = S3Mock.GetData().FindPtr(changefeedDir + "/topic_description.pb");
-                UNIT_ASSERT(topic);
-
-                const auto* changefeedChecksum = S3Mock.GetData().FindPtr(changefeedDir + "/changefeed_description.pb.sha256");
-                UNIT_ASSERT(changefeedChecksum);
-
-                const auto* topicChecksum = S3Mock.GetData().FindPtr(changefeedDir + "/topic_description.pb.sha256");
-                UNIT_ASSERT(topicChecksum);
-            }
-        }
-
-    private:
-
-        static TString GenChangefeedName(const ui64 num) {
-            return TStringBuilder() << "update_feed" << num;
-        }
-
-        TVector<TString> GenChangefeeds() {
-            TVector<TString> result(Count);
-            std::generate(result.begin(), result.end(), [n = 1]() mutable {
-                    return Sprintf(
-                        R"(
-                            TableName: "Table"
-                            StreamDescription {
-                                Name: "%s"
-                                Mode: ECdcStreamModeUpdate
-                                Format: ECdcStreamFormatJson
-                                State: ECdcStreamStateReady
-                            }
-                        )", GenChangefeedName(n++).data()
-                    );
-                }
-            );
-            for (auto x : result) {
-                Cerr << x << Endl;
-            }
             return result;
         }
 

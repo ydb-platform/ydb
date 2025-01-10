@@ -204,14 +204,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         this->Become(&TThis::StateUploadScheme);
     }
 
-    void UploadPersQueueGroups() {
-        Y_ABORT_UNLESS(!CdcStremsUploaded);
-
-        if (!CdcStremsUploaded) {
-            UploadPersQueueGroups();
-        }
-    }
-
     void UploadPermissions() {
         Y_ABORT_UNLESS(!PermissionsUploaded);
 
@@ -270,18 +262,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     void UploadTopic() {
         const auto& topic = Changefeeds[IndexExportedChangefeed].Topic;
         PutTopicDescription(topic, GetCurrentChangefeedName());
-    }
-
-    void UploadChangefeeds() {
-        Y_ABORT_UNLESS(!ChangefeedsUploaded);
-
-        for (const auto &[changefeed, topic] : ChangefeedsExportDescs) {
-            google::protobuf::TextFormat::PrintToString(changefeed, &Buffer);
-            const auto changefeedKeyPattern = TStringBuilder() << Settings.ObjectKeyPattern << "/" << changefeed.Getname();
-            PutChangefeedDescription(changefeed, changefeedKeyPattern);
-            PutTopicDescription(topic, changefeedKeyPattern);
-        }
-        this->Become(&TThis::StateUploadScheme);
     }
 
     void UploadMetadata() {
@@ -910,11 +890,7 @@ private:
     const TActorId DataShard;
     const ui64 TxId;
     const TMaybe<Ydb::Table::CreateTableRequest> Scheme;
-<<<<<<< HEAD
-    TVector<TChangefeedExportDescriptions> ChangefeedsExportDescs;
-=======
-    const TVector<TChangefeedExportDescriptions> Changefeeds;
->>>>>>> fix after review
+    TVector<TChangefeedExportDescriptions> Changefeeds;
     const TString Metadata;
     const TMaybe<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
 

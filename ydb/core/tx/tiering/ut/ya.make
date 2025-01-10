@@ -30,6 +30,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_tiers.cpp
+    ut_object.cpp
 )
 
 END()

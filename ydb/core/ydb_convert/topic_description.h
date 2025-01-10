@@ -1,22 +1,11 @@
 #pragma once
 
-// #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
-// #include <ydb/public/api/protos/ydb_table.pb.h>
 
-namespace Ydb {
-    namespace Topic {
-        class Consumer;
-        class DescribeTopicResult;
-    }
+namespace Ydb::Topic {
+    class Consumer;
+    class DescribeTopicResult;
 }
-
-// namespace NKikimrPQ {
-//     class TPQTabletConfig {
-//     public:
-//         class TConsumer;
-//     };
-// }
 
 namespace NKikimrSchemeOp {
     class TPersQueueGroupDescription;

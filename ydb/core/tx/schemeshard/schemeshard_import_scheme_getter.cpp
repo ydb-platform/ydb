@@ -148,7 +148,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
 
         NeedValidateChecksums = item.Metadata.GetVersion() > 0 && !SkipChecksumValidation;
 
-        auto nextStep = [this](){
+        auto nextStep = [this]() {
             StartDownloadingScheme();
         };
 
@@ -182,7 +182,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
             return Reply(false, "Cannot parse scheme");
         }
 
-        auto nextStep = [this](){
+        auto nextStep = [this]() {
             if (NeedDownloadPermissions) {
                 StartDownloadingPermissions();
             } else {
@@ -222,7 +222,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         }
         item.Permissions = std::move(permissions);
 
-        auto nextStep = [this](){
+        auto nextStep = [this]() {
             Reply();
         };
 
@@ -247,7 +247,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
 
         TString expectedChecksum = msg.Body.substr(0, msg.Body.find(' '));
         if (expectedChecksum != Checksum) {
-            Reply(false, TStringBuilder() << "Checksum mismatch for " << ChecksumKey
+            return Reply(false, TStringBuilder() << "Checksum mismatch for " << ChecksumKey
                 << " expected# " << expectedChecksum
                 << ", got# " << Checksum);
         }
@@ -335,7 +335,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     }
 
     void StartValidatingChecksum(const TString& key, const TString& object, std::function<void()> checksumValidatedCallback) {
-        ChecksumKey = key + ".sha256";
+        ChecksumKey = NBackup::ChecksumKey(key);
         Checksum = NBackup::ComputeChecksum(object);
         ChecksumValidatedCallback = checksumValidatedCallback;
 

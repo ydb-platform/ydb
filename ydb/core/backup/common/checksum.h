@@ -16,5 +16,6 @@ public:
 
 IChecksum* CreateChecksum();
 TString ComputeChecksum(TStringBuf data);
+TString ChecksumKey(const TString& objKey);
 
 } // NKikimr::NBackup

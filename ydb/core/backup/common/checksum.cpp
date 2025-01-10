@@ -1,4 +1,4 @@
-#include <ydb/core/backup/common/checksum.h>
+#include "checksum.h"
 
 #include <openssl/sha.h>
 
@@ -34,6 +34,10 @@ TString ComputeChecksum(TStringBuf data) {
 
 IChecksum* CreateChecksum() {
     return new TSHA256();
+}
+
+TString ChecksumKey(const TString& objKey) {
+    return objKey + ".sha256";
 }
 
 } // NKikimr::NDataShard

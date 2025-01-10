@@ -48,6 +48,7 @@ namespace {
 namespace NKikimr {
 namespace NDataShard {
 
+using namespace NBackup;
 using namespace NBackupRestoreTraits;
 
 using namespace NResourceBroker;
@@ -800,7 +801,7 @@ public:
         , Retries(task.GetNumberOfRetries())
         , ReadBatchSize(task.GetS3Settings().GetLimits().GetReadBatchSize())
         , ReadBufferSizeLimit(AppData()->DataShardConfig.GetRestoreReadBufferSizeLimit())
-        , Checksum(task.GetValidateChecksums() ? NBackup::CreateChecksum() : nullptr)
+        , Checksum(task.GetValidateChecksums() ? CreateChecksum() : nullptr)
     {
     }
 

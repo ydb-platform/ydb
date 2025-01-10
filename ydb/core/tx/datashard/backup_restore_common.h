@@ -6,11 +6,8 @@
 #include "datashard_pipeline.h"
 #include "execution_unit.h"
 
-#include <ydb/core/base/row_version.h>
-
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
-#include <util/generic/vector.h>
 
 namespace NKikimr {
 namespace NDataShard {

@@ -2279,7 +2279,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         return session;
     }
 
-    Y_UNIT_TEST(VectorIndexOrderByCosineDistance) {
+    Y_UNIT_TEST(VectorIndexOrderByCosineDistanceLevel1) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -2307,7 +2307,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         DoPositiveQueriesVectorIndexOrderByCosine(session);
     }
 
-    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarity) {
+    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarityLevel1) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -2335,7 +2335,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         DoPositiveQueriesVectorIndexOrderByCosine(session);
     }
 
-    Y_UNIT_TEST(VectorIndexOrderByCosineDistanceNullable) {
+    Y_UNIT_TEST(VectorIndexOrderByCosineDistanceNullableLevel1) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -2363,7 +2363,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         DoPositiveQueriesVectorIndexOrderByCosine(session);
     }
 
-    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarityNullable) {
+    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarityNullableLevel1) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -2381,6 +2381,118 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     GLOBAL USING vector_kmeans_tree
                     ON (emb)
                     WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        DoPositiveQueriesVectorIndexOrderByCosine(session);
+    }
+
+    Y_UNIT_TEST(VectorIndexOrderByCosineDistanceLevel2) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, false);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        DoPositiveQueriesVectorIndexOrderByCosine(session);
+    }
+
+    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarityLevel2) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, false);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        DoPositiveQueriesVectorIndexOrderByCosine(session);
+    }
+
+    Y_UNIT_TEST(VectorIndexOrderByCosineDistanceNullableLevel2) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, true);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        DoPositiveQueriesVectorIndexOrderByCosine(session);
+    }
+
+    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarityNullableLevel2) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, true);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
             )"));
 
             auto result = session.ExecuteSchemeQuery(createIndex)

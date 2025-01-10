@@ -842,7 +842,8 @@ static const char* const CommitQueueParamsQuery = R"__(
         (let eventsUpdate '(
             '('CustomQueueName customName)
             '('EventTimestamp now)
-            '('FolderId folderId)))
+            '('FolderId folderId)
+            '('Labels tags)))
 
         (let attrRow '(%3$s))
 
@@ -1244,7 +1245,8 @@ static const char* EraseQueueRecordQuery = R"__(
             'CustomQueueName
             'CreatedTimestamp
             'FolderId
-            'TablesFormat))
+            'TablesFormat
+            'Tags))
         (let queuesRead (SelectRow queuesTable queuesRow queuesSelect))
 
         (let currentVersion
@@ -1296,6 +1298,13 @@ static const char* EraseQueueRecordQuery = R"__(
             )
         )
 
+        (let queueTags
+            (Coalesce
+                (Member queuesRead 'Tags)
+                (Utf8String '"{}")
+            )
+        )
+
         (let removedQueueRow '(
             '('RemoveTimestamp now)
             '('QueueIdNumber currentVersion)))
@@ -1325,7 +1334,8 @@ static const char* EraseQueueRecordQuery = R"__(
         (let eventsUpdate '(
             '('CustomQueueName customName)
             '('EventTimestamp eventTs)
-            '('FolderId folderId)))
+            '('FolderId folderId)
+            '('Labels queueTags)))
 
         (return (Extend
             (AsList

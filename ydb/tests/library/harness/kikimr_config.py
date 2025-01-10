@@ -356,6 +356,9 @@ class KikimrConfigGenerator(object):
         if datashard_config:
             self.yaml_config["data_shard_config"] = datashard_config
 
+        if column_shard_config:
+            self.yaml_config["column_shard_config"] = column_shard_config
+
         self.__build()
 
         if self.grpc_ssl_enable:

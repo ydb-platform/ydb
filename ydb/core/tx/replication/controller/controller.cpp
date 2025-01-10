@@ -783,6 +783,7 @@ void TController::Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& 
         PendingTxId[adjustedVersion].insert(nodeId);
     }
 
+    TabletCounters->Simple()[COUNTER_PENDING_VERSIONS] = PendingTxId.size();
     RunTxAssignTxId(ctx);
 }
 
@@ -799,6 +800,7 @@ void TController::Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext
     const auto version = TRowVersion::FromProto(record.GetVersion());
     PendingHeartbeats[id] = version;
 
+    TabletCounters->Simple()[COUNTER_WORKERS_PENDING_HEARTBEAT] = PendingHeartbeats.size();
     RunTxHeartbeat(ctx);
 }
 

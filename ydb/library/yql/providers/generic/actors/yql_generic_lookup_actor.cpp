@@ -96,6 +96,10 @@ namespace NYql::NDq {
     private:
         void Free() {
             auto guard = Guard(*Alloc);
+            if (Request && InFlight) {
+                // If request fails on (unrecoverable) error or cancelled, we may end up with non-zero InFlight (when request successfully completed, @Request is nullptr)
+                InFlight->Dec();
+            }
             Request.reset();
             KeyTypeHelper.reset();
         }
@@ -111,6 +115,7 @@ namespace NYql::NDq {
             ResultBytes = component->GetCounter("Bytes");
             AnswerTime = component->GetCounter("AnswerMs");
             CpuTime = component->GetCounter("CpuUs");
+            InFlight = component->GetCounter("InFlight");
         }
     public:
 
@@ -245,6 +250,7 @@ namespace NYql::NDq {
 
             if (Count) {
                 Count->Inc();
+                InFlight->Inc();
                 Keys->Add(request->size());
             }
 
@@ -344,6 +350,7 @@ namespace NYql::NDq {
             auto ev = new IDqAsyncLookupSource::TEvLookupResult(Request);
             if (AnswerTime) {
                 AnswerTime->Add((TInstant::Now() - SentTime).MilliSeconds());
+                InFlight->Dec();
             }
             Request.reset();
             TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
@@ -454,6 +461,7 @@ namespace NYql::NDq {
         ::NMonitoring::TDynamicCounters::TCounterPtr ResultChunks;
         ::NMonitoring::TDynamicCounters::TCounterPtr AnswerTime;
         ::NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
+        ::NMonitoring::TDynamicCounters::TCounterPtr InFlight;
         TInstant SentTime;
     };
 

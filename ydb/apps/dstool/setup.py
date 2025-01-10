@@ -28,7 +28,7 @@ https://github.com/ydb-platform/ydb/blob/main/ydb/apps/dstool/README.md
 
 setuptools.setup(
     name="ydb-dstool",
-    version="0.0.12",
+    version="0.0.13",
     description="YDB Distributed Storage Administration Tool",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -38,30 +38,12 @@ setuptools.setup(
     license="Apache 2.0",
     package_dir={"": "."},
     packages=[
-        'ydb/library/actors/protos',
-        'ydb/core/protos',
-        'ydb/core/fq/libs/config/protos',
-        'ydb/library/folder_service/proto',
-        'ydb/library/login/protos',
-        'ydb/library/mkql_proto/protos',
-        'ydb/library/yql/dq/actors/protos',
-        'ydb/library/yql/dq/proto',
-        'ydb/library/yql/protos',
-        'ydb/library/yql/providers/common/proto',
-        'ydb/library/yql/providers/s3/proto',
-        'yql/essentials/public/issue/protos',
-        'ydb/public/api/protos/annotations',
-        'ydb/public/api/protos/draft',
-        'ydb/public/api/protos',
-        'ydb/apps/dstool/lib',
         'ydb/apps/dstool',
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
     ],
     install_requires=(
-        "protobuf>=3.13.0",
-        "grpcio>=1.5.0",
         "packaging"
     ),
     python_requires=">=3.7",

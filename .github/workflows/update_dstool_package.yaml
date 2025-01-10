@@ -19,7 +19,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.7.13'
+          python-version: '3.8.12'
 
       - name: Install dependencies
         run: |
@@ -35,7 +35,6 @@ jobs:
       - name: Compile proto files and build package
         run: |
           set -ex
-          ${{ github.workspace }}/ydb/apps/dstool/compile_protos.py --ydb-root ${{ github.workspace }}
           mv ${{ github.workspace }}/ydb/apps/dstool/setup.py ${{ github.workspace }}
           python -m build
 

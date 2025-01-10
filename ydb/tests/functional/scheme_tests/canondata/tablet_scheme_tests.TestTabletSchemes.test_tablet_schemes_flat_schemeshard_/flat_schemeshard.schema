@@ -6626,11 +6626,6 @@
                 "ColumnId": 6,
                 "ColumnName": "FailedAttemptCount",
                 "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 7,
-                "ColumnName": "IsEnabled",
-                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -6643,8 +6638,7 @@
                     3,
                     4,
                     5,
-                    6,
-                    7
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,

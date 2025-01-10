@@ -15,8 +15,6 @@ VERSION(18.1.0-rc1)
 
 ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-18.1.0-rc1.tar.gz)
 
-DISABLE(USE_LTO)
-
 PEERDIR(
     library/cpp/sanitizer/include
 )
@@ -29,11 +27,17 @@ NO_RUNTIME()
 
 NO_UTIL()
 
+NO_LTO()
+
 NO_SANITIZE()
 
 NO_SANITIZE_COVERAGE()
 
 CFLAGS(
+    -D_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER
+    -D_LIBUNWIND_IS_NATIVE_ONLY
+    -D_LIBUNWIND_LINK_DL_LIB
+    -D_LIBUNWIND_LINK_PTHREAD_LIB
     -fno-exceptions
     -fno-rtti
     -funwind-tables

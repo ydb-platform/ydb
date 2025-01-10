@@ -26,25 +26,33 @@ public:
 private:
     using TEvLocationResponse = NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvPartitionLocationResponse;
 
+    struct TNodeInfo {
+        TString Host;
+        ui32 Port;
+    };
+
     TActorId SendTopicRequest(const TMetadataRequestData::TMetadataRequestTopic& topicRequest);
-    void HandleResponse(TEvLocationResponse::TPtr ev, const NActors::TActorContext& ctx);
-    void HandleNodesResponse(NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev, const NActors::TActorContext& ctx);
+    void HandleLocationResponse(TEvLocationResponse::TPtr ev, const NActors::TActorContext& ctx);
+    void HandleNodesResponse(NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev,
+                             const NActors::TActorContext& ctx);
     void HandleDiscoveryData(NKikimr::TEvDiscovery::TEvDiscoveryData::TPtr& ev, const NActors::TActorContext& ctx);
     void HandleDiscoveryError(NKikimr::TEvDiscovery::TEvError::TPtr& ev);
 
-    void AddTopicResponse(TMetadataResponseData::TMetadataResponseTopic& topic, TEvLocationResponse* response);
+    void AddTopicResponse(TMetadataResponseData::TMetadataResponseTopic& topic, TEvLocationResponse* response,
+                          const TVector<TNodeInfo*>& nodes);
     void AddTopicError(TMetadataResponseData::TMetadataResponseTopic& topic, EKafkaErrors errorCode);
     void RespondIfRequired(const NActors::TActorContext& ctx);
     void AddProxyNodeToBrokers();
-    void AddCurrentNodeToBrokers();
     void AddBroker(ui64 nodeId, const TString& host, ui64 port);
     void RequestICNodeCache();
     void ProcessTopics();
     void SendDiscoveryRequest();
-    bool ProcessDiscoveryData(NKikimr::TEvDiscovery::TEvDiscoveryData::TPtr& ev);
+    void ProcessDiscoveryData(NKikimr::TEvDiscovery::TEvDiscoveryData::TPtr& ev);
+    TVector<TNodeInfo*> CheckTopicNodes(TEvLocationResponse* response);
+
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvLocationResponse, HandleResponse);
+            HFunc(TEvLocationResponse, HandleLocationResponse);
             HFunc(NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse, HandleNodesResponse);
             HFunc(NKikimr::TEvDiscovery::TEvDiscoveryData, HandleDiscoveryData);
             hFunc(NKikimr::TEvDiscovery::TEvError, HandleDiscoveryError);
@@ -68,12 +76,13 @@ private:
     EKafkaErrors ErrorCode = EKafkaErrors::NONE_ERROR;
 
     TActorId DiscoveryCacheActor;
-    bool NeedCurrentNode = false;
-    TString CurrentNodeHostname;
-    bool DiscoveryRequested = false;
     bool OwnDiscoveryCache = false;
-    THashMap<ui64, ui64> Nodes;
-    TMap<ui64, TEvLocationResponse::TPtr> PendingTopicResponses;
+    bool NeedCurrentNode = false;
+    bool HaveError = false;
+    bool FallbackToIcDiscovery = false;
+    TMap<ui64, TAutoPtr<TEvLocationResponse>> PendingTopicResponses;
+
+    THashMap<ui64, TNodeInfo> Nodes;
 };
 
 } // namespace NKafka

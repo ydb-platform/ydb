@@ -1478,13 +1478,10 @@ void TPartitionsLocationActor::Bootstrap(const NActors::TActorContext&)
 {
     SendDescribeProposeRequest();
     UnsafeBecome(&TPartitionsLocationActor::StateWork);
-    SendNodesRequest();
-
 }
 
 void TPartitionsLocationActor::StateWork(TAutoPtr<IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TEvICNodesInfoCache::TEvGetAllNodesInfoResponse, Handle);
         default:
             if (!TDescribeTopicActorImpl::StateWork(ev, ActorContext())) {
                 TBase::StateWork(ev);
@@ -1519,13 +1516,10 @@ bool TPartitionsLocationActor::ApplyResponse(
         partLocation.NodeId = nodeId;
         Response->Partitions.emplace_back(std::move(partLocation));
     }
-    if (GotNodesInfo)
-        Finalize();
-    else
-        GotPartitions = true;
+    Finalize();
     return true;
 }
-
+/*
 void TPartitionsLocationActor::SendNodesRequest() const {
     auto* icEv = new TEvICNodesInfoCache::TEvGetAllNodesInfoRequest();
     ActorContext().Send(CreateICNodesInfoCacheServiceId(), icEv);
@@ -1539,23 +1533,12 @@ void TPartitionsLocationActor::Handle(TEvICNodesInfoCache::TEvGetAllNodesInfoRes
     else
         GotNodesInfo = true;
 }
-
+*/
 void TPartitionsLocationActor::Finalize() {
     if (Settings.Partitions) {
         Y_ABORT_UNLESS(Response->Partitions.size() == Settings.Partitions.size());
     } else {
         Y_ABORT_UNLESS(Response->Partitions.size() == PQGroupInfo->Description.PartitionsSize());
-    }
-    for (auto& pInResponse : Response->Partitions) {
-        auto iter = NodesInfoEv->Get()->NodeIdsMapping->find(pInResponse.NodeId);
-        if (iter.IsEnd()) {
-            return RaiseError(
-                    TStringBuilder() << "Hostname not found for nodeId " << pInResponse.NodeId,
-                    Ydb::PersQueue::ErrorCode::ERROR,
-                    Ydb::StatusIds::INTERNAL_ERROR, ActorContext()
-            );
-        }
-        pInResponse.Hostname = (*NodesInfoEv->Get()->Nodes)[iter->second].Host;
     }
     TBase::RespondWithCode(Ydb::StatusIds::SUCCESS);
 }

@@ -216,13 +216,19 @@ namespace NKafka::NTests {
             runtime->EnableScheduleForActor(actorId);
         }
 
-        void CheckKafkaMetaResponse(TTestActorRuntime* runtime, ui64 kafkaPort) {
+        void CheckKafkaMetaResponse(TTestActorRuntime* runtime, ui64 kafkaPort, bool error = false) {
             TAutoPtr<IEventHandle> handle;
             auto* ev = runtime->GrabEdgeEvent<TEvKafka::TEvResponse>(handle);
             UNIT_ASSERT(ev);
             auto response = dynamic_cast<TMetadataResponseData*>(ev->Response.get());
             UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
-            UNIT_ASSERT(response->Topics[0].ErrorCode == EKafkaErrors::NONE_ERROR);
+            if (!error) {
+                UNIT_ASSERT(response->Topics[0].ErrorCode == EKafkaErrors::NONE_ERROR);
+            } else {
+                UNIT_ASSERT(response->Topics[0].ErrorCode == EKafkaErrors::UNKNOWN_SERVER_ERROR);
+                UNIT_ASSERT(ev->ErrorCode == EKafkaErrors::UNKNOWN_SERVER_ERROR);
+                return;
+            }
             UNIT_ASSERT_VALUES_EQUAL(response->Brokers.size(), 1);
             Cerr << "Broker " << response->Brokers[0].NodeId << " - " << response->Brokers[0].Host << ":" << response->Brokers[0].Port  << Endl;
             UNIT_ASSERT_VALUES_EQUAL(response->Brokers[0].Port, kafkaPort);
@@ -261,6 +267,21 @@ namespace NKafka::NTests {
                                    config, fakeCache);
 
             CheckKafkaMetaResponse(runtime, kafkaPort);
+        }
+
+        Y_UNIT_TEST(DiscoveryResponsesWithError) {
+            auto [server, kafkaPort, config, topicName] = SetupServer("topic1");
+
+            auto* runtime = server.GetRuntime();
+            auto edge = runtime->AllocateEdgeActor();
+
+            Ydb::Discovery::ListEndpointsResult leResult;
+            auto fakeCache = runtime->Register(new TFakeDiscoveryCache(leResult, true));
+            runtime->EnableScheduleForActor(fakeCache);
+            CreateMetarequestActor(edge, NKikimr::JoinPath({"/Root/PQ/", topicName}), runtime,
+                                   config, fakeCache);
+
+            CheckKafkaMetaResponse(runtime, kafkaPort, true);
         }
 
         Y_UNIT_TEST(DiscoveryResponsesWithOtherPort) {

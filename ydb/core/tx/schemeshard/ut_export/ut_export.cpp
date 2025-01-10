@@ -18,6 +18,8 @@
 
 #include <aws/core/Aws.h>
 
+#include <format>
+
 using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NWrappers::NTestHelpers;
 
@@ -2524,6 +2526,68 @@ partitioning_settings {
         gen.Check();
     }
 
+    class ChangefeedGenerator {
+    public:
+        ChangefeedGenerator(const ui64 count, const TS3Mock& s3Mock)
+        : Count(count)
+        , S3Mock(s3Mock)
+        , Changefeeds(GenChangefeeds())
+        {}
+
+        const TVector<TString>& GetChangefeeds() {
+            return Changefeeds;
+        }
+
+        void Check() {
+            for (ui64 i = 1; i <= Count; ++i) {
+                auto changefeedDir = "/" + GenChangefeedName(i);
+                auto* changefeed = S3Mock.GetData().FindPtr(changefeedDir + "/changefeed_description.pb");
+                UNIT_ASSERT(changefeed);
+
+                auto* topic = S3Mock.GetData().FindPtr(changefeedDir + "/topic_description.pb");
+                UNIT_ASSERT(topic);
+
+                const auto* changefeedChecksum = S3Mock.GetData().FindPtr(changefeedDir + "/changefeed_description.pb.sha256");
+                UNIT_ASSERT(changefeedChecksum);
+
+                const auto* topicChecksum = S3Mock.GetData().FindPtr(changefeedDir + "/topic_description.pb.sha256");
+                UNIT_ASSERT(topicChecksum);
+            }
+        }
+
+    private:
+
+        static TString GenChangefeedName(const ui64 num) {
+            return TStringBuilder() << "update_feed" << num;
+        }
+
+        TVector<TString> GenChangefeeds() {
+            TVector<TString> result(Count);
+            std::generate(result.begin(), result.end(), [n = 1]() mutable {
+                    return Sprintf(
+                        R"(
+                            TableName: "Table"
+                            StreamDescription {
+                                Name: "%s"
+                                Mode: ECdcStreamModeUpdate
+                                Format: ECdcStreamFormatJson
+                                State: ECdcStreamStateReady
+                            }
+                        )", GenChangefeedName(n++).data()
+                    );
+                }
+            );
+            for (auto x : result) {
+                Cerr << x << Endl;
+            }
+            return result;
+        }
+
+        const ui64 Count;
+        const TS3Mock& S3Mock;
+        const TVector<TString> Changefeeds;
+    };
+
     Y_UNIT_TEST(Changefeeds) {
         TTestBasicRuntime runtime;
 
@@ -2532,6 +2596,8 @@ partitioning_settings {
 
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
+
+        ChangefeedGenerator gen(3, s3Mock);
 
         auto request = Sprintf(R"(
             ExportToS3Settings {
@@ -2552,28 +2618,8 @@ partitioning_settings {
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             )",
-        }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", {
-            R"(
-                TableName: "Table"
-                StreamDescription {
-                    Name: "update_feed"
-                    Mode: ECdcStreamModeUpdate
-                    Format: ECdcStreamFormatJson
-                    State: ECdcStreamStateReady
-                }
-            )",
-        });
+        }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", gen.GetChangefeeds());
 
-        auto* changefeed = s3Mock.GetData().FindPtr("/update_feed/changefeed_description.pb");
-        UNIT_ASSERT(changefeed);
-
-        auto* topic = s3Mock.GetData().FindPtr("/update_feed/topic_description.pb");
-        UNIT_ASSERT(topic);
-
-        const auto* changefeedChecksum = s3Mock.GetData().FindPtr("/update_feed/changefeed_description.pb.sha256");
-        UNIT_ASSERT(changefeedChecksum);
-
-        const auto* topicChecksum = s3Mock.GetData().FindPtr("/update_feed/topic_description.pb.sha256");
-        UNIT_ASSERT(topicChecksum);
+        gen.Check();
     }
 }

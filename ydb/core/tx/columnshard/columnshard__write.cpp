@@ -322,7 +322,9 @@ public:
             if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
                 return TConclusionStatus::Fail("current tablet_id is absent in sending and receiving lists");
             }
-            AFL_VERIFY(locks.HasArbiterColumnShard());
+            if (!locks.HasArbiterColumnShard()) {
+                return TConclusionStatus::Fail("no arbiter info in request");
+            }
             ArbiterColumnShard = locks.GetArbiterColumnShard();
             if (!ReceivingShards.contains(*ArbiterColumnShard)) {
                 return TConclusionStatus::Fail("arbiter is absent in receiving lists");

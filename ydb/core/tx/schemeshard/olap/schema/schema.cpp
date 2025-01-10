@@ -1,4 +1,5 @@
 #include "schema.h"
+
 #include <ydb/core/tx/schemeshard/common/validation.h>
 
 namespace NKikimr::NSchemeShard {
@@ -17,10 +18,8 @@ static inline ui32 GetType(const TOlapColumnsDescription::TColumn& col) {
 }
 
 static bool ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& ttl,
-    const THashMap<ui32, TOlapColumnsDescription::TColumn>& sourceColumns,
-    const THashMap<ui32, TOlapColumnsDescription::TColumn>& alterColumns,
-    const THashMap<TString, ui32>& colName2Id,
-    IErrorCollector& errors) {
+    const THashMap<ui32, TOlapColumnsDescription::TColumn>& sourceColumns, const THashMap<ui32, TOlapColumnsDescription::TColumn>& alterColumns,
+    const THashMap<TString, ui32>& colName2Id, IErrorCollector& errors) {
     const TString colName = ttl.GetColumnName();
 
     auto it = colName2Id.find(colName);
@@ -75,8 +74,7 @@ static bool ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::
 bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl, IErrorCollector& errors) const {
     using TTtlProto = NKikimrSchemeOp::TColumnDataLifeCycle;
     switch (ttl.GetStatusCase()) {
-        case TTtlProto::kEnabled:
-        {
+        case TTtlProto::kEnabled: {
             const auto* column = Columns.GetByName(ttl.GetEnabled().GetColumnName());
             if (!column) {
                 errors.AddError("Incorrect ttl column - not found in scheme");
@@ -93,7 +91,11 @@ bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycl
 }
 
 bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors) {
-    if (!Columns.ApplyUpdate(schemaUpdate.GetColumns(), errors, NextColumnId)) {
+    if (!ColumnFamilies.ApplyUpdate(schemaUpdate.GetColumnFamilies(), errors, NextColumnFamilyId)) {
+        return false;
+    }
+
+    if (!Columns.ApplyUpdate(schemaUpdate.GetColumns(), ColumnFamilies, errors, NextColumnId)) {
         return false;
     }
 
@@ -120,10 +122,12 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
 
 void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
     NextColumnId = tableSchema.GetNextColumnId();
+    NextColumnFamilyId = tableSchema.GetNextColumnFamilyId();
     Version = tableSchema.GetVersion();
     Y_ABORT_UNLESS(tableSchema.HasEngine());
     Engine = tableSchema.GetEngine();
 
+    ColumnFamilies.Parse(tableSchema);
     Columns.Parse(tableSchema);
     Indexes.Parse(tableSchema);
     Options.Parse(tableSchema);
@@ -132,11 +136,12 @@ void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& ta
 void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt) const {
     NKikimrSchemeOp::TColumnTableSchema resultLocal;
     resultLocal.SetNextColumnId(NextColumnId);
+    resultLocal.SetNextColumnFamilyId(NextColumnFamilyId);
     resultLocal.SetVersion(Version);
 
     Y_ABORT_UNLESS(HasEngine());
     resultLocal.SetEngine(GetEngineUnsafe());
-
+    ColumnFamilies.Serialize(resultLocal);
     Columns.Serialize(resultLocal);
     Indexes.Serialize(resultLocal);
     Options.Serialize(resultLocal);

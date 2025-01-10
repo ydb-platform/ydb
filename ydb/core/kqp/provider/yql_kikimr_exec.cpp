@@ -182,7 +182,8 @@ namespace {
         return dropGroupSettings;
     }
 
-    TCreateTableStoreSettings ParseCreateTableStoreSettings(TKiCreateTable create, const TTableSettings& settings) {
+    TCreateTableStoreSettings ParseCreateTableStoreSettings(
+        TKiCreateTable create, const TTableSettings& settings, const TVector<TColumnFamily>& columnFamilies) {
         TCreateTableStoreSettings out;
         out.TableStore = TString(create.Table());
         out.ShardsCount = settings.MinPartitions ? *settings.MinPartitions : 0;
@@ -215,6 +216,13 @@ namespace {
                 columnMeta.NotNull = notNull;
             }
 
+            if (columnTuple.Size() > 3) {
+                auto families = columnTuple.Item(3).Cast<TCoAtomList>();
+                for (auto family : families) {
+                    columnMeta.Families.push_back(TString(family.Value()));
+                }
+            }
+
             out.ColumnOrder.push_back(columnName);
             out.Columns.insert(std::make_pair(columnName, columnMeta));
         }
@@ -224,6 +232,7 @@ namespace {
             out.Indexes.push_back(indexDesc);
         }
 #endif
+        out.ColumnFamilies = columnFamilies;
         return out;
     }
 
@@ -289,12 +298,6 @@ namespace {
         return TAnalyzeSettings{
             .TablePath = TString(analyze.Table()),
             .Columns = std::move(columns)
-        };
-    }
-
-    TAlterColumnTableSettings ParseAlterColumnTableSettings(TKiAlterTable alter) {
-        return TAlterColumnTableSettings{
-            .Table = TString(alter.Table())
         };
     }
 
@@ -1228,8 +1231,8 @@ public:
                             TStringBuilder() << "TABLESTORE with not COLUMN store"));
                         return SyncError();
                     }
-                    future = Gateway->CreateTableStore(cluster,
-                        ParseCreateTableStoreSettings(maybeCreate.Cast(), table.Metadata->TableSettings), existingOk);
+                    future = Gateway->CreateTableStore(cluster, ParseCreateTableStoreSettings(maybeCreate.Cast(), table.Metadata->TableSettings,
+                                                                    table.Metadata->ColumnFamilies), existingOk);
                     break;
                 }
                 case ETableType::Table:
@@ -1500,6 +1503,8 @@ public:
                                         f->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
                                     } else if (to_lower(comp) == "lz4") {
                                         f->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
+                                    } else if (to_lower(comp) == "zstd") {
+                                        f->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
                                     } else {
                                         auto errText = TStringBuilder() << "Unknown compression '" << comp
                                             << "' for a column family";
@@ -1508,6 +1513,9 @@ public:
                                         return SyncError();
                                     }
 
+                                } else if (name == "compression_level") {
+                                    auto level = FromString<i32>(familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                                    f->set_compression_level(level);
                                 } else {
                                     ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
                                         TStringBuilder() << "Unknown column family setting name: " << name));
@@ -1851,10 +1859,11 @@ public:
             }
 
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
-            bool isTableStore = (table.Metadata->TableType == ETableType::TableStore);
+            bool isTableStore = (table.Metadata->TableType == ETableType::TableStore);  // Doesn't set, so always false
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
 
             if (isTableStore) {
+                AFL_VERIFY(false);
                 if (!isColumn) {
                     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
                         TStringBuilder() << "TABLESTORE with not COLUMN store"));
@@ -1862,7 +1871,7 @@ public:
                 }
                 future = Gateway->AlterTableStore(cluster, ParseAlterTableStoreSettings(maybeAlter.Cast()));
             } else if (isColumn) {
-                future = Gateway->AlterColumnTable(cluster, ParseAlterColumnTableSettings(maybeAlter.Cast()));
+                future = Gateway->AlterColumnTable(cluster, std::move(alterTableRequest));
             } else {
                 TMaybe<TString> requestType;
                 if (!SessionCtx->Query().DocumentApiRestricted) {

@@ -755,7 +755,10 @@ table_setting_value:
 family_entry: FAMILY an_id family_settings;
 family_settings: LPAREN (family_settings_entry (COMMA family_settings_entry)*)? RPAREN;
 family_settings_entry: an_id EQUALS family_setting_value;
-family_setting_value: STRING_VALUE;
+family_setting_value:
+        STRING_VALUE
+      | integer
+;
 
 split_boundaries:
       LPAREN literal_value_list (COMMA literal_value_list)* RPAREN

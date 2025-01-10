@@ -219,6 +219,7 @@ struct TTrimmerTraits {
     using TTzDateReader = TTzDateBlockTrimmer<TTzDate, Nullable>;
 
     static TResult::TPtr MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder, arrow::MemoryPool* pool) {
+        Y_UNUSED(pgBuilder);
         if (desc.PassByValue) {
             return std::make_unique<TFixedSize<ui64, true>>(pool);
         } else {

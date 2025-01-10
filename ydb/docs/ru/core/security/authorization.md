@@ -60,24 +60,60 @@
 * [{#T}](../yql/reference/syntax/alter-group.md)
 * [{#T}](../yql/reference/syntax/drop-group.md)
 
-Подробнее о группах пользователей: [{#T}](group.md).
-
 ## Право {#right}
+
+### Понятие права
 
 Право в {{ ydb-short-name }} — сущность, отражающая разрешение [субъекту](#subject) выполнять конкретный набор операций в кластере или базе данных над конкретным [объектом](#object).
 
-Для управления правами служат следующие виды YQL запросов:
+{% note info %}
+
+Права привязаны не пользователю, а к объекту доступа.
+
+{% endnote %}
+
+### Управление правами с помощью YQL
+
+Для управления правами служат следующие YQL-команды:
 
 * [{#T}](../yql/reference/syntax/grant.md).
 * [{#T}](../yql/reference/syntax/revoke.md).
 
-Пример использования `GRANT`:
+В качестве имен прав доступа в этих командах можно использовать специфичные для {{ ydb-short-name }} права или соответствующие им ключевые слова.
+
+Пример использования c ключевым словом YQL:
 
 ```yql
 GRANT CREATE DIRECTORY ON `/Root/db1` TO testuser
 ```
 
-Подробнее о правах и полный перечень их типов: [{#T}](right.md).
+Пример использования c именем {{ ydb-short-name }} права:
+
+```yql
+GRANT "ydb.granular.create_directory" ON `/Root/db1` TO testuser
+```
+
+### Управление правами с помощью CLI
+
+Для управления правами служат следующие CLI-команды:
+
+* [chown](../reference/ydb-cli/commands/scheme-permissions.md#chown)
+* [grant](../reference/ydb-cli/commands/scheme-permissions.md#grant-revoke)
+* [revoke](../reference/ydb-cli/commands/scheme-permissions.md#grant-revoke)
+* [set](../reference/ydb-cli/commands/scheme-permissions.md#set)
+* [clear](../reference/ydb-cli/commands/scheme-permissions.md#clear)
+* [list](../reference/ydb-cli/commands/scheme-permissions.md#list)
+
+В CLI используется только стиль из столбца "{{ ydb-short-name }} право".
+Например:
+
+```bash
+{{ ydb-short-name }} scheme permissions grant -p "ydb.granular.create_directory" `/Root/db1` testuser
+```
+
+### Просмотр прав с помощью CLI
+
+Просматривать ACL объекта доступа можно с помощью CLI команды [`describe`](../reference/ydb-cli/commands/scheme-describe.md).
 
 ## Владелец объекта {#owner}
 
@@ -93,9 +129,9 @@ GRANT CREATE DIRECTORY ON `/Root/db1` TO testuser
 {{ ydb-cli }} scheme permissions chown '/Root/db1' testuser
 ```
 
-## Список разрешений
+## Список разрешений {#acl}
 
-У каждого такого [объекта доступа](#object)  есть список разрешений — ACL (Access Control List) — он хранит все предоставленные [субъектам доступа](#subject) (пользователям и группам) права на объект.
+У каждого такого [объекта доступа](#object) есть список разрешений — ACL (Access Control List) — он хранит все предоставленные [субъектам доступа](#subject) (пользователям и группам) [права](#right) на объект.
 
 Изменять ACL (управления правами) служат следующие виды YQL запросов:
 

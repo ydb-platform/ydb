@@ -34,4 +34,3 @@ class TestYdbWorkload(object):
         command = self.workload_command_prefix
         command.extend(["--mode", "column"])
         yatest.common.execute(command, wait=True)
-

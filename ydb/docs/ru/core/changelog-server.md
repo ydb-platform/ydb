@@ -21,7 +21,7 @@
 * Добавлена поддержка [асинхронной репликации](./concepts/async-replication), которая позволяет синхронизировать данные между базами YDB почти в реальном времени. Также она может быть использована для миграции данных между базами с минимальным простоем работающих с ними приложений.
 * Добавлена поддержка [представлений (VIEW)](https://ydb.tech/docs/ru/concepts/datamodel/view), которая может быть включена администратором кластера с помощью настройки `enable_views` в [динамической конфигурации](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
 * В [федеративных запросах](./concepts/federated_query/) поддержаны новые внешние источники данных: MySQL, Microsoft SQL Server, Greenplum.
-* Разработана [документация](./devops/manual/federated-queries/connector-deployment) по разворачиванию YDB с функциональностью федеративных запросов (в ручном режиме).
+* Разработана [документация](./devops/deployment-options/manual/federated-queries/connector-deployment) по разворачиванию YDB с функциональностью федеративных запросов (в ручном режиме).
 * Для Docker-контейнера с YDB добавлен параметр запуска `FQ_CONNECTOR_ENDPOINT`, позволяющий указать адрес коннектора ко внешним источникам данных. Добавлена возможность TLS-шифрования соединения с коннектором. Добавлена возможность вывода порта сервиса коннектора, локально работающего на том же хосте, что и динамический узел YDB.
 * Добавлен режим [автопартиционирования](./concepts/topic#autopartitioning) топиков, в котором топики могут разбивать партиции в зависимости от нагрузки с сохранением гарантий порядка чтения сообщений и exactly once записи. Режим может быть включен администратором кластера с помощью настроек `enable_topic_split_merge` и `enable_pqconfig_transactions_at_scheme_shard` в [динамической конфигурации](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
 * Добавлены [транзакции](./concepts/transactions#topic-table-transactions) с участием [топиков](https://ydb.tech/docs/ru/concepts/topic) и строковых таблиц. Таким образом, можно транзакционно перекладывать данные из таблиц в топики и в обратном направлении, а также между топиками, чтобы данные не терялись и не дублировались. Транзакции могут быть включены администратором кластера с помощью настроек `enable_topic_service_tx` и `enable_pqconfig_transactions_at_scheme_shard` в [динамической конфигурации](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
@@ -49,7 +49,7 @@
 * [Добавлена](https://github.com/ydb-platform/ydb-embedded-ui/pull/1438) вкладка с информацией о [таблетках](./concepts/glossary#tablet).
 * [Добавлена](https://github.com/ydb-platform/ydb-embedded-ui/pull/1289) вкладка с информацией о [группах распределенного хранилища](./concepts/glossary#storage-group).
 * [Добавлена](https://github.com/ydb-platform/ydb-embedded-ui/pull/1218) настройка для добавления [трассировки](./reference/observability/tracing/setup) ко всем запросам и отображение результатов трассировки запроса.
-* На страницу PDisk добавлены [атрибуты](https://github.com/ydb-platform/ydb-embedded-ui/pull/1069), информация о потреблении дискового пространства, а также кнопка, которая запускает [декомиссию диска](./devops/manual/decommissioning).
+* На страницу PDisk добавлены [атрибуты](https://github.com/ydb-platform/ydb-embedded-ui/pull/1069), информация о потреблении дискового пространства, а также кнопка, которая запускает [декомиссию диска](./devops/deployment-options/manual/decommissioning).
 * [Добавлена](https://github.com/ydb-platform/ydb-embedded-ui/pull/1313) информация о выполняющихся запросах.
 * [Добавлена](https://github.com/ydb-platform/ydb-embedded-ui/pull/1291) настройка лимита строк в выдаче для редактора запроса и отображение, если результаты запроса превысили лимит.
 * [Добавлено](https://github.com/ydb-platform/ydb-embedded-ui/pull/1049) отображение перечня запросов с максимальным потреблением CPU за последний час.
@@ -94,7 +94,7 @@
 
 ### Функциональность
 
-* Добавлена возможность [задать приоритеты](./devops/manual/maintenance-without-downtime#priority) задачам обслуживания в [системе управления кластером](./concepts/glossary#cms).
+* Добавлена возможность [задать приоритеты](./devops/deployment-options/manual/maintenance-without-downtime#priority) задачам обслуживания в [системе управления кластером](./concepts/glossary#cms).
 * Добавлена [настройка стабильных имён](./reference/configuration/#node-broker-config) для узлов кластера в рамках тенанта.
 * Добавлено получение вложенных групп от [LDAP-сервера](./security/authentication.md#ldap), в [LDAP-конфигурации](./reference/configuration/index.md#ldap-auth-config) улучшен парсинг хостов и добавлена настройка для отключения встроенной аутентификацию по логину и паролю.
 * Добавлена возможность аутентификации [динамических узлов](./concepts/glossary#dynamic) по SSL-сертификату.

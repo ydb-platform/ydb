@@ -1,0 +1,15 @@
+items:
+- name: Обзор
+  href: index.md
+- name: Расширение кластера
+  href: cluster-expansion.md
+- name: Перемещение State Storage
+  href: state-storage-move.md
+- name: Перемещение статической группы
+  href: static-group-move.md
+- name: Управление конфигурацией кластера
+  href: configuration-management/config-overview.md
+  include:
+    mode: link
+    path: configuration-management/toc_p.yaml
+  

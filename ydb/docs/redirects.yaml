@@ -65,18 +65,14 @@ common:
     to: /reference/observability/metrics/grafana-dashboards.md
   - from: /administration/production-storage-config.md
     to: /deploy/configuration/config.md
-  - from: /administration/decommissioning.md
-    to: /devops/manual/decommissioning.md
-  - from: /deploy/manual/decommissioning.md
-    to: /devops/manual/decommissioning.md
-  - from: /administration/monitoring.md
-    to: /devops/manual/monitoring.md
-  - from: /deploy/manual/monitoring.md
-    to: /devops/manual/monitoring.md
   - from: /administration/state-storage-move.md
     to: /devops/manual/state-storage-move.md
   - from: /deploy/manual/static-group-move.md
     to: /devops/manual/static-group-move.md
+  - from: /administration/monitoring.md
+    to: /devops/manual/monitoring.md
+  - from: /deploy/manual/monitoring.md
+    to: /devops/manual/monitoring.md
   - from: /administration/upgrade.md
     to: /devops/manual/upgrade.md
   - from: /deploy/manual/upgrade.md
@@ -396,3 +392,34 @@ ru:
     to: /dev/terraform.md
   - from: /postgresql/docker-connect.md
     to: /postgresql/connect.md
+
+  # Redirects for Deployment Options
+  - from: /devops/(ansible|kubernetes|manual)/(.*)$
+    to: /devops/deployment-options/$1/$2
+
+  # Redirects for Observability
+  - from: /devops/manual/(monitoring|logging)\.md$
+    to: /devops/observability/$1.md
+  - from: /devops/manual/system-views.md
+    to: /devops/observability/system-views.md
+
+  # Redirects for Maintenance
+  - from: /devops/manual/upgrade.md
+    to: /devops/maintenance/upgrade.md
+  - from: /devops/manual/maintenance-without-downtime.md
+    to: /devops/maintenance/maintenance-without-downtime.md
+
+  # Redirects for Federated Queries
+  - from: /devops/manual/federated-queries/(.*)$
+    to: /devops/deployment-options/manual/federated-queries/$1
+
+  # Redirect for backup-and-recovery
+  - from: /devops/manual/backup-and-recovery.md
+    to: /devops/backup-and-recovery.md
+
+  # Redirect for deprecated instructions
+  - from: /devops/manual/state-storage-move.md
+    to: /devops/deployment-options/manual/before-v25.1/state-storage-move.md
+  - from: /devops/manual/static-group-move.md
+    to: /devops/deployment-options/manual/before-v25.1/static-group-move.md
+    

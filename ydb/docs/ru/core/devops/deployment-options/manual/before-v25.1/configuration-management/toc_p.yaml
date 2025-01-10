@@ -1,0 +1,11 @@
+items:
+- name: Обзор
+  href: config-overview.md
+- name: Статическая конфигурация
+  href: ../../../../../reference/configuration/index.md
+- name: Динамическая конфигурация
+  href: dynamic-config.md
+- name: Изменение конфигураций через CMS
+  href: cms.md
+- name: Изменение конфигурации актор-системы
+  href: change_actorsystem_configs.md

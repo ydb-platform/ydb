@@ -1,0 +1,7 @@
+items:
+- name: Обзор конфигурации
+  href: index.md
+- name: DSL конфигурации кластера
+  href: dynamic-config-selectors.md
+- name: Временная конфигурация
+  href: dynamic-config-volatile-config.md

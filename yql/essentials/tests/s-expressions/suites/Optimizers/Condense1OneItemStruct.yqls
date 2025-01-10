@@ -1,6 +1,5 @@
 (
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 (let list (AsList (String 'a) (String 'b) (String 'c)))
 (let data (Condense1 list
@@ -18,7 +17,7 @@
 (let res_sink (DataSink 'result))
 (let world (Write! world res_sink
     (Key)
-    data '()))
+    data '('('type))))
 
 (let world (Commit! world res_sink))
 (return world)

@@ -16,7 +16,6 @@ SRCS(
 PEERDIR(
     yt/yt/core
     yt/yt/library/profiling/tcmalloc
-    yt/yt/library/profiling/perf
     yt/yt/library/ytprof
     yt/yt/library/tcmalloc # for tcmalloc singleton
     library/cpp/yt/string

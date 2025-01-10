@@ -116,6 +116,33 @@ TPortionDataAccessor::TPreparedBatchData TPortionDataAccessor::PrepareForAssembl
     return PrepareForAssembleImpl(*this, *PortionInfo, dataSchema, resultSchema, blobsData, defaultSnapshot, restoreAbsent);
 }
 
+void TPortionDataAccessor::FillBlobRangesByStorage(THashMap<ui32, THashMap<TString, THashSet<TBlobRange>>>& result,
+    const TVersionedIndex& index, const THashSet<ui32>& entityIds) const {
+    auto schema = PortionInfo->GetSchema(index);
+    return FillBlobRangesByStorage(result, schema->GetIndexInfo(), entityIds);
+}
+
+void TPortionDataAccessor::FillBlobRangesByStorage(
+    THashMap<ui32, THashMap<TString, THashSet<TBlobRange>>>& result, const TIndexInfo& indexInfo, const THashSet<ui32>& entityIds) const {
+    for (auto&& i : GetRecordsVerified()) {
+        if (!entityIds.contains(i.GetEntityId())) {
+            continue;
+        }
+        const TString& storageId = PortionInfo->GetColumnStorageId(i.GetColumnId(), indexInfo);
+        AFL_VERIFY(result[i.GetEntityId()][storageId].emplace(PortionInfo->RestoreBlobRange(i.GetBlobRange())).second)(
+            "blob_id", PortionInfo->RestoreBlobRange(i.GetBlobRange()).ToString());
+    }
+    for (auto&& i : GetIndexesVerified()) {
+        if (!entityIds.contains(i.GetEntityId())) {
+            continue;
+        }
+        const TString& storageId = PortionInfo->GetIndexStorageId(i.GetIndexId(), indexInfo);
+        auto bRange = i.GetBlobRangeVerified();
+        AFL_VERIFY(result[i.GetEntityId()][storageId].emplace(PortionInfo->RestoreBlobRange(bRange)).second)(
+            "blob_id", PortionInfo->RestoreBlobRange(bRange).ToString());
+    }
+}
+
 void TPortionDataAccessor::FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TVersionedIndex& index) const {
     auto schema = PortionInfo->GetSchema(index);
     return FillBlobRangesByStorage(result, schema->GetIndexInfo());

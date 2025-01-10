@@ -27,7 +27,7 @@ namespace NYT::NConcurrency {
  *   \endcode
  * - Write
  *   \code
- *   VERIFY_THREAD_AFFINITY(Thread);
+ *   YT_ASSERT_THREAD_AFFINITY(Thread);
  *   \endcode
  *   at the beginning of each function in the group.
  *
@@ -56,51 +56,51 @@ private:
 #define DECLARE_THREAD_AFFINITY_SLOT(slot) \
     mutable ::NYT::NConcurrency::TThreadAffinitySlot PP_CONCAT(slot, _Slot)
 
-#define VERIFY_THREAD_AFFINITY(slot) \
+#define YT_ASSERT_THREAD_AFFINITY(slot) \
     PP_CONCAT(slot, _Slot).Check()
 
-#define VERIFY_SPINLOCK_AFFINITY(spinLock) \
+#define YT_ASSERT_SPINLOCK_AFFINITY(spinLock) \
     YT_VERIFY((spinLock).IsLocked());
 
-#define VERIFY_READER_SPINLOCK_AFFINITY(spinLock) \
+#define YT_ASSERT_READER_SPINLOCK_AFFINITY(spinLock) \
     YT_VERIFY((spinLock).IsLockedByReader());
 
-#define VERIFY_WRITER_SPINLOCK_AFFINITY(spinLock) \
+#define YT_ASSERT_WRITER_SPINLOCK_AFFINITY(spinLock) \
     YT_VERIFY((spinLock).IsLockedByWriter());
 
-#define VERIFY_INVOKER_AFFINITY(invoker) \
+#define YT_ASSERT_INVOKER_AFFINITY(invoker) \
     YT_VERIFY(::NYT::NConcurrency::VerifyInvokerAffinity(invoker))
 
-#define VERIFY_SERIALIZED_INVOKER_AFFINITY(invoker) \
+#define YT_ASSERT_SERIALIZED_INVOKER_AFFINITY(invoker) \
     YT_VERIFY(::NYT::NConcurrency::VerifySerializedInvokerAffinity(invoker))
 
-#define VERIFY_INVOKERS_AFFINITY(...) \
+#define YT_ASSERT_INVOKERS_AFFINITY(...) \
     YT_VERIFY(::NYT::NConcurrency::VerifyInvokersAffinity(__VA_ARGS__))
 
-#define VERIFY_INVOKER_POOL_AFFINITY(invokerPool) \
+#define YT_ASSERT_INVOKER_POOL_AFFINITY(invokerPool) \
     YT_VERIFY(::NYT::NConcurrency::VerifyInvokerPoolAffinity(invokerPool))
 
-#define VERIFY_INVOKER_THREAD_AFFINITY(invoker, slot) \
+#define YT_ASSERT_INVOKER_THREAD_AFFINITY(invoker, slot) \
     PP_CONCAT(slot, _Slot).Check((invoker)->GetThreadId());
 
 #else
 
 // Expand macros to null but take care of the trailing semicolon.
 #define DECLARE_THREAD_AFFINITY_SLOT(slot)               struct PP_CONCAT(TNullThreadAffinitySlot_,  __LINE__) { }
-#define VERIFY_THREAD_AFFINITY(slot)                     do { } while (false)
-#define VERIFY_SPINLOCK_AFFINITY(spinLock)               do { } while (false)
-#define VERIFY_READER_SPINLOCK_AFFINITY(spinLock)        do { } while (false)
-#define VERIFY_WRITER_SPINLOCK_AFFINITY(spinLock)        do { } while (false)
-#define VERIFY_INVOKER_AFFINITY(invoker)                 do { } while (false)
-#define VERIFY_SERIALIZED_INVOKER_AFFINITY(invoker)      do { } while (false)
-#define VERIFY_INVOKERS_AFFINITY(...)                    do { } while (false)
-#define VERIFY_INVOKER_POOL_AFFINITY(invokerPool)        do { } while (false)
-#define VERIFY_INVOKER_THREAD_AFFINITY(invoker, slot)    do { } while (false)
+#define YT_ASSERT_THREAD_AFFINITY(slot)                     do { } while (false)
+#define YT_ASSERT_SPINLOCK_AFFINITY(spinLock)               do { } while (false)
+#define YT_ASSERT_READER_SPINLOCK_AFFINITY(spinLock)        do { } while (false)
+#define YT_ASSERT_WRITER_SPINLOCK_AFFINITY(spinLock)        do { } while (false)
+#define YT_ASSERT_INVOKER_AFFINITY(invoker)                 do { } while (false)
+#define YT_ASSERT_SERIALIZED_INVOKER_AFFINITY(invoker)      do { } while (false)
+#define YT_ASSERT_INVOKERS_AFFINITY(...)                    do { } while (false)
+#define YT_ASSERT_INVOKER_POOL_AFFINITY(invokerPool)        do { } while (false)
+#define YT_ASSERT_INVOKER_THREAD_AFFINITY(invoker, slot)    do { } while (false)
 
 #endif
 
 //! This is a mere declaration and intentionally does not check anything.
-#define VERIFY_THREAD_AFFINITY_ANY() do { } while (false)
+#define YT_ASSERT_THREAD_AFFINITY_ANY() do { } while (false)
 
 ////////////////////////////////////////////////////////////////////////////////
 

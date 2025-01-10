@@ -11,4 +11,9 @@ pkgs: attrs: with pkgs; with attrs; rec {
   patches = [];
 
   sourceRoot = "source/libunwind";
+
+  # Building without this option breaks build traces: https://st.yandex-team.ru/DTCC-589.
+  cmakeFlags = [
+    "-DCMAKE_CXX_FLAGS=-fno-integrated-cc1"
+  ];
 }

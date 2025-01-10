@@ -1562,7 +1562,7 @@ TEST_F(TFutureTest, SubscribeAbandon)
     auto promise = NewPromise<void>();
     auto future = promise.ToFuture();
     future.Subscribe(BIND([&] (const TError&) mutable {
-        VERIFY_INVOKER_AFFINITY(GetFinalizerInvoker());
+        YT_ASSERT_INVOKER_AFFINITY(GetFinalizerInvoker());
         called = true;
     }));
     promise.Reset();

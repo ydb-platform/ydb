@@ -1011,6 +1011,7 @@ message TNodeWardenServiceSet {
         optional TSerialManagementStage.E ManagementStage = 12;
         optional TPDiskSpaceColor.E SpaceColorBorder = 13;
         optional bool ReadOnly = 14;
+        optional bool Stop = 15;
     }
 
     message TVDisk {
@@ -1391,6 +1392,7 @@ message TEvControllerConsoleCommitResponse {
         Committed = 2;
     }
     optional EStatus Status = 1;
+    optional string ErrorReason = 2;
 }
 
 message TEvControllerReplaceConfigRequest {
@@ -1429,6 +1431,7 @@ message TEvControllerValidateConfigResponse {
     optional bool SkipBSCValidation = 2;
     optional string YAML = 3;
     optional uint32 ConfigVersion = 4;
+    optional string ErrorReason = 5;
 }
 
 message TEvControllerValidationTimeout {

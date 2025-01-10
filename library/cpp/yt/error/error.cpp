@@ -18,8 +18,6 @@
 
 namespace NYT {
 
-using namespace NYson;
-
 ////////////////////////////////////////////////////////////////////////////////
 
 void FormatValue(TStringBuilderBase* builder, TErrorCode code, TStringBuf spec)
@@ -494,10 +492,8 @@ TError TError::Truncate(
     };
 
     auto truncateAttributes = [stringLimit, &attributeWhitelist] (const TErrorAttributes& attributes, TErrorAttributes* mutableAttributes) {
-        for (const auto& key : attributes.ListKeys()) {
-            const auto& value = attributes.FindValue(key);
-
-            if (std::ssize(value.AsStringBuf()) > stringLimit && !attributeWhitelist.contains(key)) {
+        for (const auto& [key, value] : attributes.ListPairs()) {
+            if (std::ssize(value) > stringLimit && !attributeWhitelist.contains(key)) {
                 mutableAttributes->SetValue(
                     key,
                     NYT::ToErrorAttributeValue("...<attribute truncated>..."));
@@ -559,8 +555,8 @@ TError TError::Truncate(
     };
 
     auto truncateAttributes = [stringLimit, &attributeWhitelist] (TErrorAttributes* attributes) {
-        for (const auto& key : attributes->ListKeys()) {
-            if (std::ssize(attributes->FindValue(key).AsStringBuf()) > stringLimit && !attributeWhitelist.contains(key)) {
+        for (const auto& [key, value] : attributes->ListPairs()) {
+            if (std::ssize(value) > stringLimit && !attributeWhitelist.contains(key)) {
                 attributes->SetValue(
                     key,
                     NYT::ToErrorAttributeValue("...<attribute truncated>..."));
@@ -718,15 +714,15 @@ void AppendIndent(TStringBuilderBase* builer, int indent)
     builer->AppendChar(' ', indent);
 }
 
-void AppendAttribute(TStringBuilderBase* builder, const TString& key, const TString& value, int indent)
+void AppendAttribute(TStringBuilderBase* builder, const std::string& key, const std::string& value, int indent)
 {
     AppendIndent(builder, indent + 4);
-    if (!value.Contains('\n')) {
+    if (value.find('\n') == std::string::npos) {
         builder->AppendFormat("%-15s %s", key, value);
     } else {
         builder->AppendString(key);
-        TString indentedValue = "\n" + value;
-        SubstGlobal(indentedValue, "\n", "\n" + TString{static_cast<size_t>(indent + 8), ' '});
+        std::string indentedValue = "\n" + value;
+        SubstGlobal(indentedValue, "\n", "\n" + std::string(static_cast<size_t>(indent + 8), ' '));
         // Now first line in indentedValue is empty and every other line is indented by 8 spaces.
         builder->AppendString(indentedValue);
     }
@@ -735,16 +731,16 @@ void AppendAttribute(TStringBuilderBase* builder, const TString& key, const TStr
 
 void AppendError(TStringBuilderBase* builder, const TError& error, int indent)
 {
-    auto isStringTextYson = [] (const NYson::TYsonString& str) {
+    auto isStringTextYson = [] (TStringBuf str) {
         return
             str &&
-            std::ssize(str.AsStringBuf()) != 0 &&
-            str.AsStringBuf().front() == '\"';
+            std::ssize(str) != 0 &&
+            str.front() == '\"';
     };
-    auto isBoolTextYson = [] (const NYson::TYsonString& str) {
+    auto isBoolTextYson = [] (TStringBuf str) {
         return
-            str.AsStringBuf() == "%false" ||
-            str.AsStringBuf() == "%true";
+            str == "%false" ||
+            str == "%true";
     };
 
     if (error.IsOK()) {
@@ -787,11 +783,11 @@ void AppendError(TStringBuilderBase* builder, const TError& error, int indent)
 
     for (const auto& [key, value] : error.Attributes().ListPairs()) {
         if (isStringTextYson(value)) {
-            AppendAttribute(builder, key, ConvertFromTextYsonString<TString>(value), indent);
+            AppendAttribute(builder, key, NDetail::ConvertFromTextYsonString<std::string>(value), indent);
         } else if (isBoolTextYson(value)) {
-            AppendAttribute(builder, key, TString{FormatBool(ConvertFromTextYsonString<bool>(value))}, indent);
+            AppendAttribute(builder, key, std::string(FormatBool(NDetail::ConvertFromTextYsonString<bool>(value))), indent);
         } else {
-            AppendAttribute(builder, key, value.ToString(), indent);
+            AppendAttribute(builder, key, value, indent);
         }
     }
 

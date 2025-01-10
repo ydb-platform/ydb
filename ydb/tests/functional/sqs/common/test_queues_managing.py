@@ -191,7 +191,7 @@ class QueuesManagingTest(KikimrSqsTestBase):
             row_count_must_be(common_dir + '/State', queue_id_number, 0)
             row_count_must_be(common_dir + '/Messages', queue_id_number, 0)
             row_count_must_be(common_dir + '/Attributes', another_queue_id_number, 1)
-            row_count_must_be(common_dir + '/State', another_queue_id_number, 1 if is_fifo else 2)
+            row_count_must_be(common_dir + '/State', another_queue_id_number, 1 if is_fifo else 4)
             row_count_must_be(common_dir + '/Messages', another_queue_id_number, 1)
 
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)

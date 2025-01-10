@@ -85,18 +85,17 @@ public:
         fields.push_back(f);
     }
 
-    static const std::vector<std::string>& SnapshotColumnNames() {
-        static std::vector<std::string> result = { SPEC_COL_PLAN_STEP, SPEC_COL_TX_ID };
-        return result;
-    }
-
     static void AddSnapshotFields(std::vector<std::shared_ptr<arrow::Field>>& fields) {
         static const std::shared_ptr<arrow::Field> ps = arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64());
         static const std::shared_ptr<arrow::Field> txid = arrow::field(SPEC_COL_TX_ID, arrow::uint64());
-        static const std::shared_ptr<arrow::Field> writeId = arrow::field(SPEC_COL_WRITE_ID, arrow::uint64());
         fields.push_back(ps);
         fields.push_back(txid);
-        fields.push_back(writeId);
+        fields.push_back(GetWriteIdField());
+    }
+
+    static const std::shared_ptr<arrow::Field>& GetWriteIdField() {
+        static const std::shared_ptr<arrow::Field> writeId = arrow::field(SPEC_COL_WRITE_ID, arrow::uint64());
+        return writeId;
     }
 
     static void AddDeleteFields(std::vector<std::shared_ptr<arrow::Field>>& fields) {

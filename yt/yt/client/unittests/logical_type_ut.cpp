@@ -962,7 +962,7 @@ std::vector<std::vector<TString>> ParseData(TStringBuf data, int expectedFieldsC
         for (TStringBuf field : StringSplitter(record).SplitByString("::")) {
             fields.emplace_back(StripString(field));
         }
-        if (static_cast<int>(fields.size()) != expectedFieldsCount) {
+        if (std::ssize(fields) != expectedFieldsCount) {
             ythrow yexception() << "Unexpected field count expected: " << expectedFieldsCount << " actual: " << fields.size();
         }
         result.push_back(fields);

@@ -35,8 +35,6 @@ TString SchemeKeySuffix();
 TString MetadataKeySuffix();
 TString DataKeySuffix(ui32 n, EDataFormat format, ECompressionCodec codec);
 
-TString ChecksumKey(const TString& objKey);
-
 } // NBackupRestoreTraits
 } // NDataShard
 } // NKikimr

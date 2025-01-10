@@ -25,13 +25,11 @@ private:
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideMaxReadStaleness);
     YDB_ACCESSOR(std::optional<ui64>, OverrideMemoryLimitForPortionReading, 100);
     YDB_ACCESSOR(std::optional<ui64>, OverrideLimitForPortionsMetadataAsk, 1);
-    
+    YDB_ACCESSOR(std::optional<NOlap::NSplitter::TSplitSettings>, OverrideBlobSplitSettings, NOlap::NSplitter::TSplitSettings::BuildForTests());
+
     YDB_ACCESSOR_DEF(std::optional<NKikimrProto::EReplyStatus>, OverrideBlobPutResultOnWriteValue);
 
     EOptimizerCompactionWeightControl CompactionControl = EOptimizerCompactionWeightControl::Force;
-
-    YDB_ACCESSOR(std::optional<ui64>, OverrideReduceMemoryIntervalLimit, 1024);
-    YDB_ACCESSOR_DEF(std::optional<ui64>, OverrideRejectMemoryIntervalLimit);
 
     std::optional<ui32> ExpectedShardsCount;
 
@@ -134,8 +132,18 @@ private:
     void CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& shard, TCheckContext& context) const;
 
     THashSet<TString> SharingIds;
+
+    std::optional<TString> RestartOnLocalDbTxCommitted;
 protected:
-    virtual ::NKikimr::NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const override;
+    virtual const NOlap::NSplitter::TSplitSettings& DoGetBlobSplitSettings(const NOlap::NSplitter::TSplitSettings& defaultValue) const override {
+        if (OverrideBlobSplitSettings) {
+            return *OverrideBlobSplitSettings;
+        } else {
+            return defaultValue;
+        }
+    }
+    virtual ::NKikimr::NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(
+        const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const override;
 
     virtual ui64 DoGetLimitForPortionsMetadataAsk(const ui64 defaultValue) const override {
         return OverrideLimitForPortionsMetadataAsk.value_or(defaultValue);
@@ -193,13 +201,7 @@ protected:
     virtual TDuration DoGetMaxReadStaleness(const TDuration def) const override {
         return OverrideMaxReadStaleness.value_or(def);
     }
-    virtual ui64 DoGetReduceMemoryIntervalLimit(const ui64 def) const override {
-        return OverrideReduceMemoryIntervalLimit.value_or(def);
-    }
-    virtual ui64 DoGetRejectMemoryIntervalLimit(const ui64 def) const override {
-        return OverrideRejectMemoryIntervalLimit.value_or(def);
-    }
-    virtual ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 def) const override {
+    virtual ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 /* def */) const override {
         return 0;
     }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const override {
@@ -281,6 +283,13 @@ public:
         TGuard<TMutex> g(ActiveTabletsMutex);
         return ActiveTablets.contains(tabletId);
     }
+
+    void SetRestartOnLocalTxCommitted(std::optional<TString> txInfo) {
+        RestartOnLocalDbTxCommitted = std::move(txInfo);
+    }
+
+    virtual void OnAfterLocalTxCommitted(const NActors::TActorContext& ctx, const ::NKikimr::NColumnShard::TColumnShard& shard, const TString& txInfo) override;
+
 };
 
 }

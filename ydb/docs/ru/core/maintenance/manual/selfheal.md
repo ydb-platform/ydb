@@ -65,6 +65,7 @@ ydb-dstool -e <bs_endpoint> cluster set --disable-self-heal
 | **Missing**                              | Нода отвечает, но в её списке нет данного PDisk. Переход в `FAULTY`. |
 | **Timeout**                              | Нода не ответила за отведенный таймаут. Переход в `FAULTY`. |
 | **NodeDisconnected**                     | Отключение ноды. Переход в `FAULTY`. |
+| **Stopped**                              | PDisk остановлен. Переход в `FAULTY`. |
 | **Unknown**                              | Неожиданный ответ, например, ответ `TEvUndelivered` на запрос состояния. Переход в `FAULTY`. |
 
 ## Работа с дисками-донорами {#disks}

@@ -184,6 +184,7 @@ namespace NKikimr {
 
         ui64 CurrentSstCount = 0;
         ui64 CurrentInplacedSize = 0;
+        ui64 CurrentOccupancy = 0;
 
         TInstant CurrentTime;
         ui64 CurrentSpeedLimit = 0;
@@ -219,10 +220,20 @@ namespace NKikimr {
             return LinearInterpolation(CurrentInplacedSize, minInplacedSize, maxInplacedSize, deviceSpeed);
         }
 
+        ui64 CalcOccupancySpeedLimit() const {
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            ui64 minOccupancy = (ui64)VCfg->ThrottlingMinOccupancyPerMille * 1000;
+            ui64 maxOccupancy = (ui64)VCfg->ThrottlingMaxOccupancyPerMille * 1000;
+
+            return LinearInterpolation(CurrentOccupancy, minOccupancy, maxOccupancy, deviceSpeed);
+        }
+
         ui64 CalcCurrentSpeedLimit() const {
             ui64 sstCountSpeedLimit = CalcSstCountSpeedLimit();
             ui64 inplacedSizeSpeedLimit = CalcInplacedSizeSpeedLimit();
-            return std::min(sstCountSpeedLimit, inplacedSizeSpeedLimit);
+            ui64 occupancySpeedLimit = CalcOccupancySpeedLimit();
+
+            return std::min(occupancySpeedLimit, std::min(sstCountSpeedLimit, inplacedSizeSpeedLimit));
         }
 
     public:
@@ -236,9 +247,11 @@ namespace NKikimr {
         bool IsActive() const {
             ui64 minSstCount = (ui64)VCfg->ThrottlingMinSstCount;
             ui64 minInplacedSize = (ui64)VCfg->ThrottlingMinInplacedSize;
+            ui64 minOccupancy = (ui64)VCfg->ThrottlingMinOccupancyPerMille * 1000;
 
             return CurrentSstCount > minSstCount ||
-                CurrentInplacedSize > minInplacedSize;
+                CurrentInplacedSize > minInplacedSize ||
+                CurrentOccupancy > minOccupancy;
         }
 
         TDuration BytesToDuration(ui64 bytes) const {
@@ -258,7 +271,7 @@ namespace NKikimr {
             return AvailableBytes;
         }
 
-        void UpdateState(TInstant now, ui64 sstCount, ui64 inplacedSize) {
+        void UpdateState(TInstant now, ui64 sstCount, ui64 inplacedSize, float occupancy) {
             bool prevActive = IsActive();
 
             CurrentSstCount = sstCount;
@@ -266,6 +279,9 @@ namespace NKikimr {
 
             CurrentInplacedSize = inplacedSize;
             Mon.ThrottlingAllLevelsInplacedSize() = inplacedSize;
+
+            CurrentOccupancy = occupancy * 1'000'000;
+            Mon.ThrottlingOccupancyPerMille() = occupancy * 1000;
 
             Mon.ThrottlingIsActive() = (ui64)IsActive();
 
@@ -291,7 +307,7 @@ namespace NKikimr {
             auto us = (now - CurrentTime).MicroSeconds();
             AvailableBytes += CurrentSpeedLimit * us / 1000000;
             ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
-            AvailableBytes = Min(AvailableBytes, deviceSpeed);
+            AvailableBytes = std::min(AvailableBytes, deviceSpeed);
             CurrentTime = now;
         }
     };
@@ -311,7 +327,8 @@ namespace NKikimr {
             TVMultiPutHandler &&vMultiPut,
             TLocalSyncDataHandler &&loc,
             TAnubisOsirisPutHandler &&aoput)
-        : Hull(std::move(hull))
+        : VCtx(vctx)
+        , Hull(std::move(hull))
         , Mon(std::move(mon))
         , EmergencyQueue(new TEmergencyQueue(Mon, std::move(vMovedPatch), std::move(vPatchStart), std::move(vput),
                 std::move(vMultiPut), std::move(loc), std::move(aoput)))
@@ -358,11 +375,12 @@ namespace NKikimr {
             auto& logoBlobsSnap = snapshot.LogoBlobsSnap; // TLogoBlobsSnapshot
             auto& sliceSnap = logoBlobsSnap.SliceSnap; // TLevelSliceSnapshot
 
-            auto sstCount = sliceSnap.GetLevel0SstsNum();
-            auto dataInplacedSize = logoBlobsSnap.AllLevelsDataInplaced;
+            ui64 sstCount = sliceSnap.GetLevel0SstsNum();
+            ui64 dataInplacedSize = logoBlobsSnap.AllLevelsDataInplaced;
+            float occupancy = 1.f - VCtx->GetOutOfSpaceState().GetFreeSpaceShare();
 
             auto now = ctx.Now();
-            ThrottlingController->UpdateState(now, sstCount, dataInplacedSize);
+            ThrottlingController->UpdateState(now, sstCount, dataInplacedSize, occupancy);
 
             if (ThrottlingController->IsActive()) {
                 ThrottlingController->UpdateTime(now);

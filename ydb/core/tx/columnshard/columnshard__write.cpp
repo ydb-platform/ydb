@@ -326,7 +326,7 @@ public:
                 return TConclusionStatus::Fail("no arbiter info in request");
             }
             ArbiterColumnShard = locks.GetArbiterColumnShard();
-            if (!ReceivingShards.contains(*ArbiterColumnShard)) {
+            if (!ReceivingShards.contains(ArbiterColumnShard)) {
                 return TConclusionStatus::Fail("arbiter is absent in receiving lists");
             }
         }

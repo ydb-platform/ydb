@@ -1611,6 +1611,21 @@ Y_UNIT_TEST_SUITE(Viewer) {
         size_t AuthorizeTicketFails = 0;
     };
 
+    IActor* CreateFakeTicketParser(const TTicketParserSettings&) {
+        return new TFakeTicketParserActor();
+    }
+
+    void GrantConnect(TClient& client) {
+        client.CreateUser("/Root", "username", "password");
+        client.GrantConnect("username");
+
+        const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
+            { "folder_id", "test_folder_id" },
+            { "database_id", "test_database_id" },
+        });
+        UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
+    }
+
     TString PostQuery(TKeepAliveHttpClient& httpClient, TString query, TString action = "", TString transactionMode = "") {
         TStringStream requestBody;
         requestBody
@@ -1648,6 +1663,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TClient client(settings);
         client.InitRootScheme();
 
+        GrantConnect(client);
+
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
 
@@ -1680,6 +1697,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         client.InitRootScheme();
+
+        GrantConnect(client);
 
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
@@ -1775,11 +1794,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
 
-        const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
-            { "folder_id", "test_folder_id" },
-            { "database_id", "test_database_id" },
-        });
-        UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
+        GrantConnect(client);
 
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);

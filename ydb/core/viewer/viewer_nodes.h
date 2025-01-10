@@ -80,7 +80,7 @@ class TJsonNodes : public TViewerPipeClient {
     std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> ResourceBoardInfoResponse;
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> PathNavigateResponse;
     std::unordered_map<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
-
+    bool HiveNodeStatsProcessed = false;
     std::vector<TTabletId> HivesToAsk;
     bool AskHiveAboutPaths = false;
 
@@ -121,8 +121,9 @@ class TJsonNodes : public TViewerPipeClient {
     TSubDomainKey SharedSubDomainKey;
     bool FilterSubDomainKey = false;
     TString FilterPath;
-    TString FilterStoragePool;
-    std::pair<ui64, ui64> FilterStoragePoolId;
+    TString DomainPath;
+    std::vector<TString> FilterStoragePools;
+    std::vector<std::pair<ui64, ui64>> FilterStoragePoolsIds;
     std::unordered_set<TNodeId> FilterNodeIds;
     std::unordered_set<ui32> FilterGroupIds;
     std::optional<std::size_t> Offset;
@@ -895,9 +896,12 @@ public:
         OffloadMerge = FromStringWithDefault<bool>(params.Get("offload_merge"), OffloadMerge);
         OffloadMergeAttempts = FromStringWithDefault<bool>(params.Get("offload_merge_attempts"), OffloadMergeAttempts);
         Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
-        FilterStoragePool = params.Get("pool");
-        if (FilterStoragePool.empty()) {
-            FilterStoragePool = params.Get("storage_pool");
+        TString filterStoragePool = params.Get("pool");
+        if (filterStoragePool.empty()) {
+            filterStoragePool = params.Get("storage_pool");
+        }
+        if (!filterStoragePool.empty()) {
+            FilterStoragePools.emplace_back(filterStoragePool);
         }
         if (params.Has("group_id")) {
             FilterGroupIds.insert(FromStringWithDefault<ui32>(params.Get("group_id"), -1));
@@ -1001,7 +1005,7 @@ public:
             request->Record.AddFieldsRequired(-1);
             NodeStateResponse = MakeWhiteboardRequest(TActivationContext::ActorSystem()->NodeId, request.release());
         }
-        if (FilterStoragePool || !FilterGroupIds.empty()) {
+        if (!FilterStoragePools.empty() || !FilterGroupIds.empty()) {
             FilterDatabase = false; // we disable database filter if we're filtering by pool or group
         }
         if (FilterDatabase) {
@@ -1011,11 +1015,15 @@ public:
             if (!FieldsNeeded(FieldsHiveNodeStat) && !(FilterPath && FieldsNeeded(FieldsTablets))) {
                 DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(Database, EBoardInfoRequestDatabase);
             }
+            if ((Type == EType::Storage || Type == EType::Static) && FilterStoragePools.empty() && FilterGroupIds.empty()) {
+                FilterStorageStage = EFilterStorageStage::Pools;
+                FilterDatabase = false;
+            }
         }
         if (FilterPath && FieldsNeeded(FieldsTablets)) {
             PathNavigateResponse = MakeRequestSchemeCacheNavigate(FilterPath, ENavigateRequestPath);
         }
-        if (FilterStoragePool) {
+        if (!FilterStoragePools.empty()) {
             StoragePoolsResponse = RequestBSControllerPools();
             GroupsResponse = RequestBSControllerGroups();
             VSlotsResponse = RequestBSControllerVSlots();
@@ -1027,9 +1035,12 @@ public:
         if (With != EWith::Everything) {
             PDisksResponse = RequestBSControllerPDisks();
         }
+        TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
+        auto* domain = domains->GetDomain();
+        DomainPath = "/" + domain->Name;
         if (ProblemNodesOnly || GroupBy == ENodeFields::Uptime) {
             FieldsRequired.set(+ENodeFields::SystemState);
-            TTabletId rootHiveId = AppData()->DomainsInfo->GetHive();
+            TTabletId rootHiveId = domains->GetHive();
             HivesToAsk.push_back(rootHiveId);
             if (!PDisksResponse) {
                 PDisksResponse = RequestBSControllerPDisks();
@@ -1046,7 +1057,7 @@ public:
             }
         }
         if (FieldsNeeded(FieldsHiveNodeStat) && !FilterDatabase && !FilterPath) {
-            TTabletId rootHiveId = AppData()->DomainsInfo->GetHive();
+            TTabletId rootHiveId = domains->GetHive();
             HivesToAsk.push_back(rootHiveId);
         }
         Schedule(TDuration::MilliSeconds(Timeout * 50 / 100), new TEvents::TEvWakeup(TimeoutTablets)); // 50% timeout (for tablets)
@@ -1105,6 +1116,7 @@ public:
                 FoundNodes = TotalNodes = NodeView.size();
                 InvalidateNodes();
                 FilterDatabase = false;
+                AddEvent("PreFilter Applied");
             } else if (FieldsAvailable.test(+ENodeFields::Database)) {
                 TNodeView nodeView;
                 if (HasDatabaseNodes) {
@@ -1124,6 +1136,7 @@ public:
                 FoundNodes = TotalNodes = NodeView.size();
                 InvalidateNodes();
                 FilterDatabase = false;
+                AddEvent("PreFilter Applied");
             } else {
                 return;
             }
@@ -1163,6 +1176,7 @@ public:
             FoundNodes = TotalNodes = NodeView.size();
             Type = EType::Any;
             InvalidateNodes();
+            AddEvent("Type Filter Applied");
         }
         // storage/nodes pre-filter, affects TotalNodes count
         if (Type != EType::Any) {
@@ -1179,6 +1193,7 @@ public:
             FoundNodes = TotalNodes = NodeView.size();
             InvalidateNodes();
             FilterNodeIds.clear();
+            AddEvent("Id Filter Applied");
         }
         if (NeedFilter) {
             if (With == EWith::MissingDisks && FieldsAvailable.test(+ENodeFields::Missing)) {
@@ -1191,6 +1206,7 @@ public:
                 NodeView.swap(nodeView);
                 With = EWith::Everything;
                 InvalidateNodes();
+                AddEvent("Missing Filter Applied");
             }
             if (With == EWith::SpaceProblems && FieldsAvailable.test(+ENodeFields::DiskSpaceUsage)) {
                 TNodeView nodeView;
@@ -1202,6 +1218,7 @@ public:
                 NodeView.swap(nodeView);
                 With = EWith::Everything;
                 InvalidateNodes();
+                AddEvent("Space Filter Applied");
             }
             if (ProblemNodesOnly && FieldsAvailable.test(+ENodeFields::SystemState)) {
                 TNodeView nodeView;
@@ -1213,6 +1230,7 @@ public:
                 NodeView.swap(nodeView);
                 ProblemNodesOnly = false;
                 InvalidateNodes();
+                AddEvent("Problem Filter Applied");
             }
             if (UptimeSeconds > 0 && FieldsAvailable.test(+ENodeFields::SystemState)) {
                 TNodeView nodeView;
@@ -1224,6 +1242,7 @@ public:
                 NodeView.swap(nodeView);
                 UptimeSeconds = 0;
                 InvalidateNodes();
+                AddEvent("Uptime Filter Applied");
             }
             if (!Filter.empty()) {
                 bool allFieldsPresent =
@@ -1252,6 +1271,7 @@ public:
                     NodeView.swap(nodeView);
                     Filter.clear();
                     InvalidateNodes();
+                    AddEvent("Search Filter Applied");
                 }
             }
             if (!FilterGroup.empty() && FieldsAvailable.test(+FilterGroupBy)) {
@@ -1264,6 +1284,7 @@ public:
                 NodeView.swap(nodeView);
                 FilterGroup.clear();
                 InvalidateNodes();
+                AddEvent("Group Filter Applied");
             }
             NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0 || !FilterGroup.empty();
             FoundNodes = NodeView.size();
@@ -1333,6 +1354,7 @@ public:
                 case ENodeFields::ReversePeers:
                     break;
             }
+            AddEvent("Group Applied");
         }
     }
 
@@ -1444,6 +1466,7 @@ public:
             if (!NeedSort) {
                 InvalidateNodes();
             }
+            AddEvent("Sort Applied");
         }
     }
 
@@ -1458,10 +1481,12 @@ public:
                 InvalidateNodes();
             }
             NeedLimit = false;
+            AddEvent("Limit Applied");
         }
     }
 
     void ApplyEverything() {
+        AddEvent("ApplyEverything");
         ApplyFilter();
         ApplyGroup();
         ApplySort();
@@ -1544,7 +1569,7 @@ public:
                 return false;
             }
         }
-        return !HiveNodeStats.empty();
+        return HivesToAsk.empty();
     }
 
     bool TimeToAskHive() {
@@ -1585,11 +1610,8 @@ public:
         if (ResourceBoardInfoResponse && !ResourceBoardInfoResponse->IsDone()) {
             return false;
         }
-        for (const auto& [hiveId, hiveNodeStats] : HiveNodeStats) {
-            if (!hiveNodeStats.IsDone()) {
-                AddEvent("HiveNodeStats not done");
-                return false;
-            }
+        if (!HiveResponsesDone() || !HiveNodeStatsProcessed) {
+            return false;
         }
         if (StoragePoolsResponse && !StoragePoolsResponse->IsDone()) {
             return false;
@@ -1617,6 +1639,29 @@ public:
         TStringBuf db(path);
         db.SkipPrefix("gpc+");
         return TString(db);
+    }
+
+    void CheckAndFillStoragePoolFilter(const TSchemeCacheNavigate::TEntry& entry) {
+        if ((Type == EType::Storage || Type == EType::Static) && FilterStorageStage == EFilterStorageStage::Pools && FilterStoragePools.empty()) {
+            auto domainDescription = entry.DomainDescription;
+            if (domainDescription) {
+                for (const auto& storagePool : domainDescription->Description.GetStoragePools()) {
+                    FilterStoragePools.emplace_back(storagePool.GetName());
+                }
+                if (!FilterStoragePools.empty()) {
+                    if (!StoragePoolsResponse) {
+                        StoragePoolsResponse = RequestBSControllerPools();
+                    }
+                    if (!GroupsResponse) {
+                        GroupsResponse = RequestBSControllerGroups();
+                    }
+                    if (!VSlotsResponse) {
+                        VSlotsResponse = RequestBSControllerVSlots();
+                    }
+                }
+            }
+            FilterDatabase = false; // switching filter from database to storage pools
+        }
     }
 
     void ProcessResponses() {
@@ -1684,12 +1729,22 @@ public:
         if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsDone()) { // database hive and subdomain key
             if (DatabaseNavigateResponse->IsOk()) {
                 auto* ev = DatabaseNavigateResponse->Get();
-                if (ev->Request->ResultSet.size() == 1 && ev->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                    TSchemeCacheNavigate::TEntry& entry(ev->Request->ResultSet.front());
-                    if (entry.DomainInfo) {
-                        if (entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
-                            TPathId resourceDomainKey(entry.DomainInfo->ResourcesDomainKey);
-                            ResourceNavigateResponse = MakeRequestSchemeCacheNavigate(resourceDomainKey, ENavigateRequestResource);
+                TSchemeCacheNavigate::TEntry& entry(ev->Request->ResultSet.front());
+                if (entry.DomainInfo) {
+                    if (entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
+                        TPathId resourceDomainKey(entry.DomainInfo->ResourcesDomainKey);
+                        ResourceNavigateResponse = MakeRequestSchemeCacheNavigate(resourceDomainKey, ENavigateRequestResource);
+                        FilterPeerScopeId = GetScopeId(entry.DomainInfo->ResourcesDomainKey);
+                    } else {
+                        CheckAndFillStoragePoolFilter(entry);
+                        FilterPeerScopeId = GetScopeId(entry.DomainInfo->DomainKey);
+                    }
+                    if (FieldsNeeded(FieldsHiveNodeStat) || (FilterPath && FieldsNeeded(FieldsTablets))) {
+                        const auto ownerId = entry.DomainInfo->DomainKey.OwnerId;
+                        const auto localPathId = entry.DomainInfo->DomainKey.LocalPathId;
+                        SubDomainKey = TSubDomainKey(ownerId, localPathId);
+                        if (FilterDatabase) {
+                            FilterSubDomainKey = true;
                         }
                         if (FieldsNeeded(FieldsHiveNodeStat) || (FilterPath && FieldsNeeded(FieldsTablets))) {
                             const auto ownerId = entry.DomainInfo->DomainKey.OwnerId;
@@ -1719,6 +1774,7 @@ public:
                     TSchemeCacheNavigate::TEntry& entry(ev->Request->ResultSet.front());
                     auto path = CanonizePath(entry.Path);
                     SharedDatabase = path;
+                    CheckAndFillStoragePoolFilter(entry);
                     if (FieldsNeeded(FieldsHiveNodeStat) || (FilterPath && FieldsNeeded(FieldsTablets))) {
                         HivesToAsk.push_back(AppData()->DomainsInfo->GetHive());
                         if (entry.DomainInfo) {
@@ -1810,8 +1866,14 @@ public:
             ResourceBoardInfoResponse.reset();
         }
 
-        if (TimeToAskHive() && !HivesToAsk.empty()) {
-            AddEvent("TimeToAskHive");
+        if (!TimeToAskHive()) {
+            return;
+        }
+
+        AddEvent("TimeToAskHive");
+
+        if (!HivesToAsk.empty()) {
+            AddEvent("HivesTokHive");
             std::sort(HivesToAsk.begin(), HivesToAsk.end());
             HivesToAsk.erase(std::unique(HivesToAsk.begin(), HivesToAsk.end()), HivesToAsk.end());
             for (TTabletId hiveId : HivesToAsk) {
@@ -1829,7 +1891,7 @@ public:
             HivesToAsk.clear();
         }
 
-        if (HiveResponsesDone()) {
+        if (HiveResponsesDone() && !HiveNodeStatsProcessed) {
             AddEvent("HiveResponsesDone");
             for (const auto& [hiveId, nodeStats] : HiveNodeStats) {
                 if (nodeStats.IsDone()) {
@@ -1867,15 +1929,19 @@ public:
                     }
                 }
             }
-            HiveNodeStats.clear();
+            HiveNodeStatsProcessed = true;
         }
 
         if (FilterStorageStage == EFilterStorageStage::Pools && StoragePoolsResponse && StoragePoolsResponse->IsDone()) {
             if (StoragePoolsResponse->IsOk()) {
                 for (const auto& storagePoolEntry : StoragePoolsResponse->Get()->Record.GetEntries()) {
-                    if (storagePoolEntry.GetInfo().GetName() == FilterStoragePool) {
-                        FilterStoragePoolId = {storagePoolEntry.GetKey().GetBoxId(), storagePoolEntry.GetKey().GetStoragePoolId()};
-                        break;
+                    auto itFilterStoragePool = std::ranges::find(FilterStoragePools, storagePoolEntry.GetInfo().GetName());
+                    if (itFilterStoragePool != FilterStoragePools.end()) {
+                        FilterStoragePoolsIds.emplace_back(std::make_pair(storagePoolEntry.GetKey().GetBoxId(), storagePoolEntry.GetKey().GetStoragePoolId()));
+                        FilterStoragePools.erase(itFilterStoragePool);
+                        if (FilterStoragePools.empty()) {
+                            break;
+                        }
                     }
                 }
                 FilterStorageStage = EFilterStorageStage::Groups;
@@ -1887,8 +1953,10 @@ public:
         if (FilterStorageStage == EFilterStorageStage::Groups && GroupsResponse && GroupsResponse->IsDone()) {
             if (GroupsResponse->IsOk()) {
                 for (const auto& groupEntry : GroupsResponse->Get()->Record.GetEntries()) {
-                    if (groupEntry.GetInfo().GetBoxId() == FilterStoragePoolId.first
-                        && groupEntry.GetInfo().GetStoragePoolId() == FilterStoragePoolId.second) {
+                    auto itFilterStoragePoolId = std::ranges::find(FilterStoragePoolsIds,
+                        std::pair<ui64, ui64>(groupEntry.GetInfo().GetBoxId(),
+                            groupEntry.GetInfo().GetStoragePoolId()));
+                    if (itFilterStoragePoolId != FilterStoragePoolsIds.end()) {
                         FilterGroupIds.insert(groupEntry.GetKey().GetGroupId());
                     }
                 }
@@ -1912,10 +1980,11 @@ public:
                             node->SysViewVDisks.emplace_back(slotEntry);
                             node->HasDisks = true;
                         }
-                    }
-                    TNode* node = FindNode(slotEntry.GetKey().GetNodeId());
-                    if (node) {
-                        node->HasDisks = true;
+                    } else {
+                        TNode* node = FindNode(slotEntry.GetKey().GetNodeId());
+                        if (node) {
+                            node->HasDisks = true;
+                        }
                     }
                     auto& slots = slotsPerDisk[{slotEntry.GetKey().GetNodeId(), slotEntry.GetKey().GetPDiskId()}];
                     ++slots;
@@ -1954,9 +2023,14 @@ public:
             PDisksResponse.reset();
         }
 
-        if (TimeToAskWhiteboard() && FieldsAvailable.test(+ENodeFields::NodeInfo)) {
+        if (!TimeToAskWhiteboard()) {
+            return;
+        }
+
+        ApplyEverything();
+
+        if (FieldsAvailable.test(+ENodeFields::NodeInfo)) {
             AddEvent("TimeToAskWhiteboard");
-            ApplyEverything();
             if (FilterDatabase) {
                 FieldsRequired.set(+ENodeFields::SystemState);
             }
@@ -2199,6 +2273,9 @@ public:
                         if (node) {
                             nodesWithoutData.erase(nodeId);
                             node->MergeFrom(systemInfo, now);
+                            // if (!node->Database && node->IsStatic()) {
+                            //     node->Database = DomainPath;
+                            // }
                             if (Database && node->Database) {
                                 if (node->Database != Database && (!SharedDatabase || node->Database != SharedDatabase)) {
                                     removeNodes.insert(nodeId);
@@ -2226,6 +2303,9 @@ public:
                         TNode* node = FindNode(nodeId);
                         if (node) {
                             node->MergeFrom(systemState.GetSystemStateInfo(0), now);
+                            // if (!node->Database && node->IsStatic()) {
+                            //     node->Database = DomainPath;
+                            // }
                             if (Database && node->Database) {
                                 if (node->Database != Database && (!SharedDatabase || node->Database != SharedDatabase)) {
                                     removeNodes.insert(nodeId);

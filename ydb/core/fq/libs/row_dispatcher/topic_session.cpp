@@ -787,16 +787,17 @@ void TTopicSession::RestartSessionIfOldestClient(const TClientsInfo& info) {
         return;
     }
 
+    if (info.NextMessageOffset >= minMessageOffset) {
+        return;
+    }
     LOG_ROW_DISPATCHER_INFO("Client (on StopSession) has less offset (" << info.NextMessageOffset << ") than others clients (" << minMessageOffset << "), stop (restart) topic session");
-    if (info.NextMessageOffset < minMessageOffset) {
-        Metrics.RestartSessionByOffsets->Inc();
-        ++RestartSessionByOffsets;
-        info.RestartSessionByOffsetsByQuery->Inc();
-        StopReadSession();
+    Metrics.RestartSessionByOffsets->Inc();
+    ++RestartSessionByOffsets;
+    info.RestartSessionByOffsetsByQuery->Inc();
+    StopReadSession();
 
-        if (!ReadSession) {
-            Schedule(TDuration::Seconds(Config.GetTimeoutBeforeStartSessionSec()), new NFq::TEvPrivate::TEvCreateSession());
-        }
+    if (!ReadSession) {
+        Schedule(TDuration::Seconds(Config.GetTimeoutBeforeStartSessionSec()), new NFq::TEvPrivate::TEvCreateSession());
     }
 }
 

@@ -64,8 +64,10 @@ public:
 
         CompileNotifier = Runtime.AllocateEdgeActor();
         const auto compileServiceActorId = Runtime.Register(CreatePurecalcCompileServiceMock(CompileNotifier));
+
         if (MockTopicSession) {
-            MockPqGateway = CreateMockPqGateway();
+            PqGatewayNotifier = Runtime.AllocateEdgeActor();
+            MockPqGateway = CreateMockPqGateway(Runtime, PqGatewayNotifier);
         }
 
         TopicSession = Runtime.Register(NewTopicSession(
@@ -107,9 +109,9 @@ public:
             const auto ping = Runtime.GrabEdgeEvent<NActors::TEvents::TEvPing>(CompileNotifier);
             UNIT_ASSERT_C(ping, "Compilation is not performed for predicate: " << predicate);
         }
-        
-        //TVector<TMessage> msgs;
+
         if (MockTopicSession) {
+            Runtime.GrabEdgeEvent<NYql::NDq::TEvMockPqEvents::TEvCreateSession>(PqGatewayNotifier, TDuration::Seconds(GrabTimeoutSec));
             MockPqGateway->GetEventQueue(TopicPath)->Push(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(nullptr, 0, 0), 0);
         }
     }
@@ -227,16 +229,16 @@ public:
     }
 
     void PQWrite2(
-        const std::vector<TString>& sequence) {
+        const std::vector<TString>& sequence,
+        ui64 firstMessageOffset = 0) {
         if (!MockTopicSession) {
             PQWrite(sequence, TopicPath, GetDefaultPqEndpoint());
         } else {
-            static size_t MsgOffset_ = 0; // TODO
+            ui64 offset = firstMessageOffset;
             TVector<TMessage> msgs;
             size_t size = 0;
             for (const auto& s : sequence) {
-                msgs.emplace_back(MakeNextMessage(s, MsgOffset_));
-                MsgOffset_++;
+                msgs.emplace_back(MakeNextMessage(s, offset++));
                 size += s.size();
             }
             if (!msgs.empty()) {
@@ -254,6 +256,7 @@ public:
     NActors::TActorId TopicSession;
     NActors::TActorId RowDispatcherActorId;
     NActors::TActorId CompileNotifier;
+    NActors::TActorId PqGatewayNotifier;
     NYdb::TDriver Driver = NYdb::TDriver(NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr")));
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
     NActors::TActorId ReadActorId1;
@@ -597,15 +600,24 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         StartSession(ReadActorId1, source);
         std::vector<TString> data = { Json1, Json2, Json3 };
-        PQWrite2(data);
+        PQWrite2(data, 1);
         ExpectNewDataArrived({ReadActorId1});
         ExpectMessageBatch(ReadActorId1, { JsonMessage(1), JsonMessage(2), JsonMessage(3) });
 
         StartSession(ReadActorId2, source, 1);
-        std::vector<TString> data2 = { Json2, Json3 };
-        PQWrite2(data2);
+        std::vector<TString> data2 = { Json1 };
+        PQWrite2(data2, 1);
         ExpectNewDataArrived({ReadActorId2});
-        ExpectMessageBatch(ReadActorId1, { JsonMessage(2), JsonMessage(3) });
+        ExpectMessageBatch(ReadActorId2, { JsonMessage(1)});
+
+        StopSession(ReadActorId2, source);
+        Runtime.GrabEdgeEvent<NYql::NDq::TEvMockPqEvents::TEvCreateSession>(PqGatewayNotifier, TDuration::Seconds(GrabTimeoutSec));
+        MockPqGateway->GetEventQueue(TopicPath)->Push(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(nullptr, 0, 0), 0);
+
+        std::vector<TString> data3 = { Json4 };
+        PQWrite2(data3, 4);
+        ExpectNewDataArrived({ReadActorId1});
+        ExpectMessageBatch(ReadActorId1, { JsonMessage(4) });
 
         PassAway();
     }

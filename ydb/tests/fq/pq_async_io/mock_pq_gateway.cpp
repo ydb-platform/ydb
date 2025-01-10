@@ -1,5 +1,6 @@
 #include "mock_pq_gateway.h"
 
+#include <atomic>
 #include <library/cpp/threading/future/async.h>
 
 namespace NYql::NDq {
@@ -12,7 +13,8 @@ public:
         : Session(std::move(session))
         , Queue(queue) {
         if (Queue->IsStopped()) {
-            Queue = std::make_shared<NYql::TBlockingEQueue>(4_MB);
+            Queue->~TBlockingEQueue();
+            new (Queue.get()) NYql::TBlockingEQueue(4_MB);
         }
         Pool_.Start(1);
     }
@@ -85,6 +87,7 @@ class TMockPqGateway : public IMockPqGateway {
         std::shared_ptr<NYdb::NTopic::IReadSession> CreateReadSession(const NYdb::NTopic::TReadSessionSettings& settings) override {
             Y_ENSURE(!settings.Topics_.empty());
             TString topic = settings.Topics_.front().Path_;
+            Self->Runtime.Send(new NActors::IEventHandle(Self->Notifier, NActors::TActorId(), new NYql::NDq::TEvMockPqEvents::TEvCreateSession()));
             return std::make_shared<TMockTopicReadSession>(MakeIntrusive<TDummyPartitionSession>(), Self->GetEventQueue(topic));
         }
 
@@ -98,9 +101,17 @@ class TMockPqGateway : public IMockPqGateway {
 
         NYdb::TAsyncStatus CommitOffset(const TString& path, ui64 partitionId, const TString& consumerName, ui64 offset,
             const NYdb::NTopic::TCommitOffsetSettings& settings = {}) override {return NYdb::TAsyncStatus{};}
+
         TMockPqGateway* Self;
     };
 public:
+
+    TMockPqGateway(
+        NActors::TTestActorRuntime& runtime,
+        NActors::TActorId notifier)
+        : Runtime(runtime)
+        , Notifier(notifier) {}
+
     ~TMockPqGateway() {}
 
     NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override {
@@ -148,6 +159,8 @@ public:
 
 private:
     std::unordered_map<TString, std::shared_ptr<NYql::TBlockingEQueue>> Queues;
+    NActors::TTestActorRuntime& Runtime;
+    NActors::TActorId Notifier;
 };
 
 }
@@ -156,8 +169,10 @@ NYdb::NTopic::TPartitionSession::TPtr CreatePartitionSession() {
     return MakeIntrusive<TDummyPartitionSession>();
 }
 
-TIntrusivePtr<IMockPqGateway> CreateMockPqGateway() {
-    return MakeIntrusive<TMockPqGateway>();
+TIntrusivePtr<IMockPqGateway> CreateMockPqGateway(
+    NActors::TTestActorRuntime& runtime,
+    NActors::TActorId notifier) {
+    return MakeIntrusive<TMockPqGateway>(runtime, notifier);
 }
 
 }

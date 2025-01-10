@@ -8,7 +8,6 @@
 namespace NYql {
 
 TBlockingEQueue::TBlockingEQueue(size_t maxSize):MaxSize_(maxSize) {
-
 }
 
 void TBlockingEQueue::Push(NYdb::NTopic::TReadSessionEvent::TEvent&& e, size_t size) {

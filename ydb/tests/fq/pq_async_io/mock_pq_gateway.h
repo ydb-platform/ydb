@@ -18,13 +18,25 @@
 
 namespace NYql::NDq {
 
+struct TEvMockPqEvents {
+    enum EEv : ui32 {
+        EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvCreateSession = EvBegin,
+        EvEnd
+    };
+    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+    struct TEvCreateSession : public NActors::TEventLocal<TEvCreateSession, EvCreateSession> {};
+};
+
 class IMockPqGateway : public NYql::IPqGateway {
 public:
-    virtual std::shared_ptr<NYql::TBlockingEQueue> GetEventQueue(const TString& topic) = 0; 
+    virtual std::shared_ptr<NYql::TBlockingEQueue> GetEventQueue(const TString& topic) = 0;
 };
 
 NYdb::NTopic::TPartitionSession::TPtr CreatePartitionSession();
 
-TIntrusivePtr<IMockPqGateway> CreateMockPqGateway();
+TIntrusivePtr<IMockPqGateway> CreateMockPqGateway(
+    NActors::TTestActorRuntime& runtime,
+    NActors::TActorId notifier);
 
 }

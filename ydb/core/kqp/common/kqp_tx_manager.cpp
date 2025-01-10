@@ -325,6 +325,7 @@ public:
             auto arbiterIterator = std::begin(shards);
             std::advance(arbiterIterator, index);
             ArbiterColumnShard = *arbiterIterator;
+            ReceivingShards.insert(*ArbiterColumnShard);
         }
 
         ShardsToWaitPrepare = ShardsIds;

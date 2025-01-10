@@ -326,6 +326,12 @@ public:
                 return TConclusionStatus::Fail("no arbiter info in request");
             }
             ArbiterColumnShard = locks.GetArbiterColumnShard();
+
+            if (IsPrimary() && !ReceivingShards.contains(ArbiterColumnShard)) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect arbiter")("arbiter_id", ArbiterColumnShard)(
+                    "receiving", JoinSeq(", ", ReceivingShards))("sending", JoinSeq(", ", SendingShards));
+                return TConclusionStatus::Fail("arbiter is absent in receiving lists");
+            }
             if (!IsPrimary() && (!ReceivingShards.contains(ArbiterColumnShard) || !SendingShards.contains(ArbiterColumnShard))) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect arbiter")("arbiter_id", ArbiterColumnShard)(
                     "receiving", JoinSeq(", ", ReceivingShards))("sending", JoinSeq(", ", SendingShards));

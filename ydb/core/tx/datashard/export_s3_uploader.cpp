@@ -231,44 +231,45 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         this->Become(&TThis::StateUploadPermissions);
     }
 
-    void PutChangefeedDescription(const Ydb::Table::ChangefeedDescription& changefeed, const TString& changefeedKeyPattern) {
-        google::protobuf::TextFormat::PrintToString(changefeed, &Buffer);
+    void PutDescription(const google::protobuf::Message& desc, TString key, TString& checksum, auto stateFunc) {
+        google::protobuf::TextFormat::PrintToString(desc, &Buffer);
+        if (EnableChecksums) {
+            checksum = ComputeExportChecksum(Buffer);
+        }
         auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Settings.GetChangefeedKey(changefeedKeyPattern));
+            .WithKey(key);
         this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
-        this->Become(&TThis::StateUploadChangefeed);
+        this->Become(stateFunc);
     }
 
-    void PutTopicDescription(const Ydb::Topic::DescribeTopicResult& topic, const TString& changefeedKeyPattern) {
-        google::protobuf::TextFormat::PrintToString(topic, &Buffer);
-        auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Settings.GetTopicKey(changefeedKeyPattern));
-        this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
-        this->Become(&TThis::StateUploadTopic);
+    void PutChangefeedDescription(const Ydb::Table::ChangefeedDescription& changefeed, const TString& changefeedName) {
+        PutDescription(changefeed, Settings.GetChangefeedKey(changefeedName), ChangefeedChecksum, &TThis::StateUploadChangefeed);
+    }
+
+    void PutTopicDescription(const Ydb::Topic::DescribeTopicResult& topic, const TString& changefeedName) {
+        PutDescription(topic, Settings.GetTopicKey(changefeedName), TopicChecksum, &TThis::StateUploadTopic);
+    }
+
+    TString GetCurrentChangefeedName() {
+        return Changefeeds[IndexExportedChangefeed].ChangefeedDescription.Getname();
     }
 
     void UploadChangefeed() {
         if (IndexExportedChangefeed == Changefeeds.size()) {
-            auto nextStep = [this]() {
-                ChangefeedsUploaded = true;
-                if (Scanner) {
-                    this->Send(Scanner, new TEvExportScan::TEvFeed());
-                }
-                this->Become(&TThis::StateUploadData);
-            };
-            nextStep();
+            ChangefeedsUploaded = true;
+            if (Scanner) {
+                this->Send(Scanner, new TEvExportScan::TEvFeed());
+            }
+            this->Become(&TThis::StateUploadData);
             return;
         }
         const auto& changefeed = Changefeeds[IndexExportedChangefeed].ChangefeedDescription;
-        const auto changefeedKeyPattern = TStringBuilder() << Settings.ObjectKeyPattern << "/" << changefeed.Getname();
-        PutChangefeedDescription(changefeed, changefeedKeyPattern);
+        PutChangefeedDescription(changefeed, GetCurrentChangefeedName());
     }
 
     void UploadTopic() {
-        auto& descs = Changefeeds[IndexExportedChangefeed];
-        const auto changefeedKeyPattern = TStringBuilder() << Settings.ObjectKeyPattern << "/" 
-            << descs.ChangefeedDescription.Getname();
-        PutTopicDescription(descs.Topic, changefeedKeyPattern);
+        const auto& topic = Changefeeds[IndexExportedChangefeed].Topic;
+        PutTopicDescription(topic, GetCurrentChangefeedName());
     }
 
     void UploadChangefeeds() {
@@ -379,7 +380,12 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
                 UploadTopic();
             }
         };
-        nextStep();
+        if (EnableChecksums) {
+            TString checksumKey = ChecksumKey(Settings.GetChangefeedKey(GetCurrentChangefeedName()));
+            UploadChecksum(std::move(ChangefeedChecksum), checksumKey, ChangefeedKeySuffix(), nextStep);
+        } else {
+            nextStep();
+        }
     }
 
     void HandleTopic(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
@@ -397,7 +403,12 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             ++IndexExportedChangefeed;
             UploadChangefeed();
         };
-        nextStep();
+        if (EnableChecksums) {
+            TString checksumKey = ChecksumKey(Settings.GetTopicKey(GetCurrentChangefeedName()));
+            UploadChecksum(std::move(TopicChecksum), checksumKey, TopicKeySuffix(), nextStep);
+        } else {
+            nextStep();
+        }
     }
 
     void HandleMetadata(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
@@ -932,6 +943,8 @@ private:
     bool EnableChecksums;
     TString DataChecksum;
     TString MetadataChecksum;
+    TString ChangefeedChecksum;
+    TString TopicChecksum;
     TString SchemeChecksum;
     TString PermissionsChecksum;
     std::function<void()> ChecksumUploadedCallback;

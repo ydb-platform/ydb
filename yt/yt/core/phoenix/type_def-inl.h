@@ -4,7 +4,6 @@
 #include "type_def.h"
 #endif
 
-#include "concepts.h"
 #include "factory.h"
 #include "polymorphic.h"
 #include "context.h"
@@ -42,34 +41,14 @@ namespace NYT::NPhoenix2::NDetail {
         return map; \
     } \
     \
-    void type::SaveImpl(TSaveContext& context) const \
+    void type::Save(TSaveContext& context) const \
     { \
         ::NYT::NPhoenix2::NDetail::SaveImpl(this, context); \
     } \
     \
-    void type::LoadImpl(TLoadContext& context) \
-    { \
-        ::NYT::NPhoenix2::NDetail::LoadImpl(this, context); \
-    } \
-    \
-    void type::Save(TSaveContext& context) const \
-    { \
-        const_cast<type*>(this)->Persist(context); \
-    } \
-    \
     void type::Load(TLoadContext& context) \
     { \
-        Persist(context); \
-    } \
-    \
-    void type::Persist(const TPersistenceContext& context) \
-    { \
-        if (context.IsSave()) { \
-            type::SaveImpl(context.SaveContext()); \
-        } else { \
-            YT_VERIFY(context.IsLoad()); \
-            type::LoadImpl(context.LoadContext()); \
-        } \
+        ::NYT::NPhoenix2::NDetail::LoadImpl(this, context); \
     } \
     \
     template <class T> \
@@ -322,24 +301,9 @@ public:
     { }
 
     template <class TBase>
-        requires SupportsPhoenix2<TBase>
-    void BaseType()
-    {
-        This_->TBase::SaveImpl(Context_);
-    }
-
-    template <class TBase>
-        requires (!SupportsPhoenix2<TBase> && !SupportsPersist<TBase, TContext>)
     void BaseType()
     {
         This_->TBase::Save(Context_);
-    }
-
-    template <class TBase>
-        requires (!SupportsPhoenix2<TBase> && SupportsPersist<TBase, TContext>)
-    void BaseType()
-    {
-        const_cast<TThis*>(This_)->TBase::Persist(Context_);
     }
 
 private:
@@ -523,24 +487,9 @@ public:
     { }
 
     template <class TBase>
-        requires SupportsPhoenix2<TBase>
-    void BaseType()
-    {
-        This_->TBase::LoadImpl(Context_);
-    }
-
-    template <class TBase>
-        requires (!SupportsPhoenix2<TBase> && !SupportsPersist<TBase, TContext>)
     void BaseType()
     {
         This_->TBase::Load(Context_);
-    }
-
-    template <class TBase>
-        requires (!SupportsPhoenix2<TBase> && SupportsPersist<TBase, TContext>)
-    void BaseType()
-    {
-        This_->TBase::Persist(Context_);
     }
 
 private:
@@ -650,7 +599,7 @@ public:
         : This_(other.This_)
         , Context_(other.Context_)
         , Name_(other.Name_)
-        , LoadHandler_(other.LoadHandler)
+        , LoadHandler_(other.LoadHandler_)
         , MinVersion_(other.MinVersion_)
         , BeforeVersion_(other.BeforeVersion_)
         , VersionFilter_(other.VersionFilter_)

@@ -13,7 +13,7 @@
 
 #include <yt/yt/core/compression/public.h>
 
-#include <yt/yt/core/misc/phoenix.h>
+#include <yt/yt/core/phoenix/context.h>
 
 namespace NYT::NTableClient {
 
@@ -39,7 +39,7 @@ public:
 
     ui64 Set(const TTableSchemaPtr& schema);
 
-    void Persist(const NPhoenix::TPersistenceContext& context);
+    void Persist(const NPhoenix2::TPersistenceContext& context);
 
     ui64 Reset();
 
@@ -67,7 +67,7 @@ struct TTableUploadOptions
 
     TTableSchemaPtr GetUploadSchema() const;
 
-    void Persist(const NPhoenix::TPersistenceContext& context);
+    void Persist(const NPhoenix2::TPersistenceContext& context);
 };
 
 const std::vector<TString>& GetTableUploadOptionsAttributeKeys();

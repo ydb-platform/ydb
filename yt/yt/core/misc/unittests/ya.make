@@ -49,8 +49,6 @@ SRCS(
     mpl_ut.cpp
     pattern_formatter_ut.cpp
     persistent_queue_ut.cpp
-    phoenix_ut.cpp
-    phoenix_compatibility_ut.cpp
     pool_allocator_ut.cpp
     proc_ut.cpp
     random_ut.cpp

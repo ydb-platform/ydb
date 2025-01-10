@@ -64,8 +64,8 @@ protected:
             return;
         }
 
-        auto& last = TraversingStack.emplace_back();
-        last.Index = Max<size_t>(); // tenant
+        auto& last = DeepFirstSearchStack.emplace_back();
+        last.Index = Max<size_t>(); // tenant root
 
         if (TBase::AckReceived) {
             ContinueScan();
@@ -77,14 +77,12 @@ protected:
     }
 
     void ContinueScan() {
-        // Deep First Search: pick the first child from the latest entry
-        
-        while (TraversingStack) {
-            auto& last = TraversingStack.back();
+        while (DeepFirstSearchStack) {
+            auto& last = DeepFirstSearchStack.back();
 
-            if (last.Index == Max<size_t>()) { // tenant
+            if (last.Index == Max<size_t>()) { // tenant root
                 NavigatePath(SplitPath(TBase::TenantName));
-                TraversingStack.pop_back();
+                DeepFirstSearchStack.pop_back();
                 return;
             }
 
@@ -101,7 +99,7 @@ protected:
                 last.Entry.Path.pop_back();
                 return;
             } else {
-                TraversingStack.pop_back();
+                DeepFirstSearchStack.pop_back();
             }
         }
 
@@ -128,11 +126,10 @@ protected:
         FillBatch(*batch, entry);
 
         if (!batch->Finished && entry.ListNodeEntry) {
-            // Deep First Search: create and fill next level
-            TraversingStack.emplace_back(std::move(entry));
+            DeepFirstSearchStack.emplace_back(std::move(entry));
         }
 
-        batch->Finished = TraversingStack.empty();
+        batch->Finished = DeepFirstSearchStack.empty();
 
         TBase::SendBatch(std::move(batch));
     }
@@ -163,7 +160,7 @@ protected:
     virtual void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TNavigate::TEntry& entry) = 0;
 
 private:
-    TVector<TTraversingChildren> TraversingStack;
+    TVector<TTraversingChildren> DeepFirstSearchStack;
 };
 
 }

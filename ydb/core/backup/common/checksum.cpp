@@ -1,12 +1,12 @@
-#include "export_checksum.h"
+#include "checksum.h"
 
 #include <openssl/sha.h>
 
 #include <util/string/hex.h>
 
-namespace NKikimr::NDataShard {
+namespace NKikimr::NBackup {
 
-class TSHA256 : public IExportChecksum {
+class TSHA256 : public IChecksum {
 public:
     TSHA256() {
         SHA256_Init(&Context);
@@ -26,14 +26,18 @@ private:
     SHA256_CTX Context;
 };
 
-TString ComputeExportChecksum(TStringBuf data) {
-    IExportChecksum::TPtr checksum(CreateExportChecksum());
+TString ComputeChecksum(TStringBuf data) {
+    IChecksum::TPtr checksum(CreateChecksum());
     checksum->AddData(data);
     return checksum->Serialize();
 }
 
-IExportChecksum* CreateExportChecksum() {
+IChecksum* CreateChecksum() {
     return new TSHA256();
+}
+
+TString ChecksumKey(const TString& objKey) {
+    return objKey + ".sha256";
 }
 
 } // NKikimr::NDataShard

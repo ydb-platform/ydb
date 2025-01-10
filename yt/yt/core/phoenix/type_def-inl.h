@@ -662,13 +662,13 @@ public:
     auto SinceVersion(TVersion version) &&
     {
         MinVersion_ = version;
-        return TFieldLoadRegistrar(std::move(*this));
+        return TVirtualFieldLoadRegistrar(std::move(*this));
     }
 
     auto BeforeVersion(TVersion version) &&
     {
         BeforeVersion_ = version;
-        return TFieldLoadRegistrar(std::move(*this));
+        return TVirtualFieldLoadRegistrar(std::move(*this));
     }
 
     auto WhenMissing(TFieldMissingHandler<TThis, TContext> handler) &&

@@ -48,7 +48,7 @@ void WriteBufferFromFileDescriptor::nextImpl()
     Stopwatch watch;
 
     size_t bytes_written = 0;
-    while (bytes_written != offset())
+    while (bytes_written < offset())
     {
         ProfileEvents::increment(ProfileEvents::WriteBufferFromFileDescriptorWrite);
 

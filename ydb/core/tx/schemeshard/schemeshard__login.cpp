@@ -186,8 +186,8 @@ private:
         ResetFailedAttemptCount(loginRequest, db);
     }
 
-    void HandleLoginAuthSuccess(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, const NLogin::TLoginProvider::TLoginUserResponse& /* loginResponse */, NIceDb::TNiceDb& db) {
-        db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::LastSuccessfulAttempt, Schema::LoginSids::FailedAttemptCount>(TAppData::TimeProvider->Now().MicroSeconds(), Schema::LoginSids::FailedAttemptCount::Default);
+    void HandleLoginAuthSuccess(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, const NLogin::TLoginProvider::TLoginUserResponse& loginResponse, NIceDb::TNiceDb& db) {
+        db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::LastSuccessfulAttempt, Schema::LoginSids::FailedAttemptCount>(loginResponse.LoginAttemptTime, Schema::LoginSids::FailedAttemptCount::Default);
     }
 
     void HandleLoginAuthInvalidPassword(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, const NLogin::TLoginProvider::TLoginUserResponse& /* loginResponse */, NIceDb::TNiceDb& db) {

@@ -316,7 +316,16 @@ std::vector<TString> TLoginProvider::GetGroupsMembership(const TString& member) 
 }
 
 TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserRequest& request) {
+    auto now = std::chrono::system_clock::now();
     TLoginUserResponse response;
+    response.LoginAttemptTime = std::chrono::time_point_cast<std::chrono::microseconds>(now).time_since_epoch().count();
+
+    if (Keys.empty() || Keys.back().PrivateKey.empty()) {
+        response.Status = TLoginUserResponse::EStatus::UNAVAILABLE_KEY;
+        response.Error = "No key to generate token";
+        return response;
+    }
+
     if (!request.ExternalAuth) {
         auto itUser = Sids.find(request.User);
         if (itUser == Sids.end() || itUser->second.Type != ESidType::USER) {
@@ -330,22 +339,16 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
             response.Error = "Invalid password";
             return response;
         }
-    }
 
-    if (Keys.empty() || Keys.back().PrivateKey.empty()) {
-        response.Status = TLoginUserResponse::EStatus::UNAVAILABLE_KEY;
-        response.Error = "No key to generate token";
-        return response;
+        itUser->second.LastSuccessfulLogin = response.LoginAttemptTime;
     }
 
     const TKeyRecord& key = Keys.back();
-
     auto keyId = ToString(key.KeyId);
     const auto& publicKey = key.PublicKey;
     const auto& privateKey = key.PrivateKey;
 
     // encode jwt
-    auto now = std::chrono::system_clock::now();
     auto expires_at = now + MAX_TOKEN_EXPIRE_TIME;
     if (request.Options.ExpiresAfter != std::chrono::system_clock::duration::zero()) {
         expires_at = std::min(expires_at, now + request.Options.ExpiresAfter);
@@ -666,6 +669,7 @@ void TLoginProvider::UpdateSecurityState(const NLoginProto::TSecurityState& stat
             sid.Type = pbSid.GetType();
             sid.Name = pbSid.GetName();
             sid.Hash = pbSid.GetHash();
+            sid.LastSuccessfulLogin = pbSid.GetLastSuccessfulLogin();
             for (const auto& pbSubSid : pbSid.GetMembers()) {
                 sid.Members.emplace(pbSubSid);
                 ChildToParentIndex[pbSubSid].emplace(sid.Name);

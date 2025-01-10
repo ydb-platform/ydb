@@ -59,6 +59,7 @@ public:
         TString Token;
         TString SanitizedToken; // Token for audit logs
         EStatus Status = EStatus::UNSPECIFIED;
+        ui64 LoginAttemptTime; // microseconds
     };
 
     struct TValidateTokenRequest : TBasicRequest {
@@ -145,6 +146,7 @@ public:
         TString Name;
         TString Hash;
         std::unordered_set<TString> Members;
+        ui64 LastSuccessfulLogin;
     };
 
     // our current audience (database name)

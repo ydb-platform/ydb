@@ -12,12 +12,20 @@ enum ESimpleCounters {
     COUNTER_BOOT_QUEUE = 3 [(CounterOpts) = {Name: "BootQueue"}];
     COUNTER_STOP_QUEUE = 4 [(CounterOpts) = {Name: "StopQueue"}];
     COUNTER_DATA_LAG = 5 [(CounterOpts) = {Name: "DataLag"}];
+    COUNTER_PENDING_VERSIONS = 6 [(CounterOpts) = {Name: "PendingVersions"}];
+    COUNTER_ALLOCATED_TX_IDS = 7 [(CounterOpts) = {Name: "AllocatedTxIds"}];
+    COUNTER_ASSIGNED_TX_IDS = 8 [(CounterOpts) = {Name: "AssignedTxIds"}];
+    COUNTER_WORKERS_WITH_HEARTBEAT = 9 [(CounterOpts) = {Name: "WorkersWithHeartbeat"}];
+    COUNTER_WORKERS_PENDING_HEARTBEAT = 10 [(CounterOpts) = {Name: "WorkersPendingHeartbeat"}];
 }
 
 enum ECumulativeCounters {
     COUNTER_CUMULATIVE_IGNORE = 0;
     COUNTER_CREATE_SESSION = 1 [(CounterOpts) = {Name: "CreateSession"}];
     COUNTER_DELETE_SESSION = 2 [(CounterOpts) = {Name: "DeleteSession"}];
+    COUNTER_TOO_MANY_OPEN_TX_IDS = 3 [(CounterOpts) = {Name: "TooManyOpenTxIds"}];
+    COUNTER_TX_IDS_EXHAUSTED = 4 [(CounterOpts) = {Name: "TxIdsExhausted"}];
+    COUNTER_ERROR_COMMITTING_CHANGES = 5 [(CounterOpts) = {Name: "ErrorCommittingChanges"}];
 }
 
 enum EPercentileCounters {

@@ -1786,7 +1786,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetUseSectorMap(true)
                 .SetMonitoringPortOffset(monPort, true); // authorization is implemented only in async mon
 
-        auto& securityConfig = *settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
+        auto& securityConfig = *settings.AppConfig->MutableSecurityConfig();
         securityConfig.SetEnforceUserTokenCheckRequirement(true);
 
         TFakeTicketParserActor* ticketParser = nullptr;

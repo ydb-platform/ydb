@@ -461,7 +461,7 @@ struct TComplexTypeYsonReaderTraits {
     using TStrings = TStringYsonReader<TStringType, Nullable, OriginalT, Native>;
     using TExtOptional = TExternalOptYsonReader<Native>;
 
-    static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
+    static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* /* pgBuilder */) {
         return BuildPgYsonColumnReader(desc);
     }
 

@@ -132,6 +132,10 @@ void TController::Reset() {
     SysParams.Reset();
     Replications.clear();
     ReplicationsByPathId.clear();
+    AssignedTxIds.clear();
+    Workers.clear();
+    WorkersWithHeartbeat.clear();
+    WorkersByHeartbeat.clear();
 }
 
 void TController::Handle(TEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx) {

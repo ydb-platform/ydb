@@ -472,7 +472,7 @@ private:
 
     size_t GetLowestEmptyPoolId()
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         size_t id = 0;
         while (id < IdToPool_.size() && IdToPool_[id]) {
@@ -483,7 +483,7 @@ private:
 
     void AccountCurrentlyExecutingBuckets()
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         auto currentInstant = GetCpuInstant();
         auto threadCount = ThreadCount_.load();
@@ -502,7 +502,7 @@ private:
 
     void UpdateExcessTime(TBucket* bucket, TCpuDuration duration)
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         const auto& pool = IdToPool_[bucket->PoolId];
 
@@ -521,7 +521,7 @@ private:
 
     TBucketPtr GetStarvingBucket(TEnqueuedAction* action)
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         // For each currently evaluating buckets recalculate excess time.
         AccountCurrentlyExecutingBuckets();
@@ -530,7 +530,7 @@ private:
         auto minExcessTime = std::numeric_limits<NProfiling::TCpuDuration>::max();
 
         int minPoolIndex = -1;
-        for (int index = 0; index < static_cast<int>(IdToPool_.size()); ++index) {
+        for (int index = 0; index < std::ssize(IdToPool_); ++index) {
             const auto& pool = IdToPool_[index];
             if (pool && !pool->Heap.empty() && pool->ExcessTime < minExcessTime) {
                 minExcessTime = pool->ExcessTime;

@@ -33,7 +33,7 @@ TUnboxedValuePod PeelData(const TDataTypeId nodeType, const TUnboxedValuePod val
         default: break;
     }
 
-    UdfTerminate((::TStringBuilder() << "Unsupported data type: " << static_cast<int>(nodeType)).c_str());
+    UdfTerminate((::TStringBuilder() << pos <<  " Unsupported data type: " << static_cast<int>(nodeType)).c_str());
 }
 
 template<bool Strict, bool AutoConvert>
@@ -56,7 +56,7 @@ TUnboxedValuePod PeelList(const ITypeInfoHelper* typeHelper, const TType* itemTy
                     if (const auto item = TryPeelDom<Strict, AutoConvert>(typeHelper, itemType, elements[i], valueBuilder, pos))
                         values.emplace_back(item.GetOptionalValue());
                     else if constexpr (Strict)
-                        UdfTerminate("Error on convert list item.");
+                        UdfTerminate((::TStringBuilder() << pos <<  " Error on convert list item.").c_str());
                 }
             } else {
                 const auto it = x.GetListIterator();
@@ -64,7 +64,7 @@ TUnboxedValuePod PeelList(const ITypeInfoHelper* typeHelper, const TType* itemTy
                     if (const auto item = TryPeelDom<Strict, AutoConvert>(typeHelper, itemType, v, valueBuilder, pos))
                         values.emplace_back(item.GetOptionalValue());
                     else if constexpr (Strict)
-                        UdfTerminate("Error on convert list item.");
+                        UdfTerminate((::TStringBuilder() << pos <<  " Error on convert list item.").c_str());
                 }
             }
             if (values.empty()) {
@@ -78,7 +78,7 @@ TUnboxedValuePod PeelList(const ITypeInfoHelper* typeHelper, const TType* itemTy
             if constexpr (AutoConvert)
                 break;
             else if constexpr (Strict)
-                UdfTerminate("Cannot parse list from entity, scalar value or dict.");
+                UdfTerminate((::TStringBuilder() << pos <<  " Cannot parse list from entity, scalar value or dict.").c_str());
             else
                 return {};
     }
@@ -108,7 +108,7 @@ TUnboxedValuePod PeelDict(const ITypeInfoHelper* typeHelper, const TType* itemTy
                     }
 
                     if constexpr (Strict)
-                        UdfTerminate("Error on convert dict payload.");
+                        UdfTerminate((::TStringBuilder() << pos <<  " Error on convert dict payload.").c_str());
                 }
                 if (pairs.empty()) {
                     break;
@@ -122,7 +122,7 @@ TUnboxedValuePod PeelDict(const ITypeInfoHelper* typeHelper, const TType* itemTy
             if constexpr (AutoConvert)
                 break;
             else if constexpr (Strict)
-                UdfTerminate("Cannot parse dict from entity, scalar value or list.");
+                UdfTerminate((::TStringBuilder() << pos <<  " Cannot parse dict from entity, scalar value or list.").c_str());
             else
                 return {};
     }
@@ -156,7 +156,7 @@ TUnboxedValuePod MakeStub(const ITypeInfoHelper* typeHelper, const TType* shape,
                 case TDataType<TJson>::Id:
                     return TUnboxedValuePod::Embedded("null");
                 default:
-                    UdfTerminate((::TStringBuilder() << "Unsupported data type: " << static_cast<int>(nodeType)).c_str());
+                    UdfTerminate((::TStringBuilder() << pos <<  " Unsupported data type: " << static_cast<int>(nodeType)).c_str());
             }
         case ETypeKind::Tuple:
             if (const auto tupleTypeInspector = TTupleTypeInspector(*typeHelper, shape); auto count = tupleTypeInspector.GetElementsCount()) {
@@ -186,7 +186,7 @@ TUnboxedValuePod MakeStub(const ITypeInfoHelper* typeHelper, const TType* shape,
                 return MakeEntity();
             [[fallthrough]];
         default:
-            UdfTerminate((::TStringBuilder() << "Unsupported data kind: " << kind).c_str());
+            UdfTerminate((::TStringBuilder() << pos <<  " Unsupported data kind: " << kind).c_str());
     }
 }
 
@@ -204,7 +204,7 @@ TUnboxedValuePod PeelTuple(const ITypeInfoHelper* typeHelper, const TType* shape
                             if (const auto item = TryPeelDom<Strict, AutoConvert>(typeHelper, tupleTypeInspector.GetElementType(i++), *elements++, valueBuilder, pos))
                                 *items++ = item.GetOptionalValue();
                             else if constexpr (Strict)
-                                UdfTerminate("Error on convert tuple item.");
+                                UdfTerminate((::TStringBuilder() << pos <<  " Error on convert tuple item.").c_str());
                             else
                                 return {};
                         }
@@ -213,7 +213,7 @@ TUnboxedValuePod PeelTuple(const ITypeInfoHelper* typeHelper, const TType* shape
                             if (const auto item = TryPeelDom<Strict, AutoConvert>(typeHelper, tupleTypeInspector.GetElementType(i++), v, valueBuilder, pos))
                                 *items++ = item.GetOptionalValue();
                             else if constexpr (Strict)
-                                UdfTerminate("Error on convert tuple item.");
+                                UdfTerminate((::TStringBuilder() << pos <<  " Error on convert tuple item.").c_str());
                             else
                                 return {};
                         }
@@ -225,7 +225,7 @@ TUnboxedValuePod PeelTuple(const ITypeInfoHelper* typeHelper, const TType* shape
                     else if (ETypeKind::Optional == typeHelper->GetTypeKind(tupleTypeInspector.GetElementType(i++)))
                         ++items;
                     else if constexpr (Strict)
-                        UdfTerminate((::TStringBuilder() << "DOM list has less items then " << tupleTypeInspector.GetElementsCount() << " tuple elements.").c_str());
+                        UdfTerminate((::TStringBuilder() << pos <<  " DOM list has less items then " << tupleTypeInspector.GetElementsCount() << " tuple elements.").c_str());
                     else
                         return {};
                 while (--count);
@@ -244,7 +244,7 @@ TUnboxedValuePod PeelTuple(const ITypeInfoHelper* typeHelper, const TType* shape
                             ++items;
                     return result.Release();
                  } else if constexpr (Strict)
-                    UdfTerminate("Cannot parse tuple from entity, scalar value or dict.");
+                    UdfTerminate((::TStringBuilder() << pos <<  " Cannot parse tuple from entity, scalar value or dict.").c_str());
                 else
                     break;
         }
@@ -267,7 +267,7 @@ TUnboxedValuePod PeelStruct(const ITypeInfoHelper* typeHelper, const TType* shap
                             if (const auto item = TryPeelDom<Strict, AutoConvert>(typeHelper, structTypeInspector.GetMemberType(i), v.GetOptionalValue(), valueBuilder, pos))
                                 *items++ = item.GetOptionalValue();
                             else if constexpr (Strict)
-                                UdfTerminate((::TStringBuilder() << "Error on convert struct member '" << structTypeInspector.GetMemberName(i) << "'.").c_str());
+                                UdfTerminate((::TStringBuilder() << pos <<  " Error on convert struct member '" << structTypeInspector.GetMemberName(i) << "'.").c_str());
                             else
                                 return {};
                             continue;
@@ -278,7 +278,7 @@ TUnboxedValuePod PeelStruct(const ITypeInfoHelper* typeHelper, const TType* shap
                     else if (ETypeKind::Optional == typeHelper->GetTypeKind(structTypeInspector.GetMemberType(i)))
                         ++items;
                     else if constexpr (Strict)
-                        UdfTerminate((::TStringBuilder() << "Missed struct member '" << structTypeInspector.GetMemberName(i) << "'.").c_str());
+                        UdfTerminate((::TStringBuilder() << pos <<  " Missed struct member '" << structTypeInspector.GetMemberName(i) << "'.").c_str());
                     else
                         return {};
                 }
@@ -297,7 +297,7 @@ TUnboxedValuePod PeelStruct(const ITypeInfoHelper* typeHelper, const TType* shap
                             ++items;
                     return result.Release();
                 } else if constexpr (Strict)
-                    UdfTerminate("Cannot parse struct from entity, scalar value or list.");
+                    UdfTerminate((::TStringBuilder() << pos <<  " Cannot parse struct from entity, scalar value or list.").c_str());
                 else
                     break;
         }
@@ -314,7 +314,7 @@ TUnboxedValuePod PeelOptional(const ITypeInfoHelper* typeHelper, const TType* it
     if (const auto result = TryPeelDom<Strict, AutoConvert>(typeHelper, itemType, value, valueBuilder, pos); AutoConvert || result)
         return result;
     else if constexpr (Strict)
-        UdfTerminate("Failed to convert Yson DOM.");
+        UdfTerminate((::TStringBuilder() << pos <<  " Failed to convert Yson DOM.").c_str());
     else
         return TUnboxedValuePod().MakeOptional();
 }
@@ -335,10 +335,10 @@ TUnboxedValuePod TryPeelDom(const ITypeInfoHelper* typeHelper, const TType* shap
                 switch (const auto keyId = TDataTypeInspector(*typeHelper, keyType).GetTypeId()) {
                     case TDataType<char*>::Id: return PeelDict<Strict, AutoConvert, false>(typeHelper, dictTypeInspector.GetValueType(), value, valueBuilder, pos);
                     case TDataType<TUtf8>::Id: return PeelDict<Strict, AutoConvert, true>(typeHelper, dictTypeInspector.GetValueType(), value, valueBuilder, pos);
-                    default: UdfTerminate((::TStringBuilder() << "Unsupported dict key type: " << keyId).c_str());
+                    default: UdfTerminate((::TStringBuilder() << pos <<  " Unsupported dict key type: " << keyId).c_str());
                 }
             else
-                UdfTerminate((::TStringBuilder() << "Unsupported dict key kind: " << keyKind).c_str());
+                UdfTerminate((::TStringBuilder() << pos <<  " Unsupported dict key kind: " << keyKind).c_str());
         }
         case ETypeKind::Tuple:
             return PeelTuple<Strict, AutoConvert>(typeHelper, shape, value, valueBuilder, pos);
@@ -349,7 +349,7 @@ TUnboxedValuePod TryPeelDom(const ITypeInfoHelper* typeHelper, const TType* shap
                 return value;
             [[fallthrough]]; // AUTOGENERATED_FALLTHROUGH_FIXME
         default:
-            UdfTerminate((::TStringBuilder() << "Unsupported data kind: " << kind).c_str());
+            UdfTerminate((::TStringBuilder() << pos <<  " Unsupported data kind: " << kind).c_str());
     }
 }
 
@@ -360,7 +360,7 @@ TUnboxedValuePod PeelDom(const ITypeInfoHelper* typeHelper, const TType* shape, 
     if (const auto result = TryPeelDom<Strict, AutoConvert>(typeHelper, shape, value, valueBuilder, pos))
         return result.GetOptionalValue();
     ::TStringBuilder sb;
-    sb << "Failed to convert Yson DOM into strict type: ";
+    sb << pos << " Failed to convert Yson DOM into strict type: ";
     TTypePrinter(*typeHelper, shape).Out(sb.Out);
     UdfTerminate(sb.c_str());
 }

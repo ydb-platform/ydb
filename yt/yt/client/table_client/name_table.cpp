@@ -228,12 +228,12 @@ TStringBuf TNameTableReader::GetName(int id) const
 int TNameTableReader::GetSize() const
 {
     Fill();
-    return static_cast<int>(IdToNameCache_.size());
+    return std::ssize(IdToNameCache_);
 }
 
 void TNameTableReader::Fill() const
 {
-    int thisSize = static_cast<int>(IdToNameCache_.size());
+    int thisSize = std::ssize(IdToNameCache_);
     int underlyingSize = NameTable_->GetSize();
     for (int id = thisSize; id < underlyingSize; ++id) {
         IdToNameCache_.push_back(std::string(NameTable_->GetName(id)));

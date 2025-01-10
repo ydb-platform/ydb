@@ -1,11 +1,11 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "18.1.8";
+  version = "19.1.6";
 
   src = fetchFromGitHub {
     owner = "llvm";
     repo = "llvm-project";
     rev = "llvmorg-${version}";
-    hash = "sha256-iiZKMRo/WxJaBXct9GdAcAT3cz9d9pnAcO1mmR6oPNE=";
+    hash = "sha256-LD4nIjZTSZJtbgW6tZopbTF5Mq0Tenj2gbuPXhtOeUI=";
   };
 
   sourceRoot = "source/compiler-rt";
@@ -26,6 +26,7 @@ pkgs: attrs: with pkgs; with attrs; rec {
     "-DCOMPILER_RT_BUILD_MEMPROF=OFF"
     "-DCOMPILER_RT_BUILD_BUILTINS=OFF"
     "-DCOMPILER_RT_BUILD_CRT=OFF"
+    "-DCOMPILER_RT_BUILD_CTX_PROFILE=OFF"
     "-DCOMPILER_RT_BUILD_XRAY=OFF"
     "-DCOMPILER_RT_BUILD_ORC=OFF"
     "-DCOMPILER_RT_BUILD_GWP_ASAN=OFF"

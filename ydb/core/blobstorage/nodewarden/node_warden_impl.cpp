@@ -1071,7 +1071,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         };
 
         // update static group information unless distconf is enabled
-        if (!hasStaticGroupInfo(ssFrom) && config->HasSelfManagementConfig() && config->GetSelfManagementConfig().GetEnabled()) {
+        if (!hasStaticGroupInfo(ssFrom) && config->GetSelfManagementConfig().GetEnabled()) {
             // distconf enabled, keep it as is
         } else if (!hasStaticGroupInfo(*ssTo)) {
             ssTo->MutablePDisks()->CopyFrom(ssFrom.GetPDisks());

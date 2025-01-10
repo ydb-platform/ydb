@@ -10,7 +10,7 @@ namespace NKikimr {
         NKikimrBlobStorage::TEvControllerProposeConfigRequest, TEvBlobStorage::EvControllerProposeConfigRequest> {
         TEvControllerProposeConfigRequest() = default;
 
-        TEvControllerProposeConfigRequest(const ui32 configHash, const ui32 configVersion) {
+        TEvControllerProposeConfigRequest(ui64 configHash, ui32 configVersion) {
             Record.SetConfigHash(configHash);
             Record.SetConfigVersion(configVersion);
         }
@@ -68,6 +68,8 @@ namespace NKikimr {
     struct TEvBlobStorage::TEvControllerValidateConfigResponse : TEventPB<TEvBlobStorage::TEvControllerValidateConfigResponse,
         NKikimrBlobStorage::TEvControllerValidateConfigResponse, TEvBlobStorage::EvControllerValidateConfigResponse> {
         TEvControllerValidateConfigResponse() = default;
+
+        std::optional<TString> InternalError;
     };
 
     struct TEvBlobStorage::TEvControllerReplaceConfigRequest : TEventPB<TEvBlobStorage::TEvControllerReplaceConfigRequest,

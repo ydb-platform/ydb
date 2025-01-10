@@ -80,14 +80,8 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
     op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
-    if (DataShard.GetState() == TShardState::WaitScheme) {
-        txc.DB.NoMoreReadsForTx();
-        DataShard.SetPersistState(TShardState::Ready, txc);
-        // We could perform snapshot reads after becoming ready
-        // Make sure older versions restore mediator state in that case
-        DataShard.PersistUnprotectedReadsEnabled(txc);
-        DataShard.SendRegistrationRequestTimeCast(ctx);
-    }
+    txc.DB.NoMoreReadsForTx();
+    DataShard.OnTableCreated(txc, ctx);
 
     return EExecutionStatus::DelayCompleteNoMoreRestarts;
 }

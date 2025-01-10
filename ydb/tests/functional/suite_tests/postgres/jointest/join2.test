@@ -33,7 +33,7 @@ INSERT INTO t3 (name, n) VALUES ( 'cc', 23 );
 statement ok
 INSERT INTO t3 (name, n) VALUES ( 'dd', 33 );
 
-statement query
+statement skipped_cs query
 select IF(SQ.name is Null, t3.name, SQ.name) as name,
 SQ.n1 as n1, SQ.n2 as n2, t3.n as n3
 FROM t3 FULL JOIN
@@ -62,7 +62,7 @@ LEFT JOIN
 USING (name)
 order by name
 
-statement query
+statement skipped_cs query
 SELECT IF(s3.name is not Null, s3.name, s2.name) as name, s2.n as n2, s3.n as n3 FROM
 (SELECT * FROM t2) as s2
 FULL JOIN

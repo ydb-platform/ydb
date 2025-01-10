@@ -1347,7 +1347,7 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::TrimWithNotify(
     const TValuePtr& insertedValue,
     i64 weightDelta)
 {
-    VERIFY_SPINLOCK_AFFINITY(shard->SpinLock);
+    YT_ASSERT_SPINLOCK_AFFINITY(shard->SpinLock);
 
     auto evictedItems = shard->TrimNoDelete();
     auto evictedValues = shard->Trim(evictedItems);

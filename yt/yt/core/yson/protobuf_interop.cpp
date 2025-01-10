@@ -203,7 +203,7 @@ public:
     //! This method is called while reflecting types.
     TStringBuf GetYsonName(const FieldDescriptor* descriptor)
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         return GetYsonNameFromDescriptor(
             descriptor,
@@ -213,7 +213,7 @@ public:
     //! This method is called while reflecting types.
     std::vector<TStringBuf> GetYsonNameAliases(const FieldDescriptor* descriptor)
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         std::vector<TStringBuf> aliases;
         const auto& extensions = descriptor->options().GetRepeatedExtension(NYT::NYson::NProto::field_name_alias);
@@ -226,7 +226,7 @@ public:
     //! This method is called while reflecting types.
     TStringBuf GetYsonLiteral(const EnumValueDescriptor* descriptor)
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         return GetYsonNameFromDescriptor(
             descriptor,
@@ -295,7 +295,7 @@ public:
         const Descriptor* descriptor) const
     {
         // No need to call Initialize: it has been already called within Reflect*Type higher up the stack.
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         auto it = MessageTypeConverterMap_.find(descriptor);
         if (it == MessageTypeConverterMap_.end()) {
@@ -311,7 +311,7 @@ public:
         int fieldIndex) const
     {
         // No need to call Initialize: it has been already called within Reflect*Type higher up the stack.
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         auto fieldNumber = descriptor->field(fieldIndex)->number();
         auto it = MessageFieldConverterMap_.find(std::pair(descriptor, fieldNumber));
@@ -352,7 +352,7 @@ private:
 
     TStringBuf InternString(const TString& str)
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         return *InternedStrings_.emplace(str).first;
     }
@@ -886,7 +886,7 @@ private:
 
 const TProtobufMessageType* TProtobufTypeRegistry::ReflectMessageTypeInternal(const Descriptor* descriptor)
 {
-    VERIFY_SPINLOCK_AFFINITY(Lock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
     TProtobufMessageType* type;
     auto it = MessageTypeMap_.find(descriptor);
@@ -906,7 +906,7 @@ const TProtobufMessageType* TProtobufTypeRegistry::ReflectMessageTypeInternal(co
 
 const TProtobufEnumType* TProtobufTypeRegistry::ReflectEnumTypeInternal(const EnumDescriptor* descriptor)
 {
-    VERIFY_SPINLOCK_AFFINITY(Lock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
     TProtobufEnumType* type;
     auto it = EnumTypeMap_.find(descriptor);
@@ -1559,7 +1559,7 @@ private:
 
     void BeginNestedMessage()
     {
-        auto index =  static_cast<int>(NestedMessages_.size());
+        auto index =  std::ssize(NestedMessages_);
         NestedMessages_.emplace_back(BodyCodedStream_.ByteCount(), -1);
         NestedIndexStack_.push_back(index);
     }

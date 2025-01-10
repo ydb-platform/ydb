@@ -292,7 +292,7 @@ struct TPrivateEndpointInfo : THttpEndpointInfo {
     {}
 };
 
-NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::TMetricRegistry> registry = NMonitoring::TMetricRegistry::SharedInstance());
+NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::IMetricFactory> registry = NMonitoring::TMetricRegistry::SharedInstance());
 NActors::IActor* CreateHttpAcceptorActor(const TActorId& owner, const TActorId& poller);
 NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, bool secure, const TActorId& poller);
 NActors::IActor* CreateIncomingConnectionActor(

@@ -1,24 +1,19 @@
 pkgs: attrs: with pkgs; rec {
-  version = "1.6.40";
+  version = "1.6.44";
 
   src = fetchFromGitHub {
     owner = "pnggroup";
     repo = "libpng";
     rev = "v${version}";
-    hash = "sha256-Rad7Y5Z9PUCipBTQcB7LEP8fIVTG3JsnMeknUkZ/rRg=";
+    hash = "sha256-gBfHgGaqVYdmhWXoNKZzPyGzyw2rr3zp+DjWmfC41jk=";
   };
 
-  # nixpkgs use a patch from libpng-apng project for getting A(nimated) PNG support.
-  # While libpng-apng project patch is functionally equivalent to apng one,
-  # the latter seems to provide somewhat better code.
-  #
-  # The sha256 checksum of the patch has to be updated upon libpng version update.
-  patch_src = fetchurl {
-    url = "mirror://sourceforge/apng/libpng-${version}-apng.patch.gz";
-    hash = "sha256-esYjxN5hBg8Uue6AOAowulcB22U7rnQz2TjLM0+w+0w=";
-  };
+  # nixpkgs applies apng patch from sourceforge.net, which changes for every libpng version.
+  # We apply a sligthly modified version of this patch via patches/apng.patch
+  patches = [];
+  postPatch = "";
 
-  postPatch = ''
-    gunzip < ${patch_src} | patch -Np0
-  '';
+  configureFlags = [
+    "--build=x86_64-pc-linux-gnu"
+  ];
 }

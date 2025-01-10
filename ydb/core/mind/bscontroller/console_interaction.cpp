@@ -9,7 +9,6 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::StartConsoleInteraction() {
         ConsoleInteraction = std::make_unique<TConsoleInteraction>(*this);
-        ConsoleInteraction->Start();
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC22, "Console interaction started");
     }
 
@@ -112,7 +111,6 @@ namespace NKikimr::NBsController {
         }
     }
 
-
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvControllerConsoleCommitResponse::TPtr &ev) {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC20, "Console commit config response", (Response, ev->Get()->Record));
         auto& record = ev->Get()->Record;
@@ -149,7 +147,8 @@ namespace NKikimr::NBsController {
         GRPCSenderId = ev->Sender;
         if (!record.GetSkipConsoleValidation()) {
             if (!ValidationTimeout) {
-                TActivationContext::Schedule(TDuration::Minutes(2), new IEventHandle(Self.SelfId(), Self.SelfId(), new TEvPrivate::TEvValidationTimeout()));
+                TActivationContext::Schedule(TDuration::Minutes(2), new IEventHandle(Self.SelfId(), Self.SelfId(),
+                    new TEvPrivate::TEvValidationTimeout()));
             }
             ValidationTimeout = TActivationContext::Now() + TDuration::Minutes(2);
             auto validateConfigEv = std::make_unique<TEvBlobStorage::TEvControllerValidateConfigRequest>();
@@ -163,7 +162,8 @@ namespace NKikimr::NBsController {
         Self.Send(ev->Sender, validateConfigResponse.release());
     }
 
-    bool TBlobStorageController::TConsoleInteraction::ParseConfig(const TString& config, ui32& /* configVersion */, NKikimrBlobStorage::TStorageConfig& storageConfig) {
+    bool TBlobStorageController::TConsoleInteraction::ParseConfig(const TString& config, ui32& /*configVersion*/,
+            NKikimrBlobStorage::TStorageConfig& storageConfig) {
         NKikimrConfig::TAppConfig appConfig;
         try {
             appConfig = NKikimr::NYaml::Parse(config);
@@ -174,8 +174,9 @@ namespace NKikimr::NBsController {
         return success;
     }
 
-    TBlobStorageController::TConsoleInteraction::TCommitConfigResult::EStatus TBlobStorageController::TConsoleInteraction::CheckConfig(const TString& config, ui32& configVersion, bool skipBSCValidation,
-                                                                                                                                       NKikimrBlobStorage::TStorageConfig& storageConfig) {
+    TBlobStorageController::TConsoleInteraction::TCommitConfigResult::EStatus
+            TBlobStorageController::TConsoleInteraction::CheckConfig(const TString& config, ui32& configVersion,
+            bool skipBSCValidation, NKikimrBlobStorage::TStorageConfig& storageConfig) {
         if (!ParseConfig(config, configVersion, storageConfig)) {
             return TConsoleInteraction::TCommitConfigResult::EStatus::ParseError;
         }
@@ -221,7 +222,8 @@ namespace NKikimr::NBsController {
         NKikimrBlobStorage::TStorageConfig StorageConfig;
         TString yamlConfig = record.GetYAML();
         ui32 configVersion = record.GetConfigVersion();
-        if (CheckConfig(yamlConfig, configVersion, record.GetSkipBSCValidation(), StorageConfig) == TConsoleInteraction::TCommitConfigResult::EStatus::Success) {
+        if (CheckConfig(yamlConfig, configVersion, record.GetSkipBSCValidation(), StorageConfig) ==
+                TConsoleInteraction::TCommitConfigResult::EStatus::Success) {
             Self.Execute(Self.CreateTxCommitConfig(yamlConfig, configVersion, StorageConfig));
             return;
         }

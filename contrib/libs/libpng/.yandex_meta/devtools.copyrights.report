@@ -65,7 +65,7 @@ BELONGS ya.make
         powerpc/filter_vsx_intrinsics.c [3:5]
         powerpc/powerpc_init.c [4:6]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 1fce79adc0eb0ee5300ea0b88074c406
+KEEP     COPYRIGHT_SERVICE_LABEL 2210a81b65840c39738f253134eca011
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
@@ -133,47 +133,17 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        arm/filter_neon.S [4:6]
         arm/filter_neon_intrinsics.c [4:7]
         intel/filter_sse2_intrinsics.c [4:7]
         intel/intel_init.c [4:7]
-        mips/filter_msa_intrinsics.c [4:6]
-        mips/mips_init.c [4:6]
         pngdebug.h [4:7]
-        pngerror.c [4:7]
         pnginfo.h [4:7]
         pngmem.c [4:7]
-        pngpread.c [4:7]
         pngrio.c [4:7]
-        pngtrans.c [4:7]
         pngwio.c [4:7]
         pngwtran.c [4:7]
         powerpc/filter_vsx_intrinsics.c [3:5]
         powerpc/powerpc_init.c [4:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 45a151e61f5d9f2924b225327a93f376
-BELONGS ya.make
-    License text:
-        Copyright (c) 2006-2007 Andrew Smith, Copyright (c) 2008-2023 Max Stepin,
-        and are delimited by "#ifdef PNG_APNG_SUPPORTED / #endif" directives
-        surrounding them in the modified libpng source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        LICENSE [6:8]
-        png.h [29:31]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 4644b73a371ed2c05c5ac0b3899bd563
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        png.c [819:827]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 4ab05cc7c9d27c8a3fbcc6350cf56230
 BELONGS ya.make
@@ -202,25 +172,6 @@ BELONGS ya.make
         intel/filter_sse2_intrinsics.c [4:7]
         intel/intel_init.c [4:7]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 4d7193940d3da830ff7edc9e1ecaaee6
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        LICENSE [13:17]
-        png.c [4:7]
-        png.c [819:827]
-        png.h [6:9]
-        png.h [36:40]
-        pngget.c [4:7]
-        pnglibconf.h [5:6]
-        pngpriv.h [4:7]
-        pngset.c [4:7]
-        pngwrite.c [4:7]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 51b32ca44bdc2a734f625cee7a36472b
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -230,15 +181,12 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         arm/arm_init.c [4:6]
-        pngconf.h [6:9]
-        pngrutil.c [4:7]
         pngstruct.h [4:7]
-        pngwutil.c [4:7]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 5fc45730df09b1e4ad9f9d6a2d097232
 BELONGS ya.make
     License text:
-        Copyright (c) 2006-2007 Andrew Smith, Copyright (c) 2008-2023 Max Stepin,
+        Copyright (c) 2006-2007 Andrew Smith, Copyright (c) 2008-2024 Max Stepin,
         and are delimited by "#ifdef PNG_APNG_SUPPORTED / #endif" directives
         surrounding them in the modified libpng source files.
     Scancode info:
@@ -260,7 +208,7 @@ BELONGS ya.make
         LICENSE [13:17]
         LICENSE [87:91]
         png.c [4:7]
-        png.c [819:827]
+        png.c [798:804]
         png.h [6:9]
         png.h [36:40]
         png.h [110:114]
@@ -284,6 +232,18 @@ BELONGS ya.make
         pngwtran.c [4:7]
         pngwutil.c [4:7]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 7e44d6c54a35ce9344b977e884ef180c
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2024 Cosmin Truta
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        arm/filter_neon.S [4:4]
+        mips/filter_mmi_inline_assembly.c [3:4]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 9198506c7cb59dc577addf9c14d6ade1
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -293,7 +253,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         png.c [4:7]
-        png.c [819:827]
+        png.c [798:804]
         png.h [6:9]
         pngget.c [4:7]
         pnglibconf.h [5:6]
@@ -307,18 +267,48 @@ BELONGS ya.make
         pngwrite.c [4:7]
         pngwutil.c [4:7]
 
-KEEP     COPYRIGHT_SERVICE_LABEL a590c93284482861546eac4b62974abf
+KEEP     COPYRIGHT_SERVICE_LABEL 9524c4c0aaaea5b1ba2ffbc048713d9e
 BELONGS ya.make
     License text:
-         * Copyright (c) 2018 Cosmin Truta
-         * Copyright (c) 2014,2017 Glenn Randers-Pehrson
-         * Written by Mans Rullgard, 2011.
+        Copyright (c) 2006-2007 Andrew Smith, Copyright (c) 2008-2024 Max Stepin,
+        and are delimited by "#ifdef PNG_APNG_SUPPORTED / #endif" directives
+        surrounding them in the modified libpng source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        arm/filter_neon.S [4:6]
+        LICENSE [6:8]
+        png.h [29:31]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a8a352211455dc7608a2fcc17b1d1029
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [13:17]
+        mips/filter_msa_intrinsics.c [4:6]
+        mips/mips_init.c [4:7]
+        png.c [4:7]
+        png.c [798:804]
+        png.h [6:9]
+        png.h [36:40]
+        pngconf.h [6:9]
+        pngerror.c [4:7]
+        pngget.c [4:7]
+        pnglibconf.h [5:6]
+        pngpread.c [4:7]
+        pngpriv.h [4:7]
+        pngread.c [4:7]
+        pngrtran.c [4:7]
+        pngrutil.c [4:7]
+        pngset.c [4:7]
+        pngtrans.c [4:7]
+        pngwrite.c [4:7]
+        pngwutil.c [4:7]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a9fe2e1b3b86d7489fcd47a2c9749dfe
 BELONGS ya.make
@@ -331,7 +321,7 @@ BELONGS ya.make
         LICENSE [13:17]
         LICENSE [103:104]
         png.c [4:7]
-        png.c [819:827]
+        png.c [798:804]
         png.h [6:9]
         png.h [36:40]
         png.h [126:127]
@@ -357,20 +347,20 @@ BELONGS ya.make
 
 KEEP     COPYRIGHT_SERVICE_LABEL b585c8f7e4acf8c0948a1fd9ab5daaaa
 BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
+    License text:
+         * Copyright (c) 2018-2019 Cosmin Truta
+         * Copyright (c) 2017-2018 Arm Holdings. All rights reserved.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
         arm/palette_neon_intrinsics.c [4:5]
-        pngread.c [4:7]
-        pngrtran.c [4:7]
 
 KEEP     COPYRIGHT_SERVICE_LABEL b91f4788e32d0095f31d9f6910440991
 BELONGS ya.make
     License text:
-         * Copyright (c) 2018-2023 Cosmin Truta
+         * Copyright (c) 2018-2024 Cosmin Truta
          * Copyright (c) 1998-2018 Glenn Randers-Pehrson
          * Copyright (c) 1996-1997 Andreas Dilger
          * Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.
@@ -380,16 +370,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         pngset.c [4:7]
-
-KEEP     COPYRIGHT_SERVICE_LABEL ba5441522ec42a475b4efc4c19d96da2
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        png.c [819:827]
 
 KEEP     COPYRIGHT_SERVICE_LABEL c486f222c872d0101647b08aaad5c74c
 BELONGS ya.make
@@ -451,13 +431,13 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL e8596f616c40e549d2ea24adacc49cf7
 BELONGS ya.make
     License text:
-         * Copyright (c) 2018 Cosmin Truta
+         * Copyright (c) 2018-2024 Cosmin Truta
          * Copyright (c) 2016 Glenn Randers-Pehrson
-         * Written by Mandar Sahastrabuddhe, August 2016.
+         * Written by Mandar Sahastrabuddhe, August 2016
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
         mips/filter_msa_intrinsics.c [4:6]
-        mips/mips_init.c [4:6]
+        mips/mips_init.c [4:7]

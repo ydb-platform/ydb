@@ -41,13 +41,13 @@ DEFINE_ENUM(EAggregateIOTag,
     ((CompressionCodec) (17))
 );
 
-TString FormatIOTag(ERawIOTag tag);
-TString FormatIOTag(EAggregateIOTag tag);
+std::string FormatIOTag(ERawIOTag tag);
+std::string FormatIOTag(EAggregateIOTag tag);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-void AddTagToBaggage(const NYTree::IAttributeDictionaryPtr& baggage, T tag, const TStringBuf& value);
+void AddTagToBaggage(const NYTree::IAttributeDictionaryPtr& baggage, T tag, TStringBuf value);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <llvm/BinaryFormat/Dwarf.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/ExecutionEngine/JITEventListener.h>
 #include <llvm/ExecutionEngine/MCJIT.h>
@@ -9,8 +10,10 @@
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/IR/PassManager.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Linker/Linker.h>
+#include <llvm/Passes/PassBuilder.h>
 #include <llvm-c/Disassembler.h>
 #include <llvm/Support/Host.h>
 #include <llvm/Support/ManagedStatic.h>

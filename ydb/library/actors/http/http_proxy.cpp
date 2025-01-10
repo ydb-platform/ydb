@@ -29,7 +29,7 @@ public:
         Become(&THttpProxy::StateWork);
     }
 
-    THttpProxy(std::weak_ptr<NMonitoring::TMetricRegistry> registry)
+    THttpProxy(std::weak_ptr<NMonitoring::IMetricFactory> registry)
         : Registry(std::move(registry))
     {}
 
@@ -232,33 +232,33 @@ protected:
         const static TString urlNotFound = "not-found";
         const TString& url = (sensors.Status == "404" ? urlNotFound : sensors.Url);
 
-        std::shared_ptr<NMonitoring::TMetricRegistry> registry = Registry.lock();
+        std::shared_ptr<NMonitoring::IMetricFactory> registry = Registry.lock();
         if (registry) {
-            registry->Rate(
+            registry->Rate(NMonitoring::MakeLabels(
                 {
                     {"sensor", "count"},
                     {"direction", sensors.Direction},
                     {"peer", sensors.Host},
                     {"url", url},
                     {"status", sensors.Status}
-                })->Inc();
-            registry->HistogramRate(
+                }))->Inc();
+            registry->HistogramRate(NMonitoring::MakeLabels(
                 {
                     {"sensor", "time_us"},
                     {"direction", sensors.Direction},
                     {"peer", sensors.Host},
                     {"url", url},
                     {"status", sensors.Status}
-                },
+                }),
                 NMonitoring::ExplicitHistogram({1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 30000, 60000}))->Record(sensors.Time.MicroSeconds());
-            registry->HistogramRate(
+            registry->HistogramRate(NMonitoring::MakeLabels(
                 {
                     {"sensor", "time_ms"},
                     {"direction", sensors.Direction},
                     {"peer", sensors.Host},
                     {"url", url},
                     {"status", sensors.Status}
-                },
+                }),
                 NMonitoring::ExplicitHistogram({1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 30000, 60000}))->Record(sensors.Time.MilliSeconds());
         }
     }
@@ -287,7 +287,7 @@ protected:
     THashMap<TString, TActorId> Handlers;
     THashSet<TActorId> Connections; // outgoing
     std::unordered_multimap<TString, TActorId> AvailableConnections;
-    std::weak_ptr<NMonitoring::TMetricRegistry> Registry;
+    std::weak_ptr<NMonitoring::IMetricFactory> Registry;
 };
 
 TEvHttpProxy::TEvReportSensors* BuildOutgoingRequestSensors(const THttpOutgoingRequestPtr& request, const THttpIncomingResponsePtr& response) {
@@ -314,7 +314,7 @@ TEvHttpProxy::TEvReportSensors* BuildIncomingRequestSensors(const THttpIncomingR
     );
 }
 
-NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::TMetricRegistry> registry) {
+NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::IMetricFactory> registry) {
     return new THttpProxy(std::move(registry));
 }
 

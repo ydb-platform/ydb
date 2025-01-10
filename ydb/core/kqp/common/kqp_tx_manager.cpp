@@ -278,17 +278,17 @@ public:
         for (auto& [shardId, shardInfo] : ShardsInfo) {
             if ((shardInfo.Flags & EAction::WRITE)) {
                 ReceivingShards.insert(shardId);
+                if (shardInfo.IsOlap) {
+                    receivingColumnShardsSet.insert(shardId);
+                }
                 if (IsVolatile()) {
                     SendingShards.insert(shardId);
-                }
-                if (shardInfo.IsOlap) {
-                    sendingColumnShardsSet.insert(shardId);
                 }
             }
             if (!shardInfo.Locks.empty()) {
                 SendingShards.insert(shardId);
                 if (shardInfo.IsOlap) {
-                    receivingColumnShardsSet.insert(shardId);
+                    sendingColumnShardsSet.insert(shardId);
                 }
             }
 
@@ -315,6 +315,8 @@ public:
             }
         }
 
+        Cerr << "TEST>> PREPARE :: " << receivingColumnShardsSet.size() << " " << sendingColumnShardsSet.size() << Endl;
+
         if (!receivingColumnShardsSet.empty() || !sendingColumnShardsSet.empty()) {
             AFL_ENSURE(!IsVolatile());
             const auto& shards = receivingColumnShardsSet.empty()
@@ -326,6 +328,8 @@ public:
             std::advance(arbiterIterator, index);
             ArbiterColumnShard = *arbiterIterator;
         }
+
+        Cerr << "TEST>> arbiter=" << ArbiterColumnShard << Endl;
 
         ShardsToWaitPrepare = ShardsIds;
 

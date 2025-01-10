@@ -97,7 +97,7 @@ public:
 
     void TestInvalidInput() {
         const TVector<std::pair<TString, TString>> testCases = {
-            {"nul", "N_ATOM_ERROR: Problem while parsing an atom starting with the letter 'n'"},
+            {"nul", "INCORRECT_TYPE: The JSON element does not have the requested type."},
         };
 
         for (const auto& testCase : testCases) {

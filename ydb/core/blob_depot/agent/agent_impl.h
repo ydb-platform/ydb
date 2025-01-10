@@ -356,6 +356,7 @@ namespace NKikimr::NBlobDepot {
             NLog::EPriority WatchdogPriority = NLog::PRI_WARN;
             bool Destroyed = false;
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
+            ui32 BlockChecksRemain = 3;
 
             static constexpr TDuration WatchdogDuration = TDuration::Seconds(10);
 
@@ -376,6 +377,9 @@ namespace NKikimr::NBlobDepot {
             virtual void OnRead(ui64 /*tag*/, TReadOutcome&& /*outcome*/) {}
             virtual void OnIdAllocated(bool /*success*/) {}
             virtual void OnDestroy(bool /*success*/) {}
+
+            NKikimrProto::EReplyStatus CheckBlockForTablet(ui64 tabletId, std::optional<ui32> generation,
+                ui32 *blockedGeneration = nullptr);
 
         protected: // reading logic
             struct TReadContext;

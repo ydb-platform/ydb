@@ -284,6 +284,13 @@ void TSchemeShard::PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuil
     for(ui32 idx = 0; idx < info.BuildColumns.size(); ++idx) {
         db.Table<Schema::BuildColumnOperationSettings>().Key(info.Id, idx).Delete();
     }
+
+    if (info.IsBuildVectorIndex()) {
+        db.Table<Schema::KMeansTreeState>().Key(info.Id).Delete();
+        for (ui32 row = 0; row < info.KMeans.K * 2; ++row) {
+            db.Table<Schema::KMeansTreeSample>().Key(info.Id, row).Delete();
+        }
+    }
 }
 
 void TSchemeShard::Resume(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx) {

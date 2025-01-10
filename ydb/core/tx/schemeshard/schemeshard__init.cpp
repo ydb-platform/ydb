@@ -4549,6 +4549,56 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 }
             }
+
+            // read kmeans tree state
+            {
+                auto rowset = db.Table<Schema::KMeansTreeState>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeState::Id>();
+                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
+                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found: id# " << id);
+                    auto& buildInfo = *buildInfoPtr->Get();
+                    buildInfo.KMeans.Set(
+                        rowset.GetValue<Schema::KMeansTreeState::Level>(),
+                        rowset.GetValue<Schema::KMeansTreeState::Parent>(),
+                        rowset.GetValue<Schema::KMeansTreeState::State>()
+                    );
+                    buildInfo.Sample.Rows.reserve(buildInfo.KMeans.K);
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+
+
+            // read kmeans tree sample
+            {
+                auto rowset = db.Table<Schema::KMeansTreeSample>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeSample::Id>();
+                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
+                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found: id# " << id);
+                    auto& buildInfo = *buildInfoPtr->Get();
+                    buildInfo.Sample.Set(
+                        rowset.GetValue<Schema::KMeansTreeSample::Row>(),
+                        rowset.GetValue<Schema::KMeansTreeSample::Probability>(),
+                        rowset.GetValue<Schema::KMeansTreeSample::Data>()
+                    );
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
         }
 
         // Read snapshot tables

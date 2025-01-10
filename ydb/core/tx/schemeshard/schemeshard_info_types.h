@@ -3036,8 +3036,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     struct TKMeans {
         // TODO(mbkkt) move to TVectorIndexKmeansTreeDescription
-        ui32 K = 4;
-        ui32 Levels = 5;
+        ui32 K = 0;
+        ui32 Levels = 0;
 
         // progress
         enum EState : ui32 {
@@ -3045,6 +3045,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             // Recompute,
             Reshuffle,
             Local,
+            MultiLocal,
         };
         ui32 Level = 1;
 
@@ -3113,6 +3114,17 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             ParentEnd += BinPow(K, Level);
             ++Level;
             return true;
+        }
+
+        void Set(ui32 level, ui32 parent, ui32 state) {
+            // TODO(mbkkt) make it without cycles
+            while (Level < level) {
+                NextLevel();
+            }
+            while (Parent < parent) {
+                NextParent();
+            }
+            State = static_cast<EState>(state);
         }
 
         NKikimrTxDataShard::TEvLocalKMeansRequest::EState GetUpload() const {
@@ -3246,13 +3258,14 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         ui64 MaxProbability = std::numeric_limits<ui64>::max();
         bool Sent = false;
 
-        void MakeWeakTop(ui64 k) {
+        bool MakeWeakTop(ui64 k) {
             // 2 * k is needed to make it linear, 2 * N at all.
             // x * k approximately is x / (x - 1) * N, but with larger x more memory used
             if (Rows.size() < 2 * k) {
-                return;
+                return false;
             }
             MakeTop(k);
+            return true;
         }
 
         void MakeStrictTop(ui64 k) {
@@ -3276,6 +3289,11 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Rows.clear();
             MaxProbability = std::numeric_limits<ui64>::max();
             Sent = false;
+        }
+
+        void Set(ui32 row, ui64 probability, TString data) {
+            Rows.emplace_back(probability, std::move(data));
+            MaxProbability = std::max(probability + 1, MaxProbability + 1) - 1;
         }
 
     private:
@@ -3383,9 +3401,12 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             }
 
             switch (creationConfig.GetSpecializedIndexDescriptionCase()) {
-                case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription:
-                    indexInfo->SpecializedIndexDescription = std::move(*creationConfig.MutableVectorIndexKmeansTreeDescription());
-                    break;
+                case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription: {
+                    auto& desc = *creationConfig.MutableVectorIndexKmeansTreeDescription();
+                    indexInfo->KMeans.K = std::max<ui32>(2, desc.settings().clusters());
+                    indexInfo->KMeans.Levels = std::max<ui32>(1, desc.settings().levels());
+                    indexInfo->SpecializedIndexDescription =std::move(desc);
+                } break;
                 case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
                     /* do nothing */
                     break;

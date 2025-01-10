@@ -694,6 +694,7 @@ private:
     }
 
     void SendUploadSampleKRequest(TIndexBuildInfo& buildInfo) {
+        buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
         auto path = TPath::Init(buildInfo.TablePathId, Self)
                         .Dive(buildInfo.IndexName)
                         .Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
@@ -758,8 +759,11 @@ private:
     }
 
     bool InitSingleKMeans(TIndexBuildInfo& buildInfo) {
-        if (!buildInfo.DoneShards.empty() || !buildInfo.InProgressShards.empty() || !buildInfo.ToUploadShards.empty()
-            || buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Local) {
+        if (!buildInfo.DoneShards.empty() || !buildInfo.InProgressShards.empty() || !buildInfo.ToUploadShards.empty()) {
+            return false;
+        }
+        if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::MultiLocal) {
+            InitMultiKMeans(buildInfo);
             return false;
         }
         std::array<NScheme::TTypeInfo, 1> typeInfos{NScheme::NTypeIds::Uint32};
@@ -798,7 +802,7 @@ private:
                 }
             }
         }
-        buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Local;
+        buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
         buildInfo.Cluster2Shards.clear();
         Y_ASSERT(buildInfo.InProgressShards.empty());
         Y_ASSERT(buildInfo.DoneShards.empty());
@@ -833,6 +837,7 @@ private:
             case TIndexBuildInfo::TKMeans::Reshuffle:
                 return SendKMeansReshuffle(buildInfo);
             case TIndexBuildInfo::TKMeans::Local:
+            case TIndexBuildInfo::TKMeans::MultiLocal:
                 return SendKMeansLocal(buildInfo);
         }
         return true;
@@ -851,6 +856,15 @@ private:
         Self->PersistBuildIndexProcessed(db, buildInfo);
     }
 
+    void PersistKMeansState(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        NIceDb::TNiceDb db{txc.DB};
+        db.Table<Schema::KMeansTreeState>().Key(buildInfo.Id).Update(
+            NIceDb::TUpdate<Schema::KMeansTreeState::Level>(buildInfo.KMeans.Level),
+            NIceDb::TUpdate<Schema::KMeansTreeState::Parent>(buildInfo.KMeans.Parent),
+            NIceDb::TUpdate<Schema::KMeansTreeState::State>(buildInfo.KMeans.State)
+        );
+    }
+
     bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         if (InitSingleKMeans(buildInfo)) {
             LOG_D("FillIndex::SingleKMeans::Start " << buildInfo.KMeansTreeToDebugStr());
@@ -858,7 +872,6 @@ private:
         if (!SendVectorIndex(buildInfo)) {
             return false;
         }
-        // TODO(mbkkt) persist buildInfo.KMeans changes
 
         LOG_D("FillIndex::SendVectorIndex::Done " << buildInfo.KMeansTreeToDebugStr());
         if (!buildInfo.Sample.Rows.empty()) {
@@ -876,6 +889,7 @@ private:
         if (!buildInfo.Sample.Rows.empty()) {
             if (buildInfo.KMeans.NextState()) {
                 LOG_D("FillIndex::NextState::Start " << buildInfo.KMeansTreeToDebugStr());
+                PersistKMeansState(txc, buildInfo);
                 Progress(BuildId);
                 return false;
             }
@@ -885,18 +899,21 @@ private:
 
         if (buildInfo.KMeans.NextParent()) {
             LOG_D("FillIndex::NextParent::Start " << buildInfo.KMeansTreeToDebugStr());
+            PersistKMeansState(txc, buildInfo);
             Progress(BuildId);
             return false;
         }
 
         if (InitMultiKMeans(buildInfo)) {
             LOG_D("FillIndex::MultiKMeans::Start " << buildInfo.KMeansTreeToDebugStr());
+            PersistKMeansState(txc, buildInfo);
             Progress(BuildId);
             return false;
         }
 
         if (buildInfo.KMeans.NextLevel()) {
             LOG_D("FillIndex::NextLevel::Start " << buildInfo.KMeansTreeToDebugStr());
+            PersistKMeansState(txc, buildInfo);
             ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
             Progress(BuildId);
             return false;
@@ -1391,18 +1408,29 @@ public:
                 return true;
             }
 
+            NIceDb::TNiceDb db(txc.DB);
             if (record.ProbabilitiesSize()) {
                 Y_ASSERT(record.RowsSize());
                 auto& probabilities = record.GetProbabilities();
                 auto& rows = *record.MutableRows();
                 Y_ASSERT(probabilities.size() == rows.size());
+                auto& sample = buildInfo.Sample.Rows;
+                auto from = sample.size();
                 for (int i = 0; i != probabilities.size(); ++i) {
                     if (probabilities[i] >= buildInfo.Sample.MaxProbability) {
                         break;
                     }
-                    buildInfo.Sample.Rows.emplace_back(probabilities[i], std::move(rows[i]));
+                    sample.emplace_back(probabilities[i], std::move(rows[i]));
                 }
-                buildInfo.Sample.MakeWeakTop(buildInfo.KMeans.K);
+                if (buildInfo.Sample.MakeWeakTop(buildInfo.KMeans.K)) {
+                    from = 0;
+                }
+                for (; from < sample.size(); ++from) {
+                    db.Table<Schema::KMeansTreeSample>().Key(buildInfo.Id, from).Update(
+                        NIceDb::TUpdate<Schema::KMeansTreeSample::Row>(sample[from].P),
+                        NIceDb::TUpdate<Schema::KMeansTreeSample::Data>(sample[from].Row)
+                    );
+                }
             }
 
             TBillingStats stats{0, 0, record.GetReadRows(), record.GetReadBytes()};
@@ -1414,7 +1442,6 @@ public:
             shardStatus.DebugMessage = issues.ToString();
             shardStatus.Status = record.GetStatus();
 
-            NIceDb::TNiceDb db(txc.DB);
             switch (shardStatus.Status) {
             case  NKikimrIndexBuilder::EBuildStatus::DONE:
                 if (buildInfo.InProgressShards.erase(shardIdx)) {

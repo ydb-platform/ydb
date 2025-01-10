@@ -111,14 +111,13 @@ public:
         auto* makeDir = modifyScheme->MutableMkDir();
         makeDir->SetName(GetSessionDirName());
 
-        auto* modifyAcl = modifyScheme->MutableModifyACL();
-        modifyAcl->SetName(GetSessionDirName());
-        modifyAcl->SetNewOwner(NACLib::TSystemUsers::Tmp().GetUserSID());
-
         NACLib::TDiffACL diffAcl;
-        const auto useAccess = NACLib::EAccessRights::CreateDirectory | NACLib::EAccessRights::DescribeSchema;
-        diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, AppData()->AllAuthenticatedUsers);
-        diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, BUILTIN_ACL_ROOT);
+        diffAcl.AddAccess(
+            NACLib::EAccessType::Allow,
+            NACLib::EAccessRights::CreateDirectory | NACLib::EAccessRights::DescribeSchema,
+            AppData()->AllAuthenticatedUsers);
+
+        auto* modifyAcl = modifyScheme->MutableModifyACL();
         modifyAcl->SetDiffACL(diffAcl.SerializeAsString());
 
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
@@ -154,14 +153,13 @@ public:
         makeDir->SetName(SessionId);
         ActorIdToProto(KqpTempTablesAgentActor, modifyScheme->MutableTempDirOwnerActorId());
 
-        auto* modifyAcl = modifyScheme->MutableModifyACL();
-        modifyAcl->SetName(SessionId);
-        modifyAcl->SetNewOwner(UserToken->GetUserSID());
-
         NACLib::TDiffACL diffAcl;
-        const auto useAccess = NACLib::EAccessRights::CreateDirectory | NACLib::EAccessRights::DescribeSchema;
-        diffAcl.RemoveAccess(NACLib::EAccessType::Allow, useAccess, AppData()->AllAuthenticatedUsers);
-        diffAcl.RemoveAccess(NACLib::EAccessType::Allow, useAccess, BUILTIN_ACL_ROOT);
+        diffAcl.RemoveAccess(
+            NACLib::EAccessType::Allow,
+            NACLib::EAccessRights::CreateDirectory | NACLib::EAccessRights::DescribeSchema,
+            AppData()->AllAuthenticatedUsers);
+
+        auto* modifyAcl = modifyScheme->MutableModifyACL();
         modifyAcl->SetDiffACL(diffAcl.SerializeAsString());
 
         auto promise = NewPromise<IKqpGateway::TGenericResult>();

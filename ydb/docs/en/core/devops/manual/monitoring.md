@@ -22,11 +22,11 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/
 
 - `<servicename>`: sensor subgroup name.
 
-> For example, data about the utilization of server hardware resources is available at the URL:
->
-> ```http
-> http://<ydb-server-address>:<ydb-port>/counters/counters=utils
-> ```
+For example, data about the utilization of server hardware resources is available at the URL:
+
+```http
+http://<ydb-server-address>:<ydb-port>/counters/counters=utils
+```
 
 You can collect metric values using [Prometheus](https://prometheus.io/), a popular open-source observability tool, or any other system compatible with its format. {{ ydb-short-name }} sensor values in [Prometheus format](https://prometheus.io/docs/instrumenting/exposition_formats/) are available at a URL in the following format:
 
@@ -36,7 +36,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
 - `<servicename>`: sensor subgroup name.
 
-To visualize data, use any system that supports Prometheus, such as [Grafana](https://grafana.com/), [[Zabbix](https://www.zabbix.com/), or [AWS CloudWatch](https://aws.amazon.com/cloudwatch/):
+To visualize data, use any system that supports Prometheus, such as [Grafana](https://grafana.com/), [Zabbix](https://www.zabbix.com/), or [AWS CloudWatch](https://aws.amazon.com/cloudwatch/):
 
 ![grafana-actors](../../_assets/grafana-actors.png)
 
@@ -44,11 +44,11 @@ To visualize data, use any system that supports Prometheus, such as [Grafana](ht
 
 To set up monitoring for a {{ ydb-short-name }} cluster using [Prometheus](https://prometheus.io/) and [Grafana](https://grafana.com/):
 
-1. [Install and run](https://prometheus.io/docs/prometheus/latest/getting_started/#downloading-and-running-prometheus) Prometheus via a [configuration file](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_ydb_prometheus.yml).
+1. [Install](https://prometheus.io/docs/prometheus/latest/getting_started) Prometheus.
 
-    Edit the configuration file before running Prometheus:
+1. Edit the Prometheus [configuration file](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_ydb_prometheus.yml):
 
-    1. In the `targets` section specify addresses of all servers of the {{ ydb-short-name }} cluster and ports for each nodes (static and dynamic) that runs on the server.
+    1. In the `targets` section specify addresses of all servers of the {{ ydb-short-name }} cluster and ports for each storage and database node that runs on the server.
 
         For example, for the {{ ydb-short-name }} cluster that contains three servers, each server running one storage node on port 8765 and two database nodes on ports 8766 and 8767, specify nine addresses for all sensor subgroups except for the disk subgroups (for disk sensor subgroups, specify only storage node addresses):
 
@@ -72,13 +72,14 @@ To set up monitoring for a {{ ydb-short-name }} cluster using [Prometheus](https
         - targets: ["localhost:8765"]
         ```
 
-    1. If necessary, specify the TLS certificate in the `tls_config` section:
+    1. If necessary, in the `tls_config` section, specify the [CA-issued certificate](./initial-deployment.md#tls-certificates) used to sign the other TLS certificates of the {{ ydb-short-name }} cluster:
 
        ```json
        tls_config:
-           ca_file: '<ydb-prometheus-ca-file>'
+           ca_file: '<ydb-ca-file>'
        ```
 
+1. [Run](https://prometheus.io/docs/prometheus/latest/getting_started/#starting-prometheus) Prometheus using the edited configuration file.
 
 1. [Install and start](https://grafana.com/docs/grafana/latest/getting-started/getting-started/) Grafana.
 

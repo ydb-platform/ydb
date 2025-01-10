@@ -48,6 +48,7 @@ target_link_libraries(tx-replication-controller PUBLIC
   ydb-core-util
   ydb-core-ydb_convert
   ydb-services-metadata
+  essentials-public-issue
   library-cpp-json
   tools-enum_parser-enum_serialization_runtime
 )

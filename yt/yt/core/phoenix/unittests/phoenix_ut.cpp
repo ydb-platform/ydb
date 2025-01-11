@@ -13,7 +13,7 @@
 
 #include <library/cpp/testing/gtest_extensions/assertions.h>
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 namespace {
 
 using namespace NYson;
@@ -65,7 +65,7 @@ void InplaceDeserialize(const TIntrusivePtr<T>& value, const TString& buffer, in
     TLoadContext context(&input);
     context.SetVersion(version);
     context.Dumper().SetEnabled(true);
-    NPhoenix2::NDetail::TSerializer::InplaceLoad(context, value);
+    NPhoenix::NDetail::TSerializer::InplaceLoad(context, value);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -211,7 +211,7 @@ PHOENIX_DEFINE_TYPE(TConcreteStruct);
 
 struct TRefCountedAbstractStruct
     : public TRefCounted
-    , public NPhoenix2::IPersistent
+    , public NPhoenix::IPersistent
 {
     virtual void Foo() = 0;
 
@@ -1885,4 +1885,4 @@ TEST(TPhoenixTest, SeveralSpecializationsOfOneTemplate)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix

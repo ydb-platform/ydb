@@ -11,7 +11,7 @@ namespace NYT {
 
 using namespace NYTree;
 using namespace NYson;
-using namespace NPhoenix2;
+using namespace NPhoenix;
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -33,7 +33,7 @@ struct _
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix
 
 #define TYPE_DEF_INL_H_
 #include "type_def-inl.h"

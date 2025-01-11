@@ -29,10 +29,12 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
     auto schemaPtr = context.EngineLogs.GetVersionedIndex().GetLastSchema();
 
     THashMap<TString, THashSet<TUnifiedBlobId>> blobIdsByStorage;
-    for (auto&& [_, p] : FetchedDataAccessors->GetPortions()) {
-        p.RemoveFromDatabase(context.DBWrapper);
-        p.FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
-        pathIds.emplace(p.GetPortionInfo().GetPathId());
+
+    for (auto&& p : PortionsToDrop) {
+        const auto& accessor = FetchedDataAccessors->GetPortionAccessorVerified(p->GetPortionId());
+        accessor.RemoveFromDatabase(context.DBWrapper);
+        accessor.FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
+        pathIds.emplace(p->GetPathId());
     }
     for (auto&& i : blobIdsByStorage) {
         auto action = BlobsAction.GetRemoving(i.first);

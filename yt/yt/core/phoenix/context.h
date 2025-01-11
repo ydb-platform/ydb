@@ -72,35 +72,16 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TSaveContext, class TLoadContext, class TPersistenceContext>
+template <class TSaveContext, class TLoadContext>
 struct ICustomPersistent
     : public virtual TPolymorphicBase
 {
-    virtual void SaveImpl(TSaveContext& context) const
-    {
-        const_cast<ICustomPersistent<TSaveContext, TLoadContext, TPersistenceContext>*>(this)->Persist(context);
-    }
-
-    virtual void LoadImpl(TLoadContext& context)
-    {
-        Persist(context);
-    }
-
-    virtual void Save(TSaveContext& context) const
-    {
-        SaveImpl(context);
-    }
-
-    virtual void Load(TLoadContext& context)
-    {
-        LoadImpl(context);
-    }
-
-    virtual void Persist(const TPersistenceContext& context) = 0;
+    virtual void Save(TSaveContext& context) const = 0;
+    virtual void Load(TLoadContext& context) = 0;
 };
 
+using IPersistent = ICustomPersistent<TSaveContext, TLoadContext>;
 using TPersistenceContext = TCustomPersistenceContext<TSaveContext, TLoadContext>;
-using IPersistent = ICustomPersistent<TSaveContext, TLoadContext, TPersistenceContext>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

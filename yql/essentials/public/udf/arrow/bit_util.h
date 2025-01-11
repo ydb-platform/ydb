@@ -94,5 +94,30 @@ inline T* CompressArray(const T* src, const ui8* sparseBitmap, T* dst, size_t co
     return dst;
 }
 
+inline void CopyDenseBitmap(ui8* dst, const ui8* src, size_t srcOffset, size_t len) {
+    if ((srcOffset & 7) != 0) {
+        size_t offsetBytes = srcOffset >> 3;
+        src += offsetBytes;
+
+        ui8 offsetTail = srcOffset & 7;
+        ui8 offsetHead = 8 - offsetTail;
+
+        ui8 remainder = *src++ >> offsetTail;
+        size_t dstOffset = offsetHead;
+        for (; dstOffset < len; dstOffset += 8) {
+            *dst++ = remainder | (*src << offsetHead);
+            remainder = *src >> offsetTail;
+            src++;
+        }
+        // dst is guaranteed to have extra length even if it's not needed
+        *dst++ = remainder;
+    } else {
+        src += srcOffset >> 3;
+        // Round up to 8
+        len = (len + 7u) & ~size_t(7u);
+        memcpy(dst, src, len >> 3);
+    }
+}
+
 }
 }

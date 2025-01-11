@@ -68,6 +68,7 @@ public:
 
     void AddPortionToRemove(const TPortionInfo::TConstPtr& portion) {
         PortionsToRemove.AddPortion(portion);
+        PortionsToAccess->AddPortion(portion);
     }
 
     virtual ui32 GetWritePortionsCount() const override {

@@ -3,7 +3,7 @@
 #include "public.h"
 #include "serialize.h"
 
-#include <yt/yt/core/misc/phoenix.h>
+#include <yt/yt/core/phoenix/context.h>
 
 namespace NYT {
 
@@ -21,7 +21,7 @@ struct THistogramView
 };
 
 struct IHistogram
-    : public virtual NPhoenix::IPersistent
+    : public virtual NPhoenix2::IPersistent
 {
     virtual void AddValue(i64 value, i64 count = 1) = 0;
     virtual void RemoveValue(i64 value, i64 count = 1) = 0;

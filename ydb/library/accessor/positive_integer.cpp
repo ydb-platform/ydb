@@ -36,3 +36,9 @@ ui64 TPositiveControlInteger::Val() const {
 }
 
 }
+
+template<>
+void Out<NKikimr::TPositiveControlInteger>(IOutputStream& o,
+    typename TTypeTraits<NKikimr::TPositiveControlInteger>::TFuncParam x) {
+    o << x.Val();
+}

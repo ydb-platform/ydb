@@ -124,6 +124,9 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
     if (InFlightLimit <= IntervalsInFlightCount) {
         return false;
     }
+    if (SortedSources.size() == 0) {
+        return false;
+    }
     bool changed = false;
     ui32 inFlightCountLocal = 0;
     if (SortedSources.size()) {

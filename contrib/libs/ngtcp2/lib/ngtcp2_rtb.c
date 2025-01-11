@@ -38,7 +38,7 @@
 #include "ngtcp2_tstamp.h"
 #include "ngtcp2_frame_chain.h"
 
-ngtcp2_objalloc_def(rtb_entry, ngtcp2_rtb_entry, oplent);
+ngtcp2_objalloc_def(rtb_entry, ngtcp2_rtb_entry, oplent)
 
 static void rtb_entry_init(ngtcp2_rtb_entry *ent, const ngtcp2_pkt_hd *hd,
                            ngtcp2_frame_chain *frc, ngtcp2_tstamp ts,
@@ -81,17 +81,14 @@ void ngtcp2_rtb_entry_objalloc_del(ngtcp2_rtb_entry *ent,
   ngtcp2_objalloc_rtb_entry_release(objalloc, ent);
 }
 
-static int greater(const ngtcp2_ksl_key *lhs, const ngtcp2_ksl_key *rhs) {
-  return *(int64_t *)lhs > *(int64_t *)rhs;
-}
-
 void ngtcp2_rtb_init(ngtcp2_rtb *rtb, ngtcp2_rst *rst, ngtcp2_cc *cc,
                      int64_t cc_pkt_num, ngtcp2_log *log, ngtcp2_qlog *qlog,
                      ngtcp2_objalloc *rtb_entry_objalloc,
                      ngtcp2_objalloc *frc_objalloc, const ngtcp2_mem *mem) {
   rtb->rtb_entry_objalloc = rtb_entry_objalloc;
   rtb->frc_objalloc = frc_objalloc;
-  ngtcp2_ksl_init(&rtb->ents, greater, sizeof(int64_t), mem);
+  ngtcp2_ksl_init(&rtb->ents, ngtcp2_ksl_int64_greater,
+                  ngtcp2_ksl_int64_greater_search, sizeof(int64_t), mem);
   rtb->rst = rst;
   rtb->cc = cc;
   rtb->log = log;
@@ -252,9 +249,12 @@ static ngtcp2_ssize rtb_reclaim_frame(ngtcp2_rtb *rtb, uint8_t flags,
         if (!fr->stream.fin) {
           /* 0 length STREAM frame with offset == 0 must be
              retransmitted if no non-empty data are sent to this
-             stream, and no data in this stream are acknowledged. */
+             stream, fin flag is not set, and no data in this stream
+             are acknowledged. */
           if (fr->stream.offset != 0 || fr->stream.datacnt != 0 ||
-              strm->tx.offset || (strm->flags & NGTCP2_STRM_FLAG_ANY_ACKED)) {
+              strm->tx.offset ||
+              (strm->flags &
+               (NGTCP2_STRM_FLAG_SHUT_WR | NGTCP2_STRM_FLAG_ANY_ACKED))) {
             continue;
           }
         } else if (strm->flags & NGTCP2_STRM_FLAG_FIN_ACKED) {
@@ -870,7 +870,8 @@ ngtcp2_ssize ngtcp2_rtb_recv_ack(ngtcp2_rtb *rtb, const ngtcp2_ack *fr,
   }
 
   if (largest_pkt_sent_ts != UINT64_MAX && ack_eliciting_pkt_acked) {
-    cc_ack.rtt = pkt_ts - largest_pkt_sent_ts;
+    cc_ack.rtt =
+      ngtcp2_max_uint64(pkt_ts - largest_pkt_sent_ts, NGTCP2_NANOSECONDS);
 
     rv = ngtcp2_conn_update_rtt(conn, cc_ack.rtt, fr->ack_delay_unscaled, ts);
     if (rv == 0 && cc->new_rtt_sample) {
@@ -1282,14 +1283,6 @@ static int rtb_on_pkt_lost_resched_move(ngtcp2_rtb *rtb, ngtcp2_conn *conn,
     ngtcp2_log_info(rtb->log, NGTCP2_LOG_EVENT_LDC,
                     "pkn=%" PRId64
                     " is a probe packet, no retransmission is necessary",
-                    ent->hd.pkt_num);
-    return 0;
-  }
-
-  if (ent->flags & NGTCP2_RTB_ENTRY_FLAG_PMTUD_PROBE) {
-    ngtcp2_log_info(rtb->log, NGTCP2_LOG_EVENT_LDC,
-                    "pkn=%" PRId64
-                    " is a PMTUD probe packet, no retransmission is necessary",
                     ent->hd.pkt_num);
     return 0;
   }

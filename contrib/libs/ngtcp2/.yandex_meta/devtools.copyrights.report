@@ -127,7 +127,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         COPYING [3:3]
-        README.rst [355:355]
+        README.rst [357:357]
         lib/includes/ngtcp2/version.h [4:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 94b9ad611aac02e9c9d2f6105f7ab5f2

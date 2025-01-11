@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(1.8.1)
+VERSION(1.10.0)
 
-ORIGINAL_SOURCE(https://github.com/ngtcp2/ngtcp2/releases/download/v1.8.1/ngtcp2-1.8.1.tar.xz)
+ORIGINAL_SOURCE(https://github.com/ngtcp2/ngtcp2/releases/download/v1.10.0/ngtcp2-1.10.0.tar.xz)
 
 LICENSE(
     BSD-3-Clause AND

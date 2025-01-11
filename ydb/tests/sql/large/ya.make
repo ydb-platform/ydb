@@ -1,6 +1,6 @@
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
-ENV(YDB_ENABLE_DATASTREAMS=true)
+ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
 
 # INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
@@ -28,8 +28,6 @@ PEERDIR(
     ydb/tests/sql/lib
     contrib/python/moto
     contrib/python/boto3
-    library/python/testing/recipe
-    library/recipes/common
 )
 
 FORK_SUBTESTS()

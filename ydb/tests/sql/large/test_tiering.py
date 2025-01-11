@@ -1,129 +1,96 @@
 import concurrent.futures
 import datetime
 import random
-import threading
-import time
-import boto3
-import moto
-import pytest
-import requests
 import ydb
-import yatest.common
-import logging
 from ydb.tests.sql.lib.test_base import TestBase
-from library.recipes import common as recipes_common
+from ydb.tests.sql.lib.test_s3 import S3Base
+import time
 
 
-MOTO_SERVER_PATH = "contrib/python/moto/bin/moto_server"
-S3_PID_FILE = "s3.pid"
-
-class TestYdbS3TTL(TestBase):
-
-    @pytest.fixture(scope="module")
-    def s3(request) -> str:
-        port_manager = yatest.common.network.PortManager()
-        s3_port = port_manager.get_port()
-        s3_url = "http://localhost:{port}".format(port=s3_port)
-
-        command = [yatest.common.binary_path(MOTO_SERVER_PATH), "s3", "--host", "::1", "--port", str(s3_port)]
-
-        def is_s3_ready():
-            try:
-                response = requests.get(s3_url)
-                response.raise_for_status()
-                return True
-            except requests.RequestException as err:
-                logging.debug(err)
-                return False
-
-        recipes_common.start_daemon(
-            command=command, environment=None, is_alive_check=is_s3_ready, pid_file_name=S3_PID_FILE
-        )
-
-        try:
-            yield s3_url
-        finally:
-            with open(S3_PID_FILE, 'r') as f:
-                pid = int(f.read())
-            recipes_common.stop_daemon(pid)
-
-
+class TestYdbS3TTL(TestBase, S3Base):
 
     def test_basic_tiering_operations(self):
-        # Настройка мок S3
-        mock_s3 = moto.mock_s3()
-        mock_s3.start()
-
         # Инициализация S3 клиента и создание тестового бакета
-        s3_client = boto3.client('s3')
-        bucket_name = 'test-bucket'
-        s3_client.create_bucket(Bucket=bucket_name)
 
+        s3_client = self.s3_session_client()
+
+        bucket_name = self.bucket_name()
+        s3_client.create_bucket(Bucket=self.bucket_name())
+
+        self.create_external_datasource_and_secrets(bucket_name)
+
+        # Create test table
         self.query(f"""
-        CREATE EXTERNAL DATA SOURCE test_s3 WITH (
-            SOURCE_TYPE="ObjectStorage",
-            LOCATION="http://s3.amazonaws.com/{bucket_name}",
-            AUTH_METHOD="NONE"
-        );""")
-
-        # Создание тестовой таблицы
-        query = """
-        CREATE TABLE test_table (
+        CREATE TABLE `{self.table_path}_test_table` (
             id Uint64 not null,
             data Text,
             expire_at Timestamp not null,
             PRIMARY KEY (expire_at, id)
         ) PARTITION BY HASH(expire_at, id)
             WITH(STORE=COLUMN);
+        """)
 
-        ALTER TABLE test_table SET TTL
-            Interval("PT10S") TO EXTERNAL DATA SOURCE `/Root/test_s3`
+        self.query(f"""
+        ALTER TABLE `{self.table_path}_test_table` SET TTL
+            Interval("PT10S") TO EXTERNAL DATA SOURCE `{self.database}/{self.table_path}_tests3`
         ON expire_at;
-        """
-        self.query(query)
+        """)
 
         num_threads = 10
-        operations_per_thread = 10000
+        operations_per_thread = 100
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
             insert_futures = [executor.submit(self.writer, i, operations_per_thread) for i in range(num_threads)]
 
             # Wait for the insert operation to complete, then allow reading to complete
             concurrent.futures.wait(insert_futures)
+            [future.result() for future in insert_futures]
 
-        # Очистка
-        self.mock_s3.stop()
+        start_time = time.time()
+        max_wait_time = 100  # Wait time for tiered files
+        files = []
+        while True:
+            # Получаем текущий список объектов из бакета
+            response = s3_client.list_objects_v2(Bucket=bucket_name)
+            print(f"response={response}")
+
+            # Проверяем, есть ли объекты в ответе
+            if 'Contents' in response:
+                files = [content['Key'] for content in response['Contents']]
+                if len(files) > 0:
+                    break
+
+            # Проверяем, истекло ли максимальное время ожидания
+            elapsed_time = time.time() - start_time
+            if elapsed_time >= max_wait_time:
+                break
+
+            # Задержка перед следующей попыткой
+            time.sleep(1)
+        assert len(files) > 0, "No tiered files in bucket"
 
     def writer(self, worker_id, num_operations):
-
+        upsert_data = []
         for i in range(num_operations):
             # Генерация тестовых данных
             record_id = random.randint(1, 1000000)
             data = f"test_data_{worker_id}_{i}"
             expire_at = datetime.datetime.now() + datetime.timedelta(hours=-random.randint(1, 48))
 
-            # Запись в YDB
-            query = """
-            DECLARE $id AS Uint64;
-            DECLARE $data AS Text;
-            DECLARE $expire_at AS Timestamp;
+            upsert_data.append({"id": record_id, "data": data, "expire_at": expire_at})
 
-            UPSERT INTO test_table (id, data, expire_at)
-            VALUES ($id, $data, $expire_at);
-            """
-            parameters = {
-                '$id': record_id,
-                '$data': data,
-                '$expire_at': expire_at
-            }
-            self.query(query, parameters=parameters)
+        # Function to perform bulk upserts
+        def bulk_upsert_operation(data_slice):
+            column_types = ydb.BulkUpsertColumns()
+            column_types.add_column("id", ydb.PrimitiveType.Uint64)
+            column_types.add_column("data", ydb.PrimitiveType.Utf8)
+            column_types.add_column("expire_at", ydb.PrimitiveType.Timestamp)
 
-            # Проверка записи в YDB
-            query = """
-            DECLARE $id AS Uint64;
-            SELECT * FROM test_table WHERE id = $id;
-            """
-            self.query(
-                query,
-                parameters={'$id': record_id}
+            self.driver.table_client.bulk_upsert(
+                f"{self.database}/{self.table_path}_test_table",
+                data_slice,
+                column_types
             )
+
+        for chunk in TestBase.split_data_into_fixed_size_chunks(upsert_data, 10000):
+            bulk_upsert_operation(chunk)

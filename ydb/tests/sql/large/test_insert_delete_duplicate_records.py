@@ -63,6 +63,8 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
             # Ensure both operations complete
             read_future.result()
             concurrent.futures.wait(insert_futures)
+            for future in insert_futures:
+                future.result()
 
         check_data()
 
@@ -133,6 +135,8 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
             # Ensure both operations complete
             read_future.result()
             concurrent.futures.wait(insert_futures)
+            for future in insert_futures:
+                future.result()
 
         check_data()
 
@@ -194,6 +198,8 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
             # Ensure both operations complete
             read_future.result()
             concurrent.futures.wait(insert_futures)
+            for future in insert_futures:
+                future.result()
 
         check_data()
 
@@ -262,6 +268,8 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
             # Ensure both operations complete
             read_future.result()
             concurrent.futures.wait(insert_futures)
+            for future in insert_futures:
+                future.result()
 
         check_data()
 
@@ -340,5 +348,7 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
             # Ensure both operations complete
             read_future.result()
             concurrent.futures.wait(insert_futures)
+            for future in insert_futures:
+                future.result()
 
         check_data()

@@ -65,6 +65,8 @@ class TestConcurrentInsertAndCount(TpchTestBaseH1):
 
             # Wait for the insert operation to complete, then allow reading to complete
             concurrent.futures.wait(insert_futures)
+            for future in insert_futures:
+                future.result()
 
         # Verify that both operations completed successfully
         final_count = self.query(f"SELECT count(*) as cntr FROM `{count_table}` WHERE cntr > 0;")
@@ -144,6 +146,8 @@ class TestConcurrentInsertAndCount(TpchTestBaseH1):
 
             # Wait for the insert operation to complete, then allow reading to complete
             concurrent.futures.wait(insert_futures)
+            for future in insert_futures:
+                future.result()
 
         # Verify that both operations completed successfully
         final_count = self.query(f"SELECT count(*) as cntr FROM `{count_table}` WHERE cntr > 0;")
@@ -214,6 +218,8 @@ class TestConcurrentInsertAndCount(TpchTestBaseH1):
 
             # Wait for the insert operation to complete, then allow reading to complete
             concurrent.futures.wait(insert_futures)
+            for future in insert_futures:
+                future.result()
 
         # Verify that both operations completed successfully
         final_count = self.query(f"SELECT count(*) as cntr FROM `{count_table}` WHERE cntr > 0;")

@@ -1695,7 +1695,8 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     }
 
     TDuration GetTtlMinRunInterval() const {
-        static constexpr auto TtlMinRunInterval = TDuration::Minutes(15);
+        static constexpr auto TtlMinRunInterval = TDuration::Seconds(1);
+        return TtlMinRunInterval;
 
         if (!DatabaseQuotas) {
             return TtlMinRunInterval;

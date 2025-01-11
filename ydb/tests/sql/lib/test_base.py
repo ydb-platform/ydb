@@ -100,7 +100,7 @@ class TpchTestBaseH1(TestBase):
 
     def setup_tpch(cls):
         cls.run_cli(['workload', 'tpch', '-p', cls.tpch_default_path()+'/', 'init', '--store=column', '--datetime'])
-        # cls.run_cli(['workload', 'tpch', '-p', cls.tpch_default_path()+'/', 'import', 'generator', '--scale=1'])
+        cls.run_cli(['workload', 'tpch', '-p', cls.tpch_default_path()+'/', 'import', 'generator', '--scale=1'])
 
     def teardown_tpch(cls):
         cls.run_cli(['scheme', 'rmdir', '-r', '-f', cls.tpch_default_path()])

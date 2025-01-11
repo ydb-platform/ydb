@@ -59,10 +59,9 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
         AFL_VERIFY(FetchingSourcesByIdx.erase(frontSource->GetSourceIdx()));
         FetchingSources.pop_front();
         frontSource->ClearResult();
-        if (Context->GetCommonContext()->GetReadMetadata()->HasLimit() && FetchingSources.size() && frontSource->GetResultRecordsCount()) {
+        if (Context->GetCommonContext()->GetReadMetadata()->HasLimit() && SortedSources.size() && frontSource->GetResultRecordsCount()) {
             FinishedSources.emplace(frontSource);
-            while (FinishedSources.size() && (*FinishedSources.begin())->GetFinish() < FetchingSources.front()->GetStart()) {
-                auto fetchingSource = FetchingSources.front();
+            while (FinishedSources.size() && (*FinishedSources.begin())->GetFinish() < SortedSources.front()->GetStart()) {
                 auto finishedSource = *FinishedSources.begin();
                 FetchedCount += finishedSource->GetResultRecordsCount();
                 FinishedSources.erase(FinishedSources.begin());

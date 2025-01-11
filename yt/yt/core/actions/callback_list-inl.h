@@ -1,11 +1,9 @@
-#ifndef SIGNAL_INL_H_
-#error "Direct inclusion of this file is not allowed, include signal.h"
+#ifndef CALLBACK_LIST_INL_H_
+#error "Direct inclusion of this file is not allowed, include callback_list.h"
 // For the sake of sane code completion.
-#include "signal.h"
+#include "callback_list.h"
 #endif
-#undef SIGNAL_INL_H_
-
-#include <library/cpp/yt/memory/ref.h>
+#undef CALLBACK_LIST_INL_H_
 
 namespace NYT {
 
@@ -16,6 +14,7 @@ void TCallbackList<TResult(TArgs...)>::Subscribe(const TCallback& callback)
 {
     auto guard = WriterGuard(SpinLock_);
     Callbacks_.push_back(callback);
+    Empty_.store(false);
 }
 
 template <class TResult, class... TArgs>
@@ -28,11 +27,15 @@ void TCallbackList<TResult(TArgs...)>::Unsubscribe(const TCallback& callback)
             break;
         }
     }
+    Empty_.store(Callbacks_.empty(), std::memory_order::release);
 }
 
 template <class TResult, class... TArgs>
 std::vector<TCallback<TResult(TArgs...)>> TCallbackList<TResult(TArgs...)>::ToVector() const
 {
+    if (IsEmpty()) [[likely]] {
+        return {};
+    }
     auto guard = ReaderGuard(SpinLock_);
     return std::vector<TCallback>(Callbacks_.begin(), Callbacks_.end());
 }
@@ -40,15 +43,17 @@ std::vector<TCallback<TResult(TArgs...)>> TCallbackList<TResult(TArgs...)>::ToVe
 template <class TResult, class... TArgs>
 int TCallbackList<TResult(TArgs...)>::Size() const
 {
+    if (IsEmpty()) [[likely]] {
+        return 0;
+    }
     auto guard = ReaderGuard(SpinLock_);
     return Callbacks_.size();
 }
 
 template <class TResult, class... TArgs>
-bool TCallbackList<TResult(TArgs...)>::Empty() const
+bool TCallbackList<TResult(TArgs...)>::IsEmpty() const
 {
-    auto guard = ReaderGuard(SpinLock_);
-    return Callbacks_.empty();
+    return Empty_.load(std::memory_order::acquire);
 }
 
 template <class TResult, class... TArgs>
@@ -56,12 +61,17 @@ void TCallbackList<TResult(TArgs...)>::Clear()
 {
     auto guard = WriterGuard(SpinLock_);
     Callbacks_.clear();
+    Empty_.store(true, std::memory_order::release);
 }
 
 template <class TResult, class... TArgs>
 template <class... TCallArgs>
 void TCallbackList<TResult(TArgs...)>::Fire(TCallArgs&&... args) const
 {
+    if (IsEmpty()) [[likely]] {
+        return;
+    }
+
     TCallbackVector callbacks;
     {
         auto guard = ReaderGuard(SpinLock_);
@@ -77,10 +87,15 @@ template <class TResult, class... TArgs>
 template <class... TCallArgs>
 void TCallbackList<TResult(TArgs...)>::FireAndClear(TCallArgs&&... args)
 {
+    if (IsEmpty()) [[likely]] {
+        return;
+    }
+
     TCallbackVector callbacks;
     {
         auto guard = WriterGuard(SpinLock_);
         callbacks.swap(Callbacks_);
+        Empty_.store(true, std::memory_order::release);
     }
 
     for (const auto& callback : callbacks) {

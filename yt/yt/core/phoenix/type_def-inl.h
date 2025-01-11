@@ -86,8 +86,8 @@ namespace NYT::NPhoenix2::NDetail {
         YT_STATIC_INITIALIZER(::NYT::NPhoenix2::NDetail::RegisterOpaqueTypeDescriptorImpl<type>()); \
     }
 
-#define PHOENIX_REGISTER_FIELD(fieldTag, fieldName) \
-    registrar.template Field<fieldTag, &TThis::fieldName>(#fieldName)
+#define PHOENIX_REGISTER_FIELD(fieldTag, fieldName, ...) \
+    registrar.template Field<fieldTag, &TThis::fieldName>(#fieldName) __VA_ARGS__ ()
 
 ////////////////////////////////////////////////////////////////////////////////
 

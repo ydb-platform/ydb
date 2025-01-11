@@ -29,7 +29,7 @@ struct _
 #define PHOENIX_DEFINE_OPAQUE_TYPE(type, typeTagValue)
 
 //! A handy helper for registering Phoenix fields.
-#define PHOENIX_REGISTER_FIELD(fieldTag, fieldName)
+#define PHOENIX_REGISTER_FIELD(fieldTag, fieldName, ...)
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -133,10 +133,10 @@ private:
 
 void THistogram::RegisterMetadata(auto&& registrar)
 {
-    PHOENIX_REGISTER_FIELD(1, MaxBuckets_)();
-    PHOENIX_REGISTER_FIELD(2, ValueMin_)();
-    PHOENIX_REGISTER_FIELD(3, ValueMax_)();
-    PHOENIX_REGISTER_FIELD(4, Items_)();
+    PHOENIX_REGISTER_FIELD(1, MaxBuckets_);
+    PHOENIX_REGISTER_FIELD(2, ValueMin_);
+    PHOENIX_REGISTER_FIELD(3, ValueMax_);
+    PHOENIX_REGISTER_FIELD(4, Items_);
 }
 
 PHOENIX_DEFINE_TYPE(THistogram);
@@ -145,8 +145,8 @@ PHOENIX_DEFINE_TYPE(THistogram);
 
 void THistogram::TItem::RegisterMetadata(auto&& registrar)
 {
-    PHOENIX_REGISTER_FIELD(1, Value)();
-    PHOENIX_REGISTER_FIELD(2, Count)();
+    PHOENIX_REGISTER_FIELD(1, Value);
+    PHOENIX_REGISTER_FIELD(2, Count);
 }
 
 PHOENIX_DEFINE_TYPE(THistogram::TItem);

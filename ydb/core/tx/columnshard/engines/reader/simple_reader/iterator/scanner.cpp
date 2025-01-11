@@ -61,8 +61,7 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
             AFL_VERIFY(FinishedSources.emplace(frontSource).second);
             while (FinishedSources.size() && (*FinishedSources.begin())->GetFinish() < SortedSources.front()->GetStart()) {
                 auto finishedSource = *FinishedSources.begin();
-                if (!finishedSource->GetResultRecordsCount() && Context->GetCommonContext()->GetReadMetadata()->HasLimit() &&
-                    InFlightLimit < MaxInFlight) {
+                if (!finishedSource->GetResultRecordsCount() && InFlightLimit < MaxInFlight) {
                     InFlightLimit = 2 * InFlightLimit;
                 }
                 FetchedCount += finishedSource->GetResultRecordsCount();
@@ -75,6 +74,7 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
                     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "limit_exhausted")(
                         "limit", Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust())("fetched", FetchedCount);
                     SortedSources.clear();
+                    break;
                 }
             }
         }
@@ -133,6 +133,8 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
         for (auto it = FetchingInFlightSources.begin(); it != FetchingInFlightSources.end(); ++it) {
             if ((*it)->GetFinish() < SortedSources.front()->GetStart()) {
                 ++inFlightCountLocal;
+            } else {
+                break;
             }
         }
     }
@@ -148,6 +150,8 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
             for (auto it = FetchingInFlightSources.begin(); it != FetchingInFlightSources.end(); ++it) {
                 if ((*it)->GetFinish() < SortedSources.front()->GetStart()) {
                     ++inFlightCountLocalNew;
+                } else {
+                    break;
                 }
             }
             AFL_VERIFY(inFlightCountLocal <= inFlightCountLocalNew);

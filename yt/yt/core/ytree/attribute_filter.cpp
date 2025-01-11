@@ -408,7 +408,7 @@ std::unique_ptr<TAttributeFilter::IAsyncFilteringConsumer> TAttributeFilter::Cre
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// NB: universal filter is represented as an absent protobuf value.
+// NB: Universal filter is represented as an absent protobuf value.
 
 void ToProto(NProto::TAttributeFilter* protoFilter, const TAttributeFilter& filter)
 {

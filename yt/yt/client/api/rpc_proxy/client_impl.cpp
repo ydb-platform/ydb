@@ -101,7 +101,7 @@ IChannelPtr TClient::CreateSequoiaAwareRetryingChannel(IChannelPtr channel, bool
 {
     const auto& config = Connection_->GetConfig();
     bool retrySequoiaErrorsOnly = !config->EnableRetries;
-    // NB: even if client's retries are disabled Sequoia transient failures are
+    // NB: Even if client's retries are disabled Sequoia transient failures are
     // still retriable. See IsRetriableError().
     return CreateRetryingChannel(
         config->RetryingChannel,

@@ -79,7 +79,7 @@ public:
     char* GetMutableString()
     {
         YT_VERIFY(IsStringLikeType(Value_.Type));
-        // NB: it is correct to use `const_cast` here to modify the stored string
+        // NB: It is correct to use `const_cast` here to modify the stored string
         // because initially it's allocated as a non-const `char*`.
         return const_cast<char*>(Value_.Data.String);
     }

@@ -25,11 +25,11 @@ using NYT::Load;
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-TString Serialize(const T& value)
+TString Serialize(const T& value, int version = 0)
 {
     TString buffer;
     TStringOutput output(buffer);
-    TSaveContext context(&output);
+    TSaveContext context(&output, version);
     Save(context, value);
     context.Finish();
     return buffer;
@@ -307,6 +307,71 @@ TEST(TPhoenixTest, SinceVersionNew)
     auto buffer = Serialize(s1);
 
     auto s2 = Deserialize<S>(buffer, /*version*/ 200);
+    EXPECT_EQ(s1, s2);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NBeforeVersion {
+
+struct S
+{
+    int A;
+    int B;
+    int C;
+
+    bool operator==(const S&) const = default;
+
+    PHOENIX_DECLARE_TYPE(S, 0xc8da1575);
+};
+
+void S::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, A)();
+    PHOENIX_REGISTER_FIELD(2, B)
+        .BeforeVersion(100)();
+    PHOENIX_REGISTER_FIELD(3, C)
+        .BeforeVersion(200)
+        .WhenMissing([] (TThis* this_, auto& /*context*/) {
+            this_->C = 777;
+        })();
+}
+
+PHOENIX_DEFINE_TYPE(S);
+
+} // namespace NBeforeVersion
+
+TEST(TPhoenixTest, BeforeVersionOld)
+{
+    using namespace NBeforeVersion;
+
+    S s1;
+    s1.A = 123;
+    s1.B = 456;
+    s1.C = 321;
+
+    auto buffer = Serialize(s1);
+    ASSERT_EQ(buffer.size(), sizeof(s1));
+
+    auto s2 = Deserialize<S>(buffer);
+    EXPECT_EQ(s1, s2);
+}
+
+TEST(TPhoenixTest, BeforeVersionNew)
+{
+    using namespace NBeforeVersion;
+
+    S s1;
+    s1.A = 123;
+    s1.B = 0;
+    s1.C = 777;
+
+    int version = 200;
+
+    auto buffer = Serialize(s1, version);
+    ASSERT_EQ(buffer.size(), sizeof(s1.A));
+
+    auto s2 = Deserialize<S>(buffer, version);
     EXPECT_EQ(s1, s2);
 }
 

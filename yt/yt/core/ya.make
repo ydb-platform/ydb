@@ -143,7 +143,6 @@ SRCS(
     misc/relaxed_mpsc_queue.cpp
     misc/parser_helpers.cpp
     misc/pattern_formatter.cpp
-    misc/phoenix.cpp
     misc/pool_allocator.cpp
     misc/proc.cpp
     misc/process_exit_profiler.cpp

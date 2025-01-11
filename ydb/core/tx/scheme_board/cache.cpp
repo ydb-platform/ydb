@@ -1030,19 +1030,17 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
             }
 
+            const size_t emptyEndKeyPrefixCount = CountIf(partitioning, [](const auto& partition) {
+                Y_ABORT_UNLESS(partition.Range);
+                return !partition.Range->EndKeyPrefix;
+            });
+            Y_ABORT_UNLESS(emptyEndKeyPrefixCount <= 1);
             Sort(partitioning.begin(), partitioning.end(), [&schema](const auto& lhs, const auto& rhs) {
-                Y_ABORT_UNLESS(lhs.Range && rhs.Range);
-                Y_ABORT_UNLESS(lhs.Range->EndKeyPrefix || rhs.Range->EndKeyPrefix);
-
-                if (!lhs.Range->EndKeyPrefix) {
-                    return false;
+                const bool lhsHasEndKeyPrefix{lhs.Range->EndKeyPrefix};
+                const bool rhsHasEndKeyPrefix{rhs.Range->EndKeyPrefix};
+                if (!lhsHasEndKeyPrefix || !rhsHasEndKeyPrefix) {
+                    return lhsHasEndKeyPrefix > rhsHasEndKeyPrefix;
                 }
-
-                if (!rhs.Range->EndKeyPrefix) {
-                    return true;
-                }
-
-                Y_ABORT_UNLESS(lhs.Range->EndKeyPrefix && rhs.Range->EndKeyPrefix);
 
                 const int compares = CompareTypedCellVectors(
                     lhs.Range->EndKeyPrefix.GetCells().data(),

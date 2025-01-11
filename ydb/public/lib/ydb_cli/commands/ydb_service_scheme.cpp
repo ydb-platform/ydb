@@ -1169,6 +1169,7 @@ void TCommandPermissionRevoke::Parse(TConfig& config) {
 }
 
 int TCommandPermissionRevoke::Run(TConfig& config) {
+    ParsePath(config, 0);
     NScheme::TSchemeClient client(CreateDriver(config));
     ThrowOnError(
         client.ModifyPermissions(

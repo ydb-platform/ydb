@@ -19,7 +19,6 @@ PEERDIR(
     contrib/restricted/boost/any
     contrib/restricted/boost/asio
     contrib/restricted/boost/crc
-    contrib/restricted/boost/format
     contrib/restricted/boost/iostreams
     contrib/restricted/boost/math
 )

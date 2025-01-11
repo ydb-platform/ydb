@@ -28,7 +28,7 @@ message TMemoryLimits
 message TInstanceResources
 {
     optional int64 memory = 1;
-    optional int64 net = 2;
+    optional int64 net_bytes = 2;
     optional string type = 3;
     optional int32 vcpu = 4;
 }

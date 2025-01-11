@@ -368,10 +368,10 @@ TMutableVersionedRow TVersionedRowBuilder::FinishRow()
         WriteTimestamps_.size(),
         DeleteTimestamps_.size());
 
-    memcpy(row.BeginKeys(), Keys_.data(), sizeof (TUnversionedValue) * Keys_.size());
-    memcpy(row.BeginValues(), Values_.data(), sizeof (TVersionedValue)* Values_.size());
-    memcpy(row.BeginWriteTimestamps(), WriteTimestamps_.data(), sizeof (TTimestamp) * WriteTimestamps_.size());
-    memcpy(row.BeginDeleteTimestamps(), DeleteTimestamps_.data(), sizeof (TTimestamp) * DeleteTimestamps_.size());
+    memcpy(row.BeginKeys(), Keys_.data(), sizeof(TUnversionedValue) * Keys_.size());
+    memcpy(row.BeginValues(), Values_.data(), sizeof(TVersionedValue)* Values_.size());
+    memcpy(row.BeginWriteTimestamps(), WriteTimestamps_.data(), sizeof(TTimestamp) * WriteTimestamps_.size());
+    memcpy(row.BeginDeleteTimestamps(), DeleteTimestamps_.data(), sizeof(TTimestamp) * DeleteTimestamps_.size());
 
     Keys_.clear();
     Values_.clear();

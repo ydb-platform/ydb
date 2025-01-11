@@ -30,6 +30,7 @@ target_link_libraries(essentials-minikql-computation PUBLIC
   essentials-public-types
   parser-pg_wrapper-interface
   essentials-public-udf
+  public-udf-arrow
   essentials-minikql-arrow
 )
 
@@ -38,6 +39,7 @@ target_sources(essentials-minikql-computation PRIVATE
   ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_block_impl.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_block_reader.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_block_transport.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_block_trimmer.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_computation_node.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_computation_node_holders.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_computation_node_impl.cpp

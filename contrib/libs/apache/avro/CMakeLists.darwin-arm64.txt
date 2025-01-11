@@ -35,7 +35,6 @@ target_link_libraries(libs-apache-avro PUBLIC
   restricted-boost-any
   restricted-boost-asio
   restricted-boost-crc
-  restricted-boost-format
   restricted-boost-iostreams
   restricted-boost-math
 )

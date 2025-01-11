@@ -187,7 +187,6 @@ target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/relaxed_mpsc_queue.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/parser_helpers.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/pattern_formatter.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/phoenix.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/pool_allocator.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/proc.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/process_exit_profiler.cpp

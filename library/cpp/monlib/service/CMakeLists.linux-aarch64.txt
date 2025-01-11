@@ -22,7 +22,6 @@ target_link_libraries(cpp-monlib-service PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-string_utils-base64
-  contrib-libs-protobuf
   cpp-coroutine-engine
   cpp-coroutine-listener
   cpp-http-fetch
@@ -30,6 +29,7 @@ target_link_libraries(cpp-monlib-service PUBLIC
   cpp-http-io
   library-cpp-logger
   cpp-malloc-api
+  cpp-protobuf-runtime
   library-cpp-svnversion
   library-cpp-uri
   library-cpp-cgiparam

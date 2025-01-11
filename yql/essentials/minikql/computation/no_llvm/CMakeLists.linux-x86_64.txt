@@ -44,6 +44,7 @@ target_link_libraries(minikql-computation-no_llvm PUBLIC
   essentials-minikql-computation
   parser-pg_wrapper-interface
   essentials-public-udf
+  public-udf-arrow
   yql-essentials-utils
   cpp-threading-future
 )

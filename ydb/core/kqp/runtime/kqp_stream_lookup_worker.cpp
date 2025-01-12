@@ -29,15 +29,10 @@ std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpSt
         int cmp = CompareTypedCellVectors(partCur.data(), range.From.data(), keyColumnTypes.data(),
                                           std::min(partCur.size(), range.From.size()));
         if (cmp < 0) {
-            idxStart = idxCur + 1;
+            idxStart = idxCur;
         } else {
             idxFinish = idxCur;
         }
-    }
-    if (idxStart > 0) {
-        idxStart -= 1;
-    } else if (idxStart >= partitionInfo->size()) {
-        idxStart = partitionInfo->size() - 1;
     }
 
     std::vector<TCell> minusInf(keyColumnTypes.size());

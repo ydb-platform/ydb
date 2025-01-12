@@ -24,7 +24,7 @@ namespace NYdb {
         // std::vector is used to prevent copying from c3 results
         struct TSuggestedToken final {
             TTokenId Number;
-            std::vector<TRuleId> ParseStack;
+            std::vector<TRuleId> ParserCallStack;
         };
 
         class IC3Engine {
@@ -98,15 +98,15 @@ namespace NYdb {
             static TVector<TSuggestedToken> Converted(c3::CandidatesCollection candidates) {
                 TVector<TSuggestedToken> converted;
                 for (const auto& [token, _] : candidates.tokens) {
-                    std::vector<TRuleId> parseStack;
+                    std::vector<TRuleId> parserCallStack;
 
                     if (
                         auto rules = candidates.rules.find(token);
                         rules != std::end(candidates.rules)) {
-                        parseStack = std::move(rules->second.ruleList);
+                        parserCallStack = std::move(rules->second.ruleList);
                     }
 
-                    converted.emplace_back(token, std::move(parseStack));
+                    converted.emplace_back(token, std::move(parserCallStack));
                 }
                 return converted;
             }

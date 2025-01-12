@@ -161,7 +161,7 @@ namespace NYdb {
         }
 
         bool IsIdKeyword(const TSuggestedToken& token) {
-            return AnyOf(token.ParseStack, [&](TRuleId rule) {
+            return AnyOf(token.ParserCallStack, [&](TRuleId rule) {
                 return Find(KeywordRules, rule) != std::end(KeywordRules);
             });
         }

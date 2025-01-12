@@ -18,3 +18,9 @@ ngtcp2 = CMakeNinjaNixProject(
         "ngtcp2": ["ngtcp2_crypto_quictls"],
     },
 )
+
+
+ngtcp2.copy_top_sources_except |= {
+    # This is just a git log, ignore it
+    "ChangeLog",
+}

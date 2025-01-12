@@ -32,6 +32,8 @@ namespace NYdb {
             RULE(Keyword_compat),
         };
 
+        // Parametrized by the syntax mode, as there is no guarantee that the 
+        // token and rule numbers (or even sets) will match in different modes.
         const antlr4::dfa::Vocabulary& GetVocabulary(EYQLSyntaxMode mode);
         std::unordered_set<TTokenId> GetIgnoredTokens(EYQLSyntaxMode mode);
         std::unordered_set<TRuleId> GetPreferredRules(EYQLSyntaxMode mode);

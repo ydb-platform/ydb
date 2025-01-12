@@ -170,7 +170,7 @@ void TListCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("path", &TThis::Path);
 
-    // NB: default value is an empty filter in contrast to GetCommand, for which it is the universal filter.
+    // NB: Default value is an empty filter in contrast to GetCommand, for which it is the universal filter.
     // Refer to YT-5543 for details.
     registrar.ParameterWithUniversalAccessor<TAttributeFilter>(
         "attributes",

@@ -1235,7 +1235,7 @@ TNetworkInterfaceStatisticsMap GetNetworkInterfaceStatistics()
         XX(Tx.Carrier);
         XX(Tx.Compressed);
 #undef XX
-        // NB: data is racy; duplicates are possible; just deal with it.
+        // NB: Data is racy; duplicates are possible; just deal with it.
         interfaceToStatistics.emplace(interfaceName, statistics);
     }
     return interfaceToStatistics;

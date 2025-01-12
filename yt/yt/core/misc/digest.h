@@ -32,10 +32,10 @@ DEFINE_REFCOUNTED_TYPE(IDigest)
 
 struct IPersistentDigest
     : public IDigest
-    , public NPhoenix2::IPersistent
+    , public NPhoenix::IPersistent
 {
-    using TLoadContext = NPhoenix2::TLoadContext;
-    using TSaveContext = NPhoenix2::TSaveContext;
+    using TLoadContext = NPhoenix::TLoadContext;
+    using TSaveContext = NPhoenix::TSaveContext;
 
     PHOENIX_DECLARE_POLYMORPHIC_TYPE(IPersistentDigest, 0x1ed99609);
 };

@@ -65,7 +65,7 @@ typedef struct ngtcp2_acktr_entry {
   };
 } ngtcp2_acktr_entry;
 
-ngtcp2_objalloc_decl(acktr_entry, ngtcp2_acktr_entry, oplent);
+ngtcp2_objalloc_decl(acktr_entry, ngtcp2_acktr_entry, oplent)
 
 /*
  * ngtcp2_acktr_entry_objalloc_new allocates memory for ent, and
@@ -108,7 +108,7 @@ typedef struct ngtcp2_acktr_ack_entry {
    expired and canceled. */
 #define NGTCP2_ACKTR_FLAG_CANCEL_TIMER 0x0100u
 
-ngtcp2_static_ringbuf_def(acks, 32, sizeof(ngtcp2_acktr_ack_entry));
+ngtcp2_static_ringbuf_def(acks, 32, sizeof(ngtcp2_acktr_ack_entry))
 
 /*
  * ngtcp2_acktr tracks received packets which we have to send ack.

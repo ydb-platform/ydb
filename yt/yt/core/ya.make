@@ -130,7 +130,7 @@ SRCS(
     misc/digest.cpp
     misc/error.cpp
     misc/fs.cpp
-    # NB: it is necessary to prevent linker optimization of
+    # NB: It is necessary to prevent linker optimization of
     # REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION macros for TGuid.
     GLOBAL misc/guid.cpp
     misc/hazard_ptr.cpp

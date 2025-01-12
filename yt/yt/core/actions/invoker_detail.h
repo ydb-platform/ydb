@@ -39,7 +39,7 @@ public:
     NThreading::TThreadId GetThreadId() const override;
     bool CheckAffinity(const IInvokerPtr& invoker) const override;
     bool IsSerialized() const override;
-    void RegisterWaitTimeObserver(IInvoker::TWaitTimeObserver waitTimeObserver) override;
+    DECLARE_SIGNAL_OVERRIDE(IInvoker::TWaitTimeObserver::TSignature, WaitTimeObserved);
 
 protected:
     const IInvokerPtr UnderlyingInvoker_;

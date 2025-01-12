@@ -37,10 +37,10 @@
 #include <openssl/rand.h>
 
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
-# error #include <openssl/core_names.h>
+#  error #include <openssl/core_names.h>
 #endif /* OPENSSL_VERSION_NUMBER >= 0x30000000L */
 
-#include "ngtcp2_crypto_shared.h"
+#include "shared.h"
 
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
 static int crypto_initialized;

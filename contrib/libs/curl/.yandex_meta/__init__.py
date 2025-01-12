@@ -83,9 +83,6 @@ def post_install(self):
 
         # add ifaddrs implementation if needed
         m.PEERDIR.add("contrib/libs/libc_compat")
-        m.PEERDIR.add("contrib/libs/openssl")
-        m.PEERDIR.add("contrib/libs/ngtcp2")
-        m.PEERDIR.add("contrib/libs/nghttp3")
 
         # make c-ares dependency conditional,
         # but leave ADDINCL in place to make CONFIGURE work

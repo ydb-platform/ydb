@@ -7,7 +7,7 @@ namespace NYT::NTableClient {
 TLoadContext::TLoadContext(
     IZeroCopyInput* input,
     TRowBufferPtr rowBuffer)
-    : NPhoenix2::TLoadContext(input)
+    : NPhoenix::TLoadContext(input)
     , RowBuffer_(std::move(rowBuffer))
 { }
 

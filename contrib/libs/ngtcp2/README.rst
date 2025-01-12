@@ -61,9 +61,9 @@ directory require at least one of the following TLS backends:
 - `quictls
   <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1w+quic>`_
 - GnuTLS >= 3.7.5
-- BoringSSL (commit 76968bb3d53982560bcf08bcd0ba3e1865fe15cd);
-  or aws-lc >= 1.19.0
-- Picotls (commit 89fe56f4d79200a5801a08ed3b6ac8322e01ccd5)
+- BoringSSL (commit c361e279402ec359834b7eaa7d737462d02675e1);
+  or aws-lc >= 1.39.0
+- Picotls (commit 402544bb65b35c3231a8912f25919de7e7922659)
 - wolfSSL >= 5.5.0
 - LibreSSL >= v3.9.2
 
@@ -81,7 +81,7 @@ Build with wolfSSL
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v5.7.2-stable https://github.com/wolfSSL/wolfssl
+   $ git clone --depth 1 -b v5.7.4-stable https://github.com/wolfSSL/wolfssl
    $ cd wolfssl
    $ autoreconf -i
    $ # For wolfSSL < v5.6.6, append --enable-quic.
@@ -114,7 +114,7 @@ Build with BoringSSL
 
    $ git clone https://boringssl.googlesource.com/boringssl
    $ cd boringssl
-   $ git checkout 76968bb3d53982560bcf08bcd0ba3e1865fe15cd
+   $ git checkout c361e279402ec359834b7eaa7d737462d02675e1
    $ cmake -B build -DCMAKE_POSITION_INDEPENDENT_CODE=ON
    $ make -j$(nproc) -C build
    $ cd ..
@@ -141,7 +141,7 @@ Build with aws-lc
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v1.36.1 https://github.com/aws/aws-lc
+   $ git clone --depth 1 -b v1.41.1 https://github.com/aws/aws-lc
    $ cd aws-lc
    $ cmake -B build -DDISABLE_GO=ON
    $ make -j$(nproc) -C build
@@ -169,8 +169,10 @@ Build with libressl
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v3.9.2 https://github.com/libressl/portable.git libressl
+   $ git clone --depth 1 -b v4.0.0 https://github.com/libressl/portable.git libressl
    $ cd libressl
+   $ # Workaround autogen.sh failure
+   $ export LIBRESSL_GIT_OPTIONS="-b libressl-v4.0.0"
    $ ./autogen.sh
    $ ./configure --prefix=$PWD/build
    $ make -j$(nproc) install

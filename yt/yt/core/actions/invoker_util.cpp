@@ -83,7 +83,10 @@ public:
         return InvalidThreadId;
     }
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver /*waitTimeObserver*/) override
+    void SubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
+    { }
+
+    void UnsubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
     { }
 
 private:
@@ -128,7 +131,10 @@ public:
         return InvalidThreadId;
     }
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver /*waitTimeObserver*/) override
+    void SubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
+    { }
+
+    void UnsubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
     { }
 };
 

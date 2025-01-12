@@ -6,7 +6,7 @@
 #include <yt/yt/core/misc/serialize.h>
 #include <yt/yt/core/misc/id_generator.h>
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -85,7 +85,7 @@ using TPersistenceContext = TCustomPersistenceContext<TSaveContext, TLoadContext
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix
 
 #define CONTEXT_INL_H_
 #include "context-inl.h"

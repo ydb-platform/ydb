@@ -25,7 +25,6 @@ def post_install(self):
                 {
                     "NOT OS_EMSCRIPTEN": Linkable(
                         SRCS=sources,
-                        CFLAGS=["-D_LIBUNWIND_IS_NATIVE_ONLY"],
                     ),
                     "OS_EMSCRIPTEN AND ARCH_WASM32": Linkable(
                         SRCS=["src/Unwind-wasm.c"],
@@ -39,7 +38,7 @@ def post_install(self):
                         PEERDIR=["contrib/restricted/emscripten/include"],
                         CFLAGS=[
                             "-D_LIBUNWIND_HIDE_SYMBOLS",
-                            "-D__USING_WASM_EXCEPTIONS__",
+                            "-D__WASM_EXCEPTIONS__",
                         ],
                     ),
                 }

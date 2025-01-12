@@ -27,6 +27,9 @@ target_include_directories(contrib-libs-ngtcp2 PUBLIC
 
 target_include_directories(contrib-libs-ngtcp2 PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/libs/ngtcp2
+  ${PROJECT_SOURCE_DIR}/contrib/libs/ngtcp2/crypto
+  ${PROJECT_SOURCE_DIR}/contrib/libs/ngtcp2/crypto/includes
+  ${PROJECT_SOURCE_DIR}/contrib/libs/ngtcp2/lib
 )
 
 target_link_libraries(contrib-libs-ngtcp2 PUBLIC
@@ -35,6 +38,8 @@ target_link_libraries(contrib-libs-ngtcp2 PUBLIC
 )
 
 target_sources(contrib-libs-ngtcp2 PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/ngtcp2/crypto/quictls/quictls.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/ngtcp2/crypto/shared.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/ngtcp2/lib/ngtcp2_acktr.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/ngtcp2/lib/ngtcp2_addr.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/ngtcp2/lib/ngtcp2_balloc.c
@@ -45,8 +50,6 @@ target_sources(contrib-libs-ngtcp2 PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/libs/ngtcp2/lib/ngtcp2_conn.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/ngtcp2/lib/ngtcp2_conv.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/ngtcp2/lib/ngtcp2_crypto.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/ngtcp2/lib/ngtcp2_crypto_quictls.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/ngtcp2/lib/ngtcp2_crypto_shared.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/ngtcp2/lib/ngtcp2_err.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/ngtcp2/lib/ngtcp2_frame_chain.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/ngtcp2/lib/ngtcp2_gaptr.c

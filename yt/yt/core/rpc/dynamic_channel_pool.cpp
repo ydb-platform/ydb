@@ -17,7 +17,7 @@
 
 #include <library/cpp/yt/misc/variant.h>
 
-#include <library/cpp/yt/small_containers/compact_set.h>
+#include <library/cpp/yt/compact_containers/compact_set.h>
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 

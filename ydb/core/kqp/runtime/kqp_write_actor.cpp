@@ -1573,11 +1573,14 @@ public:
                     writeInfo.WriteTableActor->Close(message.Token.Cookie);
                 }
 
-                AckQueue.push(TAckMessage{
-                    .ForwardActorId = message.From,
-                    .Token = message.Token,
-                    .DataSize = 0,
-                });
+                if (!message.Close) {
+                    YQL_ENSURE(false);
+                    AckQueue.push(TAckMessage{
+                        .ForwardActorId = message.From,
+                        .Token = message.Token,
+                        .DataSize = 0,
+                    });
+                }
 
                 queue.pop();
             }
@@ -2471,6 +2474,7 @@ private:
 
     void Handle(TEvBufferWriteResult::TPtr& result) {
         CA_LOG_D("TKqpForwardWriteActor recieve EvBufferWriteResult from " << BufferActorId);
+        // TODO: move
         EgressStats.Bytes += DataSize;
         EgressStats.Chunks++;
         EgressStats.Splits++;
@@ -2534,6 +2538,13 @@ private:
 
         CA_LOG_D("Send data=" << DataSize << ", closed=" << Closed << ", bufferActorId=" << BufferActorId);
         AFL_ENSURE(Send<ESendingType::Tail>(BufferActorId, ev.release()));
+
+        if (Closed) {
+            CA_LOG_D("Finished");
+            Callbacks->OnAsyncOutputFinished(GetOutputIndex());
+        } else {
+            YQL_ENSURE(false);
+        }
     }
 
     void CommitState(const NYql::NDqProto::TCheckpoint&) final {};

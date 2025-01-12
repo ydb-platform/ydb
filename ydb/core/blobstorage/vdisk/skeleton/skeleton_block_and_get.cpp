@@ -12,8 +12,6 @@
 namespace NKikimr {
 
 class TBlockAndGetActor : public TActorBootstrapped<TBlockAndGetActor> {
-private:
-    static constexpr auto VBLOCK_DEFAULT_DEADLINE_SECONDS = 50;
 public:
     TBlockAndGetActor() = delete;
     explicit TBlockAndGetActor(
@@ -40,13 +38,15 @@ public:
 
     void Bootstrap() {
         // create TEvVBlock request
+        const TInstant deadline = Request->Get()->Record.GetMsgQoS().HasDeadlineSeconds()
+            ? TInstant::Seconds(Request->Get()->Record.GetMsgQoS().GetDeadlineSeconds())
+            : TInstant::Max();
+
         auto request = std::make_unique<TEvBlobStorage::TEvVBlock>(
             Request->Get()->Record.GetForceBlockTabletData().GetId(),
             Request->Get()->Record.GetForceBlockTabletData().GetGeneration(),
             VDiskIDFromVDiskID(Request->Get()->Record.GetVDiskID()),
-            Request->Get()->Record.GetMsgQoS().HasDeadlineSeconds() ?
-                TInstant::Seconds(Request->Get()->Record.GetMsgQoS().GetDeadlineSeconds()) :
-                TInstant::Seconds(VBLOCK_DEFAULT_DEADLINE_SECONDS)
+            deadline
         );
 
         // send TEvVBlock request
@@ -62,11 +62,10 @@ public:
 
     void Handle(TEvBlobStorage::TEvVBlockResult::TPtr &ev) {
         switch (ev->Get()->Record.GetStatus()) {
-        case NKikimrProto::OK:
-            break;
-        case NKikimrProto::ALREADY:
-            break;
-        default: {
+            case NKikimrProto::OK:
+            case NKikimrProto::ALREADY:
+                break;
+            default: {
                 // we failed to block required generation, so return failure
                 auto response = NErrBuilder::ErroneousResult(
                     VCtx,

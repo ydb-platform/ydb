@@ -445,7 +445,7 @@ private:
 
     void RemoveOverdrawnIdleFibers()
     {
-        // NB: size_t to int conversion.
+        // NB: Size_t to int conversion.
         int size = IdleFibers_.size_approx();
         int maxSize = TFiberManager::GetMaxIdleFibers();
         if (size <= maxSize) {
@@ -1172,7 +1172,7 @@ void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
                 currentFiber,
                 canceler = std::move(canceler)
             ] (const TError&) mutable {
-                YT_LOG_DEBUG("Waking up fiber (TargetFiberId: %x)",
+                YT_LOG_TRACE("Waking up fiber (TargetFiberId: %x)",
                     canceler->GetFiberId());
 
                 invoker->Invoke(

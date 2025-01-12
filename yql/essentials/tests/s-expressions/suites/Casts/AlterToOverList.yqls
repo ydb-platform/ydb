@@ -4,7 +4,6 @@
 (import alterto_module '"alterto.yql")
 
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 # List<Int32> -> List<Uint16> (success)
 (let targetType (ListType (DataType 'Uint16)))

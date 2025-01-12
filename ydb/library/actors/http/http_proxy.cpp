@@ -6,48 +6,50 @@ namespace NHttp {
 
 class THttpProxy : public NActors::TActorBootstrapped<THttpProxy>, public THttpConfig {
 public:
-    IActor* AddListeningPort(TEvHttpProxy::TEvAddListeningPort::TPtr event, const NActors::TActorContext& ctx) {
-        IActor* listeningSocket = CreateHttpAcceptorActor(ctx.SelfID, Poller);
-        TActorId acceptorId = ctx.Register(listeningSocket);
-        ctx.Send(event->Forward(acceptorId));
+    using TBase = NActors::TActorBootstrapped<THttpProxy>;
+
+    IActor* AddListeningPort(TEvHttpProxy::TEvAddListeningPort::TPtr& event) {
+        IActor* listeningSocket = CreateHttpAcceptorActor(SelfId(), Poller);
+        TActorId acceptorId = Register(listeningSocket);
+        Send(event->Forward(acceptorId));
         Acceptors.emplace_back(acceptorId);
         return listeningSocket;
     }
 
-    IActor* AddOutgoingConnection(bool secure, const NActors::TActorContext& ctx) {
-        IActor* connectionSocket = CreateOutgoingConnectionActor(ctx.SelfID, secure, Poller);
-        TActorId connectionId = ctx.Register(connectionSocket);
+    IActor* AddOutgoingConnection(bool secure) {
+        IActor* connectionSocket = CreateOutgoingConnectionActor(SelfId(), secure, Poller);
+        TActorId connectionId = Register(connectionSocket);
         ALOG_DEBUG(HttpLog, "Connection created " << connectionId);
         Connections.emplace(connectionId);
         return connectionSocket;
     }
 
-    void Bootstrap(const NActors::TActorContext& ctx) {
-        Poller = ctx.Register(NActors::CreatePollerActor());
+    void Bootstrap() {
+        Poller = Register(NActors::CreatePollerActor());
         Become(&THttpProxy::StateWork);
     }
 
-    THttpProxy(std::weak_ptr<NMonitoring::TMetricRegistry> registry)
+    THttpProxy(std::weak_ptr<NMonitoring::IMetricFactory> registry)
         : Registry(std::move(registry))
     {}
 
     static constexpr char ActorName[] = "HTTP_PROXY_ACTOR";
 
 protected:
-    STFUNC(StateWork) {
+    STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvHttpProxy::TEvAddListeningPort, Handle);
-            HFunc(TEvHttpProxy::TEvRegisterHandler, Handle);
-            HFunc(TEvHttpProxy::TEvHttpIncomingRequest, Handle);
-            HFunc(TEvHttpProxy::TEvHttpOutgoingRequest, Handle);
-            HFunc(TEvHttpProxy::TEvHttpIncomingResponse, Handle);
-            HFunc(TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
-            HFunc(TEvHttpProxy::TEvHttpAcceptorClosed, Handle);
-            HFunc(TEvHttpProxy::TEvHttpOutgoingConnectionAvailable, Handle);
-            HFunc(TEvHttpProxy::TEvHttpOutgoingConnectionClosed, Handle);
-            HFunc(TEvHttpProxy::TEvResolveHostRequest, Handle);
-            HFunc(TEvHttpProxy::TEvReportSensors, Handle);
-            HFunc(NActors::TEvents::TEvPoison, Handle);
+            hFunc(TEvHttpProxy::TEvAddListeningPort, Handle);
+            hFunc(TEvHttpProxy::TEvRegisterHandler, Handle);
+            hFunc(TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            hFunc(TEvHttpProxy::TEvHttpOutgoingRequest, Handle);
+            hFunc(TEvHttpProxy::TEvHttpIncomingResponse, Handle);
+            hFunc(TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
+            hFunc(TEvHttpProxy::TEvHttpAcceptorClosed, Handle);
+            hFunc(TEvHttpProxy::TEvHttpOutgoingConnectionAvailable, Handle);
+            hFunc(TEvHttpProxy::TEvHttpOutgoingConnectionClosed, Handle);
+            hFunc(TEvHttpProxy::TEvResolveHostRequest, Handle);
+            hFunc(TEvHttpProxy::TEvReportSensors, Handle);
+            hFunc(NActors::TEvents::TEvPoison, Handle);
         }
     }
 
@@ -59,16 +61,16 @@ protected:
         for (const NActors::TActorId& acceptor : Acceptors) {
             Send(acceptor, new NActors::TEvents::TEvPoisonPill());
         }
-        NActors::TActorBootstrapped<THttpProxy>::PassAway();
+        TBase::PassAway();
     }
 
-    void Handle(TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
+    void Handle(TEvHttpProxy::TEvHttpIncomingRequest::TPtr& event) {
         TStringBuf url = event->Get()->Request->URL.Before('?');
         THashMap<TString, TActorId>::iterator it;
         while (!url.empty()) {
             it = Handlers.find(url);
             if (it != Handlers.end()) {
-                ctx.Send(event->Forward(it->second));
+                Send(event->Forward(it->second));
                 return;
             } else {
                 if (url.EndsWith('/')) {
@@ -83,22 +85,20 @@ protected:
                 }
             }
         }
-        ctx.Send(event->Sender, new TEvHttpProxy::TEvHttpOutgoingResponse(event->Get()->Request->CreateResponseNotFound()));
+        Send(event->Sender, new TEvHttpProxy::TEvHttpOutgoingResponse(event->Get()->Request->CreateResponseNotFound()));
     }
 
-    void Handle(TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
+    void Handle(TEvHttpProxy::TEvHttpIncomingResponse::TPtr& event) {
         Y_UNUSED(event);
-        Y_UNUSED(ctx);
-        Y_ABORT("This event shouldn't be there, it should go to the http connection owner directly");
+        ALOG_ERROR(HttpLog, "Event TEvHttpIncomingResponse shouldn't be in proxy, it should go to the http connection owner directly");
     }
 
-    void Handle(TEvHttpProxy::TEvHttpOutgoingResponse::TPtr event, const NActors::TActorContext& ctx) {
+    void Handle(TEvHttpProxy::TEvHttpOutgoingResponse::TPtr& event) {
         Y_UNUSED(event);
-        Y_UNUSED(ctx);
-        Y_ABORT("This event shouldn't be there, it should go to the http connection directly");
+        ALOG_ERROR(HttpLog, "Event TEvHttpOutgoingResponse shouldn't be in proxy, it should go to the http connection directly");
     }
 
-    void Handle(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event, const NActors::TActorContext& ctx) {
+    void Handle(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
         if (event->Get()->AllowConnectionReuse) {
             auto destination = event->Get()->Request->GetDestination();
             auto itAvailableConnection = AvailableConnections.find(destination);
@@ -106,22 +106,22 @@ protected:
                 TActorId availableConnection = itAvailableConnection->second;
                 ALOG_DEBUG(HttpLog, "Reusing connection " << availableConnection << " for destination " << destination);
                 AvailableConnections.erase(itAvailableConnection);
-                ctx.Send(event->Forward(availableConnection));
+                Send(event->Forward(availableConnection));
                 return;
             } else {
                 ALOG_DEBUG(HttpLog, "Creating a new connection for destination " << destination);
             }
         }
         bool secure(event->Get()->Request->Secure);
-        NActors::IActor* actor = AddOutgoingConnection(secure, ctx);
-        ctx.Send(event->Forward(actor->SelfId()));
+        NActors::IActor* actor = AddOutgoingConnection(secure);
+        Send(event->Forward(actor->SelfId()));
     }
 
-    void Handle(TEvHttpProxy::TEvAddListeningPort::TPtr event, const NActors::TActorContext& ctx) {
-        AddListeningPort(event, ctx);
+    void Handle(TEvHttpProxy::TEvAddListeningPort::TPtr& event) {
+        AddListeningPort(event);
     }
 
-    void Handle(TEvHttpProxy::TEvHttpAcceptorClosed::TPtr event, const NActors::TActorContext&) {
+    void Handle(TEvHttpProxy::TEvHttpAcceptorClosed::TPtr& event) {
         for (auto it = Acceptors.begin(); it != Acceptors.end(); ++it) {
             if (*it == event->Get()->ConnectionID) {
                 Acceptors.erase(it);
@@ -130,12 +130,12 @@ protected:
         }
     }
 
-    void Handle(TEvHttpProxy::TEvHttpOutgoingConnectionAvailable::TPtr event, const NActors::TActorContext&) {
+    void Handle(TEvHttpProxy::TEvHttpOutgoingConnectionAvailable::TPtr& event) {
         ALOG_DEBUG(HttpLog, "Connection " << event->Get()->ConnectionID << " available for destination " << event->Get()->Destination);
         AvailableConnections.emplace(event->Get()->Destination, event->Get()->ConnectionID);
     }
 
-    void Handle(TEvHttpProxy::TEvHttpOutgoingConnectionClosed::TPtr event, const NActors::TActorContext&) {
+    void Handle(TEvHttpProxy::TEvHttpOutgoingConnectionClosed::TPtr& event) {
         ALOG_DEBUG(HttpLog, "Connection closed " << event->Get()->ConnectionID);
         Connections.erase(event->Get()->ConnectionID);
         auto range = AvailableConnections.equal_range(event->Get()->Destination);
@@ -147,15 +147,15 @@ protected:
         }
     }
 
-    void Handle(TEvHttpProxy::TEvRegisterHandler::TPtr event, const NActors::TActorContext& ctx) {
-        LOG_TRACE_S(ctx, HttpLog, "Register handler " << event->Get()->Path << " to " << event->Get()->Handler);
+    void Handle(TEvHttpProxy::TEvRegisterHandler::TPtr& event) {
+        ALOG_TRACE(HttpLog, "Register handler " << event->Get()->Path << " to " << event->Get()->Handler);
         Handlers[event->Get()->Path] = event->Get()->Handler;
     }
 
-    void Handle(TEvHttpProxy::TEvResolveHostRequest::TPtr event, const NActors::TActorContext& ctx) {
+    void Handle(TEvHttpProxy::TEvResolveHostRequest::TPtr& event) {
         const TString& host(event->Get()->Host);
         auto it = Hosts.find(host);
-        if (it == Hosts.end() || it->second.DeadlineTime < ctx.Now()) {
+        if (it == Hosts.end() || it->second.DeadlineTime < NActors::TActivationContext::Now()) {
             TString addressPart;
             TIpPort portPart = 0;
             CrackAddress(host, addressPart, portPart);
@@ -164,13 +164,13 @@ protected:
                     it = Hosts.emplace(host, THostEntry()).first;
                 }
                 it->second.Address = std::make_shared<TSockAddrInet6>(addressPart.data(), portPart);
-                it->second.DeadlineTime = ctx.Now() + HostsTimeToLive;
+                it->second.DeadlineTime = NActors::TActivationContext::Now() + HostsTimeToLive;
             } else if (IsIPv4(addressPart)) {
                 if (it == Hosts.end()) {
                     it = Hosts.emplace(host, THostEntry()).first;
                 }
                 it->second.Address = std::make_shared<TSockAddrInet>(addressPart.data(), portPart);
-                it->second.DeadlineTime = ctx.Now() + HostsTimeToLive;
+                it->second.DeadlineTime = NActors::TActivationContext::Now() + HostsTimeToLive;
             } else {
                 // TODO(xenoxeno): move to another, possible blocking actor
                 try {
@@ -180,7 +180,7 @@ protected:
                         ++pAddr;
                     }
                     if (pAddr == addr.End()) {
-                        ctx.Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse("Invalid address family resolved"));
+                        Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse("Invalid address family resolved"));
                         return;
                     }
                     THttpConfig::SocketAddressType address;
@@ -194,20 +194,20 @@ protected:
                     }
                     if (address) {
                         memcpy(address->SockAddr(), pAddr->ai_addr, pAddr->ai_addrlen);
-                        LOG_DEBUG_S(ctx, HttpLog, "Host " << host << " resolved to " << address->ToString());
+                        ALOG_DEBUG(HttpLog, "Host " << host << " resolved to " << address->ToString());
                         if (it == Hosts.end()) {
                             it = Hosts.emplace(host, THostEntry()).first;
                         }
                         it->second.Address = address;
-                        it->second.DeadlineTime = ctx.Now() + HostsTimeToLive;
+                        it->second.DeadlineTime = NActors::TActivationContext::Now() + HostsTimeToLive;
                     }
                 }
                 catch (const TNetworkResolutionError& e) {
                     if (it != Hosts.end()) {
-                        ctx.Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse(it->first, it->second.Address));
+                        Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse(it->first, it->second.Address));
                         return;
                     } else {
-                        ctx.Send(event->Sender,
+                        Send(event->Sender,
                             new TEvHttpProxy::TEvResolveHostResponse(
                                 TStringBuilder()
                                     << "Resolution failed and no stale cached value has been found to fallback.\n"
@@ -219,51 +219,51 @@ protected:
                     }
                 }
                 catch (const yexception& e) {
-                    ctx.Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse(e.what()));
+                    Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse(e.what()));
                     return;
                 }
             }
         }
-        ctx.Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse(it->first, it->second.Address));
+        Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse(it->first, it->second.Address));
     }
 
-    void Handle(TEvHttpProxy::TEvReportSensors::TPtr event, const NActors::TActorContext&) {
+    void Handle(TEvHttpProxy::TEvReportSensors::TPtr event) {
         const TEvHttpProxy::TEvReportSensors& sensors(*event->Get());
         const static TString urlNotFound = "not-found";
         const TString& url = (sensors.Status == "404" ? urlNotFound : sensors.Url);
 
-        std::shared_ptr<NMonitoring::TMetricRegistry> registry = Registry.lock();
+        std::shared_ptr<NMonitoring::IMetricFactory> registry = Registry.lock();
         if (registry) {
-            registry->Rate(
+            registry->Rate(NMonitoring::MakeLabels(
                 {
                     {"sensor", "count"},
                     {"direction", sensors.Direction},
                     {"peer", sensors.Host},
                     {"url", url},
                     {"status", sensors.Status}
-                })->Inc();
-            registry->HistogramRate(
+                }))->Inc();
+            registry->HistogramRate(NMonitoring::MakeLabels(
                 {
                     {"sensor", "time_us"},
                     {"direction", sensors.Direction},
                     {"peer", sensors.Host},
                     {"url", url},
                     {"status", sensors.Status}
-                },
+                }),
                 NMonitoring::ExplicitHistogram({1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 30000, 60000}))->Record(sensors.Time.MicroSeconds());
-            registry->HistogramRate(
+            registry->HistogramRate(NMonitoring::MakeLabels(
                 {
                     {"sensor", "time_ms"},
                     {"direction", sensors.Direction},
                     {"peer", sensors.Host},
                     {"url", url},
                     {"status", sensors.Status}
-                },
+                }),
                 NMonitoring::ExplicitHistogram({1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 30000, 60000}))->Record(sensors.Time.MilliSeconds());
         }
     }
 
-    void Handle(NActors::TEvents::TEvPoison::TPtr, const NActors::TActorContext&) {
+    void Handle(NActors::TEvents::TEvPoison::TPtr&) {
         for (const TActorId& acceptor : Acceptors) {
             Send(acceptor, new NActors::TEvents::TEvPoisonPill());
         }
@@ -287,7 +287,7 @@ protected:
     THashMap<TString, TActorId> Handlers;
     THashSet<TActorId> Connections; // outgoing
     std::unordered_multimap<TString, TActorId> AvailableConnections;
-    std::weak_ptr<NMonitoring::TMetricRegistry> Registry;
+    std::weak_ptr<NMonitoring::IMetricFactory> Registry;
 };
 
 TEvHttpProxy::TEvReportSensors* BuildOutgoingRequestSensors(const THttpOutgoingRequestPtr& request, const THttpIncomingResponsePtr& response) {
@@ -314,7 +314,7 @@ TEvHttpProxy::TEvReportSensors* BuildIncomingRequestSensors(const THttpIncomingR
     );
 }
 
-NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::TMetricRegistry> registry) {
+NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::IMetricFactory> registry) {
     return new THttpProxy(std::move(registry));
 }
 
@@ -377,28 +377,75 @@ void CrackAddress(const TString& address, TString& hostname, TIpPort& port) {
     }
 }
 
-
-void TrimBegin(TStringBuf& target, char delim) {
+TStringBuf TrimBegin(TStringBuf target, char delim) {
     while (!target.empty() && *target.begin() == delim) {
         target.Skip(1);
     }
+    return target;
 }
 
-void TrimEnd(TStringBuf& target, char delim) {
+TStringBuf TrimEnd(TStringBuf target, char delim) {
     while (!target.empty() && target.back() == delim) {
         target.Trunc(target.size() - 1);
     }
+    return target;
 }
 
-void Trim(TStringBuf& target, char delim) {
-    TrimBegin(target, delim);
-    TrimEnd(target, delim);
+TStringBuf Trim(TStringBuf target, char delim) {
+    target = TrimBegin(target, delim);
+    target = TrimEnd(target, delim);
+    return target;
 }
 
 void TrimEnd(TString& target, char delim) {
     while (!target.empty() && target.back() == delim) {
         target.resize(target.size() - 1);
     }
+}
+
+TString GetObfuscatedData(TString data, const THeaders& headers) {
+    TStringBuf authorization(headers["Authorization"]);
+    TStringBuf cookie(headers["Cookie"]);
+    TStringBuf set_cookie(headers["Set-Cookie"]);
+    TStringBuf x_ydb_auth_ticket(headers["x-ydb-auth-ticket"]);
+    TStringBuf x_yacloud_subjecttoken(headers["x-yacloud-subjecttoken"]);
+    if (!authorization.empty()) {
+        auto pos = data.find(authorization);
+        if (pos != TString::npos) {
+            data.replace(pos, authorization.size(), TString("<obfuscated>"));
+        }
+    }
+    if (!cookie.empty()) {
+        auto pos = data.find(cookie);
+        if (pos != TString::npos) {
+            data.replace(pos, cookie.size(), TString("<obfuscated>"));
+        }
+    }
+    if (!set_cookie.empty()) {
+        auto pos = data.find(set_cookie);
+        if (pos != TString::npos) {
+            data.replace(pos, set_cookie.size(), TString("<obfuscated>"));
+        }
+    }
+    if (!x_ydb_auth_ticket.empty()) {
+        auto pos = data.find(x_ydb_auth_ticket);
+        if (pos != TString::npos) {
+            data.replace(pos, x_ydb_auth_ticket.size(), TString("<obfuscated>"));
+        }
+    }
+    if (!x_yacloud_subjecttoken.empty()) {
+        auto pos = data.find(x_yacloud_subjecttoken);
+        if (pos != TString::npos) {
+            data.replace(pos, x_yacloud_subjecttoken.size(), TString("<obfuscated>"));
+        }
+    }
+    return data;
+}
+
+TString ToHex(size_t value) {
+    std::ostringstream hex;
+    hex << std::hex << value;
+    return hex.str();
 }
 
 }

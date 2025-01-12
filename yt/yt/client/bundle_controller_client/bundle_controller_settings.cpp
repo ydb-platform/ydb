@@ -32,6 +32,8 @@ void TMemoryLimits::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("reserved", &TThis::Reserved)
         .Optional();
+    registrar.Parameter("query", &TThis::Query)
+        .Optional();
 }
 
 void TInstanceResources::Register(TRegistrar registrar)
@@ -42,21 +44,50 @@ void TInstanceResources::Register(TRegistrar registrar)
     registrar.Parameter("memory", &TThis::Memory)
         .GreaterThanOrEqual(0)
         .Default(120_GB);
-    registrar.Parameter("net", &TThis::Net)
+    registrar.Parameter("net", &TThis::NetBits)
+        .Optional();
+    registrar.Parameter("net_bytes", &TThis::NetBytes)
         .Optional();
     registrar.Parameter("type", &TThis::Type)
         .Default();
+
+    registrar.Postprocessor([] (TThis* config) {
+        if (config->NetBits.has_value() && config->NetBytes.has_value() && *config->NetBits != *config->NetBytes * 8) {
+            THROW_ERROR_EXCEPTION("Net parameters are not equal")
+                << TErrorAttribute("net_bytes", config->NetBytes)
+                << TErrorAttribute("net_bits", config->NetBits);
+        }
+
+        config->CanonizeNet();
+    });
 }
 
 void TInstanceResources::Clear()
 {
     Vcpu = 0;
     Memory = 0;
+    ResetNet();
+}
+
+void TInstanceResources::CanonizeNet()
+{
+    // COMPAT(grachevkirill)
+    if (NetBytes.has_value()) {
+        NetBits = *NetBytes * 8;
+    } else if (NetBits.has_value()) {
+        NetBytes = *NetBits / 8;
+    }
+}
+
+void TInstanceResources::ResetNet()
+{
+    NetBits.reset();
+    NetBytes.reset();
 }
 
 bool TInstanceResources::operator==(const TInstanceResources& other) const
 {
-    return std::tie(Vcpu, Memory, Net) == std::tie(other.Vcpu, other.Memory, other.Net);
+    return std::tie(Vcpu, Memory, NetBytes) == std::tie(other.Vcpu, other.Memory, other.NetBytes);
 }
 
 void TDefaultInstanceConfig::Register(TRegistrar registrar)
@@ -112,9 +143,27 @@ void TBundleResourceQuota::Register(TRegistrar registrar)
         .GreaterThanOrEqual(0)
         .Default(0);
 
-    registrar.Parameter("network", &TThis::Network)
+    registrar.Parameter("network", &TThis::NetworkBits)
         .GreaterThanOrEqual(0)
         .Default(0);
+    registrar.Parameter("network_bytes", &TThis::NetworkBytes)
+        .GreaterThanOrEqual(0)
+        .Default(0);
+
+    registrar.Postprocessor([] (TThis* config) {
+        if (config->NetworkBits != 0 && config->NetworkBytes != 0 && config->NetworkBits != config->NetworkBytes * 8) {
+            THROW_ERROR_EXCEPTION("Network parameters are not equal")
+                << TErrorAttribute("network_bytes", config->NetworkBytes)
+                << TErrorAttribute("network_bits", config->NetworkBits);
+        }
+
+        // COMPAT(grachevkirill)
+        if (config->NetworkBytes != 0) {
+            config->NetworkBits = config->NetworkBytes * 8;
+        } else if (config->NetworkBits != 0) {
+            config->NetworkBytes = config->NetworkBits / 8;
+        }
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -158,6 +207,8 @@ void ToProto(NBundleController::NProto::TMemoryLimits* protoMemoryLimits, const 
     YT_TOPROTO_OPTIONAL_PTR(protoMemoryLimits, versioned_chunk_meta, memoryLimits, VersionedChunkMeta);
 
     YT_TOPROTO_OPTIONAL_PTR(protoMemoryLimits, reserved, memoryLimits, Reserved);
+
+    YT_TOPROTO_OPTIONAL_PTR(protoMemoryLimits, query, memoryLimits, Query);
 }
 
 void FromProto(NBundleControllerClient::TMemoryLimitsPtr memoryLimits, const NBundleController::NProto::TMemoryLimits* protoMemoryLimits)
@@ -174,6 +225,8 @@ void FromProto(NBundleControllerClient::TMemoryLimitsPtr memoryLimits, const NBu
     YT_FROMPROTO_OPTIONAL_PTR(protoMemoryLimits, versioned_chunk_meta, memoryLimits, VersionedChunkMeta);
 
     YT_FROMPROTO_OPTIONAL_PTR(protoMemoryLimits, reserved, memoryLimits, Reserved);
+
+    YT_FROMPROTO_OPTIONAL_PTR(protoMemoryLimits, query, memoryLimits, Query);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -182,7 +235,9 @@ void ToProto(NBundleController::NProto::TInstanceResources* protoInstanceResourc
 {
     if (instanceResources == nullptr) return;
     protoInstanceResources->set_memory(instanceResources->Memory);
-    YT_TOPROTO_OPTIONAL_PTR(protoInstanceResources, net, instanceResources, Net);
+    // COMPAT(grachevkirill)
+    YT_VERIFY(instanceResources->NetBytes.has_value() || !instanceResources->NetBits.has_value());
+    YT_TOPROTO_OPTIONAL_PTR(protoInstanceResources, net_bytes, instanceResources, NetBytes);
     protoInstanceResources->set_type(instanceResources->Type);
     protoInstanceResources->set_vcpu(instanceResources->Vcpu);
 }
@@ -190,9 +245,11 @@ void ToProto(NBundleController::NProto::TInstanceResources* protoInstanceResourc
 void FromProto(NBundleControllerClient::TInstanceResourcesPtr instanceResources, const NBundleController::NProto::TInstanceResources* protoInstanceResources)
 {
     YT_FROMPROTO_OPTIONAL_PTR(protoInstanceResources, memory, instanceResources, Memory);
-    YT_FROMPROTO_OPTIONAL_PTR(protoInstanceResources, net, instanceResources, Net);
+    YT_FROMPROTO_OPTIONAL_PTR(protoInstanceResources, net_bytes, instanceResources, NetBytes);
     YT_FROMPROTO_OPTIONAL_PTR(protoInstanceResources, type, instanceResources, Type);
     YT_FROMPROTO_OPTIONAL_PTR(protoInstanceResources, vcpu, instanceResources, Vcpu);
+    // COMPAT(grachevkirill): Remove later.
+    instanceResources->CanonizeNet();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

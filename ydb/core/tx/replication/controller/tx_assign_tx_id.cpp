@@ -49,7 +49,7 @@ class TController::TTxAssignTxId: public TTxBase {
                 }
 
                 auto& item = *ev->Record.AddVersionTxIds();
-                it->first.Serialize(*item.MutableVersion());
+                it->first.ToProto(item.MutableVersion());
                 item.SetTxId(txId);
             }
 
@@ -84,10 +84,12 @@ public:
             }
 
             if (Self->AssignedTxIds.size() >= MaxOpenTxIds) {
+                Self->TabletCounters->Cumulative()[COUNTER_TOO_MANY_OPEN_TX_IDS] += 1;
                 return EError::TooManyOpenTxIds;
             }
 
             if (Self->AllocatedTxIds.empty()) {
+                Self->TabletCounters->Cumulative()[COUNTER_TX_IDS_EXHAUSTED] += 1;
                 return EError::TxIdsExhausted;
             }
 
@@ -139,6 +141,10 @@ public:
             << ", allocated# " << Self->AllocatedTxIds.size()
             << ", exhausted# " << TxIdsExhausted);
 
+        Self->TabletCounters->Simple()[COUNTER_PENDING_VERSIONS] = Self->PendingTxId.size();
+        Self->TabletCounters->Simple()[COUNTER_ALLOCATED_TX_IDS] = Self->AllocatedTxIds.size();
+        Self->TabletCounters->Simple()[COUNTER_ASSIGNED_TX_IDS] = Self->AssignedTxIds.size();
+
         for (auto& [nodeId, ev] : Result) {
             ctx.Send(MakeReplicationServiceId(nodeId), std::move(ev));
         }
@@ -170,6 +176,7 @@ void TController::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, cons
     std::copy(ev->Get()->TxIds.begin(), ev->Get()->TxIds.end(), std::back_inserter(AllocatedTxIds));
     AllocateTxIdInFlight = false;
 
+    TabletCounters->Simple()[COUNTER_ALLOCATED_TX_IDS] = AllocatedTxIds.size();
     RunTxAssignTxId(ctx);
 }
 

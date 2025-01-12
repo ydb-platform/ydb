@@ -155,7 +155,7 @@ public:
         FormatHandler = CreateTestFormatHandler(config, settings);
     }
 
-    TStatus MakeClient(const TVector<TSchemaColumn>& columns, const TString& whereFilter, TCallback callback, ui64 expectedFilteredRows = 1) {
+    [[nodiscard]] TStatus MakeClient(const TVector<TSchemaColumn>& columns, const TString& whereFilter, TCallback callback, ui64 expectedFilteredRows = 1) {
         ClientIds.emplace_back(ClientIds.size(), 0, 0, 0);
 
         auto client = MakeIntrusive<TClientDataConsumer>(ClientIds.back(), columns, whereFilter, callback, expectedFilteredRows);
@@ -202,6 +202,30 @@ public:
         FormatHandler->RemoveClient(clientId);
     }
 
+public:
+    static TCallback EmptyCheck() {
+        return [&](TQueue<std::pair<TRope, TVector<ui64>>>&& /* data */) {};
+    }
+
+    static TCallback OneBatchCheck(std::function<void(TRope&& messages, TVector<ui64>&& offsets)> callback) {
+        return [callback](TQueue<std::pair<TRope, TVector<ui64>>>&& data) {
+            UNIT_ASSERT_VALUES_EQUAL(data.size(), 1);
+            auto [messages, offsets] = data.front();
+
+            UNIT_ASSERT(!offsets.empty());
+            callback(std::move(messages), std::move(offsets));
+        };
+    }
+
+    TCallback OneRowCheck(ui64 offset, const TRow& row) const {
+        return OneBatchCheck([this, offset, row](TRope&& messages, TVector<ui64>&& offsets) {
+            UNIT_ASSERT_VALUES_EQUAL(offsets.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(offsets.front(), offset);
+
+            CheckMessageBatch(messages, TBatch().AddRow(row));
+        });
+    }
+
 private:
     void ExtractClientsData() {
         for (auto& client : Clients) {
@@ -233,33 +257,13 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             {commonColumn, {"col_first", "[DataType; String]"}},
             "WHERE col_first = \"str_first__large__\"",
-            [&](TQueue<std::pair<TRope, TVector<ui64>>>&& data) {
-                UNIT_ASSERT_VALUES_EQUAL(data.size(), 1);
-
-                auto [messages, offsets] = data.front();
-                UNIT_ASSERT_VALUES_EQUAL(offsets.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(offsets.front(), firstOffset + 1);
-
-                CheckMessageBatch(messages, TBatch().AddRow(
-                    TRow().AddString("event2").AddString("str_first__large__")
-                ));
-            }
+            OneRowCheck(firstOffset + 1, TRow().AddString("event2").AddString("str_first__large__"))
         ));
 
         CheckSuccess(MakeClient(
             {commonColumn, {"col_second", "[DataType; String]"}},
             "WHERE col_second = \"str_second\"",
-            [&](TQueue<std::pair<TRope, TVector<ui64>>>&& data) {
-                UNIT_ASSERT_VALUES_EQUAL(data.size(), 1);
-
-                auto [messages, offsets] = data.front();
-                UNIT_ASSERT_VALUES_EQUAL(offsets.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(offsets.front(), firstOffset);
-
-                CheckMessageBatch(messages, TBatch().AddRow(
-                    TRow().AddString("event1").AddString("str_second")
-                ));
-            }
+            OneRowCheck(firstOffset, TRow().AddString("event1").AddString("str_second"))
         ));
 
         ParseMessages({
@@ -288,14 +292,10 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
             R"({"col_a": false, "col_b": {"X": "Y"}})"
         };
 
-        CheckSuccess(MakeClient(schema, "WHERE FALSE", [&](TQueue<std::pair<TRope, TVector<ui64>>>&&) {}, 0));
+        CheckSuccess(MakeClient(schema, "WHERE FALSE", EmptyCheck(), 0));
 
-        auto trueChacker = [&](TQueue<std::pair<TRope, TVector<ui64>>>&& data) {
-            UNIT_ASSERT_VALUES_EQUAL(data.size(), 1);
-            auto [messages, offsets] = data.front();
-
+        const auto trueChacker = OneBatchCheck([&](TRope&& messages, TVector<ui64>&& offsets) {
             TBatch expectedBatch;
-            UNIT_ASSERT(!offsets.empty());
             for (ui64 offset : offsets) {
                 UNIT_ASSERT(offset - firstOffset < testData.size());
                 expectedBatch.AddRow(
@@ -304,7 +304,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
             }
 
             CheckMessageBatch(messages, expectedBatch);
-        };
+        });
         CheckSuccess(MakeClient(schema, "WHERE TRUE", trueChacker, 3));
         CheckSuccess(MakeClient(schema, "", trueChacker, 2));
 
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
     Y_UNIT_TEST_F(ClientValidation, TFormatHadlerFixture) {
         const TVector<TSchemaColumn> schema = {{"data", "[DataType; String]"}};
         const TString filter = "WHERE FALSE";
-        const auto callback = [&](TQueue<std::pair<TRope, TVector<ui64>>>&&) {};
+        const auto callback = EmptyCheck();
         CheckSuccess(MakeClient(schema, filter, callback, 0));
 
         CheckError(
@@ -349,27 +349,12 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         const ui64 firstOffset = 42;
         const TSchemaColumn commonColumn = {"com_col", "[DataType; String]"};
 
-        CheckSuccess(MakeClient(
-            {commonColumn, {"col_first", "[OptionalType; [DataType; Uint8]]"}},
-            "WHERE TRUE",
-            [&](TQueue<std::pair<TRope, TVector<ui64>>>&& data) {},
-            0
-        ));
+        CheckSuccess(MakeClient({commonColumn, {"col_first", "[OptionalType; [DataType; Uint8]]"}}, "WHERE TRUE", EmptyCheck(), 0));
 
         CheckSuccess(MakeClient(
             {commonColumn, {"col_second", "[DataType; String]"}},
             "WHERE col_second = \"str_second\"",
-            [&](TQueue<std::pair<TRope, TVector<ui64>>>&& data) {
-                UNIT_ASSERT_VALUES_EQUAL(data.size(), 1);
-
-                auto [messages, offsets] = data.front();
-                UNIT_ASSERT_VALUES_EQUAL(offsets.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(offsets.front(), firstOffset);
-
-                CheckMessageBatch(messages, TBatch().AddRow(
-                    TRow().AddString("event1").AddString("str_second")
-                ));
-            }
+            OneRowCheck(firstOffset, TRow().AddString("event1").AddString("str_second"))
         ));
 
         CheckClientError(
@@ -377,6 +362,26 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
             ClientIds[0],
             EStatusId::BAD_REQUEST,
             TStringBuilder() << "Failed to parse json string at offset " << firstOffset << ", got parsing error for column 'col_first' with type [OptionalType; [DataType; Uint8]]"
+        );
+    }
+
+    Y_UNIT_TEST_F(ClientErrorWithEmptyFilter, TFormatHadlerFixture) {
+        const ui64 firstOffset = 42;
+        const TSchemaColumn commonColumn = {"com_col", "[DataType; String]"};
+
+        CheckSuccess(MakeClient({commonColumn, {"col_first", "[DataType; String]"}}, "", EmptyCheck(), 0));
+
+        CheckSuccess(MakeClient(
+            {commonColumn, {"col_second", "[DataType; String]"}},
+            "WHERE col_second = \"str_second\"",
+            OneRowCheck(firstOffset, TRow().AddString("event1").AddString("str_second"))
+        ));
+
+        CheckClientError(
+            {GetMessage(firstOffset, R"({"com_col": "event1", "col_second": "str_second"})")},
+            ClientIds[0],
+            EStatusId::PRECONDITION_FAILED,
+            TStringBuilder() << "Failed to parse json messages, found 1 missing values from offset " << firstOffset << " in non optional column 'col_first' with type [DataType; String]"
         );
     }
 }

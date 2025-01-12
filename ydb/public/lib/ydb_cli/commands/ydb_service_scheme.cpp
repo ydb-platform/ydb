@@ -3,6 +3,7 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #include <util/string/join.h>
@@ -86,8 +87,9 @@ int TCommandRemoveDirectory::Run(TConfig& config) {
     if (Recursive) {
         NTable::TTableClient tableClient(driver);
         NTopic::TTopicClient topicClient(driver);
+        NQuery::TQueryClient queryClient(driver);
         const auto prompt = Prompt.GetOrElse(ERecursiveRemovePrompt::Once);
-        ThrowOnError(RemoveDirectoryRecursive(schemeClient, tableClient, topicClient, Path, prompt, settings));
+        ThrowOnError(RemoveDirectoryRecursive(schemeClient, tableClient, &topicClient, &queryClient, Path, prompt, settings));
     } else {
         if (Prompt) {
             if (!NConsoleClient::Prompt(*Prompt, Path, NScheme::ESchemeEntryType::Directory)) {
@@ -544,6 +546,15 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
         break;
     case NReplication::TConnectionParams::ECredentials::OAuth:
         Cout << Endl << "OAuth token (SECRET): " << connParams.GetOAuthCredentials().TokenSecretName;
+        break;
+    }
+
+    Cout << Endl << "Consistency level: " << desc.GetConsistencyLevel();
+    switch (desc.GetConsistencyLevel()) {
+    case NReplication::TReplicationDescription::EConsistencyLevel::Row:
+        break;
+    case NReplication::TReplicationDescription::EConsistencyLevel::Global:
+        Cout << Endl << "Commit interval: " << desc.GetGlobalConsistency().GetCommitInterval();
         break;
     }
 

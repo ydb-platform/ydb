@@ -161,7 +161,7 @@ TSharedRef PackRefs(const T& parts)
 
     WritePod(output, static_cast<i32>(parts.size()));
     for (const auto& ref : parts) {
-        WritePod(output, static_cast<i64>(ref.Size()));
+        WritePod(output, std::ssize(ref));
         WriteRef(output, ref);
     }
 
@@ -515,7 +515,7 @@ struct TValueBoundSerializer
     { };
 
     template <class T, class C>
-        requires (NPhoenix2::SupportsPhoenix2<T> || !NPhoenix2::SupportsPersist<T, C>)
+        requires (NPhoenix::SupportsPhoenix<T> || !NPhoenix::SupportsPersist<T, C>)
     struct TSaver<
         T,
         C,
@@ -529,7 +529,7 @@ struct TValueBoundSerializer
     };
 
     template <class T, class C>
-        requires (NPhoenix2::SupportsPhoenix2<T> || !NPhoenix2::SupportsPersist<T, C>)
+        requires (NPhoenix::SupportsPhoenix<T> || !NPhoenix::SupportsPersist<T, C>)
     struct TLoader<
         T,
         C,
@@ -542,7 +542,7 @@ struct TValueBoundSerializer
     };
 
     template <class T, class C>
-        requires (!NPhoenix2::SupportsPhoenix2<T>)
+        requires (!NPhoenix::SupportsPhoenix<T>)
     struct TSaver<
         T,
         C,
@@ -555,7 +555,7 @@ struct TValueBoundSerializer
     };
 
     template <class T, class C>
-        requires (!NPhoenix2::SupportsPhoenix2<T>)
+        requires (!NPhoenix::SupportsPhoenix<T>)
     struct TLoader<
         T,
         C,

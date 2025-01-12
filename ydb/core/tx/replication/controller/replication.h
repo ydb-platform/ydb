@@ -110,6 +110,7 @@ public:
     const ITarget* FindTarget(ui64 id) const;
     ITarget* FindTarget(ui64 id);
     void RemoveTarget(ui64 id);
+    const TVector<TString>& GetTargetTablePaths() const;
 
     void Progress(const TActorContext& ctx);
     void Shutdown(const TActorContext& ctx);

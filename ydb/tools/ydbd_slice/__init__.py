@@ -2,12 +2,14 @@ import os
 import sys
 import json
 import signal
-import shutil
 import tempfile
 import logging
 import argparse
 import subprocess
 import warnings
+
+import library.python.resource as rs
+
 from urllib3.exceptions import HTTPWarning
 
 from ydb.tools.cfg.walle import NopHostsInformationProvider
@@ -22,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 HELP = '''
-\033[92mKiKiMR Developer's Slice Deployment Tool\x1b[0m
+\033[92mYDBD Developer's Slice Deployment Tool\x1b[0m
 
 See examples of cluster.yaml here
     https://cs.yandex-team.ru/#!,kikimr%%2F.*%%2Fcluster.yaml,,arcadia
@@ -34,6 +36,9 @@ Guide for ad-hoc Kubernetes operations could be found here
     https://docs.yandex-team.ru/ydb-tech/ops/kubernetes/howto/
 
 \033[96mCommands for Traditional Developer's Slices\x1b[0m
+
+\033[95msample-config\033[94m - get sample configuration for cluster:
+    %(prog)s sample-config --cluster-type=block-4-2-8-nodes --output-file=cluster.yaml
 
 \033[95minstall\033[94m - full install process from scratch:
     %(prog)s install cluster.yaml --arcadia
@@ -295,6 +300,12 @@ def deduce_components_from_args(args, cluster_details):
     if 'dynamic_slots' in result:
         result['dynamic_slots'] = ['all']
 
+    if hasattr(args, "confirm"):
+        confirm = args.confirm
+    else:
+        confirm = True
+    result['confirm'] = confirm
+
     logger.debug("active components is '%s'", result)
     return result
 
@@ -380,20 +391,20 @@ def arcadia_root(begin_path='.'):
 
 
 def deduce_kikimr_bin_from_args(args):
-    if args.kikimr is not None:
-        path = os.path.abspath(args.kikimr)
+    if args.binary is not None:
+        path = os.path.abspath(args.binary)
     elif args.arcadia:
         root = arcadia_root()
         path = ya_build(root, YDBD_EXECUTABLE, args.build_args, args.dry_run)
     else:
-        sys.exit("unable to deduce kikimr bin")
+        sys.exit("unable to deduce ydbd bin")
 
     if 'LD_LIBRARY_PATH' not in os.environ:
         os.environ['LD_LIBRARY_PATH'] = os.path.dirname(path)
 
-    compressed_path = args.kikimr_lz4
+    compressed_path = args.binary_lz4
 
-    logger.info("use kikimr bin '%s'", path)
+    logger.info("use ydbd bin '%s'", path)
     return path, compressed_path
 
 
@@ -443,7 +454,7 @@ def log_args():
         "--clear_logs",
         dest='clear_logs',
         action='store_true',
-        help="stop rsyslogd and erase all kikimr logs"
+        help="stop rsyslogd and erase all ydbd logs"
     )
     return args
 
@@ -451,15 +462,16 @@ def log_args():
 def binaries_args():
     args = argparse.ArgumentParser(add_help=False)
     args.add_argument(
+        "--binary",
         "--kikimr",
         metavar="BIN",
         default=None,
-        help="explicit path to kikimr"
+        help="explicit path to ydbd"
     )
     args.add_argument(
-        "--kikimr-lz4",
+        "--binary-lz4",
         metavar="PATH",
-        help="explicit path to compressed kikimr binary file used for transfer acceleration"
+        help="explicit path to compressed ydbd binary file used for transfer acceleration"
     )
     args.add_argument(
         "--arcadia",
@@ -487,6 +499,7 @@ def component_args():
              "multiple choice from: 'all', 'kikimr[={bin|cfg}]', "
              "'dynamic_slots'"
              "'all' is default",
+             # TODO(shmel1k@): change me
     )
     return args
 
@@ -499,7 +512,62 @@ def ssh_args():
         metavar="SSH_USER",
         default=current_user,
         help="user for ssh interaction with slice. Default value is $USER "
-             "(which equals {user} now)".format(user=current_user),
+        "(which equals {user} now)".format(user=current_user),
+    )
+    return args
+
+
+def with_confirmation():
+    args = argparse.ArgumentParser(add_help=False)
+    args.add_argument(
+        "--confirm",
+        "-y",
+        action="store_true",
+        default=False,
+        help="Confirm slice installation"
+    )
+    return args
+
+
+def databases_config_path_args():
+    args = argparse.ArgumentParser(add_help=False)
+    args.add_argument(
+        "--databases-config",
+        metavar="DATABASES_CONFIG",
+        default="",
+        required=False,
+        help="Path to file with databases configuration",
+    )
+    return args
+
+
+def cluster_type_args():
+    args = argparse.ArgumentParser(add_help=False)
+    available_erasure_types = [
+        "block-4-2-8-nodes",
+        "block-4-2-4-nodes",
+        "block-4-2-2-nodes",
+        "mirror-3-dc-3-nodes",
+        "mirror-3-dc-9-nodes",
+        "none-1-node",
+    ]
+    args.add_argument(
+        "--cluster-type",
+        metavar="CLUSTER_TYPE",
+        required=True,
+        help="Erasure type for slice.\nAvailable types: " + ", ".join(available_erasure_types),
+        choices=available_erasure_types,
+    )
+    return args
+
+
+def output_file():
+    args = argparse.ArgumentParser(add_help=False)
+    args.add_argument(
+        "--output-file",
+        metavar="OUTPUT_FILE",
+        required=False,
+        help="File to save cluster configuration",
     )
     return args
 
@@ -546,7 +614,12 @@ def add_explain_mode(modes, walle_provider):
     mode.set_defaults(handler=_run)
 
 
-def dispatch_run(func, args, walle_provider):
+def dispatch_run(func, args, walle_provider, need_confirmation=False):
+    if need_confirmation and not __confirm(args):
+        print("Aborting slice installation/formatting")
+        # TODO(shmel1k@): add confirmation message.
+        return
+
     logger.debug("run func '%s' with cmd args is '%s'", func.__name__, args)
 
     cluster_details = safe_load_cluster_details(args.cluster, walle_provider)
@@ -583,19 +656,52 @@ def dispatch_run(func, args, walle_provider):
 
     if clear_tmp:
         logger.debug("remove temp dirs '%s'", temp_dir)
-        shutil.rmtree(temp_dir)
+        # shutil.rmtree(temp_dir)
+
+
+def __confirm(args) -> bool:
+    if hasattr(args, "confirm") and args.confirm:
+        return True
+
+    confirm = input(
+        "You are trying to setup or format slice. Note, that during setup or format all previous data will be erased.\n"
+        + "Press [y] to continue or [n] to abort installation/formatting: "
+    )
+    for i in range(0, 3):
+        lw = confirm.strip().lower()
+        if lw == "n":
+            return False
+        if lw == "y":
+            return True
+        confirm = input("Enter [y] or [n]")
+    lw = confirm.strip().lower()
+    if lw == "n":
+        return False
+    if lw == "y":
+        return True
+
+    return False
 
 
 def add_install_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.Slice.slice_install, args, walle_provider)
+        dispatch_run(handlers.Slice.slice_install, args, walle_provider, True)
 
     mode = modes.add_parser(
         "install",
         conflict_handler='resolve',
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), log_args(), ssh_args()],
+        parents=[
+            direct_nodes_args(),
+            cluster_description_args(),
+            binaries_args(),
+            component_args(),
+            log_args(),
+            ssh_args(),
+            with_confirmation(),
+            # databases_config_path_args(),
+        ],
         description="Full installation of the cluster from scratch. "
-                    "You can use --hosts to specify particular hosts. But it is tricky."
+        "You can use --hosts to specify particular hosts. But it is tricky.",
     )
     mode.set_defaults(handler=_run)
 
@@ -607,17 +713,23 @@ def add_update_mode(modes, walle_provider):
     mode = modes.add_parser(
         "update",
         conflict_handler='resolve',
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), log_args(), ssh_args()],
+        parents=[
+            direct_nodes_args(),
+            cluster_description_args(),
+            binaries_args(),
+            component_args(),
+            log_args(),
+            ssh_args(),
+        ],
         description="Minor cluster update, just binary and cfg. No additional configuration is performed."
-                    "Stop all kikimr instances at the nodes, sync binary and cfg, start the instances. "
-                    "Use --hosts to specify particular hosts."
+        "Stop all ydbd instances at the nodes, sync binary and cfg, start the instances. "
+        "Use --hosts to specify particular hosts.",
     )
     mode.set_defaults(handler=_run)
 
 
 def add_update_raw_configs(modes, walle_provider):
     def _run(args):
-
         dispatch_run(lambda self: handlers.Slice.slice_update_raw_configs(self, args.raw_cfg), args, walle_provider)
 
     mode = modes.add_parser(
@@ -642,7 +754,7 @@ def add_stop_mode(modes, walle_provider):
     mode = modes.add_parser(
         "stop",
         parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
-        description="Stop kikimr static instaneces at the nodes. "
+        description="Stop ydbd static instances at the nodes. "
                     "If option components specified, try to stop particular component. "
                     "Use --hosts to specify particular hosts."
     )
@@ -656,7 +768,7 @@ def add_start_mode(modes, walle_provider):
     mode = modes.add_parser(
         "start",
         parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
-        description="Start all kikimr instances at the nodes. "
+        description="Start all ydbd instances at the nodes. "
                     "If option components specified, try to start particular component. "
                     "Otherwise only kikimr-multi-all will be started. "
                     "Use --hosts to specify particular hosts."
@@ -666,32 +778,80 @@ def add_start_mode(modes, walle_provider):
 
 def add_clear_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.Slice.slice_clear, args, walle_provider)
+        dispatch_run(handlers.Slice.slice_clear, args, walle_provider, True)
 
     mode = modes.add_parser(
         "clear",
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
-        description="Stop all kikimr instances at the nodes, format all kikimr drivers, shutdown dynamic slots. "
-                    "And don't start nodes afrer it. "
-                    "Use --hosts to specify particular hosts."
+        parents=[
+            direct_nodes_args(),
+            cluster_description_args(),
+            binaries_args(),
+            component_args(),
+            ssh_args(),
+            with_confirmation(),
+        ],
+        description="Stop all ydbd instances at the nodes, format all ydbd drives, shutdown dynamic slots. "
+        "And don't start nodes after it. "
+        "Use --hosts to specify particular hosts.",
     )
     mode.set_defaults(handler=_run)
 
 
 def add_format_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.Slice.slice_format, args, walle_provider)
+        dispatch_run(handlers.Slice.slice_format, args, walle_provider, True)
 
     mode = modes.add_parser(
         "format",
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
-        description="Stop all kikimr instances at the nodes, format all kikimr drivers at the nodes, start the instances. "
-                    "If you call format for all cluster, you will spoil it. "
-                    "Additional dynamic configuration will required after it. "
-                    "If you call format for few nodes, cluster will regenerate after it. "
-                    "Use --hosts to specify particular hosts."
-
+        parents=[
+            direct_nodes_args(),
+            cluster_description_args(),
+            binaries_args(),
+            component_args(),
+            ssh_args(),
+            with_confirmation(),
+        ],
+        description="Stop all ydbd instances at the nodes, format all ydbd drives at the nodes, start the instances. "
+        "If you call format for all cluster, you will spoil it. "
+        "Additional dynamic configuration will required after it. "
+        "If you call format for few nodes, cluster will regenerate after it. "
+        "Use --hosts to specify particular hosts.",
     )
+    mode.set_defaults(handler=_run)
+
+
+def add_sample_config_mode(modes):
+    def _run(args):
+        cluster_type = args.cluster_type
+        template_path = ""
+        if cluster_type == "block-4-2-8-nodes":
+            template_path = "/ydbd_slice/baremetal/templates/block-4-2-8-nodes.yaml"
+        elif cluster_type == "block-4-2-4-nodes":
+            template_path = "/ydbd_slice/baremetal/templates/block-4-2-4-nodes.yaml"
+        elif cluster_type == "block-4-2-2-nodes":
+            template_path = "/ydbd_slice/baremetal/templates/block-4-2-2-nodes.yaml"
+        elif cluster_type == "none-1-node":
+            template_path = "/ydbd_slice/baremetal/templates/none-1-node.yaml"
+        elif cluster_type == "mirror-3-dc-3-nodes":
+            template_path = "/ydbd_slice/baremetal/templates/mirror-3-dc-3-nodes.yaml"
+        elif cluster_type == "mirror-3-dc-9-nodes":
+            template_path = "/ydbd_slice/baremetal/templates/mirror-3-dc-9-nodes.yaml"
+        else:
+            raise "Unreachable code"  # TODO(shmel1k@): improve error
+
+        f = rs.find(template_path).decode()
+        if args.output_file is not None and args.output_file != "":
+            with open(args.output_file, "w+") as f1:
+                f1.write(f)
+        else:
+            print(f)
+
+    mode = modes.add_parser(
+        "sample-config",
+        parents=[cluster_type_args(), output_file()],
+        description="Generate default mock-configuration for provided cluster-type"
+    )
+
     mode.set_defaults(handler=_run)
 
 
@@ -1205,6 +1365,8 @@ def main(walle_provider=None):
         add_clear_mode(modes, walle_provider)
         add_format_mode(modes, walle_provider)
         add_explain_mode(modes, walle_provider)
+        add_sample_config_mode(modes)
+
         add_docker_build_mode(modes)
         add_kube_generate_mode(modes)
         add_kube_install_mode(modes)

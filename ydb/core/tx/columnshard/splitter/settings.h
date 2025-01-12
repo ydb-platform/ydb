@@ -26,6 +26,10 @@ private:
     YDB_ACCESSOR(i64, MaxPortionSize, DefaultMaxPortionSize);
 
 public:
+    static TSplitSettings BuildForTests(const double scaleKff = 1) {
+        return TSplitSettings().SetMaxBlobSize(1024 * 10 * scaleKff).SetMinBlobSize(256 * 10 * scaleKff);
+    }
+
     ui64 GetExpectedRecordsCountOnPage() const {
         return 1.5 * MinRecordsCount;
     }

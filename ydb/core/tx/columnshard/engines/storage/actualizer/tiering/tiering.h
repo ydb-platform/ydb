@@ -1,9 +1,11 @@
 #pragma once
 #include "counters.h"
+
+#include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
-#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
-#include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
+#include <ydb/core/tx/tiering/manager.h>
 
 namespace NKikimr::NOlap {
 class TTiering;
@@ -116,6 +118,7 @@ private:
     std::shared_ptr<ISnapshotSchema> TargetCriticalSchema;
     const ui64 PathId;
     const TVersionedIndex& VersionedIndex;
+    const std::shared_ptr<IStoragesManager>& StoragesManager;
 
     THashMap<TRWAddress, TRWAddressPortionsInfo> PortionIdByWaitDuration;
     THashMap<ui64, TFindActualizationInfo> PortionsInfo;
@@ -138,11 +141,13 @@ public:
 
     void Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext);
 
-    TTieringActualizer(const ui64 pathId, const TVersionedIndex& versionedIndex)
+    TTieringActualizer(const ui64 pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager)
         : PathId(pathId)
         , VersionedIndex(versionedIndex)
+        , StoragesManager(storagesManager)
     {
         Y_UNUSED(PathId);
+        AFL_VERIFY(StoragesManager);
     }
 };
 

@@ -153,7 +153,8 @@ void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo::T
         NIceDb::TUpdate<Schema::Exports::Settings>(exportInfo->Settings),
         NIceDb::TUpdate<Schema::Exports::DomainPathOwnerId>(exportInfo->DomainPathId.OwnerId),
         NIceDb::TUpdate<Schema::Exports::DomainPathId>(exportInfo->DomainPathId.LocalPathId),
-        NIceDb::TUpdate<Schema::Exports::Items>(exportInfo->Items.size())
+        NIceDb::TUpdate<Schema::Exports::Items>(exportInfo->Items.size()),
+        NIceDb::TUpdate<Schema::Exports::EnableChecksums>(exportInfo->EnableChecksums)
     );
 
     if (exportInfo->UserSID) {

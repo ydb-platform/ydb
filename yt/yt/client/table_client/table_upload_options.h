@@ -13,7 +13,7 @@
 
 #include <yt/yt/core/compression/public.h>
 
-#include <yt/yt/core/misc/phoenix.h>
+#include <yt/yt/core/phoenix/context.h>
 
 namespace NYT::NTableClient {
 

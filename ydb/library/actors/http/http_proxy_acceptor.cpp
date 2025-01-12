@@ -7,6 +7,8 @@ namespace NHttp {
 class TAcceptorActor : public NActors::TActor<TAcceptorActor>, public THttpConfig {
 public:
     using TBase = NActors::TActor<TAcceptorActor>;
+    using TBase::Schedule;
+
     const TActorId Owner;
     const TActorId Poller;
     TIntrusivePtr<TSocketDescriptor> Socket;
@@ -26,22 +28,22 @@ public:
     static constexpr char ActorName[] = "HTTP_ACCEPTOR_ACTOR";
 
 protected:
-    STFUNC(StateListening) {
+    STATEFN(StateListening) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NActors::TEvPollerRegisterResult, Handle);
-            HFunc(NActors::TEvPollerReady, Handle);
-            HFunc(TEvHttpProxy::TEvHttpIncomingConnectionClosed, Handle);
-            HFunc(TEvHttpProxy::TEvReportSensors, Handle);
+            hFunc(NActors::TEvPollerRegisterResult, Handle);
+            hFunc(NActors::TEvPollerReady, Handle);
+            hFunc(TEvHttpProxy::TEvHttpIncomingConnectionClosed, Handle);
+            hFunc(TEvHttpProxy::TEvReportSensors, Handle);
         }
     }
 
-    STFUNC(StateInit) {
+    STATEFN(StateInit) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvHttpProxy::TEvAddListeningPort, HandleInit);
+            hFunc(TEvHttpProxy::TEvAddListeningPort, HandleInit);
         }
     }
 
-    void HandleInit(TEvHttpProxy::TEvAddListeningPort::TPtr event, const NActors::TActorContext& ctx) {
+    void HandleInit(TEvHttpProxy::TEvAddListeningPort::TPtr& event) {
         TString address = event->Get()->Address;
         ui16 port = event->Get()->Port;
         MaxRecycledRequestsCount = event->Get()->MaxRecycledRequestsCount;
@@ -53,7 +55,7 @@ protected:
 #endif
         SocketAddressType bindAddress(Socket->Socket.MakeAddress(address, port));
         Endpoint = std::make_shared<TPrivateEndpointInfo>(event->Get()->CompressContentTypes);
-        Endpoint->Owner = ctx.SelfID;
+        Endpoint->Owner = SelfId();
         Endpoint->Proxy = Owner;
         Endpoint->WorkerName = event->Get()->WorkerName;
         Endpoint->Secure = event->Get()->Secure;
@@ -69,14 +71,13 @@ protected:
             }
             if (Endpoint->SecureContext == nullptr) {
                 err = -1;
-                LOG_WARN_S(ctx, HttpLog, "Failed to construct server security context");
+                ALOG_WARN(HttpLog, "Failed to construct server security context");
             }
         }
         if (err == 0) {
             err = Socket->Socket.Bind(bindAddress.get());
             if (err != 0) {
-                LOG_WARN_S(
-                    ctx,
+                ALOG_WARN(
                     HttpLog,
                     "Failed to bind " << bindAddress->ToString()
                     << ", code: " << err);
@@ -86,37 +87,36 @@ protected:
         if (err == 0) {
             err = Socket->Socket.Listen(LISTEN_QUEUE);
             if (err == 0) {
-                LOG_INFO_S(ctx, HttpLog, "Listening on " << schema << bindAddress->ToString());
+                ALOG_INFO(HttpLog, "Listening on " << schema << bindAddress->ToString());
                 SetNonBlock(Socket->Socket);
-                ctx.Send(Poller, new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
+                Send(Poller, new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
                 TBase::Become(&TAcceptorActor::StateListening);
-                ctx.Send(event->Sender, new TEvHttpProxy::TEvConfirmListen(bindAddress, Endpoint), 0, event->Cookie);
+                Send(event->Sender, new TEvHttpProxy::TEvConfirmListen(bindAddress, Endpoint), 0, event->Cookie);
                 return;
             } else {
-                LOG_WARN_S(
-                    ctx,
+                ALOG_WARN(
                     HttpLog,
                     "Failed to listen on " << schema << bindAddress->ToString()
                     << ", code: " << err);
             }
         }
-        LOG_WARN_S(ctx, HttpLog, "Failed to init - retrying...");
-        ctx.ExecutorThread.Schedule(TDuration::Seconds(1), event.Release());
+        ALOG_WARN(HttpLog, "Failed to init - retrying...");
+        NActors::TlsActivationContext->ExecutorThread.Schedule(TDuration::Seconds(1), event.Release());
     }
 
-    void Die(const NActors::TActorContext& ctx) override {
-        ctx.Send(Owner, new TEvHttpProxy::TEvHttpAcceptorClosed(ctx.SelfID));
+    void PassAway() override {
+        Send(Owner, new TEvHttpProxy::TEvHttpAcceptorClosed(SelfId()));
         for (const NActors::TActorId& connection : Connections) {
-            ctx.Send(connection, new NActors::TEvents::TEvPoisonPill());
+            Send(connection, new NActors::TEvents::TEvPoisonPill());
         }
     }
 
-    void Handle(NActors::TEvPollerRegisterResult::TPtr ev, const NActors::TActorContext& /*ctx*/) {
+    void Handle(NActors::TEvPollerRegisterResult::TPtr& ev) {
         PollerToken = std::move(ev->Get()->PollerToken);
         PollerToken->Request(true, false); // request read polling
     }
 
-    void Handle(NActors::TEvPollerReady::TPtr, const NActors::TActorContext& ctx) {
+    void Handle(NActors::TEvPollerReady::TPtr&) {
         for (;;) {
             SocketAddressType addr;
             std::optional<SocketType> s = Socket->Socket.Accept(addr);
@@ -137,13 +137,13 @@ protected:
                 connectionSocket = CreateIncomingConnectionActor(Endpoint, socket, addr, std::move(RecycledRequests.front()));
                 RecycledRequests.pop_front();
             }
-            NActors::TActorId connectionId = ctx.Register(connectionSocket);
-            ctx.Send(Poller, new NActors::TEvPollerRegister(socket, connectionId, connectionId));
+            NActors::TActorId connectionId = Register(connectionSocket);
+            Send(Poller, new NActors::TEvPollerRegister(socket, connectionId, connectionId));
             Connections.emplace(connectionId);
         }
     }
 
-    void Handle(TEvHttpProxy::TEvHttpIncomingConnectionClosed::TPtr event, const NActors::TActorContext&) {
+    void Handle(TEvHttpProxy::TEvHttpIncomingConnectionClosed::TPtr& event) {
         Connections.erase(event->Get()->ConnectionID);
         for (auto& req : event->Get()->RecycledRequests) {
             if (RecycledRequests.size() >= MaxRecycledRequestsCount) {
@@ -154,8 +154,8 @@ protected:
         }
     }
 
-    void Handle(TEvHttpProxy::TEvReportSensors::TPtr event, const NActors::TActorContext& ctx) {
-        ctx.Send(event->Forward(Owner));
+    void Handle(TEvHttpProxy::TEvReportSensors::TPtr& event) {
+        Send(event->Forward(Owner));
     }
 };
 

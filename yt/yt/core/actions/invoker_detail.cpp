@@ -46,9 +46,15 @@ bool TInvokerWrapper<VirtualizeBase>::IsSerialized() const
 }
 
 template <bool VirtualizeBase>
-void TInvokerWrapper<VirtualizeBase>::RegisterWaitTimeObserver(IInvoker::TWaitTimeObserver waitTimeObserver)
+void TInvokerWrapper<VirtualizeBase>::SubscribeWaitTimeObserved(const IInvoker::TWaitTimeObserver& callback)
 {
-    return UnderlyingInvoker_->RegisterWaitTimeObserver(waitTimeObserver);
+    return UnderlyingInvoker_->SubscribeWaitTimeObserved(callback);
+}
+
+template <bool VirtualizeBase>
+void TInvokerWrapper<VirtualizeBase>::UnsubscribeWaitTimeObserved(const IInvoker::TWaitTimeObserver& callback)
+{
+    return UnderlyingInvoker_->SubscribeWaitTimeObserved(callback);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

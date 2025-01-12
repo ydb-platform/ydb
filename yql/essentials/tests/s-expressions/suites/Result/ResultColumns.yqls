@@ -1,7 +1,6 @@
 (
 #comment
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 (let row1 (AsStruct '('key (String 'key1)) '('subkey (String '.)) '('value (String 'value1))))
 (let row2 (AsStruct '('key (String 'key2)) '('subkey (String '.)) '('value (String 'value2))))

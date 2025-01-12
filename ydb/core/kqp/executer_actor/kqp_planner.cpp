@@ -85,6 +85,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     : TxId(args.TxId)
     , LockTxId(args.LockTxId)
     , LockNodeId(args.LockNodeId)
+    , LockMode(args.LockMode)
     , ExecuterId(args.Executer)
     , Snapshot(args.Snapshot)
     , Database(args.Database)
@@ -206,6 +207,9 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     if (LockTxId) {
         request.SetLockTxId(*LockTxId);
         request.SetLockNodeId(LockNodeId);
+    }
+    if (LockMode) {
+        request.SetLockMode(*LockMode);
     }
     ActorIdToProto(ExecuterId, request.MutableExecuterActorId());
 
@@ -487,6 +491,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .TxId = TxId,
         .LockTxId = LockTxId,
         .LockNodeId = LockNodeId,
+        .LockMode = LockMode,
         .Task = taskDesc,
         .TxInfo = TxInfo,
         .RuntimeSettings = settings,

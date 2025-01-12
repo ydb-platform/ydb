@@ -53,6 +53,7 @@
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/fq/libs/metrics/sanitize_label.h>
 #include <ydb/core/fq/libs/private_client/internal_service.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -360,8 +361,7 @@ private:
         const TString queryId = task.query_id().value();
         const bool isStreaming = task.query_type() == FederatedQuery::QueryContent::STREAMING;
         TString queryIdLabel;
-        // todo: sanitize query name
-        TString queryNameLabel = task.query_name();
+        TString queryNameLabel = SanitizeLabel(task.query_name());
         if (task.automatic()) {
             queryIdLabel = isStreaming ? "streaming" : "analytics";
         } else if (isStreaming) {

@@ -1,5 +1,8 @@
 #include "histogram.h"
 
+#include <yt/yt/core/phoenix/type_decl.h>
+#include <yt/yt/core/phoenix/type_def.h>
+
 #include <yt/yt/core/yson/public.h>
 
 #include <yt/yt/core/ytree/fluent.h>
@@ -14,7 +17,6 @@ using namespace NPhoenix;
 
 class THistogram
     : public IHistogram
-    , public NPhoenix::TFactoryTag<NPhoenix::TSimpleFactory>
 {
 public:
     THistogram() = default;
@@ -74,29 +76,14 @@ public:
         return result;
     }
 
-    void Persist(const TPersistenceContext& context) override
-    {
-        using NYT::Persist;
-        Persist(context, MaxBuckets_);
-        Persist(context, ValueMin_);
-        Persist(context, ValueMax_);
-        Persist(context, Items_);
-    }
-
 private:
-    struct TItem {
+    struct TItem
+    {
         i64 Value;
         i64 Count;
 
-        void Persist(const TPersistenceContext& context)
-        {
-            using NYT::Persist;
-            Persist(context, Value);
-            Persist(context, Count);
-        }
+        PHOENIX_DECLARE_TYPE(TItem, 0x9860143c);
     };
-
-    DECLARE_DYNAMIC_PHOENIX_TYPE(THistogram, 0x636d76d7);
 
     static const i64 HistogramViewReserveFactor = 2;
 
@@ -139,9 +126,30 @@ private:
             View_.Count[GetBucketIndex(item.Value)] += item.Count;
         }
     }
+
+    PHOENIX_DECLARE_FRIEND();
+    PHOENIX_DECLARE_POLYMORPHIC_TYPE(THistogram, 0x636d76d7);
 };
 
-DEFINE_DYNAMIC_PHOENIX_TYPE(THistogram);
+void THistogram::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, MaxBuckets_);
+    PHOENIX_REGISTER_FIELD(2, ValueMin_);
+    PHOENIX_REGISTER_FIELD(3, ValueMax_);
+    PHOENIX_REGISTER_FIELD(4, Items_);
+}
+
+PHOENIX_DEFINE_TYPE(THistogram);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void THistogram::TItem::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, Value);
+    PHOENIX_REGISTER_FIELD(2, Count);
+}
+
+PHOENIX_DEFINE_TYPE(THistogram::TItem);
 
 ////////////////////////////////////////////////////////////////////////////////
 

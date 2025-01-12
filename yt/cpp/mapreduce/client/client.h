@@ -333,7 +333,7 @@ protected:
 
 private:
     ITransactionPingerPtr TransactionPinger_;
-    THolder<TPingableTransaction> PingableTx_;
+    std::unique_ptr<TPingableTransaction> PingableTx_;
     TClientPtr ParentClient_;
 };
 
@@ -495,19 +495,14 @@ protected:
     TClientPtr GetParentClientImpl() override;
 
 private:
-    template <class TOptions>
-    void SetTabletParams(
-        THttpHeader& header,
-        const TYPath& path,
-        const TOptions& options);
-
     void CheckShutdown() const;
 
+private:
     ITransactionPingerPtr TransactionPinger_;
 
     std::atomic<bool> Shutdown_ = false;
     TMutex Lock_;
-    THolder<TYtPoller> YtPoller_;
+    std::unique_ptr<TYtPoller> YtPoller_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

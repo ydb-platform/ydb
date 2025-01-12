@@ -1,10 +1,14 @@
 LIBRARY()
 
 SRCS(
-    fetched_data.cpp
     columns_set.cpp
-    iterator.cpp
+    constructor.cpp
     context.cpp
+    fetch_steps.cpp
+    fetched_data.cpp
+    fetching.cpp
+    iterator.cpp
+    source.cpp
 )
 
 PEERDIR(

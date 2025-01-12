@@ -1,6 +1,9 @@
 #include "distconf.h"
 #include "node_warden_impl.h"
 #include <ydb/core/mind/dynamic_nameserver.h>
+#include <ydb/library/yaml_config/yaml_config_helpers.h>
+#include <ydb/library/yaml_config/yaml_config.h>
+#include <library/cpp/streams/zstd/zstd.h>
 
 namespace NKikimr::NStorage {
 
@@ -19,10 +22,11 @@ namespace NKikimr::NStorage {
         STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
 
         auto ns = NNodeBroker::BuildNameserverTable(Cfg->NameserviceConfig);
-        auto ev = std::make_unique<TEvInterconnect::TEvNodesInfo>();
+        auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
         for (const auto& [nodeId, item] : ns->StaticNodeTable) {
-            ev->Nodes.emplace_back(nodeId, item.Address, item.Host, item.ResolveHost, item.Port, item.Location);
+            nodes->emplace_back(nodeId, item.Address, item.Host, item.ResolveHost, item.Port, item.Location);
         }
+        auto ev = std::make_unique<TEvInterconnect::TEvNodesInfo>(nodes);
         Send(SelfId(), ev.release());
 
         // and subscribe for the node list too
@@ -60,16 +64,48 @@ namespace NKikimr::NStorage {
 
     bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
         if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration()) {
+            StorageConfigYaml = StorageConfigFetchYaml = {};
+            StorageConfigFetchYamlHash = 0;
+            StorageConfigYamlVersion.reset();
+
+            if (config.HasConfigComposite()) {
+                try {
+                    // parse the composite stream
+                    TStringInput ss(config.GetConfigComposite());
+                    TZstdDecompress zstd(&ss);
+                    StorageConfigYaml = TString::Uninitialized(LoadSize(&zstd));
+                    zstd.LoadOrFail(StorageConfigYaml.Detach(), StorageConfigYaml.size());
+                    StorageConfigFetchYaml = TString::Uninitialized(LoadSize(&zstd));
+                    zstd.LoadOrFail(StorageConfigFetchYaml.Detach(), StorageConfigFetchYaml.size());
+
+                    // extract _current_ config version
+                    auto metadata = NYamlConfig::GetMetadata(StorageConfigYaml);
+                    Y_DEBUG_ABORT_UNLESS(metadata.Version.has_value());
+                    StorageConfigYamlVersion = metadata.Version.value_or(0);
+
+                    // and _fetched_ config hash
+                    StorageConfigFetchYamlHash = NYaml::GetConfigHash(StorageConfigFetchYaml);
+                } catch (const std::exception& ex) {
+                    Y_ABORT("ConfigComposite format incorrect: %s", ex.what());
+                }
+            }
+
             StorageConfig.emplace(config);
             if (ProposedStorageConfig && ProposedStorageConfig->GetGeneration() <= StorageConfig->GetGeneration()) {
                 ProposedStorageConfig.reset();
             }
+
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenStorageConfig(*StorageConfig,
                 ProposedStorageConfig ? &ProposedStorageConfig.value() : nullptr));
+
             if (IsSelfStatic) {
                 PersistConfig({});
                 ApplyConfigUpdateToDynamicNodes(false);
             }
+
+            ConnectToConsole();
+            SendConfigProposeRequest();
+
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
                 StorageConfig->GetFingerprint() != config.GetFingerprint()) {
@@ -196,6 +232,10 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(!Binding);
         } else {
             Y_ABORT_UNLESS(RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT);
+
+            // we can't have connection to the Console without being the root node
+            Y_ABORT_UNLESS(!ConsolePipeId);
+            Y_ABORT_UNLESS(!ConsoleConnected);
         }
     }
 #endif
@@ -279,6 +319,11 @@ namespace NKikimr::NStorage {
             fFunc(TEvents::TSystem::Gone, HandleGone);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             cFunc(TEvents::TSystem::Poison, PassAway);
+            hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            hFunc(TEvBlobStorage::TEvControllerValidateConfigResponse, Handle);
+            hFunc(TEvBlobStorage::TEvControllerProposeConfigResponse, Handle);
+            hFunc(TEvBlobStorage::TEvControllerConsoleCommitResponse, Handle);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);

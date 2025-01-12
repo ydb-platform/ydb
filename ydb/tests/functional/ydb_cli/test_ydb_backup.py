@@ -272,6 +272,23 @@ class BaseTestBackupInFiles(object):
             if not is_system_object(child)
         ]
 
+    def create_user(self, user, password="password"):
+        yatest.common.execute(
+            [
+                backup_bin(),
+                "--verbose",
+                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+                "--database", "/Root",
+                "yql",
+                "--script", f"CREATE USER {user} PASSWORD '{password}'",
+            ]
+        )
+
+    def create_users(self):
+        self.create_user("alice")
+        self.create_user("bob")
+        self.create_user("eve")
+
 
 class TestBackupSingle(BaseTestBackupInFiles):
     def test_single_table_backup(self):
@@ -825,6 +842,7 @@ class TestPermissionsBackupRestoreSingleTable(BaseTestBackupInFiles):
         session = self.driver.table_client.session().create()
 
         # Create table and modify permissions on it
+        self.create_users()
         create_table_with_data(session, "folder/table")
         modify_permissions(self.driver.scheme_client, "folder/table")
 
@@ -879,6 +897,7 @@ class TestPermissionsBackupRestoreSingleTable(BaseTestBackupInFiles):
 class TestPermissionsBackupRestoreFolderWithTable(BaseTestBackupInFiles):
     def test_folder_with_table(self):
         # Create folder and modify permissions on it
+        self.create_users()
         self.driver.scheme_client.make_directory("/Root/folder")
         modify_permissions(self.driver.scheme_client, "folder")
 
@@ -935,6 +954,7 @@ class TestPermissionsBackupRestoreFolderWithTable(BaseTestBackupInFiles):
 class TestPermissionsBackupRestoreDontOverwriteOnAlreadyExisting(BaseTestBackupInFiles):
     def test_dont_overwrite_on_already_existing(self):
         # Create folder and modify permissions on it
+        self.create_users()
         self.driver.scheme_client.make_directory("/Root/folder")
         modify_permissions(self.driver.scheme_client, "folder")
 
@@ -1034,6 +1054,7 @@ class TestPermissionsBackupRestoreDontOverwriteOnAlreadyExisting(BaseTestBackupI
 class TestPermissionsBackupRestoreSchemeOnly(BaseTestBackupInFiles):
     def test_scheme_only(self):
         # Create folder and modify permissions on it
+        self.create_users()
         self.driver.scheme_client.make_directory("/Root/folder")
         modify_permissions(self.driver.scheme_client, "folder")
 
@@ -1091,6 +1112,7 @@ class TestPermissionsBackupRestoreSchemeOnly(BaseTestBackupInFiles):
 class TestPermissionsBackupRestoreEmptyDir(BaseTestBackupInFiles):
     def test_empty_dir(self):
         # Create empty folder and modify permissions on it
+        self.create_users()
         self.driver.scheme_client.make_directory("/Root/folder")
         modify_permissions(self.driver.scheme_client, "folder")
 
@@ -1141,6 +1163,7 @@ class TestRestoreACLOption(BaseTestBackupInFiles):
         session = self.driver.table_client.session().create()
 
         # Create table and modify permissions on it
+        self.create_users()
         create_table_with_data(session, "folder/table")
         modify_permissions(self.driver.scheme_client, "folder/table")
 
@@ -1208,6 +1231,7 @@ class TestRestoreNoData(BaseTestBackupInFiles):
         session = self.driver.table_client.session().create()
 
         # Create table and modify permissions on it
+        self.create_users()
         create_table_with_data(session, "folder/table")
         modify_permissions(self.driver.scheme_client, "folder/table")
 

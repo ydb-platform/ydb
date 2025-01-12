@@ -74,7 +74,7 @@ struct ngtcp2_frame_chain {
   };
 };
 
-ngtcp2_objalloc_decl(frame_chain, ngtcp2_frame_chain, oplent);
+ngtcp2_objalloc_decl(frame_chain, ngtcp2_frame_chain, oplent)
 
 /*
  * ngtcp2_bind_frame_chains binds two frame chains |a| and |b| using

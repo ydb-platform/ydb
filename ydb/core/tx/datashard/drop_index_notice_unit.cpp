@@ -31,7 +31,7 @@ public:
 
         const auto& params = schemeTx.GetDropIndexNotice();
 
-        const auto pathId = PathIdFromPathId(params.GetPathId());
+        const auto pathId = TPathId::FromProto(params.GetPathId());
         Y_ABORT_UNLESS(pathId.OwnerId == DataShard.GetPathOwnerId());
 
         const auto version = params.GetTableSchemaVersion();
@@ -39,7 +39,7 @@ public:
 
         TUserTable::TPtr tableInfo;
         if (params.HasIndexPathId()) {
-            const auto indexPathId = PathIdFromPathId(params.GetIndexPathId());
+            const auto indexPathId = TPathId::FromProto(params.GetIndexPathId());
 
             const auto& userTables = DataShard.GetUserTables();
             Y_ABORT_UNLESS(userTables.contains(pathId.LocalPathId));

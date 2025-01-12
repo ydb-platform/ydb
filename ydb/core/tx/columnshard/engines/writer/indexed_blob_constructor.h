@@ -67,7 +67,8 @@ public:
         if (BlobSize + batch.GetSplittedBlobs().GetSize() < 8 * 1024 * 1024) {
             Ranges.emplace_back(&batch);
             BlobSize += batch.GetSplittedBlobs().GetSize();
-            batch.SetRange(TBlobRange(TUnifiedBlobId(0, 0, 0, 0, 0, 0, BlobSize), BlobData.size(), batch.GetSplittedBlobs().GetSize()));
+            batch.SetRange(TBlobRange(
+                TUnifiedBlobId(0, 0, 0, 0, 0, 0, BlobSize), BlobSize - batch.GetSplittedBlobs().GetSize(), batch.GetSplittedBlobs().GetSize()));
             BlobData.emplace_back(batch.GetSplittedBlobs().GetData());
             return true;
         } else {

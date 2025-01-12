@@ -438,7 +438,9 @@ private:
                     YQL_CLOG(WARN, ProviderYt) << "Unable to collect paths and labels: " << status;
                     return;
                 }
-                leftJoinKeys = BuildJoinKeys(labels.Inputs[0], *op->LeftLabel);
+                if (!labels.Inputs.empty()) {
+                    leftJoinKeys = BuildJoinKeys(labels.Inputs[0], *op->LeftLabel);
+                }
                 ++numLeaves;
             }
             if (rightLeaf) {
@@ -451,7 +453,9 @@ private:
                     YQL_CLOG(WARN, ProviderYt) << "Unable to collect paths and labels: " << status;
                     return;
                 }
-                rightJoinKeys = BuildJoinKeys(labels.Inputs[1], *op->RightLabel);
+                if (labels.Inputs.size() > 1) {
+                    rightJoinKeys = BuildJoinKeys(labels.Inputs[1], *op->RightLabel);
+                }
                 ++numLeaves;
             }
         }

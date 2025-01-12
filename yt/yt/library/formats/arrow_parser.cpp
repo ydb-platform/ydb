@@ -43,7 +43,7 @@ void ThrowOnError(const arrow::Status& status)
 }
 
 template <class TUnderlyingValueType>
-TStringBuf SerializeDecimalBinary(const TStringBuf& value, int precision, char* buffer, size_t bufferLength)
+TStringBuf SerializeDecimalBinary(TStringBuf value, int precision, char* buffer, size_t bufferLength)
 {
     // NB: Arrow wire representation of Decimal128 is little-endian and (obviously) 128 bit,
     // while YT in-memory representation of Decimal is big-endian, variadic-length of either 32 bit, 64 bit or 128 bit,
@@ -191,14 +191,14 @@ public:
 
     arrow::Status Visit(const arrow::Decimal128Type& type) override
     {
-        return ParseStringLikeArray<arrow::Decimal128Array>([&] (const TStringBuf& value, i64 columnId) {
+        return ParseStringLikeArray<arrow::Decimal128Array>([&] (TStringBuf value, i64 columnId) {
             return MakeDecimalBinaryValue<TDecimal::TValue128>(value, columnId, type.precision());
         });
     }
 
     arrow::Status Visit(const arrow::Decimal256Type& type) override
     {
-        return ParseStringLikeArray<arrow::Decimal256Array>([&] (const TStringBuf& value, i64 columnId) {
+        return ParseStringLikeArray<arrow::Decimal256Array>([&] (TStringBuf value, i64 columnId) {
             return MakeDecimalBinaryValue<TDecimal::TValue256>(value, columnId, type.precision());
         });
     }
@@ -245,6 +245,7 @@ private:
     void ParseSimpleNumeric(FuncType makeUnversionedValueFunc)
     {
         auto array = std::static_pointer_cast<ArrayType>(Array_);
+        YT_VERIFY(array->length() <= std::ssize(*RowValues_));
         for (int rowIndex = 0; rowIndex < array->length(); ++rowIndex) {
             if (array->IsNull(rowIndex)) {
                 (*RowValues_)[rowIndex] = MakeUnversionedNullValue(ColumnId_);
@@ -258,6 +259,7 @@ private:
     arrow::Status ParseStringLikeArray(auto makeUnversionedValueFunc)
     {
         auto array = std::static_pointer_cast<ArrayType>(Array_);
+        YT_VERIFY(array->length() <= std::ssize(*RowValues_));
         for (int rowIndex = 0; rowIndex < array->length(); ++rowIndex) {
             if (array->IsNull(rowIndex)) {
                 (*RowValues_)[rowIndex] = MakeUnversionedNullValue(ColumnId_);
@@ -283,7 +285,7 @@ private:
         // Note that MakeUnversionedValue actually has third argument in its signature,
         // which leads to a "too few arguments" in the point of its invocation if we try to pass
         // it directly to ParseStringLikeArray.
-        return ParseStringLikeArray<ArrayType>([this] (const TStringBuf& value, i64 columnId) {
+        return ParseStringLikeArray<ArrayType>([this] (TStringBuf value, i64 columnId) {
             if (ColumnType_  && *ColumnType_ == ESimpleLogicalValueType::Any) {
                 return MakeUnversionedAnyValue(value, columnId);
             } else {
@@ -295,6 +297,7 @@ private:
     arrow::Status ParseBoolean()
     {
         auto array = std::static_pointer_cast<arrow::BooleanArray>(Array_);
+        YT_VERIFY(array->length() <= std::ssize(*RowValues_));
         for (int rowIndex = 0; rowIndex < array->length(); rowIndex++) {
             if (array->IsNull(rowIndex)) {
                 (*RowValues_)[rowIndex] = MakeUnversionedNullValue(ColumnId_);
@@ -308,6 +311,7 @@ private:
     arrow::Status ParseNull()
     {
         auto array = std::static_pointer_cast<arrow::NullArray>(Array_);
+        YT_VERIFY(array->length() <= std::ssize(*RowValues_));
         for (int rowIndex = 0; rowIndex < array->length(); rowIndex++) {
             (*RowValues_)[rowIndex] = MakeUnversionedNullValue(ColumnId_);
         }
@@ -315,7 +319,7 @@ private:
     }
 
     template <class TUnderlyingValueType>
-    TUnversionedValue MakeDecimalBinaryValue(const TStringBuf& arrowValue, i64 columnId, int precision)
+    TUnversionedValue MakeDecimalBinaryValue(TStringBuf arrowValue, i64 columnId, int precision)
     {
         const auto maxByteCount = sizeof(TUnderlyingValueType);
         char* buffer = BufferForStringLikeValues_->Preallocate(maxByteCount);
@@ -466,14 +470,14 @@ public:
 
     arrow::Status Visit(const arrow::Decimal128Type& type) override
     {
-        return ParseStringLikeArray<arrow::Decimal128Array>([&] (const TStringBuf& value) {
+        return ParseStringLikeArray<arrow::Decimal128Array>([&] (TStringBuf value) {
             WriteDecimalBinary<TDecimal::TValue128>(value, type.precision());
         });
     }
 
     arrow::Status Visit(const arrow::Decimal256Type& type) override
     {
-        return ParseStringLikeArray<arrow::Decimal256Array>([&] (const TStringBuf& value) {
+        return ParseStringLikeArray<arrow::Decimal256Array>([&] (TStringBuf value) {
             WriteDecimalBinary<TDecimal::TValue256>(value, type.precision());
         });
     }
@@ -528,7 +532,7 @@ private:
     template <typename ArrayType>
     arrow::Status ParseStringLikeArray()
     {
-        return ParseStringLikeArray<ArrayType>([&] (const TStringBuf& value) {
+        return ParseStringLikeArray<ArrayType>([&] (TStringBuf value) {
             Writer_->WriteBinaryString(value);
         });
     }
@@ -834,19 +838,21 @@ void PrepareArrayForSimpleLogicalType(
 {
     CheckMatchingArrowTypes(columnType, column);
     if (column->type()->id() == arrow::Type::DICTIONARY) {
-        auto dictionaryColumn = std::static_pointer_cast<arrow::DictionaryArray>(column);
-        TUnversionedRowValues dictionaryValues(rowsValues[columnIndex].size());
-        auto dictionaryValuesColumn = dictionaryColumn->dictionary();
-        CheckMatchingArrowTypes(columnType, dictionaryValuesColumn);
+        auto dictionaryArrayColumn = std::static_pointer_cast<arrow::DictionaryArray>(column);
+        auto dictionary = dictionaryArrayColumn->dictionary();
+        TUnversionedRowValues dictionaryValues(dictionary->length());
+        CheckMatchingArrowTypes(columnType, dictionary);
 
-        TArraySimpleVisitor visitor(columnType, columnId, dictionaryValuesColumn, bufferForStringLikeValues, &dictionaryValues);
-        ThrowOnError(dictionaryColumn->dictionary()->type()->Accept(&visitor));
+        TArraySimpleVisitor visitor(columnType, columnId, dictionary, bufferForStringLikeValues, &dictionaryValues);
+        ThrowOnError(dictionaryArrayColumn->dictionary()->type()->Accept(&visitor));
 
         for (int offset = 0; offset < std::ssize(rowsValues[columnIndex]); offset++) {
-            if (dictionaryColumn->IsNull(offset)) {
+            if (dictionaryArrayColumn->IsNull(offset)) {
                 rowsValues[columnIndex][offset] = MakeUnversionedNullValue(columnId);
             } else {
-                rowsValues[columnIndex][offset] = dictionaryValues[dictionaryColumn->GetValueIndex(offset)];
+                auto dictionaryValueIndex = dictionaryArrayColumn->GetValueIndex(offset);
+                YT_VERIFY(dictionaryValueIndex < std::ssize(dictionaryValues));
+                rowsValues[columnIndex][offset] = dictionaryValues[dictionaryValueIndex];
             }
         }
     } else {

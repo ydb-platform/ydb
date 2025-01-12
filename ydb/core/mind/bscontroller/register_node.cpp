@@ -421,6 +421,8 @@ void TBlobStorageController::ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo
     pDisk->SetEntityStatus(entityStatus);
     if (pdisk.Mood == TPDiskMood::ReadOnly) {
         pDisk->SetReadOnly(true);
+    } else if (pdisk.Mood == TPDiskMood::Stop) {
+        pDisk->SetStop(true);
     }
 }
 

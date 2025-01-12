@@ -82,7 +82,6 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
         NKikimrServices::EServiceKikimr_Name
     );
     TString explanation;
-    logSettings->SetLevel(NLog::PRI_TRACE, NActorsServices::EServiceCommon::HTTP, explanation);
     //logSettings->SetLevel(NLog::PRI_INFO, NKikimrServices::BS_SKELETON, explanation);
     //logSettings->SetLevel(NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, explan
     NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(logSettings,
@@ -131,6 +130,8 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
     //////////////////////////////////////////////////////////////////////////////
 
     DoneEvent.Wait();
+
+    Monitoring->Stop();
     ActorSystem1->Stop();
     ActorSystem1.reset();
 }

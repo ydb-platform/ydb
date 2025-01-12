@@ -276,7 +276,7 @@ void PrintTo(const TColumnarStatistics& statistics, std::ostream* os)
         << "LegacyChunkRowCount: "
         << ::testing::PrintToString(statistics.LegacyChunkRowCount) << "\n";
 
-    if (!statistics.LargeStatistics.Empty()) {
+    if (!statistics.LargeStatistics.IsEmpty()) {
         *os << "ColumnHyperLogLogDigests: [\n";
         for (const auto& hyperLogLog : statistics.LargeStatistics.ColumnHyperLogLogDigests) {
             *os << "    ";

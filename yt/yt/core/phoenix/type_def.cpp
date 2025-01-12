@@ -1,6 +1,6 @@
 #include "type_def.h"
 
-namespace NYT::NPhoenix2::NDetail {
+namespace NYT::NPhoenix::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -22,7 +22,7 @@ TTypeSchemaBuilderRegistar::TTypeSchemaBuilderRegistar(
 const TTypeDescriptor& TTypeSchemaBuilderRegistar::operator()() &&
 {
     const auto& result = *TypeDescriptor_;
-    ::NYT::NPhoenix2::ITypeRegistry::Get()->RegisterTypeDescriptor(std::move(TypeDescriptor_));
+    ::NYT::NPhoenix::ITypeRegistry::Get()->RegisterTypeDescriptor(std::move(TypeDescriptor_));
     return result;
 }
 
@@ -32,4 +32,4 @@ NConcurrency::TFlsSlot<TUniverseLoadState> UniverseLoadState;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2::NDetail
+} // namespace NYT::NPhoenix::NDetail

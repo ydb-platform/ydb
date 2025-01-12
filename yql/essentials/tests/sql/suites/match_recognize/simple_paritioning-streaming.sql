@@ -1,6 +1,5 @@
 pragma FeatureR010="prototype";
 pragma config.flags("MatchRecognizeStream", "force");
-USE plato;
 
 $data = [
 <|dt:15, host:"fqdn1", key:0|>,

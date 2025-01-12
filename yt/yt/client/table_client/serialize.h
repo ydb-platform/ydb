@@ -11,16 +11,16 @@ namespace NYT::NTableClient {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSaveContext
-    : public NPhoenix2::TSaveContext
+    : public NPhoenix::TSaveContext
 {
 public:
-    using NPhoenix2::TSaveContext::TSaveContext;
+    using NPhoenix::TSaveContext::TSaveContext;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TLoadContext
-    : public NPhoenix2::TLoadContext
+    : public NPhoenix::TLoadContext
 {
 public:
     DEFINE_BYVAL_RO_PROPERTY(TRowBufferPtr, RowBuffer);

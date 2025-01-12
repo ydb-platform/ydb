@@ -101,6 +101,10 @@ SRCS(
     security_client/public.cpp
     security_client/helpers.cpp
 
+    signature/signature.cpp
+    signature/validator.cpp
+    signature/generator.cpp
+
     table_client/public.cpp
     table_client/adapters.cpp
     table_client/table_output.cpp
@@ -189,10 +193,6 @@ SRCS(
     complex_types/uuid_text.cpp
     complex_types/yson_format_conversion.cpp
 
-    zookeeper/packet.cpp
-    zookeeper/protocol.cpp
-    zookeeper/requests.cpp
-
     kafka/packet.cpp
     kafka/protocol.cpp
     kafka/requests.cpp
@@ -237,6 +237,7 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     api/unittests
+    signature/unittests
     table_client/unittests
     unittests
 )

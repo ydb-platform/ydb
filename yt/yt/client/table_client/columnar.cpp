@@ -402,7 +402,7 @@ void BuildDictionaryIndexesFromDictionaryIndexesWithZeroNull(
     const auto* currentInput = beginInput;
     auto* currentOutput = dst.Begin();
     while (currentInput < endInput) {
-        // NB: null becomes FFFFFFFF.
+        // NB: Null becomes FFFFFFFF.
         *currentOutput++ = (*currentInput++) - 1;
     }
 }
@@ -451,7 +451,7 @@ void BuildIotaDictionaryIndexesFromRleIndexes(
                 break;
             }
             ++currentRleIndex;
-            thresholdIndex = currentRleIndex < static_cast<i64>(rleIndexes.Size())
+            thresholdIndex = currentRleIndex < std::ssize(rleIndexes)
                 ? std::min(static_cast<i64>(rleIndexes[currentRleIndex]), endIndex)
                 : endIndex;
             ++currentValue;
@@ -733,7 +733,7 @@ i64 CountTotalStringLengthInRleDictionaryIndexesWithZeroNull(
     i64 result = 0;
     while (currentIndex < endIndex) {
         ++currentRleIndex;
-        auto thresholdIndex = currentRleIndex < static_cast<i64>(rleIndexes.Size()) ? static_cast<i64>(rleIndexes[currentRleIndex]) : Max<i64>();
+        auto thresholdIndex = currentRleIndex < std::ssize(rleIndexes) ? static_cast<i64>(rleIndexes[currentRleIndex]) : Max<i64>();
         auto currentDictionaryIndex = *currentInput++;
         auto newIndex = std::min(endIndex, thresholdIndex);
         if (currentDictionaryIndex != 0) {
@@ -753,7 +753,7 @@ i64 TranslateRleIndex(
 
     return BinarySearch(
         static_cast<i64>(0),
-        static_cast<i64>(rleIndexes.size()),
+        std::ssize(rleIndexes),
         [&] (i64 k) {
             return static_cast<i64>(rleIndexes[k]) <= index;
         }) - 1;

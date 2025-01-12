@@ -177,6 +177,10 @@ namespace NKikimr::NStorage {
 
         // currently active storage config
         std::optional<NKikimrBlobStorage::TStorageConfig> StorageConfig;
+        TString StorageConfigYaml; // the part we have to push (unless this is storage-only) to console
+        TString StorageConfigFetchYaml; // the part we would get is we fetch from console
+        ui64 StorageConfigFetchYamlHash = 0;
+        std::optional<ui32> StorageConfigYamlVersion;
 
         // base config from config file
         NKikimrBlobStorage::TStorageConfig BaseConfig;
@@ -261,6 +265,17 @@ namespace NKikimr::NStorage {
         // child actors
         THashSet<TActorId> ChildActors;
 
+        // pipe to Console
+        TActorId ConsolePipeId;
+        bool ConsoleConnected = false;
+        bool ConfigCommittedToConsole = false;
+        ui64 ValidateRequestCookie = 0;
+        ui64 ProposeRequestCookie = 0;
+        ui64 CommitRequestCookie = 0;
+        bool ProposeRequestInFlight = false;
+        std::optional<std::tuple<ui64, ui32>> ProposedConfigHashVersion;
+        std::vector<std::tuple<TActorId, TString, ui64>> ConsoleConfigValidationQ;
+
         friend void ::Out<ERootState>(IOutputStream&, ERootState);
 
     public:
@@ -339,7 +354,7 @@ namespace NKikimr::NStorage {
 
         struct TExConfigError : yexception {};
 
-        void GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID);
+        std::optional<TString> GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID);
 
         void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, ui32 groupId, ui32 groupGeneration,
             TBlobStorageGroupType gtype, const NKikimrBlobStorage::TGroupGeometry& geometry,
@@ -420,6 +435,23 @@ namespace NKikimr::NStorage {
         // Monitoring
 
         void Handle(NMon::TEvHttpInfo::TPtr ev);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Console interaction
+
+        void ConnectToConsole(bool enablingDistconf = false);
+        void DisconnectFromConsole();
+        void SendConfigProposeRequest();
+        void Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr ev);
+        void Handle(TEvBlobStorage::TEvControllerProposeConfigResponse::TPtr ev);
+        void Handle(TEvBlobStorage::TEvControllerConsoleCommitResponse::TPtr ev);
+        void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);
+        void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev);
+        void OnConsolePipeError();
+        bool EnqueueConsoleConfigValidation(TActorId queryId, bool enablingDistconf, TString yaml);
+
+        static std::optional<TString> UpdateConfigComposite(NKikimrBlobStorage::TStorageConfig& config, const TString& yaml,
+            const std::optional<TString>& fetched);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Consistency checking

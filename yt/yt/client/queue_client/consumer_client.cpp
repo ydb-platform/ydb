@@ -445,7 +445,7 @@ private:
                 YT_ABORT();
             }
 
-            // NB: in BigRT offsets encode the last read row, while we operate with the first unread row.
+            // NB: In BigRT offsets encode the last read row, while we operate with the first unread row.
             auto partitionInfo = TPartitionInfo{
                 .PartitionIndex = FromUnversionedValue<i64>(partitionIndexValue),
                 .NextRowIndex = offset,

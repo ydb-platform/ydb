@@ -46,7 +46,7 @@ template <class T>
 int TInternRegistry<T>::GetSize() const
 {
     auto guard = Guard(Lock_);
-    return static_cast<int>(Registry_.size());
+    return std::ssize(Registry_);
 }
 
 template <class T>

@@ -12,6 +12,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
 
+#include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
@@ -2316,6 +2317,7 @@ struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> {
             const auto alterSpace = GetFileStoreSpace(*AlterConfig);
             space.SSD = Max(space.SSD, alterSpace.SSD);
             space.HDD = Max(space.HDD, alterSpace.HDD);
+            space.SSDSystem = Max(space.SSDSystem, alterSpace.SSDSystem);
         }
 
         return space;
@@ -2329,7 +2331,11 @@ private:
         TFileStoreSpace space;
         switch (config.GetStorageMediaKind()) {
             case 1: // STORAGE_MEDIA_SSD
-                space.SSD += blockCount * blockSize;
+                if (config.GetIsSystem()) {
+                    space.SSDSystem += blockCount * blockSize;
+                } else {
+                    space.SSD += blockCount * blockSize;
+                }
                 break;
             case 2: // STORAGE_MEDIA_HYBRID
             case 3: // STORAGE_MEDIA_HDD
@@ -2704,6 +2710,8 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
 
+    bool EnableChecksums = false;
+
     explicit TExportInfo(
             const ui64 id,
             const TString& uid,
@@ -2815,6 +2823,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TPathId DstPathId;
         Ydb::Table::CreateTableRequest Scheme;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
+        NBackup::TMetadata Metadata;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;
@@ -3126,7 +3135,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             using namespace NTableIndex::NTableVectorKmeansTreeIndex;
             TString name = PostingTable;
             if (needsBuildTable || NeedsAnotherLevel()) {
-                name += Level % 2 != 0 ? BuildPostingTableSuffix0 : BuildPostingTableSuffix1;
+                name += Level % 2 != 0 ? BuildSuffix0 : BuildSuffix1;
             }
             return name;
         }
@@ -3134,7 +3143,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Y_ASSERT(Parent != 0);
             using namespace NTableIndex::NTableVectorKmeansTreeIndex;
             TString name = PostingTable;
-            name += Level % 2 != 0 ? BuildPostingTableSuffix1 : BuildPostingTableSuffix0;
+            name += Level % 2 != 0 ? BuildSuffix1 : BuildSuffix0;
             return name;
         }
     };
@@ -3602,6 +3611,15 @@ struct TExternalDataSourceInfo: TSimpleRefCount<TExternalDataSourceInfo> {
     NKikimrSchemeOp::TAuth Auth;
     NKikimrSchemeOp::TExternalTableReferences ExternalTableReferences;
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
+
+    void FillProto(NKikimrSchemeOp::TExternalDataSourceDescription& proto) const {
+        proto.SetVersion(AlterVersion);
+        proto.SetSourceType(SourceType);
+        proto.SetLocation(Location);
+        proto.SetInstallation(Installation);
+        proto.MutableAuth()->CopyFrom(Auth);
+        proto.MutableProperties()->CopyFrom(Properties);
+    }
 };
 
 struct TViewInfo : TSimpleRefCount<TViewInfo> {

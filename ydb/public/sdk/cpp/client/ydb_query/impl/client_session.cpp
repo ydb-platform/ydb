@@ -11,20 +11,23 @@ namespace NYdb::NQuery {
 
 // Custom lock primitive to protect session from destroying
 // during async read execution.
-// The problem is currect grpc stream reader has no method to get guarantee
-// all callback executed and will not be executed until reader dtor called.
+// The problem is TSession::TImpl holds grpc stream processor by IntrusivePtr
+// and this processor alredy refcounted by internal code.
+// That mean during TSession::TImpl dtor no gurantee to grpc procerrot will be destroyed.
+// StreamProcessor_->Cancel() doesn't help it just start async cancelation but we have no way
+// to wait cancelation has done.
 // So we need some way to protect access to row session impl pointer
-// from async reader. We can't use shared/weak ptr here because TSessionImpl
+// from async reader (processor callback). We can't use shared/weak ptr here because TSessionImpl
 // stores as uniq ptr inside session pool and as shared ptr in the TSession
-// when user got session.
+// when user got session (see GetSmartDeleter related code).
 
 // Why just not std::mutex? - Requirement do not destroy a mutex while it is locked
-// makes it difficult to use here.
+// makes it difficult to use here. Moreover we need to allow recursive lock.
 
-// Why thread id? - We destroy session from CloseFromServer call, so the session dtor called from thread
-// which already got the lock.
+// Why recursive lock? - In happy path we destroy session from CloseFromServer call,
+// so the session dtor called from thread which already got the lock.
 
-// TODO: Proably we can add sync version of Cancel method in to grpc reader to make sure
+// TODO: Proably we can add sync version of Cancel method in to grpc stream procesor to make sure
 // no more callback will be called.
 
 class TSafeTSessionImplHolder {

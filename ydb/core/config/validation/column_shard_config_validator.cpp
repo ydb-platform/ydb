@@ -49,9 +49,6 @@ EValidationResult ValidateColumnShardConfig(const NKikimrConfig::TColumnShardCon
     if (validateDefaultCompressionResult == EValidationResult::Error) {
         return EValidationResult::Error;
     }
-    if (msg.size() > 0) {
-        return EValidationResult::Warn;
-    }
     return EValidationResult::Ok;
 }
 

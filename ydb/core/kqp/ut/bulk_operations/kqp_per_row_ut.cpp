@@ -221,6 +221,24 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
     }
+
+    Y_UNIT_TEST(DeletePerRowMultiStatement) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session);
+
+        auto query = Q_(R"(
+            DELETE PER ROW FROM TestTable WHERE Group = 2;
+            SELECT 42;
+        )");
+
+        auto txControl = NYdb::NQuery::TTxControl::NoTx();
+
+        auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+    }
 }
 
 } // namespace NKqp

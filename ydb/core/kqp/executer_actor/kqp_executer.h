@@ -66,8 +66,15 @@ struct TEvKqpExecuter {
         }
     };
 
-    struct TEvStreamData : public TEventPB<TEvStreamData, NKikimrKqp::TEvExecuterStreamData,
-        TKqpExecuterEvents::EvStreamData> {};
+    struct TEvStreamData : public TEventPBWithArena<TEvStreamData, NKikimrKqp::TEvExecuterStreamData, TKqpExecuterEvents::EvStreamData> {
+        using TBaseEv = TEventPBWithArena<TEvStreamData, NKikimrKqp::TEvExecuterStreamData, TKqpExecuterEvents::EvStreamData>;
+        using TBaseEv::TEventPBBase;
+
+        TEvStreamData() = default;
+        explicit TEvStreamData(TIntrusivePtr<NActors::TProtoArenaHolder> arena)
+            : TEventPBBase(std::move(arena))
+        {}
+    };
 
     struct TEvStreamDataAck : public TEventPB<TEvStreamDataAck, NKikimrKqp::TEvExecuterStreamDataAck,
         TKqpExecuterEvents::EvStreamDataAck>

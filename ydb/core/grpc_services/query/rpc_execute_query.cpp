@@ -320,13 +320,13 @@ private:
     }
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
-        Ydb::Query::ExecuteQueryResponsePart response;
-        response.set_status(Ydb::StatusIds::SUCCESS);
-        response.set_result_set_index(ev->Get()->Record.GetQueryResultIndex());
-        response.mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
+        Ydb::Query::ExecuteQueryResponsePart *response = ev->Get()->Arena->Allocate<Ydb::Query::ExecuteQueryResponsePart>();
+        response->set_status(Ydb::StatusIds::SUCCESS);
+        response->set_result_set_index(ev->Get()->Record.GetQueryResultIndex());
+        response->mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
 
         TString out;
-        Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
+        Y_PROTOBUF_SUPPRESS_NODISCARD response->SerializeToString(&out);
 
         FlowControl_.PushResponse(out.size());
         const i64 freeSpaceBytes = FlowControl_.FreeSpaceBytes();

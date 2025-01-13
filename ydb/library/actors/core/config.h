@@ -35,12 +35,13 @@ namespace NActors {
     };
 
     struct TSharedExecutorPoolConfig {
+        ui32 PoolId = 0;
         ui32 Threads = 1;
         ui64 SpinThreshold = 100;
         TCpuMask Affinity; // Executor thread affinity
         TDuration TimePerMailbox = TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX;
         ui32 EventsPerMailbox = TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
-        i16 SoftProcessingDurationTs = Us2Ts(500);
+        i16 SoftProcessingDurationTs = Us2Ts(10'000);
     };
 
     struct TIOExecutorPoolConfig {

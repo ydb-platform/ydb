@@ -2339,8 +2339,6 @@ Y_UNIT_TEST_SUITE(SystemView) {
         env.GetClient().CreateUser("/Root/Tenant2", "user3", "password3");
         env.GetClient().CreateUser("/Root/Tenant2", "user4", "password4");
         env.GetClient().CreateGroup("/Root/Tenant2", "group1");
-        env.GetClient().AddGroupMembership("/Root", "group1", "user3");
-        env.GetClient().AddGroupMembership("/Root", "group1", "user4");
 
         env.GetClient().MkDir("/Root", "Dir1/SubDir1");
         env.GetClient().ModifyOwner("/Root", "Dir1", "user1");

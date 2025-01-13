@@ -5,50 +5,75 @@
 
 namespace NActors {
 
-void TSharedInfo::Init(i16 poolCount) {
-    HasSharedThread.resize(poolCount, false);
-    HasSharedThreadWhichWasNotBorrowed.resize(poolCount, false);
-    HasBorrowedSharedThread.resize(poolCount, false);
-}
+void TSharedInfo::Pull(const ISharedPool& shared) {
+    shared.FillForeignThreadsAllowed(ForeignThreadsAllowed);
+    shared.FillOwnedThreads(OwnedThreads);
 
-void TSharedInfo::Pull(const ISharedExecutorPool& shared) {
-    auto sharedState = shared.GetState();
-    for (ui32 poolIdx = 0; poolIdx < HasSharedThread.size(); ++poolIdx) {
-        i16 threadIdx = sharedState.ThreadByPool[poolIdx];
-        if (threadIdx != -1) {
-            HasSharedThread[poolIdx] = true;
-            if (sharedState.PoolByBorrowedThread[threadIdx] == -1) {
-                HasSharedThreadWhichWasNotBorrowed[poolIdx] = true;
-            } else {
-                HasSharedThreadWhichWasNotBorrowed[poolIdx] = false;
-            }
-        }
-        if (sharedState.BorrowedThreadByPool[poolIdx] != -1) {
-            HasBorrowedSharedThread[poolIdx] = true;
-        } else {
-            HasBorrowedSharedThread[poolIdx] = false;
+    for (i16 poolId = 0; poolId < PoolCount; ++poolId) {
+        CpuConsumption[poolId].Elapsed = 0;
+        CpuConsumption[poolId].Cpu = 0;
+        CpuConsumption[poolId].CpuQuota = 0;
+    }
+
+    for (i16 poolId = 0; poolId < PoolCount; ++poolId) {
+        shared.GetSharedStatsForHarmonizer(poolId, ThreadStats);
+        for (i16 threadId = 0; threadId < static_cast<i16>(ThreadStats.size()); ++threadId) {
+            ui64 elapsed = std::exchange(CpuConsumptionByPool[poolId][threadId].Elapsed, ThreadStats[threadId].SafeElapsedTicks);
+            CpuConsumptionByPool[poolId][threadId].DiffElapsed += CpuConsumptionByPool[poolId][threadId].Elapsed - elapsed;
+            ui64 cpu = std::exchange(CpuConsumptionByPool[poolId][threadId].Cpu, ThreadStats[threadId].CpuUs);
+            CpuConsumptionByPool[poolId][threadId].DiffCpu += CpuConsumptionByPool[poolId][threadId].Cpu - cpu;
+            ui64 parked = std::exchange(CpuConsumptionByPool[poolId][threadId].Parked, ThreadStats[threadId].SafeParkedTicks);
+            CpuConsumptionByPool[poolId][threadId].DiffParked += CpuConsumptionByPool[poolId][threadId].Parked - parked;
         }
     }
+
+    for (i16 threadId = 0; threadId < static_cast<i16>(ThreadStats.size()); ++threadId) {
+        TStackVec<ui64, 8> elapsedByPool;
+        TStackVec<ui64, 8> cpuByPool;
+        ui64 parked = 0;
+
+        for (i16 poolId = 0; poolId < PoolCount; ++poolId) {
+            elapsedByPool.push_back(CpuConsumptionByPool[poolId][threadId].DiffElapsed);
+            cpuByPool.push_back(CpuConsumptionByPool[poolId][threadId].DiffCpu);
+            parked += CpuConsumptionByPool[poolId][threadId].DiffParked;
+        }
+
+        ui64 threadTime = std::accumulate(elapsedByPool.begin(), elapsedByPool.end(), 0) + parked;
+        
+        for (i16 poolId = 0; poolId < PoolCount; ++poolId) {
+            CpuConsumption[poolId].Elapsed += static_cast<float>(CpuConsumptionByPool[poolId][threadId].DiffElapsed) / threadTime;
+            CpuConsumption[poolId].Cpu += static_cast<float>(CpuConsumptionByPool[poolId][threadId].DiffCpu) / threadTime;
+            CpuConsumption[poolId].CpuQuota += static_cast<float>(CpuConsumptionByPool[poolId][threadId].DiffElapsed) / threadTime;
+        }
+        CpuConsumption[ThreadOwners[threadId]].CpuQuota = static_cast<float>(parked) / threadTime;
+    }
+}
+
+void TSharedInfo::Init(i16 poolCount, const ISharedPool& shared) {
+    PoolCount = poolCount;
+    ForeignThreadsAllowed.resize(poolCount);
+    OwnedThreads.resize(poolCount);
+    CpuConsumption.resize(poolCount);
+    shared.FillThreadOwners(ThreadOwners);
+    CpuConsumptionByPool.resize(poolCount);
+    for (i16 i = 0; i < poolCount; ++i) {
+        CpuConsumptionByPool[i].resize(ThreadOwners.size());
+    }
+    ThreadStats.resize(ThreadOwners.size());
 }
 
 TString TSharedInfo::ToString() const {
     TStringBuilder builder;
     builder << "{";
-    builder << "HasSharedThread: \"";
-    for (ui32 i = 0; i < HasSharedThread.size(); ++i) {
-        builder << (HasSharedThread[i] ? "1" : "0");
+    builder << " ForeignThreadsAllowed: {";
+    for (ui32 i = 0; i < ForeignThreadsAllowed.size(); ++i) {
+        builder << "Pool[" << i << "]: " << ForeignThreadsAllowed[i] << "; ";
     }
-    builder << "\", ";
-    builder << "HasSharedThreadWhichWasNotBorrowed: \"";
-    for (ui32 i = 0; i < HasSharedThreadWhichWasNotBorrowed.size(); ++i) {
-        builder << (HasSharedThreadWhichWasNotBorrowed[i] ? "1" : "0");
+    builder << "} OwnedThreads: {";
+    for (ui32 i = 0; i < OwnedThreads.size(); ++i) {
+        builder << "Pool[" << i << "]: " << OwnedThreads[i] << "; ";
     }
-    builder << "\", ";
-    builder << "HasBorrowedSharedThread: \"";
-    for (ui32 i = 0; i < HasBorrowedSharedThread.size(); ++i) {
-        builder << (HasBorrowedSharedThread[i] ? "1" : "0");
-    }
-    builder << "\"}";
+    builder << "} }";
     return builder;
 }
 

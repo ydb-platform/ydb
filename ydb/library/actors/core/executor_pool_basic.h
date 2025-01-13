@@ -5,6 +5,7 @@
 #include "executor_thread.h"
 #include "executor_thread_ctx.h"
 #include "executor_pool_basic_feature_flags.h"
+#include "executor_pool_shared.h"
 #include "scheduler_queue.h"
 #include "executor_pool_base.h"
 #include <memory>
@@ -24,7 +25,7 @@ namespace NActors {
 
     class TExecutorPoolJail;
     class TBasicExecutorPoolSanitizer;
-
+    class TSharedExecutorPool;
     struct TWaitingStatsConstants {
         static constexpr ui64 BucketCount = 128;
         static constexpr double MaxSpinThersholdUs = 12.8;
@@ -132,6 +133,7 @@ namespace NActors {
 
     class TBasicExecutorPool: public TExecutorPoolBase {
         friend class TBasicExecutorPoolSanitizer;
+        friend class TSharedExecutorPool;
 
         NThreading::TPadded<std::atomic_bool> AllThreadsSleep = true;
         const ui64 DefaultSpinThresholdCycles;
@@ -176,11 +178,7 @@ namespace NActors {
         const i16 Priority = 0;
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
         TExecutorPoolJail *Jail = nullptr;
-
-        static constexpr ui64 MaxSharedThreadsForPool = 2;
-        NThreading::TPadded<std::atomic_uint64_t> SharedThreadsCount = 0;
-        NThreading::TPadded<std::atomic<TSharedExecutorThreadCtx*>> SharedThreads[MaxSharedThreadsForPool] = {nullptr, nullptr};
-
+        TSharedExecutorPool *SharedPool = nullptr;
         std::unique_ptr<TBasicExecutorPoolSanitizer> Sanitizer;
 
     public:
@@ -233,6 +231,7 @@ namespace NActors {
         void Initialize(TWorkerContext& wctx) override;
         TMailbox* GetReadyActivation(TWorkerContext& wctx, ui64 revolvingReadCounter) override;
         TMailbox* GetReadyActivationCommon(TWorkerContext& wctx, ui64 revolvingReadCounter);
+        TMailbox* GetReadyActivationShared(TWorkerContext& wctx, ui64 revolvingReadCounter);
         TMailbox* GetReadyActivationLocalQueue(TWorkerContext& wctx, ui64 revolvingReadCounter);
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
@@ -278,11 +277,8 @@ namespace NActors {
         void CalcSpinPerThread(ui64 wakingUpConsumption);
         void ClearWaitingStats() const;
 
-        TSharedExecutorThreadCtx* ReleaseSharedThread() override;
-        void AddSharedThread(TSharedExecutorThreadCtx* thread) override;
-        bool IsSharedThreadEnabled() const override {
-            return true;
-        }
+        TSemaphore GetSemaphore() const;
+        void SetSharedPool(TSharedExecutorPool* pool);
 
     private:
         void AskToGoToSleep(bool *needToWait, bool *needToBlock);

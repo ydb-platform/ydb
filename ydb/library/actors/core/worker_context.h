@@ -33,12 +33,12 @@ namespace NActors {
         const TCpuId CpuId;
         TLease Lease;
         IExecutorPool* Executor = nullptr;
+        IExecutorPool* SharedExecutor = nullptr;
         TMailboxTable* MailboxTable = nullptr;
         ui64 TimePerMailboxTs = 0;
         ui32 EventsPerMailbox = 0;
         ui64 SoftDeadlineTs = ui64(-1);
-        TExecutorThreadStats* Stats = &WorkerStats; // pool stats
-        TExecutorThreadStats WorkerStats;
+        TExecutorThreadStats* Stats = nullptr; // pool stats
         TPoolId PoolId = MaxPools;
         mutable NLWTrace::TOrbit Orbit;
         bool IsNeededToWaitNextActivation = true;
@@ -52,11 +52,9 @@ namespace NActors {
 
         TMailboxCache MailboxCache;
 
-        TWorkerContext(TWorkerId workerId, TCpuId cpuId)
-            : WorkerId(workerId)
-            , CpuId(cpuId)
-            , Lease(WorkerId, NeverExpire)
-        {}
+        TWorkerContext(TWorkerId workerId, TCpuId cpuId);
+
+        ~TWorkerContext();
 
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         void GetCurrentStats(TExecutorThreadStats& statsCopy) const {
@@ -81,10 +79,6 @@ namespace NActors {
             if (Y_LIKELY(elapsed > 0)) {
                 RelaxedStore(&Stats->ParkedTicks, RelaxedLoad(&Stats->ParkedTicks) + elapsed);
             }
-        }
-
-        void AddBlockedCycles(i64 elapsed) {
-            RelaxedStore(&Stats->BlockedTicks, RelaxedLoad(&Stats->BlockedTicks) + elapsed);
         }
 
         void IncrementSentEvents() {
@@ -163,6 +157,7 @@ namespace NActors {
 
         void UpdateThreadTime() {
             RelaxedStore(&Stats->SafeElapsedTicks, (ui64)RelaxedLoad(&Stats->ElapsedTicks));
+            RelaxedStore(&Stats->SafeParkedTicks, (ui64)RelaxedLoad(&Stats->ParkedTicks));
             RelaxedStore(&Stats->CpuUs, (ui64)RelaxedLoad(&Stats->CpuUs) + CpuSensor.GetDiff());
         }
 
@@ -175,7 +170,6 @@ namespace NActors {
         void SetCurrentActivationTime(ui32, i64) {}
         inline void AddElapsedCycles(ui32, i64) {}
         inline void AddParkedCycles(i64) {}
-        inline void AddBlockedCycles(i64) {}
         inline void IncrementSentEvents() {}
         inline void IncrementPreemptedEvents() {}
         inline void IncrementMailboxPushedOutByTailSending() {}
@@ -208,14 +202,6 @@ namespace NActors {
             Stats = stats;
             PoolId = Executor ? Executor->PoolId : MaxPools;
             MailboxCache.Switch(mailboxTable);
-        }
-
-        void SwitchToIdle() {
-            Executor = nullptr;
-            MailboxTable = nullptr;
-            MailboxCache.Switch(nullptr);
-            //Stats = &WorkerStats; // TODO: in actorsystem 2.0 idle stats cannot be related to specific pool
-            PoolId = MaxPools;
         }
     };
 }

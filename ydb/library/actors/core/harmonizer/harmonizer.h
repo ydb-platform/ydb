@@ -4,7 +4,7 @@
 
 namespace NActors {
     class IExecutorPool;
-    class ISharedExecutorPool;
+    class ISharedPool;
     struct TSelfPingInfo;
 
     template <typename T>
@@ -60,7 +60,7 @@ namespace NActors {
         virtual void Enable(bool enable) = 0;
         virtual TPoolHarmonizerStats GetPoolStats(i16 poolId) const = 0;
         virtual THarmonizerStats GetStats() const = 0;
-        virtual void SetSharedPool(ISharedExecutorPool* pool) = 0;
+        virtual void SetSharedPool(ISharedPool* pool) = 0;
     };
 
     IHarmonizer* MakeHarmonizer(ui64 ts);

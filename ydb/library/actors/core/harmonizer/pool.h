@@ -9,7 +9,7 @@
 
 namespace NActors {
 
-class ISharedExecutorPool;
+class ISharedPool;
 class TBasicExecutorPool;
 class IExecutorPool;
 template <typename T>
@@ -23,7 +23,7 @@ struct TThreadInfo {
 struct TPoolInfo {
     std::vector<TThreadInfo> ThreadInfo;
     std::vector<TThreadInfo> SharedInfo;
-    ISharedExecutorPool* Shared = nullptr;
+    ISharedPool* Shared = nullptr;
     IExecutorPool* Pool = nullptr;
     TBasicExecutorPool* BasicPool = nullptr;
 
@@ -43,6 +43,8 @@ struct TPoolInfo {
     ui64 NotEnoughCpuExecutions = 0;
     ui64 NewNotEnoughCpuExecutions = 0;
     ui16 LocalQueueSize;
+
+    std::atomic<i64> CurrentThreadCount = 0;
 
     std::atomic<i64> LastFlags = 0; // 0 - isNeedy; 1 - isStarved; 2 - isHoggish
     std::atomic<ui64> IncreasingThreadsByNeedyState = 0;

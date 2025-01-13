@@ -232,10 +232,6 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
             OriginalPool->GiveHalfThread(from, to);
         }
 
-        i16 GetSharedThreadCount() const override {
-            return OriginalPool->GetSharedThreadCount();
-        }
-
         TSharedPoolState GetState() const override {
             return OriginalPool->GetState();
         }

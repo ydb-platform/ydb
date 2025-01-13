@@ -10,7 +10,7 @@
 
 #include <library/cpp/yt/assert/assert.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
 
@@ -722,7 +722,7 @@ void FormatValue(TStringBuilderBase* builder, const std::tuple<Ts...>& value, TS
     [&] <size_t... Idx> (std::index_sequence<Idx...>) {
         ([&] {
             FormatValue(builder, std::get<Idx>(value), spec);
-            if constexpr (Idx != sizeof...(Ts)) {
+            if constexpr (Idx != sizeof...(Ts) - 1) {
                 builder->AppendString(TStringBuf(", "));
             }
         } (), ...);

@@ -470,7 +470,7 @@ where d not between 110 and 150
    and b>c
    and d>e
 
-statement query
+statement skipped_cs query
 select a+b*2 as col1
 from t1
 where a>b
@@ -900,7 +900,7 @@ where d not between 110 and 150
    and (e>a and e<b)
 order by col2,col6,col3,col4,col1,col5
 
-statement query
+statement skipped_cs query
 select d-e as col1,
        a+b*2+c*3+d*4+e*5 as col2,
        a as col3
@@ -1255,7 +1255,7 @@ where (e>a and e<b)
     or b>c
     or (c<=d-2 or c>=d+2)
 
-statement query
+statement skipped_cs query
 select d-e as col1
 from t1
 where coalesce(a,b,c,d,e)<>0
@@ -1489,7 +1489,7 @@ where (c<=d-2 or c>=d+2)
     or coalesce(a,b,c,d,e)<>0
 order by col2,col1,col3,col4
 
-statement query
+statement skipped_cs query
 select abs(a) as col1,
        c as col2,
        (a+b+c+d+e)/5 as col3,
@@ -1554,7 +1554,7 @@ from t1
 where (e>c or e<d)
 order by col4,col3,col1,col2
 
-statement query
+statement skipped_cs query
 select (a+b+c+d+e)/5 as col1,
        c-d as col2
 from t1
@@ -1691,7 +1691,7 @@ where (e>c or e<d)
     or e+d between a+b-10 and c+130
 order by col1
 
-statement query
+statement skipped_cs query
 select d-e as col1,
        a as col2,
        d as col3
@@ -1830,7 +1830,7 @@ select a-b as col1,
 from t1
 order by col3,col6,col4,col5,col2,col1
 
-statement query
+statement skipped_cs query
 select abs(a) as col1,
        case a+1 when b then 111 when c then 222
         when d then 333  when e then 444 else 555 end as col2,
@@ -1898,7 +1898,7 @@ where b>c
    and b is not null
 order by col3,col2,col1,col4
 
-statement query
+statement skipped_cs query
 select a+b*2 as col1,
        abs(a) as col2
 from t1
@@ -2272,7 +2272,7 @@ where e+d between a+b-10 and c+130
     or b>c
 order by col3,col2,col1
 
-statement query
+statement skipped_cs query
 select a-b as col1,
        d-e as col2,
        abs(b-c) as col3,
@@ -2356,7 +2356,7 @@ where a is null
    and c>d
    and a>b
 
-statement query
+statement skipped_cs query
 select abs(b-c) as col1,
        (a+b+c+d+e)/5 as col2,
        a-b as col3,
@@ -2508,7 +2508,7 @@ from t1
 where a>b
     or (a>b-2 and a<b+2)
 
-statement query
+statement skipped_cs query
 select d as col1,
        abs(b-c) as col2,
        b-c as col3,
@@ -2529,7 +2529,7 @@ select b as col1,
 from t1
 order by col1,col3,col2,col4
 
-statement query
+statement skipped_cs query
 select c as col1,
        e as col2,
        a+b*2 as col3,

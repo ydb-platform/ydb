@@ -197,7 +197,7 @@ YT_DEFINE_ERROR_ENUM(
     ((SslError)                     (static_cast<int>(NBus::EErrorCode::SslError)))
     ((RequestMemoryPressure)        (120)) // There is no enough memory to handle RPC request.
     ((GlobalDiscoveryError)         (121)) // Single peer discovery interrupts discovery session.
-    ((ResponseMemoryPressure)       (122)) // There is no enouth memory to handle RPC response.
+    ((ResponseMemoryPressure)       (122)) // There is no enough memory to handle RPC response.
 );
 
 DEFINE_ENUM(EMessageFormat,

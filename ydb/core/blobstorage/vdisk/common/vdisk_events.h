@@ -1109,7 +1109,7 @@ namespace NKikimr {
             ShowInternals = 2,
         };
 
-        using TForceBlockTabletData = TEvBlobStorage::TEvGet::TTabletData;
+        using TForceBlockTabletData = TEvBlobStorage::TEvGet::TForceBlockTabletData;
 
         struct TExtremeQuery : std::tuple<TLogoBlobID, ui32, ui32, const ui64*> {
             TExtremeQuery(const TLogoBlobID &logoBlobId, ui32 sh, ui32 sz, const ui64 *cookie = nullptr)

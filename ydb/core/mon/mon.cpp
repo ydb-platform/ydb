@@ -25,6 +25,7 @@
 #include <ydb/core/protos/mon.pb.h>
 
 #include "mon_impl.h"
+#include "counters_adapter_impl.h"
 
 namespace NActors {
 
@@ -388,17 +389,6 @@ public:
     }
 
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
-        if (response->Status.StartsWith("2")) {
-            TString url(Event->Get()->Request->URL.Before('?'));
-            TString status(response->Status);
-            NMonitoring::THistogramPtr ResponseTimeHgram = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters,
-                    ActorMonPage->MonServiceName)
-                ->GetSubgroup("subsystem", "mon")
-                ->GetSubgroup("url", url)
-                ->GetSubgroup("status", status)
-                ->GetHistogram("ResponseTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
-            ResponseTimeHgram->Collect(Event->Get()->Request->Timer.Passed() * 1000);
-        }
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
@@ -1357,9 +1347,15 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     NLwTraceMonPage::RegisterPages(IndexMonPage.Get());
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(ACTORLIB_PROVIDER));
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(MONITORING_PROVIDER));
+    if (ActorSystem->AppData<NKikimr::TAppData>()) {
+        auto metricsRoot = NKikimr::GetServiceCounters(ActorSystem->AppData<NKikimr::TAppData>()->Counters, "utils")->GetSubgroup("subsystem", "mon");
+        Metrics = std::make_shared<TMetricFactoryForDynamicCounters>(std::move(metricsRoot));
+    } else {
+        Metrics = NMonitoring::TMetricRegistry::SharedInstance();
+    }
     ui32 executorPool = ActorSystem->AppData<NKikimr::TAppData>() ? ActorSystem->AppData<NKikimr::TAppData>()->UserPoolId : 0;
     HttpProxyActorId = ActorSystem->Register(
-        NHttp::CreateHttpProxy(),
+        NHttp::CreateHttpProxy(Metrics),
         TMailboxType::ReadAsFilled,
         executorPool);
     HttpMonServiceActorId = ActorSystem->Register(

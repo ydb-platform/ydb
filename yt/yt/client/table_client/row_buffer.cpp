@@ -99,7 +99,7 @@ TMutableUnversionedRow TRowBuffer::CaptureRow(TUnversionedValueRange values, boo
     auto capturedRow = TMutableUnversionedRow::Allocate(&Pool_, count);
     auto* capturedBegin = capturedRow.Begin();
 
-    ::memcpy(capturedBegin, values.Begin(), count * sizeof (TUnversionedValue));
+    ::memcpy(capturedBegin, values.Begin(), count * sizeof(TUnversionedValue));
 
     if (captureValues) {
         for (int index = 0; index < count; ++index) {
@@ -114,7 +114,7 @@ TMutableUnversionedRow TRowBuffer::CaptureRow(TUnversionedValueRange values, boo
 
 std::vector<TMutableUnversionedRow> TRowBuffer::CaptureRows(TRange<TUnversionedRow> rows, bool captureValues)
 {
-    int rowCount = static_cast<int>(rows.Size());
+    int rowCount = std::ssize(rows);
     std::vector<TMutableUnversionedRow> capturedRows(rowCount);
     for (int index = 0; index < rowCount; ++index) {
         capturedRows[index] = CaptureRow(rows[index], captureValues);
@@ -252,7 +252,7 @@ TMutableVersionedRow TRowBuffer::CaptureAndPermuteRow(
 
     std::sort(writeTimestamps.begin(), writeTimestamps.end(), std::greater<TTimestamp>());
     writeTimestamps.erase(std::unique(writeTimestamps.begin(), writeTimestamps.end()), writeTimestamps.end());
-    int writeTimestampCount = static_cast<int>(writeTimestamps.size());
+    int writeTimestampCount = std::ssize(writeTimestamps);
 
     if (validateDuplicateAndRequiredValueColumns) {
         ValidateDuplicateAndRequiredValueColumns(
@@ -270,8 +270,8 @@ TMutableVersionedRow TRowBuffer::CaptureAndPermuteRow(
         writeTimestampCount,
         deleteTimestampCount);
 
-    ::memcpy(capturedRow.BeginWriteTimestamps(), writeTimestamps.data(), sizeof (TTimestamp) * writeTimestampCount);
-    ::memcpy(capturedRow.BeginDeleteTimestamps(), row.BeginDeleteTimestamps(), sizeof (TTimestamp) * deleteTimestampCount);
+    ::memcpy(capturedRow.BeginWriteTimestamps(), writeTimestamps.data(), sizeof(TTimestamp) * writeTimestampCount);
+    ::memcpy(capturedRow.BeginDeleteTimestamps(), row.BeginDeleteTimestamps(), sizeof(TTimestamp) * deleteTimestampCount);
 
     if (!allowMissingKeyColumns) {
         int index = 0;

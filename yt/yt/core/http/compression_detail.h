@@ -8,7 +8,7 @@ namespace NYT::NHttp::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// NB: some codecs (e.g. lzop) accept ui16 as buffer size.
+// NB: Some codecs (e.g. lzop) accept ui16 as buffer size.
 constexpr size_t DefaultCompressionBufferSize = 32_KB;
 
 std::unique_ptr<IOutputStream> TryDetectOptionalCompressors(

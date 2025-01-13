@@ -158,13 +158,16 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         }
     }
 
-    if (StorageConfig.HasSelfManagementConfig() && StorageConfig.GetSelfManagementConfig().GetEnabled()) {
+    if (StorageConfig.GetSelfManagementConfig().GetEnabled()) {
         // assuming that in autoconfig mode HostRecords are managed by the distconf; we need to apply it here to
         // avoid race with box autoconfiguration and node list change
         HostRecords = std::make_shared<THostRecordMap::element_type>(StorageConfig);
         if (SelfHealId) {
             Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
         }
+    } else {
+        StartConsoleInteraction();
+        ConsoleInteraction->Start(); // start console interaction when working in non-distconf mode
     }
 
     if (!std::exchange(StorageConfigObtained, true)) { // this is the first time we get StorageConfig in this instance of BSC
@@ -190,8 +193,7 @@ void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
 
 void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
     if (!StorageConfig.HasBlobStorageConfig() || // this would be strange
-            !ignoreDistconf && (!StorageConfig.HasSelfManagementConfig() ||
-            !StorageConfig.GetSelfManagementConfig().GetEnabled() ||
+            !ignoreDistconf && (!StorageConfig.GetSelfManagementConfig().GetEnabled() ||
             !StorageConfig.GetSelfManagementConfig().GetAutomaticBoxManagement())) {
         return;
     }

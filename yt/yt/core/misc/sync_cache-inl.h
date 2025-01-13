@@ -378,9 +378,9 @@ bool TSyncSlruCacheBase<TKey, TValue, THash>::Touch(TShard* shard, TItem* item)
 template <class TKey, class TValue, class THash>
 void TSyncSlruCacheBase<TKey, TValue, THash>::DrainTouchBuffer(TShard* shard)
 {
-    int count = std::min(
+    int count = std::min<int>(
         shard->TouchBufferPosition.load(),
-        static_cast<int>(shard->TouchBuffer.size()));
+        std::ssize(shard->TouchBuffer));
     for (int index = 0; index < count; ++index) {
         MoveToOlder(shard, shard->TouchBuffer[index]);
     }

@@ -195,11 +195,6 @@ public:
         const TJobId& jobId,
         const TGetJobFailContextOptions& options = {}) = 0;
 
-    virtual TString GetJobStderrWithRetries(
-        const TOperationId& operationId,
-        const TJobId& jobId,
-        const TGetJobStderrOptions& options = {}) = 0;
-
     virtual IFileReaderPtr GetJobStderr(
         const TOperationId& operationId,
         const TJobId& jobId,
@@ -208,12 +203,6 @@ public:
     virtual std::vector<TJobTraceEvent> GetJobTrace(
         const TOperationId& operationId,
         const TGetJobTraceOptions& options = {}) = 0;
-
-    // SkyShare
-
-    virtual NHttpClient::IHttpResponsePtr SkyShareTable(
-        const std::vector<TYPath>& tablePaths,
-        const TSkyShareTableOptions& options = {}) = 0;
 
     // Files
     virtual std::unique_ptr<IInputStream> ReadFile(
@@ -345,8 +334,6 @@ public:
         const TGetTablePartitionsOptions& options = {}) = 0;
 
     virtual ui64 GenerateTimestamp() = 0;
-
-    virtual TAuthorizationInfo WhoAmI() = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

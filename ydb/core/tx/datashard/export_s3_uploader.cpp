@@ -1,6 +1,5 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
-#include "backup_restore_common.h"
 #include "datashard.h"
 #include "export_common.h"
 #include "export_s3.h"
@@ -9,6 +8,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/core/backup/common/checksum.h>
+#include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/events/common.h>
@@ -31,6 +32,7 @@
 namespace NKikimr {
 namespace NDataShard {
 
+using namespace NBackup;
 using namespace NBackupRestoreTraits;
 
 class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
@@ -183,7 +185,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         google::protobuf::TextFormat::PrintToString(Scheme.GetRef(), &Buffer);
         if (EnableChecksums) {
-            SchemeChecksum = ComputeExportChecksum(Buffer);
+            SchemeChecksum = NBackup::ComputeChecksum(Buffer);
         }
 
         auto request = Aws::S3::Model::PutObjectRequest()
@@ -202,7 +204,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         google::protobuf::TextFormat::PrintToString(Permissions.GetRef(), &Buffer);
         if (EnableChecksums) {
-            PermissionsChecksum = ComputeExportChecksum(Buffer);
+            PermissionsChecksum = NBackup::ComputeChecksum(Buffer);
         }
 
         auto request = Aws::S3::Model::PutObjectRequest()
@@ -217,7 +219,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         Buffer = std::move(Metadata);
         if (EnableChecksums) {
-            MetadataChecksum = ComputeExportChecksum(Buffer);
+            MetadataChecksum = NBackup::ComputeChecksum(Buffer);
         }
 
         auto request = Aws::S3::Model::PutObjectRequest()
@@ -814,11 +816,11 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         ? GenYdbPermissions(Task.GetTable())
         : Nothing();
 
-    NBackupRestore::TMetadata metadata;
+    NBackup::TMetadata metadata;
     metadata.SetVersion(Task.GetEnableChecksums() ? 1 : 0);
 
-    NBackupRestore::TFullBackupMetadata::TPtr backup = new NBackupRestore::TFullBackupMetadata{
-        .SnapshotVts = NBackupRestore::TVirtualTimestamp(
+    NBackup::TFullBackupMetadata::TPtr backup = new NBackup::TFullBackupMetadata{
+        .SnapshotVts = NBackup::TVirtualTimestamp(
             Task.GetSnapshotStep(),
             Task.GetSnapshotTxId())
     };

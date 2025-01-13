@@ -9,7 +9,7 @@
 #include <yt/yt/core/net/address.h>
 #include <yt/yt/core/net/local_address.h>
 
-#include <library/cpp/yt/small_containers/compact_set.h>
+#include <library/cpp/yt/compact_containers/compact_set.h>
 
 namespace NYT::NRpc {
 
@@ -226,7 +226,7 @@ public:
 
     std::vector<std::pair<std::string, IChannelPtr>> PickRandomPeers(int peerCount = 1) const
     {
-        VERIFY_READER_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_READER_SPINLOCK_AFFINITY(SpinLock_);
 
         YT_VERIFY(0 < peerCount && peerCount <= ActivePeerToPriority_.Size());
 
@@ -362,7 +362,7 @@ private:
 
     void InitPeersAvailablePromise()
     {
-        VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
         YT_LOG_DEBUG("Awaiting peer availability");
         PeersAvailablePromise_ = NewPromise<void>();
@@ -378,7 +378,7 @@ private:
 
     void OnPeerUnregistered()
     {
-        VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
         if (ActivePeerToPriority_.Size() == 0 && PeersAvailablePromise_.IsSet()) {
             InitPeersAvailablePromise();
@@ -400,7 +400,7 @@ private:
     //! Trying to call this method for a currently viable address with a different priority than stored leads to failure.
     bool RegisterPeerWithPriority(const std::string& address, int priority)
     {
-        VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
         // Check for an existing active peer for this address.
         if (auto it = ActivePeerToPriority_.find(address); it != ActivePeerToPriority_.end()) {
@@ -465,7 +465,7 @@ private:
     template <class F>
     void GeneratePeerHashes(const std::string& address, F f)
     {
-        VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
         TRandomGenerator generator(ComputeHash(address));
         for (int index = 0; index < Config_->HashesPerPeer; ++index) {
@@ -475,7 +475,7 @@ private:
 
     bool GuardedUnregisterPeer(const std::string& address)
     {
-        VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
         // Check if the peer is in the backlog and erase it if so.
         if (EraseBacklogPeer(address)) {
@@ -505,7 +505,7 @@ private:
 
     void ActivateBacklogPeers()
     {
-        VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
         while (!BacklogPeerToPriority_.empty() && ActivePeerToPriority_.Size() < Config_->MaxPeerCount) {
             auto& [priority, backlogPeers] = *PriorityToBacklogPeers_.begin();
@@ -522,7 +522,7 @@ private:
 
     void AddActivePeer(const std::string& address, int priority)
     {
-        VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
         ActivePeerToPriority_.Set(address, priority);
 
@@ -539,7 +539,7 @@ private:
 
     void AddBacklogPeer(const std::string& address, int priority)
     {
-        VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
         BacklogPeerToPriority_[address] = priority;
         PriorityToBacklogPeers_[priority].Set(address, {});
@@ -547,7 +547,7 @@ private:
 
     bool EraseActivePeer(const std::string& address)
     {
-        VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
         auto activePeerIt = ActivePeerToPriority_.find(address);
 
@@ -573,7 +573,7 @@ private:
 
     bool EraseBacklogPeer(const std::string& address)
     {
-        VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
         auto backlogPeerIt = BacklogPeerToPriority_.find(address);
 

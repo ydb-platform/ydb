@@ -55,27 +55,27 @@
 #define ngtcp2_max_def(SUFFIX, T)                                              \
   static inline T ngtcp2_max_##SUFFIX(T a, T b) { return a < b ? b : a; }
 
-ngtcp2_max_def(int8, int8_t);
-ngtcp2_max_def(int16, int16_t);
-ngtcp2_max_def(int32, int32_t);
-ngtcp2_max_def(int64, int64_t);
-ngtcp2_max_def(uint8, uint8_t);
-ngtcp2_max_def(uint16, uint16_t);
-ngtcp2_max_def(uint32, uint32_t);
-ngtcp2_max_def(uint64, uint64_t);
-ngtcp2_max_def(size, size_t);
+ngtcp2_max_def(int8, int8_t)
+ngtcp2_max_def(int16, int16_t)
+ngtcp2_max_def(int32, int32_t)
+ngtcp2_max_def(int64, int64_t)
+ngtcp2_max_def(uint8, uint8_t)
+ngtcp2_max_def(uint16, uint16_t)
+ngtcp2_max_def(uint32, uint32_t)
+ngtcp2_max_def(uint64, uint64_t)
+ngtcp2_max_def(size, size_t)
 
 #define ngtcp2_min_def(SUFFIX, T)                                              \
   static inline T ngtcp2_min_##SUFFIX(T a, T b) { return a < b ? a : b; }
 
-ngtcp2_min_def(int8, int8_t);
-ngtcp2_min_def(int16, int16_t);
-ngtcp2_min_def(int32, int32_t);
-ngtcp2_min_def(int64, int64_t);
-ngtcp2_min_def(uint8, uint8_t);
-ngtcp2_min_def(uint16, uint16_t);
-ngtcp2_min_def(uint32, uint32_t);
-ngtcp2_min_def(uint64, uint64_t);
-ngtcp2_min_def(size, size_t);
+ngtcp2_min_def(int8, int8_t)
+ngtcp2_min_def(int16, int16_t)
+ngtcp2_min_def(int32, int32_t)
+ngtcp2_min_def(int64, int64_t)
+ngtcp2_min_def(uint8, uint8_t)
+ngtcp2_min_def(uint16, uint16_t)
+ngtcp2_min_def(uint32, uint32_t)
+ngtcp2_min_def(uint64, uint64_t)
+ngtcp2_min_def(size, size_t)
 
 #endif /* !defined(NGTCP2_MACRO_H) */

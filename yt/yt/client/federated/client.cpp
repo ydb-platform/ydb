@@ -773,7 +773,7 @@ void TClient::HandleError(const TErrorOr<void>& error, int clientIndex)
 
 void TClient::UpdateActiveClient()
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
     for (int index = 0; index < std::ssize(UnderlyingClients_); ++index) {
         const auto& clientDescription = UnderlyingClients_[index];

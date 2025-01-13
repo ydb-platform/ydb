@@ -23,13 +23,13 @@ TEST(TAsyncLooperTest, JustWorks)
     auto queue = New<TActionQueue>();
 
     auto asyncStart = BIND([invoker = queue->GetInvoker()] (bool) {
-        VERIFY_INVOKER_AFFINITY(invoker);
+        YT_ASSERT_INVOKER_AFFINITY(invoker);
         return BIND([] {}).AsyncVia(invoker).Run();
     });
 
     auto progress = std::make_shared<std::atomic<int>>(0);
     auto syncFinish = BIND([progress, invoker = queue->GetInvoker()] (bool) {
-        VERIFY_INVOKER_AFFINITY(invoker);
+        YT_ASSERT_INVOKER_AFFINITY(invoker);
         progress->fetch_add(1);
     });
 

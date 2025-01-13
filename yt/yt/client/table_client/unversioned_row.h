@@ -18,7 +18,7 @@
 
 #include <yt/yt_proto/yt/core/misc/proto/guid.pb.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/yt/memory/chunked_memory_pool.h>
 
@@ -79,7 +79,7 @@ public:
     char* GetMutableString()
     {
         YT_VERIFY(IsStringLikeType(Value_.Type));
-        // NB: it is correct to use `const_cast` here to modify the stored string
+        // NB: It is correct to use `const_cast` here to modify the stored string
         // because initially it's allocated as a non-const `char*`.
         return const_cast<char*>(Value_.Data.String);
     }

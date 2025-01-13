@@ -124,7 +124,7 @@ struct ngtcp2_rtb_entry {
   };
 };
 
-ngtcp2_objalloc_decl(rtb_entry, ngtcp2_rtb_entry, oplent);
+ngtcp2_objalloc_decl(rtb_entry, ngtcp2_rtb_entry, oplent)
 
 /*
  * ngtcp2_rtb_entry_objalloc_new allocates ngtcp2_rtb_entry object via

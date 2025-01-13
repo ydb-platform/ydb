@@ -74,7 +74,10 @@ struct TBucket
         return false;
     }
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver /*waitTimeObserver*/) override
+    void SubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
+    { }
+
+    void UnsubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
     { }
 
     ~TBucket();
@@ -298,12 +301,9 @@ public:
         auto currentInstant = GetCpuInstant();
 
         TBucketPtr bucket;
-        TWaitTimeObserver waitTimeObserver;
-
         {
             auto guard = Guard(SpinLock_);
             bucket = GetStarvingBucket(action);
-            waitTimeObserver = WaitTimeObserver_;
 
             if (!bucket) {
                 return false;
@@ -318,8 +318,9 @@ public:
             bucket->WaitTime = action->StartedAt - action->EnqueuedAt;
         }
 
-        if (waitTimeObserver) {
-            waitTimeObserver(CpuDurationToDuration(action->StartedAt - action->EnqueuedAt));
+        // Microoptimization: avoid calling CpuDurationToDuration if no observers are registered.
+        if (!WaitTimeObservers_.IsEmpty()) {
+            WaitTimeObservers_.Fire(CpuDurationToDuration(action->StartedAt - action->EnqueuedAt));
         }
 
         YT_ASSERT(action && !action->Finished);
@@ -393,10 +394,14 @@ public:
         }
     }
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver)
+    void SubscribeWaitTimeObserved(const TWaitTimeObserver& callback)
     {
-        auto guard = Guard(SpinLock_);
-        WaitTimeObserver_ = waitTimeObserver;
+        WaitTimeObservers_.Subscribe(callback);
+    }
+
+    void UnsubscribeWaitTimeObserved(const TWaitTimeObserver& callback)
+    {
+        WaitTimeObservers_.Unsubscribe(callback);
     }
 
 private:
@@ -467,12 +472,12 @@ private:
     std::atomic<int> ThreadCount_ = 0;
     std::array<TThreadState, TThreadPoolBase::MaxThreadCount> ThreadStates_;
 
-    ITwoLevelFairShareThreadPool::TWaitTimeObserver WaitTimeObserver_;
+    TCallbackList<ITwoLevelFairShareThreadPool::TWaitTimeObserver::TSignature> WaitTimeObservers_;
 
 
     size_t GetLowestEmptyPoolId()
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         size_t id = 0;
         while (id < IdToPool_.size() && IdToPool_[id]) {
@@ -483,7 +488,7 @@ private:
 
     void AccountCurrentlyExecutingBuckets()
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         auto currentInstant = GetCpuInstant();
         auto threadCount = ThreadCount_.load();
@@ -502,7 +507,7 @@ private:
 
     void UpdateExcessTime(TBucket* bucket, TCpuDuration duration)
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         const auto& pool = IdToPool_[bucket->PoolId];
 
@@ -521,7 +526,7 @@ private:
 
     TBucketPtr GetStarvingBucket(TEnqueuedAction* action)
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         // For each currently evaluating buckets recalculate excess time.
         AccountCurrentlyExecutingBuckets();
@@ -530,7 +535,7 @@ private:
         auto minExcessTime = std::numeric_limits<NProfiling::TCpuDuration>::max();
 
         int minPoolIndex = -1;
-        for (int index = 0; index < static_cast<int>(IdToPool_.size()); ++index) {
+        for (int index = 0; index < std::ssize(IdToPool_); ++index) {
             const auto& pool = IdToPool_[index];
             if (pool && !pool->Heap.empty() && pool->ExcessTime < minExcessTime) {
                 minExcessTime = pool->ExcessTime;
@@ -693,9 +698,14 @@ public:
         TThreadPoolBase::Shutdown();
     }
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver) override
+    void SubscribeWaitTimeObserved(const TWaitTimeObserver& callback) override
     {
-        Queue_->RegisterWaitTimeObserver(std::move(waitTimeObserver));
+        Queue_->SubscribeWaitTimeObserved(callback);
+    }
+
+    void UnsubscribeWaitTimeObserved(const TWaitTimeObserver& callback) override
+    {
+        Queue_->UnsubscribeWaitTimeObserved(callback);
     }
 
 private:

@@ -15,7 +15,7 @@
 #include <library/cpp/yt/threading/event_count.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <atomic>
 #include <type_traits>
@@ -111,7 +111,7 @@ public:
             return false;
         }
         cookie -= MinCookie;
-        YT_ASSERT(cookie >= 0 && cookie < static_cast<int>(Callbacks_.size()));
+        YT_ASSERT(cookie >= 0 && cookie < std::ssize(Callbacks_));
         YT_ASSERT(Callbacks_[cookie]);
         SpareCookies_.push_back(cookie);
         auto callback = std::move(Callbacks_[cookie]);
@@ -528,14 +528,14 @@ private:
 
     void SetResultError(const NYT::TError& error) override
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
         TFutureState<void>::SetResultError(error);
         Result_.emplace(error);
     }
 
     bool DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<NThreading::TSpinLock>* guard) override
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
         return
             ResultHandlers_.TryRemove(cookie, guard) ||
             TFutureState<void>::DoUnsubscribe(cookie, guard);
@@ -2108,7 +2108,7 @@ public:
             return MakeFuture<typename TResultHolder::TResult>({});
         }
 
-        for (int index = 0; index < static_cast<int>(this->Futures_.size()); ++index) {
+        for (int index = 0; index < std::ssize(this->Futures_); ++index) {
             const auto& future = this->Futures_[index];
             if (future.IsSet()) {
                 OnFutureSet(index, future.Get());
@@ -2151,7 +2151,7 @@ private:
             return;
         }
 
-        if (++ResponseCount_ == static_cast<int>(this->Futures_.size())) {
+        if (++ResponseCount_ == std::ssize(this->Futures_)) {
             ResultHolder_.TrySetPromise(Promise_);
         }
     }
@@ -2188,7 +2188,7 @@ public:
             return MakeFuture<typename TResultHolder::TResult>({});
         }
 
-        if (static_cast<int>(this->Futures_.size()) < N_) {
+        if (std::ssize(this->Futures_) < N_) {
             if (Options_.CancelInputOnShortcut) {
                 this->CancelFutures(NYT::TError(
                     NYT::EErrorCode::FutureCombinerShortcut,
@@ -2204,7 +2204,7 @@ public:
 
         std::vector<TFutureCallbackCookie> subscriptionCookies;
         subscriptionCookies.reserve(this->Futures_.size());
-        for (int index = 0; index < static_cast<int>(this->Futures_.size()); ++index) {
+        for (int index = 0; index < std::ssize(this->Futures_); ++index) {
             TFutureCallbackCookie cookie;
             const auto& future = this->Futures_[index];
             if (future.IsSet()) {
@@ -2273,7 +2273,7 @@ private:
             }
 
             if (Options_.CancelInputOnShortcut &&
-                responseIndex < static_cast<int>(this->Futures_.size()) - 1 &&
+                responseIndex < std::ssize(this->Futures_) - 1 &&
                 this->TryAcquireFuturesCancelLatch())
             {
                 this->CancelFutures(NYT::TError(
@@ -2289,8 +2289,8 @@ private:
 
         Errors_.push_back(error);
 
-        auto totalCount = static_cast<int>(this->Futures_.size());
-        auto failedCount = static_cast<int>(Errors_.size());
+        auto totalCount = std::ssize(this->Futures_);
+        auto failedCount = std::ssize(Errors_);
         if (totalCount - failedCount >= N_) {
             return;
         }
@@ -2380,7 +2380,7 @@ TFuture<std::vector<TErrorOr<T>>> AllSetWithTimeout(
     IInvokerPtr invoker)
 {
     std::vector<TPromise<T>> promises(futures.size());
-    for (int index = 0; index < static_cast<int>(futures.size()); ++index) {
+    for (int index = 0; index < std::ssize(futures); ++index) {
         auto promise = NewPromise<T>();
         futures[index].Subscribe(BIND_NO_PROPAGATE([promise] (const NYT::TErrorOr<T>& value) {
             promise.TrySet(value);
@@ -2400,7 +2400,7 @@ TFuture<std::vector<TErrorOr<T>>> AllSetWithTimeout(
 
     auto cookie = NConcurrency::TDelayedExecutor::Submit(
         BIND_NO_PROPAGATE([promises, futures] {
-            for (int index = 0; index < static_cast<int>(futures.size()); ++index) {
+            for (int index = 0; index < std::ssize(futures); ++index) {
                 auto error = NYT::TError(NYT::EErrorCode::Timeout, "Operation timed out");
                 promises[index].TrySet(error);
                 futures[index].Cancel(error);
@@ -2597,7 +2597,7 @@ public:
         if (Callbacks_.empty()) {
             return MakeFuture(std::vector<TErrorOr<T>>());
         }
-        int startImmediatelyCount = std::min(ConcurrencyLimit_, static_cast<int>(Callbacks_.size()));
+        int startImmediatelyCount = std::min<int>(ConcurrencyLimit_, std::ssize(Callbacks_));
         CurrentIndex_ = startImmediatelyCount;
         for (int index = 0; index < startImmediatelyCount; ++index) {
             RunCallback(index);

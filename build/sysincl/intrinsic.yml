@@ -33,6 +33,7 @@
   - intrin.h
   - intrin0.h
   - intrinsics.h
+  - lsxintrin.h
   - lzcntintrin.h
   - mm_malloc.h
   - mm3dnow.h

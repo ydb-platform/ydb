@@ -1,7 +1,7 @@
 #include "digest.h"
 #include "config.h"
 
-#include <yt/yt/core/misc/phoenix.h>
+#include <yt/yt/core/phoenix/type_def.h>
 
 namespace NYT {
 
@@ -9,9 +9,15 @@ using namespace NPhoenix;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void IPersistentDigest::RegisterMetadata(auto&& /*registrar*/)
+{ }
+
+PHOENIX_DEFINE_TYPE(IPersistentDigest);
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TLogDigest
     : public IPersistentDigest
-    , public NPhoenix::TFactoryTag<NPhoenix::TSimpleFactory>
 {
 public:
     TLogDigest(TLogDigestConfigPtr config)
@@ -60,21 +66,6 @@ public:
         std::fill(Buckets_.begin(), Buckets_.end(), 0);
     }
 
-    void Persist(const TPersistenceContext& context) override
-    {
-        using NYT::Persist;
-        Persist(context, Step_);
-        Persist(context, LogStep_);
-        Persist(context, LowerBound_);
-        Persist(context, UpperBound_);
-        Persist(context, DefaultValue_);
-        Persist(context, BucketCount_);
-        Persist(context, SampleCount_);
-        Persist(context, Buckets_);
-    }
-
-    DECLARE_DYNAMIC_PHOENIX_TYPE(TLogDigest, 0x42424243);
-
 private:
     double Step_;
     double LogStep_;
@@ -88,9 +79,23 @@ private:
     i64 SampleCount_ = 0;
 
     std::vector<i64> Buckets_;
+
+    PHOENIX_DECLARE_POLYMORPHIC_TYPE(TLogDigest, 0x42424243);
 };
 
-DEFINE_DYNAMIC_PHOENIX_TYPE(TLogDigest);
+void TLogDigest::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, Step_);
+    PHOENIX_REGISTER_FIELD(2, LogStep_);
+    PHOENIX_REGISTER_FIELD(3, LowerBound_);
+    PHOENIX_REGISTER_FIELD(4, UpperBound_);
+    PHOENIX_REGISTER_FIELD(5, DefaultValue_);
+    PHOENIX_REGISTER_FIELD(6, BucketCount_);
+    PHOENIX_REGISTER_FIELD(7, SampleCount_);
+    PHOENIX_REGISTER_FIELD(8, Buckets_);
+}
+
+PHOENIX_DEFINE_TYPE(TLogDigest);
 
 ////////////////////////////////////////////////////////////////////////////////
 

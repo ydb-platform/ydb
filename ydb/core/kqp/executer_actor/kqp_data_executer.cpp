@@ -2561,6 +2561,7 @@ private:
                     auto arbiterIterator = std::begin(shards);
                     std::advance(arbiterIterator, index);
                     columnShardArbiter = *arbiterIterator;
+                    receivingShardsSet.insert(*columnShardArbiter);
                 }
             }
 
@@ -2575,7 +2576,13 @@ private:
 
                 for (auto& [shardId, shardTx] : datashardTxs) {
                     shardTx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    if (columnShardArbiter) {
+                    if (!columnShardArbiter) {
+                        *shardTx->MutableLocks()->MutableSendingShards() = sendingShards;
+                        *shardTx->MutableLocks()->MutableReceivingShards() = receivingShards;
+                        if (arbiter) {
+                            shardTx->MutableLocks()->SetArbiterShard(arbiter);
+                        }
+                    } else if (!sendingShardsSet.empty() && !receivingShards.empty()) {
                         shardTx->MutableLocks()->AddSendingShards(*columnShardArbiter);
                         shardTx->MutableLocks()->AddReceivingShards(*columnShardArbiter);
                         if (sendingShardsSet.contains(shardId)) {
@@ -2584,23 +2591,30 @@ private:
                         if (receivingShardsSet.contains(shardId)) {
                             shardTx->MutableLocks()->AddReceivingShards(shardId);
                         }
+                        std::sort(
+                            std::begin(*shardTx->MutableLocks()->MutableSendingShards()),
+                            std::end(*shardTx->MutableLocks()->MutableSendingShards()));
+                        std::sort(
+                            std::begin(*shardTx->MutableLocks()->MutableReceivingShards()),
+                            std::end(*shardTx->MutableLocks()->MutableReceivingShards()));
                         AFL_ENSURE(!arbiter);
-                    } else {
-                        *shardTx->MutableLocks()->MutableSendingShards() = sendingShards;
-                        *shardTx->MutableLocks()->MutableReceivingShards() = receivingShards;
-                        if (arbiter) {
-                            shardTx->MutableLocks()->SetArbiterShard(arbiter);
-                        }
                     }
                 }
 
                 for (auto& [shardId, tx] : evWriteTxs) {
                     tx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    if (columnShardArbiter && *columnShardArbiter == shardId) {
+                    if (!columnShardArbiter) {
+                        *tx->MutableLocks()->MutableSendingShards() = sendingShards;
+                        *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
+                        if (arbiter) {
+                            tx->MutableLocks()->SetArbiterShard(arbiter);
+                        }
+                    } else if (*columnShardArbiter == shardId
+                            && !sendingShardsSet.empty() && !receivingShardsSet.empty()) {
                         tx->MutableLocks()->SetArbiterColumnShard(*columnShardArbiter);
                         *tx->MutableLocks()->MutableSendingShards() = sendingShards;
                         *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
-                    } else if (columnShardArbiter) {
+                    } else if (!sendingShardsSet.empty() && !receivingShardsSet.empty()) {
                         tx->MutableLocks()->SetArbiterColumnShard(*columnShardArbiter);
                         tx->MutableLocks()->AddSendingShards(*columnShardArbiter);
                         tx->MutableLocks()->AddReceivingShards(*columnShardArbiter);
@@ -2610,18 +2624,21 @@ private:
                         if (receivingShardsSet.contains(shardId)) {
                             tx->MutableLocks()->AddReceivingShards(shardId);
                         }
-                    } else {
-                        *tx->MutableLocks()->MutableSendingShards() = sendingShards;
-                        *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
-                        if (arbiter) {
-                            tx->MutableLocks()->SetArbiterShard(arbiter);
-                        }
+                        std::sort(
+                            std::begin(*tx->MutableLocks()->MutableSendingShards()),
+                            std::end(*tx->MutableLocks()->MutableSendingShards()));
+                        std::sort(
+                            std::begin(*tx->MutableLocks()->MutableReceivingShards()),
+                            std::end(*tx->MutableLocks()->MutableReceivingShards()));
                     }
                 }
 
                 for (auto& [shardId, t] : topicTxs) {
                     t.tx.SetOp(NKikimrPQ::TDataTransaction::Commit);
-                    if (columnShardArbiter) {
+                    if (!columnShardArbiter) {
+                        *t.tx.MutableSendingShards() = sendingShards;
+                        *t.tx.MutableReceivingShards() = receivingShards;
+                    } else if (!sendingShardsSet.empty() && !receivingShardsSet.empty()) {
                         t.tx.AddSendingShards(*columnShardArbiter);
                         t.tx.AddReceivingShards(*columnShardArbiter);
                         if (sendingShardsSet.contains(shardId)) {
@@ -2630,9 +2647,12 @@ private:
                         if (receivingShardsSet.contains(shardId)) {
                             t.tx.AddReceivingShards(shardId);
                         }
-                    } else {
-                        *t.tx.MutableSendingShards() = sendingShards;
-                        *t.tx.MutableReceivingShards() = receivingShards;
+                        std::sort(
+                            std::begin(*t.tx.MutableSendingShards()),
+                            std::end(*t.tx.MutableSendingShards()));
+                        std::sort(
+                            std::begin(*t.tx.MutableReceivingShards()),
+                            std::end(*t.tx.MutableReceivingShards()));
                     }
                     YQL_ENSURE(!arbiter);
                 }

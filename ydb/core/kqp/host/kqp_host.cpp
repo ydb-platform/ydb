@@ -62,6 +62,38 @@ void AddQueryStats(NKqpProto::TKqpStatsQuery& total, NKqpProto::TKqpStatsQuery&&
     total.SetWorkerCpuTimeUs(total.GetWorkerCpuTimeUs() + stats.GetWorkerCpuTimeUs());
 }
 
+bool CheckPerRow(const TExprNode::TPtr& root, TExprContext& exprCtx) {
+    ui64 writeCount = 0;
+    ui64 readCount = 0;
+    bool perRow = false;
+
+    VisitExpr(root, [&](const TExprNode::TPtr& node) {
+        if (node->Content() == "per_row") {
+            perRow = true;
+            return false;
+        }
+
+        if (NYql::NNodes::TCoWrite::Match(node.Get())) {
+            writeCount++;
+            return true;
+        } else if (NYql::NNodes::TCoRead::Match(node.Get())) {
+            readCount++;
+            return false;
+        }
+
+        return true;
+    });
+
+    if (perRow && writeCount > 1 || readCount != 0) {
+        exprCtx.AddError(NYql::TIssue(
+            exprCtx.GetPosition(NYql::NNodes::TExprBase(root).Pos()),
+            "PER ROW can't be used with multiple writes or reads."));
+        return false;
+    }
+
+    return true;
+}
+
 class TKqpResultWriter : public IResultWriter {
 public:
     TKqpResultWriter() {}
@@ -1334,6 +1366,10 @@ private:
         YQL_ENSURE(queryAst->Root);
         TExprNode::TPtr queryExpr;
         if (!CompileExpr(*queryAst->Root, queryExpr, ctx, ModuleResolver.get(), nullptr)) {
+            return result;
+        }
+
+        if (!CheckPerRow(queryExpr, ctx)) {
             return result;
         }
 

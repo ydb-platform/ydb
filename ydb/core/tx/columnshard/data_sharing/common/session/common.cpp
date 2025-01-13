@@ -24,7 +24,8 @@ TConclusionStatus TCommonSession::TryStart(NColumnShard::TColumnShard& shard) {
     for (auto&& i : GetPathIdsForStart()) {
         const auto& g = index.GetGranuleVerified(i);
         for (auto&& p : g.GetPortionsOlderThenSnapshot(GetSnapshotBarrier())) {
-            if (shard.GetDataLocksManager()->IsLocked(*p.second, { "sharing_session:" + GetSessionId() })) {
+            if (shard.GetDataLocksManager()->IsLocked(
+                    *p.second, NDataLocks::ELockCategory::Sharing, { "sharing_session:" + GetSessionId() })) {
                 return TConclusionStatus::Fail("failed to start cursor: portion is locked");
             }
 //            portionsByPath[i].emplace_back(p.second);
@@ -48,7 +49,7 @@ void TCommonSession::PrepareToStart(const NColumnShard::TColumnShard& shard) {
     State = EState::Prepared;
     AFL_VERIFY(!LockGuard);
     LockGuard = shard.GetDataLocksManager()->RegisterLock<NDataLocks::TSnapshotLock>("sharing_session:" + GetSessionId(),
-        TransferContext.GetSnapshotBarrierVerified(), GetPathIdsForStart(), true);
+        TransferContext.GetSnapshotBarrierVerified(), GetPathIdsForStart(), NDataLocks::ELockCategory::Sharing, true);
     shard.GetSharingSessionsManager()->StartSharingSession();
 }
 

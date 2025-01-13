@@ -118,7 +118,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 }
 
                 exportInfo = new TExportInfo(id, uid, TExportInfo::EKind::S3, settings, domainPath.Base()->PathId, request.GetPeerName());
-
+                exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableExportChecksums();
                 TString explain;
                 if (!FillItems(exportInfo, settings, explain)) {
                     return Reply(

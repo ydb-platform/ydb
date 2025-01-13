@@ -178,6 +178,7 @@ namespace NYql::NDqs {
                 operation.Mutableresult()->PackFrom(queryResult);
                 *operation.Mutableissues() = result.GetIssues();
                 ResponseBuffer.SetTruncated(result.GetTruncated());
+                ResponseBuffer.SetTimeout(result.GetTimeout());
 
                 Reply(Ydb::StatusIds::SUCCESS, statusCode > 1 || result.GetIssues().size() > 0);
             }

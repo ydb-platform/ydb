@@ -10,6 +10,7 @@ TContainerCacheOnContext::TContainerCacheOnContext(TComputationMutables& mutable
     : Index(mutables.CurValueIndex++)
 {
     ++++mutables.CurValueIndex;
+    mutables.CachedValues.insert(mutables.CachedValues.end(), {Index, Index + 1, Index + 2});
 }
 
 NUdf::TUnboxedValuePod TContainerCacheOnContext::NewArray(TComputationContext& ctx, ui64 size, NUdf::TUnboxedValue*& items) const {

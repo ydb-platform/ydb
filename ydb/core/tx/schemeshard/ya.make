@@ -26,6 +26,7 @@ RECURSE_FOR_TESTS(
     ut_index_build
     ut_index_build_reboots
     ut_login
+    ut_login_large
     ut_move
     ut_move_reboots
     ut_olap
@@ -48,6 +49,7 @@ RECURSE_FOR_TESTS(
     ut_subdomain
     ut_subdomain_reboots
     ut_topic_splitmerge
+    ut_transfer
     ut_ttl
     ut_user_attributes
     ut_user_attributes_reboots
@@ -103,6 +105,7 @@ SRCS(
     schemeshard__operation_assign_bsv.cpp
     schemeshard__operation_backup_backup_collection.cpp
     schemeshard__operation_backup_incremental_backup_collection.cpp
+    schemeshard__operation_restore_backup_collection.cpp
     schemeshard__operation_blob_depot.cpp
     schemeshard__operation_cancel_tx.cpp
     schemeshard__operation_cansel_build_index.cpp
@@ -307,6 +310,7 @@ PEERDIR(
     yql/essentials/providers/common/proto
     ydb/services/bg_tasks
     ydb/core/tx/columnshard/bg_tasks/manager
+    ydb/core/tx/tiering/tier
 )
 
 YQL_LAST_ABI_VERSION()

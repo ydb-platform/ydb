@@ -170,7 +170,8 @@ public:
         OutputItemType batch = Batch_.Get();
         size_t nvalues = DatumToMemberIDMap_.size();
 
-        const auto& sizeDatum = TArrowBlock::From(value.GetElement(BatchLengthID_)).GetDatum();
+        const auto& sizeValue = value.GetElement(BatchLengthID_);
+        const auto& sizeDatum = TArrowBlock::From(sizeValue).GetDatum();
         Y_ENSURE(sizeDatum.is_scalar());
         const auto& sizeScalar = sizeDatum.scalar();
         const auto& sizeData = arrow::internal::checked_cast<const arrow::UInt64Scalar&>(*sizeScalar);
@@ -179,7 +180,8 @@ public:
         TVector<arrow::Datum> datums(nvalues);
         for (size_t i = 0; i < nvalues; i++) {
             const ui32 id = DatumToMemberIDMap_[i];
-            const auto& datum = TArrowBlock::From(value.GetElement(id)).GetDatum();
+            const auto& datumValue = value.GetElement(id);
+            const auto& datum = TArrowBlock::From(datumValue).GetDatum();
             datums[i] = datum;
             if (datum.is_scalar()) {
                 continue;

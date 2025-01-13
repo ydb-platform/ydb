@@ -12,20 +12,24 @@ $src = [
 
 SELECT
     a
-FROM as_table($src)
+FROM
+    as_table($src)
 ORDER BY
-    date;
+    date
+;
 
 SELECT
     x.a
-FROM as_table($src)
-    AS x
+FROM
+    as_table($src) AS x
 ORDER BY
-    date;
+    date
+;
 
 SELECT
     x.a
-FROM as_table($src)
-    AS x
+FROM
+    as_table($src) AS x
 ORDER BY
-    x.date;
+    x.date
+;

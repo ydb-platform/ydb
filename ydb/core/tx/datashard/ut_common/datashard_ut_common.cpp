@@ -249,7 +249,7 @@ void TTester::RegisterTableInResolver(const TString& schemeText)
     table.Table.TableName = tdesc.GetName();
     table.TableId.Reset(new TTableId(FAKE_SCHEMESHARD_TABLET_ID, tdesc.GetId_Deprecated()));
     if (tdesc.HasPathId()) {
-        table.TableId.Reset(new TTableId(PathIdFromPathId(tdesc.GetPathId())));
+        table.TableId.Reset(new TTableId(TPathId::FromProto(tdesc.GetPathId())));
     }
     table.KeyColumnCount = tdesc.KeyColumnIdsSize();
     for (size_t i = 0; i < tdesc.ColumnsSize(); i++) {
@@ -1282,9 +1282,9 @@ std::tuple<TVector<ui64>, TTableId> CreateShardedTable(
         desc->MutableReplicationConfig()->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
     }
 
-    if (opts.ReplicationConsistency_) {
-        desc->MutableReplicationConfig()->SetConsistency(
-            static_cast<NKikimrSchemeOp::TTableReplicationConfig::EConsistency>(*opts.ReplicationConsistency_));
+    if (opts.ReplicationConsistencyLevel_) {
+        desc->MutableReplicationConfig()->SetConsistencyLevel(
+            static_cast<NKikimrSchemeOp::TTableReplicationConfig::EConsistencyLevel>(*opts.ReplicationConsistencyLevel_));
     }
 
     WaitTxNotification(server, sender, RunSchemeTx(*server->GetRuntime(), std::move(request), sender));
@@ -1376,7 +1376,7 @@ std::pair<TTableInfoByPathIdMap, ui64> GetTablesByPathId(
     TAutoPtr<IEventHandle> handle;
     auto response = GetEvGetInfo(server, tabletId, handle);
     for (auto& table: response->Record.GetUserTables()) {
-        result[PathIdFromPathId(table.GetDescription().GetPathId())] = table;
+        result[TPathId::FromProto(table.GetDescription().GetPathId())] = table;
     }
 
     auto ownerId = response->Record.GetTabletInfo().GetSchemeShard();
@@ -1539,12 +1539,10 @@ void ApplyChanges(
 }
 
 TRowVersion CommitWrites(
-        Tests::TServer::TPtr server,
+        TTestActorRuntime& runtime,
         const TVector<TString>& tables,
         ui64 writeTxId)
 {
-    auto& runtime = *server->GetRuntime();
-
     TActorId sender = runtime.AllocateEdgeActor();
 
     {
@@ -1569,6 +1567,14 @@ TRowVersion CommitWrites(
         "Unexpected step " << step << " and txId " << txId);
 
     return { step, txId };
+}
+
+TRowVersion CommitWrites(
+        Tests::TServer::TPtr server,
+        const TVector<TString>& tables,
+        ui64 writeTxId)
+{
+    return CommitWrites(*server->GetRuntime(), tables, writeTxId);
 }
 
 ui64 AsyncDropTable(
@@ -1899,14 +1905,25 @@ ui64 AsyncAlterTakeIncrementalBackup(
 ui64 AsyncAlterRestoreIncrementalBackup(
         Tests::TServer::TPtr server,
         const TString& workingDir,
-        const TString& srcTableName,
-        const TString& dstTableName)
+        const TString& srcTablePath,
+        const TString& dstTablePath)
 {
-    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup, workingDir);
+    return AsyncAlterRestoreMultipleIncrementalBackups(server, workingDir, {srcTablePath}, dstTablePath);
+}
 
-    auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableRestoreIncrementalBackup();
-    desc.SetSrcTableName(srcTableName);
-    desc.SetDstTableName(dstTableName);
+ui64 AsyncAlterRestoreMultipleIncrementalBackups(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TVector<TString>& srcTablePaths,
+        const TString& dstTablePath)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups, workingDir);
+
+    auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableRestoreMultipleIncrementalBackups();
+    for (const auto& srcTablePath: srcTablePaths) {
+        desc.AddSrcTablePaths(srcTablePath);
+    }
+    desc.SetDstTablePath(dstTablePath);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request));
 }
@@ -2604,6 +2621,7 @@ namespace {
             PRINT_PRIMITIVE(Datetime64);
             PRINT_PRIMITIVE(Timestamp64);
             PRINT_PRIMITIVE(String);
+            PRINT_PRIMITIVE(Utf8);
             PRINT_PRIMITIVE(DyNumber);
 
             default:
@@ -2643,13 +2661,12 @@ namespace {
 } // namespace
 
 TReadShardedTableState StartReadShardedTable(
-        Tests::TServer::TPtr server,
+        TTestActorRuntime& runtime,
         const TString& path,
         TRowVersion snapshot,
         bool pause,
         bool ordered)
 {
-    auto& runtime = *server->GetRuntime();
     auto sender = runtime.AllocateEdgeActor();
     auto worker = runtime.Register(new TReadTableImpl(sender, path, snapshot, pause, ordered));
     auto ev = runtime.GrabEdgeEventRethrow<TReadTableImpl::TEvResult>(sender);
@@ -2658,6 +2675,16 @@ TReadShardedTableState StartReadShardedTable(
         UNIT_ASSERT_VALUES_EQUAL(result, "PAUSED");
     }
     return { sender, worker, result };
+}
+
+TReadShardedTableState StartReadShardedTable(
+        Tests::TServer::TPtr server,
+        const TString& path,
+        TRowVersion snapshot,
+        bool pause,
+        bool ordered)
+{
+    return StartReadShardedTable(*server->GetRuntime(), path, snapshot, pause, ordered);
 }
 
 void ResumeReadShardedTable(
@@ -2671,11 +2698,19 @@ void ResumeReadShardedTable(
 }
 
 TString ReadShardedTable(
+        TTestActorRuntime& runtime,
+        const TString& path,
+        TRowVersion snapshot)
+{
+    return StartReadShardedTable(runtime, path, snapshot, /* pause = */ false).Result;
+}
+
+TString ReadShardedTable(
         Tests::TServer::TPtr server,
         const TString& path,
         TRowVersion snapshot)
 {
-    return StartReadShardedTable(server, path, snapshot, /* pause = */ false).Result;
+    return ReadShardedTable(*server->GetRuntime(), path, snapshot);
 }
 
 void SendViaPipeCache(
@@ -2732,7 +2767,7 @@ std::unique_ptr<TEvDataShard::TEvRead> GetBaseReadRequest(
     record.MutableTableId()->SetSchemaVersion(description.GetTableSchemaVersion());
 
     if (readVersion) {
-        readVersion.Serialize(*record.MutableSnapshot());
+        readVersion.ToProto(record.MutableSnapshot());
     }
 
     record.SetResultFormat(format);

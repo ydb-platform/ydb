@@ -79,6 +79,7 @@ SET(ORIG_SOURCES
     mkql_mapnext.cpp
     mkql_map_join.cpp
     mkql_match_recognize.cpp
+    mkql_match_recognize_rows_formatter.cpp
     mkql_multihopping.cpp
     mkql_multimap.cpp
     mkql_next_value.cpp

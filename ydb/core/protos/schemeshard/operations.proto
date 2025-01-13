@@ -154,7 +154,7 @@ enum EOperationType {
     ESchemeOpDropResourcePool = 101;
     ESchemeOpAlterResourcePool = 102;
 
-    ESchemeOpRestoreIncrementalBackup = 103;
+    ESchemeOpRestoreMultipleIncrementalBackups = 103;
     ESchemeOpRestoreIncrementalBackupAtTable = 104;
 
     // BackupCollection
@@ -163,9 +163,17 @@ enum EOperationType {
     ESchemeOpDropBackupCollection = 107;
     ESchemeOpBackupBackupCollection = 109;
     ESchemeOpBackupIncrementalBackupCollection = 110;
+    ESchemeOpRestoreBackupCollection = 111;
 
     // Move sequence
     ESchemeOpMoveSequence = 108;
 
+    // Transfer
+    ESchemeOpCreateTransfer = 112;
+    ESchemeOpAlterTransfer = 113;
+    ESchemeOpDropTransfer = 114;
+    ESchemeOpDropTransferCascade = 115;
+    
+    
     // Some entries are grouped by semantics, so are out of order
 }

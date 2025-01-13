@@ -12,6 +12,8 @@
 
 #include <deque>
 
+#include <ydb/library/login/password_checker/password_checker.h>
+
 #include "login.h"
 
 namespace NLogin {
@@ -35,6 +37,12 @@ struct TLoginProvider::TImpl {
 
 TLoginProvider::TLoginProvider()
     : Impl(new TImpl())
+    , PasswordChecker(TPasswordComplexity())
+{}
+
+TLoginProvider::TLoginProvider(const TPasswordComplexity& passwordComplexity)
+    : Impl(new TImpl())
+    , PasswordChecker(passwordComplexity)
 {}
 
 TLoginProvider::~TLoginProvider()
@@ -51,6 +59,13 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
         response.Error = "Name is not allowed";
         return response;
     }
+
+    TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password);
+    if (!passwordCheckResult.Success) {
+        response.Error = passwordCheckResult.Error;
+        return response;
+    }
+
     auto itUserCreate = Sids.emplace(request.User, TSidRecord{.Type = NLoginProto::ESidType::USER});
     if (!itUserCreate.second) {
         if (itUserCreate.first->second.Type == ESidType::USER) {
@@ -73,8 +88,8 @@ bool TLoginProvider::CheckSubjectExists(const TString& name, const ESidType::Sid
     return itSidModify != Sids.end() && itSidModify->second.Type == type;
 }
 
-bool TLoginProvider::CheckUserExists(const TString& name) {
-    return CheckSubjectExists(name, ESidType::USER);
+bool TLoginProvider::CheckUserExists(const TString& user) {
+    return CheckSubjectExists(user, ESidType::USER);
 }
 
 TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserRequest& request) {
@@ -86,30 +101,34 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
         return response;
     }
 
+    TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password);
+    if (!passwordCheckResult.Success) {
+        response.Error = passwordCheckResult.Error;
+        return response;
+    }
+
     TSidRecord& user = itUserModify->second;
     user.Hash = Impl->GenerateHash(request.Password);
 
     return response;
 }
 
-TLoginProvider::TRemoveUserResponse TLoginProvider::RemoveUser(const TRemoveUserRequest& request) {
+TLoginProvider::TRemoveUserResponse TLoginProvider::RemoveUser(const TString& user) {
     TRemoveUserResponse response;
 
-    auto itUserModify = Sids.find(request.User);
+    auto itUserModify = Sids.find(user);
     if (itUserModify == Sids.end() || itUserModify->second.Type != ESidType::USER) {
-        if (!request.MissingOk) {
-            response.Error = "User not found";
-        }
+        response.Error = "User not found";
         return response;
     }
 
-    auto itChildToParentIndex = ChildToParentIndex.find(request.User);
+    auto itChildToParentIndex = ChildToParentIndex.find(user);
     if (itChildToParentIndex != ChildToParentIndex.end()) {
         for (const TString& parent : itChildToParentIndex->second) {
             auto itGroup = Sids.find(parent);
             if (itGroup != Sids.end()) {
                 response.TouchedGroups.emplace_back(itGroup->first);
-                itGroup->second.Members.erase(request.User);
+                itGroup->second.Members.erase(user);
             }
         }
         ChildToParentIndex.erase(itChildToParentIndex);
@@ -301,17 +320,20 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
     if (!request.ExternalAuth) {
         auto itUser = Sids.find(request.User);
         if (itUser == Sids.end() || itUser->second.Type != ESidType::USER) {
+            response.Status = TLoginUserResponse::EStatus::INVALID_USER;
             response.Error = "Invalid user";
             return response;
         }
 
         if (!Impl->VerifyHash(request.Password, itUser->second.Hash)) {
+            response.Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
             response.Error = "Invalid password";
             return response;
         }
     }
 
     if (Keys.empty() || Keys.back().PrivateKey.empty()) {
+        response.Status = TLoginUserResponse::EStatus::UNAVAILABLE_KEY;
         response.Error = "No key to generate token";
         return response;
     }
@@ -353,6 +375,7 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
 
     response.Token = TString(encoded_token);
     response.SanitizedToken = SanitizeJwtToken(response.Token);
+    response.Status = TLoginUserResponse::EStatus::SUCCESS;
 
     return response;
 }
@@ -657,6 +680,10 @@ TString TLoginProvider::SanitizeJwtToken(const TString& token) {
         return {};
     }
     return TStringBuilder() << TStringBuf(token).SubString(0, signaturePos) << ".**"; // <token>.**
+}
+
+void TLoginProvider::UpdatePasswordCheckParameters(const TPasswordComplexity& passwordComplexity) {
+    PasswordChecker.Update(passwordComplexity);
 }
 
 }

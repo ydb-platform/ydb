@@ -495,11 +495,11 @@ namespace NYql::NDq {
     {
         const auto dsi = source.select().data_source_instance();
         YQL_CLOG(INFO, ProviderGeneric) << "Creating read actor with params:"
-                                        << " kind=" << NYql::NConnector::NApi::EDataSourceKind_Name(dsi.kind())
+                                        << " kind=" << NYql::EGenericDataSourceKind_Name(dsi.kind())
                                         << ", endpoint=" << dsi.endpoint().ShortDebugString()
                                         << ", database=" << dsi.database()
                                         << ", use_tls=" << ToString(dsi.use_tls())
-                                        << ", protocol=" << NYql::NConnector::NApi::EProtocol_Name(dsi.protocol());
+                                        << ", protocol=" << NYql::EGenericProtocol_Name(dsi.protocol());
 
         // FIXME: strange piece of logic - authToken is created but not used:
         // https://a.yandex-team.ru/arcadia/ydb/library/yql/providers/clickhouse/actors/yql_ch_read_actor.cpp?rev=r11550199#L140
@@ -528,7 +528,8 @@ namespace NYql::NDq {
 
         auto tokenProvider = CreateGenericTokenProvider(
             source.GetToken(),
-            source.GetServiceAccountId(), source.GetServiceAccountIdSignature(),
+            source.GetServiceAccountId(), 
+            source.GetServiceAccountIdSignature(),
             credentialsFactory);
 
         const auto actor = new TGenericReadActor(

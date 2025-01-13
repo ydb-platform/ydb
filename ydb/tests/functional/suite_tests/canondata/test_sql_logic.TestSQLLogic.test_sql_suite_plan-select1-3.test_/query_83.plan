@@ -108,7 +108,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[row.col3,row.col1,row.col2,row.col4]"
                                             },
                                             {
                                                 "Inputs": [
@@ -128,6 +128,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/sqllogictest_select1-3.test_plan/t1",
                                                         "ReadColumns": [
                                                             "a",
                                                             "b",

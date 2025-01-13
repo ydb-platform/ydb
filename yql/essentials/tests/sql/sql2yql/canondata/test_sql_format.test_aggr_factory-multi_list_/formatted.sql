@@ -1,6 +1,6 @@
 /* syntax version 1 */
 /* postgres can not */
-$input =
+$input = (
     SELECT
         AsList(
             1,
@@ -12,15 +12,18 @@ $input =
         AsList(
             4,
             5
-        ) AS nums;
+        ) AS nums
+);
 
 SELECT
-    MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY("count")) AS count,
-    MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY("min")) AS min,
-    MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY("max")) AS max,
-    MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY("sum")) AS sum,
-    MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY("avg")) AS avg,
-    MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY("stddev")) AS stddev,
-    MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY("percentile", 0.5)) AS p50,
-    MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY("aggregate_list")) AS agg_list
-FROM $input;
+    MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY('count')) AS count,
+    MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY('min')) AS min,
+    MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY('max')) AS max,
+    MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY('sum')) AS sum,
+    MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY('avg')) AS avg,
+    MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY('stddev')) AS stddev,
+    MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY('percentile', 0.5)) AS p50,
+    MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY('aggregate_list')) AS agg_list
+FROM
+    $input
+;

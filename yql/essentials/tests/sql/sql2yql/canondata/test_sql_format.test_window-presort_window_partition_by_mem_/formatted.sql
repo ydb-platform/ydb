@@ -4,8 +4,8 @@ SELECT
     row_number() OVER w
 FROM (
     SELECT
-        AsList("a") AS key,
-        "z" AS value
+        AsList('a') AS key,
+        'z' AS value
 )
 WINDOW
     w AS (
@@ -13,4 +13,5 @@ WINDOW
             key
         ORDER BY
             value
-    );
+    )
+;

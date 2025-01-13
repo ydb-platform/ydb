@@ -136,6 +136,7 @@ public:
         bool NeedToConnect = true;
         bool NeedToCheckForUpdate = true;
         bool ForceVersionCheck = false;
+        bool AllowEmptyDatabase = false;
 
         TCredentialsGetter CredentialsGetter;
 

@@ -11,7 +11,7 @@ from urllib3.util.retry import Retry
 
 from .query_results import YQResults
 
-MAX_RETRY_FOR_SESSION = 4
+MAX_RETRY_FOR_SESSION = 100
 BACK_OFF_FACTOR = 0.3
 TIME_BETWEEN_RETRIES = 1000
 ERROR_CODES = (500, 502, 504)
@@ -150,6 +150,22 @@ class YQHttpClient(object):
         self._validate_http_error(response, expected_code=expected_code)
         return response.json()["id"]
 
+    def start_query(
+        self,
+        query_id: str,
+        request_id=None,
+        idempotency_key: str | None = None,
+        expected_code: int = 204,
+    ):
+        response = self.session.post(
+            self._compose_api_url(f"/api/fq/v1/queries/{query_id}/start"),
+            headers=self._build_headers(idempotency_key=idempotency_key, request_id=request_id),
+            params=self._build_params(),
+        )
+
+        self._validate_http_error(response, expected_code)
+        return response
+
     def get_query_status(self, query_id, request_id=None, expected_code=200) -> Any:
         response = self.session.get(
             self._compose_api_url(f"/api/fq/v1/queries/{query_id}/status"),
@@ -272,9 +288,7 @@ class YQHttpClient(object):
 
         return YQResults(result).results
 
-    def get_query_all_result_sets(
-        self, query_id: str, result_set_count: int, raw_format: bool = False
-    ) -> Any:
+    def get_query_all_result_sets(self, query_id: str, result_set_count: int, raw_format: bool = False) -> Any:
         result = []
         for i in range(0, result_set_count):
             r = self.get_query_result_set(query_id, result_set_index=i, raw_format=raw_format)

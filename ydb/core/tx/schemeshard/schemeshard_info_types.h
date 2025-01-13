@@ -12,6 +12,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
 
+#include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
@@ -2012,10 +2013,6 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         DiskQuotaExceeded = value;
     }
 
-    bool HasSecurityState() const {
-        return SecurityState.PublicKeysSize() > 0;
-    }
-
     const NLoginProto::TSecurityState& GetSecurityState() const {
         return SecurityState;
     }
@@ -2320,6 +2317,7 @@ struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> {
             const auto alterSpace = GetFileStoreSpace(*AlterConfig);
             space.SSD = Max(space.SSD, alterSpace.SSD);
             space.HDD = Max(space.HDD, alterSpace.HDD);
+            space.SSDSystem = Max(space.SSDSystem, alterSpace.SSDSystem);
         }
 
         return space;
@@ -2333,7 +2331,11 @@ private:
         TFileStoreSpace space;
         switch (config.GetStorageMediaKind()) {
             case 1: // STORAGE_MEDIA_SSD
-                space.SSD += blockCount * blockSize;
+                if (config.GetIsSystem()) {
+                    space.SSDSystem += blockCount * blockSize;
+                } else {
+                    space.SSD += blockCount * blockSize;
+                }
                 break;
             case 2: // STORAGE_MEDIA_HYBRID
             case 3: // STORAGE_MEDIA_HDD
@@ -2708,6 +2710,8 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
 
+    bool EnableChecksums = false;
+
     explicit TExportInfo(
             const ui64 id,
             const TString& uid,
@@ -2819,6 +2823,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TPathId DstPathId;
         Ydb::Table::CreateTableRequest Scheme;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
+        NBackup::TMetadata Metadata;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;
@@ -3041,7 +3046,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Reshuffle,
             Local,
         };
-        ui32 Level = 0;
+        ui32 Level = 1;
 
         ui32 Parent = 0;
         ui32 ParentEnd = 0;  // included
@@ -3049,6 +3054,14 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         EState State = Sample;
 
         ui32 ChildBegin = 1;  // included
+
+        TString ToStr() const {
+            return TStringBuilder()
+                << "{ K = " << K
+                << ", Level = " << Level << " / " << Levels
+                << ", Parent = " << Parent << " / " << ParentEnd
+                << ", State = " << State << " }";
+        }
 
         static ui32 BinPow(ui32 k, ui32 l) {
             ui32 r = 1;
@@ -3103,7 +3116,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         }
 
         NKikimrTxDataShard::TEvLocalKMeansRequest::EState GetUpload() const {
-            if (Level == 0) {
+            if (Parent == 0) {
                 if (NeedsAnotherLevel()) {
                     return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD;
                 } else {
@@ -3122,15 +3135,15 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             using namespace NTableIndex::NTableVectorKmeansTreeIndex;
             TString name = PostingTable;
             if (needsBuildTable || NeedsAnotherLevel()) {
-                name += Level % 2 == 0 ? BuildPostingTableSuffix0 : BuildPostingTableSuffix1;
+                name += Level % 2 != 0 ? BuildSuffix0 : BuildSuffix1;
             }
             return name;
         }
         TString ReadFrom() const {
-            Y_ASSERT(Level != 0);
+            Y_ASSERT(Parent != 0);
             using namespace NTableIndex::NTableVectorKmeansTreeIndex;
             TString name = PostingTable;
-            name += Level % 2 == 0 ? BuildPostingTableSuffix1 : BuildPostingTableSuffix0;
+            name += Level % 2 != 0 ? BuildSuffix1 : BuildSuffix0;
             return name;
         }
     };
@@ -3212,7 +3225,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TBillingStats Processed;
     TBillingStats Billed;
 
-    struct TSampleK {
+    struct TSample {
         struct TRow {
             ui64 P = 0;
             TString Row;
@@ -3276,8 +3289,26 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             MaxProbability = kth->P;
         }
     };
+    TSample Sample;
 
-    TSampleK Sample;
+    TString KMeansTreeToDebugStr() const {
+        return TStringBuilder()
+            << KMeans.ToStr() << ", "
+            << "{ Rows = " << Sample.Rows.size()
+            << ", Sent = " << Sample.Sent << " }, "
+            << "{ Done = " << DoneShards.size()
+            << ", ToUpload = " << ToUploadShards.size()
+            << ", InProgress = " << InProgressShards.size() << " }";
+    }
+
+    struct TClusterShards {
+        ui32 From = std::numeric_limits<ui32>::max();
+        TShardIdx Local = InvalidShardIdx;
+        std::vector<TShardIdx> Global;
+    };
+    TMap<ui32, TClusterShards> Cluster2Shards;
+
+    void AddParent(const TSerializedTableRange& range, TShardIdx shard);
 
     TIndexBuildInfo(TIndexBuildId id, TString uid)
         : Id(id)
@@ -3470,9 +3501,10 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         TString lastKeyAck =
             row.template GetValue<Schema::IndexBuildShardStatus::LastKeyAck>();
 
+        TSerializedTableRange bound{range};
+        AddParent(bound, shardIdx);
         Shards.emplace(
-            shardIdx, TIndexBuildInfo::TShardStatus(
-                          TSerializedTableRange(range), std::move(lastKeyAck)));
+            shardIdx, TIndexBuildInfo::TShardStatus(std::move(bound), std::move(lastKeyAck)));
         TIndexBuildInfo::TShardStatus &shardStatus = Shards.at(shardIdx);
 
         shardStatus.Status =
@@ -3541,11 +3573,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     float CalcProgressPercent() const {
         if (IsBuildVectorIndex()) {
+            Y_ASSERT(KMeans.Level != 0);
             // TODO(mbkkt) better calculation for vector index
-            if (KMeans.Level == 0) {
-                return 0.0;
-            }
-            return KMeans.Levels * 100. / KMeans.Level;
+            return KMeans.Level * 100.0 / KMeans.Levels;
         }
         if (Shards) {
             float totalShards = Shards.size();
@@ -3581,6 +3611,15 @@ struct TExternalDataSourceInfo: TSimpleRefCount<TExternalDataSourceInfo> {
     NKikimrSchemeOp::TAuth Auth;
     NKikimrSchemeOp::TExternalTableReferences ExternalTableReferences;
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
+
+    void FillProto(NKikimrSchemeOp::TExternalDataSourceDescription& proto) const {
+        proto.SetVersion(AlterVersion);
+        proto.SetSourceType(SourceType);
+        proto.SetLocation(Location);
+        proto.SetInstallation(Installation);
+        proto.MutableAuth()->CopyFrom(Auth);
+        proto.MutableProperties()->CopyFrom(Properties);
+    }
 };
 
 struct TViewInfo : TSimpleRefCount<TViewInfo> {

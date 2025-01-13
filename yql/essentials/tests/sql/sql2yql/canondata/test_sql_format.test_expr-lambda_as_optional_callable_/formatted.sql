@@ -5,4 +5,5 @@ $outer = CALLABLE ($outerType, ($x, $f) -> (($f ?? $defaultFunc)($x)));
 
 SELECT
     $outer(1, ($y) -> ($y + 1)),
-    $outer(1);
+    $outer(1)
+;

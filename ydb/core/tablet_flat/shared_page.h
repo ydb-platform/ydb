@@ -6,6 +6,8 @@
 
 namespace NKikimr::NSharedCache {
 
+using TPageId = NTable::NPage::TPageId;
+
 struct TCollection;
 
 enum EPageState {
@@ -26,12 +28,12 @@ struct TPage
     ui32 CacheFlags1 : 4 = 0;
     ui32 CacheFlags2 : 4 = 0;
 
-    const ui32 PageId;
+    const TPageId PageId;
     const size_t Size;
 
     TCollection* Collection;
 
-    TPage(ui32 pageId, size_t size, TCollection* collection)
+    TPage(TPageId pageId, size_t size, TCollection* collection)
         : PageId(pageId)
         , Size(size)
         , Collection(collection)

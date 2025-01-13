@@ -373,6 +373,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         auto it = oldConsumers.find(consumer.GetName());
         if (it != oldConsumers.end()) {
             Consumers[consumer.GetName()] = std::move(it->second);
+        } else {
+            Consumers.insert(std::make_pair(consumer.GetName(), TConsumerInfo{}));
         }
     }
 

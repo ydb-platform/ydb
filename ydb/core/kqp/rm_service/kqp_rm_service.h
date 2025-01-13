@@ -163,7 +163,7 @@ public:
         res << ", tx initially granted memory: " << HumanReadableSize(TxExternalDataQueryMemory.load(), SF_BYTES)
             << ", tx total memory allocations: " << HumanReadableSize(TxScanQueryMemory.load(), SF_BYTES)
             << ", tx largest successful memory allocation: " << HumanReadableSize(TxMaxAllocation.load(), SF_BYTES)
-            << ", tx largest failed memory allocation: " << HumanReadableSize(TxFailedAllocation.load(), SF_BYTES)
+            << ", tx last failed memory allocation: " << HumanReadableSize(TxFailedAllocation.load(), SF_BYTES)
             << ", tx total execution units: " << TxExecutionUnits.load()
             << ", started at: " << CreatedAt
             << " }" << Endl;
@@ -184,11 +184,11 @@ public:
 
     void AckFailedMemoryAlloc(ui64 memory) {
         auto* oldBacktrace = TxFailedAllocationBacktrace.load();
-        ui64 maxAlloc = TxFailedAllocation.load();
+        ui64 lastAlloc = TxFailedAllocation.load();
         bool exchanged = false;
 
-        while(maxAlloc < memory && !exchanged) {
-            exchanged = TxFailedAllocation.compare_exchange_weak(maxAlloc, memory);
+        while(!exchanged) {
+            exchanged = TxFailedAllocation.compare_exchange_weak(lastAlloc, memory);
         }
 
         if (exchanged) {

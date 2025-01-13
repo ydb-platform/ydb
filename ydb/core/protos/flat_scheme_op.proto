@@ -223,7 +223,7 @@ message TTTLSettings {
     }
 
     message TEvictionToExternalStorageSettings {
-        optional string StorageName = 1;
+        optional string Storage = 1;
     }
 
     message TTier {
@@ -250,7 +250,7 @@ message TTTLSettings {
         TDisabled Disabled = 2;
     }
 
-    optional string UseTiering = 3;
+    reserved 3;
 }
 
 message TTableReplicationConfig {
@@ -259,14 +259,14 @@ message TTableReplicationConfig {
         REPLICATION_MODE_READ_ONLY = 1;
     }
 
-    enum EConsistency {
-        CONSISTENCY_UNKNOWN = 0;
-        CONSISTENCY_STRONG = 1;
-        CONSISTENCY_WEAK = 2;
+    enum EConsistencyLevel {
+        CONSISTENCY_LEVEL_UNKNOWN = 0;
+        CONSISTENCY_LEVEL_GLOBAL = 1;
+        CONSISTENCY_LEVEL_ROW = 2;
     }
 
     optional EReplicationMode Mode = 1;
-    optional EConsistency Consistency = 2;
+    optional EConsistencyLevel ConsistencyLevel = 2;
 }
 
 message TTableIncrementalBackupConfig {
@@ -391,6 +391,14 @@ message TRequestedBloomFilter {
     repeated string ColumnNames = 3;
 }
 
+message TRequestedBloomNGrammFilter {
+    optional uint32 NGrammSize = 1;
+    optional uint32 FilterSizeBytes = 2;
+    optional uint32 HashesCount = 3;
+    optional string ColumnName = 4;
+    optional uint32 RecordsCount = 5;
+}
+
 message TRequestedMaxIndex {
     optional string ColumnName = 1;
 }
@@ -410,6 +418,7 @@ message TOlapIndexRequested {
         TRequestedBloomFilter BloomFilter = 40;
         TRequestedMaxIndex MaxIndex = 41;
         TRequestedCountMinSketch CountMinSketch = 42;
+        TRequestedBloomNGrammFilter BloomNGrammFilter = 43;
     }
 }
 
@@ -417,6 +426,14 @@ message TBloomFilter {
     optional double FalsePositiveProbability = 1 [default = 0.1];
     optional uint64 MaxBytesCount = 2 [default = 8196];
     repeated uint32 ColumnIds = 3;
+}
+
+message TBloomNGrammFilter {
+    optional uint32 NGrammSize = 1;
+    optional uint32 FilterSizeBytes = 2;
+    optional uint32 HashesCount = 3;
+    optional uint32 ColumnId = 4;
+    optional uint32 RecordsCount = 5;
 }
 
 message TMaxIndex {
@@ -441,6 +458,7 @@ message TOlapIndexDescription {
         TBloomFilter BloomFilter = 41;
         TMaxIndex MaxIndex = 42;
         TCountMinSketch CountMinSketch = 43;
+        TBloomNGrammFilter BloomNGrammFilter = 44;
     }
 }
 
@@ -460,6 +478,21 @@ message TStorageTierConfig {
     optional TCompressionOptions Compression = 3;
 }
 
+message TCompactionLevelConstructorContainer {
+    optional string ClassName = 1;
+
+    message TZeroLevel {
+        optional uint32 PortionsLiveDurationSeconds = 1;
+        optional uint64 ExpectedBlobsSize = 2;
+        optional uint64 PortionsCountAvailable = 3;
+    }
+
+    oneof Implementation {
+        TZeroLevel ZeroLevel = 10;
+    }
+
+}
+
 message TCompactionPlannerConstructorContainer {
     optional string ClassName = 1;
 
@@ -473,7 +506,7 @@ message TCompactionPlannerConstructorContainer {
     }
 
     message TLCOptimizer {
-
+        repeated TCompactionLevelConstructorContainer Levels = 1;
     }
 
     oneof Implementation {
@@ -502,9 +535,9 @@ message TMetadataManagerConstructorContainer {
 
 message TColumnTableSchemeOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
-    optional bool ExternalGuaranteeExclusivePK = 2 [default = false];
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
+    optional string ScanReaderPolicyName = 5;
 }
 
 message TColumnTableSchema {
@@ -546,9 +579,9 @@ message TColumnTableSchemaDiff {
 
 message TColumnTableRequestedOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
-    optional bool ExternalGuaranteeExclusivePK = 2;
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
+    optional string ScanReaderPolicyName = 5;
 }
 
 message TAlterColumnTableSchema {
@@ -612,7 +645,7 @@ message TColumnDataLifeCycle {
     // Incremented on each settings change
     optional uint64 Version = 3 [default = 1];
 
-    optional string UseTiering = 5;
+    reserved 5;
 }
 
 message TColumnTableTtlSettingsPreset {
@@ -972,10 +1005,18 @@ message TDropContinuousBackup {
 }
 
 message TRestoreIncrementalBackup {
-    optional string SrcTableName = 1;
+    optional string SrcTablePath = 1; // Absolute path
     optional NKikimrProto.TPathID SrcPathId = 3;
 
-    optional string DstTableName = 2;
+    optional string DstTablePath = 2; // Absolute path
+    optional NKikimrProto.TPathID DstPathId = 4;
+}
+
+message TRestoreMultipleIncrementalBackups {
+    repeated string SrcTablePaths = 1; // Absolute path
+    repeated NKikimrProto.TPathID SrcPathIds = 3;
+
+    optional string DstTablePath = 2; // Absolute path
     optional NKikimrProto.TPathID DstPathId = 4;
 }
 
@@ -1208,6 +1249,7 @@ message TBackupTask {
 
     optional uint64 SnapshotStep = 14;
     optional uint64 SnapshotTxId = 15;
+    optional bool EnableChecksums = 16; // currently available for s3
 }
 
 message TRestoreTask {
@@ -1220,6 +1262,8 @@ message TRestoreTask {
     oneof Settings {
         TS3Settings S3Settings = 6;
     }
+
+    optional bool ValidateChecksums = 7; // currently available for s3
 }
 
 message TPersQueueGroupAllocate {
@@ -1663,13 +1707,14 @@ message TModifyScheme {
 
     optional TResourcePoolDescription CreateResourcePool = 72;
 
-    optional TRestoreIncrementalBackup RestoreIncrementalBackup = 73;
+    optional TRestoreMultipleIncrementalBackups RestoreMultipleIncrementalBackups = 73;
 
     optional TBackupCollectionDescription CreateBackupCollection = 74;
     optional TBackupCollectionDescription AlterBackupCollection = 75;
     optional TBackupCollectionDescription DropBackupCollection = 76;
     optional TBackupBackupCollection BackupBackupCollection = 78;
     optional TBackupBackupCollection BackupIncrementalBackupCollection = 79;
+    optional TBackupBackupCollection RestoreBackupCollection = 80;
 
     optional TMove MoveSequence = 77;
 
@@ -1740,6 +1785,7 @@ enum EPathType {
     EPathTypeView = 20;
     EPathTypeResourcePool = 21;
     EPathTypeBackupCollection = 22;
+    EPathTypeTransfer = 23;
 }
 
 enum EPathSubType {

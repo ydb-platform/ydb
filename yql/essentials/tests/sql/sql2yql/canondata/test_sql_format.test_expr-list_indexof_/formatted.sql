@@ -8,4 +8,5 @@ SELECT
     ListIndexOf(Just($opt_list), 200),
     ListIndexOf(Nothing(List<Int32>?), 2),
     ListIndexOf([], 'foo'),
-    ListIndexOf(NULL, 1.0),;
+    ListIndexOf(NULL, 1.0),
+;

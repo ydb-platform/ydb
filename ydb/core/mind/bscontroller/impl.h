@@ -59,6 +59,7 @@ public:
     class TTxNodeReport;
     class TTxUpdateSeenOperational;
     class TTxConfigCmd;
+    class TTxCommitConfig;
     class TTxProposeGroupKey;
     class TTxRegisterNode;
     class TTxGetGroup;
@@ -70,6 +71,7 @@ public:
     class TTxUpdateLastSeenReady;
     class TTxUpdateNodeDrives;
     class TTxUpdateNodeDisconnectTimestamp;
+    class TTxUpdateShred;
 
     class TVSlotInfo;
     class TPDiskInfo;
@@ -996,6 +998,10 @@ public:
                 std::tie(BoxId, Fqdn, IcPort) = std::move(key);
             }
 
+            THostKey ChangeBox(Schema::BoxHostV2::BoxId::Type newBoxId) const {
+                return {{newBoxId, Fqdn, IcPort}};
+            }
+
             auto GetKey() const {
                 return std::tie(BoxId, Fqdn, IcPort);
             }
@@ -1412,9 +1418,9 @@ public:
         TNodeId NodeId;
         TNodeLocation Location;
 
-        THostRecord(TEvInterconnect::TNodeInfo&& nodeInfo)
+        THostRecord(const TEvInterconnect::TNodeInfo& nodeInfo)
             : NodeId(nodeInfo.NodeId)
-            , Location(std::move(nodeInfo.Location))
+            , Location(nodeInfo.Location)
         {}
 
         THostRecord(const NKikimrBlobStorage::TNodeIdentifier& node)
@@ -1428,11 +1434,13 @@ public:
         THashMap<TNodeId, THostId> NodeIdToHostId;
 
     public:
+        THostRecordMapImpl() = default;
+
         THostRecordMapImpl(TEvInterconnect::TEvNodesInfo *msg) {
-            for (TEvInterconnect::TNodeInfo& nodeInfo : msg->Nodes) {
+            for (const TEvInterconnect::TNodeInfo& nodeInfo : msg->Nodes) {
                 const THostId hostId(nodeInfo.Host, nodeInfo.Port);
                 NodeIdToHostId.emplace(nodeInfo.NodeId, hostId);
-                HostIdToRecord.emplace(hostId, std::move(nodeInfo));
+                HostIdToRecord.emplace(hostId, nodeInfo);
             }
         }
 
@@ -1522,6 +1530,11 @@ private:
     bool DonorMode = false;
     TDuration ScrubPeriodicity;
     NKikimrBlobStorage::TStorageConfig StorageConfig;
+    TString YamlConfig;
+    ui32 ConfigVersion = 0;
+    TBackoffTimer GetBlockBackoff{1, 1000};
+    NKikimrBlobStorage::TShredState ShredState;
+
     THashMap<TPDiskId, std::reference_wrapper<const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk>> StaticPDiskMap;
     THashMap<TPDiskId, ui32> StaticPDiskSlotUsage;
     std::unique_ptr<TStoragePoolStat> StoragePoolStat;
@@ -1548,6 +1561,10 @@ private:
     friend class TConfigState;
 
     class TNodeWardenUpdateNotifier;
+
+    class TConsoleInteraction;
+
+    std::unique_ptr<TConsoleInteraction> ConsoleInteraction;
 
     struct TEvPrivate {
         enum EEv {
@@ -1726,32 +1743,7 @@ private:
     void DefaultSignalTabletActive(const TActorContext&) override
     {} // do nothing, we will signal tablet active explicitly after initialization
 
-    void PassAway() override {
-        if (ResponsivenessPinger) {
-            ResponsivenessPinger->Detach(TActivationContext::ActorContextFor(ResponsivenessActorID));
-            ResponsivenessPinger = nullptr;
-        }
-        for (TActorId *ptr : {&SelfHealId, &StatProcessorActorId, &SystemViewsCollectorId}) {
-            if (const TActorId actorId = std::exchange(*ptr, {})) {
-                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
-            }
-        }
-        for (const auto& [id, info] : GroupMap) {
-            if (const auto& actorId = info->VirtualGroupSetupMachineId) {
-                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
-            }
-        }
-        for (const auto& [groupId, info] : BlobDepotDeleteQueue) {
-            if (const auto& actorId = info.VirtualGroupSetupMachineId) {
-                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
-            }
-        }
-        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, GetNameserviceActorId(), SelfId(),
-            nullptr, 0));
-        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeBlobStorageNodeWardenID(SelfId().NodeId()),
-            SelfId(), nullptr, 0));
-        return TActor::PassAway();
-    }
+    void PassAway() override;
 
     void OnDetach(const TActorContext&) override {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC02, "OnDetach");
@@ -1775,11 +1767,14 @@ private:
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev);
     void Handle(TEvents::TEvUndelivered::TPtr ev);
-    void ApplyStorageConfig();
+    void ApplyStorageConfig(bool ignoreDistconf = false);
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;
     void ProcessPostQuery(const NActorsProto::TRemoteHttpInfo& query, TActorId sender);
+
+    void StartConsoleInteraction();
+    void MakeCommitToConsole();
 
     void RenderResourceValues(IOutputStream& out, const TResourceRawValues& current);
     void RenderHeader(IOutputStream& out);
@@ -1820,8 +1815,7 @@ public:
 
     // For test purposes, required for self heal actor
     void CreateEmptyHostRecordsMap() {
-        TEvInterconnect::TEvNodesInfo nodes;
-        HostRecords = std::make_shared<THostRecordMapImpl>(&nodes);
+        HostRecords = std::make_shared<THostRecordMapImpl>();
     }
 
     ui64 NextConfigTxSeqNo = 1;
@@ -1843,6 +1837,8 @@ private:
     void Handle(TEvBlobStorage::TEvControllerProposeGroupKey::TPtr &ev);
     void ForwardToSystemViewsCollector(STATEFN_SIG);
     void Handle(TEvPrivate::TEvUpdateSystemViews::TPtr &ev);
+    void Handle(TEvBlobStorage::TEvGetBlockResult::TPtr &ev);
+    void Handle(TEvBlobStorage::TEvControllerShredRequest::TPtr ev);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Scrub handling
@@ -1921,6 +1917,7 @@ private:
     ITransaction* CreateTxMigrate();
     ITransaction* CreateTxLoadEverything();
     ITransaction* CreateTxUpdateSeenOperational(TVector<TGroupId> groups);
+    ITransaction* CreateTxCommitConfig(TString& yamlConfig, ui64 configVersion, NKikimrBlobStorage::TStorageConfig& storageConfig);
 
     struct TVDiskAvailabilityTiming {
         TVSlotId VSlotId;
@@ -1956,21 +1953,9 @@ public:
         return NKikimrServices::TActivity::BS_CONTROLLER_ACTOR;
     }
 
-    TBlobStorageController(const TActorId &tablet, TTabletStorageInfo *info)
-        : TActor(&TThis::StateInit)
-        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
-        , ResponsivenessPinger(nullptr)
-        , ScrubState(this)
-    {
-        using namespace NBlobStorageController;
-        TabletCountersPtr.Reset(new TProtobufTabletCounters<
-            ESimpleCounters_descriptor,
-            ECumulativeCounters_descriptor,
-            EPercentileCounters_descriptor,
-            ETxTypes_descriptor
-        >());
-        TabletCounters = TabletCountersPtr.Get();
-    }
+    TBlobStorageController(const TActorId &tablet, TTabletStorageInfo *info);
+
+    ~TBlobStorageController();
 
     STFUNC(StateInit) {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC05, "StateInit event", (Type, ev->GetTypeRewrite()),
@@ -2093,6 +2078,7 @@ public:
             hFunc(TEvBlobStorage::TEvControllerGroupDecommittedNotify, Handle);
             cFunc(TEvPrivate::EvScrub, ScrubState.HandleTimer);
             cFunc(TEvPrivate::EvVSlotReadyUpdate, VSlotReadyUpdate);
+            hFunc(TEvBlobStorage::TEvControllerShredRequest, Handle);
         }
 
         if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {
@@ -2101,57 +2087,7 @@ public:
         }
     }
 
-    STFUNC(StateWork) {
-        const ui32 type = ev->GetTypeRewrite();
-        THPTimer timer;
-
-        switch (type) {
-            fFunc(TEvBlobStorage::EvControllerRegisterNode, EnqueueIncomingEvent);
-            fFunc(TEvBlobStorage::EvControllerGetGroup, EnqueueIncomingEvent);
-            fFunc(TEvBlobStorage::EvControllerSelectGroups, EnqueueIncomingEvent);
-            fFunc(TEvBlobStorage::EvControllerUpdateDiskStatus, EnqueueIncomingEvent);
-            fFunc(TEvBlobStorage::EvControllerUpdateGroupStat, EnqueueIncomingEvent);
-            fFunc(TEvBlobStorage::EvControllerGroupMetricsExchange, EnqueueIncomingEvent);
-            fFunc(TEvBlobStorage::EvControllerUpdateNodeDrives, EnqueueIncomingEvent);
-            fFunc(TEvControllerCommitGroupLatencies::EventType, EnqueueIncomingEvent);
-            fFunc(TEvBlobStorage::EvRequestControllerInfo, EnqueueIncomingEvent);
-            fFunc(TEvBlobStorage::EvControllerNodeReport, EnqueueIncomingEvent);
-            fFunc(TEvBlobStorage::EvControllerConfigRequest, EnqueueIncomingEvent);
-            fFunc(TEvBlobStorage::EvControllerProposeGroupKey, EnqueueIncomingEvent);
-            fFunc(NSysView::TEvSysView::EvGetPDisksRequest, ForwardToSystemViewsCollector);
-            fFunc(NSysView::TEvSysView::EvGetVSlotsRequest, ForwardToSystemViewsCollector);
-            fFunc(NSysView::TEvSysView::EvGetGroupsRequest, ForwardToSystemViewsCollector);
-            fFunc(NSysView::TEvSysView::EvGetStoragePoolsRequest, ForwardToSystemViewsCollector);
-            fFunc(NSysView::TEvSysView::EvGetStorageStatsRequest, ForwardToSystemViewsCollector);
-            fFunc(TEvPrivate::EvUpdateSystemViews, EnqueueIncomingEvent);
-            hFunc(TEvInterconnect::TEvNodesInfo, Handle);
-            hFunc(TEvTabletPipe::TEvServerConnected, Handle);
-            hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
-            fFunc(TEvPrivate::EvUpdateSelfHealCounters, EnqueueIncomingEvent);
-            fFunc(TEvPrivate::EvDropDonor, EnqueueIncomingEvent);
-            fFunc(TEvBlobStorage::EvControllerScrubQueryStartQuantum, EnqueueIncomingEvent);
-            fFunc(TEvBlobStorage::EvControllerScrubQuantumFinished, EnqueueIncomingEvent);
-            fFunc(TEvBlobStorage::EvControllerScrubReportQuantumInProgress, EnqueueIncomingEvent);
-            fFunc(TEvBlobStorage::EvControllerGroupDecommittedNotify, EnqueueIncomingEvent);
-            fFunc(TEvPrivate::EvScrub, EnqueueIncomingEvent);
-            fFunc(TEvPrivate::EvVSlotReadyUpdate, EnqueueIncomingEvent);
-            cFunc(TEvPrivate::EvVSlotNotReadyHistogramUpdate, VSlotNotReadyHistogramUpdate);
-            cFunc(TEvPrivate::EvProcessIncomingEvent, ProcessIncomingEvent);
-            hFunc(TEvNodeWardenStorageConfig, Handle);
-            hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
-            default:
-                if (!HandleDefaultEvents(ev, SelfId())) {
-                    STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),
-                        (Event, ev->ToString()));
-                }
-            break;
-        }
-
-        if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {
-            STLOG(PRI_ERROR, BS_CONTROLLER, BSC00, "StateWork event processing took too much time", (Type, type),
-                (Duration, time));
-        }
-    }
+    STFUNC(StateWork);
 
     void LoadFinished() {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC09, "LoadFinished");
@@ -2166,6 +2102,10 @@ public:
         SignalTabletActive(TActivationContext::AsActorContext());
         Loaded = true;
         ApplyStorageConfig();
+
+        if (!ConsoleInteraction) { // maybe we are in distconf mode, no console interaction yet started
+            StartConsoleInteraction();
+        }
 
         for (const auto& [id, info] : GroupMap) {
             if (info->VirtualGroupState) {

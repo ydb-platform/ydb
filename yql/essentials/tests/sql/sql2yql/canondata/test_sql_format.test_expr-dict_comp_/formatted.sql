@@ -7,7 +7,8 @@ SELECT
         AsDict(AsTuple(1, 2u)) == AsDict(AsTuple(2, 2)),
         AsDict(AsTuple(1u, 2l)) == AsDict(AsTuple(1u, just(2u))),
         AsDict(AsTuple(1, 2u)) == AsDict(AsTuple(1, 2 / 0)),
-    );
+    )
+;
 
 SELECT
     AsTuple(
@@ -17,4 +18,5 @@ SELECT
         AsDict(AsTuple(1, 2u)) != AsDict(AsTuple(2, 2)),
         AsDict(AsTuple(1u, 2l)) != AsDict(AsTuple(1u, just(2u))),
         AsDict(AsTuple(1, 2u)) != AsDict(AsTuple(1, 2 / 0)),
-    );
+    )
+;

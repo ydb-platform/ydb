@@ -13,6 +13,7 @@
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <ydb/core/tx/locks/sys_tables.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/login/protos/login.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
@@ -48,6 +49,19 @@ struct TSchemeCacheConfig : public TThrRefBase {
 struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     using TPtr = TIntrusivePtr<TDomainInfo>;
 
+    struct TUser {
+        TString Sid;
+
+        TString ToString() const;
+    };
+
+    struct TGroup {
+        TString Sid;
+        TVector<TString> Members;
+
+        TString ToString() const;
+    };
+
     explicit TDomainInfo(const TPathId& domainKey, const TPathId& resourcesDomainKey)
         : DomainKey(domainKey)
         , ResourcesDomainKey(resourcesDomainKey)
@@ -71,6 +85,23 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
 
         if (descr.HasSharedHive()) {
             SharedHiveId = descr.GetSharedHive();
+        }
+
+        if (descr.HasSecurityState()) {
+            for (const auto& sid : descr.GetSecurityState().GetSids()) {
+                switch (sid.GetType()) {
+                case NLoginProto::ESidType_SidType_USER:
+                    Users.emplace_back(sid.GetName());
+                    break;
+                case NLoginProto::ESidType_SidType_GROUP: {
+                    TVector<TString> members(sid.GetMembers().begin(), sid.GetMembers().end());
+                    Groups.emplace_back(sid.GetName(), std::move(members));
+                    break;
+                }
+                default:
+                    break;
+                }
+            }
         }
     }
 
@@ -104,6 +135,8 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     TCoordinators Coordinators;
     TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
     ui64 SharedHiveId = 0;
+    TVector<TUser> Users;
+    TVector<TGroup> Groups;
 
     TString ToString() const;
 
@@ -160,6 +193,7 @@ struct TSchemeCacheNavigate {
         KindView = 21,
         KindResourcePool = 22,
         KindBackupCollection = 23,
+        KindTransfer = 24,
     };
 
     struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> {

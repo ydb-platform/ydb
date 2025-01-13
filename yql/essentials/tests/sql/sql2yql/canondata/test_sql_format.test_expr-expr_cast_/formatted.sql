@@ -1,2 +1,3 @@
 SELECT
-    CAST(3.14 AS Uint32);
+    CAST(3.14 AS Uint32)
+;

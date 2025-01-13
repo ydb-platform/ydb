@@ -22,9 +22,14 @@ std::optional<TBackupCollectionPaths> ResolveBackupCollectionPaths(
     THolder<TProposeResponse>& result,
     bool enforceBackupCollectionsDirExists = true);
 
-std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths(
+std::optional<THashMap<TString, THashSet<TString>>> GetBackupRequiredPaths(
     const TTxTransaction& tx,
     const TString& targetDir,
+    const TString& targetName,
+    const TOperationContext& context);
+
+std::optional<THashMap<TString, THashSet<TString>>> GetRestoreRequiredPaths(
+    const TTxTransaction& tx,
     const TString& targetName,
     const TOperationContext& context);
 

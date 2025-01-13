@@ -1,2 +1,3 @@
 SELECT
-    YQL::FromString("100500", YQL::@@'Uint64@@);
+    YQL::FromString('100500', YQL::@@'Uint64@@)
+;

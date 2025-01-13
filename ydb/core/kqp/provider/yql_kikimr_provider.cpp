@@ -79,6 +79,7 @@ struct TKikimrData {
         DataSinkNames.insert(TKiDropBackupCollection::CallableName());
         DataSinkNames.insert(TKiBackup::CallableName());
         DataSinkNames.insert(TKiBackupIncremental::CallableName());
+        DataSinkNames.insert(TKiRestore::CallableName());
 
         CommitModes.insert(CommitModeFlush);
         CommitModes.insert(CommitModeRollback);
@@ -130,7 +131,8 @@ struct TKikimrData {
             TYdbOperation::AlterBackupCollection |
             TYdbOperation::DropBackupCollection |
             TYdbOperation::Backup |
-            TYdbOperation::BackupIncremental;
+            TYdbOperation::BackupIncremental |
+            TYdbOperation::Restore;
 
         SystemColumns = {
             {"_yql_partition_id", NKikimr::NUdf::EDataSlot::Uint64}
@@ -438,11 +440,14 @@ bool TKikimrKey::Extract(const TExprNode& key) {
     } else if(tagName == "permission") {
         KeyType = Type::Permission;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
+    } else if (tagName == "sequence") {
+        KeyType = Type::Sequence;
+        Target = key.Child(0)->Child(1)->Child(0)->Content();
     } else if (tagName == "pgObject") {
         KeyType = Type::PGObject;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
         ObjectType = key.Child(0)->Child(2)->Child(0)->Content();
-    } else if (tagName == "backupCollection" || tagName == "backup") {
+    } else if (tagName == "backupCollection" || tagName == "backup" || tagName == "restore") {
         KeyType = Type::BackupCollection;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
         ExplicitPrefix = key.Child(0)->Child(2)->Child(0)->Content();
@@ -838,13 +843,14 @@ void TableDescriptionToTableInfoImpl(const TKikimrTableDescription& desc, TYdbOp
                 continue;
             }
 
-            const auto& idxTableDesc = desc.Metadata->SecondaryGlobalIndexMetadata[idxNo];
+            const auto& implTable = *desc.Metadata->ImplTables[idxNo];
+            YQL_ENSURE(!implTable.Next);
 
             auto info = NKqpProto::TKqpTableInfo();
-            info.SetTableName(idxTableDesc->Name);
-            info.MutableTableId()->SetOwnerId(idxTableDesc->PathId.OwnerId());
-            info.MutableTableId()->SetTableId(idxTableDesc->PathId.TableId());
-            info.SetSchemaVersion(idxTableDesc->SchemaVersion);
+            info.SetTableName(implTable.Name);
+            info.MutableTableId()->SetOwnerId(implTable.PathId.OwnerId());
+            info.MutableTableId()->SetTableId(implTable.PathId.TableId());
+            info.SetSchemaVersion(implTable.SchemaVersion);
 
             back_inserter = std::move(info);
             ++back_inserter;

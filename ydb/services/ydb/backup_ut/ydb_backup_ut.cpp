@@ -655,6 +655,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeCdcStream:
                 break; // https://github.com/ydb-platform/ydb/issues/7054
             case EPathTypeReplication:
+            case EPathTypeTransfer:
                 break; // https://github.com/ydb-platform/ydb/issues/10436
             case EPathTypeExternalTable:
                 break; // https://github.com/ydb-platform/ydb/issues/10438
@@ -1034,6 +1035,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EPathTypeCdcStream:
                 break; // https://github.com/ydb-platform/ydb/issues/7054
             case EPathTypeReplication:
+            case EPathTypeTransfer:
                 break; // https://github.com/ydb-platform/ydb/issues/10436
             case EPathTypeExternalTable:
                 break; // https://github.com/ydb-platform/ydb/issues/10438

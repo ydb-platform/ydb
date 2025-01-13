@@ -210,14 +210,14 @@ public:
         AuxInvoker_ = FairShareThreadPool_->GetInvoker("aux", "default");
     }
 
-    void Reconfigure(int threadCount) override
+    void SetThreadCount(int threadCount) override
     {
-        FairShareThreadPool_->Configure(threadCount);
+        FairShareThreadPool_->SetThreadCount(threadCount);
     }
 
-    void Reconfigure(TDuration pollingPeriod) override
+    void SetPollingPeriod(TDuration pollingPeriod) override
     {
-        FairShareThreadPool_->Configure(pollingPeriod);
+        FairShareThreadPool_->SetPollingPeriod(pollingPeriod);
     }
 
     bool TryRegister(const IPollablePtr& pollable, TString poolName) override
@@ -528,14 +528,14 @@ public:
         Poller_->Start();
     }
 
-    void Reconfigure(int threadCount) override
+    void SetThreadCount(int threadCount) override
     {
-        return Poller_->Reconfigure(threadCount);
+        return Poller_->SetThreadCount(threadCount);
     }
 
-    void Reconfigure(TDuration pollingPeriod) override
+    void SetPollingPeriod(TDuration pollingPeriod) override
     {
-        return Poller_->Reconfigure(pollingPeriod);
+        return Poller_->SetPollingPeriod(pollingPeriod);
     }
 
     void Shutdown() override

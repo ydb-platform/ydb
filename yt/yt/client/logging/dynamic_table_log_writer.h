@@ -28,10 +28,6 @@ DEFINE_REFCOUNTED_TYPE(IDynamicTableLogWriterFactory)
 //! reconfigure the underlying client for existing dynamic table log writers.
 IDynamicTableLogWriterFactoryPtr GetDynamicTableLogWriterFactory();
 
-//! Creates and registers the dynamic table log writer factory in the default log manager.
-//! NB: Make sure to call this *before* configuring any dynamic table log writers.
-void RegisterDynamicTableLogWriterFactory();
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NLogging

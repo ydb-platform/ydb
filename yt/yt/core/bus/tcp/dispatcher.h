@@ -2,8 +2,6 @@
 
 #include "public.h"
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/core/concurrency/public.h>
 
 #include <yt/yt/core/net/public.h>
@@ -13,6 +11,8 @@
 #include <yt/yt/core/ytree/public.h>
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
+
+#include <library/cpp/yt/memory/leaky_singleton.h>
 
 namespace NYT::NBus {
 

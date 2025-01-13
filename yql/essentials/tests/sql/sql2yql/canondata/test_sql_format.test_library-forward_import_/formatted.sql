@@ -1,11 +1,13 @@
 /* postgres can not */
 /* syntax version 1 */
-PRAGMA Library("agg.sql");
-PRAGMA Library("lib.sql");
+PRAGMA Library('agg.sql');
+PRAGMA Library('lib.sql');
+
 IMPORT lib SYMBOLS $Square, $Agg_sum, $Agg_max;
 
 SELECT
-    $Square(2);
+    $Square(2)
+;
 
 SELECT
     AGGREGATE_BY(x, $Agg_sum),

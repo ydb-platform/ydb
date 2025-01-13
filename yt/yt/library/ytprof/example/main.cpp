@@ -5,9 +5,10 @@
 #include <yt/yt/core/http/server.h>
 
 #include <yt/yt/library/ytprof/http/handler.h>
-#include <yt/yt/library/ytprof/heap_profiler.h>
 
-#include <absl/debugging/stacktrace.h>
+#include <library/cpp/yt/backtrace/absl_unwinder/absl_unwinder.h>
+
+#include <tcmalloc/malloc_extension.h>
 
 using namespace NYT;
 using namespace NYT::NHttp;
@@ -16,7 +17,7 @@ using namespace NYT::NYTProf;
 
 int main(int argc, char* argv[])
 {
-    absl::SetStackUnwinder(AbslStackUnwinder);
+    NBacktrace::SetAbslStackUnwinder();
     tcmalloc::MallocExtension::SetProfileSamplingRate(2_MB);
 
     try {

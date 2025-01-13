@@ -106,7 +106,7 @@ void TWorkloadCommand::Config(TConfig& config) {
     config.Opts->AddLongOption("window", "Window duration in seconds.")
         .DefaultValue(1).StoreResult(&WindowSec);
     config.Opts->AddLongOption("executer", "Query executer type (data or generic).")
-        .DefaultValue("data").StoreResult(&QueryExecuterType);
+        .DefaultValue("generic").StoreResult(&QueryExecuterType);
 }
 
 void TWorkloadCommand::PrepareForRun(TConfig& config) {
@@ -136,7 +136,7 @@ void TWorkloadCommand::PrepareForRun(TConfig& config) {
                                     .MaxActiveSessions(10+Threads));
         QueryClient = std::make_unique<NQuery::TQueryClient>(*Driver, queryClientSettings);
     } else {
-        Y_FAIL_S("Unexpected executor Type: " + QueryExecuterType);
+        throw TMisuseException() << "Unexpected executor Type: " << QueryExecuterType;
     }
 }
 
@@ -187,9 +187,9 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
         }
         ++retryCount;
         if (queryInfo.AlterTable) {
-            Y_FAIL_S("Generic query doesn't support alter table.");
+            throw TMisuseException() << "Generic query doesn't support alter table. Use data query (--executer data)";
         } else if (queryInfo.UseReadRows) {
-            Y_FAIL_S("Generic query doesn't support readrows.");
+            throw TMisuseException() << "Generic query doesn't support readrows. Use data query (--executer data)";
         } else {
             auto result = session.ExecuteQuery(queryInfo.Query.c_str(),
                 NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
@@ -397,7 +397,7 @@ void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& wo
         if (DryRun) {
             Cout << "Remove " << fullPath << Endl;
         } else {
-            ThrowOnError(RemovePathRecursive(*SchemeClient, *TableClient, *TopicClient, fullPath, ERecursiveRemovePrompt::Never, settings));
+            ThrowOnError(RemovePathRecursive(*SchemeClient, *TableClient, TopicClient.Get(), QueryClient.Get(), fullPath, ERecursiveRemovePrompt::Never, settings));
         }
         Cout << "Remove path " << path << "...Ok"  << Endl;
     }
@@ -444,7 +444,7 @@ TWorkloadCommandRoot::TWorkloadCommandRoot(const TString& key)
     }
     AddCommand(std::make_unique<TWorkloadCommandClean>(*Params));
 }
-    
+
 void TWorkloadCommandRoot::Config(TConfig& config) {
     TClientCommandTree::Config(config);
     Params->ConfigureOpts(*config.Opts, NYdbWorkload::TWorkloadParams::ECommandType::Root, 0);

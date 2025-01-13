@@ -1,2 +1,3 @@
 SELECT
-    'hawkeye' LIKE 'h%' ESCAPE '#' AS shouldTrue;
+    'hawkeye' LIKE 'h%' ESCAPE '#' AS shouldTrue
+;

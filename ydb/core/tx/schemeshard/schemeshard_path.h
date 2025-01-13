@@ -59,6 +59,7 @@ public:
         const TChecker& IsColumnTable(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsSequence(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsReplication(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsTransfer(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsCommonSensePath(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsInsideTableIndexPath(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsInsideCdcStreamPath(EStatus status = EStatus::StatusNameConflict) const;
@@ -173,6 +174,7 @@ public:
     bool IsCdcStream() const;
     bool IsSequence() const;
     bool IsReplication() const;
+    bool IsTransfer() const;
     ui32 Depth() const;
     ui64 Shards() const;
     const TString& LeafName() const;

@@ -364,7 +364,7 @@ namespace NTabletFlatExecutor {
 
                 logl
                     << NFmt::Do(*this) << " end=" << ui32(abort)
-                    << ", " << Blobs << "blobs " << WriteStats.Rows << "r"
+                    << ", " << Blobs << " blobs " << WriteStats.Rows << "r"
                     << " (max " << Conf->Layout.MaxRows << ")"
                     << ", put " << NFmt::If(Spent.Get());
 

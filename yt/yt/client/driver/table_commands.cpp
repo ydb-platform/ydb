@@ -34,6 +34,7 @@ namespace NYT::NDriver {
 using namespace NApi;
 using namespace NChaosClient;
 using namespace NChunkClient;
+using namespace NCodegen;
 using namespace NConcurrency;
 using namespace NFormats;
 using namespace NHiveClient;
@@ -266,14 +267,15 @@ void TWriteTableCommand::Register(TRegistrar registrar)
         .Default(1_MB);
 }
 
-TFuture<ITableWriterPtr> TWriteTableCommand::CreateTableWriter(
-    const ICommandContextPtr& context) const
+NApi::ITableWriterPtr TWriteTableCommand::CreateTableWriter(
+    const ICommandContextPtr& context)
 {
     PutMethodInfoInTraceContext("write_table");
 
-    return context->GetClient()->CreateTableWriter(
+    return WaitFor(context->GetClient()->CreateTableWriter(
         Path,
-        Options);
+        Options))
+            .ValueOrThrow();
 }
 
 void TWriteTableCommand::DoExecuteImpl(const ICommandContextPtr& context)
@@ -288,8 +290,7 @@ void TWriteTableCommand::DoExecuteImpl(const ICommandContextPtr& context)
     Options.PingAncestors = true;
     Options.Config = config;
 
-    auto apiWriter = WaitFor(CreateTableWriter(context))
-        .ValueOrThrow();
+    auto apiWriter = CreateTableWriter(context);
 
     auto schemalessWriter = CreateSchemalessFromApiWriterAdapter(std::move(apiWriter));
 
@@ -824,7 +825,7 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<NApi::EExecutionBackend>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<EExecutionBackend>>(
         "execution_backend",
         [] (TThis* command) -> auto& {
             return command->Options.ExecutionBackend;

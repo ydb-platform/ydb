@@ -12,6 +12,8 @@
 
 #include <library/cpp/yt/memory/ref.h>
 
+#include <library/cpp/yt/logging/logger.h>
+
 namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -57,6 +59,8 @@ public:
 
     const NRpc::NProto::TRequestHeader& Header() const override;
     NRpc::NProto::TRequestHeader& Header() override;
+
+    bool IsAttachmentCompressionEnabled() const override;
 
     bool IsStreamingEnabled() const override;
 
@@ -204,6 +208,8 @@ using TYPathMaybeRef = std::conditional_t<IsArcadiaProtobuf, const TYPath&, TYPa
 
 TYPathMaybeRef GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
 TYPathMaybeRef GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
+
+const google::protobuf::RepeatedPtrField<TProtobufString>& GetOriginalRequestAdditionalPaths(const NRpc::NProto::TRequestHeader& header);
 
 void SetRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPathBuf path);
 

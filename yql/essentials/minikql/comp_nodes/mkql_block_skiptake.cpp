@@ -117,7 +117,12 @@ public:
 
 
         block = test;
-        const auto height = CallInst::Create(getCount, { WrapArgumentForWindows(getres.second.back()(ctx, block), ctx, block) }, "height", block);
+
+        const auto countValue = getres.second.back()(ctx, block);
+        const auto height = CallInst::Create(getCount, { WrapArgumentForWindows(countValue, ctx, block) }, "height", block);
+
+        ValueCleanup(EValueRepresentation::Any, countValue, ctx, block);
+
         const auto part = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULT, count, height, "part", block);
         const auto decr = BinaryOperator::CreateSub(count, height, "decr", block);
         count->addIncoming(decr, block);
@@ -201,6 +206,8 @@ public:
 
                 const auto slice = CallInst::Create(sliceType, slicePtr, {ctx.GetFactory(), value, offset}, "slice", block);
 
+                ValueCleanup(EValueRepresentation::Any, value, ctx, block);
+
                 output->addIncoming(slice, block);
                 BranchInst::Create(exit, block);
 
@@ -214,9 +221,8 @@ public:
 #endif
 private:
     static NUdf::TUnboxedValuePod SliceBlock(const THolderFactory& holderFactory, NUdf::TUnboxedValuePod block, const uint64_t offset) {
-        NUdf::TUnboxedValue b(block);
-        auto& datum = TArrowBlock::From(b).GetDatum();
-        return datum.is_scalar() ? b.Release() : holderFactory.CreateArrowBlock(DeepSlice(datum.array(), offset, datum.array()->length - offset));
+        const auto& datum = TArrowBlock::From(block).GetDatum();
+        return datum.is_scalar() ? block : holderFactory.CreateArrowBlock(DeepSlice(datum.array(), offset, datum.array()->length - offset));
     }
 
     void RegisterDependencies() const final {
@@ -325,7 +331,11 @@ public:
 
         block = good;
 
-        const auto height = CallInst::Create(getCount, { WrapArgumentForWindows(getres.second.back()(ctx, block), ctx, block) }, "height", block);
+        const auto countValue = getres.second.back()(ctx, block);
+        const auto height = CallInst::Create(getCount, { WrapArgumentForWindows(countValue, ctx, block) }, "height", block);
+
+        ValueCleanup(EValueRepresentation::Any, countValue, ctx, block);
+
         const auto part = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULT, count, height, "part", block);
         const auto decr = BinaryOperator::CreateSub(count, height, "decr", block);
 
@@ -395,6 +405,8 @@ public:
 
                 const auto slice = CallInst::Create(sliceType, slicePtr, {ctx.GetFactory(), value, size}, "slice", block);
 
+                ValueCleanup(EValueRepresentation::Any, value, ctx, block);
+
                 output->addIncoming(slice, block);
                 BranchInst::Create(exit, block);
 
@@ -408,9 +420,8 @@ public:
 #endif
 private:
     static NUdf::TUnboxedValuePod SliceBlock(const THolderFactory& holderFactory, NUdf::TUnboxedValuePod block, const uint64_t offset) {
-        NUdf::TUnboxedValue b(block);
-        auto& datum = TArrowBlock::From(b).GetDatum();
-        return datum.is_scalar() ? b.Release() : holderFactory.CreateArrowBlock(DeepSlice(datum.array(), 0ULL, offset));
+        const auto& datum = TArrowBlock::From(block).GetDatum();
+        return datum.is_scalar() ? block : holderFactory.CreateArrowBlock(DeepSlice(datum.array(), 0ULL, offset));
     }
 
     void RegisterDependencies() const final {

@@ -12,6 +12,8 @@
 #include <aws/common/package.h>
 #include <aws/common/stdint.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 #define AWS_OP_SUCCESS (0)
 #define AWS_OP_ERR (-1)
 
@@ -201,5 +203,7 @@ enum aws_common_error {
     AWS_ERROR_GET_HOME_DIRECTORY_FAILED,
     AWS_ERROR_END_COMMON_RANGE = AWS_ERROR_ENUM_END_RANGE(AWS_C_COMMON_PACKAGE_ID)
 };
+
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_ERROR_H */

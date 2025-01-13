@@ -1,6 +1,6 @@
 /* postgres can not */
 $pt = AsTuple(1, 2, 3);
-$et = Nothing(ParseType("Tuple<Int32, Int32, Int32>?"));
+$et = Nothing(ParseType('Tuple<Int32, Int32, Int32>?'));
 
 SELECT
     1 IN $pt, -- true
@@ -22,4 +22,5 @@ SELECT
     100 IN NULL,
     1 / 1 IN NULL,
     1 / 0 IN NULL,
-    NULL IN NULL;
+    NULL IN NULL
+;

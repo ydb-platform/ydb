@@ -10,9 +10,9 @@
 
 #include <yt/yt/core/ytree/convert.h>
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/library/quantile_digest/config.h>
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 namespace NYT::NTableClient {
 

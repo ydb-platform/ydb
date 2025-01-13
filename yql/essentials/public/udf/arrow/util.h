@@ -2,12 +2,13 @@
 
 #include "defs.h"
 
-#include <util/generic/vector.h>
-
 #include <arrow/compute/api.h>
 #include <arrow/datum.h>
 #include <arrow/memory_pool.h>
 #include <arrow/util/bit_util.h>
+
+#include <util/generic/maybe.h>
+#include <util/generic/vector.h>
 
 #include <functional>
 
@@ -24,6 +25,9 @@ enum class EPgStringType {
 std::shared_ptr<arrow::Buffer> AllocateBitmapWithReserve(size_t bitCount, arrow::MemoryPool* pool);
 std::shared_ptr<arrow::Buffer> MakeDenseBitmap(const ui8* srcSparse, size_t len, arrow::MemoryPool* pool);
 std::shared_ptr<arrow::Buffer> MakeDenseBitmapNegate(const ui8* srcSparse, size_t len, arrow::MemoryPool* pool);
+std::shared_ptr<arrow::Buffer> MakeDenseBitmapCopy(const ui8* src, size_t len, size_t offset, arrow::MemoryPool* pool);
+
+std::shared_ptr<arrow::Buffer> MakeDenseFalseBitmap(int64_t len, arrow::MemoryPool* pool);
 
 /// \brief Recursive version of ArrayData::Slice() method
 std::shared_ptr<arrow::ArrayData> DeepSlice(const std::shared_ptr<arrow::ArrayData>& data, size_t offset, size_t len);
@@ -81,7 +85,7 @@ public:
             return arrow::Status::Invalid("Negative buffer resize: ", newSize);
         }
         uint8_t* ptr = mutable_data();
-        if (ptr && shrink_to_fit && newSize <= size_) {
+        if (ptr && shrink_to_fit) {
             int64_t newCapacity = arrow::BitUtil::RoundUpToMultipleOf64(newSize);
             if (capacity_ != newCapacity) {
                 ARROW_RETURN_NOT_OK(Pool->Reallocate(capacity_, newCapacity, &ptr));
@@ -137,9 +141,11 @@ class TTypedBufferBuilder {
 
     using TArrowBuffer = std::conditional_t<std::is_trivially_destructible_v<T>, TResizeableBuffer, TResizableManagedBuffer<T>>;
 public:
-    explicit TTypedBufferBuilder(arrow::MemoryPool* pool)
-        : Pool(pool)
+    explicit TTypedBufferBuilder(arrow::MemoryPool* pool, TMaybe<ui8> minFillPercentage = {})
+        : MinFillPercentage(minFillPercentage)
+        , Pool(pool)
     {
+        Y_ENSURE(!MinFillPercentage || *MinFillPercentage <= 100);
     }
 
     inline void Reserve(size_t size) {
@@ -201,14 +207,18 @@ public:
     }
 
     inline std::shared_ptr<arrow::Buffer> Finish() {
-        bool shrinkToFit = false;
-        ARROW_OK(Buffer->Resize(Len * sizeof(T), shrinkToFit));
+        int64_t newSize = Len * sizeof(T);
+        bool shrinkToFit = MinFillPercentage
+            ? newSize <= Buffer->capacity() * *MinFillPercentage / 100
+            : false;
+        ARROW_OK(Buffer->Resize(newSize, shrinkToFit));
         std::shared_ptr<arrow::ResizableBuffer> result;
         std::swap(result, Buffer);
         Len = 0;
         return result;
     }
 private:
+    const TMaybe<ui8> MinFillPercentage;
     arrow::MemoryPool* const Pool;
     std::shared_ptr<arrow::ResizableBuffer> Buffer;
     size_t Len = 0;
@@ -226,5 +236,5 @@ inline void ZeroMemoryContext(void* ptr) {
     SetMemoryContext(ptr, nullptr);
 }
 
-}
-}
+} // namespace NUdf
+} // namespace NYql

@@ -63,6 +63,7 @@ public:
     virtual void ResetRowsProcessing(ui64 readId, ui32 firstUnprocessedQuery, TMaybe<TOwnedCellVec> lastProcessedKey) = 0;
 
 protected:
+    const NKikimrKqp::TKqpStreamLookupSettings Settings;
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NMiniKQL::THolderFactory& HolderFactory;
     const NYql::NDqProto::TTaskInput& InputDesc;
@@ -71,7 +72,6 @@ protected:
     std::unordered_map<TString, TSysTables::TTableColumnInfo> KeyColumns;
     std::vector<TSysTables::TTableColumnInfo*> LookupKeyColumns;
     std::vector<TSysTables::TTableColumnInfo> Columns;
-    const NKqpProto::EStreamLookupStrategy Strategy;
 };
 
 std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,

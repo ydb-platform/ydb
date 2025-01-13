@@ -55,6 +55,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui64, false> EnableSpillingNodes;
     NCommon::TConfSetting<TString, false> OverridePlanner;
     NCommon::TConfSetting<bool, false> UseGraceJoinCoreForMap;
+    NCommon::TConfSetting<bool, false> EnableOrderPreservingLookupJoin;
 
     NCommon::TConfSetting<TString, false> OptOverrideStatistics;
     NCommon::TConfSetting<NYql::TOptimizerHints, false> OptimizerHints;
@@ -91,7 +92,7 @@ struct TKikimrSettings {
     bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
     bool HasMaxSequentialReadsInFlight() const;
-
+    bool OrderPreservingLookupJoinEnabled() const;
     EOptionalFlag GetOptPredicateExtract() const;
     EOptionalFlag GetUseLlvm() const;
     NDq::EHashJoinMode GetHashJoinMode() const;
@@ -167,6 +168,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnablePerStatementQueryExecution = false;
     bool EnableCreateTableAs = false;
     ui64 IdxLookupJoinsPrefixPointLimit = 1;
+    bool AllowOlapDataQuery = false;
     bool EnableOlapSink = false;
     bool EnableOltpSink = false;
     bool EnableHtapTx = false;
@@ -176,6 +178,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableConstantFolding = true;
     ui64 DefaultEnableSpillingNodes = 0;
     bool EnableAntlr4Parser = false;
+    bool EnableSnapshotIsolationRW = false;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;

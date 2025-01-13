@@ -15,15 +15,15 @@ FROM (
         (2, NULL),
         (3, 4),
         (4, 5)
+) AS a (
+    r,
+    x
 )
-    AS a (
-        r,
-        x
-    )
 WINDOW
     w AS (
         ORDER BY
             r
     )
 ORDER BY
-    r;
+    r
+;

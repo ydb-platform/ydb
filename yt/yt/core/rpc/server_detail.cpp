@@ -179,7 +179,7 @@ void TServiceContextBase::SetComplete()
 
 TFuture<TSharedRefArray> TServiceContextBase::GetAsyncResponseMessage() const
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
     auto guard  = Guard(ResponseLock_);
 
@@ -205,6 +205,9 @@ TSharedRefArray TServiceContextBase::BuildResponseMessage()
     NProto::TResponseHeader header;
     ToProto(header.mutable_request_id(), RequestId_);
     ToProto(header.mutable_error(), Error_);
+
+    ToProto(header.mutable_service(), GetService());
+    ToProto(header.mutable_method(), GetMethod());
 
     if (RequestHeader_->has_response_format()) {
         header.set_format(RequestHeader_->response_format());
@@ -232,7 +235,7 @@ TSharedRefArray TServiceContextBase::BuildResponseMessage()
 
 bool TServiceContextBase::IsReplied() const
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
     return Replied_.load();
 }
 
@@ -890,16 +893,14 @@ IServicePtr TServerBase::GetServiceOrThrow(const TServiceId& serviceId) const
     if (serviceMapIt == RealmIdToServiceMap_.end()) {
         if (realmId) {
             // TODO(gritukan): Stop wrapping error one day.
-            auto innerError = TError(EErrorCode::NoSuchRealm, "Request realm is unknown")
+            auto innerError = TError(NRpc::EErrorCode::NoSuchRealm, "Request realm is unknown")
                 << TErrorAttribute("service", serviceName)
                 << TErrorAttribute("realm_id", realmId);
-            THROW_ERROR_EXCEPTION(
-                EErrorCode::NoSuchService,
+            THROW_ERROR_EXCEPTION(NRpc::EErrorCode::NoSuchService,
                 "Service is not registered")
                 << innerError;
         } else {
-            THROW_ERROR_EXCEPTION(
-                EErrorCode::NoSuchService,
+            THROW_ERROR_EXCEPTION(NRpc::EErrorCode::NoSuchService,
                 "Service is not registered")
                 << TErrorAttribute("service", serviceName)
                 << TErrorAttribute("realm_id", realmId);
@@ -908,8 +909,7 @@ IServicePtr TServerBase::GetServiceOrThrow(const TServiceId& serviceId) const
     auto& serviceMap = serviceMapIt->second;
     auto serviceIt = serviceMap.find(serviceName);
     if (serviceIt == serviceMap.end()) {
-        THROW_ERROR_EXCEPTION(
-            EErrorCode::NoSuchService,
+        THROW_ERROR_EXCEPTION(NRpc::EErrorCode::NoSuchService,
             "Service is not registered")
             << TErrorAttribute("service", serviceName)
             << TErrorAttribute("realm_id", realmId);
@@ -920,7 +920,7 @@ IServicePtr TServerBase::GetServiceOrThrow(const TServiceId& serviceId) const
 
 void TServerBase::ApplyConfig()
 {
-    VERIFY_SPINLOCK_AFFINITY(ServicesLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(ServicesLock_);
 
     auto newAppliedConfig = New<TServerConfig>();
     newAppliedConfig->EnableErrorCodeCounter = DynamicConfig_->EnableErrorCodeCounter.value_or(StaticConfig_->EnableErrorCodeCounter);

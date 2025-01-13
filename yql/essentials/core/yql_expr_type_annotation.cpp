@@ -9,7 +9,7 @@
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/minikql/dom/json.h>
 #include <yql/essentials/minikql/dom/yson.h>
-#include <yql/essentials/minikql/jsonpath/jsonpath.h>
+#include <yql/essentials/minikql/jsonpath/parser/parser.h>
 #include <yql/essentials/core/sql_types/simple_types.h>
 #include "yql/essentials/parser/pg_catalog/catalog.h"
 #include <yql/essentials/parser/pg_wrapper/interface/utils.h>
@@ -4396,7 +4396,7 @@ TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2, bool wa
     }
 
     if (IsDataTypeInterval(dataSlot1) && IsDataTypeInterval(dataSlot2)) {
-        return (dataSlot1 == EDataSlot::Interval64 || dataSlot2 == EDataSlot::Interval64) 
+        return (dataSlot1 == EDataSlot::Interval64 || dataSlot2 == EDataSlot::Interval64)
             ? EDataSlot::Interval64
             : EDataSlot::Interval;
     }
@@ -4944,7 +4944,7 @@ bool IsSqlInCollectionItemsNullable(const NNodes::TCoSqlIn& node) {
                     break;
                 }
             }
-            
+
             break;
         }
         case ETypeAnnotationKind::Dict: {
@@ -6449,7 +6449,7 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .Atom(1, ToString(aggDesc.FinalFuncId))
                 .List(2)
                     .Do([aggResultType, originalAggResultType](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
-                        if (aggResultType != originalAggResultType) { 
+                        if (aggResultType != originalAggResultType) {
                             builder.List(0)
                                 .Atom(0, "type")
                                 .Atom(1, NPg::LookupType(aggResultType).Name)

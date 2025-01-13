@@ -134,6 +134,8 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
         TActorId Register(IActor* /*actor*/, TMailboxType::EType /*mailboxType*/, ui64 /*revolvingCounter*/, const TActorId& /*parentId*/) override { return TActorId(); }
         TActorId Register(IActor* /*actor*/, TMailboxCache& /*cache*/, ui64 /*revolvingCounter*/, const TActorId& /*parentId*/) override { return TActorId(); }
         TActorId Register(IActor* /*actor*/, TMailbox* /*mailbox*/, const TActorId& /*parentId*/) override { return TActorId(); }
+        TActorId RegisterAlias(TMailbox*, IActor*) override { return TActorId(); }
+        void UnregisterAlias(TMailbox*, const TActorId&) override {}
 
         TAffinity* Affinity() const override { return nullptr; }
 

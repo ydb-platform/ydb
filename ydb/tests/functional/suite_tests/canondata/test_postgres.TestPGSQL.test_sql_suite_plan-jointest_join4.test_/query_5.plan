@@ -57,14 +57,15 @@
                                                                     "x",
                                                                     "y"
                                                                 ],
-                                                                "E-Cost": "No estimate",
-                                                                "E-Rows": "No estimate",
-                                                                "E-Size": "No estimate",
+                                                                "E-Cost": "0",
+                                                                "E-Rows": "0",
+                                                                "E-Size": "0",
                                                                 "LookupKeyColumns": [
                                                                     "x",
                                                                     "y"
                                                                 ],
                                                                 "Node Type": "TableLookupJoin",
+                                                                "Path": "/Root/postgres_jointest/join4.test_plan/tqb",
                                                                 "PlanNodeId": 3,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
@@ -78,6 +79,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
+                                                                                        "Path": "/Root/postgres_jointest/join4.test_plan/tqa",
                                                                                         "ReadColumns": [
                                                                                             "i"
                                                                                         ],

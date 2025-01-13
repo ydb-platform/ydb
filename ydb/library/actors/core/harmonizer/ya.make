@@ -33,7 +33,7 @@ PEERDIR(
 
 IF (SANITIZER_TYPE == "thread")
     SUPPRESSIONS(
-        tsan.supp
+        ../tsan.supp
     )
 ENDIF()
 

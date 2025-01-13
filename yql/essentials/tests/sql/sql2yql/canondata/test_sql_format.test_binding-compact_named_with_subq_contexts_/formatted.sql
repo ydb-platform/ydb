@@ -3,29 +3,39 @@ PRAGMA CompactNamedExprs;
 
 $a = (
     SELECT
-        CAST(Unicode::ToUpper("o"u) AS String) || "utpu"
+        CAST(Unicode::ToUpper("o"u) AS String) || 'utpu'
 );
+
 $b = $a || CAST(Unicode::ToLower("T"u) AS String);
 
 SELECT
-    $b;
+    $b
+;
 
 SELECT
-    $a || CAST(Unicode::ToLower("T"u) AS String);
+    $a || CAST(Unicode::ToLower("T"u) AS String)
+;
 
 SELECT
     *
-FROM $a;
+FROM
+    $a
+;
 
 SELECT
-    "Outpu" IN $a;
+    'Outpu' IN $a
+;
 
 DEFINE SUBQUERY $sub() AS
     SELECT
         *
-    FROM $a;
+    FROM
+        $a
+    ;
 END DEFINE;
 
 SELECT
     *
-FROM $sub();
+FROM
+    $sub()
+;

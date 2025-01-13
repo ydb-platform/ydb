@@ -109,7 +109,7 @@ public:
 
     void WriteSchema(NYson::IYsonConsumer* consumer) const;
 
-    // always returns |true| for itself
+    // Always returns |true| for itself
     // else always returns |false| if one of the fields
     // is not equality comparable.
     // See templated operator== for explanation why it was not
@@ -232,7 +232,7 @@ protected:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T, class S>
-concept CYsonStructFieldFor =
+concept CYsonStructLoadableFieldFor =
     CYsonStructSource<S> &&
     requires (
         T& parameter,
@@ -242,10 +242,6 @@ concept CYsonStructFieldFor =
         const NYPath::TYPath& path,
         std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
     {
-        // NB(arkady-e1ppa): This alias serves no purpose other
-        // than an easy way to grep for every implementation.
-        typename T::TImplementsYsonStructField;
-
         // For YsonStruct.
         parameter.Load(
             source,
@@ -253,6 +249,15 @@ concept CYsonStructFieldFor =
             setDefaults,
             path,
             recursiveUnrecognizedStrategy);
+    };
+
+template <class T, class S>
+concept CYsonStructFieldFor =
+    CYsonStructLoadableFieldFor<T, S> &&
+    requires {
+        // NB(arkady-e1ppa): This alias serves no purpose other
+        // than an easy way to grep for every implementation.
+        typename T::TImplementsYsonStructField;
     };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -378,8 +383,8 @@ template <class T>
 TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<T>& obj, bool postprocess = true, bool setDefaults = true);
 template <class T>
 std::vector<TIntrusivePtr<T>> CloneYsonStructs(const std::vector<TIntrusivePtr<T>>& objs);
-template <class T>
-THashMap<TString, TIntrusivePtr<T>> CloneYsonStructs(const THashMap<TString, TIntrusivePtr<T>>& objs);
+template <class TKey, class TValue>
+THashMap<TKey, TIntrusivePtr<TValue>> CloneYsonStructs(const THashMap<TKey, TIntrusivePtr<TValue>>& objs);
 
 void Serialize(const TYsonStructBase& value, NYson::IYsonConsumer* consumer);
 void Deserialize(TYsonStructBase& value, INodePtr node);
@@ -388,7 +393,7 @@ void Deserialize(TYsonStructBase& value, NYson::TYsonPullParserCursor* cursor);
 template <CExternallySerializable T>
 void Serialize(const T& value, NYson::IYsonConsumer* consumer);
 template <CExternallySerializable T, CYsonStructSource TSource>
-void Deserialize(T& value, TSource source, bool postprocess = true, bool setDefaults = true);
+void Deserialize(T& value, TSource source, bool postprocess = true, bool setDefaults = true, std::optional<EUnrecognizedStrategy> strategy = {});
 
 template <class T>
 TIntrusivePtr<T> UpdateYsonStruct(

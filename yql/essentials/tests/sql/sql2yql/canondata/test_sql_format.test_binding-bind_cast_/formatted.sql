@@ -3,4 +3,5 @@
 $casted_null = CAST(NULL AS Double);
 
 SELECT
-    $casted_null;
+    $casted_null
+;

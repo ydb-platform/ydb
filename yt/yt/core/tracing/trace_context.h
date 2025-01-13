@@ -49,11 +49,6 @@ ITracerPtr GetGlobalTracer();
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void SetTracingTransportConfig(TTracingTransportConfigPtr config);
-TTracingTransportConfigPtr GetTracingTransportConfig();
-
-////////////////////////////////////////////////////////////////////////////////
-
 DEFINE_ENUM(ETraceContextState,
     (Disabled) // Used to propagate TraceId, RequestId and LoggingTag.
     (Recorded) // May be sampled later.
@@ -75,7 +70,7 @@ DEFINE_ENUM(ETraceContextState,
  *
  *  By default, child objects inherit TraceId, RequestId and LoggingTag from the parent.
  *
- *  \note Thread affininty: any unless noted otherwise.
+ *  \note Thread affinity: any unless noted otherwise.
  */
 class TTraceContext
     : public TRefCounted
@@ -215,7 +210,10 @@ public:
     std::vector<std::pair<std::string, TProfilingTagValue>> GetProfilingTags();
     void SetProfilingTags(std::vector<std::pair<std::string, TProfilingTagValue>> profilingTags);
 
-    friend void ToProto(NProto::TTracingExt* ext, const TTraceContextPtr& context);
+    friend void ToProto(
+        NProto::TTracingExt* ext,
+        const TTraceContextPtr& context,
+        bool sendBaggage);
 
 private:
     const TTraceId TraceId_;

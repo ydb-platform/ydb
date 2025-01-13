@@ -1,3 +1,4 @@
 /* postgres can not */
 SELECT
-    Yql::Xor(TRUE, FALSE);
+    Yql::Xor(TRUE, FALSE)
+;

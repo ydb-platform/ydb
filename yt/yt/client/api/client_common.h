@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <yt/yt/library/codegen_api/execution_backend.h>
+
 #include <yt/yt/client/hydra/public.h>
 
 #include <yt/yt/client/misc/workload.h>
@@ -22,11 +24,6 @@ struct TMutatingOptions
     bool Retry = false;
 
     NRpc::TMutationId GetOrGenerateMutationId() const;
-};
-
-struct TTimeoutOptions
-{
-    std::optional<TDuration> Timeout;
 };
 
 struct TMultiplexingBandOptions
@@ -162,11 +159,6 @@ struct TSelectRowsOptionsBase
     bool NewRangeInference = true;
 };
 
-DEFINE_ENUM(EExecutionBackend,
-    (Native)
-    (WebAssembly)
-);
-
 struct TSelectRowsOptions
     : public TSelectRowsOptionsBase
 {
@@ -185,7 +177,7 @@ struct TSelectRowsOptions
     //! YSON map with placeholder values for parameterized queries.
     NYson::TYsonString PlaceholderValues;
     //! Native or WebAssembly execution backend.
-    std::optional<EExecutionBackend> ExecutionBackend;
+    std::optional<NCodegen::EExecutionBackend> ExecutionBackend;
     //! Explicitly allow or forbid the usage of row cache.
     std::optional<bool> UseLookupCache;
     //! Allow queries without any condition on key columns.

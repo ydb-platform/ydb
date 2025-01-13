@@ -53,7 +53,7 @@ public:
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -91,10 +91,10 @@ public:
             NKikimrTxDataShard::TFlatSchemeTransaction tx;
             context.SS->FillSeqNo(tx, seqNo);
             auto move = tx.MutableMoveTable();
-            PathIdFromPathId(srcPath->PathId, move->MutablePathId());
+            srcPath->PathId.ToProto(move->MutablePathId());
             move->SetTableSchemaVersion(srcTable->AlterVersion+1);
 
-            PathIdFromPathId(dstPath->PathId, move->MutableDstPathId());
+            dstPath->PathId.ToProto(move->MutableDstPathId());
             move->SetDstPath(TPath::Init(dstPath->PathId, context.SS).PathString());
 
             for (const auto& child: srcPath->GetChildren()) {
@@ -114,8 +114,8 @@ public:
                 Y_ABORT_UNLESS(dstIndexPath.IsResolved());
 
                 auto remap = move->AddReMapIndexes();
-                PathIdFromPathId(srcChildPath->PathId, remap->MutableSrcPathId());
-                PathIdFromPathId(dstIndexPath->PathId, remap->MutableDstPathId());
+                srcChildPath->PathId.ToProto(remap->MutableSrcPathId());
+                dstIndexPath->PathId.ToProto(remap->MutableDstPathId());
             }
 
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
@@ -311,7 +311,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvPrivate::TEvCompletePublication"
                                << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         Y_ABORT_UNLESS(ActivePathId == ev->Get()->PathId);
 
@@ -330,7 +330,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
                                << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
 
@@ -391,7 +391,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvPrivate:TEvCompleteBarrier"
                                << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -435,7 +435,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
                                << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         context.OnComplete.Barrier(OperationId, "RenamePathBarrier");
         return false;

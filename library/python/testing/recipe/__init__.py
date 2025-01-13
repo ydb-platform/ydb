@@ -62,8 +62,6 @@ def get_options():
 
     ya = Ya(context=context, build_root=args.build_root, source_root=args.source_root, output_dir=args.output_dir, env_file=args.env_file)
 
-    ya._data_root = ""  # XXX remove
-
     sanitizer_extra_checks = args.sanitizer_extra_checks
     if sanitizer_extra_checks:
         for envvar in ['LSAN_OPTIONS', 'ASAN_OPTIONS']:

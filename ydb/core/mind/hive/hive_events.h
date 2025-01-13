@@ -36,6 +36,7 @@ struct TEvPrivate {
         EvUpdateDataCenterFollowers,
         EvGenerateTestData,
         EvRefreshScaleRecommendation,
+        EvUpdateFollowers,
         EvEnd
     };
 
@@ -133,6 +134,9 @@ struct TEvPrivate {
     struct TEvGenerateTestData : TEventLocal<TEvGenerateTestData, EvGenerateTestData> {};
   
     struct TEvRefreshScaleRecommendation : TEventLocal<TEvRefreshScaleRecommendation, EvRefreshScaleRecommendation> {};
+
+    struct TEvUpdateFollowers : TEventLocal<TEvUpdateFollowers, EvUpdateFollowers> {
+    };
 };
 
 } // NHive

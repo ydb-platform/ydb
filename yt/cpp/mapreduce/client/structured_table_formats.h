@@ -21,13 +21,13 @@ TMaybe<TNode> GetCommonTableFormat(
 
 TMaybe<TNode> GetTableFormat(
     const IClientRetryPolicyPtr& clientRetryPolicy,
-    const TClientContext& context,
+    const IRawClientPtr& rawClient,
     const TTransactionId& transactionId,
     const TRichYPath& path);
 
 TMaybe<TNode> GetTableFormats(
     const IClientRetryPolicyPtr& clientRetryPolicy,
-    const TClientContext& context,
+    const IRawClientPtr& rawClient,
     const TTransactionId& transactionId,
     const TVector<TRichYPath>& paths);
 
@@ -84,6 +84,7 @@ private:
 
 public:
     TFormatBuilder(
+        IRawClientPtr rawClient,
         IClientRetryPolicyPtr clientRetryPolicy,
         TClientContext context,
         TTransactionId transactionId,
@@ -130,6 +131,7 @@ public:
         bool allowFormatFromTableAttribute);
 
 private:
+    const IRawClientPtr RawClient_;
     const IClientRetryPolicyPtr ClientRetryPolicy_;
     const TClientContext Context_;
     const TTransactionId TransactionId_;

@@ -35,7 +35,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TMoveSequence TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -153,7 +153,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TMoveSequence TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -254,7 +254,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvPrivate::TEvCompletePublication"
                                << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         Y_ABORT_UNLESS(ActivePathId == ev->Get()->PathId);
 
@@ -273,7 +273,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
                                << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
 
@@ -324,7 +324,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvPrivate::TEvCompleteBarrier"
                                << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -349,7 +349,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
                                << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         context.OnComplete.Barrier(OperationId, "RenamePathBarrier");
 
@@ -364,7 +364,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TMoveSequence TProposedMoveSequence"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
     void UpdateSequenceDescription(NKikimrSchemeOp::TSequenceDescription& descr) {
         descr.SetStartValue(GetSequenceResult.GetStartValue());
@@ -542,7 +542,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TMoveSequence TDropParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

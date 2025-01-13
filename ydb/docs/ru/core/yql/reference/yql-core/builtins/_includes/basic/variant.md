@@ -56,15 +56,15 @@ SELECT
 Visit(Variant<key1: K1, key2: K2, ...>, K1->R AS key1, K2->R AS key2, ...)->R
 Visit(Variant<K1, K2, ...>, K1->R, K2->R, ...)->R
 
-VisitOrDefault(Variant<K1, K2, ...>{Flags:AutoMap}, [K1->R, [K2->R, ...]], R)->R
-VisitOrDefault(Variant<key1: K1, key2: K2, ...>{Flags:AutoMap}, [K1->R AS key1, [K2->R AS key2, ...]], R)->R
+VisitOrDefault(Variant<K1, K2, ...>{Flags:AutoMap}, R, [K1->R, [K2->R, ...]])->R
+VisitOrDefault(Variant<key1: K1, key2: K2, ...>{Flags:AutoMap}, R, [K1->R AS key1, [K2->R AS key2, ...]])->R
 ```
 
 ### Аргументы
 
 * Для варианта над структурой функция принимает сам вариант в качестве позиционного аргумента и по одному именованному аргументу-обработчику для каждого поля этой структуры.
 * Для варианта над кортежем функция принимает сам вариант и по одному обработчику на каждый элемент кортежа в качестве позиционных аргументов.
-* Модификация `VisitOrDefault` принимает дополнительный последний позиционный аргумент, представляющий значение по умолчанию, и позволяет не указывать некоторые обработчики.
+* Модификация `VisitOrDefault` принимает дополнительный позиционный аргумент (на втором месте), представляющий значение по умолчанию, и позволяет не указывать некоторые обработчики.
 
 ### Пример
 
@@ -105,5 +105,28 @@ SELECT
     VariantItem(Nothing(OptionalType($vartype1))),       -- Nothing(Optional<Int32>)
     VariantItem(NULL)                                    -- NULL
 ;
+```
+
+## Way {#way}
+
+Возвращает активное поле (активный индекс) варианта поверх структуры (кортежа).
+
+### Сигнатура
+
+```yql
+VariantItem(Variant<key1: K1, key2: K2, ...>{Flags:AutoMap})->Utf8
+VariantItem(Variant<K1, K2, ...>{Flags:AutoMap})->Uint32
+```
+
+### Пример
+
+```yql
+$vr = Variant(1, "0", Variant<Int32, String>);
+$vrs = Variant(1, "a", Variant<a:Int32, b:String>);
+
+
+SELECT Way($vr);  -- 0
+SELECT Way($vrs); -- "a"
+
 ```
 

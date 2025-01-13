@@ -1,7 +1,7 @@
 #include "worker_registrator.h"
 #include "yt_wrapper.h"
 
-#include <ydb/library/yql/providers/yt/lib/log/yt_logger.h>
+#include <yt/yql/providers/yt/lib/log/yt_logger.h>
 
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include <ydb/library/yql/providers/dq/common/attrs.h>

@@ -42,7 +42,7 @@ DEPRECATED_STUBS = [
     "src/google/protobuf/json_util.h",
 ]
 
-DEPRECATED_SRC = [x for x in DEPRECATED_STUBS if x.endswith('.cc')]
+DEPRECATED_SRC = [x for x in DEPRECATED_STUBS if x.endswith(".cc")]
 
 # Set of proto files coming with original google protobuf (excluding descriptor.proto, see below)
 # WARN: upon changing this file, make sure to check protobuf_std counterpart.
@@ -219,19 +219,19 @@ ENDIF()
         for lang in ["csharp", "objectivec"]:
             for root, _, files in os.walk(os.path.join(libprotoc_abs_dir, "src/google/protobuf/compiler", lang)):
                 for file in files:
-                    if file.endswith('.h'):
-                        with open(os.path.join(root, lang + '_' + file), 'w') as f:
+                    if file.endswith(".h"):
+                        with open(os.path.join(root, lang + "_" + file), "w") as f:
                             f.write(f'#include "{file}"\n')
                             f.write('#include "names.h"')
 
         # generate temporal proxy for ydb
-        with open(os.path.join(libprotoc_abs_dir, "src/google/protobuf/compiler/cpp/cpp_helpers.h"), 'w') as f:
+        with open(os.path.join(libprotoc_abs_dir, "src/google/protobuf/compiler/cpp/cpp_helpers.h"), "w") as f:
             f.write('#include "helpers.h"')
 
         with open(f"{libprotoc_abs_dir}/ya.make", "wt") as ymake:
             ymake.write(str(libprotoc))
 
-        with open(os.path.join(self.ctx.arc, self.arcdir, "src/google/protobuf/util/json_util.h"), 'w') as f:
+        with open(os.path.join(self.ctx.arc, self.arcdir, "src/google/protobuf/util/json_util.h"), "w") as f:
             f.write('#define USE_DEPRECATED_NAMESPACE 1\n#include "google/protobuf/json/json.h"')
 
 

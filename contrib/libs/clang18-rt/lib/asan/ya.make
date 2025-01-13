@@ -13,8 +13,6 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-SUBSCRIBER(g:cpp-contrib)
-
 VERSION(18.1.8)
 
 ADDINCL(

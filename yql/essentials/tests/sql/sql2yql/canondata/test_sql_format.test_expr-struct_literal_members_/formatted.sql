@@ -5,4 +5,5 @@ $list = YQL::@@
 
 SELECT
     $list.query AS query,
-    $list.result AS result;
+    $list.result AS result
+;

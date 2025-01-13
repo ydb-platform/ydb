@@ -1,7 +1,6 @@
 #pragma once
 
 #include "public.h"
-#include "stripped_error.h"
 
 #include <yt/yt/core/yson/public.h>
 
@@ -11,6 +10,7 @@
 
 #include <yt/yt/core/concurrency/public.h>
 
+#include <library/cpp/yt/error/error.h>
 #include <library/cpp/yt/error/origin_attributes.h>
 
 namespace NYT {

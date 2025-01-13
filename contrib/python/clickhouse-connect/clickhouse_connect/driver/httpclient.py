@@ -80,6 +80,7 @@ class HttpClient(Client):
         """
         self.url = f'{interface}://{host}:{port}'
         self.headers = {}
+        self.params = dict_copy(HttpClient.params)
         ch_settings = dict_copy(settings, self.params)
         self.http = pool_mgr
         if interface == 'https':

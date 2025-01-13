@@ -945,6 +945,9 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
     if (Config.HasDomainsConfig()) {
         nodeWardenConfig->DomainsConfig.emplace(Config.GetDomainsConfig());
     }
+    if (Config.HasSelfManagementConfig()) {
+        nodeWardenConfig->SelfManagementConfig.emplace(Config.GetSelfManagementConfig());
+    }
 
     ObtainTenantKey(&nodeWardenConfig->TenantKey, Config.GetKeyConfig());
     ObtainStaticKey(&nodeWardenConfig->StaticKey);
@@ -1633,11 +1636,10 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
 
     if (!IsServiceInitialized(setup, NGRpcService::CreateGRpcRequestProxyId(0))) {
         const size_t proxyCount = Config.HasGRpcConfig() ? Config.GetGRpcConfig().GetGRpcProxyCount() : 1UL;
-        NJaegerTracing::TSamplingThrottlingConfigurator tracingConfigurator(appData->TimeProvider, appData->RandomProvider);
         for (size_t i = 0; i < proxyCount; ++i) {
             auto grpcReqProxy = Config.HasGRpcConfig() && Config.GetGRpcConfig().GetSkipSchemeCheck()
                 ? NGRpcService::CreateGRpcRequestProxySimple(Config)
-                : NGRpcService::CreateGRpcRequestProxy(Config, tracingConfigurator.GetControl());
+                : NGRpcService::CreateGRpcRequestProxy(Config);
             setup->LocalServices.push_back(std::pair<TActorId,
                                            TActorSetupCmd>(NGRpcService::CreateGRpcRequestProxyId(i),
                                                            TActorSetupCmd(grpcReqProxy, TMailboxType::ReadAsFilled,
@@ -1646,7 +1648,7 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
                 TActorId(),
                 TActorSetupCmd(
-                    NConsole::CreateJaegerTracingConfigurator(std::move(tracingConfigurator), Config.GetTracingConfig()),
+                    NConsole::CreateJaegerTracingConfigurator(appData->TracingConfigurator, Config.GetTracingConfig()),
                     TMailboxType::ReadAsFilled,
                     appData->UserPoolId)));
     }
@@ -2050,28 +2052,8 @@ void TMemoryControllerInitializer::InitializeServices(
     NActors::TActorSystemSetup* setup,
     const NKikimr::TAppData* appData)
 {
-    NMemory::TResourceBrokerConfig resourceBrokerSelfConfig; // for backward compatibility
-    auto mergeResourceBrokerConfigs = [&](const NKikimrResourceBroker::TResourceBrokerConfig& resourceBrokerConfig) {
-        if (resourceBrokerConfig.HasResourceLimit() && resourceBrokerConfig.GetResourceLimit().HasMemory()) {
-            resourceBrokerSelfConfig.LimitBytes = resourceBrokerConfig.GetResourceLimit().GetMemory();
-        }
-        for (const auto& queue : resourceBrokerConfig.GetQueues()) {
-            if (queue.GetName() == NLocalDb::KqpResourceManagerQueue) {
-                if (queue.HasLimit() && queue.GetLimit().HasMemory()) {
-                    resourceBrokerSelfConfig.QueryExecutionLimitBytes = queue.GetLimit().GetMemory();
-                }
-            }
-        }
-    };
-    if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasResourceBroker()) {
-        mergeResourceBrokerConfigs(Config.GetBootstrapConfig().GetResourceBroker());
-    }
-    if (Config.HasResourceBrokerConfig()) {
-        mergeResourceBrokerConfigs(Config.GetResourceBrokerConfig());
-    }
-
     auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), ProcessMemoryInfoProvider,
-        Config.GetMemoryControllerConfig(), resourceBrokerSelfConfig,
+        Config.GetMemoryControllerConfig(), NKikimrConfigHelpers::CreateMemoryControllerResourceBrokerConfig(Config),
         appData->Counters);
     setup->LocalServices.emplace_back(
         NMemory::MakeMemoryControllerId(0),

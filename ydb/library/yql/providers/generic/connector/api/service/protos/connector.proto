@@ -5,16 +5,16 @@ package NYql.NConnector.NApi;
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
-import "ydb/library/yql/providers/generic/connector/api/common/data_source.proto";
+import "yql/essentials/providers/common/proto/gateways_config.proto";
 
-option go_package = "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos";
+option go_package = "a.yandex-team.ru/contrib/ydb/library/yql/providers/generic/connector/libgo/service/protos";
 
 // ---------- API Requests ----------
 
 // TListTablesRequest requests the list of tables in a particular database of the data source
 message TListTablesRequest {
     // Data source instance to connect
-    TDataSourceInstance data_source_instance = 1;
+    NYql.TGenericDataSourceInstance data_source_instance = 1;
 
     // There may be a huge number of tables in the data source,
     // and here are ways to extract only necessary ones:
@@ -36,7 +36,7 @@ message TListTablesResponse {
 // TDescribeTableRequest requests table metadata
 message TDescribeTableRequest {
     // Data source instance to connect
-    TDataSourceInstance data_source_instance = 1;
+    NYql.TGenericDataSourceInstance data_source_instance = 1;
     // Table to describe
     string table = 2;
     // Rules for type mapping
@@ -115,7 +115,7 @@ message TListSplitsResponse {
 // TODO: support JOIN, ORDER BY, GROUP BY
 message TSelect {
     // Data source instance to connect
-    TDataSourceInstance data_source_instance = 1;
+    NYql.TGenericDataSourceInstance data_source_instance = 1;
 
     // Describes what particularly to get from the data source
     message TWhat {
@@ -200,7 +200,7 @@ message TReadSplitsRequest {
     // Data source instance to connect.
     // Deprecated field: server implementations must rely on
     // TDataSourceInstance provided in each TSelect.
-    TDataSourceInstance data_source_instance = 1 [deprecated = true];
+    NYql.TGenericDataSourceInstance data_source_instance = 1 [deprecated = true];
 
     // Splits that YQ engine would like to read.
     repeated TSplit splits = 2;
@@ -352,6 +352,12 @@ message TExpression {
         TExpression else_expression = 3;
     }
 
+    // CAST($value AS $type)
+    message TCast {
+        TExpression value = 1;
+        Ydb.Type type = 2;
+    }
+
     message TNull {
     }
 
@@ -368,6 +374,8 @@ message TExpression {
         TCoalesce coalesce = 5;
 
         TIf if = 6;
+
+        TCast cast = 7;
     }
 }
 

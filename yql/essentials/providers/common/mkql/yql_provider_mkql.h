@@ -1,5 +1,7 @@
 #pragma once
 
+#include "yql_type_mkql.h"
+
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
@@ -17,16 +19,19 @@ struct TMkqlBuildContext {
     NKikimr::NMiniKQL::TProgramBuilder& ProgramBuilder;
     TExprContext& ExprCtx;
     TMemoizedNodesMap Memoization;
+    TMemoizedTypesMap TypeMemoizationHolder;
+    TMemoizedTypesMap* TypeMemoization;
     TMkqlBuildContext *const ParentCtx = nullptr;
     const size_t Level = 0ULL;
     const ui64 LambdaId = 0ULL;
     NKikimr::NMiniKQL::TRuntimeNode Parameters;
 
-    TMkqlBuildContext(const IMkqlCallableCompiler& mkqlCompiler, NKikimr::NMiniKQL::TProgramBuilder& builder, TExprContext& exprCtx, ui64 lambdaId = 0ULL, TArgumentsMap&& args = {})
+    TMkqlBuildContext(const IMkqlCallableCompiler& mkqlCompiler, NKikimr::NMiniKQL::TProgramBuilder& builder, TExprContext& exprCtx, ui64 lambdaId = 0ULL, TArgumentsMap&& args = {}, TMemoizedTypesMap* typeMemoization = nullptr)
         : MkqlCompiler(mkqlCompiler)
         , ProgramBuilder(builder)
         , ExprCtx(exprCtx)
         , Memoization(std::move(args))
+        , TypeMemoization(typeMemoization ? typeMemoization : &TypeMemoizationHolder)
         , LambdaId(lambdaId)
     {}
 
@@ -35,11 +40,16 @@ struct TMkqlBuildContext {
         , ProgramBuilder(parent.ProgramBuilder)
         , ExprCtx(parent.ExprCtx)
         , Memoization(std::move(args))
+        , TypeMemoization(parent.TypeMemoization)
         , ParentCtx(&parent)
         , Level(parent.Level + 1U)
         , LambdaId(lambdaId)
         , Parameters(parent.Parameters)
     {}
+
+    NKikimr::NMiniKQL::TType* BuildType(const TExprNode& owner, const TTypeAnnotationNode& annotation) {
+        return NYql::NCommon::BuildType(owner, annotation, ProgramBuilder, *TypeMemoization);
+    }
 };
 
 class IMkqlCallableCompiler : public TThrRefBase {

@@ -18,7 +18,7 @@ NCommon::IMkqlCallableCompiler::TCompiler MakeSelfCallableCompiler() {
         MKQL_ENSURE(argument->IsAtom(), "Self argument must be atom");
         ui32 inputIndex = 0;
         MKQL_ENSURE(TryFromString(argument->Content(), inputIndex), "Self argument must be UI32");
-        auto type = NCommon::BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        auto type = ctx.BuildType(node, *node.GetTypeAnn());
         NKikimr::NMiniKQL::TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), node.Content(), type);
         call.Add(ctx.ProgramBuilder.NewDataLiteral<ui32>(inputIndex));
         return NKikimr::NMiniKQL::TRuntimeNode(call.Build(), false);
@@ -93,7 +93,7 @@ NCommon::IMkqlCallableCompiler::TCompiler MakeFolderPathCallableCompiler(const T
 }
 
 NKikimr::NMiniKQL::TRuntimeNode CompileMkql(const TExprNode::TPtr& exprRoot, TExprContext& exprCtx,
-    const NKikimr::NMiniKQL::IFunctionRegistry& funcRegistry, const NKikimr::NMiniKQL::TTypeEnvironment& env, const TUserDataTable& userData)
+    const NKikimr::NMiniKQL::IFunctionRegistry& funcRegistry, const NKikimr::NMiniKQL::TTypeEnvironment& env, const TUserDataTable& userData, NCommon::TMemoizedTypesMap* typeMemoization)
 {
     NCommon::TMkqlCommonCallableCompiler compiler;
 
@@ -106,7 +106,7 @@ NKikimr::NMiniKQL::TRuntimeNode CompileMkql(const TExprNode::TPtr& exprRoot, TEx
     // Prepare build context
 
     NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(env, funcRegistry);
-    NCommon::TMkqlBuildContext buildCtx(compiler, pgmBuilder, exprCtx);
+    NCommon::TMkqlBuildContext buildCtx(compiler, pgmBuilder, exprCtx, /*lambdaId*/0, /*args*/{}, typeMemoization);
 
     // Build the root MKQL node
 

@@ -4,8 +4,8 @@
 #include "private.h"
 
 #include <yt/yt/core/actions/invoker_util.h>
+
 #include <yt/yt/core/misc/relaxed_mpsc_queue.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <yt/yt/core/threading/thread.h>
 

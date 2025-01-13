@@ -295,6 +295,7 @@ private:
 
         bool enableSequences = TableServiceConfig.GetEnableSequences();
         bool enableColumnsWithDefault = TableServiceConfig.GetEnableColumnsWithDefault();
+        bool allowOlapDataQuery = TableServiceConfig.GetAllowOlapDataQuery();
         bool enableOlapSink = TableServiceConfig.GetEnableOlapSink();
         bool enableOltpSink = TableServiceConfig.GetEnableOltpSink();
         bool enableHtapTx = TableServiceConfig.GetEnableHtapTx();
@@ -314,6 +315,8 @@ private:
 
         TString enableSpillingNodes = TableServiceConfig.GetEnableSpillingNodes();
 
+        bool enableSnapshotIsolationRW = TableServiceConfig.GetEnableSnapshotIsolationRW();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -329,6 +332,7 @@ private:
             TableServiceConfig.GetIndexAutoChooseMode() != indexAutoChooser ||
             TableServiceConfig.GetEnableSequences() != enableSequences ||
             TableServiceConfig.GetEnableColumnsWithDefault() != enableColumnsWithDefault ||
+            TableServiceConfig.GetAllowOlapDataQuery() != allowOlapDataQuery ||
             TableServiceConfig.GetEnableOlapSink() != enableOlapSink ||
             TableServiceConfig.GetEnableOltpSink() != enableOltpSink ||
             TableServiceConfig.GetEnableHtapTx() != enableHtapTx ||
@@ -344,7 +348,8 @@ private:
             TableServiceConfig.GetEnableAstCache() != enableAstCache ||
             TableServiceConfig.GetEnableImplicitQueryParameterTypes() != enableImplicitQueryParameterTypes ||
             TableServiceConfig.GetEnablePgConstsToParams() != enablePgConstsToParams ||
-            TableServiceConfig.GetEnablePerStatementQueryExecution() != enablePerStatementQueryExecution) {
+            TableServiceConfig.GetEnablePerStatementQueryExecution() != enablePerStatementQueryExecution ||
+            TableServiceConfig.GetEnableSnapshotIsolationRW() != enableSnapshotIsolationRW) {
 
             QueryCache->Clear();
 
@@ -1228,7 +1233,7 @@ void TKqpQueryCache::InsertQuery(const TKqpCompileResult::TConstPtr& compileResu
 
     auto queryIt = QueryIndex.emplace(query, compileResult->Uid);
     if (!queryIt.second) {
-        EraseByUid(compileResult->Uid);
+        EraseByUidImpl(compileResult->Uid);
         QueryIndex.erase(query);
     }
     Y_ENSURE(queryIt.second);

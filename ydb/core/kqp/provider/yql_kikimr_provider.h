@@ -250,6 +250,7 @@ enum class TYdbOperation : ui64 {
     DropBackupCollection   = 1ull << 30,
     Backup                 = 1ull << 31,
     BackupIncremental      = 1ull << 32,
+    Restore                = 1ull << 33,
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation);

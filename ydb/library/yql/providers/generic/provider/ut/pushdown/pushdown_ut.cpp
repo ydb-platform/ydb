@@ -230,13 +230,13 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
 
             auto* cluster = GatewaysCfg.MutableGeneric()->AddClusterMapping();
             cluster->SetName("test_cluster");
-            cluster->SetKind(NConnector::NApi::POSTGRESQL);
+            cluster->SetKind(NYql::EGenericDataSourceKind::POSTGRESQL);
             cluster->MutableEndpoint()->set_host("host");
             cluster->MutableEndpoint()->set_port(42);
             cluster->MutableCredentials()->mutable_basic()->set_username("user");
             cluster->MutableCredentials()->mutable_basic()->set_password("password");
             cluster->SetDatabaseName("database");
-            cluster->SetProtocol(NConnector::NApi::NATIVE);
+            cluster->SetProtocol(NYql::EGenericProtocol::NATIVE);
         }
 
         GenericState = MakeIntrusive<TGenericState>(

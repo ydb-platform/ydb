@@ -17,6 +17,10 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+using namespace std::string_literals;
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TTestMetricConsumer
     : public NMonitoring::IMetricConsumer
 {
@@ -960,6 +964,132 @@ TEST_P(TOmitNameLabelSuffixTest, GaugeSummary)
     ASSERT_NEAR(gauges[Format("yt.dmin%v{}", omitNameLabelSuffix ? "" : ".min")], 32, 1e-6);
     ASSERT_NEAR(gauges[Format("yt.dmax%v{}", omitNameLabelSuffix ? "" : ".max")], 44, 1e-6);
     ASSERT_NEAR(gauges[Format("yt.davg%v{}", omitNameLabelSuffix ? "" : ".avg")], 40 + 1 / 3.0, 1e-6);
+}
+
+struct TTagInfo
+{
+    std::string TagValue;
+    std::string EncodedTagValue;
+};
+
+using TTagInfoMapping = THashMap<std::string, TTagInfo>;
+
+TTagInfo GetLongTag() {
+    TString longTag;
+    longTag.reserve(210);
+    for (int index = 0; index < 210; ++index) {
+        longTag.append('a' + index % 26);
+    }
+    TString longTagEncoded;
+    longTagEncoded.reserve(200);
+    longTagEncoded.append(longTag.begin(), 100).append("...");
+    for (int index = 103; index < 200; ++index) {
+        longTagEncoded.append('a' + (index - 103 + 9) % 26);
+    }
+
+    return {
+        .TagValue = std::move(longTag),
+        .EncodedTagValue = std::move(longTagEncoded),
+    };
+}
+
+void CheckTags(const TSolomonRegistryPtr& registry, const TTagInfoMapping& tagInfoMapping) {
+    int tagNameLength = tagInfoMapping.begin()->first.size();
+
+    TTagSet tagSet;
+    for (const auto& [tagName, tagInfo] : tagInfoMapping) {
+        ASSERT_EQ(ssize(tagName), tagNameLength);
+        tagSet.AddTag({tagName, tagInfo.TagValue});
+    }
+
+    auto profiler = TProfiler(registry, "/debug")
+        .WithTags(tagSet);
+    auto c0 = profiler.Counter("/c");
+    c0.Increment(1);
+
+    auto result = CollectSensors(registry);
+
+    for (const auto& label : result.Labels) {
+        // Label has structure - "labelName=labelValue"
+        auto tagName = label.substr(0, tagNameLength);
+        auto tagValue = label.substr(tagNameLength + 1, label.size() - tagNameLength - 1);
+
+        ASSERT_EQ(tagValue, tagInfoMapping.at(tagName).EncodedTagValue);
+    }
+}
+
+TEST(TSolomonRegistry, IncorrectSolomonLabelsWeakPolicy)
+{
+    auto impl = New<TSolomonRegistry>();
+    impl->SetWindowSize(12);
+    impl->SetLabelSanitizationPolicy(ELabelSanitizationPolicy::Weak);
+
+    CheckTags(
+        impl,
+        {
+            {
+                "tag0",
+                GetLongTag(),
+            },
+            {
+                "tag1",
+                {
+                    .TagValue = "a\0aa|*?\"'\\`b\0b\xff"s,
+                    .EncodedTagValue = "a%00aa|*?\"'\\`b%00b\xff",
+                },
+            },
+            {
+                "tag2",
+                {
+                    .TagValue = TString(98, 'a')
+                        .append('\0')
+                        .append(100, 'a')
+                        .append('\0')
+                        .append('\xff'),
+                    .EncodedTagValue = TString(98, 'a')
+                        .append("%0...")
+                        .append(93, 'a')
+                        .append("%00")
+                        .append('\xff')
+                },
+            },
+        });
+}
+
+TEST(TSolomonRegistry, IncorrectSolomonLabelsStrongPolicy)
+{
+    auto impl = New<TSolomonRegistry>();
+    impl->SetWindowSize(12);
+    impl->SetLabelSanitizationPolicy(ELabelSanitizationPolicy::Strong);
+
+    CheckTags(
+        impl,
+        {
+            {
+                "tag0",
+                GetLongTag(),
+            },
+            {
+                "tag1",
+                {
+                    .TagValue = "a\0aa|*?\"'\\`bb\xff\0"s,
+                    .EncodedTagValue = "a%00aa%7c%2a%3f%22%27%5c%60bb%ff%00",
+                },
+            },
+            {
+                "tag2",
+                {
+                    .TagValue = TString(98, 'a')
+                        .append('\xff')
+                        .append(100, 'a')
+                        .append('\0'),
+                    .EncodedTagValue = TString(98, 'a')
+                        .append("%f...")
+                        .append(94, 'a')
+                        .append("%00"),
+                },
+            },
+        });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

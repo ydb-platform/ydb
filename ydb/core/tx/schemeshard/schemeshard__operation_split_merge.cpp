@@ -17,7 +17,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TSplitMerge TConfigureDestination"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -187,7 +187,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TSplitMerge TTransferData"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

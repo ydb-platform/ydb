@@ -929,7 +929,7 @@ public:
 private:
     void DoWrite(TRange<TUnversionedRow> rows) override
     {
-        int rowCount = static_cast<int>(rows.Size());
+        int rowCount = std::ssize(rows);
         for (int index = 0; index < rowCount; ++index) {
             auto row = rows[index];
 
@@ -1079,7 +1079,7 @@ ISchemalessFormatWriterPtr CreateWriterForProtobuf(
             controlAttributesConfig,
             keyColumnCount);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(EErrorCode::InvalidFormat, "Failed to parse config for protobuf format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for protobuf format") << ex;
     }
 }
 

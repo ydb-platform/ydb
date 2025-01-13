@@ -48,7 +48,6 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInsta
         settings.WithoutConsumer().AppendTopics(topic);
     }
 
-
     if (params.UseTransactions) {
         txSupport.emplace(params.Driver, params.ReadOnlyTableName, params.TableName);
     }
@@ -66,7 +65,7 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInsta
 
     (*params.StartedCount)++;
 
-    TInstant commitTime = Now() + TDuration::Seconds(params.CommitPeriod);
+    TInstant commitTime = Now() + TDuration::MilliSeconds(params.CommitPeriodMs);
 
     TVector<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent> stopPartitionSessionEvents;
 
@@ -184,7 +183,7 @@ void TTopicWorkloadReader::TryCommitTx(TTopicWorkloadReaderParams& params,
     TryCommitTableChanges(params, txSupport);
     GracefullShutdown(stopPartitionSessionEvents);
 
-    commitTime += TDuration::Seconds(params.CommitPeriod);
+    commitTime += TDuration::MilliSeconds(params.CommitPeriodMs);
 }
 
 void TTopicWorkloadReader::TryCommitTableChanges(TTopicWorkloadReaderParams& params,

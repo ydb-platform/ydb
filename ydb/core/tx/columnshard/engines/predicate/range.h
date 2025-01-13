@@ -20,6 +20,12 @@ public:
         return PredicateFrom.IsEmpty() && PredicateTo.IsEmpty();
     }
 
+    bool IsPointRange(const std::shared_ptr<arrow::Schema>& pkSchema) const {
+        return PredicateFrom.GetCompareType() == NArrow::ECompareType::GREATER_OR_EQUAL &&
+               PredicateTo.GetCompareType() == NArrow::ECompareType::LESS_OR_EQUAL && PredicateFrom.IsEqualPointTo(PredicateTo) &&
+               PredicateFrom.IsSchemaEqualTo(pkSchema);
+    }
+
     const TPredicateContainer& GetPredicateFrom() const {
         return PredicateFrom;
     }

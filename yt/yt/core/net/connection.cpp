@@ -1236,7 +1236,7 @@ public:
 
     TFuture<void> Abort() override
     {
-        return Impl_->Abort(TError(EErrorCode::Aborted, "Connection aborted"));
+        return Impl_->Abort(TError(NNet::EErrorCode::Aborted, "Connection aborted"));
     }
 
     TFuture<void> CloseRead() override
@@ -1305,7 +1305,8 @@ namespace {
 
 TFileDescriptor CreateWriteFDForConnection(
     const TString& pipePath,
-    std::optional<int> capacity)
+    std::optional<int> capacity,
+    bool useDeliveryFence)
 {
 #ifdef _unix_
     int flags = O_WRONLY | O_CLOEXEC;
@@ -1319,6 +1320,10 @@ TFileDescriptor CreateWriteFDForConnection(
     try {
         if (capacity) {
             SafeSetPipeCapacity(fd, *capacity);
+        }
+
+        if (useDeliveryFence) {
+            SafeEnableEmptyPipeEpollEvent(fd);
         }
 
         SafeMakeNonblocking(fd);
@@ -1421,7 +1426,7 @@ IConnectionWriterPtr CreateOutputConnectionFromPath(
     bool useDeliveryFence)
 {
     return New<TFDConnection>(
-        CreateWriteFDForConnection(pipePath, capacity),
+        CreateWriteFDForConnection(pipePath, capacity, useDeliveryFence),
         std::move(pipePath),
         std::move(poller),
         pipeHolder,

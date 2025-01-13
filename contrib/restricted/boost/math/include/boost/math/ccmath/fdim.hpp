@@ -66,7 +66,7 @@ constexpr auto fdim(T1 x, T2 y) noexcept
 {
     if (BOOST_MATH_IS_CONSTANT_EVALUATED(x))
     {
-        using promoted_type = boost::math::tools::promote_args_2_t<T1, T2>;
+        using promoted_type = boost::math::tools::promote_args_t<T1, T2>;
         return boost::math::ccmath::fdim(promoted_type(x), promoted_type(y));
     }
     else

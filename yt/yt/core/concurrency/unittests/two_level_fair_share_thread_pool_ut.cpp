@@ -27,7 +27,7 @@ TEST(TTwoLevelFairShareThreadPoolTest, Configure)
             ToString(RandomNumber<size_t>(10)));
         futures.push_back(callback.AsyncVia(invoker).Run());
         if (i % 100 == 0) {
-            threadPool->Configure(RandomNumber<size_t>(10) + 1);
+            threadPool->SetThreadCount(RandomNumber<size_t>(10) + 1);
         }
     }
 

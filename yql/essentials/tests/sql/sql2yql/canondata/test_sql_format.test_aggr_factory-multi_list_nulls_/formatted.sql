@@ -8,18 +8,21 @@ $data = AsList(
 );
 
 SELECT
-    MULTI_AGGREGATE_BY(x, AggregationFactory("agg_list")),
-    MULTI_AGGREGATE_BY(x, AggregationFactory("avg")),
-    MULTI_AGGREGATE_BY(x, AggregationFactory("count")),
-FROM AS_TABLE($data);
+    MULTI_AGGREGATE_BY(x, AggregationFactory('agg_list')),
+    MULTI_AGGREGATE_BY(x, AggregationFactory('avg')),
+    MULTI_AGGREGATE_BY(x, AggregationFactory('count')),
+FROM
+    AS_TABLE($data)
+;
 
 SELECT
-    MULTI_AGGREGATE_BY(x, AggregationFactory("agg_list")),
-    MULTI_AGGREGATE_BY(x, AggregationFactory("avg")),
-    MULTI_AGGREGATE_BY(x, AggregationFactory("count")),
+    MULTI_AGGREGATE_BY(x, AggregationFactory('agg_list')),
+    MULTI_AGGREGATE_BY(x, AggregationFactory('avg')),
+    MULTI_AGGREGATE_BY(x, AggregationFactory('count')),
 FROM (
     SELECT
         *
-    FROM AS_TABLE($data)
+    FROM
+        AS_TABLE($data)
     LIMIT 0
 );

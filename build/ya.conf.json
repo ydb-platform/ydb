@@ -550,7 +550,6 @@
             "params": {
                 "c_compiler": "$(CLANG)/bin/clang",
                 "cxx_compiler": "$(CLANG)/bin/clang++",
-                "gcc_version": "16",
                 "llvm-symbolizer": "$(CLANG)/bin/llvm-symbolizer",
                 "match_root": "CLANG",
                 "objcopy": "$(CLANG)/bin/llvm-objcopy",
@@ -559,7 +558,7 @@
                 "strip": "$(CLANG)/bin/llvm-strip",
                 "type": "clang",
                 "use_bundle": true,
-                "werror_mode": "all"
+                "version": "16"
             },
             "platforms": [
                 {
@@ -1126,8 +1125,7 @@
                 "type": "msvc",
                 "use_bundle": true,
                 "use_clang": true,
-                "version": "2019",
-                "werror_mode": "all"
+                "version": "16"
             },
             "platforms": [
                 {
@@ -1229,7 +1227,6 @@
             "params": {
                 "c_compiler": "$(CLANG)/bin/clang",
                 "cxx_compiler": "$(CLANG)/bin/clang++",
-                "gcc_version": "18",
                 "llvm-symbolizer": "$(CLANG)/bin/llvm-symbolizer",
                 "match_root": "CLANG",
                 "objcopy": "$(CLANG)/bin/llvm-objcopy",
@@ -1238,7 +1235,7 @@
                 "strip": "$(CLANG)/bin/llvm-strip",
                 "type": "clang",
                 "use_bundle": true,
-                "werror_mode": "all"
+                "version": "18"
             },
             "platforms": [
                 {
@@ -1805,8 +1802,7 @@
                 "type": "msvc",
                 "use_bundle": true,
                 "use_clang": true,
-                "version": "2019",
-                "werror_mode": "all"
+                "version": "18"
             },
             "platforms": [
                 {

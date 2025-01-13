@@ -756,7 +756,6 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 
     Y_UNIT_TEST(ConnectDbAclIsStrictlyChecked) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true);
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
@@ -875,7 +874,6 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 
     Y_UNIT_TEST(ConnectDbAclIsOffWhenYdbRequestsWithoutDatabase) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true);
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(true);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
@@ -924,7 +922,6 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 
     Y_UNIT_TEST(ConnectDbAclIsOffWhenTokenIsOptionalAndNull) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true);
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");

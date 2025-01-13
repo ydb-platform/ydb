@@ -41,8 +41,8 @@ public:
 
 class TMetadataFromStore: public NAbstract::TMetadataFromStore {
 protected:
-    virtual NAbstract::TGranuleMetaView DoBuildGranuleView(const TGranuleMeta& granule, const bool reverse) const override {
-        NAbstract::TGranuleMetaView result(granule, reverse);
+    virtual NAbstract::TGranuleMetaView DoBuildGranuleView(const TGranuleMeta& granule, const bool reverse, const TSnapshot& reqSnapshot) const override {
+        NAbstract::TGranuleMetaView result(granule, reverse, reqSnapshot);
         result.FillOptimizerTasks(granule, reverse);
         return result;
     }
@@ -52,8 +52,9 @@ public:
 
 class TMetadataFromTable: public NAbstract::TMetadataFromTable {
 protected:
-    virtual NAbstract::TGranuleMetaView DoBuildGranuleView(const TGranuleMeta& granule, const bool reverse) const override {
-        NAbstract::TGranuleMetaView result(granule, reverse);
+    virtual NAbstract::TGranuleMetaView DoBuildGranuleView(
+        const TGranuleMeta& granule, const bool reverse, const TSnapshot& reqSnapshot) const override {
+        NAbstract::TGranuleMetaView result(granule, reverse, reqSnapshot);
         result.FillOptimizerTasks(granule, reverse);
         return result;
     }

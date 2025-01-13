@@ -15,7 +15,7 @@ SRCS(
 PEERDIR(
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/public/purecalc/common/no_llvm
-    contrib/ydb/library/yql/providers/yt/codec/codegen/no_llvm
+    yt/yql/providers/yt/codec/codegen/no_llvm
     yql/essentials/minikql/codegen/no_llvm
     yql/essentials/minikql/computation/no_llvm
     yql/essentials/minikql/invoke_builtins/no_llvm

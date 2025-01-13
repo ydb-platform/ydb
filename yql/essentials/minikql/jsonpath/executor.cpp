@@ -1,5 +1,5 @@
 #include "executor.h"
-#include "parse_double.h"
+#include <yql/essentials/minikql/jsonpath/parser/parse_double.h>
 
 #include <yql/essentials/core/issue/protos/issue_id.pb.h>
 #include <yql/essentials/minikql/dom/node.h>

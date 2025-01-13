@@ -39,10 +39,12 @@ public:
     virtual TConclusion<std::shared_ptr<TPartialReadResult>> GetBatch() override {
         while (!Finished()) {
             if (!IsReadyForBatch()) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "batch_not_ready");
                 return std::shared_ptr<TPartialReadResult>();
             }
             auto batchOpt = ExtractStatsBatch();
             if (!batchOpt) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "no_batch_on_finished");
                 AFL_VERIFY(Finished());
                 return std::shared_ptr<TPartialReadResult>();
             }
@@ -70,6 +72,7 @@ public:
             auto table = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({resultBatch}));
             return std::make_shared<TPartialReadResult>(table, std::make_shared<TPlainScanCursor>(lastKey), Context, std::nullopt);
         }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "finished_iterator");
         return std::shared_ptr<TPartialReadResult>();
     }
 
@@ -89,10 +92,7 @@ public:
                     AFL_VERIFY(*count == i->length());
                 }
             }
-            auto result = arrow::RecordBatch::Make(DataSchema, columns.front()->length(), columns);
-            if (result->num_rows()) {
-                return result;
-            }
+            return arrow::RecordBatch::Make(DataSchema, columns.front()->length(), columns);
         }
         return std::nullopt;
     }

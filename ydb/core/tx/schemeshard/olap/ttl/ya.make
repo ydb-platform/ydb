@@ -9,6 +9,7 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/protos
+    ydb/core/tx/tiering/tier
 )
 
 YQL_LAST_ABI_VERSION()

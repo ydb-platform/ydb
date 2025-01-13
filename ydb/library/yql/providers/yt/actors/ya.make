@@ -9,8 +9,8 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/minikql/computation
     yql/essentials/providers/common/provider
-    ydb/library/yql/providers/yt/proto
-    ydb/library/yql/providers/yt/gateway/file
+    yt/yql/providers/yt/proto
+    yt/yql/providers/yt/gateway/file
     ydb/library/yql/dq/actors/compute
     yql/essentials/public/types
 )

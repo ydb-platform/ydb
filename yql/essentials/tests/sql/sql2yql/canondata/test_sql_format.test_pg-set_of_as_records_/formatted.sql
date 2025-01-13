@@ -1,2 +1,3 @@
 SELECT
-    Pg::json_each(pgjson('{"a":"foo", "b":"bar"}'));
+    Pg::json_each(pgjson('{"a":"foo", "b":"bar"}'))
+;

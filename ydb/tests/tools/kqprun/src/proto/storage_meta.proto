@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package NKqpRun;
+
+message TStorageMeta {
+    uint64 StorageGeneration = 1;
+}

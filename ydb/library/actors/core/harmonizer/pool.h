@@ -16,8 +16,8 @@ template <typename T>
 struct TWaitingStats;
 
 struct TThreadInfo {
-    TValueHistory<8> CpuUs;
-    TValueHistory<8> ElapsedUs;
+    TValueHistory<8> UsedCpu;
+    TValueHistory<8> ElapsedCpu;
 }; // struct TThreadInfo
 
 struct TPoolInfo {
@@ -58,15 +58,15 @@ struct TPoolInfo {
     std::atomic<ui64> ReturnedHalfThreadByStarvedState = 0;
     std::atomic<ui64> ReturnedHalfThreadByOtherHoggishState = 0;
 
-    TValueHistory<16> CpuUs;
-    TValueHistory<16> ElapsedUs;
+    TValueHistory<16> UsedCpu;
+    TValueHistory<16> ElapsedCpu;
 
-    std::atomic<float> MaxCpuUs = 0;
-    std::atomic<float> MinCpuUs = 0;
-    std::atomic<float> AvgCpuUs = 0;
-    std::atomic<float> MaxElapsedUs = 0;
-    std::atomic<float> MinElapsedUs = 0;
-    std::atomic<float> AvgElapsedUs = 0;
+    std::atomic<float> MaxUsedCpu = 0;
+    std::atomic<float> MinUsedCpu = 0;
+    std::atomic<float> AvgUsedCpu = 0;
+    std::atomic<float> MaxElapsedCpu = 0;
+    std::atomic<float> MinElapsedCpu = 0;
+    std::atomic<float> AvgElapsedCpu = 0;
 
     std::unique_ptr<TWaitingStats<ui64>> WaitingStats;
     std::unique_ptr<TWaitingStats<double>> MovingWaitingStats;

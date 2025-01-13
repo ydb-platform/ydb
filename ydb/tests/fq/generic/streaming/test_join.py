@@ -12,7 +12,7 @@ from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
 from ydb.library.yql.providers.generic.connector.tests.utils.one_time_waiter import OneTimeWaiter
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 
 import conftest
 
@@ -53,7 +53,7 @@ TESTCASES = [
                             e.Data as data, u.id as lookup
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.{table_name} as u
+                left join {streamlookup} any ydb_conn_{table_name}.{table_name} as u
                 on(e.Data = u.data)
             ;
 
@@ -83,7 +83,7 @@ TESTCASES = [
                             e.Data as data, CAST(e.Data AS Int32) as id, u.data as lookup
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.{table_name} as u
+                left join {streamlookup} any ydb_conn_{table_name}.{table_name} as u
                 on(CAST(e.Data AS Int32) = u.id)
             ;
 
@@ -121,7 +121,7 @@ TESTCASES = [
                             u.data as lookup
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.{table_name} as u
+                left join {streamlookup} any ydb_conn_{table_name}.{table_name} as u
                 on(e.user = u.id)
             ;
 
@@ -165,7 +165,7 @@ TESTCASES = [
                             u.data as lookup
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.{table_name} as u
+                left join {streamlookup} any ydb_conn_{table_name}.{table_name} as u
                 on(e.user = u.id)
             ;
 
@@ -230,7 +230,7 @@ TESTCASES = [
                             u.age as age
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.`users` as u
+                left join {streamlookup} any ydb_conn_{table_name}.`users` as u
                 on(e.user = u.id)
             ;
 
@@ -270,6 +270,12 @@ TESTCASES = [
             ]
             * 1000
         ),
+        "TTL",
+        "10",
+        "MaxCachedRows",
+        "5",
+        "MaxDelayedRows",
+        "100",
     ),
     # 5
     (
@@ -290,7 +296,7 @@ TESTCASES = [
                             eu.id as uid
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.`users` as eu
+                left join {streamlookup} any ydb_conn_{table_name}.`users` as eu
                 on(e.user = eu.id)
             ;
 
@@ -333,7 +339,7 @@ TESTCASES = [
             $enriched = select a, b, c, d, e, f, za, yb, yc, zd
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.db as u
+                left join {streamlookup} any ydb_conn_{table_name}.db as u
                 on(e.yb = u.b AND e.za = u.a )
             ;
 
@@ -378,7 +384,7 @@ TESTCASES = [
             $enriched = select a, b, c, d, e, f, za, yb, yc, zd
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.db as u
+                left join {streamlookup} any ydb_conn_{table_name}.db as u
                 on(e.za = u.a AND e.yb = u.b)
             ;
 
@@ -410,7 +416,7 @@ TESTCASES = [
 
 
 one_time_waiter = OneTimeWaiter(
-    data_source_kind=EDataSourceKind.YDB,
+    data_source_kind=EGenericDataSourceKind.YDB,
     docker_compose_file_path=conftest.docker_compose_file_path,
     expected_tables=["simple_table", "join_table", "dummy_table"],
 )
@@ -501,12 +507,12 @@ class TestJoinStreaming(TestYdsBase):
             database_id='local',
         )
 
-        sql, messages = TESTCASES[testcase]
+        sql, messages, *options = TESTCASES[testcase]
         sql = sql.format(
             input_topic=self.input_topic,
             output_topic=self.output_topic,
             table_name=table_name,
-            streamlookup=R'/*+ streamlookup() */' if streamlookup else '',
+            streamlookup=Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else '',
         )
 
         one_time_waiter.wait()

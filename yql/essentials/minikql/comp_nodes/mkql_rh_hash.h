@@ -31,7 +31,7 @@ struct TRobinHoodBatchRequestItem {
     void ConstructKey(const TKey& key) {
         new (KeyStorage) TKey(key);
     }
-    
+
     // intermediate data
     ui64 Hash;
     char* InitialIterator;
@@ -114,6 +114,14 @@ public:
         }
     }
 
+    // returns iterator or nullptr if key is not present
+    Y_FORCE_INLINE char* Lookup(TKey key) {
+        auto hash = HashLocal(key);
+        auto ptr = MakeIterator(hash, Data, CapacityShift);
+        auto ret = LookupImpl(key, hash, Data, DataEnd, ptr);
+        return ret;
+    }
+
     template <typename TSink>
     Y_NO_INLINE void BatchInsert(std::span<TRobinHoodBatchRequestItem<TKey>> batchRequest, TSink&& sink) {
         while (2 * (Size + batchRequest.size()) >= Capacity) {
@@ -133,6 +141,22 @@ public:
             auto iter = InsertImpl(r.GetKey(), r.Hash, isNew, Data, DataEnd, r.InitialIterator);
             Size += isNew ? 1 : 0;
             sink(i, iter, isNew);
+        }
+    }
+
+    template <typename TSink>
+    Y_NO_INLINE void BatchLookup(std::span<TRobinHoodBatchRequestItem<TKey>> batchRequest, TSink&& sink) {
+        for (size_t i = 0; i < batchRequest.size(); ++i) {
+            auto& r = batchRequest[i];
+            r.Hash = HashLocal(r.GetKey());
+            r.InitialIterator = MakeIterator(r.Hash, Data, CapacityShift);
+            NYql::PrefetchForRead(r.InitialIterator);
+        }
+
+        for (size_t i = 0; i < batchRequest.size(); ++i) {
+            auto& r = batchRequest[i];
+            auto iter = LookupImpl(r.GetKey(), r.Hash, Data, DataEnd, r.InitialIterator);
+            sink(i, iter);
         }
     }
 
@@ -215,7 +239,7 @@ private:
     };
 
     Y_FORCE_INLINE char* MakeIterator(const ui64 hash, char* data, ui64 capacityShift) {
-        // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/        
+        // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
         ui64 bucket = ((SelfHash ^ hash) * 11400714819323198485llu) >> capacityShift;
         char* ptr = data + AsDeriv().GetCellSize() * bucket;
         return ptr;
@@ -279,6 +303,29 @@ private:
             }
 
             ++psl.Distance;
+            AdvancePointer(ptr, data, dataEnd);
+        }
+    }
+
+    Y_FORCE_INLINE char* LookupImpl(TKey key, const ui64 hash, char* data, char* dataEnd, char* ptr) {
+        i32 currDistance = 0;
+        for (;;) {
+            auto& pslPtr = GetPSL(ptr);
+            if (pslPtr.Distance < 0 || currDistance > pslPtr.Distance) {
+                return nullptr;
+            }
+
+            if constexpr (CacheHash) {
+                if (pslPtr.Hash == hash && EqualLocal(GetKey(ptr), key)) {
+                    return ptr;
+                }
+            } else {
+                if (EqualLocal(GetKey(ptr), key)) {
+                    return ptr;
+                }
+            }
+
+            ++currDistance;
             AdvancePointer(ptr, data, dataEnd);
         }
     }

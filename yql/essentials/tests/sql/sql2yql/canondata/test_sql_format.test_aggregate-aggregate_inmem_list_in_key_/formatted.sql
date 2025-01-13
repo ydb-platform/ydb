@@ -16,7 +16,8 @@ FROM (
 GROUP BY
     x
 ORDER BY
-    c;
+    c
+;
 
 SELECT
     x,
@@ -51,4 +52,5 @@ GROUP BY
     x,
     y
 ORDER BY
-    c;
+    c
+;

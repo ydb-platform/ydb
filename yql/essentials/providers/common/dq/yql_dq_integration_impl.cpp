@@ -74,7 +74,7 @@ void TDqIntegrationBase::FillTransformSettings(const TExprNode&, ::google::proto
 void TDqIntegrationBase::Annotate(const TExprNode&, THashMap<TString, TString>&) {
 }
 
-bool TDqIntegrationBase::PrepareFullResultTableParams(const TExprNode&, TExprContext&, THashMap<TString, TString>&, THashMap<TString, TString>&) {
+bool TDqIntegrationBase::PrepareFullResultTableParams(const TExprNode&, TExprContext&, THashMap<TString, TString>&, THashMap<TString, TString>&, const TMaybe<TColumnOrder>&) {
     return false;
 }
 
@@ -90,6 +90,9 @@ bool TDqIntegrationBase::FillSinkPlanProperties(const NNodes::TExprBase&, TMap<T
 }
 
 void TDqIntegrationBase::ConfigurePeepholePipeline(bool, const THashMap<TString, TString>&, TTransformationPipeline*) {
+}
+
+void TDqIntegrationBase::NotifyDqTimeout() {
 }
 
 } // namespace NYql

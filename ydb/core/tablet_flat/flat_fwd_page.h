@@ -3,6 +3,7 @@
 #include "flat_part_iface.h"
 #include "flat_sausage_fetch.h"
 #include "flat_fwd_misc.h"
+#include "shared_handle.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -31,6 +32,7 @@ namespace NFwd {
         ~TPage()
         {
             Y_ABORT_UNLESS(!Data, "Forward cache page is still holds data");
+            Y_ABORT_UNLESS(!SharedPageRef, "Forward cache page is still holds data");
         }
 
         explicit operator bool() const
@@ -53,7 +55,7 @@ namespace NFwd {
             return Data ? &Data : nullptr;
         }
 
-        ui32 Settle(NPageCollection::TLoadedPage &page) noexcept
+        ui32 Settle(NPageCollection::TLoadedPage &page, NSharedCache::TSharedPageRef ref) noexcept
         {
             const auto was = std::exchange(Fetch, EFetch::Done);
 
@@ -67,6 +69,7 @@ namespace NFwd {
                 Y_ABORT("Settling page that is not waiting for any data");
             } else {
                 Data = std::move(page.Data);
+                SharedPageRef = ref;
             }
 
             return Data.size();
@@ -90,6 +93,8 @@ namespace NFwd {
         {
             Fetch = Max(Fetch, EFetch::Drop);
 
+            SharedPageRef.Drop();
+            
             return std::exchange(Data, { });
         }
 
@@ -100,6 +105,7 @@ namespace NFwd {
         EUsage Usage    = EUsage::None;
         EFetch Fetch    = EFetch::None;
         TSharedData Data;
+        NSharedCache::TSharedPageRef SharedPageRef;
     };
 
 }

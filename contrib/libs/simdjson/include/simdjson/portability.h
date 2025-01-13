@@ -6,10 +6,14 @@
 #include <cstdlib>
 #include <cfloat>
 #include <cassert>
+#include <climits>
 #ifndef _WIN32
 // strcasecmp, strncasecmp
 #include <strings.h>
 #endif
+
+static_assert(CHAR_BIT == 8, "simdjson requires 8-bit bytes");
+
 
 // We are using size_t without namespace std:: throughout the project
 using std::size_t;
@@ -44,6 +48,7 @@ using std::size_t;
 #elif defined(__loongarch_lp64)
 #define SIMDJSON_IS_LOONGARCH64 1
 #elif defined(__PPC64__) || defined(_M_PPC64)
+#define SIMDJSON_IS_PPC64 1
 #if defined(__ALTIVEC__)
 #define SIMDJSON_IS_PPC64_VMX 1
 #endif // defined(__ALTIVEC__)
@@ -200,5 +205,44 @@ using std::size_t;
 #define SIMDJSON_ASSUME(COND) assert(COND)
 
 #endif
+
+
+
+#if defined __BYTE_ORDER__ && defined __ORDER_BIG_ENDIAN__
+#define SIMDJSON_IS_BIG_ENDIAN (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+#elif defined _WIN32
+#define SIMDJSON_IS_BIG_ENDIAN 0
+#else
+#if defined(__APPLE__) || defined(__FreeBSD__)
+#include <machine/endian.h>
+#elif defined(sun) || defined(__sun)
+#error #include <sys/byteorder.h>
+#elif defined(__MVS__)
+#include <sys/endian.h>
+#else
+#ifdef __has_include
+#if __has_include(<endian.h>)
+#include <endian.h>
+#endif //__has_include(<endian.h>)
+#endif //__has_include
+#endif
+#
+#ifndef __BYTE_ORDER__
+// safe choice
+#define SIMDJSON_IS_BIG_ENDIAN 0
+#endif
+#
+#ifndef __ORDER_LITTLE_ENDIAN__
+// safe choice
+#define SIMDJSON_IS_BIG_ENDIAN 0
+#endif
+#
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define SIMDJSON_IS_BIG_ENDIAN 0
+#else
+#define SIMDJSON_IS_BIG_ENDIAN 1
+#endif
+#endif
+
 
 #endif // SIMDJSON_PORTABILITY_H

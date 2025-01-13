@@ -3,7 +3,9 @@
 #include "yql_ast_escaping.h"
 
 #include <yql/essentials/parser/pg_catalog/catalog.h>
+#include <yql/essentials/public/udf/udf_types.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+
 
 #include <util/string/cast.h>
 #include <util/generic/map.h>
@@ -559,7 +561,9 @@ private:
         for (;;) {
             if (Token == TOKEN_IDENTIFIER) {
                 if (Identifier == TStringBuf("AutoMap")) {
-                    argFlags |= TArgumentFlags::AutoMap;
+                    argFlags |= NUdf::ICallablePayload::TArgumentFlags::AutoMap;
+                } else if (Identifier == TStringBuf("NoYield")) {
+                    argFlags |= NUdf::ICallablePayload::TArgumentFlags::NoYield;
                 } else {
                     AddError(TString("Unknown flag name: ") + Identifier);
                     return false;
@@ -1329,8 +1333,22 @@ private:
             argInfo.Type->Accept(*this);
             if (argInfo.Flags) {
                 Out_ << TStringBuf("{Flags:");
-                if (argInfo.Flags & TArgumentFlags::AutoMap) {
+                bool start = true;
+                if (argInfo.Flags & NUdf::ICallablePayload::TArgumentFlags::AutoMap) {
+                    if (!start) {
+                        Out_ << '|';
+                    }
+
                     Out_ << TStringBuf("AutoMap");
+                    start = false;
+                }
+                if (argInfo.Flags & NUdf::ICallablePayload::TArgumentFlags::NoYield) {
+                    if (!start) {
+                        Out_ << '|';
+                    }
+
+                    Out_ << TStringBuf("NoYield");
+                    start = false;
                 }
                 Out_ << '}';
             }

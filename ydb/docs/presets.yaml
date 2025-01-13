@@ -36,7 +36,7 @@ default:
   ydbd-install-url: https://install.ydb.tech
   ydb-cli-install-url: https://install.ydb.tech/cli
   ydb-stable-binary-archive: ydbd-stable-linux-amd64.tar.gz
-  ydb_local_docker_image: cr.yandex/yc/yandex-docker-local-ydb
+  ydb_local_docker_image: ydbplatform/local-ydb
   ydb_local_docker_image_tag: latest
   managed-k8s-full-name: Yandex Managed Service for Kubernetes
   managed-k8s-name: Managed Service for Kubernetes

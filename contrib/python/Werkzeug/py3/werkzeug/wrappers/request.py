@@ -2,7 +2,6 @@ import functools
 import json
 import typing
 import typing as t
-import warnings
 from io import BytesIO
 
 from .._internal import _wsgi_decoding_dance
@@ -50,6 +49,9 @@ class Request(_SansIORequest):
         prevent consuming the form data in middleware, which would make
         it unavailable to the final application.
 
+    .. versionchanged:: 2.1
+        Remove the ``disable_data_descriptor`` attribute.
+
     .. versionchanged:: 2.0
         Combine ``BaseRequest`` and mixins into a single ``Request``
         class. Using the old classes is deprecated and will be removed
@@ -81,19 +83,9 @@ class Request(_SansIORequest):
     #: .. versionadded:: 0.5
     max_form_memory_size: t.Optional[int] = None
 
-    #: The form data parser that shoud be used.  Can be replaced to customize
+    #: The form data parser that should be used.  Can be replaced to customize
     #: the form date parsing.
     form_data_parser_class: t.Type[FormDataParser] = FormDataParser
-
-    #: Disable the :attr:`data` property to avoid reading from the input
-    #: stream.
-    #:
-    #: .. deprecated:: 2.0
-    #:     Will be removed in Werkzeug 2.1. Create the request with
-    #:     ``shallow=True`` instead.
-    #:
-    #: .. versionadded:: 0.9
-    disable_data_descriptor: t.Optional[bool] = None
 
     #: The WSGI environment containing HTTP headers and information from
     #: the WSGI server.
@@ -125,17 +117,6 @@ class Request(_SansIORequest):
             remote_addr=environ.get("REMOTE_ADDR"),
         )
         self.environ = environ
-
-        if self.disable_data_descriptor is not None:
-            warnings.warn(
-                "'disable_data_descriptor' is deprecated and will be"
-                " removed in Werkzeug 2.1. Create the request with"
-                " 'shallow=True' instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            shallow = shallow or self.disable_data_descriptor
-
         self.shallow = shallow
 
         if populate_request and not shallow:
@@ -549,6 +530,12 @@ class Request(_SansIORequest):
         (:mimetype:`application/json`, see :attr:`is_json`).
 
         Calls :meth:`get_json` with default arguments.
+
+        If the request content type is not ``application/json``, this
+        will raise a 400 Bad Request error.
+
+        .. versionchanged:: 2.1
+            Raise a 400 error if the content type is incorrect.
         """
         return self.get_json()
 
@@ -562,23 +549,28 @@ class Request(_SansIORequest):
         """Parse :attr:`data` as JSON.
 
         If the mimetype does not indicate JSON
-        (:mimetype:`application/json`, see :attr:`is_json`), this
-        returns ``None``.
-
-        If parsing fails, :meth:`on_json_loading_failed` is called and
-        its return value is used as the return value.
+        (:mimetype:`application/json`, see :attr:`is_json`), or parsing
+        fails, :meth:`on_json_loading_failed` is called and
+        its return value is used as the return value. By default this
+        raises a 400 Bad Request error.
 
         :param force: Ignore the mimetype and always try to parse JSON.
-        :param silent: Silence parsing errors and return ``None``
-            instead.
+        :param silent: Silence mimetype and parsing errors, and
+            return ``None`` instead.
         :param cache: Store the parsed JSON to return for subsequent
             calls.
+
+        .. versionchanged:: 2.1
+            Raise a 400 error if the content type is incorrect.
         """
         if cache and self._cached_json[silent] is not Ellipsis:
             return self._cached_json[silent]
 
         if not (force or self.is_json):
-            return None
+            if not silent:
+                return self.on_json_loading_failed(None)
+            else:
+                return None
 
         data = self.get_data(cache=cache)
 
@@ -603,58 +595,20 @@ class Request(_SansIORequest):
 
         return rv
 
-    def on_json_loading_failed(self, e: ValueError) -> t.Any:
-        """Called if :meth:`get_json` parsing fails and isn't silenced.
+    def on_json_loading_failed(self, e: t.Optional[ValueError]) -> t.Any:
+        """Called if :meth:`get_json` fails and isn't silenced.
+
         If this method returns a value, it is used as the return value
         for :meth:`get_json`. The default implementation raises
         :exc:`~werkzeug.exceptions.BadRequest`.
+
+        :param e: If parsing failed, this is the exception. It will be
+            ``None`` if the content type wasn't ``application/json``.
         """
-        raise BadRequest(f"Failed to decode JSON object: {e}")
+        if e is not None:
+            raise BadRequest(f"Failed to decode JSON object: {e}")
 
-
-class StreamOnlyMixin:
-    """Mixin to create a ``Request`` that disables the ``data``,
-    ``form``, and ``files`` properties. Only ``stream`` is available.
-
-    .. deprecated:: 2.0
-        Will be removed in Werkzeug 2.1. Create the request with
-        ``shallow=True`` instead.
-
-    .. versionadded:: 0.9
-    """
-
-    def __init__(self, *args: t.Any, **kwargs: t.Any) -> None:
-        warnings.warn(
-            "'StreamOnlyMixin' is deprecated and will be removed in"
-            " Werkzeug 2.1. Create the request with 'shallow=True'"
-            " instead.",
-            DeprecationWarning,
-            stacklevel=2,
+        raise BadRequest(
+            "Did not attempt to load JSON data because the request"
+            " Content-Type was not 'application/json'."
         )
-        kwargs["shallow"] = True
-        super().__init__(*args, **kwargs)
-
-
-class PlainRequest(StreamOnlyMixin, Request):
-    """A request object without ``data``, ``form``, and ``files``.
-
-    .. deprecated:: 2.0
-        Will be removed in Werkzeug 2.1. Create the request with
-        ``shallow=True`` instead.
-
-    .. versionadded:: 0.9
-    """
-
-    def __init__(self, *args: t.Any, **kwargs: t.Any) -> None:
-        warnings.warn(
-            "'PlainRequest' is deprecated and will be removed in"
-            " Werkzeug 2.1. Create the request with 'shallow=True'"
-            " instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
-        # Don't show the DeprecationWarning for StreamOnlyMixin.
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            super().__init__(*args, **kwargs)

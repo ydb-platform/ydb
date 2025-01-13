@@ -37,6 +37,7 @@
   - MacTypes.h
   - TargetConditionals.h
   - architecture/byte_order.h
+  - arm/cpu_capabilities_public.h
   - asl.h
   - copyfile.h
   - crt_externs.h

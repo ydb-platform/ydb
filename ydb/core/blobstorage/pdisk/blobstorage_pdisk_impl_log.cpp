@@ -66,8 +66,8 @@ bool TPDisk::InitCommonLogger() {
     ui64 sectorIdx = (InitialLogPosition.OffsetInChunk + Format.SectorSize - 1) / Format.SectorSize;
 
     TLogChunkInfo *info = &*std::find_if(LogChunks.begin(), LogChunks.end(), [=](const TLogChunkInfo& i) {
-            return i.ChunkIdx == chunkIdx;
-        });
+        return i.ChunkIdx == chunkIdx;
+    });
 
     if (sectorIdx >= UsableSectorsPerLogChunk() && InitialTailBuffer) {
         InitialTailBuffer->Release(PCtx->ActorSystem);
@@ -84,7 +84,7 @@ bool TPDisk::InitCommonLogger() {
         }
         CommonLogger->SwitchToNewChunk(TReqId(TReqId::InitCommonLoggerSwitchToNewChunk, 0), nullptr);
 
-        // Log chunk can be collected as soon as noone needs it
+        // Log chunk can be collected as soon as no one needs it
         ChunkState[chunkIdx].CommitState = TChunkState::DATA_COMMITTED;
     }
     bool isOk = LogNonceJump(InitialPreviousNonce);
@@ -570,14 +570,19 @@ void TPDisk::ProcessLogReadQueue() {
             ui32 endLogChunkIdx;
             ui64 endLogSectorIdx;
 
-            TOwnerData::TLogEndPosition &logEndPos = ownerData.LogEndPosition;
-            if (logEndPos.ChunkIdx == 0 && logEndPos.SectorIdx == 0) {
-                TFirstUncommitted firstUncommitted = CommonLogger->FirstUncommitted.load();
-                endLogChunkIdx = firstUncommitted.ChunkIdx;
-                endLogSectorIdx = firstUncommitted.SectorIdx;
+            if (Cfg->ReadOnly) {
+                endLogChunkIdx = LastInitialChunkIdx;
+                endLogSectorIdx = LastInitialSectorIdx;
             } else {
-                endLogChunkIdx = logEndPos.ChunkIdx;
-                endLogSectorIdx = logEndPos.SectorIdx;
+                TOwnerData::TLogEndPosition &logEndPos = ownerData.LogEndPosition;
+                if (logEndPos.ChunkIdx == 0 && logEndPos.SectorIdx == 0) {
+                    TFirstUncommitted firstUncommitted = CommonLogger->FirstUncommitted.load();
+                    endLogChunkIdx = firstUncommitted.ChunkIdx;
+                    endLogSectorIdx = firstUncommitted.SectorIdx;
+                } else {
+                    endLogChunkIdx = logEndPos.ChunkIdx;
+                    endLogSectorIdx = logEndPos.SectorIdx;
+                }
             }
 
             ownerData.LogReader = new TLogReader(false,
@@ -707,16 +712,37 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Common log writing
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void TPDisk::ProcessLogWriteQueueAndCommits() {
-    if (JointLogWrites.empty()) {
-        LWTRACK(PDiskProcessLogWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointLogWrites.size(), JointCommits.size());
+void TPDisk::ProcessLogWriteQueue() {
+    while (JointLogWrites.size()) {
+        TVector<TLogWrite*> logWrites;
+        logWrites.reserve(JointLogWrites.size());
+        TVector<TLogWrite*> commits;
+        commits.reserve(JointLogWrites.size());
+        size_t batchSizeBytes = 0;
+        while (JointLogWrites.size()) {
+            auto *log = static_cast<TLogWrite*>(JointLogWrites.front());
+            JointLogWrites.pop();
+
+            logWrites.push_back(log);
+            batchSizeBytes += log->Data.Size();
+            if (log->Signature.HasCommitRecord()) {
+                commits.push_back(log);
+            }
+            if (UseNoopSchedulerCached && batchSizeBytes >= (size_t)ForsetiOpPieceSizeCached) {
+                break;
+            }
+        }
+        LWTRACK(PDiskProcessLogWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointLogWrites.size(), logWrites.size(), commits.size());
+        ProcessLogWriteBatch(std::move(logWrites), std::move(commits));
+    }
+}
+
+void TPDisk::ProcessLogWriteBatch(TVector<TLogWrite*> logWrites, TVector<TLogWrite*> commits) {
+    if (logWrites.empty()) {
         return;
     }
 
-    NHPTimer::STime now = HPNow();
-    for (TLogWrite *logCommit : JointCommits) {
-        Mon.LogQueueTime.Increment(logCommit->LifeDurationMs(now));
-
+    for (TLogWrite *logCommit : commits) {
         TStringStream errorReason;
         NKikimrProto::EReplyStatus status = ValidateRequest(logCommit, errorReason);
         if (status == NKikimrProto::OK) {
@@ -726,11 +752,13 @@ void TPDisk::ProcessLogWriteQueueAndCommits() {
             PrepareLogError(logCommit, errorReason, status);
         }
     }
+    NHPTimer::STime now = HPNow();
     NWilson::TTraceId traceId;
     size_t logOperationSizeBytes = 0;
     TVector<ui32> logChunksToCommit;
-    for (TLogWrite *logWrite : JointLogWrites) {
+    for (TLogWrite *logWrite : logWrites) {
         Y_DEBUG_ABORT_UNLESS(logWrite);
+        Mon.LogQueueTime.Increment(logWrite->LifeDurationMs(now));
         logWrite->SpanStack.PopOk();
         logOperationSizeBytes += logWrite->Data.size();
         TStringStream errorReason;
@@ -746,20 +774,17 @@ void TPDisk::ProcessLogWriteQueueAndCommits() {
             PrepareLogError(logWrite, errorReason, status);
         }
     }
-    for (TLogWrite *logWrite : JointLogWrites) {
+    for (TLogWrite *logWrite : logWrites) {
         LWTRACK(PDiskLogWriteFlush, logWrite->Orbit, PCtx->PDiskId, logWrite->ReqId.Id, HPSecondsFloat(logWrite->CreationTime),
                 double(logWrite->Cost) / 1000000.0, HPSecondsFloat(logWrite->Deadline),
                 logWrite->Owner, logWrite->IsFast, logWrite->PriorityClass);
     }
-    LWTRACK(PDiskProcessLogWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointLogWrites.size(), JointCommits.size());
-    TReqId reqId = JointLogWrites.back()->ReqId;
+    LWTRACK(PDiskProcessLogWriteBatch, UpdateCycleOrbit, PCtx->PDiskId, logWrites.size(), commits.size());
+    TReqId reqId = logWrites.back()->ReqId;
     auto write = MakeHolder<TCompletionLogWrite>(
-        this, std::move(JointLogWrites), std::move(JointCommits), std::move(logChunksToCommit));
+        this, std::move(logWrites), std::move(commits), std::move(logChunksToCommit));
     LogFlush(write.Get(), write->GetCommitedLogChunksPtr(), reqId, &traceId);
     Y_UNUSED(write.Release());
-
-    JointCommits.clear();
-    JointLogWrites.clear();
 
     // Check if we can TRIM some chunks that were deleted
     TryTrimChunk(false, 0, NWilson::TSpan{});
@@ -1385,6 +1410,10 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                             "Error while parsing common log at booting state"));
                 return;
             }
+
+            LastInitialChunkIdx = evReadLogResult.LastGoodChunkIdx;
+            LastInitialSectorIdx = evReadLogResult.LastGoodSectorIdx;
+
             // Initialize metadata.
             InitFormattedMetadata();
             // Prepare the FreeChunks list
@@ -1481,13 +1510,17 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
             InitSysLogger();
 
             InitPhase = EInitPhase::Initialized;
-            if (!InitCommonLogger()) {
-                // TODO: report red zone
-                *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::CommonLoggerInitError;
-                *Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
-                *Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorCommonLoggerInit;
-                PCtx->ActorSystem->Send(pDiskActor, new TEvLogInitResult(false, "Error in common logger init"));
-                return;
+
+            if (!Cfg->ReadOnly) {
+                // We don't need logger in ReadOnly mode.
+                if (!InitCommonLogger()) {
+                    // TODO: report red zone
+                    *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::CommonLoggerInitError;
+                    *Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
+                    *Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorCommonLoggerInit;
+                    PCtx->ActorSystem->Send(pDiskActor, new TEvLogInitResult(false, "Error in common logger init"));
+                    return;
+                }
             }
 
             // Now it's ok to write both logs and data.
@@ -1495,9 +1528,13 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
             *Mon.PDiskBriefState = TPDiskMon::TPDisk::OK;
             *Mon.PDiskDetailedState = TPDiskMon::TPDisk::EverythingIsOk;
 
-            auto completion = MakeHolder<TCompletionEventSender>(this, pDiskActor, new TEvLogInitResult(true, "OK"));
-            ReleaseUnusedLogChunks(completion.Get());
-            WriteSysLogRestorePoint(completion.Release(), TReqId(TReqId::AfterInitCommonLoggerSysLog, 0), {});
+            if (Cfg->ReadOnly) {
+                PCtx->ActorSystem->Send(pDiskActor, new TEvLogInitResult(true, "OK"));
+            } else {
+                auto completion = MakeHolder<TCompletionEventSender>(this, pDiskActor, new TEvLogInitResult(true, "OK"));
+                ReleaseUnusedLogChunks(completion.Get());
+                WriteSysLogRestorePoint(completion.Release(), TReqId(TReqId::AfterInitCommonLoggerSysLog, 0), {});
+            }
 
             // Start reading metadata.
             ReadFormattedMetadataIfNeeded();

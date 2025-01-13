@@ -1,4 +1,5 @@
 PRAGMA SeqMode;
 
 SELECT
-    1;
+    1
+;

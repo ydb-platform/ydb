@@ -693,7 +693,7 @@ Y_UNIT_TEST_SUITE(TPart) {
             {1, prefix + "baaaa"}, // -> (1, "b")
             {1, prefix + "bab"},
             {1, prefix + "caa"},
-            
+
             {2, prefix + "aaa"}, // -> (2, null)
             {2, prefix + "bbb"},
             {2, prefix + "ccc"},
@@ -726,13 +726,13 @@ Y_UNIT_TEST_SUITE(TPart) {
             UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatLastRecord(*part), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, prefix + "cxz"))), 0);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*part, 0)), 
+        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*part, 0)),
             TSerializedCellVec::Serialize(part->IndexPages.HasBTree() ? TVector<TCell>() : TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, prefix + "aaa"))));
-        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*part, 1)), 
+        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*part, 1)),
             TSerializedCellVec::Serialize(TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, prefix + "b"))));
-        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*part, 2)), 
+        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*part, 2)),
             TSerializedCellVec::Serialize(TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, nullptr))));
-        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*part, 3)), 
+        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*part, 3)),
             TSerializedCellVec::Serialize(TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, prefix + "ccx"))));
     }
 
@@ -753,7 +753,7 @@ Y_UNIT_TEST_SUITE(TPart) {
             {1, "baaaa"}, // -> (1, "b")
             {1, "bab"},
             {1, "caa"},
-            
+
             {2, "aaa"}, // -> (2, null)
             {2, "bbb"},
             {2, "ccc"},
@@ -788,7 +788,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         Cerr << DumpPart(*fullPart, 2) << Endl;
 
         UNIT_ASSERT_GT(fullPart->IndexesRawSize, cutPart->IndexesRawSize);
-        
+
         if (cutPart->IndexPages.HasFlat()) {
             const NPage::TCompare<NPage::TFlatIndex::TRecord> cmp(cutPart->Scheme->Groups[0].ColsKeyIdx, *(*lay).Keys);
             UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatRecord(*cutPart, 0), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, "aaa"))), 0);
@@ -798,13 +798,13 @@ Y_UNIT_TEST_SUITE(TPart) {
             UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatLastRecord(*cutPart), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, "cxz"))), 0);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*cutPart, 0)), 
+        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*cutPart, 0)),
             TSerializedCellVec::Serialize(cutPart->IndexPages.HasBTree() ? TVector<TCell>() : TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, "aaa"))));
-        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*cutPart, 1)), 
+        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*cutPart, 1)),
             TSerializedCellVec::Serialize(TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, "b"))));
-        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*cutPart, 2)), 
+        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*cutPart, 2)),
             TSerializedCellVec::Serialize(TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, nullptr))));
-        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*cutPart, 3)), 
+        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*cutPart, 3)),
             TSerializedCellVec::Serialize(TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, "ccx"))));
 
         for (auto r : fullRows) {
@@ -895,7 +895,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         Cerr << DumpPart(*fullPart, 2) << Endl;
 
         UNIT_ASSERT_GT(fullPart->IndexesRawSize, cutPart->IndexesRawSize);
-        
+
         for (auto r : fullRows) {
             cutWrap.Has(*TSchemedCookRow(*lay).Col(r.first, r.second));
             fullWrap.Has(*TSchemedCookRow(*lay).Col(r.first, r.second));
@@ -1004,14 +1004,14 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         Cerr << "======= CUT =======" << Endl;
         Cerr << DumpPart(*cutPart, 2) << Endl;
-        
+
         Cerr << "======= FULL =======" << Endl;
         Cerr << DumpPart(*fullPart, 2) << Endl;
 
         UNIT_ASSERT_GT(fullPart->IndexesRawSize, cutPart->IndexesRawSize);
         UNIT_ASSERT_GT(cutPart->Slices->size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(fullPart->Slices->size(), 1);
-        
+
         for (auto i : xrange(fullRows.size())) {
             auto &r = fullRows[i];
             fullWrap.To(100 + i).Has(*TSchemedCookRow(*lay).Col(r.first, r.second));
@@ -1069,7 +1069,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         auto check = [&] (ui32 testId, TString a, TString b, TString expected) {
             TPartCook cook(lay, conf);
 
-            cook.Add(*TSchemedCookRow(*lay).Col(a == "<NULL>" ? nullptr : a));
+            cook.Add(*TSchemedCookRow(*lay).Col(a == "<NULL>" ? "" : a));
             cook.Add(*TSchemedCookRow(*lay).Col(b));
 
             TCheckIter wrap(cook.Finish(), { });
@@ -1083,73 +1083,73 @@ Y_UNIT_TEST_SUITE(TPart) {
         };
 
         check(0,
-            "cccccc", 
-            "ccccccd", 
+            "cccccc",
+            "ccccccd",
             "ccccccd");
 
         check(1,
-            "cccccc", 
-            "ccccccddd", 
+            "cccccc",
+            "ccccccddd",
             "ccccccd");
 
         check(2,
-            "cccccc", 
-            "cccccd", 
+            "cccccc",
+            "cccccd",
             "cccccd");
 
         check(3,
-            "cccccc", 
-            "cccccddd", 
+            "cccccc",
+            "cccccddd",
             "cccccd");
 
         check(4,
-            "cccccc", 
-            "ccccd", 
+            "cccccc",
+            "ccccd",
             "ccccd");
 
         check(5,
-            "cccccc", 
-            "ccccddd", 
+            "cccccc",
+            "ccccddd",
             "ccccd");
 
         check(6,
-            "cccccc", 
-            "cccd", 
+            "cccccc",
+            "cccd",
             "cccd");
 
         check(7,
-            "cccccc", 
-            "cccddd", 
+            "cccccc",
+            "cccddd",
             "cccd");
 
         check(8,
-            "cccccc", 
-            "d", 
+            "cccccc",
+            "d",
             "d");
 
         check(9,
-            "cccccc", 
-            "ddd", 
+            "cccccc",
+            "ddd",
             "d");
 
         check(10,
-            "", 
-            "d", 
+            "",
+            "d",
             "d");
-        
+
         check(11,
-            "", 
-            "ddd", 
+            "",
+            "ddd",
             "d");
 
         check(12,
-            "<NULL>", 
-            "d", 
+            "<NULL>",
+            "d",
             "d");
-        
+
         check(12,
-            "<NULL>", 
-            "ddd", 
+            "<NULL>",
+            "ddd",
             "d");
 
         check(13,
@@ -1190,8 +1190,8 @@ Y_UNIT_TEST_SUITE(TPart) {
         };
 
         check(0,
-            "cccccc", 
-            "cccddd", 
+            "cccccc",
+            "cccddd",
             "cccd");
 
         check(1,

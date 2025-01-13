@@ -8,6 +8,7 @@
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/locks/sys_tables.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/actor.h>
@@ -19,36 +20,48 @@ namespace NDataIntegrity {
 
 inline void WriteTablePoint(const TConstArrayRef<NKikimr::TCell>& point, TStringStream& output) {
     std::string result;
-    result.resize(SHA_DIGEST_LENGTH);
+    result.resize(SHA256_DIGEST_LENGTH);
 
-    SHA_CTX sha1;
-    if (!SHA1_Init(&sha1)) {
+    SHA256_CTX sha256;
+    if (!SHA256_Init(&sha256)) {
         return;
     }
 
     for (size_t i = 0; i < point.size(); ++i) {
         const NKikimr::TCell& cell = point[i];
-        if (!SHA1_Update(&sha1, cell.Data(), cell.Size())) {
+        if (!SHA256_Update(&sha256, cell.Data(), cell.Size())) {
             return;
         }
     }
 
-    if (!SHA1_Final(reinterpret_cast<unsigned char*>(&result[0]), &sha1)) {
+    if (!SHA256_Final(reinterpret_cast<unsigned char*>(&result[0]), &sha256)) {
         return;
     }
 
     output << Base64Encode(result);
 }
 
-inline void WriteTableRange(const NKikimr::TTableRange &range, TStringStream& output) {
+inline void WriteTableRange(const NKikimr::TTableRange& range, const TVector<NScheme::TTypeInfo>& types, TStringStream& output) {
+    const auto keysLogMode = AppData()->DataIntegrityTrailsConfig.HasKeysLogMode()
+        ? AppData()->DataIntegrityTrailsConfig.GetKeysLogMode()
+        : NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_HASHED;
+
     if (range.Point) {
-        WriteTablePoint(range.From, output);
+        if (keysLogMode == NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_ORIGINAL) {
+            output << DebugPrintPoint(types, range.From, *AppData()->TypeRegistry);
+        } else {
+            WriteTablePoint(range.From, output);
+        }
     } else {
-        output << (range.InclusiveFrom ? "[" : "(");
-        WriteTablePoint(range.From, output);
-        output << " ; ";
-        WriteTablePoint(range.To, output);
-        output << (range.InclusiveTo ? "]" : ")");
+        if (keysLogMode == NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_ORIGINAL) {
+            output << DebugPrintRange(types, range, *AppData()->TypeRegistry);
+        } else {
+            output << (range.InclusiveFrom ? "[" : "(");
+            WriteTablePoint(range.From, output);
+            output << " ; ";
+            WriteTablePoint(range.To, output);
+            output << (range.InclusiveTo ? "]" : ")");
+        }
     }
 }
 
@@ -100,7 +113,7 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
                     LogKeyValue("Op", rowOp, ss);
 
                     ss << "Key: ";
-                    WriteTableRange(range, ss);
+                    WriteTableRange(range, keyDef->KeyColumnTypes, ss);
 
                     if (i + 1 < keys.Keys.size() && j + 1 < batchSize) {
                         ss << ",";

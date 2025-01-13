@@ -79,7 +79,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateKesus TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -94,7 +94,7 @@ public:
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TCreateKesus TConfigureParts HandleReply TEvSetConfigResult"
-                    << " operationId#" << OperationId
+                    << " operationId# " << OperationId
                     << " at tablet" << ssId);
 
         auto tabletId = TTabletId(ev->Get()->Record.GetTabletId());
@@ -130,7 +130,7 @@ public:
         auto ssId = context.SS->SelfTabletId();
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TCreateKesus TConfigureParts ProgressState"
-                    << " operationId#" << OperationId
+                    << " operationId# " << OperationId
                     << " at tablet" << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
@@ -178,7 +178,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateKesus TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

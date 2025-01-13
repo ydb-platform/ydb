@@ -45,6 +45,61 @@ public:
             (Indexes ? (Indexes->size() * sizeof(TIndexChunk)) : 0);
     }
 
+    class TExtractContext {
+    private:
+        YDB_ACCESSOR_DEF(std::optional<std::set<ui32>>, ColumnIds);
+        YDB_ACCESSOR_DEF(std::optional<std::set<ui32>>, IndexIds);
+
+    public:
+        TExtractContext() = default;
+    };
+
+    TPortionDataAccessor Extract(const std::optional<std::set<ui32>>& columnIds, const std::optional<std::set<ui32>>& indexIds) const {
+        return Extract(TExtractContext().SetColumnIds(columnIds).SetIndexIds(indexIds));
+    }
+
+    TPortionDataAccessor Extract(const TExtractContext& context) const {
+        AFL_VERIFY(Records);
+        std::vector<TColumnRecord> extractedRecords;
+        if (context.GetColumnIds()) {
+            auto itRec = Records->begin();
+            auto itExt = context.GetColumnIds()->begin();
+            while (itRec != Records->end() && itExt != context.GetColumnIds()->end()) {
+                if (itRec->GetEntityId() == *itExt) {
+                    extractedRecords.emplace_back(*itRec);
+                    ++itRec;
+                } else if (itRec->GetEntityId() < *itExt) {
+                    ++itRec;
+                } else {
+                    ++itExt;
+                }
+            }
+        } else {
+            extractedRecords = *Records;
+        }
+
+        AFL_VERIFY(Indexes);
+        std::vector<TIndexChunk> extractedIndexes;
+        if (context.GetIndexIds()) {
+            auto itIdx = Indexes->begin();
+            auto itExt = context.GetIndexIds()->begin();
+            while (itIdx != Indexes->end() && itExt != context.GetIndexIds()->end()) {
+                if (itIdx->GetEntityId() == *itExt) {
+                    extractedIndexes.emplace_back(*itIdx);
+                    ++itIdx;
+                } else if (itIdx->GetEntityId() < *itExt) {
+                    ++itIdx;
+                } else {
+                    ++itExt;
+                }
+            }
+        } else {
+            extractedIndexes = *Indexes;
+        }
+
+        return TPortionDataAccessor(PortionInfo, std::move(extractedRecords), std::move(extractedIndexes), false);
+    }
+
     const std::vector<TColumnRecord>& TestGetRecords() const {
         AFL_VERIFY(Records);
         return std::move(*Records);
@@ -174,6 +229,9 @@ public:
 
     void FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TIndexInfo& indexInfo) const;
     void FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TVersionedIndex& index) const;
+    void FillBlobRangesByStorage(THashMap<ui32, THashMap<TString, THashSet<TBlobRange>>>& result, const TIndexInfo& indexInfo, const THashSet<ui32>& entityIds) const;
+    void FillBlobRangesByStorage(
+        THashMap<ui32, THashMap<TString, THashSet<TBlobRange>>>& result, const TVersionedIndex& index, const THashSet<ui32>& entityIds) const;
     void FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TIndexInfo& indexInfo) const;
     void FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TVersionedIndex& index) const;
 
@@ -402,9 +460,10 @@ public:
     };
 
     TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
-        THashMap<TChunkAddress, TString>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt) const;
+        THashMap<TChunkAddress, TString>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt,
+        const bool restoreAbsent = true) const;
     TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
-        THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt) const;
+        THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt, const bool restoreAbsent = true) const;
 
     class TPage {
     private:

@@ -16,7 +16,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateSequence TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -170,7 +170,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateSequence TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

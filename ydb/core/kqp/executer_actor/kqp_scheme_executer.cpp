@@ -385,6 +385,12 @@ public:
                 break;
             }
 
+            case NKqpProto::TKqpSchemeOperation::kRestore: {
+                const auto& modifyScheme = schemeOp.GetRestore();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
             default:
                 InternalError(TStringBuilder() << "Unexpected scheme operation: "
                     << (ui32) schemeOp.GetOperationCase());

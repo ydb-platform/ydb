@@ -186,7 +186,7 @@
             "Base": "TKqlLookupTableBase",
             "Match": {"Type": "Callable", "Name": "KqlStreamLookupTable"},
             "Children": [
-                {"Index": 3, "Name": "LookupStrategy", "Type": "TCoAtom"}
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
@@ -211,7 +211,7 @@
             "Base": "TKqlLookupIndexBase",
             "Match": {"Type": "Callable", "Name": "KqlStreamLookupIndex"},
             "Children": [
-                {"Index": 4, "Name": "LookupStrategy", "Type": "TCoAtom"}
+                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
@@ -467,7 +467,7 @@
                 {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
                 {"Index": 3, "Name": "InputType", "Type": "TExprBase"},
-                {"Index": 4, "Name": "LookupStrategy", "Type": "TCoAtom"}
+                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {

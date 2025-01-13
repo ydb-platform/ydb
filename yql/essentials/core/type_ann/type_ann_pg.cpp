@@ -346,7 +346,7 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
             TVector<const TItemExprType*> items;
             for (size_t i = 0; i < proc.OutputArgTypes.size(); ++i) {
                 items.push_back(ctx.Expr.MakeType<TItemExprType>(
-                    resultColumnOrder->AddColumn(proc.OutputArgNames[i]), 
+                    resultColumnOrder->AddColumn(proc.OutputArgNames[i]),
                     ctx.Expr.MakeType<TPgExprType>(proc.OutputArgTypes[i])));
             }
 
@@ -697,7 +697,7 @@ IGraphTransformer::TStatus PgArrayOpWrapper(const TExprNode::TPtr& input, TExprN
 
         const auto& opResDesc = NPg::LookupType(oper.ResultType);
         if (opResDesc.Name != "bool") {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << 
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() <<
                 "Expected boolean operator result, but got: " << opResDesc.Name));
             return IGraphTransformer::TStatus::Error;
         }
@@ -1021,7 +1021,7 @@ IGraphTransformer::TStatus PgNullIfWrapper(const TExprNode::TPtr& input, TExprNo
         input->ChildRef(0) = WrapWithPgCast(std::move(input->ChildRef(0)), commonType->TypeId, ctx.Expr);
         return IGraphTransformer::TStatus::Repeat;
     }
-    
+
     input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(commonType->TypeId));
     return IGraphTransformer::TStatus::Ok;
 }
@@ -1144,7 +1144,7 @@ IGraphTransformer::TStatus PgReplaceUnknownWrapper(const TExprNode::TPtr& input,
 
     auto structType = listType->GetItemType()->Cast<TStructExprType>();
     auto structItemTypes = structType->GetItems();
-    const bool noUnknowns = std::none_of(structItemTypes.cbegin(), structItemTypes.cend(), 
+    const bool noUnknowns = std::none_of(structItemTypes.cbegin(), structItemTypes.cend(),
         [] (const TItemExprType* item) {
                 const auto* itemType = item->GetItemType();
                 return itemType->GetKind() == ETypeAnnotationKind::Pg && itemType->Cast<TPgExprType>()->GetId() == NPg::UnknownOid;
@@ -2010,12 +2010,23 @@ bool ValidateWindowRefs(const TExprNode::TPtr& root, const TExprNode* windows, T
     return !isError;
 }
 
+TString EscapeDotsInAlias(TStringBuf alias) {
+    TStringBuilder sb;
+    for (auto c: alias) {
+        if (c == '.' || c == '\\') {
+            sb << '\\';
+        }
+        sb << c;
+    }
+    return sb;
+}
+
 TString MakeAliasedColumn(TStringBuf alias, TStringBuf column) {
     if (!alias) {
         return TString(column);
     }
 
-    return TStringBuilder() << "_alias_" << alias << "." << column;
+    return TStringBuilder() << "_alias_" << EscapeDotsInAlias(alias) << "." << column;
 }
 
 const TItemExprType* AddAlias(const TString& alias, const TItemExprType* item, TExprContext& ctx) {
@@ -2027,22 +2038,30 @@ const TItemExprType* AddAlias(const TString& alias, const TItemExprType* item, T
 }
 
 TStringBuf RemoveAlias(TStringBuf column) {
-    TStringBuf tmp;
+    TString tmp;
     return RemoveAlias(column, tmp);
 }
 
-TStringBuf RemoveAlias(TStringBuf column, TStringBuf& alias) {
+TStringBuf RemoveAlias(TStringBuf column, TString& alias) {
     if (!column.StartsWith("_alias_")) {
         alias = "";
         return column;
     }
-
-    auto columnPos = column.find('.', 7);
-    YQL_ENSURE(columnPos != TString::npos);
-    columnPos += 1;
-    YQL_ENSURE(columnPos != column.size());
-    alias = column.substr(7, columnPos - 7 - 1);
-    return column.substr(columnPos);
+    column = column.substr(7);
+    TStringBuilder aliasBuilder;
+    for (size_t i = 0; i < column.size(); ++i) {
+        if (column[i] == '\\') {
+            YQL_ENSURE(i + 1 < column.size());
+            aliasBuilder << column[++i];
+            continue;
+        }
+        if (column[i] == '.') {
+            alias = aliasBuilder;
+            return column.substr(i + 1);
+        }
+        aliasBuilder << column[i];
+    }
+    YQL_ENSURE(false, "No dot ('.') found in alised column");
 }
 
 const TItemExprType* RemoveAlias(const TItemExprType* item, TExprContext& ctx) {
@@ -2877,7 +2896,7 @@ bool ReplaceProjectionRefs(TExprNode::TPtr& lambda, const TStringBuf& scope, con
             for (ui32 i = 0; i < projectionOrders.size(); ++i) {
                 if (index >= current && index < current + projectionOrders[i]->first.Size()) {
                     TStringBuf column = projectionOrders[i]->first[index - current].PhysicalName;
-                    TStringBuf alias;
+                    TString alias;
                     column = RemoveAlias(column, alias);
 
                     if (result && projectionOrders[i]->second) {
@@ -3346,7 +3365,7 @@ bool GatherExtraSortColumns(const TExprNode& data, const TInputs& inputs, TExprN
                 }
 
                 if (node->IsCallable("Member") && &node->Head() == arg) {
-                    TStringBuf alias;
+                    TString alias;
                     TStringBuf column = NTypeAnnImpl::RemoveAlias(node->Tail().Content(), alias);
 
                     TMaybe<ui32> index;
@@ -3495,7 +3514,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                             "Incorrect fill_target_columns option"));
                         return IGraphTransformer::TStatus::Error;
                     }
-		        }
+                }
                 else if (optionName == "unknowns_allowed") {
                     hasUnknownsAllowed = true;
                 }
@@ -3686,7 +3705,11 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                             }
                                         }
 
-                                        YQL_ENSURE(found);
+                                        if (!found) {
+                                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                                                TStringBuilder() << "Alias `" << alias << "` not found."));
+                                            return IGraphTransformer::TStatus::Error;
+                                        }
                                     } else {
                                         isExpr = true;
                                         o.AddColumn(TString(column->Head().Content()));
@@ -4456,7 +4479,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                                 return IGraphTransformer::TStatus::Error;
                                             }
                                         }
-                                        
+
                                         if (rightSideUsing.contains(lcase)) {
                                             lrNames[1] = ctx.Expr.NewList(inp->Pos(), {ctx.Expr.NewAtom(inp->Pos(), rightSideUsing[lcase])});
                                         } else {
@@ -5442,7 +5465,7 @@ IGraphTransformer::TStatus PgArrayWrapper(const TExprNode::TPtr& input, TExprNod
 
     bool castsNeeded = false;
     const NPg::TTypeDesc* elemTypeDesc;
-    if (const auto issue = NPg::LookupCommonType(argTypes, 
+    if (const auto issue = NPg::LookupCommonType(argTypes,
         [&input, &ctx](size_t i) {
             return ctx.Expr.GetPosition(input->Child(i)->Pos());
         }, elemTypeDesc, castsNeeded))

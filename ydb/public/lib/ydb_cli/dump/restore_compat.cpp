@@ -95,7 +95,10 @@ public:
         Bytes = 0;
         RequestUnitsX2 = 0;
 
-        return {}; // Writer gets data directly from accumulator
+        // Writer gets data directly from accumulator
+        NPrivate::TBatch batch;
+        batch.SetOriginAccumulator(this);
+        return batch; 
     }
 
 private:
@@ -115,14 +118,14 @@ public:
     explicit TDataWriter(
             const TString& path,
             TTableClient& tableClient,
-            NPrivate::IDataAccumulator* accumulator,
+            const NPrivate::IDataAccumulator* accumulator,
             const TRestoreSettings& settings)
         : Path(path)
         , TableClient(tableClient)
-        , Accumulator(dynamic_cast<TDataAccumulator*>(accumulator))
         , UseBulkUpsert(settings.Mode_ == TRestoreSettings::EMode::BulkUpsert)
-    {
-        Y_ENSURE(Accumulator);
+    {   
+        const auto* dataAccumulator = dynamic_cast<const TDataAccumulator*>(accumulator);
+        Y_ENSURE(dataAccumulator);
 
         TUploader::TOptions opts;
         opts.InFly = settings.InFly_;
@@ -130,20 +133,22 @@ public:
         opts.Interval = settings.RateLimiterSettings_.Interval_;
         opts.ReactionTime = settings.RateLimiterSettings_.ReactionTime_;
 
-        Uploader = MakeHolder<TUploader>(opts, TableClient, Accumulator->GetQueryString());
+        Uploader = MakeHolder<TUploader>(opts, TableClient, dataAccumulator->GetQueryString());
     }
 
-    bool Push(NPrivate::TBatch&&) override {
-        bool ok;
+    bool Push(NPrivate::TBatch&& batch) override {
+        auto* accumulator = dynamic_cast<TDataAccumulator*>(batch.GetOriginAccumulator());
+        Y_ENSURE(accumulator);
 
+        bool ok;
         if (UseBulkUpsert) {
-            ok = Uploader->Push(Path, Accumulator->EndAndGetResultingValue());
+            ok = Uploader->Push(Path, accumulator->EndAndGetResultingValue());
         } else {
-            ok = Uploader->Push(Accumulator->EndAndGetResultingParams());
+            ok = Uploader->Push(accumulator->EndAndGetResultingParams());
         }
 
         if (ok) {
-            Accumulator->Begin();
+            accumulator->Begin();
         }
 
         return ok;
@@ -156,7 +161,6 @@ public:
 private:
     const TString Path;
     TTableClient& TableClient;
-    TDataAccumulator* Accumulator;
     const bool UseBulkUpsert;
     THolder<TUploader> Uploader;
 
@@ -174,7 +178,7 @@ NPrivate::IDataAccumulator* CreateCompatAccumulator(
 NPrivate::IDataWriter* CreateCompatWriter(
         const TString& path,
         TTableClient& tableClient,
-        NPrivate::IDataAccumulator* accumulator,
+        const NPrivate::IDataAccumulator* accumulator,
         const TRestoreSettings& settings) {
     return new TDataWriter(path, tableClient, accumulator, settings);
 }

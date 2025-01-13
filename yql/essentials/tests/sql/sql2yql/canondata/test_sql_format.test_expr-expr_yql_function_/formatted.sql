@@ -1,2 +1,3 @@
 SELECT
-    YQL::ToString(1 + 2);
+    YQL::ToString(1 + 2)
+;

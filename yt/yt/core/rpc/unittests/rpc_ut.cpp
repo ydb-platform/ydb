@@ -77,7 +77,7 @@ TYPED_TEST(TRpcTest, RetryingSend)
 {
     auto config = New<TRetryingChannelConfig>();
     config->Load(ConvertTo<INodePtr>(TYsonString(TStringBuf(
-        "{retry_backoff_time=10}"))));
+        "{enable_exponential_retry_backoffs=true;retry_backoff={min_backoff=10}}"))));
 
     IChannelPtr channel = CreateRetryingChannel(
         std::move(config),
@@ -129,7 +129,7 @@ TYPED_TEST(TNotUdsTest, Address)
     {
         auto config = New<TRetryingChannelConfig>();
         config->Load(ConvertTo<INodePtr>(TYsonString(TStringBuf(
-            "{retry_backoff_time=10}"))));
+            "{enable_exponential_retry_backoffs=true;retry_backoff={min_backoff=10}}"))));
         testChannel(CreateRetryingChannel(
             std::move(config),
             this->CreateChannel()));
@@ -795,7 +795,7 @@ TYPED_TEST(TNotGrpcTest, RequestQueueSizeLimit)
     Cerr << Format("End of the RequestQueueSizeLimit test (Id: %v)", testId) << '\n';
 }
 
-TYPED_TEST(TNotGrpcTest, RequesMemoryPressureException)
+TYPED_TEST(TNotGrpcTest, RequestMemoryPressureException)
 {
     auto memoryUsageTracker = this->GetMemoryUsageTracker();
     memoryUsageTracker->ClearTotalUsage();
@@ -810,7 +810,7 @@ TYPED_TEST(TNotGrpcTest, RequesMemoryPressureException)
     auto result = WaitFor(req->Invoke().AsVoid());
 
     // Limit of memory is 32 MB.
-    EXPECT_EQ(NRpc::EErrorCode::MemoryPressure, req->Invoke().Get().GetCode());
+    EXPECT_EQ(NRpc::EErrorCode::RequestMemoryPressure, req->Invoke().Get().GetCode());
 }
 
 TYPED_TEST(TNotGrpcTest, MemoryTracking)

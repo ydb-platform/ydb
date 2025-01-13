@@ -1029,9 +1029,12 @@ public:
     }
 
     template<typename TEvent>
-    [[nodiscard]] TRequestResponse<typename WhiteboardResponse<TEvent>::Type> RequestNodeWhiteboard(TNodeId nodeId) {
+    [[nodiscard]] TRequestResponse<typename WhiteboardResponse<TEvent>::Type> RequestNodeWhiteboard(TNodeId nodeId, std::initializer_list<int> fields = {}) {
         TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         auto request = MakeHolder<TEvent>();
+        for (int field : fields) {
+            request->Record.AddFieldsRequired(field);
+        }
         TRequestResponse<typename WhiteboardResponse<TEvent>::Type> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, TypeName(*request.Get())));
         if (response.Span) {
             response.Span.Attribute("target_node_id", nodeId);
@@ -1043,7 +1046,7 @@ public:
 
     void RequestGenericNode(TNodeId nodeId) {
         if (NodeSystemState.count(nodeId) == 0) {
-            NodeSystemState.emplace(nodeId, RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId));
+            NodeSystemState.emplace(nodeId, RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId, {-1}));
             ++Requests;
         }
     }
@@ -2167,6 +2170,7 @@ public:
         if (pDiskInfo.HasState()) {
             switch (pDiskInfo.GetState()) {
                 case NKikimrBlobStorage::TPDiskState::Normal:
+                case NKikimrBlobStorage::TPDiskState::Stopped:
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                     break;
                 case NKikimrBlobStorage::TPDiskState::Initial:
@@ -2194,9 +2198,9 @@ public:
                                          TStringBuilder() << "PDisk state is " << NKikimrBlobStorage::TPDiskState::E_Name(pDiskInfo.GetState()),
                                          ETags::PDiskState);
                     break;
-                case NKikimrBlobStorage::TPDiskState::Reserved14:
                 case NKikimrBlobStorage::TPDiskState::Reserved15:
                 case NKikimrBlobStorage::TPDiskState::Reserved16:
+                case NKikimrBlobStorage::TPDiskState::Reserved17:
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Unknown PDisk state");
                     break;
             }

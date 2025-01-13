@@ -17,4 +17,5 @@ SELECT
     9,
     CAST(CAST(53375807ul AS date32) AS string),
     10,
-    CAST(CAST(53375808ul AS date32) AS string);
+    CAST(CAST(53375808ul AS date32) AS string)
+;

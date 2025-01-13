@@ -1,8 +1,8 @@
 --- contrib/python/ipython/py3/.dist-info/METADATA	(index)
 +++ contrib/python/ipython/py3/.dist-info/METADATA	(working tree)
 @@ -31,1 +31,1 @@ Classifier: Programming Language :: Python :: 3 :: Only
--Requires-Dist: jedi >=0.16
-+Requires-Dist: jedi >=0.13
+-Requires-Dist: jedi>=0.16
++Requires-Dist: jedi>=0.13
 --- contrib/python/ipython/py3/ya.make	(index)
 +++ contrib/python/ipython/py3/ya.make	(working tree)
 @@ -17,1 +17,0 @@ PEERDIR(

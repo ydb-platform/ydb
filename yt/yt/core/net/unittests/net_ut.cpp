@@ -46,10 +46,10 @@ protected:
 TEST_F(TNetTest, ReconfigurePoller)
 {
     for (int i = 1; i <= 10; ++i) {
-        Poller_->Reconfigure(i);
+        Poller_->SetThreadCount(i);
     }
     for (int i = 9; i >= 10; --i) {
-        Poller_->Reconfigure(i);
+        Poller_->SetThreadCount(i);
     }
 }
 

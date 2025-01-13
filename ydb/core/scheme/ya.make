@@ -25,6 +25,7 @@ PEERDIR(
     # temporary.
     ydb/library/pretty_types_print/protobuf
     library/cpp/lwtrace/mon
+    library/cpp/containers/absl_flat_hash
 )
 
 END()

@@ -241,8 +241,8 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.WriteTimestamp);}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.CreateTimestamp);}
                                     TABLED() {out << (d.second.GetReadOffset());}
-                                    TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.GetReadWriteTimestamp());}
-                                    TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.GetReadCreateTimestamp());}
+                                    TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.GetReadWriteTimestamp(EndOffset));}
+                                    TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.GetReadCreateTimestamp(EndOffset));}
                                     TABLED() {out << (d.second.ReadOffsetRewindSum);}
                                     TABLED() {out << d.second.ActiveReads;}
                                     TABLED() {out << d.second.Subscriptions;}

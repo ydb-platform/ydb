@@ -124,7 +124,7 @@ private:
 private:
     TTransactionId DefaultTransaction_;
     ::TIntrusivePtr<NDetail::NRawClient::TRawBatchRequest> Impl_;
-    THolder<TBatchRequest> TmpWithTransaction_;
+    std::unique_ptr<TBatchRequest> TmpWithTransaction_;
     ::TIntrusivePtr<TClient> Client_;
 
 private:

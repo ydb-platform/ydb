@@ -77,13 +77,14 @@ std::optional<NBackup::TBackupCollectionPaths> ResolveBackupCollectionPaths(
     return NBackup::TBackupCollectionPaths{rootPath, dstPath};
 }
 
-std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths(
+std::optional<THashMap<TString, THashSet<TString>>> GetBackupRequiredPaths(
     const TTxTransaction& tx,
     const TString& targetDir,
     const TString& targetName,
     const TOperationContext& context)
 {
     THashMap<TString, THashSet<TString>> paths;
+
     const TString& targetPath = JoinPath({tx.GetWorkingDir(), targetName});
 
     const TPath& bcPath = TPath::Resolve(targetPath, context.SS);
@@ -120,6 +121,54 @@ std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths(
         if (pathPieces.size() > 1) {
             auto parent = ExtractParent(paths.second);
             collectionPaths.emplace(JoinPath({targetDir, TString(parent)}));
+        }
+    }
+
+    return paths;
+}
+
+std::optional<THashMap<TString, THashSet<TString>>> GetRestoreRequiredPaths(
+    const TTxTransaction& tx,
+    const TString& targetName,
+    const TOperationContext& context)
+{
+    THashMap<TString, THashSet<TString>> paths;
+
+    const TString& targetPath = JoinPath({tx.GetWorkingDir(), targetName});
+
+    const TPath& bcPath = TPath::Resolve(targetPath, context.SS);
+    {
+        auto checks = bcPath.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotUnderDeleting()
+            .NotUnderOperation()
+            .IsBackupCollection();
+
+        if (!checks) {
+            return {};
+        }
+    }
+
+    Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
+    const auto& bc = context.SS->BackupCollections[bcPath->PathId];
+
+    auto& collectionPaths = paths[tx.GetWorkingDir()];
+
+    for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+        std::pair<TString, TString> paths;
+        TString err;
+        if (!TrySplitPathByDb(item.GetPath(), tx.GetWorkingDir(), paths, err)) {
+            return {};
+        }
+
+        auto pathPieces = SplitPath(paths.second);
+        if (pathPieces.size() > 1) {
+            auto parent = ExtractParent(paths.second);
+            collectionPaths.emplace(TString(parent));
         }
     }
 

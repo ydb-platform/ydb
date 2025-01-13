@@ -588,6 +588,46 @@
             [
               1
             ]
+        },
+      "DefineHostConfig":
+        [
+          {
+            "HostConfigId":1,
+            "Drive":
+              [
+                {
+                  "Path":"SectorMap:1:64",
+                  "Type":"SSD"
+                },
+                {
+                  "Path":"SectorMap:2:64",
+                  "Type":"SSD"
+                },
+                {
+                  "Path":"SectorMap:3:64",
+                  "Type":"SSD"
+                }
+              ]
+          }
+        ],
+      "DefineBox":
+        {
+          "BoxId":1,
+          "Host":
+            [
+              {
+                "HostConfigId":1,
+                "EnforcedNodeId":1
+              },
+              {
+                "HostConfigId":1,
+                "EnforcedNodeId":2
+              },
+              {
+                "HostConfigId":1,
+                "EnforcedNodeId":3
+              }
+            ]
         }
     },
   "ChannelProfileConfig":
@@ -1413,5 +1453,9 @@
       "CA":"/opt/ydb/certs/ca.crt",
       "Cert":"/opt/ydb/certs/node.crt",
       "Key":"/opt/ydb/certs/node.key"
+    },
+  "AuthConfig":
+    {
+      "PathToRootCA":"/opt/ydb/certs/ca.crt"
     }
 }

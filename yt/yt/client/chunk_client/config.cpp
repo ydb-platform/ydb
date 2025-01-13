@@ -83,6 +83,11 @@ void TRemoteReaderConfigBase::Register(TRegistrar registrar)
     registrar.Parameter("net_queue_size_factor", &TThis::NetQueueSizeFactor)
         .Default(0.5);
 
+    registrar.Parameter("cached_block_count_factor", &TThis::CachedBlockCountFactor)
+        .Default(0.0);
+    registrar.Parameter("cached_block_size_factor", &TThis::CachedBlockSizeFactor)
+        .Default(0.0);
+
     registrar.Parameter("suspicious_node_grace_period", &TThis::SuspiciousNodeGracePeriod)
         .Default();
 
@@ -275,7 +280,7 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("prefer_local_host", &TThis::PreferLocalHost)
         .Default(true);
-    registrar.Parameter("node_ping_interval", &TThis::NodePingPeriod)
+    registrar.Parameter("node_ping_period", &TThis::NodePingPeriod)
         .Default(TDuration::Seconds(10));
     registrar.Parameter("populate_cache", &TThis::PopulateCache)
         .Default(false);

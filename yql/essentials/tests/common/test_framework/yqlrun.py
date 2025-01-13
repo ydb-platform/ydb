@@ -27,7 +27,7 @@ class YQLRun(object):
 
     def __init__(self, udfs_dir=None, prov='yt', use_sql2yql=False, keep_temp=True, binary=None, gateway_config=None, fs_config=None, extra_args=[], cfg_dir=None, support_udfs=True):
         if binary is None:
-            self.yqlrun_binary = yql_utils.yql_binary_path(os.getenv('YQL_YQLRUN_PATH') or 'contrib/ydb/library/yql/tools/yqlrun/yqlrun')
+            self.yqlrun_binary = yql_utils.yql_binary_path(os.getenv('YQL_YQLRUN_PATH') or 'yql/tools/yqlrun/yqlrun')
         else:
             self.yqlrun_binary = binary
         self.extra_args = extra_args
@@ -156,9 +156,11 @@ class YQLRun(object):
             '--err-file=%(err_file)s ' \
             '--gateways=%(prov)s ' \
             '--syntax-version=%(syntax_version)d ' \
-            '--tmp-dir=%(res_dir)s ' \
             '--gateways-cfg=%(gateways_cfg_file)s ' \
             '--fs-cfg=%(fs_cfg_file)s ' % locals()
+
+        if prov != 'pure':
+            cmd += '--tmp-dir=%(res_dir)s ' % locals()
 
         if self.udfs_path is not None:
             cmd += '--udfs-dir=%(udfs_dir)s ' % locals()
@@ -166,7 +168,7 @@ class YQLRun(object):
         if ansi_lexer:
             cmd += '--ansi-lexer '
 
-        if self.keep_temp:
+        if self.keep_temp and prov != 'pure':
             cmd += '--keep-temp '
 
         if self.extra_args:
@@ -234,7 +236,7 @@ class YQLRun(object):
             for name in self.tables:
                 cmd += '--table=yt.%s@%s ' % (name, self.tables[name].yqlrun_file)
 
-        if "--lineage" not in self.extra_args:
+        if "--lineage" not in self.extra_args and "--peephole" not in self.extra_args:
             if optimize_only:
                 cmd += '-O '
             else:

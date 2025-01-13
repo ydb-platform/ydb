@@ -5,8 +5,6 @@
 
 #include <yt/yt/core/misc/error.h>
 
-#include <yt/yt/core/misc/singleton.h>
-
 namespace NYT::NYTree {
 
 using namespace NYson;
@@ -223,7 +221,7 @@ void ToProto(NProto::TAttributeDictionary* protoAttributes, const IAttributeDict
     std::sort(pairs.begin(), pairs.end(), [] (const auto& lhs, const auto& rhs) {
         return lhs.first < rhs.first;
     });
-    protoAttributes->mutable_attributes()->Reserve(static_cast<int>(pairs.size()));
+    protoAttributes->mutable_attributes()->Reserve(std::ssize(pairs));
     for (const auto& [key, value] : pairs) {
         auto* protoAttribute = protoAttributes->add_attributes();
         protoAttribute->set_key(key);

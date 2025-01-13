@@ -4,4 +4,5 @@ SELECT
     '\',
     '',
     'foo''bar',
-    '''baz';
+    '''baz'
+;

@@ -538,6 +538,7 @@ public:
         TMaybe<Ydb::Cms::SchemaOperationQuotas> SchemaOperationQuotas;
         TMaybe<Ydb::Cms::DatabaseQuotas> DatabaseQuotas;
         TMaybe<Ydb::Cms::ScaleRecommenderPolicies> ScaleRecommenderPolicies;
+        bool ScaleRecommenderPoliciesConfirmed;
         TActorId ScaleRecommenderPoliciesWorker;
         TString CreateIdempotencyKey;
         TString AlterIdempotencyKey;

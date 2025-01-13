@@ -15,7 +15,7 @@ class TOlapSchemaUpdate {
     YDB_READONLY_DEF(TOlapColumnFamiliesUpdate, ColumnFamilies);
 
 public:
-    bool Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys = false);
+    bool Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys);
     bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors);
 };
 }

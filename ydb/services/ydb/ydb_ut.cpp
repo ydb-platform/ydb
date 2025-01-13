@@ -273,7 +273,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         if (enforceUserTokenCheckRequirement) {
             UNIT_ASSERT_EQUAL(reqResultWithInvalidToken, std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
         } else {
-            UNIT_ASSERT_EQUAL(reqResultWithInvalidToken, std::make_pair(Ydb::StatusIds::SUCCESS, grpc::StatusCode::OK));
+            UNIT_ASSERT_EQUAL(reqResultWithInvalidToken, std::make_pair(Ydb::StatusIds::UNAUTHORIZED, grpc::StatusCode::OK));
         }
 
         UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/blabla", "invalid token"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
@@ -421,6 +421,10 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
 
+        {
+            TClient client(*server.ServerSettings);
+            client.CreateUser("/Root", "qqq", "password");
+        }
         {
             NYdbGrpc::TGRpcClientLow clientLow;
             auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Scheme::V1::SchemeService>(clientConfig);

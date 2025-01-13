@@ -696,6 +696,12 @@ public:
         std::fill_n(Ctx->MutableValues.get(), PatternNodes->GetMutables().CurValueIndex, NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Invalid()));
     }
 
+    void InvalidateCaches() override {
+        for (const auto cachedIndex : Ctx->Mutables.CachedValues) {
+            Ctx->MutableValues[cachedIndex] = NUdf::TUnboxedValuePod::Invalid();
+        }
+    }
+
     const TComputationNodePtrDeque& GetNodes() const override {
         return PatternNodes->GetNodes();
     }

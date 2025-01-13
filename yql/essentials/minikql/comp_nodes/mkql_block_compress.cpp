@@ -1,4 +1,5 @@
 #include "mkql_block_compress.h"
+#include "mkql_counters.h"
 
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
@@ -83,6 +84,9 @@ public:
 
         const auto bitmapValue = getres.second[BitmapIndex_](ctx, block);
         const auto bitmap = CallInst::Create(getBitmap, { WrapArgumentForWindows(bitmapValue, ctx, block) }, "bitmap", block);
+
+        ValueCleanup(EValueRepresentation::Any, bitmapValue, ctx, block);
+
         const auto one = ConstantInt::get(bitmapType, 1);
         const auto band = BinaryOperator::CreateAnd(bitmap, one, "band", block);
         const auto good = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, band, one, "good", block);
@@ -188,6 +192,9 @@ public:
 
         const auto bitmapValue = getres.second[BitmapIndex_](ctx, block);
         const auto pops = CallInst::Create(getPopCount, { WrapArgumentForWindows(bitmapValue, ctx, block) }, "pops", block);
+
+        ValueCleanup(EValueRepresentation::Any, bitmapValue, ctx, block);
+
         const auto good = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, pops, ConstantInt::get(sizeType, 0), "good", block);
 
         BranchInst::Create(fill, loop, good, block);
@@ -269,7 +276,7 @@ public:
                         s.IsFinished_ = true;
                         break;
                     case EFetchResult::One:
-                        switch (s.Check(bitmap.Release())) {
+                        switch (s.Check(bitmap)) {
                             case TState::EStep::Copy:
                                 for (ui32 i = 0; i < s.Values.size(); ++i) {
                                     if (const auto out = output[i]) {
@@ -414,6 +421,8 @@ public:
         const auto checkPtr = CastInst::Create(Instruction::IntToPtr, checkFunc, PointerType::getUnqual(checkType), "check_func", block);
         const auto check = CallInst::Create(checkType, checkPtr, {stateArg, bitmapArg}, "check", block);
 
+        ValueCleanup(EValueRepresentation::Any, bitmap, ctx, block);
+
         result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
 
         const auto step = SwitchInst::Create(check, save, 2U, block);
@@ -522,6 +531,8 @@ private:
         std::vector<std::shared_ptr<arrow::ArrayData>> Arrays_;
         std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
 
+        NYql::NUdf::TCounter CounterOutputRows_;
+
         TState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TBlockType*>& types)
             : TBlockState(memInfo, types.size() + 1U)
             , MaxLength_(CalcBlockLen(std::accumulate(types.cbegin(), types.cend(), 0ULL, [](size_t max, const TBlockType* type){ return std::max(max, CalcMaxBlockItemSize(type->GetItemType())); })))
@@ -532,6 +543,11 @@ private:
                 if (types[i]->GetShape() != TBlockType::EShape::Scalar) {
                     Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i]->GetItemType(), ctx.ArrowMemoryPool, MaxLength_, &ctx.Builder->GetPgBuilder());
                 }
+            }
+            if (ctx.CountersProvider) {
+                // id will be assigned externally in future versions
+                TString id = TString(Operator_Filter) + "0";
+                CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
             }
         }
 
@@ -544,14 +560,16 @@ private:
         EStep Check(const NUdf::TUnboxedValuePod bitmapValue) {
             Y_ABORT_UNLESS(!IsFinished_);
             Y_ABORT_UNLESS(!InputSize_);
-            const NUdf::TUnboxedValue b(std::move(bitmapValue));
             auto& bitmap = Arrays_.back();
-            bitmap = TArrowBlock::From(b).GetDatum().array();
+            bitmap = TArrowBlock::From(bitmapValue).GetDatum().array();
 
             if (!bitmap->length)
                 return EStep::Skip;
 
             const auto popCount = GetBitmapPopCount(bitmap);
+
+            CounterOutputRows_.Add(popCount);
+
             if (!popCount)
                 return EStep::Skip;
 

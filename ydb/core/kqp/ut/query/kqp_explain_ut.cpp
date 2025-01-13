@@ -167,8 +167,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto aggregate = FindPlanNodeByKv(read, "Name", "Aggregate");
         UNIT_ASSERT(aggregate.IsDefined());
         UNIT_ASSERT(aggregate.GetMapSafe().at("GroupBy").GetStringSafe() == "item.App");
-        UNIT_ASSERT(aggregate.GetMapSafe().at("Aggregation").GetStringSafe() ==
-            "{_yql_agg_0: MAX(item.Message,state._yql_agg_0),_yql_agg_1: MIN(item.Message,state._yql_agg_1)}");
+        UNIT_ASSERT(aggregate.GetMapSafe().at("Aggregation").GetStringSafe() == "{MAX(item.Message),MIN(item.Message)}");
     }
 
     Y_UNIT_TEST(ComplexJoin) {
@@ -593,7 +592,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        auto join = FindPlanNodeByKv(plan, "Node Type", "FullJoin (JoinDict)");
+        Cout << plan.GetStringRobust() << Endl;
+        auto join = FindPlanNodeByKv(plan, "Node Type", "FullJoin (Grace)");
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());

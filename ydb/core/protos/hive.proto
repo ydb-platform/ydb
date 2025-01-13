@@ -603,7 +603,9 @@ message TEvResponseScaleRecommendation {
 message TScaleRecommenderPolicies {
     message TScaleRecommenderPolicy {
         message TTargetTrackingPolicy {
-            optional uint32 AverageCpuUtilizationPercent = 1; 
+            oneof Target {
+                uint32 AverageCpuUtilizationPercent = 1; 
+            }
         }
 
         oneof Policy {

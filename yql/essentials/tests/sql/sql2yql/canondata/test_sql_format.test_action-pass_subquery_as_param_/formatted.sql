@@ -3,18 +3,24 @@
 DEFINE SUBQUERY $dup($x) AS
     SELECT
         *
-    FROM $x(1)
+    FROM
+        $x(1)
     UNION ALL
     SELECT
         *
-    FROM $x(2);
+    FROM
+        $x(2)
+    ;
 END DEFINE;
 
 DEFINE SUBQUERY $sub($n) AS
     SELECT
-        $n * 10;
+        $n * 10
+    ;
 END DEFINE;
 
 SELECT
     *
-FROM $dup($sub);
+FROM
+    $dup($sub)
+;

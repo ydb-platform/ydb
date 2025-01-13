@@ -8,6 +8,7 @@ RECURSE(
     gateway
     metrics
     mkql
+    mkql_simple_file
     proto/python
     provider
     schema

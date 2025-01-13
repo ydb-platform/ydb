@@ -7,4 +7,6 @@ $foo = (
 
 SELECT
     bar
-FROM $foo;
+FROM
+    $foo
+;

@@ -4,7 +4,7 @@
 
 #include <library/cpp/yt/misc/guid.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/yt/memory/allocation_tags.h>
 
@@ -21,8 +21,6 @@ class TTracingExt;
 ////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_REFCOUNTED_CLASS(TTraceContext)
-
-DECLARE_REFCOUNTED_CLASS(TTracingTransportConfig)
 
 constexpr int TypicalAllocationTagCount = 8;
 using TAllocationTags = TCompactVector<TAllocationTag, TypicalAllocationTagCount>;

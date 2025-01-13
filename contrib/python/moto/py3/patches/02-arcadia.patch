@@ -1,67 +1,12 @@
---- contrib/python/moto/py3/moto/s3/models.py	(index)
-+++ contrib/python/moto/py3/moto/s3/models.py	(working tree)
-@@ -339,11 +339,12 @@ class FakeKey(BaseModel):
- 
- 
- class FakeMultipart(BaseModel):
--    def __init__(self, key_name, metadata, storage=None, tags=None):
-+    def __init__(self, key_name, metadata, storage=None, tags=None, acl=None):
-         self.key_name = key_name
-         self.metadata = metadata
-         self.storage = storage
-         self.tags = tags
-+        self.acl = acl
-         self.parts = {}
-         self.partlist = []  # ordered list of part ID's
-         rand_b64 = base64.b64encode(os.urandom(UPLOAD_ID_BYTES))
-@@ -1865,13 +1866,6 @@ class S3Backend(BaseBackend, CloudWatchMetricProvider):
-             pub_block_config.get("RestrictPublicBuckets"),
-         )
- 
--    def initiate_multipart(self, bucket_name, key_name, metadata):
--        bucket = self.get_bucket(bucket_name)
--        new_multipart = FakeMultipart(key_name, metadata)
--        bucket.multiparts[new_multipart.id] = new_multipart
--
--        return new_multipart
--
-     def complete_multipart(self, bucket_name, multipart_id, body):
-         bucket = self.get_bucket(bucket_name)
-         multipart = bucket.multiparts[multipart_id]
-@@ -1908,9 +1902,11 @@ class S3Backend(BaseBackend, CloudWatchMetricProvider):
-         return len(bucket.multiparts[multipart_id].parts) > next_part_number_marker
- 
-     def create_multipart_upload(
--        self, bucket_name, key_name, metadata, storage_type, tags
-+        self, bucket_name, key_name, metadata, storage_type, tags, acl
-     ):
--        multipart = FakeMultipart(key_name, metadata, storage=storage_type, tags=tags)
-+        multipart = FakeMultipart(
-+            key_name, metadata, storage=storage_type, tags=tags, acl=acl
-+        )
- 
-         bucket = self.get_bucket(bucket_name)
-         bucket.multiparts[multipart.id] = multipart
 --- contrib/python/moto/py3/moto/s3/responses.py	(index)
 +++ contrib/python/moto/py3/moto/s3/responses.py	(working tree)
-@@ -1946,8 +1946,11 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
-             metadata = metadata_from_headers(request.headers)
+@@ -2000,7 +2000,8 @@ class S3Response(BaseResponse):
              tagging = self._tagging_from_headers(request.headers)
              storage_type = request.headers.get("x-amz-storage-class", "STANDARD")
-+            acl = self._acl_from_headers(request.headers)
+             acl = self._acl_from_headers(request.headers)
+-
 +            if acl is None:
 +                acl = self.backend.get_bucket(bucket_name).acl
              multipart_id = self.backend.create_multipart_upload(
--                bucket_name, key_name, metadata, storage_type, tagging
-+                bucket_name, key_name, metadata, storage_type, tagging, acl
-             )
- 
-             template = self.response_template(S3_MULTIPART_INITIATE_RESPONSE)
-@@ -1976,6 +1979,7 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
-             )
-             key.set_metadata(multipart.metadata)
-             self.backend.set_key_tags(key, multipart.tags)
-+            self.backend.put_object_acl(bucket_name, key.name, multipart.acl)
- 
-             template = self.response_template(S3_MULTIPART_COMPLETE_RESPONSE)
-             headers = {}
+                 bucket_name,
+                 key_name,

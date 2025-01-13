@@ -10,7 +10,6 @@ FROM (
         (1),
         (NULL),
         (3)
-)
-    AS a (
-        key
-    );
+) AS a (
+    key
+);

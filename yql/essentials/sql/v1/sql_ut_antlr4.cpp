@@ -471,6 +471,82 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["EquiJoin"]);
     }
 
+    Y_UNIT_TEST(CreateAlterUserWithLoginNoLogin) {
+        auto reqCreateUser = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1;
+        )");
+
+        UNIT_ASSERT(reqCreateUser.IsOk());
+        UNIT_ASSERT(reqCreateUser.Root);
+
+        auto reqAlterUser = SqlToYql(R"(
+            USE plato;
+            ALTER USER user1;
+        )");
+
+        UNIT_ASSERT(!reqAlterUser.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(reqAlterUser.Issues.ToString(), "Error: mismatched input ';' expecting {ENCRYPTED, LOGIN, NOLOGIN, PASSWORD, RENAME, WITH}");
+
+        auto reqPasswordAndLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 LOgin;
+        )");
+
+        UNIT_ASSERT(reqPasswordAndLogin.IsOk());
+        UNIT_ASSERT(reqPasswordAndLogin.Root);
+
+        auto reqPasswordAndNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 PASSWORD '123' NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqPasswordAndNoLogin.IsOk());
+        UNIT_ASSERT(reqPasswordAndNoLogin.Root);
+
+        auto reqLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 LOGIN;
+        )");
+
+        UNIT_ASSERT(reqLogin.IsOk());
+        UNIT_ASSERT(reqLogin.Root);
+
+        auto reqNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqNoLogin.IsOk());
+        UNIT_ASSERT(reqNoLogin.Root);
+
+        auto reqLoginNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 LOGIN NOLOGIN;
+        )");
+
+        UNIT_ASSERT(!reqLoginNoLogin.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(reqLoginNoLogin.Issues.ToString(), "Error: Conflicting or redundant options");
+
+        auto reqAlterLoginNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 LOGIN;
+            ALTER USER user1 NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqAlterLoginNoLogin.IsOk());
+        UNIT_ASSERT(reqAlterLoginNoLogin.Root);
+
+        auto reqAlterLoginNoLoginWithPassword = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 LOGIN;
+            ALTER USER user1 PASSWORD '321' NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqAlterLoginNoLoginWithPassword.IsOk());
+        UNIT_ASSERT(reqAlterLoginNoLoginWithPassword.Root);
+    }
+
     Y_UNIT_TEST(JoinWithoutConcreteColumns) {
         NYql::TAstParseResult res = SqlToYql(
             " use plato;"
@@ -2340,7 +2416,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                     FORMAT = 'json',
                     INITIAL_SCAN = TRUE,
                     VIRTUAL_TIMESTAMPS = FALSE,
-                    RESOLVED_TIMESTAMPS = Interval("PT1S"),
+                    BARRIERS_INTERVAL = Interval("PT1S"),
                     RETENTION_PERIOD = Interval("P1D"),
                     TOPIC_MIN_ACTIVE_PARTITIONS = 10,
                     AWS_REGION = 'aws:region'
@@ -2360,7 +2436,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("true"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("virtual_timestamps"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("false"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("resolved_timestamps"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("barriers_interval"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("retention_period"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("topic_min_active_partitions"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("aws_region"));
@@ -2997,6 +3073,21 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         }
     }
 
+    Y_UNIT_TEST(AsyncReplicationInvalidCommitInterval) {
+        auto req = R"(
+            USE plato;
+            CREATE ASYNC REPLICATION MyReplication
+            FOR table1 AS table2, table3 AS table4
+            WITH (
+                COMMIT_INTERVAL = "FOO"
+            );
+        )";
+
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:6:35: Error: Literal of Interval type is expected for COMMIT_INTERVAL\n");
+    }
+
     Y_UNIT_TEST(AlterAsyncReplicationParseCorrect) {
         auto req = R"(
             USE plato;
@@ -3026,7 +3117,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
-    Y_UNIT_TEST(AlterAsyncReplicationUnsupportedSettings) {
+    Y_UNIT_TEST(AlterAsyncReplicationSettings) {
         auto reqTpl = R"(
             USE plato;
             ALTER ASYNC REPLICATION MyReplication
@@ -3046,19 +3137,17 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             {"password_secret_name", "bar_secret_name"},
         };
 
-        for (const auto& setting : settings) {
-            auto& key = setting.first;
-            auto& value = setting.second;
-            auto req = Sprintf(reqTpl, key.c_str(), value.c_str());
+        for (const auto& [k, v] : settings) {
+            auto req = Sprintf(reqTpl, k.c_str(), v.c_str());
             auto res = SqlToYql(req);
             UNIT_ASSERT(res.Root);
 
-            TVerifyLineFunc verifyLine = [&key, &value](const TString& word, const TString& line) {
+            TVerifyLineFunc verifyLine = [&k, &v](const TString& word, const TString& line) {
                 if (word == "Write") {
                     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
                     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("alter"));
-                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(key));
-                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(value));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(k));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(v));
                 }
             };
 
@@ -3066,6 +3155,27 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             VerifyProgram(res, elementStat, verifyLine);
 
             UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+        }
+    }
+
+    Y_UNIT_TEST(AlterAsyncReplicationUnsupportedSettings) {
+        {
+            auto req = R"(
+                USE plato;
+                ALTER ASYNC REPLICATION MyReplication SET (CONSISTENCY_LEVEL = "GLOBAL");
+            )";
+            auto res = SqlToYql(req);
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:80: Error: CONSISTENCY_LEVEL is not supported in ALTER\n");
+        }
+        {
+            auto req = R"(
+                USE plato;
+                ALTER ASYNC REPLICATION MyReplication SET (COMMIT_INTERVAL = Interval("PT10S"));
+            )";
+            auto res = SqlToYql(req);
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:87: Error: COMMIT_INTERVAL is not supported in ALTER\n");
         }
     }
 
@@ -4668,12 +4778,12 @@ select FormatType($f());
             USE plato;
             CREATE TABLE tableName (
                 Key Uint32, PRIMARY KEY (Key),
-                CHANGEFEED feedName WITH (MODE = "KEYS_ONLY", FORMAT = "json", RESOLVED_TIMESTAMPS = "foo")
+                CHANGEFEED feedName WITH (MODE = "KEYS_ONLY", FORMAT = "json", BARRIERS_INTERVAL = "foo")
             );
         )";
         auto res = SqlToYql(req);
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:102: Error: Literal of Interval type is expected for RESOLVED_TIMESTAMPS\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:100: Error: Literal of Interval type is expected for BARRIERS_INTERVAL\n");
     }
 
     Y_UNIT_TEST(InvalidChangefeedRetentionPeriod) {
@@ -5002,6 +5112,45 @@ select FormatType($f());
             )
         )";
         ExpectFailWithError(query, "<main>:2:33: Error: Aggregation function Min requires exactly 1 argument(s), given: 2\n");
+    }
+
+    Y_UNIT_TEST(ScalarContextUsage1) {
+        TString query = R"(
+            $a = (select 1 as x, 2 as y);
+            select 1 + $a;
+        )";
+        ExpectFailWithError(query, "<main>:2:39: Error: Source used in expression should contain one concrete column\n"
+            "<main>:3:24: Error: Source is used here\n");
+    }
+
+    Y_UNIT_TEST(ScalarContextUsage2) {
+        TString query = R"(
+            use plato;
+            $a = (select 1 as x, 2 as y);
+            select * from concat($a);
+        )";
+        ExpectFailWithError(query, "<main>:3:39: Error: Source used in expression should contain one concrete column\n"
+            "<main>:4:34: Error: Source is used here\n");
+    }
+
+    Y_UNIT_TEST(ScalarContextUsage3) {
+        TString query = R"(
+            use plato;
+            $a = (select 1 as x, 2 as y);
+            select * from range($a);
+        )";
+        ExpectFailWithError(query, "<main>:3:39: Error: Source used in expression should contain one concrete column\n"
+            "<main>:4:33: Error: Source is used here\n");
+    }
+
+    Y_UNIT_TEST(ScalarContextUsage4) {
+        TString query = R"(
+            use plato;
+            $a = (select 1 as x, 2 as y);
+            insert into $a select 1;
+        )";
+        ExpectFailWithError(query, "<main>:3:39: Error: Source used in expression should contain one concrete column\n"
+            "<main>:4:25: Error: Source is used here\n");
     }
 }
 

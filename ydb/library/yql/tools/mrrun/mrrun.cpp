@@ -2,15 +2,15 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs/codecs.h>
 
-#include <ydb/library/yql/providers/yt/lib/log/yt_logger.h>
-#include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
-#include <ydb/library/yql/providers/yt/lib/yt_url_lister/yt_url_lister.h>
-#include <ydb/library/yql/providers/yt/lib/config_clusters/config_clusters.h>
-#include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
-#include <ydb/library/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
-#include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
+#include <yt/yql/providers/yt/lib/log/yt_logger.h>
+#include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
+#include <yt/yql/providers/yt/lib/yt_url_lister/yt_url_lister.h>
+#include <yt/yql/providers/yt/lib/config_clusters/config_clusters.h>
+#include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
+#include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
+#include <yt/yql/providers/yt/provider/yql_yt_provider.h>
+#include <yt/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
+#include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
 #include <ydb/library/yql/providers/yt/dq_task_preprocessor/yql_yt_dq_task_preprocessor.h>
 #include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 
@@ -245,10 +245,11 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, I
         std::make_shared<TPqGatewayConfig>(),
         nullptr
     );
-    RegisterDqPqReadActorFactory(*factory, driver, nullptr, CreatePqNativeGateway(std::move(pqServices)));
+    auto pqGateway = CreatePqNativeGateway(std::move(pqServices));
+    RegisterDqPqReadActorFactory(*factory, driver, nullptr, pqGateway);
     RegisterYdbReadActorFactory(*factory, driver, nullptr);
     RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
-    RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
+    RegisterDqPqWriteActorFactory(*factory, driver, nullptr, pqGateway);
 
     auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
     auto retryPolicy = GetHTTPDefaultRetryPolicy();

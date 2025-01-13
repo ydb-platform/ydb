@@ -21,7 +21,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TCreateFileStore::TConfigureParts"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -132,7 +132,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TCreateFileStore::TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:

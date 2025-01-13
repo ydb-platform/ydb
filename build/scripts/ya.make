@@ -29,7 +29,6 @@ IF (PY2)
         python_yndexer.py
         run_ios_simulator.py
         run_msvc_wine.py
-        run_sonar.py
         symlink.py
         touch.py
         unpacking_jtest_runner.py

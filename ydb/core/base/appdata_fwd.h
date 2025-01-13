@@ -22,6 +22,9 @@ namespace NKikimr {
     namespace NSharedCache {
         class TSharedCachePages;
     }
+    namespace NJaegerTracing {
+        class TSamplingThrottlingConfigurator;
+    }
 }
 
 namespace NKikimrCms {
@@ -35,6 +38,7 @@ namespace NKikimrSharedCache {
 namespace NKikimrProto {
     class TKeyConfig;
     class TAuthConfig;
+    class TDataIntegrityTrailsConfig;
 
     namespace NFolderService {
         class TFolderServiceConfig;
@@ -225,6 +229,7 @@ struct TAppData {
     NKikimrConfig::TMetadataCacheConfig& MetadataCacheConfig;
     NKikimrConfig::TMemoryControllerConfig& MemoryControllerConfig;
     NKikimrReplication::TReplicationDefaults& ReplicationConfig;
+    NKikimrProto::TDataIntegrityTrailsConfig& DataIntegrityTrailsConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
@@ -266,6 +271,9 @@ struct TAppData {
     TString ClusterName;
 
     bool YamlConfigEnabled = false;
+
+    // Tracing configurator (look for tracing config in ydb/core/jaeger_tracing/actors_tracing_control)
+    TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> TracingConfigurator;
 
     TAppData(
             ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId,

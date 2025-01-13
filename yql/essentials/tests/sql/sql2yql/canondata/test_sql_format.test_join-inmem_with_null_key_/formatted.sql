@@ -13,8 +13,8 @@ $b = (
 
 SELECT
     a.*
-FROM $a
-    AS a
-LEFT ONLY JOIN $b
-    AS b
+FROM
+    $a AS a
+LEFT ONLY JOIN
+    $b AS b
 USING (a);

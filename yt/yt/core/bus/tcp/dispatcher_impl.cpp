@@ -186,8 +186,8 @@ void TTcpDispatcher::TImpl::Configure(const TTcpDispatcherConfigPtr& config)
         Config_ = config;
 
         if (XferPoller_) {
-            XferPoller_->Reconfigure(Config_->ThreadPoolSize);
-            XferPoller_->Reconfigure(Config_->ThreadPoolPollingPeriod);
+            XferPoller_->SetThreadCount(Config_->ThreadPoolSize);
+            XferPoller_->SetPollingPeriod(Config_->ThreadPoolPollingPeriod);
         }
     }
 

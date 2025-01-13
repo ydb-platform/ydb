@@ -125,7 +125,8 @@ public:
             case BLOCK_WIDE: {
                 ui64 result = 0;
                 batch.ForEachRowWide([&](NUdf::TUnboxedValue* values, ui32 width) {
-                    result += NKikimr::NMiniKQL::TArrowBlock::From(values[width - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+                    const auto& blockLength = values[width - 1];
+                    result += NKikimr::NMiniKQL::TArrowBlock::From(blockLength).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
                 });
                 return result;
             }
@@ -135,7 +136,8 @@ public:
             case LEGACY_SIMPLE_BLOCK: {
                 ui64 result = 0;
                 batch.ForEachRow([&](NUdf::TUnboxedValue& value) {
-                    result += NKikimr::NMiniKQL::TArrowBlock::From(value.GetElement(LegacyBlockLengthIndex)).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+                    const auto& blockLength = value.GetElement(LegacyBlockLengthIndex);
+                    result += NKikimr::NMiniKQL::TArrowBlock::From(blockLength).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
                 });
                 return result;
             }
@@ -143,7 +145,8 @@ public:
                 ui64 result = 0;
                 batch.ForEachRow([&](NUdf::TUnboxedValue& value) {
                     auto value0 = value.GetElement(0);
-                    result += NKikimr::NMiniKQL::TArrowBlock::From(value0.GetElement(LegacyBlockLengthIndex)).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+                    const auto& blockLength = value0.GetElement(LegacyBlockLengthIndex);
+                    result += NKikimr::NMiniKQL::TArrowBlock::From(blockLength).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
                 });
                 return result;
             }

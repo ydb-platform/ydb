@@ -11,13 +11,14 @@ namespace {
 using TCases = TVector<std::pair<TString, TString>>;
 
 struct TSetup {
-    TSetup() {
+    TSetup(bool ansiLexer = false) {
         NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &Arena;
         settings.Antlr4Parser = true;
+        settings.AnsiLexer = ansiLexer;
         Formatter = NSQLFormat::MakeSqlFormatter(settings);
     }
-    
+
     void Run(const TCases& cases, NSQLFormat::EFormatMode mode = NSQLFormat::EFormatMode::Pretty) {
         for (const auto& c : cases) {
             NYql::TIssues issues;

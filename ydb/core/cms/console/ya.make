@@ -13,6 +13,7 @@ SRCS(
     console.h
     console_audit.cpp
     console_audit.h
+    console_handshake.cpp
     console_configs_manager.cpp
     console_configs_manager.h
     console_configs_provider.cpp

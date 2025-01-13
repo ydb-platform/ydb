@@ -63,6 +63,7 @@ private:
     const TDqTaskRunnerParameterProvider ParameterProvider;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
+    const TMaybe<ui8> ArrayBufferMinFillPercentage;
 };
 
 } // namespace NKqp

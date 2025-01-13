@@ -45,6 +45,7 @@ public:
         const ui64 TxId;
         const TMaybe<ui64> LockTxId;
         const ui32 LockNodeId;
+        const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
         const TActorId& Executer;
         const IKqpGateway::TKqpSnapshot& Snapshot;
         const TString& Database;
@@ -69,6 +70,7 @@ public:
         const std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager>& ResourceManager_;
         const std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory>& CaFactory_;
         const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
+        const TMaybe<ui8> ArrayBufferMinFillPercentage;
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
@@ -106,6 +108,7 @@ private:
     const ui64 TxId;
     const TMaybe<ui64> LockTxId;
     const ui32 LockNodeId;
+    const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
     const TActorId ExecuterId;
     TVector<ui64> ComputeTasks;
     THashMap<ui64, TVector<ui64>> TasksPerNode;
@@ -146,6 +149,7 @@ private:
     TIntrusivePtr<NRm::TTxState> TxInfo;
     TVector<TProgressStat> LastStats;
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
+    const TMaybe<ui8> ArrayBufferMinFillPercentage;
 
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error

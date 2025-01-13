@@ -79,10 +79,6 @@ class Date32(Date):
         return data_conv.read_date32_col(source, num_rows)
 
 
-from_ts_naive = datetime.utcfromtimestamp
-from_ts_tz = datetime.fromtimestamp
-
-
 class DateTimeBase(ClickHouseType, registered=False):
     __slots__ = ('tzinfo',)
     valid_formats = 'native', 'int'

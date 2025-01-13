@@ -2,17 +2,17 @@
 /* custom error:Callable expected at most 3 argument(s)*/
 -- Find has optional args
 SELECT
-    String::ReplaceAll();
+    String::ReplaceAll()
+; -- too few
 
--- too few
 SELECT
-    String::ReplaceAll("abc");
+    String::ReplaceAll('abc')
+; -- too few
 
--- too few
 SELECT
-    String::ReplaceAll("abc", "b", 2, 4);
+    String::ReplaceAll('abc', 'b', 2, 4)
+; -- too many
 
--- too many
 SELECT
-    String::ReplaceAll("abc", "b", 2, 4, 44);
--- too many
+    String::ReplaceAll('abc', 'b', 2, 4, 44)
+; -- too many

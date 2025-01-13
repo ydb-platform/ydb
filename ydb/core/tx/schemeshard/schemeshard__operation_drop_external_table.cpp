@@ -58,7 +58,7 @@ public:
 
         TExternalDataSourceInfo::TPtr externalDataSourceInfo = context.SS->ExternalDataSources.Value(dataSourcePathId, nullptr);
         Y_ABORT_UNLESS(externalDataSourceInfo);
-        EraseIf(*externalDataSourceInfo->ExternalTableReferences.MutableReferences(), [pathId](const NKikimrSchemeOp::TExternalTableReferences::TReference& reference) { return PathIdFromPathId(reference.GetPathId()) == pathId; });
+        EraseIf(*externalDataSourceInfo->ExternalTableReferences.MutableReferences(), [pathId](const NKikimrSchemeOp::TExternalTableReferences::TReference& reference) { return TPathId::FromProto(reference.GetPathId()) == pathId; });
 
         context.SS->TabletCounters->Simple()[COUNTER_EXTERNAL_TABLE_COUNT].Sub(1);
         context.SS->PersistExternalDataSource(db, dataSourcePathId, externalDataSourceInfo);

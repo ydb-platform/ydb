@@ -223,5 +223,75 @@
                 ]
             }
         ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Uint64"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Uint64"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column2";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Uint64"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column3";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Uint64"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "0"
+                        ];
+                        [
+                            "0"
+                        ];
+                        [
+                            "0"
+                        ];
+                        [
+                            "0"
+                        ]
+                    ]
+                ]
+            }
+        ]
     }
 ]

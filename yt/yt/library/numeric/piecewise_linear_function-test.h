@@ -4,7 +4,7 @@
 #include "binary_search.h"
 #include "piecewise_linear_function.h"
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <vector>
 #include <algorithm>

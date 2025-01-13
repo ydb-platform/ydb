@@ -29,6 +29,7 @@ IF (CYTHON_COVERAGE)
     # Let covarage support add all needed files to resources
 ELSE()
     RESOURCE_FILES(
+        DONT_COMPRESS
         PREFIX ${MODDIR}/
         __res.pyx
         importer.pxi

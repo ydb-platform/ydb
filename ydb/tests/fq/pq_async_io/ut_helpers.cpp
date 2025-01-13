@@ -3,6 +3,7 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 
+#include <ydb/core/base/backtrace.h>
 #include <ydb/core/testlib/basics/appdata.h>
 
 #include <util/system/env.h>
@@ -11,6 +12,16 @@
 #include <thread>
 
 namespace NYql::NDq {
+
+namespace {
+
+void SegmentationFaultHandler(int) {
+    Cerr << "segmentation fault call stack:" << Endl;
+    FormatBackTrace(&Cerr);
+    abort();
+}
+
+}
 
 using namespace NActors;
 
@@ -26,6 +37,11 @@ NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
     settings.SetEndpoint(GetDefaultPqEndpoint());
     settings.MutableToken()->SetName("token");
     settings.SetDatabase(GetDefaultPqDatabase());
+    settings.SetRowType("[StructType; [[dt; [DataType; Uint64]]; [value; [DataType; String]]]]");
+    settings.AddColumns("dt");
+    settings.AddColumns("value");
+    settings.AddColumnTypes("[DataType; Uint64]");
+    settings.AddColumnTypes("[DataType; String]");
     if (watermarksPeriod) {
         settings.MutableWatermarks()->SetEnabled(true);
         settings.MutableWatermarks()->SetGranularityUs(watermarksPeriod->MicroSeconds());
@@ -48,6 +64,8 @@ NYql::NPq::NProto::TDqPqTopicSink BuildPqTopicSinkSettings(TString topic) {
 }
 
 TPqIoTestFixture::TPqIoTestFixture() {
+    NKikimr::EnableYDBBacktraceFormat();
+    signal(SIGSEGV, &SegmentationFaultHandler);
 }
 
 TPqIoTestFixture::~TPqIoTestFixture() {
@@ -106,6 +124,14 @@ void TPqIoTestFixture::InitAsyncOutput(
 {
     const THashMap<TString, TString> secureParams;
 
+    TPqGatewayServices pqServices(
+            Driver,
+            nullptr,
+            nullptr,
+            std::make_shared<TPqGatewayConfig>(),
+            nullptr
+        );
+
     CaSetup->Execute([&](TFakeActor& actor) {
         auto [dqAsyncOutput, dqAsyncOutputAsActor] = CreateDqPqWriteActor(
             std::move(settings),
@@ -118,6 +144,7 @@ void TPqIoTestFixture::InitAsyncOutput(
             nullptr,
             &actor.GetAsyncOutputCallbacks(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            CreatePqNativeGateway(std::move(pqServices)),
             freeSpace);
 
         actor.InitAsyncOutput(dqAsyncOutput, dqAsyncOutputAsActor);
@@ -239,14 +266,14 @@ void AddReadRule(NYdb::TDriver& driver, const TString& streamName) {
     UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
 }
 
-std::vector<TString> UVParser(const NUdf::TUnboxedValue& item) {
-    return { TString(item.AsStringRef()) };
+std::vector<std::pair<ui64, TString>> UVPairParser(const NUdf::TUnboxedValue& item) {
+    UNIT_ASSERT_VALUES_EQUAL(item.GetListLength(), 2);
+    auto stringElement = item.GetElement(1);
+    return { {item.GetElement(0).Get<ui64>(), TString(stringElement.AsStringRef())} };
 }
 
-std::vector<TString> UVParserWithMetadatafields(const NUdf::TUnboxedValue& item) {
-    const auto& cell = item.GetElement(0);
-    TString str(cell.AsStringRef());
-    return {str};
+std::vector<TString> UVParser(const NUdf::TUnboxedValue& item) {
+    return { TString(item.AsStringRef()) };
 }
 
 void TPqIoTestFixture::AsyncOutputWrite(std::vector<TString> data, TMaybe<NDqProto::TCheckpoint> checkpoint) {

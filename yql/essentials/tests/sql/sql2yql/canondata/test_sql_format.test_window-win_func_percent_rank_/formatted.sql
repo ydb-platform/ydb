@@ -12,17 +12,16 @@ FROM (
             (2, 3),
             (3, 4),
             (4, 4)
+    ) AS a (
+        r,
+        x
     )
-        AS a (
-            r,
-            x
-        )
-)
-    AS z
+) AS z
 WINDOW
     w AS (
         ORDER BY
             r
     )
 ORDER BY
-    r;
+    r
+;

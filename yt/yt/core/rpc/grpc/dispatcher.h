@@ -3,8 +3,6 @@
 #include "helpers.h"
 #include "private.h"
 
-#include <yt/yt/core/misc/singleton.h>
-
 namespace NYT::NRpc::NGrpc {
 
 ////////////////////////////////////////////////////////////////////////////////

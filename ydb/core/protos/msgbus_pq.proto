@@ -54,6 +54,7 @@ message TPersQueuePartitionRequest {
         optional uint64 Generation = 3;
         optional uint64 Step = 4;
         optional uint64 PartitionSessionId = 5;
+        optional bool RestoreSession = 6;
     }
 
     message TCmdDeleteSession {
@@ -495,6 +496,10 @@ message TPersQueuePartitionResponse {
     }
 
     message TCmdPublishDirectReadResult {
+        optional uint64 DirectReadId = 1;
+    }
+
+    message TCmdRestoreDirectReadSessionResult {
     }
 
 
@@ -506,6 +511,7 @@ message TPersQueuePartitionResponse {
     optional TCmdPrepareDirectReadResult CmdPrepareReadResult = 7;
     optional TCmdPublishDirectReadResult CmdPublishReadResult = 8;
     optional TCmdPublishDirectReadResult CmdForgetReadResult = 9;
+    optional TCmdRestoreDirectReadSessionResult CmdRestoreDirectReadResult = 10;
 
     optional uint64 Cookie = 6;
 }

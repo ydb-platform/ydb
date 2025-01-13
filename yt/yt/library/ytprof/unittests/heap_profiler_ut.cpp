@@ -16,15 +16,15 @@
 
 #include <library/cpp/testing/common/env.h>
 
+#include <library/cpp/yt/backtrace/absl_unwinder/absl_unwinder.h>
+
+#include <tcmalloc/malloc_extension.h>
+
 #include <util/string/cast.h>
 #include <util/stream/file.h>
 #include <util/generic/hash_set.h>
 #include <util/datetime/base.h>
 #include <util/generic/size_literals.h>
-
-#include <tcmalloc/common.h>
-
-#include <absl/debugging/stacktrace.h>
 
 namespace NYT::NYTProf {
 namespace {
@@ -50,7 +50,7 @@ Y_NO_INLINE auto BlowHeap()
 
 TEST(THeapProfilerTest, ReadProfile)
 {
-    absl::SetStackUnwinder(AbslStackUnwinder);
+    NBacktrace::SetAbslStackUnwinder();
     tcmalloc::MallocExtension::SetProfileSamplingRate(256_KB);
 
     auto token = tcmalloc::MallocExtension::StartAllocationProfiling();
@@ -80,10 +80,10 @@ TEST(THeapProfilerTest, ReadProfile)
     ASSERT_GE(usage, 5_MB);
 
     auto dumpProfile = [] (auto name, auto type) {
-        auto profile = ReadHeapProfile(type);
+        auto profile = CaptureHeapProfile(type);
 
         TFileOutput output(GetOutputPath() / name);
-        WriteProfile(&output, profile);
+        WriteCompressedProfile(&output, profile);
         output.Finish();
     };
 
@@ -95,7 +95,7 @@ TEST(THeapProfilerTest, ReadProfile)
     auto profile = std::move(token).Stop();
 
     TFileOutput output(GetOutputPath() / "allocations.pb.gz");
-    WriteProfile(&output, ConvertAllocationProfile(profile));
+    WriteCompressedProfile(&output, TCMallocProfileToProtoProfile(profile));
     output.Finish();
 }
 

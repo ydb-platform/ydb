@@ -8,4 +8,5 @@ SELECT
     NULL AS jx,
     NULL AS x,
     2 / 1 AS jy,
-    'b' AS y;
+    'b' AS y
+;

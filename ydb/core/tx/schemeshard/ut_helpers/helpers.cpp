@@ -17,6 +17,7 @@
 #include <ydb/core/util/pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -868,6 +869,14 @@ namespace NSchemeShardUT_Private {
     DROP_BY_PATH_ID_HELPERS(DropReplication, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication)
     GENERIC_HELPERS(DropReplicationCascade, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropReplicationCascade, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade)
+
+    // transfer
+    GENERIC_HELPERS(CreateTransfer, NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer, &NKikimrSchemeOp::TModifyScheme::MutableReplication)
+    GENERIC_HELPERS(AlterTransfer, NKikimrSchemeOp::EOperationType::ESchemeOpAlterTransfer, &NKikimrSchemeOp::TModifyScheme::MutableAlterReplication)
+    GENERIC_HELPERS(DropTransfer, NKikimrSchemeOp::EOperationType::ESchemeOpDropTransfer, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropTransfer, NKikimrSchemeOp::EOperationType::ESchemeOpDropTransfer)
+    GENERIC_HELPERS(DropTransferCascade, NKikimrSchemeOp::EOperationType::ESchemeOpDropTransferCascade, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropTransferCascade, NKikimrSchemeOp::EOperationType::ESchemeOpDropTransferCascade)
 
     // pq
     GENERIC_HELPERS(CreatePQGroup, NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup, &NKikimrSchemeOp::TModifyScheme::MutableCreatePersQueueGroup)
@@ -1963,6 +1972,30 @@ namespace NSchemeShardUT_Private {
         TestModificationResults(runtime, txId, expectedResults);
     }
 
+    void CreateAlterLoginRemoveUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TVector<TExpectedResult>& expectedResults) {
+        auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
+        auto transaction = modifyTx->Record.AddTransaction();
+        transaction->SetWorkingDir(database);
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
+        auto removeUser = transaction->MutableAlterLogin()->MutableRemoveUser();
+        removeUser->SetUser(user);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    void CreateAlterLoginCreateGroup(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& group, const TVector<TExpectedResult>& expectedResults) {
+        auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
+        auto transaction = modifyTx->Record.AddTransaction();
+        transaction->SetWorkingDir(database);
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
+        auto createGroup = transaction->MutableAlterLogin()->MutableCreateGroup();
+        createGroup->SetGroup(group);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
     void AlterLoginAddGroupMembership(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& member, const TString& group, const TVector<TExpectedResult>& expectedResults) {
         auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto transaction = modifyTx->Record.AddTransaction();
@@ -1989,13 +2022,17 @@ namespace NSchemeShardUT_Private {
 
         AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
         TestModificationResults(runtime, txId, expectedResults);
-    }   
-    
+    }
+
     NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password) {
         TActorId sender = runtime.AllocateEdgeActor();
         auto evLogin = new TEvSchemeShard::TEvLogin();
         evLogin->Record.SetUser(user);
         evLogin->Record.SetPassword(password);
+
+        if (auto ldapDomain = runtime.GetAppData().AuthConfig.GetLdapAuthenticationDomain(); user.EndsWith("@" + ldapDomain)) {
+            evLogin->Record.SetExternalAuth(ldapDomain);
+        }
         ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evLogin);
         TAutoPtr<IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);

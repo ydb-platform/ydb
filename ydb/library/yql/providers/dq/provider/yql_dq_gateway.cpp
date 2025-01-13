@@ -176,6 +176,7 @@ public:
 
         bool error = false;
         bool fallback = false;
+        result.Timeout = resp.GetTimeout();
 
         if (status.Ok()) {
             YQL_CLOG(TRACE, ProviderDq) << "TDqGateway::Ok";

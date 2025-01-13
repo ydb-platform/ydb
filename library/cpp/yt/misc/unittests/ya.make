@@ -8,11 +8,12 @@ SRCS(
     enum_ut.cpp
     guid_ut.cpp
     hash_ut.cpp
-    non_null_ptr_ut.cpp
     preprocessor_ut.cpp
     strong_typedef_ut.cpp
     tag_invoke_cpo_ut.cpp
     tag_invoke_impl_ut.cpp
+    typeid_sample.cpp
+    typeid_ut.cpp
 )
 
 PEERDIR(

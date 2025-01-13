@@ -383,7 +383,7 @@ public:
             if (auto item = s.GetValue(ctx.HolderFactory); !item.IsInvalid())
                 return item;
 
-            if (const auto input = Flow_->GetValue(ctx).Release(); input.IsSpecial())
+            if (const auto input = Flow_->GetValue(ctx); input.IsSpecial())
                 return input;
             else
                 s.Reset(input);
@@ -443,6 +443,8 @@ public:
         const auto setPtr = CastInst::Create(Instruction::IntToPtr, setFunc, PointerType::getUnqual(setType), "set", block);
         CallInst::Create(setType, setPtr, {stateArg, input }, "", block);
 
+        ValueCleanup(EValueRepresentation::Any, input, ctx, block);
+
         BranchInst::Create(work, block);
 
         block = done;
@@ -475,8 +477,7 @@ private:
         }
 
         void Reset(const NUdf::TUnboxedValuePod block) {
-            const NUdf::TUnboxedValue v(block);
-            const auto& datum = TArrowBlock::From(v).GetDatum();
+            const auto& datum = TArrowBlock::From(block).GetDatum();
             MKQL_ENSURE(datum.is_arraylike(), "Expecting array as FromBlocks argument");
             MKQL_ENSURE(Arrays_.empty(), "Not all input is processed");
             if (datum.is_array()) {
@@ -633,6 +634,8 @@ public:
 
         const auto countValue = getres.second.back()(ctx, block);
         const auto height = CallInst::Create(getCount, { WrapArgumentForWindows(countValue, ctx, block) }, "height", block);
+
+        ValueCleanup(EValueRepresentation::Any, countValue, ctx, block);
 
         new StoreInst(height, countPtr, block);
         new StoreInst(ConstantInt::get(indexType, 0), indexPtr, block);
@@ -953,9 +956,8 @@ private:
     }
 
     arrow::Datum DoReplicate(const NUdf::TUnboxedValuePod val, const NUdf::TUnboxedValuePod cnt, TComputationContext& ctx) const {
-        const NUdf::TUnboxedValue v(val), c(cnt);
-        const auto value = TArrowBlock::From(v).GetDatum().scalar();
-        const ui64 count = TArrowBlock::From(c).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+        const auto value = TArrowBlock::From(val).GetDatum().scalar();
+        const ui64 count = TArrowBlock::From(cnt).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
 
         const auto reader = MakeBlockReader(TTypeInfoHelper(), Type_);
         const auto builder = MakeArrayBuilder(TTypeInfoHelper(), Type_, ctx.ArrowMemoryPool, count, &ctx.Builder->GetPgBuilder());

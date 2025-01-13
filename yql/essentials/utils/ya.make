@@ -63,6 +63,7 @@ IF (OPENSOURCE_PROJECT != "yt")
         log
         memory_profiling
         network
+        oom_helper
         signals
         sys
         test_http_server

@@ -17,7 +17,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropKesus TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

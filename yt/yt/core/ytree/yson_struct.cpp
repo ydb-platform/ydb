@@ -5,8 +5,6 @@
 #include <yt/yt/core/ytree/node.h>
 #include <yt/yt/core/ytree/ypath_detail.h>
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <util/generic/algorithm.h>
 
 namespace NYT::NYTree {

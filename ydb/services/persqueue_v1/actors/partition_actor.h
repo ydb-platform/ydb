@@ -129,6 +129,11 @@ private:
 
     void InitLockPartition(const NActors::TActorContext& ctx);
     void InitStartReading(const NActors::TActorContext& ctx);
+    void RestartDirectReadSession();
+    void OnDirectReadsRestored();
+    [[nodiscard]] bool SendNextRestorePrepareOrForget();
+    [[nodiscard]] bool SendNextRestorePublishRequest();
+    void ResendRecentRequests();
 
     void RestartPipe(const NActors::TActorContext& ctx, const TString& reason, const NPersQueue::NErrorCode::EErrorCode errorCode);
     void WaitDataInPartition(const NActors::TActorContext& ctx);
@@ -137,7 +142,10 @@ private:
     void SendPublishDirectRead(const ui64 directReadId, const TActorContext& ctx);
     void SendForgetDirectRead(const ui64 directReadId, const TActorContext& ctx);
     void SendPartitionReady(const TActorContext& ctx);
-
+    NKikimrClient::TPersQueueRequest MakeCreateSessionRequest(bool initial) const;
+    NKikimrClient::TPersQueueRequest MakeReadRequest(ui64 readOffset, ui64 lastOffset, ui64 maxCount,
+                                                                      ui64 maxSize, ui64 maxTimeLagMs, ui64 readTimestampMs,
+                                                                      ui64 directReadId) const;
 
 private:
     const TActorId ParentId;
@@ -211,7 +219,22 @@ private:
     bool DirectRead = false;
 
     ui64 DirectReadId = 1;
-    std::map<ui64, NKikimrClient::TPersQueuePartitionResponse::TCmdPrepareDirectReadResult> DirectReads;
+    std::map<ui64, NKikimrClient::TPersQueuePartitionResponse::TCmdPrepareDirectReadResult> DirectReadResults;
+    std::set<ui64> PublishedDirectReads;
+
+    std::map<ui64, NKikimrClient::TPersQueuePartitionResponse::TCmdPrepareDirectReadResult> DirectReadsToRestore;
+    std::set<ui64> DirectReadsToPublish;
+    std::set<ui64> DirectReadsToForget;
+
+    enum class EDirectReadRestoreStage {
+        None,
+        Session,
+        Prepare,
+        Publish,
+        Forget
+    };
+    ui64 RestoredDirectReadId = 0;
+    EDirectReadRestoreStage DirectReadRestoreStage = EDirectReadRestoreStage::None;
 
     bool UseMigrationProtocol;
 

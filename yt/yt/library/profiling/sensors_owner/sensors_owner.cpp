@@ -55,6 +55,8 @@ template <typename... Args>
 using TGaugeHistogramWrapper = typename TSensorWrapper<TGaugeHistogram, Args...>::template TImpl<&TProfiler::GaugeHistogram>;
 template <typename... Args>
 using TRateHistogramWrapper = typename TSensorWrapper<TRateHistogram, Args...>::template TImpl<&TProfiler::RateHistogram>;
+template <typename... Args>
+using TSummaryWrapper = typename TSensorWrapper<TSummary, Args...>::template TImpl<&TProfiler::Summary>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -179,6 +181,11 @@ const TGaugeHistogram& TSensorsOwner::GetGaugeHistogram(const std::string& name,
 const TRateHistogram& TSensorsOwner::GetRateHistogram(const std::string& name, std::vector<double> buckets) const
 {
     return Get<TRateHistogramWrapper<std::vector<double>>>(name, std::move(buckets)).Sensor;
+}
+
+const TSummary& TSensorsOwner::GetSummary(const std::string& name, ESummaryPolicy policy) const
+{
+    return Get<TSummaryWrapper<ESummaryPolicy>>(name, policy).Sensor;
 }
 
 void TSensorsOwner::Increment(const std::string& name, i64 delta) const

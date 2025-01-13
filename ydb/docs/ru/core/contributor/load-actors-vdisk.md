@@ -2,8 +2,6 @@
 
 Подает нагрузку write-only на VDisk. Имитирует Distributed Storage Proxy. Результатом теста является производительность записи на VDisk в операциях в секунду.
 
-{% include notitle [addition](../_includes/addition.md) %}
-
 ## Параметры актора {#options}
 
 {% include [load-actors-params](../_includes/load-actors-params.md) %}

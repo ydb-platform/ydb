@@ -14,7 +14,6 @@
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
-#include <util/system/type_name.h>
 #include <util/generic/vector.h>
 
 #include <google/protobuf/message.h>
@@ -1025,7 +1024,7 @@ struct TRichYPath
     ///
     /// @{
     ///
-    /// Get range view, that is convenient way to iterate through all ranges.
+    /// Get range view, that is a convenient way to iterate through all ranges.
     TArrayRef<TReadRange> MutableRangesView()
     {
         if (Ranges_.Defined()) {

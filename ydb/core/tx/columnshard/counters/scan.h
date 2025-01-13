@@ -141,7 +141,23 @@ private:
     NMonitoring::THistogramPtr HistogramIntervalMemoryRequiredOnFail;
     NMonitoring::THistogramPtr HistogramIntervalMemoryReduceSize;
     NMonitoring::THistogramPtr HistogramIntervalMemoryRequiredAfterReduce;
+    NMonitoring::TDynamicCounters::TCounterPtr NotIndexBlobs;
+    NMonitoring::TDynamicCounters::TCounterPtr RecordsAcceptedByIndex;
+    NMonitoring::TDynamicCounters::TCounterPtr RecordsDeniedByIndex;
+
 public:
+    void OnNotIndexBlobs() const {
+        NotIndexBlobs->Add(1);
+    }
+    void OnAcceptedByIndex(const ui32 recordsCount) const {
+        RecordsAcceptedByIndex->Add(recordsCount);
+    }
+    void OnDeniedByIndex(const ui32 recordsCount) const {
+        RecordsDeniedByIndex->Add(recordsCount);
+    }
+    NMonitoring::TDynamicCounters::TCounterPtr AcceptedByIndex;
+    NMonitoring::TDynamicCounters::TCounterPtr DeniedByIndex;
+
 
     TScanIntervalStateGuard CreateIntervalStateGuard() const {
         return TScanIntervalStateGuard(ScanIntervalState);
@@ -185,7 +201,23 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr BlobsReceivedCount;
     NMonitoring::TDynamicCounters::TCounterPtr BlobsReceivedBytes;
 
+    NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceCount;
+    NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceRawBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceRecords;
+    NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceEmptyCount;
+    NMonitoring::THistogramPtr HistogramFilteredResultCount;
+
     TScanCounters(const TString& module = "Scan");
+
+    void OnSourceFinished(const ui32 recordsCount, const ui64 rawBytes, const ui32 filteredRecordsCount) const {
+        ProcessedSourceCount->Add(1);
+        ProcessedSourceRawBytes->Add(rawBytes);
+        ProcessedSourceRecords->Add(recordsCount);
+        HistogramFilteredResultCount->Collect(filteredRecordsCount);
+        if (!filteredRecordsCount) {
+            ProcessedSourceEmptyCount->Add(1);
+        }
+    }
 
     void OnOptimizedIntervalMemoryFailed(const ui64 memoryRequired) const {
         HistogramIntervalMemoryRequiredOnFail->Collect(memoryRequired / (1024.0 * 1024.0 * 1024.0));

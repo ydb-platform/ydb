@@ -7,7 +7,6 @@ SELECT
 FROM (
     VALUES
         (1)
-)
-    AS a (
-        key
-    );
+) AS a (
+    key
+);

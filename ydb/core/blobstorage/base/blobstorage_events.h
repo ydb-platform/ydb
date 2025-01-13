@@ -380,9 +380,11 @@ namespace NKikimr {
 
     struct TEvBlobStorage::TEvAskWardenRestartPDisk : TEventLocal<TEvAskWardenRestartPDisk, EvAskWardenRestartPDisk> {
         const ui32 PDiskId;
+        const bool IgnoreChecks;
 
-        TEvAskWardenRestartPDisk(const ui32& pdiskId)
+        TEvAskWardenRestartPDisk(const ui32 pdiskId, const bool ignoreChecks)
             : PDiskId(pdiskId)
+            , IgnoreChecks(ignoreChecks)
         {}
     };
 

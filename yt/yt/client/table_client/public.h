@@ -4,6 +4,8 @@
 
 #include <yt/yt/client/cypress_client/public.h>
 
+#include <yt/yt/client/signature/public.h>
+
 #include <yt/yt/client/tablet_client/public.h>
 
 #include <yt/yt/client/transaction_client/public.h>
@@ -343,6 +345,7 @@ DECLARE_REFCOUNTED_CLASS(TRowBuffer)
 DECLARE_REFCOUNTED_STRUCT(ISchemalessUnversionedReader)
 DECLARE_REFCOUNTED_STRUCT(ISchemafulUnversionedReader)
 DECLARE_REFCOUNTED_STRUCT(IUnversionedWriter)
+DECLARE_REFCOUNTED_STRUCT(IUnversionedTableFragmentWriter)
 DECLARE_REFCOUNTED_STRUCT(IUnversionedRowsetWriter)
 
 using TSchemalessWriterFactory = std::function<IUnversionedRowsetWriterPtr(
@@ -451,6 +454,12 @@ using TUUComparerSignature = int(const TUnversionedValue*, const TUnversionedVal
 
 struct TVersionedReadOptions;
 struct TVersionedWriteOptions;
+
+////////////////////////////////////////////////////////////////////////////////
+
+YT_DEFINE_STRONG_TYPEDEF(TSignedDistributedWriteSessionPtr, NSignature::TSignaturePtr);
+YT_DEFINE_STRONG_TYPEDEF(TSignedWriteFragmentCookiePtr, NSignature::TSignaturePtr);
+YT_DEFINE_STRONG_TYPEDEF(TSignedWriteFragmentResultPtr, NSignature::TSignaturePtr);
 
 ////////////////////////////////////////////////////////////////////////////////
 

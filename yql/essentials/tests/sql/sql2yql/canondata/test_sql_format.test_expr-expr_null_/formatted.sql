@@ -1,3 +1,4 @@
 /* postgres can not */
 SELECT
-    NULL;
+    NULL
+;

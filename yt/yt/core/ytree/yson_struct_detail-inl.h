@@ -189,7 +189,7 @@ void LoadFromSource(
     std::optional<T>& parameter,
     TSource source,
     const NYPath::TYPath& path,
-    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy);
+    std::optional<EUnrecognizedStrategy> unrecognizedStrategy);
 
 // std::vector
 template <CYsonStructSource TSource, CStdVector TVector>
@@ -197,7 +197,7 @@ void LoadFromSource(
     TVector& parameter,
     TSource source,
     const NYPath::TYPath& path,
-    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy);
+    std::optional<EUnrecognizedStrategy> unrecognizedStrategy);
 
 // any map.
 template <CYsonStructSource TSource, CAnyMap TMap>
@@ -205,7 +205,7 @@ void LoadFromSource(
     TMap& parameter,
     TSource source,
     const NYPath::TYPath& path,
-    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy);
+    std::optional<EUnrecognizedStrategy> unrecognizedStrategy);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -274,14 +274,14 @@ void LoadFromSource(
     TIntrusivePtr<T>& parameter,
     TSource source,
     const NYPath::TYPath& path,
-    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
+    std::optional<EUnrecognizedStrategy> unrecognizedStrategy)
 {
     if (!parameter) {
         parameter = New<T>();
     }
 
-    if (recursiveUnrecognizedStrategy) {
-        parameter->SetUnrecognizedStrategy(*recursiveUnrecognizedStrategy);
+    if (unrecognizedStrategy) {
+        parameter->SetUnrecognizedStrategy(*unrecognizedStrategy);
     }
 
     parameter->Load(std::move(source), /*postprocess*/ false, /*setDefaults*/ false, path);
@@ -293,9 +293,12 @@ void LoadFromSource(
     T& parameter,
     TSource source,
     const NYPath::TYPath& path,
-    std::optional<EUnrecognizedStrategy> /*ignored*/)
+    std::optional<EUnrecognizedStrategy> unrecognizedStrategy)
 {
     try {
+        if (unrecognizedStrategy) {
+            parameter.SetUnrecognizedStrategy(*unrecognizedStrategy);
+        }
         parameter.Load(std::move(source), /*postprocess*/ false, /*setDefaults*/ false, path);
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error reading parameter %v", path)
@@ -309,31 +312,36 @@ void LoadFromSource(
     T& parameter,
     TSource source,
     const NYPath::TYPath& path,
-    std::optional<EUnrecognizedStrategy> /*ignored*/)
+    std::optional<EUnrecognizedStrategy> unrecognizedStrategy)
 {
     try {
-        Deserialize(parameter, std::move(source), /*postprocess*/ false, /*setDefaults*/ false);
+        Deserialize(parameter, std::move(source), /*postprocess*/ false, /*setDefaults*/ false, unrecognizedStrategy);
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error reading parameter %v", path)
             << ex;
     }
 }
 
-// CYsonStructExtension
-template <CYsonStructSource TSource, CYsonStructFieldFor<TSource> TExtension>
+// CYsonStructField
+// NB(arkady-e1ppa): We check for alias presence in the body so that
+// partially modelled concept does not result in call to Deserialize
+// (which is the default implementation) but hard CE.
+template <CYsonStructSource TSource, CYsonStructLoadableFieldFor<TSource> TExtension>
 void LoadFromSource(
     TExtension& parameter,
     TSource source,
     const NYPath::TYPath& path,
-    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
+    std::optional<EUnrecognizedStrategy> unrecognizedStrategy)
 {
+    static_assert(CYsonStructFieldFor<TExtension, TSource>, "You must add alias TImplementsYsonStructField");
+
     try {
         parameter.Load(
             std::move(source),
             /*postprocess*/ false,
             /*setDefaults*/ false,
             path,
-            recursiveUnrecognizedStrategy);
+            unrecognizedStrategy);
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error loading parameter %v", path)
             << ex;
@@ -346,7 +354,7 @@ void LoadFromSource(
     std::optional<T>& parameter,
     TSource source,
     const NYPath::TYPath& path,
-    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
+    std::optional<EUnrecognizedStrategy> unrecognizedStrategy)
 {
     using TTraits = TYsonSourceTraits<TSource>;
 
@@ -358,12 +366,12 @@ void LoadFromSource(
         }
 
         if (parameter.has_value()) {
-            LoadFromSource(*parameter, std::move(source), path, recursiveUnrecognizedStrategy);
+            LoadFromSource(*parameter, std::move(source), path, unrecognizedStrategy);
             return;
         }
 
         T value;
-        LoadFromSource(value, std::move(source), path, recursiveUnrecognizedStrategy);
+        LoadFromSource(value, std::move(source), path, unrecognizedStrategy);
         parameter = std::move(value);
 
     } catch (const std::exception& ex) {
@@ -378,7 +386,7 @@ void LoadFromSource(
     TVector& parameter,
     TSource source,
     const NYPath::TYPath& path,
-    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
+    std::optional<EUnrecognizedStrategy> unrecognizedStrategy)
 {
     using TTraits = TYsonSourceTraits<TSource>;
 
@@ -391,7 +399,7 @@ void LoadFromSource(
                 vector.emplace_back(),
                 elementSource,
                 path + "/" + NYPath::ToYPathLiteral(index),
-                recursiveUnrecognizedStrategy);
+                unrecognizedStrategy);
             ++index;
         });
     } catch (const std::exception& ex) {
@@ -406,7 +414,7 @@ void LoadFromSource(
     TMap& parameter,
     TSource source,
     const NYPath::TYPath& path,
-    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
+    std::optional<EUnrecognizedStrategy> unrecognizedStrategy)
 {
     using TTraits = TYsonSourceTraits<TSource>;
     // TODO(arkady-e1ppa): Remove "typename" when clang-14 is abolished.
@@ -420,7 +428,7 @@ void LoadFromSource(
                 value,
                 childSource,
                 path + "/" + NYPath::ToYPathLiteral(key),
-                recursiveUnrecognizedStrategy);
+                unrecognizedStrategy);
             map[DeserializeMapKey<TKey>(key)] = std::move(value);
         });
     } catch (const std::exception& ex) {
@@ -746,6 +754,13 @@ void TYsonStructParameter<TValue>::Load(
     const TLoadParameterOptions& options)
 {
     if (node) {
+        auto unrecognizedStrategy = options.RecursiveUnrecognizedRecursively;
+        if (EnforceDefaultUnrecognizedStrategy_) {
+            unrecognizedStrategy.reset();
+        }
+        if (!unrecognizedStrategy) {
+            unrecognizedStrategy = DefaultUnrecognizedStrategy_;
+        }
         if (ResetOnLoad_) {
             NPrivate::ResetOnLoad(FieldAccessor_->GetValue(self));
         }
@@ -753,7 +768,7 @@ void TYsonStructParameter<TValue>::Load(
             FieldAccessor_->GetValue(self),
             std::move(node),
             options.Path,
-            options.RecursiveUnrecognizedRecursively);
+            unrecognizedStrategy);
 
         if (auto* bitmap = self->GetSetFieldsBitmap()) {
             bitmap->Set(FieldIndex_);
@@ -771,6 +786,13 @@ void TYsonStructParameter<TValue>::Load(
     const TLoadParameterOptions& options)
 {
     if (cursor) {
+        auto unrecognizedStrategy = options.RecursiveUnrecognizedRecursively;
+        if (EnforceDefaultUnrecognizedStrategy_) {
+            unrecognizedStrategy.reset();
+        }
+        if (!unrecognizedStrategy) {
+            unrecognizedStrategy = DefaultUnrecognizedStrategy_;
+        }
         if (ResetOnLoad_) {
             NPrivate::ResetOnLoad(FieldAccessor_->GetValue(self));
         }
@@ -778,7 +800,7 @@ void TYsonStructParameter<TValue>::Load(
             FieldAccessor_->GetValue(self),
             cursor,
             options.Path,
-            options.RecursiveUnrecognizedRecursively);
+            unrecognizedStrategy);
 
         if (auto* bitmap = self->GetSetFieldsBitmap()) {
             bitmap->Set(FieldIndex_);
@@ -884,6 +906,20 @@ template <class TValue>
 TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::ResetOnLoad()
 {
     ResetOnLoad_ = true;
+    return *this;
+}
+
+template <class TValue>
+TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::DefaultUnrecognizedStrategy(EUnrecognizedStrategy strategy)
+{
+    DefaultUnrecognizedStrategy_.emplace(strategy);
+    return *this;
+}
+
+template <class TValue>
+TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::EnforceDefaultUnrecognizedStrategy()
+{
+    EnforceDefaultUnrecognizedStrategy_ = true;
     return *this;
 }
 

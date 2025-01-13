@@ -49,6 +49,7 @@ IGraphTransformer::TStatus OptimizeExprEx(const TExprNode::TPtr& input, TExprNod
     TExprContext& ctx, const TOptimizeExprSettings& settings);
 
 IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
+IGraphTransformer::TStatus ExpandApplyNoRepeat(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
 TExprNode::TPtr ApplySyncListToWorld(const TExprNode::TPtr& main, const TSyncMap& syncList, TExprContext& ctx);
 
 typedef std::function<bool (const TExprNode::TPtr&)> TExprVisitPtrFunc;

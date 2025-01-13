@@ -89,7 +89,7 @@ public:
     void Send(THolder<T> ev, ui64 cookie = 0) {
         if (LocalRecipient) {
             LastSentDataTime = TInstant::Now();
-            NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release(), /* flags */ 0, cookie));
+            NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release(), /* flags */ NActors::IEventHandle::FlagTrackDelivery, cookie));
             return;
         }
 
@@ -186,6 +186,9 @@ private:
             THolder<T> ev = MakeHolder<T>();
             ev->Record = Event->Record;
             ev->Record.MutableTransportMeta()->SetConfirmedSeqNo(confirmedSeqNo);
+            for (ui32 i = 0; i < Event->GetPayloadCount(); ++i) {
+                ev->AddPayload(TRope(Event->GetPayload(i)));
+            }
             return MakeHolder<NActors::IEventHandle>(Recipient, Sender, ev.Release(), NActors::IEventHandle::FlagTrackDelivery, Cookie);
         }
 

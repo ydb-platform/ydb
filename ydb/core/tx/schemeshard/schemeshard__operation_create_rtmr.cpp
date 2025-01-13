@@ -64,7 +64,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateRTMR TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 public:
     TConfigureParts(TOperationId id)
@@ -77,7 +77,7 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateRTMR TConfigureParts ProgressState operationId#" << OperationId
+                     "TCreateRTMR TConfigureParts ProgressState operationId# " << OperationId
                      << " at tablet" << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);

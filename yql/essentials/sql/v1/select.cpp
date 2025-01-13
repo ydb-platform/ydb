@@ -124,6 +124,10 @@ public:
                     Node = Y("SingleMember", Y("SqlAccess", Q("dict"), Y("Take", Node, Y("Uint64", Q("1"))), Y("Uint64", Q("0"))));
                 } else {
                     ctx.Error(Pos) << "Source used in expression should contain one concrete column";
+                    if (RefPos) {
+                        ctx.Error(*RefPos) << "Source is used here";
+                    }
+
                     return false;
                 }
             }
@@ -565,6 +569,10 @@ public:
                 Node = Y("SingleMember", Y("SqlAccess", Q("dict"), Y("Take", Node, Y("Uint64", Q("1"))), Y("Uint64", Q("0"))));
             } else {
                 ctx.Error(Pos) << "Source used in expression should contain one concrete column";
+                if (RefPos) {
+                    ctx.Error(*RefPos) << "Source is used here";
+                }
+
                 return false;
             }
         }
@@ -1858,6 +1866,10 @@ public:
     bool IsMissingInProjection(TContext& ctx, const TColumnNode& column) const {
         TString columnName = FullColumnName(column);
         if (Columns.Real.contains(columnName) || Columns.Artificial.contains(columnName)) {
+            return false;
+        }
+
+        if (!ctx.SimpleColumns && Columns.QualifiedAll && !columnName.Contains('.')) {
             return false;
         }
 

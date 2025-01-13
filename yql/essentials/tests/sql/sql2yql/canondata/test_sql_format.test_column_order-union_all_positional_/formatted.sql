@@ -1,7 +1,7 @@
 /* postgres can not */
 /* syntax version 1 */
 PRAGMA PositionalUnionAll;
-PRAGMA warning("disable", "1107");
+PRAGMA warning('disable', '1107');
 
 SELECT
     (1, 1u) AS z,
@@ -11,4 +11,5 @@ UNION ALL
 SELECT
     (1u, 1) AS a,
     (2u, 2) AS b,
-    (3u, 3) AS c;
+    (3u, 3) AS c
+;

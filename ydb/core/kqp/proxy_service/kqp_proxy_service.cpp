@@ -723,6 +723,11 @@ public:
         }
 
         if (sessionInfo) {
+            if (sessionInfo->Closing) {
+                TString error = TStringBuilder() << "Session is closing";
+                ReplyProcessError(Ydb::StatusIds::BAD_SESSION, error, requestId);
+                return;
+            }
             LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery());
         }
 
@@ -784,6 +789,7 @@ public:
         }
 
         if (sessionInfo) {
+            LocalSessions->SetSessionClosing(sessionInfo);
             Send(sessionInfo->WorkerId, ev->Release().Release());
         } else {
             if (!sessionId.empty()) {

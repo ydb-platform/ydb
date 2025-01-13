@@ -84,9 +84,7 @@ icu = NixProject(
         "g:cpp-contrib",
     ],
     arcdir="contrib/libs/icu",
-    nixattr="icu67",
-    # https://github.com/NixOS/nixpkgs/blob/b2f6aa631edc025cb6748133864317983bf5c6d1/pkgs/development/libraries/icu/base.nix#L17-L20
-    nixsrcdir="icu/source",
+    nixattr="icu74",
     put_with={
         "icuio": [
             "icuuc",
@@ -103,6 +101,17 @@ icu = NixProject(
     ],
     disable_includes=[
         "sys/isa_defs.h",
+        "sys/neutrino.h",
+        "ascii_a.h",
+        "cics.h",
+        "mih/testptr.h",
+        "qliept.h",
+        "qusec.h",
+        "qusrjobi.h",
+        "ucln_local_hook.c",
+        "uconfig_local.h",
+        "udbgutil.h",
+        "unistrm.h",
     ],
     # We setup ADDINCL GLOBAL, so we have sinlge "usual" way to include ICU headers by default
     addincl_global={".": {"./include"}},

@@ -26,14 +26,9 @@ private:
                 if (enabled.HasColumnUnit()) {
                     alterEnabled->SetColumnUnit(enabled.GetColumnUnit());
                 }
-                for (const auto& tier : enabled.GetTiers()) {
-                    alterEnabled->AddTiers()->CopyFrom(tier);
-                }
+                *alterEnabled->MutableTiers() = enabled.GetTiers();
             } else if (tableTtl.HasDisabled()) {
                 alterTtl->MutableDisabled();
-            }
-            if (tableTtl.HasUseTiering()) {
-                alterTtl->SetUseTiering(tableTtl.GetUseTiering());
             }
         }
 

@@ -2,6 +2,9 @@
 
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 
+#include <ydb/core/sys_view/auth/users.h>
+#include <ydb/core/sys_view/auth/groups.h>
+#include <ydb/core/sys_view/auth/group_members.h>
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/sys_view/nodes/nodes.h>
@@ -233,8 +236,22 @@ THolder<NActors::IActor> CreateSystemViewScan(
     if (tableId.SysViewInfo == InformationSchemaTablesName) {
         return CreateInformationSchemaTablesScan(ownerId, scanId, tableId, tablePath, tableRange, columns);
     }
-        if (tableId.SysViewInfo == PgClassName) {
+        
+    if (tableId.SysViewInfo == PgClassName) {
         return CreatePgClassScan(ownerId, scanId, tableId, tablePath, tableRange, columns);
+    }
+
+    {
+        using namespace NAuth;
+        if (tableId.SysViewInfo == UsersName) {
+            return CreateUsersScan(ownerId, scanId, tableId, tableRange, columns);
+        }
+        if (tableId.SysViewInfo == NAuth::GroupsName) {
+            return NAuth::CreateGroupsScan(ownerId, scanId, tableId, tableRange, columns);
+        }
+        if (tableId.SysViewInfo == GroupMembersName) {
+            return NAuth::CreateGroupMembersScan(ownerId, scanId, tableId, tableRange, columns);
+        }
     }
 
     return {};

@@ -219,11 +219,11 @@ void ExecJob(int argc, const char** argv, const TInitializeOptions& options)
 
         NDetail::OutputTableCount = static_cast<i64>(outputTableCount);
 
-        THolder<IInputStream> jobStateStream;
+        std::unique_ptr<IInputStream> jobStateStream;
         if (hasState) {
-            jobStateStream = MakeHolder<TIFStream>("jobstate");
+            jobStateStream = std::make_unique<TIFStream>("jobstate");
         } else {
-            jobStateStream = MakeHolder<TBufferStream>(0);
+            jobStateStream = std::make_unique<TBufferStream>(0);
         }
 
         int ret = 1;

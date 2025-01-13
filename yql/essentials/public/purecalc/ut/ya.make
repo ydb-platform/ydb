@@ -11,6 +11,7 @@ SRCS(
     test_udf.cpp
     test_user_data.cpp
     test_eval.cpp
+    test_fatal_err.cpp
     test_pool.cpp
     test_mixed_allocators.cpp
 )

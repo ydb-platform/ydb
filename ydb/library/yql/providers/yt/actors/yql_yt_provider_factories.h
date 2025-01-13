@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file_services.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 

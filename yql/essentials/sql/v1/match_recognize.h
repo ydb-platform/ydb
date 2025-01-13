@@ -10,11 +10,6 @@ struct TNamedFunction {
     TString name;
 };
 
-enum class ERowsPerMatch {
-    OneRow,
-    AllRows
-};
-
 class TMatchRecognizeBuilder: public TSimpleRefCount<TMatchRecognizeBuilder> {
 public:
     TMatchRecognizeBuilder(
@@ -22,7 +17,7 @@ public:
             std::pair<TPosition, TVector<TNamedFunction>>&& partitioners,
             std::pair<TPosition, TVector<TSortSpecificationPtr>>&& sortSpecs,
             std::pair<TPosition, TVector<TNamedFunction>>&& measures,
-            std::pair<TPosition, ERowsPerMatch>&& rowsPerMatch,
+            std::pair<TPosition, NYql::NMatchRecognize::ERowsPerMatch>&& rowsPerMatch,
             std::pair<TPosition, NYql::NMatchRecognize::TAfterMatchSkipTo>&& skipTo,
             std::pair<TPosition, NYql::NMatchRecognize::TRowPattern>&& pattern,
             std::pair<TPosition, TNodePtr>&& subset,
@@ -45,7 +40,7 @@ private:
     std::pair<TPosition, TVector<TNamedFunction>> Partitioners;
     std::pair<TPosition, TVector<TSortSpecificationPtr>> SortSpecs;
     std::pair<TPosition, TVector<TNamedFunction>> Measures;
-    std::pair<TPosition, ERowsPerMatch> RowsPerMatch;
+    std::pair<TPosition, NYql::NMatchRecognize::ERowsPerMatch> RowsPerMatch;
     std::pair<TPosition, NYql::NMatchRecognize::TAfterMatchSkipTo> SkipTo;
     std::pair<TPosition, NYql::NMatchRecognize::TRowPattern> Pattern;
     std::pair<TPosition, TNodePtr> Subset;

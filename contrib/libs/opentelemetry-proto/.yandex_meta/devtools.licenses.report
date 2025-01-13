@@ -33,6 +33,17 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
+KEEP     Apache-2.0           0dce10f8944aa70ebb0aad0f6eb3ad4c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 85.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        opentelemetry/proto/profiles/v1development/profiles.proto [15:29]
+
 KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -55,13 +66,11 @@ BELONGS ya.make
     Files with this license:
         opentelemetry/proto/collector/logs/v1/logs_service.proto [3:13]
         opentelemetry/proto/collector/metrics/v1/metrics_service.proto [3:13]
-        opentelemetry/proto/collector/profiles/v1experimental/profiles_service.proto [3:13]
+        opentelemetry/proto/collector/profiles/v1development/profiles_service.proto [3:13]
         opentelemetry/proto/collector/trace/v1/trace_service.proto [3:13]
         opentelemetry/proto/common/v1/common.proto [3:13]
         opentelemetry/proto/logs/v1/logs.proto [3:13]
         opentelemetry/proto/metrics/v1/metrics.proto [3:13]
-        opentelemetry/proto/profiles/v1experimental/pprofextended.proto [3:13]
-        opentelemetry/proto/profiles/v1experimental/pprofextended.proto [19:29]
-        opentelemetry/proto/profiles/v1experimental/profiles.proto [3:13]
+        opentelemetry/proto/profiles/v1development/profiles.proto [3:13]
         opentelemetry/proto/resource/v1/resource.proto [3:13]
         opentelemetry/proto/trace/v1/trace.proto [3:13]

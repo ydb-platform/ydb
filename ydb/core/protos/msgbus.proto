@@ -704,6 +704,7 @@ message TTestShardControlRequest {
         optional uint32 PatchRequestsFractionPPM = 12;
         optional uint32 PutTraceFractionPPM = 13;
         optional uint32 PutTraceVerbosity = 14 [default = 15];
+        optional uint32 SecondsBeforeLoadStart = 15; // number of seconds to wait before starting load
     }
 
     optional uint64 TabletId = 1;

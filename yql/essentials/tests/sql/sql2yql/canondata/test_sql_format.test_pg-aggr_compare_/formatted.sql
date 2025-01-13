@@ -20,4 +20,5 @@ SELECT
     AsStruct(
         Yql::AggrGreaterOrEqual($a, $b) AS x1, Yql::AggrGreaterOrEqual($b, $a) AS x2, Yql::AggrGreaterOrEqual($b, $b2) AS x3,
         Yql::AggrGreaterOrEqual($a, $n) AS y1, Yql::AggrGreaterOrEqual($n, $a) AS y2, Yql::AggrGreaterOrEqual($n, $n2) AS y3
-    ),;
+    ),
+;

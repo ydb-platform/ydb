@@ -59,8 +59,9 @@ public:
     void AddTransactionId(const TTransactionId& transactionId, bool overwrite = false);
     void AddPath(const TString& path, bool overwrite = false);
     void AddOperationId(const TOperationId& operationId, bool overwrite = false);
-    void AddMutationId();
+    TMutationId AddMutationId();
     bool HasMutationId() const;
+    void SetMutationId(TMutationId mutationId);
 
     void SetToken(const TString& token);
     void SetProxyAddress(const TString& proxyAddress);
@@ -137,7 +138,7 @@ private:
 
 struct TConnection
 {
-    THolder<TSocket> Socket;
+    std::unique_ptr<TSocket> Socket;
     TAtomic Busy = 1;
     TInstant DeadLine;
     ui32 Id;
@@ -205,7 +206,7 @@ private:
     class THttpInputWrapped;
 
 private:
-    THolder<THttpInputWrapped> HttpInput_;
+    std::unique_ptr<THttpInputWrapped> HttpInput_;
 
     const bool Unframe_;
 
@@ -256,10 +257,10 @@ private:
 
     TConnectionPtr Connection_;
 
-    THolder<TRequestStream> RequestStream_;
+    std::unique_ptr<TRequestStream> RequestStream_;
 
-    THolder<TSocketInput> SocketInput_;
-    THolder<THttpResponse> Input_;
+    std::unique_ptr<TSocketInput> SocketInput_;
+    std::unique_ptr<THttpResponse> Input_;
 
     bool LogResponse_ = false;
 };

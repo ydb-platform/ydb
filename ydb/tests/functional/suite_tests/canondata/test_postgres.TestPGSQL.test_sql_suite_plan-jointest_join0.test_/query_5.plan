@@ -98,6 +98,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
+                                                                                        "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                                         "ReadColumns": [
                                                                                             "unique1",
                                                                                             "unique2"
@@ -173,6 +174,7 @@
                                                                                                     {
                                                                                                         "Inputs": [],
                                                                                                         "Name": "TableFullScan",
+                                                                                                        "Path": "/Root/postgres_jointest/join0.test_plan/int8_tbl",
                                                                                                         "ReadColumns": [
                                                                                                             "q1",
                                                                                                             "q2"
@@ -226,6 +228,7 @@
                                                                                                     {
                                                                                                         "Inputs": [],
                                                                                                         "Name": "TableFullScan",
+                                                                                                        "Path": "/Root/postgres_jointest/join0.test_plan/int8_tbl",
                                                                                                         "ReadColumns": [
                                                                                                             "q1",
                                                                                                             "q2"

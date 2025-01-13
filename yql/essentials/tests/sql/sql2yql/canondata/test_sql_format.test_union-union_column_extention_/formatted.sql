@@ -13,4 +13,5 @@ SELECT
 UNION
 SELECT
     1 AS x,
-    'b' AS y;
+    'b' AS y
+;

@@ -63,7 +63,7 @@ public:
             }
 
             TStringStream profileBlob;
-            WriteProfile(&profileBlob, profile);
+            WriteCompressedProfile(&profileBlob, profile);
 
             rsp->SetStatus(EStatusCode::OK);
             WaitFor(rsp->WriteBody(TSharedRef::FromString(profileBlob.Str())))
@@ -176,7 +176,7 @@ public:
 
     NProto::Profile BuildProfile(const TCgiParameters& /*params*/) override
     {
-        return ReadHeapProfile(ProfileType_);
+        return CaptureHeapProfile(ProfileType_);
     }
 
 private:
@@ -198,7 +198,7 @@ public:
 
         auto token = tcmalloc::MallocExtension::StartAllocationProfiling();
         TDelayedExecutor::WaitForDuration(duration);
-        return ConvertAllocationProfile(std::move(token).Stop());
+        return TCMallocProfileToProtoProfile(std::move(token).Stop());
     }
 };
 

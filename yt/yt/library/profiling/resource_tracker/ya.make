@@ -3,6 +3,8 @@ LIBRARY()
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 SRCS(
+    config.cpp
+    GLOBAL configure_resource_tracker.cpp
     resource_tracker.cpp
 )
 

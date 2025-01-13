@@ -4,6 +4,7 @@
 #include <yql/essentials/core/yql_data_provider.h>
 #include <yql/essentials/core/yql_statistics.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 #include <library/cpp/yson/writer.h>
@@ -81,7 +82,7 @@ public:
     virtual void FillSinkSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sinkType) = 0;
     virtual void FillTransformSettings(const TExprNode& node, ::google::protobuf::Any& settings) = 0;
     virtual void Annotate(const TExprNode& node, THashMap<TString, TString>& params) = 0;
-    virtual bool PrepareFullResultTableParams(const TExprNode& root, TExprContext& ctx, THashMap<TString, TString>& params, THashMap<TString, TString>& secureParams) = 0;
+    virtual bool PrepareFullResultTableParams(const TExprNode& root, TExprContext& ctx, THashMap<TString, TString>& params, THashMap<TString, TString>& secureParams, const TMaybe<TColumnOrder>& = {}) = 0;
     virtual void WriteFullResultTableRef(NYson::TYsonWriter& writer, const TVector<TString>& columns, const THashMap<TString, TString>& graphParams) = 0;
 
     // Fill plan operator properties for sources/sinks
@@ -90,6 +91,7 @@ public:
     virtual bool FillSinkPlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) = 0;
     // Called to configure DQ peephole
     virtual void ConfigurePeepholePipeline(bool beforeDqTransforms, const THashMap<TString, TString>& params, TTransformationPipeline* pipeline) = 0;
+    virtual void NotifyDqTimeout() = 0;
 };
 
 std::unordered_set<IDqIntegration*> GetUniqueIntegrations(const TTypeAnnotationContext& typesCtx);

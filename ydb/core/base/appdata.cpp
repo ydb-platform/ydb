@@ -12,12 +12,14 @@
 
 #include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
 #include <ydb/core/tablet_flat/shared_cache_pages.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/data_integrity_trails.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/memory_controller_config.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -67,6 +69,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TMetadataCacheConfig MetadataCacheConfig;
     NKikimrConfig::TMemoryControllerConfig MemoryControllerConfig;
     NKikimrReplication::TReplicationDefaults ReplicationConfig;
+    NKikimrProto::TDataIntegrityTrailsConfig DataIntegrityTrailsConfig;
 };
 
 TAppData::TAppData(
@@ -122,7 +125,9 @@ TAppData::TAppData(
     , MetadataCacheConfig(Impl->MetadataCacheConfig)
     , MemoryControllerConfig(Impl->MemoryControllerConfig)
     , ReplicationConfig(Impl->ReplicationConfig)
+    , DataIntegrityTrailsConfig(Impl->DataIntegrityTrailsConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
+    , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}
 
 TAppData::~TAppData()

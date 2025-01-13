@@ -19,7 +19,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropPQ TDropParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

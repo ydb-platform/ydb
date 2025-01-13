@@ -6355,7 +6355,7 @@ public:
         }
 
         if (!root) {
-            Cerr << "Can't parse SQL for function: " << proc.Name << ", " << results[0].Issues.ToString();
+            //Cerr << "Can't parse SQL for function: " << proc.Name << ", " << results[0].Issues.ToString();
             return;
         }
 

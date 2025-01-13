@@ -28,10 +28,10 @@ namespace NYdb {
             ui64 ReaderIdx;
             bool UseTransactions = false;
             bool UseTopicCommit = false;
-            bool UseTableSelect = true;
-            bool UseTableUpsert = true;
+            bool UseTableSelect = false;
+            bool UseTableUpsert = false;
             bool ReadWithoutConsumer = false;
-            size_t CommitPeriod = 15;
+            size_t CommitPeriodMs = 15'000;
             size_t CommitMessages = 1'000'000;
         };
 

@@ -60,18 +60,10 @@ public:
                 }
                 case NKikimrSchemeOp::TAlterLogin::kRemoveUser: {
                     const auto& removeUser = alterLogin.GetRemoveUser();
-                    const TString& user = removeUser.GetUser();
-                    auto response = context.SS->LoginProvider.RemoveUser({
-                        .User = user,
-                        .MissingOk = removeUser.GetMissingOk()
-                    });
+                    auto response = RemoveUser(context, removeUser, db);
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
-                        db.Table<Schema::LoginSids>().Key(user).Delete();
-                        for (const TString& group : response.TouchedGroups) {
-                            db.Table<Schema::LoginSidMembers>().Key(group, user).Delete();
-                        }
                         result->SetStatus(NKikimrScheme::StatusSuccess);
                     }
                     break;
@@ -94,7 +86,7 @@ public:
                     auto response = context.SS->LoginProvider.AddGroupMembership({
                         .Group = addGroupMembership.GetGroup(),
                         .Member = addGroupMembership.GetMember()
-                        });
+                    });
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
@@ -111,7 +103,7 @@ public:
                     auto response = context.SS->LoginProvider.RemoveGroupMembership({
                         .Group = removeGroupMembership.GetGroup(),
                         .Member = removeGroupMembership.GetMember()
-                        });
+                    });
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
@@ -191,6 +183,64 @@ public:
 
     void AbortUnsafe(TTxId, TOperationContext&) override {
         Y_ABORT("no AbortUnsafe for TAlterLogin");
+    }
+
+    NLogin::TLoginProvider::TBasicResponse RemoveUser(TOperationContext& context, const NKikimrSchemeOp::TLoginRemoveUser& removeUser, NIceDb::TNiceDb& db) {
+        const TString& user = removeUser.GetUser();
+
+        if (!context.SS->LoginProvider.CheckUserExists(user)) {
+            if (removeUser.GetMissingOk()) {
+                return {}; // success
+            }
+            return {.Error = "User not found"};
+        }
+
+        auto subTree = context.SS->ListSubTree(context.SS->RootPathId(), context.Ctx);
+        for (auto pathId : subTree) {
+            TPathElement::TPtr path = context.SS->PathsById.at(pathId);
+            if (path->Owner == user) {
+                auto pathStr = TPath::Init(pathId, context.SS).PathString();
+                return {.Error = TStringBuilder() << 
+                    "User " << user << " owns " << pathStr << " and can't be removed"};
+            }
+        }
+
+        auto removeUserResponse = context.SS->LoginProvider.RemoveUser(user);
+        if (removeUserResponse.Error) {
+            return removeUserResponse;
+        }
+
+        for (auto pathId : subTree) {
+            TPathElement::TPtr path = context.SS->PathsById.at(pathId);
+            NACLib::TACL acl(path->ACL);
+            if (acl.TryRemoveAccess(user)) {
+                ++path->ACLVersion;
+                path->ACL = acl.SerializeAsString();
+                context.SS->PersistACL(db, path);
+                if (!path->IsPQGroup()) {
+                    const auto parent = context.SS->PathsById.at(path->ParentPathId);
+                    ++parent->DirAlterVersion;
+                    context.SS->PersistPathDirAlterVersion(db, parent);
+                    context.SS->ClearDescribePathCaches(parent);
+                    context.OnComplete.PublishToSchemeBoard(OperationId, parent->PathId);
+                }
+            }
+            NACLib::TACL effectiveACL(path->CachedEffectiveACL.GetForSelf());
+            if (effectiveACL.HasAccess(user)) {
+                // publish paths from which the user's access is being removed
+                // user access could have been granted directly (ACL, handled by `acl.TryRemoveAccess(user)` above)
+                // or it might have been inherited from a parent (effective ACL)
+                context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
+            }
+        }
+
+        context.OnComplete.UpdateTenants(std::move(subTree));
+        db.Table<Schema::LoginSids>().Key(user).Delete();
+        for (const TString& group : removeUserResponse.TouchedGroups) {
+            db.Table<Schema::LoginSidMembers>().Key(group, user).Delete();
+        }
+        
+        return {}; // success
     }
 };
 

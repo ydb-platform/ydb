@@ -203,6 +203,10 @@ Y_UNIT_TEST_SUITE(TTypeString)
                "(CallableType '() '((DataType 'Double)) "
                     "'((DataType 'Int32) 'x '1)"
                ")");
+        TestOk("(x:Int32{Flags: AutoMap | NoYield})->Double",
+               "(CallableType '() '((DataType 'Double)) "
+                    "'((DataType 'Int32) 'x '3)"
+               ")");
     }
 
     Y_UNIT_TEST(ParseCallableWithPayload) {

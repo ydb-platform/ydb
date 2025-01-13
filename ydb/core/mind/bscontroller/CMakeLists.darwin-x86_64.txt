@@ -67,6 +67,7 @@ target_sources(core-mind-bscontroller PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/register_node.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/request_controller_info.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/scrub.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/shred.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/select_groups.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/self_heal.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/stat_processor.cpp

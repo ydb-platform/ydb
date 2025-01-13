@@ -27,6 +27,7 @@ public:
         bool SmallDisk = false;
         bool SuppressCompatibilityCheck = false;
         TAutoPtr<TLogBackend> LogBackend = nullptr;
+        bool ReadOnly = false;
         bool InitiallyZeroed = false; // Only for sector map. Zero first 1MiB on start.
     };
 
@@ -59,7 +60,7 @@ public:
             TestCtx.SectorMap->ZeroInit(1_MB / NPDisk::NSectorMap::SECTOR_SIZE);
         }
 
-        if (!Settings.InitiallyZeroed) {
+        if (!Settings.InitiallyZeroed && !Settings.ReadOnly) {
             if (Settings.DiskSize) {
                 FormatPDiskForTest(path, formatGuid, Settings.ChunkSize, Settings.DiskSize, false, TestCtx.SectorMap, Settings.SmallDisk);
             } else {
@@ -76,6 +77,7 @@ public:
         pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
         pDiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(Settings.SmallDisk);
         pDiskConfig->FeatureFlags.SetSuppressCompatibilityCheck(Settings.SuppressCompatibilityCheck);
+        pDiskConfig->ReadOnly = Settings.ReadOnly;
         return pDiskConfig;
     }
 
@@ -202,7 +204,7 @@ public:
         THolder<TRes> evRes = Recv<TRes>();
 
         if (status.has_value()) {
-            UNIT_ASSERT_C(evRes->Status == status.value(), evRes->ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(evRes->Status, status.value(), evRes->ToString());
         }
 
         UNIT_ASSERT(evRes->Status == NKikimrProto::OK || !evRes->ErrorReason.empty());
@@ -261,6 +263,7 @@ struct TVDiskMock {
         const auto evInitRes = TestCtx->TestResponse<NPDisk::TEvYardInitResult>(
                 new NPDisk::TEvYardInit(OwnerRound.fetch_add(1), VDiskID, TestCtx->TestCtx.PDiskGuid),
                 NKikimrProto::OK);
+
         PDiskParams = evInitRes->PDiskParams;
 
         TSet<TChunkIdx> commited = Chunks[EChunkState::COMMITTED];

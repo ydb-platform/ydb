@@ -177,6 +177,10 @@ public:
 
     TIntrusivePtr<TPDiskConfig> Cfg;
     TInstant CreationTime;
+    // Last chunk and sector indexes we have seen on initial log read.
+    // Used to limit log reading in read-only mode.
+    ui32 LastInitialChunkIdx;
+    ui64 LastInitialSectorIdx;
 
     ui64 ExpectedSlotCount = 0; // Number of slots to use for space limit calculation.
 
@@ -320,7 +324,7 @@ public:
             TString textMessage, const bool isErasureEncodeUserLog, const bool trimEntireDevice);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Owner initialization
-    void ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str);
+    void ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str, NKikimrProto::EReplyStatus status = NKikimrProto::ERROR);
     TOwner FindNextOwnerId();
     bool YardInitStart(TYardInit &evYardInit);
     void YardInitFinish(TYardInit &evYardInit);
@@ -389,6 +393,7 @@ private:
     void AddCbs(ui32 ownerId, EGate gate, const char *gateName, ui64 minBudget);
     void AddCbsSet(ui32 ownerId);
     void UpdateMinLogCostNs();
+    bool HandleReadOnlyIfWrite(TRequestBase *request);
 };
 
 void ParsePayloadFromSectorOffset(const TDiskFormat& format, ui64 firstSector, ui64 lastSector, ui64 currentSector,

@@ -147,6 +147,15 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
                 }
             }
         }
+        if (!PDiskRestartInFlight.empty()) {
+            DIV() {
+                out << "PDiskRestartInFlight# [";
+                for (const auto& item : PDiskRestartInFlight) {
+                    out << "pdiskId:" << item.first << " -> needsAnotherRestart: " << item.second << ", ";
+                }
+                out << "]";
+            }
+        }
 
         TAG(TH3) { out << "VDisks"; }
         TABLE_CLASS("table oddgray") {

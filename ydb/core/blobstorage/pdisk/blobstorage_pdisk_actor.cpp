@@ -376,13 +376,21 @@ public:
                         TActorId pDiskActor = std::get<2>(*params);
                         delete params;
 
+                        TPDiskConfig *cfg = actor->Cfg.Get();
+
+                        if (cfg->ReadOnly) {
+                        TString readOnlyError = "PDisk is in read-only mode";
+                            LOG_ERROR_S(*actorSystem, NKikimrServices::BS_PDISK, "Formatting error, " << readOnlyError);
+                            actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(false, readOnlyError));
+                            return nullptr;
+                        }
+
                         NPDisk::TKey chunkKey;
                         NPDisk::TKey logKey;
                         NPDisk::TKey sysLogKey;
                         EntropyPool().Read(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
                         EntropyPool().Read(&logKey, sizeof(NKikimr::NPDisk::TKey));
                         EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
-                        TPDiskConfig *cfg = actor->Cfg.Get();
 
                         try {
                             try {
@@ -447,6 +455,13 @@ public:
                 const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
                 NActors::TActorSystem* actorSystem = std::get<3>(*params);
                 TActorId pdiskActor = std::get<4>(*params);
+
+                if (cfg->ReadOnly) {
+                    TString readOnlyError = "PDisk is in read-only mode";
+                    LOG_ERROR_S(*actorSystem, NKikimrServices::BS_PDISK, "Formatting error, " << readOnlyError);
+                    actorSystem->Send(pdiskActor, new TEvPDiskFormattingFinished(false, readOnlyError));
+                    return nullptr;
+                }
 
                 THolder<NPDisk::TPDisk> pDisk(new NPDisk::TPDisk(cfg, counters));
 

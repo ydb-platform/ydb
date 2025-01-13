@@ -25,18 +25,20 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
             TABLEBODY() {
                 TABLER() {
                     TABLED() {str << "PDisk";}
+                    TString stateStr = TStringBuilder() << TPDiskMon::TPDisk::StateToStr(Mon.PDiskState->Val()) << (Cfg->ReadOnly ? " (readonly)" : "");
+                    TString briefStateStr = TPDiskMon::TPDisk::BriefStateToStr(Mon.PDiskBriefState->Val());
                     switch(Mon.PDiskBriefState->Val()) {
                     case TPDiskMon::TPDisk::OK:
-                        TABLED() {GREEN_TEXT(str, TPDiskMon::TPDisk::StateToStr(Mon.PDiskState->Val()));}
-                        TABLED() {GREEN_TEXT(str, TPDiskMon::TPDisk::BriefStateToStr(Mon.PDiskBriefState->Val()));}
+                        TABLED() {GREEN_TEXT(str, stateStr);}
+                        TABLED() {GREEN_TEXT(str, briefStateStr);}
                         break;
                     case TPDiskMon::TPDisk::Booting:
-                        TABLED() {YELLOW_TEXT(str, TPDiskMon::TPDisk::StateToStr(Mon.PDiskState->Val()));}
-                        TABLED() {YELLOW_TEXT(str, TPDiskMon::TPDisk::BriefStateToStr(Mon.PDiskBriefState->Val()));}
+                        TABLED() {YELLOW_TEXT(str, stateStr);}
+                        TABLED() {YELLOW_TEXT(str, briefStateStr);}
                         break;
                     case TPDiskMon::TPDisk::Error:
-                        TABLED() {RED_TEXT(str, TPDiskMon::TPDisk::StateToStr(Mon.PDiskState->Val()));}
-                        TABLED() {RED_TEXT(str, TPDiskMon::TPDisk::BriefStateToStr(Mon.PDiskBriefState->Val()));}
+                        TABLED() {RED_TEXT(str, stateStr);}
+                        TABLED() {RED_TEXT(str, briefStateStr);}
                         break;
                     }
                     TABLED() {str << TPDiskMon::TPDisk::DetailedStateToStr(Mon.PDiskDetailedState->Val());}

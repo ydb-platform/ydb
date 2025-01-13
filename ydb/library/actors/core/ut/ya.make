@@ -19,6 +19,7 @@ PEERDIR(
 )
 
 SRCS(
+    actor_basic_ut.cpp
     actor_coroutine_ut.cpp
     benchmark_ut.cpp
     actor_ut.cpp

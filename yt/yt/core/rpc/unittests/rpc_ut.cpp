@@ -77,7 +77,7 @@ TYPED_TEST(TRpcTest, RetryingSend)
 {
     auto config = New<TRetryingChannelConfig>();
     config->Load(ConvertTo<INodePtr>(TYsonString(TStringBuf(
-        "{retry_backoff_time=10}"))));
+        "{enable_exponential_retry_backoffs=true;retry_backoff={min_backoff=10}}"))));
 
     IChannelPtr channel = CreateRetryingChannel(
         std::move(config),
@@ -129,7 +129,7 @@ TYPED_TEST(TNotUdsTest, Address)
     {
         auto config = New<TRetryingChannelConfig>();
         config->Load(ConvertTo<INodePtr>(TYsonString(TStringBuf(
-            "{retry_backoff_time=10}"))));
+            "{enable_exponential_retry_backoffs=true;retry_backoff={min_backoff=10}}"))));
         testChannel(CreateRetryingChannel(
             std::move(config),
             this->CreateChannel()));

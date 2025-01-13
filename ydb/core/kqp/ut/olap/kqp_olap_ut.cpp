@@ -2949,7 +2949,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        Tests::NCommon::TLoggerInit(kikimr)
+            .SetComponents({ NKikimrServices::TX_COLUMNSHARD_WRITE, NKikimrServices::TX_COLUMNSHARD }, "CS")
+            .SetPriority(NActors::NLog::PRI_DEBUG)
+            .Initialize();
 
         TLocalHelper(kikimr).CreateTestOlapTables();
 

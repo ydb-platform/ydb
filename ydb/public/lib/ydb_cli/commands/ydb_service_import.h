@@ -38,7 +38,8 @@ private:
     TString Description;
     ui32 NumberOfRetries = 10;
     bool UseVirtualAddressing = true;
-    bool NoACL = true;
+    bool NoACL = false;
+    bool SkipChecksumValidation = false;
 };
 
 class TCommandImportFromFile : public TClientCommandTree {

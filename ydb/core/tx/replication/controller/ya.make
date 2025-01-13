@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/util
     ydb/core/ydb_convert
     ydb/services/metadata
+    yql/essentials/public/issue
     library/cpp/json
 )
 

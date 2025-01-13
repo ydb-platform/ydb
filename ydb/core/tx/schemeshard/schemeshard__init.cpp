@@ -4433,6 +4433,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         item.Permissions = permissions;
                     }
 
+                    if (rowset.HaveValue<Schema::ImportItems::Metadata>()) {
+                        item.Metadata = NBackup::TMetadata::Deserialize(rowset.GetValue<Schema::ImportItems::Metadata>());
+                    }
+
                     item.State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::ImportItems::State>());
                     item.WaitTxId = rowset.GetValueOrDefault<Schema::ImportItems::WaitTxId>(InvalidTxId);
                     item.NextIndexIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextIndexIdx>(0);

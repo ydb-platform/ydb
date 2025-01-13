@@ -62,8 +62,8 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             operation->OnWriteFinish(txc, {}, true);
         } else {
             operation->OnWriteFinish(txc, InsertWriteIds, false);
+            Self->OperationsManager->LinkInsertWriteIdToOperationWriteId(InsertWriteIds, operation->GetWriteId());
         }
-        Self->OperationsManager->LinkInsertWriteIdToOperationWriteId(InsertWriteIds, operation->GetWriteId());
         if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());

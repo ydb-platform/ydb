@@ -10,7 +10,6 @@ def post_install(self):
             boost.make_arcdir("any"),
             boost.make_arcdir("asio"),
             boost.make_arcdir("crc"),
-            boost.make_arcdir("format"),
             boost.make_arcdir("math"),
         ]
 

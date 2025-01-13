@@ -21,7 +21,7 @@ TS3BufferRaw::TS3BufferRaw(const TTagToColumn& columns, ui64 rowsLimit, ui64 byt
     , BytesLimit(bytesLimit)
     , Rows(0)
     , BytesRead(0)
-    , Checksum(enableChecksums ? CreateExportChecksum() : nullptr)
+    , Checksum(enableChecksums ? NBackup::CreateChecksum() : nullptr)
 {
 }
 

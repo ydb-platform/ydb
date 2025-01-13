@@ -69,8 +69,8 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedImmediate(const ui64 
         return EOverloadStatus::Disk;
     }
     ui64 txLimit = Settings.OverloadTxInFlight;
-    ui64 writesLimit = Settings.OverloadWritesInFlight;
-    ui64 writesSizeLimit = Settings.OverloadWritesSizeInFlight;
+    const ui64 writesLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestsCountLimit() : 1000;
+    const ui64 writesSizeLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestBytesLimit() : (((ui64)128) << 20);
     if (txLimit && Executor()->GetStats().TxInFly > txLimit) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "shard_overload")("reason", "tx_in_fly")("sum", Executor()->GetStats().TxInFly)(
             "limit", txLimit);
@@ -152,8 +152,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
                 auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, errCode);
                 ctx.Send(writeMeta.GetSource(), result.release());
             } else {
-                auto operation = OperationsManager->GetOperation((TOperationWriteId)writeMeta.GetWriteId());
-                Y_ABORT_UNLESS(operation);
+                auto operation = OperationsManager->GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
                 auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), operation->GetLockId(),
                     ev->Get()->GetWriteResultStatus(), ev->Get()->GetErrorMessage() ? ev->Get()->GetErrorMessage() : "put data fails");
                 ctx.Send(writeMeta.GetSource(), result.release(), 0, operation->GetCookie());
@@ -316,18 +315,28 @@ public:
         LockId = lock.GetLockId();
         SendingShards = std::set<ui64>(locks.GetSendingShards().begin(), locks.GetSendingShards().end());
         ReceivingShards = std::set<ui64>(locks.GetReceivingShards().begin(), locks.GetReceivingShards().end());
-        const bool singleShardTx = SendingShards.empty() && ReceivingShards.empty();
-        if (!singleShardTx) {
+        if (SendingShards.empty() != ReceivingShards.empty()) {
+            return TConclusionStatus::Fail("incorrect synchronization data (send/receiving lists)");
+        }
+        if (ReceivingShards.size() && SendingShards.size()) {
             if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
-                return TConclusionStatus::Fail("shard is absent in sending and receiving lists");
+                return TConclusionStatus::Fail("current tablet_id is absent in sending and receiving lists");
             }
-            if (locks.HasArbiterColumnShard()) {
-                ArbiterColumnShard = locks.GetArbiterColumnShard();
-            } else {
-                AFL_VERIFY(!ReceivingShards.empty());
-                ArbiterColumnShard = *ReceivingShards.begin();
+            if (!locks.HasArbiterColumnShard()) {
+                return TConclusionStatus::Fail("no arbiter info in request");
             }
-            AFL_VERIFY(ArbiterColumnShard);
+            ArbiterColumnShard = locks.GetArbiterColumnShard();
+
+            if (IsPrimary() && !ReceivingShards.contains(ArbiterColumnShard)) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect arbiter")("arbiter_id", ArbiterColumnShard)(
+                    "receiving", JoinSeq(", ", ReceivingShards))("sending", JoinSeq(", ", SendingShards));
+                return TConclusionStatus::Fail("arbiter is absent in receiving lists");
+            }
+            if (!IsPrimary() && (!ReceivingShards.contains(ArbiterColumnShard) || !SendingShards.contains(ArbiterColumnShard))) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect arbiter")("arbiter_id", ArbiterColumnShard)(
+                    "receiving", JoinSeq(", ", ReceivingShards))("sending", JoinSeq(", ", SendingShards));
+                return TConclusionStatus::Fail("arbiter is absent in sending or receiving lists");
+            }
         }
 
         Generation = lock.GetGeneration();

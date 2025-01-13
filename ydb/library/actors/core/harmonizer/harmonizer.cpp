@@ -50,7 +50,7 @@ private:
     std::atomic<float> MaxElapsedCpu = 0;
     std::atomic<float> MinElapsedCpu = 0;
 
-    TSharedExecutorPool* Shared = nullptr;
+    ISharedPool* Shared = nullptr;
     TSharedInfo SharedInfo;
 
     TWaitingInfo WaitingInfo;
@@ -77,7 +77,7 @@ public:
     void Enable(bool enable) override;
     TPoolHarmonizerStats GetPoolStats(i16 poolId) const override;
     THarmonizerStats GetStats() const override;
-    void SetSharedPool(TSharedExecutorPool* pool) override;
+    void SetSharedPool(ISharedPool* pool) override;
 };
 
 THarmonizer::THarmonizer(ui64 ts) {
@@ -358,7 +358,7 @@ void THarmonizer::AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo) {
     poolInfo.MinFullThreadCount = pool->GetMinFullThreadCount();
     poolInfo.MaxFullThreadCount = pool->GetMaxFullThreadCount();
     poolInfo.ThreadInfo.resize(poolInfo.MaxFullThreadCount);
-    poolInfo.SharedInfo.resize(Shared ? Shared->GetThreads() : 0);
+    poolInfo.SharedInfo.resize(Shared ? Shared->GetSharedThreadCount() : 0);
     poolInfo.Priority = pool->GetPriority();
     pool->SetFullThreadCount(poolInfo.DefaultFullThreadCount);
     if (pingInfo) {
@@ -421,7 +421,7 @@ THarmonizerStats THarmonizer::GetStats() const {
     };
 }
 
-void THarmonizer::SetSharedPool(TSharedExecutorPool* pool) {
+void THarmonizer::SetSharedPool(ISharedPool* pool) {
     Shared = pool;
 }
 

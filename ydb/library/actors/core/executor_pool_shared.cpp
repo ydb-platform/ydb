@@ -594,4 +594,8 @@ namespace NActors {
             threadOwners[i] = Threads[i].OwnerPoolId;
         }
     }
+
+    i16 TSharedExecutorPool::GetSharedThreadCount() const {
+        return PoolThreads;
+    }
 }

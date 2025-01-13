@@ -56,6 +56,7 @@ namespace NActors {
         virtual void FillThreadOwners(std::vector<i16>& threadOwners) const = 0;
         virtual void FillForeignThreadsAllowed(std::vector<i16>& foreignThreadsAllowed) const = 0;
         virtual void FillOwnedThreads(std::vector<i16>& ownedThreads) const = 0;
+        virtual i16 GetSharedThreadCount() const = 0;
     };
 
     class TSharedExecutorPool: public TExecutorPoolBaseMailboxed, public ISharedPool {
@@ -151,6 +152,7 @@ namespace NActors {
         float GetDefaultThreadCount() const override;
         float GetMinThreadCount() const override;
         float GetMaxThreadCount() const override;
+        i16 GetSharedThreadCount() const override;
 
         bool WakeUpLocalThreads(i16 poolId);
         bool WakeUpGlobalThreads(i16 poolId);

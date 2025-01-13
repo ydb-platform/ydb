@@ -427,7 +427,7 @@ namespace NActors {
         NProfiling::TMemoryTagScope::Reset(0);
         TlsActivationContext = nullptr;
         if (mailbox->IsEmpty() && drained) {
-            Ctx.MailboxCache[CurrentPoolId].Free(mailbox);
+            Ctx.MailboxCache.Free(mailbox);
         } else {
             mailbox->Unlock(Ctx.Executor, hpnow, RevolvingWriteCounter);
         }

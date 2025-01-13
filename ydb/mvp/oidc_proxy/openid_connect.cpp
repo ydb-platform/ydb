@@ -9,7 +9,6 @@
 #include <openssl/sha.h>
 #include <util/random/random.h>
 #include <util/string/builder.h>
-#include <util/string/hex.h>
 
 namespace NMVP::NOIDC {
 
@@ -104,18 +103,6 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
     return request->CreateResponse("302", "Authorization required", responseHeaders);
 }
 
-TString CreateNameYdbOidcCookie(TStringBuf key, TStringBuf state) {
-    return TOpenIdConnectSettings::YDB_OIDC_COOKIE + "_" + HexEncode(HmacSHA256(key, state));
-}
-
-TString CreateNameSessionCookie(TStringBuf key) {
-    return "__Host_" + TOpenIdConnectSettings::SESSION_COOKIE + "_" + HexEncode(key);
-}
-
-TString CreateNameImpersonatedCookie(TStringBuf key) {
-    return "__Host_" + TOpenIdConnectSettings::IMPERSONATED_COOKIE + "_" + HexEncode(key);
-}
-
 const TString& GetAuthCallbackUrl() {
     static const TString callbackUrl = "/auth/callback";
     return callbackUrl;
@@ -124,7 +111,7 @@ const TString& GetAuthCallbackUrl() {
 TString CreateSecureCookie(const TString& name, const TString& value) {
     TStringBuilder cookieBuilder;
     cookieBuilder << name << "=" << value
-            << "; Path=/; Secure; HttpOnly; SameSite=None; Partitioned";
+            << "; Path=/; Secure; HttpOnly; SameSite=None; Partitioned; Max-Age=86400";
     return cookieBuilder;
 }
 

@@ -28,9 +28,9 @@ void THandlerImpersonateStart::Bootstrap() {
     NHttp::THeaders headers(Request->Headers);
     NHttp::TCookies cookies(headers.Get("Cookie"));
 
-    TStringBuf sessionCookieValue = GetCookie(cookies, CreateNameSessionCookie(Settings.ClientId));
+    TStringBuf sessionCookieValue = GetCookie(cookies, Settings.CreateNameSessionCookie());
     TString sessionToken = DecodeToken(sessionCookieValue);
-    TStringBuf impersonatedCookieValue = GetCookie(cookies, CreateNameImpersonatedCookie(Settings.ClientId));
+    TStringBuf impersonatedCookieValue = GetCookie(cookies, Settings.CreateNameImpersonatedCookie());
 
     if (sessionToken.empty()) {
         return ReplyBadRequestAndPassAway("Wrong impersonate parameter: session cookie not found");
@@ -67,7 +67,7 @@ void THandlerImpersonateStart::RequestImpersonatedToken(TString& sessionToken, T
 }
 
 void THandlerImpersonateStart::ProcessImpersonatedToken(const TString& impersonatedToken) {
-    TString impersonatedCookieName = CreateNameImpersonatedCookie(Settings.ClientId);
+    TString impersonatedCookieName = Settings.CreateNameImpersonatedCookie();
     TString impersonatedCookieValue = Base64Encode(impersonatedToken);
     BLOG_D("Set impersonated cookie: (" << impersonatedCookieName << ": " << NKikimr::MaskTicket(impersonatedCookieValue) << ")");
 

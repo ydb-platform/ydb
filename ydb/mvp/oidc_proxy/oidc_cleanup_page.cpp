@@ -7,12 +7,10 @@ namespace NMVP::NOIDC {
 THandlerCleanup::THandlerCleanup(const NActors::TActorId& sender,
                                  const NHttp::THttpIncomingRequestPtr& request,
                                  const NActors::TActorId& httpProxyId,
-                                 const TOpenIdConnectSettings& settings,
                                  const TString& cookieName)
     : Sender(sender)
     , Request(request)
     , HttpProxyId(httpProxyId)
-    , Settings(settings)
     , CookieName(cookieName)
 {}
 
@@ -38,7 +36,7 @@ TCleanupPageHandler::TCleanupPageHandler(const NActors::TActorId& httpProxyId, c
 {}
 
 void TCleanupPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event) {
-    Register(new THandlerCleanup(event->Sender, event->Get()->Request, HttpProxyId, Settings, CreateNameSessionCookie(Settings.ClientId)));
+    Register(new THandlerCleanup(event->Sender, event->Get()->Request, HttpProxyId, Settings.CreateNameSessionCookie()));
 }
 
 } // NMVP::NOIDC

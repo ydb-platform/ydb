@@ -34,7 +34,7 @@ void THandlerSessionCreateNebius::RequestSessionToken(const TString& code) {
 }
 
 void THandlerSessionCreateNebius::ProcessSessionToken(const TString& sessionToken, const NActors::TActorContext& ) {
-    TString sessionCookieName = CreateNameSessionCookie(Settings.ClientId);
+    TString sessionCookieName = Settings.CreateNameSessionCookie();
     TString sessionCookieValue = Base64Encode(sessionToken);
     BLOG_D("Set session cookie: (" << sessionCookieName << ": " << NKikimr::MaskTicket(sessionCookieValue) << ")");
 

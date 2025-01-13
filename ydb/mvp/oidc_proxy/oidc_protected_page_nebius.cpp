@@ -21,8 +21,8 @@ void THandlerSessionServiceCheckNebius::StartOidcProcess(const NActors::TActorCo
     BLOG_D("Start OIDC process");
 
     NHttp::TCookies cookies(headers.Get("Cookie"));
-    TStringBuf sessionCookieValue = GetCookie(cookies, CreateNameSessionCookie(Settings.ClientId));
-    TStringBuf impersonatedCookieValue = GetCookie(cookies, CreateNameImpersonatedCookie(Settings.ClientId));
+    TStringBuf sessionCookieValue = GetCookie(cookies, Settings.CreateNameSessionCookie());
+    TStringBuf impersonatedCookieValue = GetCookie(cookies, Settings.CreateNameImpersonatedCookie());
 
     TString sessionToken = DecodeToken(sessionCookieValue);
     if (sessionToken) {
@@ -114,7 +114,7 @@ void THandlerSessionServiceCheckNebius::ExchangeImpersonatedToken(const TString&
 }
 
 void THandlerSessionServiceCheckNebius::ClearImpersonatedCookie() {
-    TString impersonatedCookieName = CreateNameImpersonatedCookie(Settings.ClientId);
+    TString impersonatedCookieName = Settings.CreateNameImpersonatedCookie();
     BLOG_D("Clear impersonated cookie (" << impersonatedCookieName << ") and retry");
     NHttp::THeadersBuilder responseHeaders;
     SetCORS(Request, &responseHeaders);

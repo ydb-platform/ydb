@@ -397,7 +397,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
                                 "Host: oidcproxy.net\r\n"
                                 "Cookie: yc_session=allowed_session_cookie;"
-                                + CreateNameSessionCookie(settings.ClientId) + "=" + Base64Encode("session_cookie") + "\r\n\r\n");
+                                + settings.CreateNameSessionCookie() + "=" + Base64Encode("session_cookie") + "\r\n\r\n");
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
         TAutoPtr<IEventHandle> handle;
 
@@ -1157,7 +1157,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /impersonate/start?service_account_id=serviceaccount-e0tydb-dev HTTP/1.1\r\n"
                 << "Host: " + hostProxy + "\r\n"
-                << "Cookie: " << CreateNameSessionCookie(settings.ClientId) + "=" + Base64Encode("session_cookie") + "\r\n\r\n";
+                << "Cookie: " << settings.CreateNameSessionCookie() + "=" + Base64Encode("session_cookie") + "\r\n\r\n";
 
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, request);
@@ -1182,7 +1182,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const NHttp::THeaders impersonatePageHeaders(outgoingResponseEv->Response->Headers);
         UNIT_ASSERT(impersonatePageHeaders.Has("Set-Cookie"));
         TStringBuf impersonatedCookie = impersonatePageHeaders.Get("Set-Cookie");
-        TString expectedCookie = CreateSecureCookie(CreateNameImpersonatedCookie(settings.ClientId), Base64Encode("impersonation_token"));
+        TString expectedCookie = CreateSecureCookie(settings.CreateNameImpersonatedCookie(), Base64Encode("impersonation_token"));
         UNIT_ASSERT_STRINGS_EQUAL(impersonatedCookie, expectedCookie);
     }
 
@@ -1213,7 +1213,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /impersonate/start HTTP/1.1\r\n"
                 << "Host: " + hostProxy + "\r\n"
-                << "Cookie: " << CreateNameSessionCookie(settings.ClientId) + "=" + Base64Encode("session_cookie") + "\r\n\r\n";
+                << "Cookie: " << settings.CreateNameSessionCookie() + "=" + Base64Encode("session_cookie") + "\r\n\r\n";
 
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, request);
@@ -1254,7 +1254,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /impersonate/start HTTP/1.1\r\n"
                 << "Host: " + hostProxy + "\r\n"
-                << "Cookie: " << CreateNameImpersonatedCookie(settings.ClientId) + "=" + Base64Encode("impersonated_cookie") + "\r\n\r\n";
+                << "Cookie: " << settings.CreateNameImpersonatedCookie() + "=" + Base64Encode("impersonated_cookie") + "\r\n\r\n";
 
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, request);
@@ -1267,7 +1267,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const NHttp::THeaders impersonatePageHeaders(outgoingResponseEv->Response->Headers);
         UNIT_ASSERT(impersonatePageHeaders.Has("Set-Cookie"));
         TStringBuf impersonatedCookie = impersonatePageHeaders.Get("Set-Cookie");
-        TString expectedCookie = ClearSecureCookie(CreateNameImpersonatedCookie(settings.ClientId));
+        TString expectedCookie = ClearSecureCookie(settings.CreateNameImpersonatedCookie());
         UNIT_ASSERT_STRINGS_EQUAL(impersonatedCookie, expectedCookie);
     }
 
@@ -1301,8 +1301,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         request << "GET " << protectedPage << " HTTP/1.1\r\n"
                 << "Host: " << hostProxy << "\r\n"
                 << "Referer: https://" << hostProxy << protectedPage << "\r\n"
-                << "Cookie: " << CreateNameSessionCookie(settings.ClientId) << "=" << Base64Encode("session_cookie") << "; "
-                << CreateNameImpersonatedCookie(settings.ClientId) << "=" << Base64Encode("impersonated_cookie") << "\r\n\r\n";
+                << "Cookie: " << settings.CreateNameSessionCookie() << "=" << Base64Encode("session_cookie") << "; "
+                << settings.CreateNameImpersonatedCookie() << "=" << Base64Encode("impersonated_cookie") << "\r\n\r\n";
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, request);
         incomingRequest->Endpoint->Secure = true;
@@ -1370,8 +1370,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         request << "GET " << protectedPage << " HTTP/1.1\r\n"
                 << "Host: " << hostProxy << "\r\n"
                 << "Referer: https://" << hostProxy << protectedPage << "\r\n"
-                << "Cookie: " << CreateNameSessionCookie(settings.ClientId) << "=" << Base64Encode("session_cookie") << "; "
-                << CreateNameImpersonatedCookie(settings.ClientId) << "=" << Base64Encode("impersonated_cookie") << "\r\n\r\n";
+                << "Cookie: " << settings.CreateNameSessionCookie() << "=" << Base64Encode("session_cookie") << "; "
+                << settings.CreateNameImpersonatedCookie() << "=" << Base64Encode("impersonated_cookie") << "\r\n\r\n";
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, request);
         incomingRequest->Endpoint->Secure = true;

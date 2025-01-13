@@ -12,7 +12,7 @@ TImpersonateStopPageHandler::TImpersonateStopPageHandler(const NActors::TActorId
 {}
 
 void TImpersonateStopPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event) {
-    Register(new THandlerCleanup(event->Sender, event->Get()->Request, HttpProxyId, Settings, CreateNameImpersonatedCookie(Settings.ClientId)));
+    Register(new THandlerCleanup(event->Sender, event->Get()->Request, HttpProxyId, Settings.CreateNameImpersonatedCookie()));
 }
 
 } // NMVP::NOIDC

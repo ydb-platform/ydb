@@ -14,14 +14,12 @@ protected:
     const NActors::TActorId Sender;
     const NHttp::THttpIncomingRequestPtr Request;
     NActors::TActorId HttpProxyId;
-    const TOpenIdConnectSettings Settings;
     const TString CookieName;
 
 public:
     THandlerCleanup(const NActors::TActorId& sender,
                     const NHttp::THttpIncomingRequestPtr& request,
                     const NActors::TActorId& httpProxyId,
-                    const TOpenIdConnectSettings& settings,
                     const TString& cookieName);
 
     void Bootstrap();

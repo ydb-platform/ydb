@@ -34,6 +34,9 @@ struct TOpenIdConnectSettings {
     TString GetTokenEndpointURL() const;
     TString GetExchangeEndpointURL() const;
     TString GetImpersonateEndpointURL() const;
+
+    TString CreateNameSessionCookie() const;
+    TString CreateNameImpersonatedCookie() const;
 };
 
 } // NMVP::NOIDC

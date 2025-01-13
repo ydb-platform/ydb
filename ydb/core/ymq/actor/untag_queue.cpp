@@ -36,8 +36,6 @@ public:
 
 private:
     bool DoValidate() override {
-        // TODO(qyryq) Tag validation
-
         if (!GetQueueName()) {
             MakeError(Response_.MutableUntagQueue(), NErrors::MISSING_PARAMETER, "No QueueName parameter.");
             return false;
@@ -97,16 +95,13 @@ private:
         const auto& record = ev->Get()->Record;
         const ui32 status = record.GetStatus();
         auto* result = Response_.MutableUntagQueue();
-        bool queueExists = true;
-
-        // TODO(qyryq) Handle case when the queue does not exist? SetQueueAttributes doesn't do it in this method.
 
         if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
             RLOG_SQS_DEBUG("Sending clear attributes cache event for queue [" << UserName_ << "/" << GetQueueName() << "]");
             Send(QueueLeader_, MakeHolder<TSqsEvents::TEvClearQueueAttributesCache>());
         } else {
-            RLOG_SQS_ERROR("Tag queue query failed, queue exists: " << queueExists << ", answer: " << record);
-            MakeError(result, queueExists ? NErrors::INTERNAL_FAILURE : NErrors::NON_EXISTENT_QUEUE);
+            RLOG_SQS_ERROR("Tag queue query failed, answer: " << record);
+            MakeError(result, NErrors::INTERNAL_FAILURE);
         }
         SendReplyAndDie();
     }

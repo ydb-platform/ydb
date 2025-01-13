@@ -361,7 +361,7 @@ PEERDIR(
     library/cpp/yt/backtrace
     library/cpp/yt/coding
     library/cpp/yt/malloc
-    library/cpp/yt/small_containers
+    library/cpp/yt/compact_containers
     library/cpp/yt/system
     library/cpp/yt/threading
 

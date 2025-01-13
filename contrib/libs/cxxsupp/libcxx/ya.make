@@ -52,11 +52,6 @@ ELSEIF (OS_LINUX OR OS_DARWIN)
     ELSE()
         DEFAULT(CXX_RT "libcxxrt")
     ENDIF()
-    IF (MUSL)
-        PEERDIR(
-            contrib/libs/musl/include
-        )
-    ENDIF()
 ELSEIF (OS_WINDOWS)
     SRCS(
         src/support/win32/locale_win32.cpp
@@ -76,9 +71,6 @@ ELSEIF (OS_EMSCRIPTEN)
     CXXFLAGS(
         -Wno-unknown-pragmas
         -nostdinc++
-    )
-    PEERDIR(
-        contrib/restricted/emscripten/include
     )
 ELSE()
     DEFAULT(CXX_RT "glibcxx_static")

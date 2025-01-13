@@ -9,7 +9,7 @@
 #include <library/cpp/yt/threading/event_count.h>
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <contrib/libs/grpc/include/grpc/grpc.h>
 #include <contrib/libs/grpc/include/grpc/grpc_security.h>

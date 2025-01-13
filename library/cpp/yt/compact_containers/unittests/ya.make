@@ -11,7 +11,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/yt/small_containers
+    library/cpp/yt/compact_containers
     library/cpp/testing/gtest
 )
 

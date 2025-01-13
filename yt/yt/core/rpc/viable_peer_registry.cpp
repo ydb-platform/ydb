@@ -9,7 +9,7 @@
 #include <yt/yt/core/net/address.h>
 #include <yt/yt/core/net/local_address.h>
 
-#include <library/cpp/yt/small_containers/compact_set.h>
+#include <library/cpp/yt/compact_containers/compact_set.h>
 
 namespace NYT::NRpc {
 

@@ -65,7 +65,7 @@ void CopyProtobuf(const etcdserverpb::PutRequest &from, NKikimrKeyValue::Execute
     cmd->set_value(from.value());
 }
 
-void CopyProtobuf(const NKikimrKeyValue::ExecuteTransactionResult &from, etcdserverpb::PutResponse *to) {
+void CopyProtobuf(const NKikimrKeyValue::ExecuteTransactionResult &, etcdserverpb::PutResponse *) {
 
 }
 
@@ -75,7 +75,7 @@ void CopyProtobuf(const etcdserverpb::DeleteRangeRequest &from, NKikimrKeyValue:
     cmd->mutable_range()->set_to_key_exclusive(from.range_end());
 }
 
-void CopyProtobuf(const NKikimrKeyValue::ExecuteTransactionResult &from, etcdserverpb::DeleteRangeResponse *to) {
+void CopyProtobuf(const NKikimrKeyValue::ExecuteTransactionResult &, etcdserverpb::DeleteRangeResponse *) {
 
 }
 
@@ -196,7 +196,7 @@ private:
     typedef typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type TRequestBase;
 
     template<typename TIn, typename TOut>
-    void Fill(const TIn* in, TOut* out) {/* TODO
+    void Fill(const TIn*, TOut*) {/* TODO
         auto& operationParams = in->operation_params();
         out->OperationTimeout_ = GetDuration(operationParams.operation_timeout());
         out->CancelAfter_ = GetDuration(operationParams.cancel_after());

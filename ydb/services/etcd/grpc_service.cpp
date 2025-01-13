@@ -22,9 +22,9 @@ public:
         self->Reply(resp, operation.status());
     }
 
-    void SendResult(const google::protobuf::Message& result,
+    void SendResult(const google::protobuf::Message&,
         Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message) override
+        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>&) override
     {
         auto self = Derived();
         self->FinishRequest();
@@ -32,7 +32,7 @@ public:
         self->Reply(resp, status);
     }
 
-    void SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status) override {
+    void SendResult(const google::protobuf::Message&, Ydb::StatusIds::StatusCode status) override {
         auto self = Derived();
         self->FinishRequest();
         auto resp = self->CreateResponseMessage();

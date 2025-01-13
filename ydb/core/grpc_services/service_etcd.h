@@ -1,12 +1,14 @@
 #pragma once
 
-#include <memory>
+namespace NActors {
+    class IActor;
+}
 
 namespace NKikimr::NGRpcService {
     class IRequestOpCtx;
     class IFacilityProvider;
 
-    void DoRange(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-    void DoPut(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-    void DoDeleteRange(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
+    NActors::IActor* DoRange(IRequestOpCtx* p);
+    NActors::IActor* DoPut(IRequestOpCtx* p);
+    NActors::IActor* DoDeleteRange(IRequestOpCtx* p);
 } // NKikimr::NGRpcService

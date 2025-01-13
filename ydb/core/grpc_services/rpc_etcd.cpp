@@ -603,19 +603,19 @@ public:
 
 }
 
-void DoRange(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+NActors::IActor* DoRange(IRequestOpCtx* p) {
     Cerr << __func__ << Endl;
-    TActivationContext::AsActorContext().Register(new TRangeRequest(p.release()));
+    return new TRangeRequest(p);
 }
 
-void DoPut(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+NActors::IActor* DoPut(IRequestOpCtx* p) {
     Cerr << __func__ << Endl;
-    TActivationContext::AsActorContext().Register(new TPutRequest(p.release()));
+    return new TPutRequest(p);
 }
 
-void DoDeleteRange(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+NActors::IActor* DoDeleteRange(IRequestOpCtx* p) {
     Cerr << __func__ << Endl;
-    TActivationContext::AsActorContext().Register(new TDeleteRangeRequest(p.release()));
+    return new TDeleteRangeRequest(p);
 }
 
 } // namespace NKikimr::NGRpcService

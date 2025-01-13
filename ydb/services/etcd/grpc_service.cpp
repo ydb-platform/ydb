@@ -412,11 +412,6 @@ class TEtcdRequestCall
     using TRequestIface = typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type;
 
 public:
-    template<typename TOptionalArg>
-    static IActor* CreateRpcActor(TRequestIface* msg, TOptionalArg arg);
-
-    static IActor* CreateRpcActor(TRequestIface* msg);
-
     static constexpr bool IsOp = IsOperation;
 
     using TBase = std::conditional_t<TProtoHasValidate<TReq>::Value,
@@ -432,8 +427,8 @@ public:
         , AuxSettings(std::move(auxSettings))
     { }
 
-    void Pass(const IFacilityProvider& facility) override try {
-        PassMethod(std::move(std::unique_ptr<TRequestIface>(this)), facility);
+    void Pass(const IFacilityProvider&) override try {
+        PassMethod(this);
     } catch (const std::exception& ex) {
         this->RaiseIssue(NYql::TIssue{TStringBuilder() << "unexpected exception: " << ex.what()});
     }
@@ -467,7 +462,7 @@ public:
     }
 
 private:
-    std::function<void(std::unique_ptr<TRequestIface>, const IFacilityProvider&)> PassMethod;
+    std::function<NActors::IActor*(TRequestIface*)> PassMethod;
     const TRequestAuxSettings AuxSettings;
 };
 
@@ -475,12 +470,9 @@ template <typename TReq, typename TResp>
 using TEtcdRequestOperationCall = TEtcdRequestCall<TReq, TResp, true>;
 
 
-TEtcdGRpcService::TEtcdGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId)
-    : ActorSystem(actorSystem)
-    , Counters(std::move(counters))
-    , GRpcRequestProxyId(grpcRequestProxyId)
-{
-}
+TEtcdGRpcService::TEtcdGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId)
+    : ActorSystem(actorSystem), Counters(std::move(counters))
+{}
 
 TEtcdGRpcService::~TEtcdGRpcService() = default;
 
@@ -503,13 +495,16 @@ void TEtcdGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         CQ,                                                                                                     \
         [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                                      \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                                \
-            ActorSystem->Send(GRpcRequestProxyId, new TEtcdRequestOperationCall<                              \
+            Cerr << Y_STRINGIZE(methodName) " >> " Y_STRINGIZE(method) << Endl;                            \
+            ActorSystem->Register(method(new TEtcdRequestOperationCall<                              \
                 etcdserverpb::Y_CAT(methodName, Request),                                                \
                 etcdserverpb::Y_CAT(methodName, Response)>(reqCtx, &method,                             \
-                    TRequestAuxSettings {                                                                    \
+                    TRequestAuxSettings {                                            \
                         .RlMode = TRateLimiterMode::rlMode,                                                 \
                         .RequestType = NJaegerTracing::ERequestType::requestType,                         \
-                    }));                                                                                      \
+                    }              \
+                )                   \
+            ));           \
         },                                                                                                      \
         &etcdserverpb::serviceName::AsyncService::Y_CAT(Request, methodName),          \
         Y_STRINGIZE(serviceType) "/" Y_STRINGIZE(methodName),                                               \

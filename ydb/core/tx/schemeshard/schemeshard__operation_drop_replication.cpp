@@ -202,7 +202,7 @@ public:
 
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(-1);
         context.SS->ResolveDomainInfo(pathId)->DecPathsInside();
-        parentPath->DecAliveChildren();
+        DecAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         ++parentPath->DirAlterVersion;
         context.SS->PersistPathDirAlterVersion(db, parentPath);

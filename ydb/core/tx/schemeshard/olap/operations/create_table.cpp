@@ -866,7 +866,7 @@ public:
             dstPath.DomainInfo()->AddInternalShards(txState);
             dstPath.Base()->IncShardsInside(tableInfo->GetOwnedColumnShardsVerified().size());
         }
-        parentPath.Base()->IncAliveChildren();
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState(!!storeInfo));
         return result;

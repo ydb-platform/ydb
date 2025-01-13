@@ -249,11 +249,11 @@ private:
                 ythrow yexception() << "Trace opt id allowed only for trace opt type script (used " << runnerOptions.TraceOptType << ")";
             }
 
-            const ui64 numberScripts = ScriptQueries.size() * LoopCount;
-            if (*traceOptId >= numberScripts) {
-                ythrow yexception() << "Invalid trace opt id " << *traceOptId << ", it should be less than number of scipt queries " << numberScripts;
+            const ui64 scriptNumber = ScriptQueries.size() * LoopCount;
+            if (*traceOptId >= scriptNumber) {
+                ythrow yexception() << "Invalid trace opt id " << *traceOptId << ", it should be less than number of script queries " << scriptNumber;
             }
-            if (numberScripts == 1) {
+            if (scriptNumber == 1) {
                 Cout << colors.Red() << "Warning: trace opt id is not necessary for single script mode" << Endl;
             }
         }
@@ -546,10 +546,9 @@ protected:
                 if (tableName.empty() || filePath.empty()) {
                     ythrow yexception() << "Incorrect table mapping, expected form table@file, e. g. yt.Root/plato.Input@input.txt";
                 }
-                if (TablesMapping.contains(tableName)) {
+                if (!TablesMapping.emplace(tableName, filePath).second) {
                     ythrow yexception() << "Got duplicated table name: " << tableName;
                 }
-                TablesMapping[tableName] = filePath;
             });
 
         options.AddLongOption('c', "app-config", "File with app config (TAppConfig for ydb tenant)")
@@ -614,15 +613,14 @@ protected:
                     ythrow yexception() << "Incorrect log setting, expected form component=priority, e. g. KQP_YQL=trace";
                 }
 
-                const auto service = GetLogService(TString(component));
-                if (LogPriorities.contains(service)) {
-                    ythrow yexception() << "Got duplicated log service name: " << component;
-                }
-
                 if (!logPriority.Contains(TString(priority))) {
                     ythrow yexception() << "Incorrect log priority: " << priority;
                 }
-                LogPriorities[service] = logPriority(TString(priority));
+
+                const auto service = GetLogService(TString(component));
+                if (!LogPriorities.emplace(service, logPriority(TString(priority))).second) {
+                    ythrow yexception() << "Got duplicated log service name: " << component;
+                }
             });
 
         TChoices<TRunnerOptions::ETraceOptType> traceOpt({
@@ -631,7 +629,7 @@ protected:
             {"script", TRunnerOptions::ETraceOptType::Script},
             {"disabled", TRunnerOptions::ETraceOptType::Disabled}
         });
-        options.AddLongOption('T', "trace-opt", "Print AST in the begin of each transformation (use script@<query id> for tracing one -p query)")
+        options.AddLongOption('T', "trace-opt", "Print AST in the begin of each transformation")
             .RequiredArgument("trace-opt-query")
             .DefaultValue("disabled")
             .Choices(traceOpt.GetChoices())

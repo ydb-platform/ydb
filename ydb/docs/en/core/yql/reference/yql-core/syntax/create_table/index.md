@@ -36,11 +36,6 @@ The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ conc
 
 {% if oss == true and backend_name == "YDB" %}
 
-{% cut "See table and column naming rules" %}
-
-{% include [table naming rules](../../../../concepts/datamodel/_includes/table-name-rules.md) %}
-
-{% endcut %}
 
 {% if feature_olap_tables %}
 
@@ -65,7 +60,9 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
 
 {% endif %}
 
-### Examples of table creation {#examples-tables-creation}
+{% include [table naming rules](../../../../concepts/datamodel/_includes/table-name-rules.md) %}
+
+## Examples of table creation {#examples-tables-creation}
 
 {% list tabs %}
 
@@ -219,7 +216,7 @@ Specifying a `PRIMARY KEY` with a non-empty list of columns is mandatory. These 
 
 {% endif %}
 
-#### Example
+### Example
 
 ```yql
 CREATE TABLE <table_name> (

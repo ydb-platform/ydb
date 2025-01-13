@@ -12,7 +12,7 @@ Database object names in {{ ydb-short-name }} must meet the following requiremen
 - Object name length must not exceed 255 characters.
 - Objects cannot be created in folders, which names start with a dot, such as `.sys`, `.medatata`, `.sys_health`.
 
-## Column naming rules
+## Column naming rules {#column-naming-rules}
 
 Column names in {{ ydb-short-name }} must meet the following requirements:
 

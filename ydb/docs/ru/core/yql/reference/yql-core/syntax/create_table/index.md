@@ -36,12 +36,6 @@
 
 {% if oss == true and backend_name == "YDB" %}
 
-{% cut "См. правила наименования таблиц и колонок" %}
-
-{% include [table naming rules](../../../../concepts/datamodel/_includes/table-name-rules.md) %}
-
-{% endcut %}
-
 {% if feature_olap_tables %}
 
 {{ ydb-short-name }} поддерживает два типа таблиц:
@@ -66,7 +60,9 @@ WITH (
 
 {% endif %}
 
-### Примеры создания таблиц
+{% include [table naming rules](../../../../concepts/datamodel/_includes/table-name-rules.md) %}
+
+## Примеры создания таблиц
 
 {% list tabs %}
 

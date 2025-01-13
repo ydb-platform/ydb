@@ -104,7 +104,7 @@ class S3Base(object):
                    """)
 
         self.query(f"""
-        CREATE EXTERNAL DATA SOURCE `{self.table_path}_tests3` WITH (
+        CREATE EXTERNAL DATA SOURCE `{self.table_path}_external_datasource` WITH (
             SOURCE_TYPE="ObjectStorage",
             LOCATION='{self.s3_endpoint()}/{bucket_name}',
             AUTH_METHOD="AWS",

@@ -29,7 +29,13 @@ class TestBase(TestLib, Query):
         cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=cls.get_cluster_configuration(),
                                                    extra_feature_flags=["enable_resource_pools",
                                                                         "enable_external_data_sources",
-                                                                        "enable_tiering_in_column_shard"]))
+                                                                        "enable_tiering_in_column_shard"],
+                                                   columnshard_config={
+                                                    'lag_for_compaction_before_tierings_ms': 0,
+                                                    'compaction_actualization_lag_ms': 0,
+                                                    'optimizer_freshness_check_duration_ms': 0,
+                                                    'small_portion_detect_size_limit': 0,
+                                                    }))
         cls.cluster.start()
         cls.driver = ydb.Driver(
             ydb.DriverConfig(

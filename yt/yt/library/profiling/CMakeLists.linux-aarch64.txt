@@ -29,7 +29,7 @@ target_link_libraries(yt-library-profiling PUBLIC
   yutil
   cpp-yt-assert
   cpp-yt-cpu_clock
-  cpp-yt-small_containers
+  cpp-yt-compact_containers
   cpp-yt-string
   cpp-yt-memory
 )

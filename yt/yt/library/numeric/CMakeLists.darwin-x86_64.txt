@@ -23,7 +23,7 @@ target_compile_options(yt-library-numeric PRIVATE
 target_link_libraries(yt-library-numeric PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-yt-small_containers
+  cpp-yt-compact_containers
   cpp-yt-string
 )
 

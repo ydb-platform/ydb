@@ -40,7 +40,7 @@ ALTER TABLE `mytable` SET (
 {% include [OLTP_not_allow_note](../../_includes/not_allow_for_oltp_note.md) %}
 
 To enable data eviction, an [external data source](../../concepts/datamodel/external_data_source.md) object that describes a connection to the external storage is needed.
-In the example below, external data source `/Root/s3_cold_data` will describe a connection to bucket `test_cold_data` located in Yandex Object Storage with authorization by static access keys.
+In the example below, an external data source `/Root/s3_cold_data` is created. It describes a connection to bucket `test_cold_data` located in Yandex Object Storage with authorization by static access keys provided via secrets `access_key` and `secret_key`.
 
 ```yql
 CREATE OBJECT access_key (TYPE SECRET) WITH (value="...");

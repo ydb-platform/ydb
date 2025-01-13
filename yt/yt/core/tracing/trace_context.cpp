@@ -10,6 +10,7 @@
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/ytree/convert.h>
+#include <yt/yt/core/ytree/helpers.h>
 
 #include <yt/yt_proto/yt/core/tracing/proto/tracing_ext.pb.h>
 

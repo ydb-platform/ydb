@@ -898,6 +898,8 @@ private:
                 return false;
             }
             buildInfo.Sample.Clear();
+            NIceDb::TNiceDb db{txc.DB};
+            Self->PersistBuildIndexSampleForget(db, buildInfo);
             LOG_D("FillIndex::NextState::Done " << buildInfo.KMeansTreeToDebugStr());
         }
 

@@ -264,6 +264,13 @@ void TSchemeShard::PersistBuildIndexUploadReset(NIceDb::TNiceDb& db, TIndexBuild
     info.Shards.clear();
 }
 
+void TSchemeShard::PersistBuildIndexSampleForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
+    Y_ASSERT(info.IsBuildVectorIndex());
+    for (ui32 row = 0; row < info.KMeans.K * 2; ++row) {
+        db.Table<Schema::KMeansTreeSample>().Key(info.Id, row).Delete();
+    }
+}
+
 void TSchemeShard::PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
     db.Table<Schema::IndexBuild>().Key(info.Id).Delete();
 
@@ -287,9 +294,7 @@ void TSchemeShard::PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuil
 
     if (info.IsBuildVectorIndex()) {
         db.Table<Schema::KMeansTreeState>().Key(info.Id).Delete();
-        for (ui32 row = 0; row < info.KMeans.K * 2; ++row) {
-            db.Table<Schema::KMeansTreeSample>().Key(info.Id, row).Delete();
-        }
+        PersistBuildIndexSampleForget(db, info);
     }
 }
 

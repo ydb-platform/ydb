@@ -1023,7 +1023,7 @@ namespace NKikimr::NYmq::V1 {
             return resp.GetTagQueue();
         }
 
-        Ydb::Ymq::V1::TagQueueResult GetResult(const NKikimrClient::TSqsResponse& resp) override {
+        Ydb::Ymq::V1::TagQueueResult GetResult(const NKikimrClient::TSqsResponse&) override {
             Ydb::Ymq::V1::TagQueueResult result;
             return result;
         }
@@ -1070,7 +1070,7 @@ namespace NKikimr::NYmq::V1 {
             return resp.GetUntagQueue();
         }
 
-        Ydb::Ymq::V1::UntagQueueResult GetResult(const NKikimrClient::TSqsResponse& resp) override {
+        Ydb::Ymq::V1::UntagQueueResult GetResult(const NKikimrClient::TSqsResponse&) override {
             Ydb::Ymq::V1::UntagQueueResult result;
             return result;
         }

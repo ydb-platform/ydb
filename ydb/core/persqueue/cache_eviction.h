@@ -321,6 +321,11 @@ namespace NPQ {
                     reqData.RenamedBlobs.emplace_back(std::piecewise_construct,
                                                       std::make_tuple(oldBlob.Partition, oldBlob.Offset, oldBlob.PartNo, nullptr),
                                                       std::make_tuple(newBlob.Partition, newBlob.Offset, newBlob.PartNo, nullptr));
+
+                    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Renaming head blob in L1. Old partition "
+                                << oldBlob.Partition << " old offset " << oldBlob.Offset << " old count " << oldBlob.Count
+                                << " new partition " << newBlob.Partition << " new offset " << newBlob.Offset << " new count " << newBlob.Count
+                                << " actorID " << ctx.SelfID);
                 }
             }
         }
@@ -345,6 +350,10 @@ namespace NPQ {
 
                     reqData.RemovedBlobs.emplace_back(kvReq.Partition, blob.Offset, blob.PartNo, nullptr);
                     Counters.Dec(value);
+
+                    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Deleting head blob in L1. Partition "
+                                << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
+                                << " actorID " << ctx.SelfID);
                 }
 
                 Cache.erase(lowerBound, upperBound);

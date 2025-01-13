@@ -313,9 +313,9 @@ namespace NPQ {
                     continue;
                 }
                 kvReq.RenamedBlobs.emplace_back(cmd.GetOldKey(), cmd.GetNewKey());
-            }
 
-            Y_UNUSED(ctx);
+                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "CacheProxy. Rename blob from " << cmd.GetOldKey() << " to " << cmd.GetNewKey());
+            }
         }
 
         void SaveCmdDelete(const NKikimrClient::TKeyValueRequest& srcRequest, TKvRequest& kvReq, const TActorContext& ctx)
@@ -328,12 +328,14 @@ namespace NPQ {
                 if (!IsDataKey(range.GetFrom()) || !IsDataKey(range.GetTo())) {
                     continue;
                 }
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "CacheProxy. from=" << range.GetFrom() << ", to=" << range.GetTo());
                 kvReq.DeletedBlobs.emplace_back(range.GetFrom(), range.GetIncludeFrom(),
                                                 range.GetTo(), range.GetIncludeTo());
-            }
 
-            Y_UNUSED(ctx);
+                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                            "CacheProxy. Delete blobs from " <<
+                            range.GetFrom() << "(" << (range.GetIncludeFrom() ? '+' : '-') << ") to " <<
+                            range.GetTo() << "(" << (range.GetIncludeTo() ? '+' : '-') << ")");
+            }
         }
 
         bool IsDataKey(const TString& key) const {

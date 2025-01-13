@@ -13,7 +13,7 @@
 * [Анонимная](#anonymous) аутентификация.
 * Аутентификация по [логину и паролю](#static-credentials).
 * Аутентификация с использованием [LDAP каталога](#ldap-auth-provider).
-* [Аутентификация с использованием стороннего IAM-провайдера](#iam), например [Yandex Identity and Access Management]{% if lang == "en" %}(https://cloud.yandex.com/en/docs/iam/){% endif %}{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/){% endif %}.
+* [Аутентификация с использованием стороннего IAM-провайдера](#iam), например [Yandex Identity and Access Management](https://yandex.cloud/ru/docs/iam/).
 
 ## Анонимная аутентификация {#anonymous}
 

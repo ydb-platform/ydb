@@ -998,6 +998,7 @@ struct TAdoptedShard {
     ui64 PrevOwner;
     TLocalShardIdx PrevShardIdx;
 };
+
 struct TShardInfo {
     TTabletId TabletID = InvalidTabletId;
     TTxId CurrentTxId = InvalidTxId; ///< @note we support only one modifying transaction on shard at time

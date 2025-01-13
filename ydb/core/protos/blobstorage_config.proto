@@ -406,19 +406,25 @@ message TPDiskLocation {
 }
 
 message TRestartPDisk {
-    NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
-    TPDiskLocation TargetPDiskLocation = 2;
+    oneof PDisk {
+        NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+        TPDiskLocation TargetPDiskLocation = 2;   
+    }
 }
 
 message TSetPDiskReadOnly {
-    NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
-    TPDiskLocation TargetPDiskLocation = 2;
+    oneof PDisk {
+        NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+        TPDiskLocation TargetPDiskLocation = 2;
+    }
     bool Value = 3;
 }
 
 message TStopPDisk {
-    NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
-    TPDiskLocation TargetPDiskLocation = 2;
+    oneof PDisk {
+        NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+        TPDiskLocation TargetPDiskLocation = 2;
+    }
 }
 
 message TSetScrubPeriodicity {

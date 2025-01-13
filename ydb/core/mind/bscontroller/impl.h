@@ -10,6 +10,8 @@
 #include "self_heal.h"
 #include "storage_pool_stat.h"
 
+#include <util/generic/hash_multi_map.h>
+
 inline IOutputStream& operator <<(IOutputStream& o, NKikimr::TErasureType::EErasureSpecies p) {
     return o << NKikimr::TErasureType::ErasureSpeciesName(p);
 }
@@ -1431,6 +1433,7 @@ public:
     class THostRecordMapImpl {
         THashMap<THostId, THostRecord> HostIdToRecord;
         THashMap<TNodeId, THostId> NodeIdToHostId;
+        THashMultiMap<TString, TNodeId> FqdnToNodeId;
 
     public:
         THostRecordMapImpl() = default;
@@ -1440,6 +1443,7 @@ public:
                 const THostId hostId(nodeInfo.Host, nodeInfo.Port);
                 NodeIdToHostId.emplace(nodeInfo.NodeId, hostId);
                 HostIdToRecord.emplace(hostId, nodeInfo);
+                FqdnToNodeId.emplace(nodeInfo.Host, nodeInfo.NodeId);
             }
         }
 
@@ -1449,6 +1453,7 @@ public:
                 const TNodeId nodeId = item.GetNodeId();
                 NodeIdToHostId.emplace(nodeId, hostId);
                 HostIdToRecord.emplace(hostId, item);
+                FqdnToNodeId.emplace(item.GetHost(), nodeId);
             }
         }
 
@@ -1479,6 +1484,10 @@ public:
             } else {
                 return {};
             }
+        }
+
+        auto ResolveNodeId(const TString& fqdn) const {
+            return FqdnToNodeId.equal_range(fqdn);
         }
 
         auto begin() const {

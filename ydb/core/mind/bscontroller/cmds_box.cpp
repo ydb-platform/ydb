@@ -248,20 +248,16 @@ namespace NKikimr::NBsController {
             const NKikimrBlobStorage::TPDiskLocation& pdiskLocation = command.GetTargetPDiskLocation();
             const TString& targetFqdn = pdiskLocation.GetFqdn();
             const TString& targetDiskPath = pdiskLocation.GetPath();
-            
-            for (auto it = state.HostRecords->begin(); it != state.HostRecords->end(); ++it) {
-                const auto& [hostId, hostRecord] = *it;
 
-                TString fqdn = std::get<0>(hostId);
-                
-                if (targetFqdn == fqdn) {
-                    ui32 targetNodeId = hostRecord.NodeId;
-                    
-                    if (const auto& pdiskId = state.FindPDiskByLocation(targetNodeId, targetDiskPath)) {
-                        return *pdiskId;
-                    }
+            auto range = state.HostRecords->ResolveNodeId(targetFqdn);
+
+            for (auto it = range.first; it != range.second; ++it) {
+                const TNodeId nodeId = it->second;
+                if (const auto& pdiskId = state.FindPDiskByLocation(nodeId, targetDiskPath)) {
+                    return *pdiskId;
                 }
             }
+            
             throw TExPDiskNotFound(targetFqdn, targetDiskPath);
         }
         throw TExError() << "Either TargetPDiskId or PDiskLocation must be specified";

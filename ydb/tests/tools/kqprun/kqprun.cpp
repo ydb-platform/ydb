@@ -125,16 +125,17 @@ struct TExecutionOptions {
     }
 
     void Validate(const TRunnerOptions& runnerOptions) const {
-        if (!SchemeQuery && ScriptQueries.empty() && !runnerOptions.YdbSettings.MonitoringEnabled && !runnerOptions.YdbSettings.GrpcEnabled) {
+        const auto& ydbSettings = runnerOptions.YdbSettings;
+        if (!SchemeQuery && ScriptQueries.empty() && !ydbSettings.MonitoringEnabled && !ydbSettings.GrpcEnabled) {
             ythrow yexception() << "Nothing to execute and is not running as daemon";
         }
 
         ValidateOptionsSizes(runnerOptions);
         ValidateSchemeQueryOptions(runnerOptions);
         ValidateScriptExecutionOptions(runnerOptions);
-        ValidateAsyncOptions(runnerOptions.YdbSettings.AsyncQueriesSettings);
+        ValidateAsyncOptions(ydbSettings.AsyncQueriesSettings);
         ValidateTraceOpt(runnerOptions);
-        ValidateStorageSettings(runnerOptions.YdbSettings);
+        ValidateStorageSettings(ydbSettings);
     }
 
 private:
@@ -844,6 +845,10 @@ protected:
         options.AddLongOption('E', "emulate-yt", "Emulate YT tables (use file gateway instead of native gateway)")
             .NoArgument()
             .SetFlag(&EmulateYt);
+
+        options.AddLongOption("enable-fq", "Enable fq proxy for streaming requests")
+            .NoArgument()
+            .SetFlag(&RunnerOptions.YdbSettings.FqEnabled);
 
         options.AddLongOption("domain", "Test cluster domain name")
             .RequiredArgument("name")

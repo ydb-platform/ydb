@@ -2,12 +2,17 @@
 
 #include <library/cpp/colorizer/colors.h>
 
+#include <ydb/core/fq/libs/init/init.h>
+#include <ydb/core/fq/libs/mock/yql_mock.h>
+
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/test_client.h>
 
+#include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 
 #include <ydb/tests/tools/kqprun/src/proto/storage_meta.pb.h>
@@ -241,6 +246,7 @@ private:
         serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
         serverSettings.SetInitializeFederatedQuerySetupFactory(true);
         serverSettings.SetVerbose(Settings_.VerboseLevel >= 2);
+        serverSettings.SetEnableYqGrpc(Settings_.FqEnabled);
 
         SetLoggerSettings(serverSettings);
         SetFunctionRegistry(serverSettings);
@@ -324,6 +330,13 @@ private:
     }
 
     void InitializeServer(ui32 grpcPort) {
+        if (Settings_.FqEnabled) {
+            if (Settings_.VerboseLevel >= 1) {
+                Cout << CoutColors_.Cyan() << "FQ proxy enabled" << (Settings_.GrpcEnabled ? "" : " (starting gRPC)") << CoutColors_.Default() << Endl;
+            }
+            Settings_.GrpcEnabled = true;
+        }
+
         NKikimr::Tests::TServerSettings serverSettings = GetServerSettings(grpcPort);
 
         Server_ = MakeIntrusive<NKikimr::Tests::TServer>(serverSettings);
@@ -347,6 +360,65 @@ private:
 
         ModifyLogPriorities({{NKikimrServices::EServiceKikimr::KQP_YQL, NActors::NLog::PRI_TRACE}}, *Settings_.AppConfig.MutableLogConfig());
         NYql::NLog::InitLogger(NActors::CreateNullBackend());
+    }
+
+    NFq::NConfig::TConfig GetFqProxyConfig(ui32 grpcPort, ui32 httpPort, ui32 nodeIdx) {
+        auto fqConfig = Settings_.AppConfig.GetFederatedQueryConfig();
+
+        fqConfig.MutableControlPlaneStorage()->AddSuperUsers(BUILTIN_ACL_ROOT);
+        fqConfig.MutablePrivateProxy()->AddGrantedUsers(BUILTIN_ACL_ROOT);
+
+        const TString endpoint = TStringBuilder() << "localhost:" << grpcPort;
+        const TString database = NKikimr::CanonizePath(Settings_.DomainName);
+        const auto fillStorageConfig = [endpoint, database](NFq::NConfig::TYdbStorageConfig* config) {
+            config->SetEndpoint(endpoint);
+            config->SetDatabase(database);
+        };
+        fillStorageConfig(fqConfig.MutableControlPlaneStorage()->MutableStorage());
+        fillStorageConfig(fqConfig.MutableDbPool()->MutableStorage());
+        fillStorageConfig(fqConfig.MutableCheckpointCoordinator()->MutableStorage());
+        fillStorageConfig(fqConfig.MutableRateLimiter()->MutableDatabase());
+        fillStorageConfig(fqConfig.MutableRowDispatcher()->MutableCoordinator()->MutableDatabase());
+
+        auto* privateApiConfig = fqConfig.MutablePrivateApi();
+        privateApiConfig->SetTaskServiceEndpoint(endpoint);
+        privateApiConfig->SetTaskServiceDatabase(database);
+
+        auto* nodesMenagerConfig = fqConfig.MutableNodesManager();
+        nodesMenagerConfig->SetPort(grpcPort);
+        nodesMenagerConfig->SetHost("localhost");
+
+        fqConfig.MutableCommon()->SetYdbMvpCloudEndpoint(TStringBuilder() << "http://localhost:" << httpPort << "/yql-mock/abc");
+
+        return fqConfig;
+    }
+
+    void InitializeFqProxy(ui32 grpcPort) {
+        if (!Settings_.FqEnabled) {
+            return;
+        }
+
+        const ui32 httpPort = PortManager_.GetPort();
+        for (ui32 nodeIdx = 0; nodeIdx < GetRuntime()->GetNodeCount(); ++nodeIdx) {
+            const auto fqConfig = GetFqProxyConfig(grpcPort, httpPort, nodeIdx);
+
+            const auto ydbCredFactory = NKikimr::CreateYdbCredentialsProviderFactory;
+            const auto counters = GetRuntime()->GetAppData(nodeIdx).Counters;
+            YqSharedResources_ = NFq::CreateYqSharedResources(fqConfig, ydbCredFactory, counters->GetSubgroup("counters", "yq"));
+
+            const auto actorRegistrator = [runtime = GetRuntime(), nodeIdx](NActors::TActorId serviceActorId, NActors::IActor* actor) {
+                auto actorId = runtime->Register(actor, nodeIdx, runtime->GetAppData(nodeIdx).UserPoolId);
+                runtime->RegisterService(serviceActorId, actorId, nodeIdx);
+            };
+
+            NFq::Init(fqConfig, GetRuntime()->GetNodeId(nodeIdx), actorRegistrator, &GetRuntime()->GetAppData(nodeIdx),
+                Settings_.DomainName, nullptr, YqSharedResources_,
+                [](auto& config) { return NKikimr::NFolderService::CreateMockFolderServiceAdapterActor(config, ""); },
+                0, {}
+            );
+
+            NFq::InitTest(GetRuntime(), httpPort, grpcPort, YqSharedResources_);
+        }
     }
 
     void WaitResourcesPublishing() const {
@@ -377,8 +449,16 @@ public:
             }
         }
 
+        InitializeFqProxy(grpcPort);
+
         if (Settings_.GrpcEnabled && Settings_.VerboseLevel >= 1) {
             Cout << CoutColors_.Cyan() << "Domain gRPC port: " << CoutColors_.Default() << grpcPort << Endl;
+        }
+    }
+
+    ~TImpl() {
+        if (YqSharedResources_) {
+            YqSharedResources_->Stop();
         }
     }
 
@@ -588,6 +668,7 @@ private:
     NKikimr::Tests::TServer::TPtr Server_;
     THolder<NKikimr::Tests::TClient> Client_;
     THolder<NKikimr::Tests::TTenants> Tenants_;
+    NFq::IYqSharedResources::TPtr YqSharedResources_;
     TPortManager PortManager_;
 
     std::unordered_map<TString, TString> ServerlessToShared_;

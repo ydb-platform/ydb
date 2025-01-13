@@ -1664,6 +1664,125 @@ Y_UNIT_TEST_SUITE(Viewer) {
         JsonStorage9Nodes9GroupsListingTest("v2", false, true, true, 4, 8);
     }
 
+<<<<<<< HEAD
+=======
+    struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
+        TFakeTicketParserActor()
+            : TActor<TFakeTicketParserActor>(&TFakeTicketParserActor::StFunc)
+        {}
+
+        STFUNC(StFunc) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvTicketParser::TEvAuthorizeTicket, Handle);
+                default:
+                    break;
+            }
+        }
+
+        void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Ticket parser: got TEvAuthorizeTicket event: " << ev->Get()->Ticket << " " << ev->Get()->Database << " " << ev->Get()->Entries.size());
+            ++AuthorizeTicketRequests;
+
+            if (ev->Get()->Database != "/Root") {
+                Fail(ev, TStringBuilder() << "Incorrect database " << ev->Get()->Database);
+                return;
+            }
+
+            if (ev->Get()->Ticket != "test_ydb_token") {
+                Fail(ev, TStringBuilder() << "Incorrect token " << ev->Get()->Ticket);
+                return;
+            }
+
+            bool databaseIdFound = false;
+            bool folderIdFound = false;
+            for (const TEvTicketParser::TEvAuthorizeTicket::TEntry& entry : ev->Get()->Entries) {
+                for (const std::pair<TString, TString>& attr : entry.Attributes) {
+                    if (attr.first == "database_id") {
+                        databaseIdFound = true;
+                        if (attr.second != "test_database_id") {
+                            Fail(ev, TStringBuilder() << "Incorrect database_id " << attr.second);
+                            return;
+                        }
+                    } else if (attr.first == "folder_id") {
+                        folderIdFound = true;
+                        if (attr.second != "test_folder_id") {
+                            Fail(ev, TStringBuilder() << "Incorrect folder_id " << attr.second);
+                            return;
+                        }
+                    }
+                }
+            }
+            if (!databaseIdFound) {
+                Fail(ev, "database_id not found");
+                return;
+            }
+            if (!folderIdFound) {
+                Fail(ev, "folder_id not found");
+                return;
+            }
+
+            Success(ev);
+        }
+
+        void Fail(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev, const TString& message) {
+            ++AuthorizeTicketFails;
+            TEvTicketParser::TError err;
+            err.Retryable = false;
+            err.Message = message ? message : "Test error";
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Send TEvAuthorizeTicketResult: " << err.Message);
+            Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, err));
+        }
+
+        void Success(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
+            ++AuthorizeTicketSuccesses;
+            NACLib::TUserToken::TUserTokenInitFields args;
+            args.UserSID = "username";
+            args.GroupSIDs.push_back("group_name");
+            TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Send TEvAuthorizeTicketResult success");
+            Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, userToken));
+        }
+
+        size_t AuthorizeTicketRequests = 0;
+        size_t AuthorizeTicketSuccesses = 0;
+        size_t AuthorizeTicketFails = 0;
+    };
+
+    IActor* CreateFakeTicketParser(const TTicketParserSettings&) {
+        return new TFakeTicketParserActor();
+    }
+
+    void GrantConnect(TClient& client) {
+        client.CreateUser("/Root", { .User = "username", .Password = "password"});
+        client.GrantConnect("username");
+
+        const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
+            { "folder_id", "test_folder_id" },
+            { "database_id", "test_database_id" },
+        });
+        UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
+    }
+
+    TString PostQuery(TKeepAliveHttpClient& httpClient, TString query, TString action = "", TString transactionMode = "") {
+        TStringStream requestBody;
+        requestBody
+            << "{ \"query\": \"" << query << "\","
+            << " \"database\": \"/Root\","
+            << " \"action\": \"" << action << "\","
+            << " \"syntax\": \"yql_v1\","
+            << " \"transaction_mode\": \"" << transactionMode << "\","
+            << " \"stats\": \"none\" }";
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/query?timeout=600000&base64=false&schema=modern", requestBody.Str(), &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+        return response;
+    }
+
+>>>>>>> 5e689da643 (fix compilation error for client.CreateUser)
     Y_UNIT_TEST(ExecuteQueryDoesntExecuteSchemeOperationsInsideTransation) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);

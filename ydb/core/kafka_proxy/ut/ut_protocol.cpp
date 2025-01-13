@@ -175,7 +175,7 @@ public:
                                         {"serverless_rt_base_resource_ru", "/ru_Root"}}));
 
         {
-            auto status = client.CreateUser("/Root", "ouruser", "ourUserPassword");
+            auto status = client.CreateUser("/Root", { .User = "ouruser", .Password = "ourUserPassword"});
             UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
 
             NYdb::NScheme::TSchemeClient schemeClient(*Driver);

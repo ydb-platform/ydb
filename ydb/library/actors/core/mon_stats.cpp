@@ -61,6 +61,7 @@ namespace NActors {
         EmptyMailboxActivation += RelaxedLoad(&other.EmptyMailboxActivation);
         CpuUs += RelaxedLoad(&other.CpuUs);
         SafeElapsedTicks += RelaxedLoad(&other.SafeElapsedTicks);
+        SafeParkedTicks += RelaxedLoad(&other.SafeParkedTicks);
         RelaxedStore(
             &WorstActivationTimeUs,
             std::max(RelaxedLoad(&WorstActivationTimeUs), RelaxedLoad(&other.WorstActivationTimeUs)));

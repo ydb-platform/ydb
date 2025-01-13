@@ -912,13 +912,16 @@ private:
 
     void OnSchemeUploadResult(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(SchemeUploadResult);
+        const auto& result = *SchemeUploadResult.Get()->Get();
 
         LOG_D("TExport::TTxProgress: OnSchemeUploadResult"
-            << ": success# " << SchemeUploadResult->Get()->Success
-            << ", error# " << SchemeUploadResult->Get()->Error
+            << ": id# " << result.ExportId
+            << ", itemIdx# " << result.ItemIdx
+            << ", success# " << result.Success
+            << ", error# " << result.Error
         );
 
-        const auto exportId = SchemeUploadResult->Get()->ExportId;
+        const auto exportId = result.ExportId;
         auto exportInfo = Self->Exports.Value(exportId, nullptr);
         if (!exportInfo) {
             LOG_E("TExport::TTxProgress: OnSchemeUploadResult received unknown export id"
@@ -927,7 +930,7 @@ private:
             return;
         }
 
-        ui32 itemIdx = SchemeUploadResult->Get()->ItemIdx;
+        ui32 itemIdx = result.ItemIdx;
         if (itemIdx >= exportInfo->Items.size()) {
             LOG_E("TExport::TTxProgress: OnSchemeUploadResult item index out of range"
                 << ": id# " << exportId
@@ -942,9 +945,9 @@ private:
         auto& item = exportInfo->Items[itemIdx];
         item.SchemeUploader = TActorId();
 
-        if (!SchemeUploadResult->Get()->Success) {
+        if (!result.Success) {
             item.State = EState::Cancelled;
-            item.Issue = SchemeUploadResult->Get()->Error;
+            item.Issue = result.Error;
             Self->PersistExportItemState(db, exportInfo, itemIdx);
 
             if (!exportInfo->IsInProgress()) {
@@ -967,10 +970,7 @@ private:
 
                 Self->PersistExportState(db, exportInfo);
                 SendNotificationsIfFinished(exportInfo);
-
-                if (exportInfo->IsFinished()) {
-                    AuditLogExportEnd(*exportInfo.Get(), Self);
-                }
+                AuditLogExportEnd(*exportInfo.Get(), Self);
             }
         }
     }

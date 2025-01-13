@@ -314,4 +314,4 @@ IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, 
     return new TSchemeUploader(schemeShard, exportId, itemIdx, sourcePathId, settings, databaseRoot);
 }
 
-} // NSchemeShard::NKikimr
+} // NKikimr::NSchemeShard

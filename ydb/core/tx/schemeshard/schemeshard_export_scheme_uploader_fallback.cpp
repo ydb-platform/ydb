@@ -36,4 +36,4 @@ IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, 
     return new TSchemeUploaderFallback(schemeShard, exportId, itemIdx);
 }
 
-} // NSchemeShard::NKikimr
+} // NKikimr::NSchemeShard

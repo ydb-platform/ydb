@@ -37,18 +37,18 @@ Y_UNIT_TEST(GetASPoolsith1CPU) {
 
 Y_UNIT_TEST(GetASPoolsWith2CPUs) {
     TASPools pools = GetASPools(2);
-    ASSERT_POOLS(pools, 0, 0, 0, 1, 0);
+    ASSERT_POOLS(pools, 0, 0, 1, 2, 0);
 
     NKikimrConfig::TActorSystemConfig config;
     config.SetUseAutoConfig(true);
     config.SetCpuCount(2);
     pools = GetASPools(config, true);
-    ASSERT_POOLS(pools, 0, 0, 0, 1, 0);
+    ASSERT_POOLS(pools, 0, 0, 1, 2, 0);
 
-    UNIT_ASSERT_VALUES_EQUAL(pools.GetIndeces(),  (std::vector<ui8>{0, 0, 0, 1, 0}));
-    UNIT_ASSERT_VALUES_EQUAL(pools.GetPriorities(), (std::vector<ui8>{40, 0}));
-    UNIT_ASSERT_VALUES_EQUAL(pools.GetRealPoolNames(), (std::vector<TString>{"Common", "IO"}));
-    UNIT_ASSERT_VALUES_EQUAL(pools.GetRealPoolCount(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(pools.GetIndeces(),  (std::vector<ui8>{0, 0, 1, 2, 0}));
+    UNIT_ASSERT_VALUES_EQUAL(pools.GetPriorities(), (std::vector<ui8>{40, 10, 0}));
+    UNIT_ASSERT_VALUES_EQUAL(pools.GetRealPoolNames(), (std::vector<TString>{"Common", "Batch", "IO"}));
+    UNIT_ASSERT_VALUES_EQUAL(pools.GetRealPoolCount(), 3);
 }
 
 Y_UNIT_TEST(GetASPoolsWith3CPUs) {

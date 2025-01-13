@@ -122,6 +122,7 @@ namespace Tests {
         TString DomainName = TestDomainName;
         ui32 NodeCount = 1;
         ui32 DynamicNodeCount = 0;
+        ui64 StorageGeneration = 0;
         NFake::TStorage CustomDiskParams;
         TControls Controls;
         TAppPrepare::TFnReg FrFactory = &DefaultFrFactory;
@@ -177,6 +178,7 @@ namespace Tests {
         TServerSettings& SetDomainName(const TString& value);
         TServerSettings& SetNodeCount(ui32 value) { NodeCount = value; return *this; }
         TServerSettings& SetDynamicNodeCount(ui32 value) { DynamicNodeCount = value; return *this; }
+        TServerSettings& SetStorageGeneration(ui64 value) { StorageGeneration = value; return *this; }
         TServerSettings& SetCustomDiskParams(const NFake::TStorage& value) { CustomDiskParams = value; return *this; }
         TServerSettings& SetControls(const TControls& value) { Controls = value; return *this; }
         TServerSettings& SetFrFactory(const TAppPrepare::TFnReg& value) { FrFactory = value; return *this; }

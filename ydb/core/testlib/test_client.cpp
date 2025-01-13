@@ -93,6 +93,7 @@
 #include <ydb/core/mind/tenant_slot_broker.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/core/mind/node_broker.h>
+#include <ydb/core/mon_alloc/monitor.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
@@ -610,6 +611,7 @@ namespace Tests {
 
         NKikimrBlobStorage::TDefineBox boxConfig;
         boxConfig.SetBoxId(Settings->BOX_ID);
+        boxConfig.SetItemConfigGeneration(Settings->StorageGeneration);
 
         ui32 nodeId = Runtime->GetNodeId(0);
         Y_ABORT_UNLESS(nodesInfo->Nodes[0].NodeId == nodeId);
@@ -617,11 +619,13 @@ namespace Tests {
 
         NKikimrBlobStorage::TDefineHostConfig hostConfig;
         hostConfig.SetHostConfigId(nodeId);
+        hostConfig.SetItemConfigGeneration(Settings->StorageGeneration);
         TString path;
         if (Settings->UseSectorMap) {
             path ="SectorMap:test-client[:2000]";
         } else {
-            path = TStringBuilder() << Runtime->GetTempDir() << "pdisk_1.dat";
+            TString diskPath = Settings->CustomDiskParams.DiskPath;
+            path = TStringBuilder() << (diskPath ? diskPath : Runtime->GetTempDir()) << "pdisk_1.dat";
         }
         hostConfig.AddDrive()->SetPath(path);
         if (Settings->Verbose) {
@@ -637,7 +641,9 @@ namespace Tests {
 
         for (const auto& [poolKind, storagePool] : Settings->StoragePoolTypes) {
             if (storagePool.GetNumGroups() > 0) {
-                bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(storagePool);
+                auto* command = bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool();
+                command->CopyFrom(storagePool);
+                command->SetItemConfigGeneration(Settings->StorageGeneration);
             }
         }
 
@@ -1068,6 +1074,28 @@ namespace Tests {
                     Cerr << "TMeteringWriterInitializer: failed to open file '" << Settings->MeteringFilePath << "': "
                          << ex.what() << Endl;
                 }
+            }
+        }
+
+        {
+            if (Settings->NeedStatsCollectors) {
+                TString filePathPrefix;
+                if (Settings->AppConfig->HasMonitoringConfig()) {
+                    filePathPrefix = Settings->AppConfig->GetMonitoringConfig().GetMemAllocDumpPathPrefix();
+                }
+
+                const TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider(MakeIntrusive<NMemory::TProcessMemoryInfoProvider>());
+
+                IActor* monitorActor = CreateMemProfMonitor(TDuration::Seconds(1), processMemoryInfoProvider,
+                    Runtime->GetAppData(nodeIdx).Counters, filePathPrefix);
+                const TActorId monitorActorId = Runtime->Register(monitorActor, nodeIdx, Runtime->GetAppData(nodeIdx).BatchPoolId);
+                Runtime->RegisterService(MakeMemProfMonitorID(Runtime->GetNodeId(nodeIdx)), monitorActorId, nodeIdx);
+
+                IActor* controllerActor = NMemory::CreateMemoryController(TDuration::Seconds(1), processMemoryInfoProvider,
+                    Settings->AppConfig->GetMemoryControllerConfig(), NKikimrConfigHelpers::CreateMemoryControllerResourceBrokerConfig(*Settings->AppConfig),
+                    Runtime->GetAppData(nodeIdx).Counters);
+                const TActorId controllerActorId = Runtime->Register(controllerActor, nodeIdx, Runtime->GetAppData(nodeIdx).BatchPoolId);
+                Runtime->RegisterService(NMemory::MakeMemoryControllerId(0), controllerActorId, nodeIdx);
             }
         }
 

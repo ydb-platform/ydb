@@ -17,7 +17,8 @@ namespace NActors {
     class TExecutorPoolBaseMailboxed: public IExecutorPool {
     protected:
         TActorSystem* ActorSystem;
-        THolder<TMailboxTable> MailboxTable;
+        THolder<TMailboxTable> MailboxTableHolder;
+        TMailboxTable* MailboxTable;
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         // Need to have per pool object to collect stats like actor registrations (because
         // registrations might be done in threads from other pools)
@@ -45,6 +46,9 @@ namespace NActors {
         TActorId RegisterAlias(TMailbox* mailbox, IActor* actor) override;
         void UnregisterAlias(TMailbox* mailbox, const TActorId& actorId) override;
         bool Cleanup() override;
+        virtual TMailboxTable* GetMailboxTable() const {
+            return MailboxTable;
+        }
     };
 
     class TExecutorPoolBase: public TExecutorPoolBaseMailboxed {
@@ -52,6 +56,7 @@ namespace NActors {
         using TUnorderedCacheActivationQueue = TUnorderedCache<ui32, 512, 4>;
 
         const i16 PoolThreads;
+        const bool UseRingQueue;
         TIntrusivePtr<TAffinity> ThreadsAffinity;
         TAtomic Semaphore = 0;
         std::variant<TUnorderedCacheActivationQueue, TRingActivationQueue> Activations;

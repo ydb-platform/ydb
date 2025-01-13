@@ -6,6 +6,7 @@
 #include "executor_thread.h"
 #include "mailbox.h"
 #include "probes.h"
+#include "debug.h"
 #include <ydb/library/actors/util/datetime.h>
 
 namespace NActors {
@@ -20,11 +21,12 @@ namespace NActors {
     TExecutorPoolBaseMailboxed::TExecutorPoolBaseMailboxed(ui32 poolId)
         : IExecutorPool(poolId)
         , ActorSystem(nullptr)
-        , MailboxTable(new TMailboxTable)
+        , MailboxTableHolder(new TMailboxTable)
+        , MailboxTable(MailboxTableHolder.Get())
     {}
 
     TExecutorPoolBaseMailboxed::~TExecutorPoolBaseMailboxed() {
-        MailboxTable.Destroy();
+        MailboxTableHolder.Destroy();
     }
 
 #if defined(ACTORSLIB_COLLECT_EXEC_STATS)
@@ -69,6 +71,7 @@ namespace NActors {
     TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue)
         : TExecutorPoolBaseMailboxed(poolId)
         , PoolThreads(threads)
+        , UseRingQueue(useRingQueue)
         , ThreadsAffinity(affinity)
     {
         if (useRingQueue) {
@@ -144,11 +147,11 @@ namespace NActors {
     }
 
     void TExecutorPoolBase::ScheduleActivation(TMailbox* mailbox) {
-#ifdef RING_ACTIVATION_QUEUE
-        ScheduleActivationEx(mailbox, 0);
-#else
-        ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
-#endif
+        if (UseRingQueue) {
+            ScheduleActivationEx(mailbox, 0);
+        } else {
+            ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
+        }
     }
 
     Y_FORCE_INLINE bool IsAllowedToCapture(IExecutorPool *self) {

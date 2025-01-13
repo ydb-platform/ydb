@@ -21,6 +21,7 @@ PEERDIR(
     ydb/services/lib/actors
     ydb/services/lib/sharding
     ydb/services/metadata
+    ydb/core/ydb_convert
 )
 
 SRCS(

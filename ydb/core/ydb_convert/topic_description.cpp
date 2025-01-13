@@ -3,32 +3,71 @@
 #include <ydb/library/persqueue/topic_parser_public/topic_parser.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/core/persqueue/utils.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/services/lib/actors/pq_schema_actor.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/string/builder.h>
 
 namespace NKikimr {
 
-void FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig::TConsumer& in) {
-    auto consumerName = NPersQueue::ConvertOldConsumerName(in.GetName());
-    out.set_name(consumerName);
-    out.mutable_read_from()->set_seconds(in.GetReadFromTimestampsMs() / 1000);
-    auto version = in.GetVersion();
+bool FillConsumer(Ydb::Topic::Consumer *rr, const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
+    const NKikimrPQ::TPQConfig& pqConfig,
+    Ydb::StatusIds_StatusCode& status, TString& error)
+{
+    auto consumerName = NPersQueue::ConvertOldConsumerName(consumer.GetName());
+    rr->set_name(consumerName);
+    rr->mutable_read_from()->set_seconds(consumer.GetReadFromTimestampsMs() / 1000);
+    auto version = consumer.GetVersion();
     if (version != 0)
-        (*out.mutable_attributes())["_version"] = TStringBuilder() << version;
-    for (const auto &codec : in.GetCodec().GetIds()) {
-        out.mutable_supported_codecs()->add_codecs((Ydb::Topic::Codec) (codec + 1));
+        (*rr->mutable_attributes())["_version"] = TStringBuilder() << version;
+    for (const auto &codec : consumer.GetCodec().GetIds()) {
+        rr->mutable_supported_codecs()->add_codecs((Ydb::Topic::Codec) (codec + 1));
     }
 
-    out.set_important(in.GetImportant());
+    rr->set_important(consumer.GetImportant());
     TString serviceType = "";
-    if (in.HasServiceType()) {
-        serviceType = in.GetServiceType();
+    if (consumer.HasServiceType()) {
+        serviceType = consumer.GetServiceType();
+    } else {
+        if (pqConfig.GetDisallowDefaultClientServiceType()) {
+            error = "service type must be set for all read rules";
+            status = Ydb::StatusIds::INTERNAL_ERROR;
+            return false;
+        }
+        serviceType = pqConfig.GetDefaultClientServiceType().GetName();
     }
-    (*out.mutable_attributes())["_service_type"] = serviceType;
+    (*rr->mutable_attributes())["_service_type"] = serviceType;
+    return true;
 }
 
-void FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSchemeOp::TPersQueueGroupDescription& in) {
+bool FillConsumer(Ydb::Topic::Consumer* rr, const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
+                        const NActors::TActorContext& ctx, Ydb::StatusIds_StatusCode& status, TString& error)
+{
+    const auto& pqConfig = AppData(ctx)->PQConfig;
+    return FillConsumer(rr, consumer, pqConfig, status, error);
+}
+
+bool FillConsumer(Ydb::Topic::Consumer *rr, const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
+    Ydb::StatusIds_StatusCode& status, TString& error)
+{
+    const auto& pqConfig = AppData()->PQConfig;
+    return FillConsumer(rr, consumer, pqConfig, status, error);
+}
+
+bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSchemeOp::TPersQueueGroupDescription& in,
+    const NKikimrPQ::TPQConfig& pqConfig, const NKikimrSchemeOp::TDirEntry &fromDirEntry, const TMaybe<TString>& cdcName,
+    bool EnableTopicSplitMerge, NYql::TIssue& issue, const TActorContext& ctx, const TString& consumer = "", bool includeStats = false, bool includeLocation = false) {
+
+    Ydb::Scheme::Entry *selfEntry = out.mutable_self();
+    ConvertDirectoryEntry(fromDirEntry, selfEntry, true);
+    if (cdcName) {
+        selfEntry->set_name(*cdcName);
+    }
+
     for (auto& sourcePart: in.GetPartitions()) {
         auto destPart = out.add_partitions();
         destPart->set_partition_id(sourcePart.GetPartitionId());
@@ -52,6 +91,11 @@ void FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     }
 
     const auto &config = in.GetPQTabletConfig();
+    if (EnableTopicSplitMerge && NPQ::SplitMergeEnabled(config)) {
+        out.mutable_partitioning_settings()->set_min_active_partitions(config.GetPartitionStrategy().GetMinPartitionCount());
+    } else {
+        out.mutable_partitioning_settings()->set_min_active_partitions(in.GetTotalGroupCount());
+    }
 
     out.mutable_partitioning_settings()->set_max_active_partitions(config.GetPartitionStrategy().GetMaxPartitionCount());
     switch(config.GetPartitionStrategy().GetPartitionStrategyType()) {
@@ -93,7 +137,7 @@ void FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     if (config.HasFederationAccount()) {
         (*out.mutable_attributes())["_federation_account"] = config.GetFederationAccount();
     }
-
+    bool local = config.GetLocalDC();
     const auto &partConfig = config.GetPartitionConfig();
     i64 msip = partConfig.GetMaxSizeInPartition();
     if (partConfig.HasMaxSizeInPartition() && msip != Max<i64>()) {
@@ -104,15 +148,58 @@ void FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     (*out.mutable_attributes())["_message_group_seqno_retention_period_ms"] = TStringBuilder() << (partConfig.GetSourceIdLifetimeSeconds() * 1000);
     (*out.mutable_attributes())["__max_partition_message_groups_seqno_stored"] = TStringBuilder() << partConfig.GetSourceIdMaxCounts();
 
+    if (local || pqConfig.GetTopicsAreFirstClassCitizen()) {
+        out.set_partition_write_speed_bytes_per_second(partConfig.GetWriteSpeedInBytesPerSecond());
+        out.set_partition_write_burst_bytes(partConfig.GetBurstSize());
+    }
+
+    if (pqConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota()) {
+        auto readSpeedPerConsumer = partConfig.GetWriteSpeedInBytesPerSecond() * 2;
+        out.set_partition_total_read_speed_bytes_per_second(readSpeedPerConsumer * pqConfig.GetQuotingConfig().GetMaxParallelConsumersPerPartition());
+        out.set_partition_consumer_read_speed_bytes_per_second(readSpeedPerConsumer);
+    }
+
     for (const auto &codec : config.GetCodecs().GetIds()) {
         out.mutable_supported_codecs()->add_codecs((Ydb::Topic::Codec)(codec + 1));
     }
 
-    for (const auto& consumer : config.GetConsumers()) {
-        auto rr = out.add_consumers();
-        FillConsumer(*rr, consumer);
+    if (pqConfig.GetBillingMeteringConfig().GetEnabled()) {
+        switch (config.GetMeteringMode()) {
+            case NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY:
+                out.set_metering_mode(Ydb::Topic::METERING_MODE_RESERVED_CAPACITY);
+                break;
+            case NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS:
+                out.set_metering_mode(Ydb::Topic::METERING_MODE_REQUEST_UNITS);
+                break;
+            default:
+                break;
+        }
     }
 
+    bool found = false;
+    auto consumerName = NPersQueue::ConvertNewConsumerName(consumer, ctx);
+    for (const auto& consumer : config.GetConsumers()) {
+        if (consumerName == consumer.GetName()) {
+                found = true;
+        }
+        auto rr = out.add_consumers();
+        Ydb::StatusIds::StatusCode status;
+        TString error;
+        if (!FillConsumer(rr, consumer, ctx, status, error)) {
+            issue = NGRpcProxy::V1::FillIssue(error, status);
+            return false;
+        }
+    }
+    if (includeStats || includeLocation) {
+        if (consumer && !found) {
+           issue = NGRpcProxy::V1::FillIssue(
+                    TStringBuilder() << "no consumer '" << consumer << "' in topic",
+                    Ydb::PersQueue::ErrorCode::BAD_REQUEST
+            );
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace NKikimr

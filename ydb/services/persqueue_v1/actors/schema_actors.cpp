@@ -1023,24 +1023,6 @@ bool TDescribeConsumerActor::ApplyResponse(
 }
 
 
-bool FillConsumerProto(Ydb::Topic::Consumer* rr, const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
-                        const NActors::TActorContext& ctx, Ydb::StatusIds::StatusCode& status, TString& error)
-{
-    const auto& pqConfig = AppData(ctx)->PQConfig;
-
-    NKikimr::FillConsumer(*rr, consumer);
-
-    if (!consumer.HasServiceType()) {
-        if (pqConfig.GetDisallowDefaultClientServiceType()) {
-            error = "service type must be set for all read rules";
-            status = Ydb::StatusIds::INTERNAL_ERROR;
-            return false;
-        }
-        (*rr->mutable_attributes())["_service_type"] = pqConfig.GetDefaultClientServiceType().GetName();
-    }
-    return true;
-}
-
 void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     Y_ABORT_UNLESS(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
     if (ReplyIfNotTopic(ev)) {
@@ -1051,75 +1033,33 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
 
     const TString path = JoinSeq("/", response.Path);
 
-    Ydb::Scheme::Entry *selfEntry = Result.mutable_self();
-    ConvertDirectoryEntry(response.Self->Info, selfEntry, true);
-    if (const auto& name = GetCdcStreamName()) {
-        selfEntry->set_name(*name);
-    }
-
     if (response.PQGroupInfo) {
         const auto& pqDescr = response.PQGroupInfo->Description;
-        FillTopicDescription(Result, pqDescr);
-
-        const auto &config = pqDescr.GetPQTabletConfig();
-        if (AppData(TActivationContext::ActorContextFor(SelfId()))->FeatureFlags.GetEnableTopicSplitMerge() && NPQ::SplitMergeEnabled(config)) {
-            Result.mutable_partitioning_settings()->set_min_active_partitions(config.GetPartitionStrategy().GetMinPartitionCount());
-        } else {
-            Result.mutable_partitioning_settings()->set_min_active_partitions(pqDescr.GetTotalGroupCount());
-        }
-        bool local = config.GetLocalDC();
-        const auto &partConfig = config.GetPartitionConfig();
         const auto& pqConfig = AppData(ActorContext())->PQConfig;
+        NYql::TIssue issue;
+        FillTopicDescription(Result, pqDescr, pqConfig, response.Self->Info, GetCdcStreamName(),
+        AppData(TActivationContext::ActorContextFor(SelfId()))->FeatureFlags.GetEnableTopicSplitMerge(),
+         issue, ActorContext(), Settings.Consumer,GetProtoRequest()->include_stats(), GetProtoRequest()->include_location());
 
-        if (local || pqConfig.GetTopicsAreFirstClassCitizen()) {
-            Result.set_partition_write_speed_bytes_per_second(partConfig.GetWriteSpeedInBytesPerSecond());
-            Result.set_partition_write_burst_bytes(partConfig.GetBurstSize());
-        }
-
-        if (pqConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota()) {
-            auto readSpeedPerConsumer = partConfig.GetWriteSpeedInBytesPerSecond() * 2;
-            Result.set_partition_total_read_speed_bytes_per_second(readSpeedPerConsumer * pqConfig.GetQuotingConfig().GetMaxParallelConsumersPerPartition());
-            Result.set_partition_consumer_read_speed_bytes_per_second(readSpeedPerConsumer);
-        }
-
-        if (pqConfig.GetBillingMeteringConfig().GetEnabled()) {
-            switch (config.GetMeteringMode()) {
-                case NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY:
-                    Result.set_metering_mode(Ydb::Topic::METERING_MODE_RESERVED_CAPACITY);
-                    break;
-                case NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS:
-                    Result.set_metering_mode(Ydb::Topic::METERING_MODE_REQUEST_UNITS);
-                    break;
-                default:
-                    break;
-            }
-        }
-        auto consumerName = NPersQueue::ConvertNewConsumerName(Settings.Consumer, ActorContext());
-        bool found = false;
-        ui64 ind = 0;
-        for (const auto& consumer : config.GetConsumers()) {
-            if (consumerName == consumer.GetName()) {
-                 found = true;
-            }
-            auto rr = Result.get_idx_consumers(ind++);
-            Ydb::StatusIds::StatusCode status;
-            TString error;
-            if (!FillConsumerProto(&rr, consumer, ActorContext(), status, error)) {
-                return RaiseError(error, Ydb::PersQueue::ErrorCode::ERROR, status, ActorContext());
-            }
+        switch (issue.GetCode()) {
+        case Ydb::StatusIds::INTERNAL_ERROR:
+            return RaiseError(issue.GetMessage(), Ydb::PersQueue::ErrorCode::ERROR, Ydb::StatusIds::INTERNAL_ERROR, ActorContext());
+        case Ydb::PersQueue::ErrorCode::BAD_REQUEST:
+            Request_->RaiseIssue(issue);
+            return RespondWithCode(Ydb::StatusIds::SCHEME_ERROR);
+        default:
+            break;
         }
 
         if (GetProtoRequest()->include_stats() || GetProtoRequest()->include_location()) {
-            if (Settings.Consumer && !found) {
-                Request_->RaiseIssue(FillIssue(
-                        TStringBuilder() << "no consumer '" << Settings.Consumer << "' in topic",
-                        Ydb::PersQueue::ErrorCode::BAD_REQUEST
-                ));
-                return RespondWithCode(Ydb::StatusIds::SCHEME_ERROR);
-            }
-
             ProcessTablets(pqDescr, ActorContext());
             return;
+        }
+    } else {
+        Ydb::Scheme::Entry *selfEntry = Result.mutable_self();
+        ConvertDirectoryEntry(response.Self->Info, selfEntry, true);
+        if (const auto& name = GetCdcStreamName()) {
+            selfEntry->set_name(*name);
         }
     }
     return ReplyWithResult(Ydb::StatusIds::SUCCESS, Result, ActorContext());
@@ -1163,7 +1103,7 @@ void TDescribeConsumerActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::
             auto rr = Result.mutable_consumer();
             Ydb::StatusIds::StatusCode status;
             TString error;
-            if (!FillConsumerProto(rr, consumer, ActorContext(), status, error)) {
+            if (!FillConsumer(rr, consumer, ActorContext(), status, error)) {
                 return RaiseError(error, Ydb::PersQueue::ErrorCode::ERROR, status, ActorContext());
             }
             break;

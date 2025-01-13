@@ -2063,6 +2063,10 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
+    NMsgBusProxy::EResponseStatus TClient::CreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken) {
+        return CreateUser(parent, {.User = user, .Password = password}, userToken);
+    }
+
     NMsgBusProxy::EResponseStatus TClient::ModifyUser(const TString& parent, const TModifyUserOption& options, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto* op = request->Record.MutableTransaction()->MutableModifyScheme();

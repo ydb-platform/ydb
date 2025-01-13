@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(BSCStopPDisk) {
         env.Sim(TDuration::Seconds(30));
 
         auto it = env.PDiskMockStates.begin();
-        TPDiskMockState* targetState = it->second.get();
+        TPDiskMockState* targetState = it->second.Get();
         ui32 targetNodeId = it->first.first;
         ui32 targetPDiskId = it->first.second;
 

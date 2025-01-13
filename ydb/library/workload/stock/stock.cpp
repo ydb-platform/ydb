@@ -110,10 +110,10 @@ TVector<std::string> TStockWorkloadGenerator::GetCleanPaths() const {
 }
 
 TQueryInfo TStockWorkloadGenerator::FillStockData() const {
-    std::string query = R"(--!syntax_v1
+    std::string query = std::format(R"(--!syntax_v1
         DECLARE $stocks AS List<Struct<product:Utf8,quantity:Int64>>;
-        INSERT INTO `stock`(product, quantity) SELECT product, quantity from AS_TABLE( $stocks );
-    )";
+        INSERT INTO `{0}/stock`(product, quantity) SELECT product, quantity from AS_TABLE( $stocks );
+    )", DbPath);
 
     NYdb::TValueBuilder rows;
     rows.BeginList();
@@ -163,14 +163,14 @@ TVector<IWorkloadQueryGenerator::TWorkloadType> TStockWorkloadGenerator::GetSupp
 }
 
 TQueryInfo TStockWorkloadGenerator::InsertOrder(const uint64_t orderID, const std::string& customer, const TProductsQuantity& products) {
-    std::string query = R"(--!syntax_v1
+    std::string query = std::format(R"(--!syntax_v1
         DECLARE $ido AS UInt64;
         DECLARE $cust as Utf8;
         DECLARE $lines AS List<Struct<product:Utf8,quantity:Int64>>;
         DECLARE $time AS DateTime;
-        INSERT INTO `orders`(id, customer, created) values ($ido, $cust, $time);
-        UPSERT INTO `orderLines`(id_order, product, quantity) SELECT $ido, product, quantity from AS_TABLE( $lines );
-    )";
+        INSERT INTO `{0}/orders`(id, customer, created) values ($ido, $cust, $time);
+        UPSERT INTO `{0}/orderLines`(id_order, product, quantity) SELECT $ido, product, quantity from AS_TABLE( $lines );
+    )", DbPath);
 
     NYdb::TValueBuilder rows;
     rows.BeginList();
@@ -200,19 +200,19 @@ TQueryInfo TStockWorkloadGenerator::InsertOrder(const uint64_t orderID, const st
 }
 
 TQueryInfo TStockWorkloadGenerator::ExecuteOrder(const uint64_t orderID) {
-    std::string query = R"(--!syntax_v1
+    std::string query = std::format(R"(--!syntax_v1
         DECLARE $ido AS UINT64;
         DECLARE $time AS DateTime;
-        $prods = SELECT * FROM orderLines as p WHERE p.id_order = $ido;
+        $prods = SELECT * FROM `{0}/orderLines` as p WHERE p.id_order = $ido;
         $cnt = SELECT count(*) FROM $prods;
         $newq = SELECT p.product AS product, COALESCE(s.quantity,0)-p.quantity AS quantity
-                FROM   $prods as p LEFT JOIN stock AS s on s.product = p.product;
+                FROM   $prods as p LEFT JOIN `{0}/stock` AS s on s.product = p.product;
         $check = SELECT count(*) as cntd FROM $newq as q where q.quantity >= 0;
-        UPSERT INTO stock SELECT product, quantity FROM $newq where $check=$cnt;
-        $upo = SELECT id, $time as tm FROM orders WHERE id = $ido and $check = $cnt;
-        UPSERT INTO orders SELECT id, tm as processed FROM $upo;
+        UPSERT INTO `{0}/stock` SELECT product, quantity FROM $newq where $check=$cnt;
+        $upo = SELECT id, $time as tm FROM `{0}/orders` WHERE id = $ido and $check = $cnt;
+        UPSERT INTO `{0}/orders` SELECT id, tm as processed FROM $upo;
         SELECT * from $newq as q where q.quantity < 0
-    )";
+    )", DbPath);
 
     NYdb::TParamsBuilder paramsBuilder;
     paramsBuilder
@@ -232,11 +232,11 @@ TQueryInfo TStockWorkloadGenerator::SelectCustomerHistory(const std::string& cus
             DECLARE $cust as Utf8;
             DECLARE $limit as UInt32;
             select id, customer, created
-            from orders {}
+            from `{0}/orders` {1}
             where customer = $cust
             order by customer desc, created desc
             limit $limit;
-        )", Params.GetStoreType() == TStockWorkloadParams::EStoreType::Row ? "view ix_cust" : "");
+        )", DbPath, Params.GetStoreType() == TStockWorkloadParams::EStoreType::Row ? "view ix_cust" : "");
     }();
 
     NYdb::TParamsBuilder paramsBuilder;

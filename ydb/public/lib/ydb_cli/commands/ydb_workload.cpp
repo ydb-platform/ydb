@@ -107,6 +107,8 @@ void TWorkloadCommand::Config(TConfig& config) {
         .DefaultValue(1).StoreResult(&WindowSec);
     config.Opts->AddLongOption("executer", "Query executer type (data or generic).")
         .DefaultValue("generic").StoreResult(&QueryExecuterType);
+    config.Opts->AddLongOption("prefix", "Prefix.")
+        .Optional().StoreResult(&Prefix);
 }
 
 void TWorkloadCommand::PrepareForRun(TConfig& config) {
@@ -348,7 +350,7 @@ TWorkloadCommandRun::TWorkloadCommandRun(NYdbWorkload::TWorkloadParams& params, 
 
 int TWorkloadCommandRun::Run(TConfig& config) {
     PrepareForRun(config);
-    Params.DbPath = config.Database;
+    Params.DbPath = config.Database + '/' + Prefix;
     auto workloadGen = Params.CreateGenerator();
     return RunWorkload(*workloadGen, Type);
 }
@@ -371,6 +373,8 @@ void TWorkloadCommandBase::Config(TConfig& config) {
     config.Opts->SetFreeArgsNum(0);
     config.Opts->AddLongOption("dry-run", "Dry run").NoArgument()
         .Optional().StoreResult(&DryRun, true);
+    config.Opts->AddLongOption("prefix", "Prefix.")
+        .Optional().StoreResult(&Prefix);
     Params.ConfigureOpts(*config.Opts, CommandType, Type);
 }
 
@@ -382,7 +386,7 @@ int TWorkloadCommandBase::Run(TConfig& config) {
         SchemeClient = MakeHolder<NScheme::TSchemeClient>(*Driver);
         QueryClient = MakeHolder<NQuery::TQueryClient>(*Driver);
     }
-    Params.DbPath = config.Database;
+    Params.DbPath = config.Database + '/' + Prefix;
     auto workloadGen = Params.CreateGenerator();
     return DoRun(*workloadGen, config);
 }

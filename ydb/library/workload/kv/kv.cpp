@@ -228,7 +228,7 @@ TQueryInfoList TKvWorkloadGenerator::WriteRows(TString operation, TVector<TRow>&
         }
     }
 
-    ss << operation << " INTO `" << Params.TableName << "` (";
+    ss << operation << " INTO `" << Params.DbPath << "/" << Params.TableName << "` (";
 
     for (size_t col = 0; col < Params.ColumnsCnt; ++col) {
         ss << "c" << col;
@@ -298,7 +298,7 @@ TQueryInfoList TKvWorkloadGenerator::Select(TVector<TRow>&& rows) {
         ss << " ";
     }
 
-    ss << "FROM `" << Params.TableName << "` WHERE ";
+    ss << "FROM `" << Params.DbPath << "/" << Params.TableName << "` WHERE ";
     for (size_t row = 0; row < Params.RowsCnt; ++row) {
         for (size_t col = 0; col < Params.KeyColumnsCnt; ++col) {
             TString paramName = "$r" + std::to_string(row) + "_" + std::to_string(col);

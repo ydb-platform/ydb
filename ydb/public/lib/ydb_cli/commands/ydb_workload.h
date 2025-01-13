@@ -41,6 +41,7 @@ protected:
     std::unique_ptr<NTable::TTableClient> TableClient;
     std::unique_ptr<NQuery::TQueryClient> QueryClient;
 
+    TString Prefix;
     size_t TotalSec;
     size_t Threads;
     ui64 Rate;
@@ -104,6 +105,7 @@ protected:
     THolder<NQuery::TQueryClient> QueryClient;
     int Type = 0;
     bool DryRun = false;
+    TString Prefix;
 };
 
 class TWorkloadCommandInit final: public TWorkloadCommandBase {

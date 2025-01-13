@@ -688,9 +688,9 @@ void TTopicSession::SendData(TClientsInfo& info) {
     } while(!buffer.empty());
 
     UnreadBytes -= info.UnreadBytes;
+    Metrics.UnreadBytes->Sub(info.UnreadBytes);
     info.UnreadRows = 0;
     info.UnreadBytes = 0;
-    Metrics.UnreadBytes->Sub(info.UnreadBytes);
 
     info.Stat.Add(dataSize, eventsSize);
     info.FilteredDataRate->Add(dataSize);

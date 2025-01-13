@@ -847,6 +847,7 @@ private:
             case TRule_sql_stmt_core::kAltSqlStmtCore14: // export
             case TRule_sql_stmt_core::kAltSqlStmtCore32: // drop external data source
             case TRule_sql_stmt_core::kAltSqlStmtCore34: // drop replication
+            case TRule_sql_stmt_core::kAltSqlStmtCore60: // drop transfer
                 return true;
             case TRule_sql_stmt_core::kAltSqlStmtCore3: { // named nodes
                 const auto& stmt = msg.GetAlt_sql_stmt_core3().GetRule_named_nodes_stmt1();

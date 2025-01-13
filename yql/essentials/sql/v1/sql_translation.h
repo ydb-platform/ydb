@@ -341,5 +341,6 @@ TVector<TPatternComponent<TChar>> SplitPattern(const TBasicString<TChar>& patter
 }
 
 bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& suffix);
+TString FormatLambda(const TRule_lambda& statement);
 
 } // namespace NSQLTranslationV1

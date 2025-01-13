@@ -49,9 +49,9 @@ struct TTokenCollector {
     TStringBuilder Tokens;
 };
 
-TString CollectTokens(const TRule_select_stmt& selectStatement) {
+TString CollectTokens(const auto& statement) {
     TTokenCollector tokenCollector;
-    VisitAllFields(selectStatement, tokenCollector);
+    VisitAllFields(statement, tokenCollector);
     return tokenCollector.Tokens;
 }
 
@@ -5294,6 +5294,10 @@ bool TSqlTranslation::ParseResourcePoolClassifierSettings(std::map<TString, TDef
         case TRule_alter_resource_pool_classifier_action::ALT_NOT_SET:
             Y_ABORT("You should change implementation according to grammar changes");
     }
+}
+
+TString FormatLambda(const TRule_lambda& statement) {
+    return CollectTokens(statement);
 }
 
 } // namespace NSQLTranslationV1

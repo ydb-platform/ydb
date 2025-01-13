@@ -189,31 +189,31 @@ bool ValidateMessageBody(TStringBuf body, TString& errorDescription) {
     return true;
 }
 
-bool TTagValidator::ValidateString(const TString& str, const bool key) {
+bool TTagValidator::ValidateString(const TString& str, const bool isKey) {
     if (str.empty()) {
-        Error = key ? "Tag key must not be empty."
-                    : "Tag value must not be empty.";
+        Error = isKey ? "Tag key must not be empty."
+                      : "Tag value must not be empty.";
         return false;
     }
 
-    if (key && !IsAsciiLower(str[0])) {
-        Error = key ? "Tag key must start with a lowercase letter (a-z)."
-                    : "Tag value must start with a lowercase letter (a-z).";
+    if (isKey && !IsAsciiLower(str[0])) {
+        Error = isKey ? "Tag key must start with a lowercase letter (a-z)."
+                      : "Tag value must start with a lowercase letter (a-z).";
         return false;
     }
 
     constexpr size_t maxSize = 63;
     if (str.size() > maxSize) {
-        Error = key ? "Tag key must not be longer than 63 characters."
-                    : "Tag value must not be longer than 63 characters.";
+        Error = isKey ? "Tag key must not be longer than 63 characters."
+                      : "Tag value must not be longer than 63 characters.";
         return false;
     }
 
     for (char c : str) {
         bool ok = IsAsciiLower(c) || IsAsciiDigit(c) || c == '-' || c == '_';
         if (!ok) {
-            Error = key ? "Tag key can only consist of ASCII lowercase letters, digits, dashes and underscores."
-                        : "Tag value can only consist of ASCII lowercase letters, digits, dashes and underscores.";
+            Error = isKey ? "Tag key can only consist of ASCII lowercase letters, digits, dashes and underscores."
+                          : "Tag value can only consist of ASCII lowercase letters, digits, dashes and underscores.";
             return false;
         }
     }

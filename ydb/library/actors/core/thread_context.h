@@ -31,6 +31,7 @@ namespace NActors {
         TWaitingStats<ui64> *WaitingStats = nullptr;
         bool IsCurrentRecipientAService = false;
         TMPMCRingQueue<20>::EPopMode ActivationPopMode = TMPMCRingQueue<20>::EPopMode::ReallySlow;
+        ui64 ProcessedActivationsByCurrentPool = 0;
 
         std::atomic<i64> StartOfProcessingEventTS = GetCycleCountFast();
         std::atomic<i64> ActivationStartTS = 0;

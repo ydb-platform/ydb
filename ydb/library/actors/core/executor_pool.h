@@ -180,16 +180,6 @@ namespace NActors {
             return 1;
         }
 
-        virtual TSharedExecutorThreadCtx* ReleaseSharedThread() {
-            return nullptr;
-        }
-        virtual void AddSharedThread(TSharedExecutorThreadCtx*) {
-        }
-
-        virtual bool IsSharedThreadEnabled() const {
-            return false;
-        }
-
         virtual TCpuConsumption GetThreadCpuConsumption(i16 threadIdx) {
             Y_UNUSED(threadIdx);
             return TCpuConsumption{0.0, 0.0};

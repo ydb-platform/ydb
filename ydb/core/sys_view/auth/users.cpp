@@ -99,7 +99,44 @@ protected:
             for (auto& column : Columns) {
                 switch (column.Tag) {
                 case Schema::AuthUsers::Sid::ColumnId:
-                    cells.push_back(TCell(user.GetName().data(), user.GetName().size()));
+                    cells.push_back(user.HasName()
+                        ? TCell(user.GetName().data(), user.GetName().size())
+                        : TCell());
+                    break;
+                case Schema::AuthUsers::IsEnabled::ColumnId:
+                    cells.push_back(user.HasIsEnabled()
+                        ? TCell::Make(user.GetIsEnabled())
+                        : TCell());
+                    break;
+                case Schema::AuthUsers::IsLockedOut::ColumnId:
+                    cells.push_back(user.HasIsLockedOut()
+                        ? TCell::Make(user.GetIsLockedOut())
+                        : TCell());
+                    break;
+                case Schema::AuthUsers::CreatedAt::ColumnId:
+                    cells.push_back(user.HasCreatedAt()
+                        ? TCell::Make(user.GetCreatedAt())
+                        : TCell());
+                    break;
+                case Schema::AuthUsers::LastSuccessfulAttemptAt::ColumnId:
+                    cells.push_back(user.HasLastSuccessfulAttemptAt()
+                        ? TCell::Make(user.GetLastSuccessfulAttemptAt())
+                        : TCell());
+                    break;
+                case Schema::AuthUsers::LastFailedAttemptAt::ColumnId:
+                    cells.push_back(user.HasLastFailedAttemptAt()
+                        ? TCell::Make(user.GetLastFailedAttemptAt())
+                        : TCell());
+                    break;
+                case Schema::AuthUsers::FailedAttemptCount::ColumnId:
+                    cells.push_back(user.HasFailedAttemptCount()
+                        ? TCell::Make(user.GetFailedAttemptCount())
+                        : TCell());
+                    break;
+                case Schema::AuthUsers::Password::ColumnId:
+                    cells.push_back(user.HasPassword()
+                        ? TCell(user.GetPassword().data(), user.GetPassword().size())
+                        : TCell());
                     break;
                 default:
                     cells.emplace_back();

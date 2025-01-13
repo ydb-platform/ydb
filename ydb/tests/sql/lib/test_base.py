@@ -20,7 +20,7 @@ class TestBase(TestLib):
     @classmethod
     def setup_class(cls):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY", "ydb/apps/ydbd/ydbd"))
-        logger.error(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("ascii"))
+        logger.error(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
 
         cls.database = "/Root"
         cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=cls.get_cluster_configuration()))

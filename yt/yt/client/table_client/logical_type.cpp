@@ -394,7 +394,7 @@ i64 TOptionalLogicalType::GetMemoryUsage(i64 limit) const
     YT_ASSERT(limit > 0);
 
     if (Element_->GetMetatype() == ELogicalMetatype::Simple) {
-        // NB: see TOptionalLogicalType::GetMemoryUsage().
+        // NB: See TOptionalLogicalType::GetMemoryUsage().
         return 0;
     } else if (auto sizeOfThis = static_cast<i64>(sizeof(*this)); sizeOfThis >= limit) {
         return sizeof(*this);

@@ -12,6 +12,7 @@ from clickhouse_connect import common
 from clickhouse_connect.common import version
 from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.datatypes.base import ClickHouseType
+from clickhouse_connect.datatypes import dynamic as dynamic_module
 from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.common import dict_copy, StreamContext, coerce_int, coerce_bool
 from clickhouse_connect.driver.constants import CH_VERSION_WITH_PROTOCOL, PROTOCOL_VERSION_WITH_LOW_CARD
@@ -90,7 +91,7 @@ class Client(ABC):
         server_settings = self.query(f'SELECT name, value, {readonly} as readonly FROM system.settings LIMIT 10000')
         self.server_settings = {row['name']: SettingDef(**row) for row in server_settings.named_results()}
 
-        if self.min_version(CH_VERSION_WITH_PROTOCOL):
+        if self.min_version(CH_VERSION_WITH_PROTOCOL) and common.get_setting('use_protocol_version'):
             #  Unfortunately we have to validate that the client protocol version is actually used by ClickHouse
             #  since the query parameter could be stripped off (in particular, by CHProxy)
             test_data = self.raw_query('SELECT 1 AS check', fmt='Native', settings={
@@ -103,6 +104,8 @@ class Client(ABC):
         if self._setting_status('allow_experimental_json_type').is_set and \
                 self._setting_status('cast_string_to_dynamic_user_inference').is_writable:
             self.set_client_setting('cast_string_to_dynamic_use_inference', '1')
+        if self.min_version('24.8') and not self.min_version('24.10'):
+            dynamic_module.json_serialization_format = 0
 
 
     def _validate_settings(self, settings: Optional[Dict[str, Any]]) -> Dict[str, str]:

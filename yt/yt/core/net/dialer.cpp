@@ -223,7 +223,7 @@ private:
 
     void CloseSocket()
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         if (Socket_ != INVALID_SOCKET) {
             YT_VERIFY(TryClose(Socket_));
@@ -233,7 +233,7 @@ private:
 
     bool TryRegisterPollable()
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         auto pollable = New<TPollable>(this, Id_, Socket_);
         if (!Poller_->TryRegister(pollable)) {
@@ -248,7 +248,7 @@ private:
 
     void UnregisterPollable()
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         YT_VERIFY(Socket_ != INVALID_SOCKET);
         Poller_->Unarm(Socket_, Pollable_);
@@ -262,7 +262,7 @@ private:
 
     void Connect(TGuard<NThreading::TSpinLock>& guard)
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         try {
             auto family = Address_.GetSockAddr()->sa_family;

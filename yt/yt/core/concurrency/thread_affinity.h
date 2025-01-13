@@ -102,18 +102,6 @@ private:
 //! This is a mere declaration and intentionally does not check anything.
 #define YT_ASSERT_THREAD_AFFINITY_ANY() do { } while (false)
 
-// Temporary compatibility. Remove after removing all usages of VERIFY_*.
-#define VERIFY_THREAD_AFFINITY(slot) YT_ASSERT_THREAD_AFFINITY(slot)
-#define VERIFY_SPINLOCK_AFFINITY(spinLock) YT_ASSERT_SPINLOCK_AFFINITY(spinLock)
-#define VERIFY_READER_SPINLOCK_AFFINITY(spinLock) YT_ASSERT_READER_SPINLOCK_AFFINITY(spinLock)
-#define VERIFY_WRITER_SPINLOCK_AFFINITY(spinLock) YT_ASSERT_WRITER_SPINLOCK_AFFINITY(spinLock)
-#define VERIFY_INVOKER_AFFINITY(invoker) YT_ASSERT_INVOKER_AFFINITY(invoker)
-#define VERIFY_SERIALIZED_INVOKER_AFFINITY(invoker) YT_ASSERT_SERIALIZED_INVOKER_AFFINITY(invoker)
-#define VERIFY_INVOKERS_AFFINITY(...) YT_ASSERT_INVOKERS_AFFINITY(__VA_ARGS__)
-#define VERIFY_INVOKER_POOL_AFFINITY(invokerPool) YT_ASSERT_INVOKER_POOL_AFFINITY(invokerPool)
-#define VERIFY_INVOKER_THREAD_AFFINITY(invoker, slot) YT_ASSERT_INVOKER_THREAD_AFFINITY(invoker, slot)
-#define VERIFY_THREAD_AFFINITY_ANY() YT_ASSERT_THREAD_AFFINITY_ANY()
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency

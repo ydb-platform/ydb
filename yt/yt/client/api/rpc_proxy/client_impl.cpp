@@ -101,7 +101,7 @@ IChannelPtr TClient::CreateSequoiaAwareRetryingChannel(IChannelPtr channel, bool
 {
     const auto& config = Connection_->GetConfig();
     bool retrySequoiaErrorsOnly = !config->EnableRetries;
-    // NB: even if client's retries are disabled Sequoia transient failures are
+    // NB: Even if client's retries are disabled Sequoia transient failures are
     // still retriable. See IsRetriableError().
     return CreateRetryingChannel(
         config->RetryingChannel,
@@ -1715,9 +1715,13 @@ TFuture<std::vector<TColumnarStatistics>> TClient::GetColumnarStatistics(
 
     req->set_fetcher_mode(static_cast<NProto::EColumnarStatisticsFetcherMode>(options.FetcherMode));
 
-    ToProto(req->mutable_fetch_chunk_spec_config(), options.FetchChunkSpecConfig);
+    if (options.FetchChunkSpecConfig) {
+        ToProto(req->mutable_fetch_chunk_spec_config(), options.FetchChunkSpecConfig);
+    }
 
-    ToProto(req->mutable_fetcher_config(), options.FetcherConfig);
+    if (options.FetcherConfig) {
+        ToProto(req->mutable_fetcher_config(), options.FetcherConfig);
+    }
 
     req->set_enable_early_finish(options.EnableEarlyFinish);
 
@@ -1745,12 +1749,18 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
         req->add_paths(ToString(path));
     }
 
-    ToProto(req->mutable_fetch_chunk_spec_config(), options.FetchChunkSpecConfig);
+    if (options.FetchChunkSpecConfig) {
+        ToProto(req->mutable_fetch_chunk_spec_config(), options.FetchChunkSpecConfig);
+    }
 
-    ToProto(req->mutable_fetcher_config(), options.FetcherConfig);
+    if (options.FetcherConfig) {
+        ToProto(req->mutable_fetcher_config(), options.FetcherConfig);
+    }
 
-    req->mutable_chunk_slice_fetcher_config()->set_max_slices_per_fetch(
-        options.ChunkSliceFetcherConfig->MaxSlicesPerFetch);
+    if (options.ChunkSliceFetcherConfig) {
+        req->mutable_chunk_slice_fetcher_config()->set_max_slices_per_fetch(
+            options.ChunkSliceFetcherConfig->MaxSlicesPerFetch);
+    }
 
     req->set_partition_mode(static_cast<NProto::EPartitionTablesMode>(options.PartitionMode));
 

@@ -3788,8 +3788,6 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
         case ERequestType::RequestChunkReadPiece:
         case ERequestType::RequestYardInit:
         case ERequestType::RequestCheckSpace:
-        case ERequestType::RequestHarakiri:
-        case ERequestType::RequestYardSlay:
         case ERequestType::RequestYardControl:
         case ERequestType::RequestWhiteboartReport:
         case ERequestType::RequestHttpInfo:
@@ -3805,16 +3803,16 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
 
         // Can't be processed in read-only mode.
         case ERequestType::RequestLogWrite: {
-            TLogWrite &ev = *static_cast<TLogWrite*>(request);
+            TLogWrite &req = *static_cast<TLogWrite*>(request);
             NPDisk::TEvLogResult* result = new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, errorReason);
-            result->Results.push_back(NPDisk::TEvLogResult::TRecord(ev.Lsn, ev.Cookie));
+            result->Results.push_back(NPDisk::TEvLogResult::TRecord(req.Lsn, req.Cookie));
             PCtx->ActorSystem->Send(sender, result);
-            ev.Replied = true;
+            req.Replied = true;
             return true;
         }
         case ERequestType::RequestChunkWrite: {
-            TChunkWrite &ev = *static_cast<TChunkWrite*>(request);
-            SendChunkWriteError(ev, errorReason, NKikimrProto::CORRUPTED);
+            TChunkWrite &req = *static_cast<TChunkWrite*>(request);
+            SendChunkWriteError(req, errorReason, NKikimrProto::CORRUPTED);
             return true;
         }
         case ERequestType::RequestChunkReserve:
@@ -3829,6 +3827,18 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
         case ERequestType::RequestChunkForget:
             PCtx->ActorSystem->Send(sender, new NPDisk::TEvChunkForgetResult(NKikimrProto::CORRUPTED, 0, errorReason));
             return true;
+        case ERequestType::RequestHarakiri:
+            PCtx->ActorSystem->Send(sender, new NPDisk::TEvHarakiriResult(NKikimrProto::CORRUPTED, 0, errorReason));
+            return true;
+        case ERequestType::RequestYardSlay: {
+            TSlay &req = *static_cast<TSlay*>(request);
+            // We send NOTREADY, since BSController can't handle CORRUPTED or ERROR.
+            // If for some reason the disk will become *not* read-only, the request will be retried and VDisk will be slain.
+            // If not, we will be retrying the request until the disk is replaced during maintenance.
+            PCtx->ActorSystem->Send(sender, new NPDisk::TEvSlayResult(NKikimrProto::NOTREADY, 0,
+                        req.VDiskId, req.SlayOwnerRound, req.PDiskId, req.VSlotId, errorReason));
+            return true;
+        }
 
         case ERequestType::RequestWriteMetadata:
         case ERequestType::RequestWriteMetadataResult:

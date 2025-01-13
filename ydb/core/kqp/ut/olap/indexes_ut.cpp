@@ -362,7 +362,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 auto alterQuery =
                     TStringBuilder() <<
                     R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
-                  {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "10s", "expected_blobs_size" : 2048000, "portions_count_available" : 1}, 
+                  {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "10s", "expected_blobs_size" : 2048000, "portions_count_available" : 1},
                                {"class_name" : "Zero"}]}`);
                 )";
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();

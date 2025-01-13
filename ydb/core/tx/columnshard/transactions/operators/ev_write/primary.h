@@ -63,7 +63,6 @@ private:
         for (auto&& i : protoData.GetWaitShardsResultAck()) {
             WaitShardsResultAck.emplace(i);
         }
-        AFL_VERIFY(ReceivingShards.empty() == SendingShards.empty());
         if (protoData.HasTxBroken()) {
             TxBroken = protoData.GetTxBroken();
         }

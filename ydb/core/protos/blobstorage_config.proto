@@ -630,6 +630,7 @@ message TBaseConfig {
         EDecommitStatus DecommitStatus = 16;
         string ExpectedSerial = 17;
         string LastSeenSerial = 18;
+        bool ReadOnly = 19;
     }
     message TVSlot {
         message TDonorDisk {

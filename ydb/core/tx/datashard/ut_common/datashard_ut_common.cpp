@@ -1539,12 +1539,10 @@ void ApplyChanges(
 }
 
 TRowVersion CommitWrites(
-        Tests::TServer::TPtr server,
+        TTestActorRuntime& runtime,
         const TVector<TString>& tables,
         ui64 writeTxId)
 {
-    auto& runtime = *server->GetRuntime();
-
     TActorId sender = runtime.AllocateEdgeActor();
 
     {
@@ -1569,6 +1567,14 @@ TRowVersion CommitWrites(
         "Unexpected step " << step << " and txId " << txId);
 
     return { step, txId };
+}
+
+TRowVersion CommitWrites(
+        Tests::TServer::TPtr server,
+        const TVector<TString>& tables,
+        ui64 writeTxId)
+{
+    return CommitWrites(*server->GetRuntime(), tables, writeTxId);
 }
 
 ui64 AsyncDropTable(
@@ -2615,6 +2621,7 @@ namespace {
             PRINT_PRIMITIVE(Datetime64);
             PRINT_PRIMITIVE(Timestamp64);
             PRINT_PRIMITIVE(String);
+            PRINT_PRIMITIVE(Utf8);
             PRINT_PRIMITIVE(DyNumber);
 
             default:
@@ -2654,13 +2661,12 @@ namespace {
 } // namespace
 
 TReadShardedTableState StartReadShardedTable(
-        Tests::TServer::TPtr server,
+        TTestActorRuntime& runtime,
         const TString& path,
         TRowVersion snapshot,
         bool pause,
         bool ordered)
 {
-    auto& runtime = *server->GetRuntime();
     auto sender = runtime.AllocateEdgeActor();
     auto worker = runtime.Register(new TReadTableImpl(sender, path, snapshot, pause, ordered));
     auto ev = runtime.GrabEdgeEventRethrow<TReadTableImpl::TEvResult>(sender);
@@ -2669,6 +2675,16 @@ TReadShardedTableState StartReadShardedTable(
         UNIT_ASSERT_VALUES_EQUAL(result, "PAUSED");
     }
     return { sender, worker, result };
+}
+
+TReadShardedTableState StartReadShardedTable(
+        Tests::TServer::TPtr server,
+        const TString& path,
+        TRowVersion snapshot,
+        bool pause,
+        bool ordered)
+{
+    return StartReadShardedTable(*server->GetRuntime(), path, snapshot, pause, ordered);
 }
 
 void ResumeReadShardedTable(
@@ -2682,11 +2698,19 @@ void ResumeReadShardedTable(
 }
 
 TString ReadShardedTable(
+        TTestActorRuntime& runtime,
+        const TString& path,
+        TRowVersion snapshot)
+{
+    return StartReadShardedTable(runtime, path, snapshot, /* pause = */ false).Result;
+}
+
+TString ReadShardedTable(
         Tests::TServer::TPtr server,
         const TString& path,
         TRowVersion snapshot)
 {
-    return StartReadShardedTable(server, path, snapshot, /* pause = */ false).Result;
+    return ReadShardedTable(*server->GetRuntime(), path, snapshot);
 }
 
 void SendViaPipeCache(

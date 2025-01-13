@@ -117,7 +117,7 @@ public:
     }
 };
 
-class MemoryOutputStream : public OutputStream {
+class MemoryOutputStream final : public OutputStream {
 public:
     const size_t chunkSize_;
     std::vector<uint8_t *> data_;
@@ -129,7 +129,7 @@ public:
     ~MemoryOutputStream() final {
         for (std::vector<uint8_t *>::const_iterator it = data_.begin();
              it != data_.end(); ++it) {
-            delete[] * it;
+            delete[] *it;
         }
     }
 

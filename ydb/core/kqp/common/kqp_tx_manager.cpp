@@ -278,17 +278,17 @@ public:
         for (auto& [shardId, shardInfo] : ShardsInfo) {
             if ((shardInfo.Flags & EAction::WRITE)) {
                 ReceivingShards.insert(shardId);
+                if (shardInfo.IsOlap) {
+                    receivingColumnShardsSet.insert(shardId);
+                }
                 if (IsVolatile()) {
                     SendingShards.insert(shardId);
-                }
-                if (shardInfo.IsOlap) {
-                    sendingColumnShardsSet.insert(shardId);
                 }
             }
             if (!shardInfo.Locks.empty()) {
                 SendingShards.insert(shardId);
                 if (shardInfo.IsOlap) {
-                    receivingColumnShardsSet.insert(shardId);
+                    sendingColumnShardsSet.insert(shardId);
                 }
             }
 
@@ -325,6 +325,7 @@ public:
             auto arbiterIterator = std::begin(shards);
             std::advance(arbiterIterator, index);
             ArbiterColumnShard = *arbiterIterator;
+            ReceivingShards.insert(*ArbiterColumnShard);
         }
 
         ShardsToWaitPrepare = ShardsIds;

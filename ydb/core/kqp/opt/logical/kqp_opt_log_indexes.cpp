@@ -17,7 +17,7 @@ using namespace NYql::NNodes;
 
 namespace {
 
-TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx,
+TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& /* table */, TPositionHandle pos, TExprContext& ctx,
                                 const auto& columnsToSelect) {
     TVector<TExprBase> columnsList;
     columnsList.reserve(columnsToSelect.size());

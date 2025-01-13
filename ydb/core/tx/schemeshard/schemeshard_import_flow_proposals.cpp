@@ -168,6 +168,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
             if (const auto region = importInfo->Settings.region()) {
                 restoreSettings.SetRegion(region);
             }
+
+            if (item.Metadata.HasVersion()) {
+                task.SetValidateChecksums(item.Metadata.GetVersion() > 0 && !importInfo->Settings.skip_checksum_validation());
+            }
         }
         break;
     }

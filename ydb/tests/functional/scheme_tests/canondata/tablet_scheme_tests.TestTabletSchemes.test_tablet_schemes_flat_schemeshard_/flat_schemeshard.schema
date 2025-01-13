@@ -6168,6 +6168,11 @@
                 "ColumnId": 11,
                 "ColumnName": "Permissions",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "Metadata",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -6184,7 +6189,8 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12
                 ],
                 "RoomID": 0,
                 "Codec": 0,

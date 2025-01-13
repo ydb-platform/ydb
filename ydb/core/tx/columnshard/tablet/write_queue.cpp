@@ -6,7 +6,7 @@
 
 namespace NKikimr::NColumnShard {
 
-bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) {
+bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) {
     auto overloadStatus = owner->CheckOverloadedWait(PathId);
     if (overloadStatus != TColumnShard::EOverloadStatus::None) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "wait_overload")("status", overloadStatus);
@@ -26,7 +26,8 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) {
     writeOperation->SetBehaviour(Behaviour);
     NOlap::TWritingContext wContext(owner->TabletID(), owner->SelfId(), Schema, owner->StoragesManager,
         owner->Counters.GetIndexationCounters().SplitterCounters, owner->Counters.GetCSCounters().WritingCounters, NOlap::TSnapshot::Max(),
-        writeOperation->GetActivityChecker());
+        writeOperation->GetActivityChecker(), Behaviour == EOperationBehaviour::NoTxWrite, owner->BufferizationInsertionWriteActorId,
+        owner->BufferizationPortionsWriteActorId);
     ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId)->GetBucketPositions());
     writeOperation->Start(*owner, ArrowData, SourceId, wContext);
     return true;

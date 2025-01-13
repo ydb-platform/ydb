@@ -549,6 +549,15 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
         break;
     }
 
+    Cout << Endl << "Consistency level: " << desc.GetConsistencyLevel();
+    switch (desc.GetConsistencyLevel()) {
+    case NReplication::TReplicationDescription::EConsistencyLevel::Row:
+        break;
+    case NReplication::TReplicationDescription::EConsistencyLevel::Global:
+        Cout << Endl << "Commit interval: " << desc.GetGlobalConsistency().GetCommitInterval();
+        break;
+    }
+
     if (const auto& items = desc.GetItems()) {
         TVector<TString> columnNames = { "#", "Source", "Destination", "Changefeed" };
         if (ShowStats) {

@@ -2513,8 +2513,8 @@ TEST(TSkiffParser, Simple)
         })->SetName("opt_string32"),
     });
 
-    TCollectingValueConsumer collectedRows;
-    auto parser = CreateParserForSkiff(skiffSchema, &collectedRows);
+    TCollectingValueConsumer rowCollector;
+    auto parser = CreateParserForSkiff(skiffSchema, &rowCollector);
 
     TStringStream dataStream;
     TCheckedSkiffWriter checkedSkiffWriter(CreateVariant16Schema({skiffSchema}), &dataStream);
@@ -2537,20 +2537,20 @@ TEST(TSkiffParser, Simple)
     parser->Read(dataStream.Str());
     parser->Finish();
 
-    ASSERT_EQ(static_cast<int>(collectedRows.Size()), 1);
+    ASSERT_EQ(rowCollector.Size(), 1);
 
-    ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "int64")), -1);
-    ASSERT_EQ(GetUint64(collectedRows.GetRowValue(0, "uint64")), 2u);
-    ASSERT_EQ(GetDouble(collectedRows.GetRowValue(0, "double")), 3.0);
-    ASSERT_EQ(GetBoolean(collectedRows.GetRowValue(0, "boolean")), true);
-    ASSERT_EQ(GetString(collectedRows.GetRowValue(0, "string32")), "foo");
-    ASSERT_EQ(IsNull(collectedRows.GetRowValue(0, "null")), true);
+    ASSERT_EQ(GetInt64(rowCollector.GetRowValue(0, "int64")), -1);
+    ASSERT_EQ(GetUint64(rowCollector.GetRowValue(0, "uint64")), 2u);
+    ASSERT_EQ(GetDouble(rowCollector.GetRowValue(0, "double")), 3.0);
+    ASSERT_EQ(GetBoolean(rowCollector.GetRowValue(0, "boolean")), true);
+    ASSERT_EQ(GetString(rowCollector.GetRowValue(0, "string32")), "foo");
+    ASSERT_EQ(IsNull(rowCollector.GetRowValue(0, "null")), true);
 
-    ASSERT_EQ(IsNull(collectedRows.GetRowValue(0, "opt_int64")), true);
-    ASSERT_EQ(IsNull(collectedRows.GetRowValue(0, "opt_uint64")), true);
-    ASSERT_EQ(IsNull(collectedRows.GetRowValue(0, "opt_double")), true);
-    ASSERT_EQ(IsNull(collectedRows.GetRowValue(0, "opt_boolean")), true);
-    ASSERT_EQ(IsNull(collectedRows.GetRowValue(0, "opt_string32")), true);
+    ASSERT_EQ(IsNull(rowCollector.GetRowValue(0, "opt_int64")), true);
+    ASSERT_EQ(IsNull(rowCollector.GetRowValue(0, "opt_uint64")), true);
+    ASSERT_EQ(IsNull(rowCollector.GetRowValue(0, "opt_double")), true);
+    ASSERT_EQ(IsNull(rowCollector.GetRowValue(0, "opt_boolean")), true);
+    ASSERT_EQ(IsNull(rowCollector.GetRowValue(0, "opt_string32")), true);
 }
 
 TEST(TSkiffParser, TestOptionalNull)
@@ -2564,9 +2564,9 @@ TEST(TSkiffParser, TestOptionalNull)
     auto nameTable = New<TNameTable>();
 
     {
-        TCollectingValueConsumer collectedRows;
+        TCollectingValueConsumer rowCollector;
         EXPECT_THROW_WITH_SUBSTRING(
-            CreateParserForSkiff(skiffSchema, &collectedRows),
+            CreateParserForSkiff(skiffSchema, &rowCollector),
             "cannot be represented with Skiff schema");
     }
 
@@ -2574,8 +2574,8 @@ TEST(TSkiffParser, TestOptionalNull)
         TColumnSchema("opt_null", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Null))),
     });
 
-    TCollectingValueConsumer collectedRows(tableSchema);
-    auto parser = CreateParserForSkiff(skiffSchema, &collectedRows);
+    TCollectingValueConsumer rowCollector(tableSchema);
+    auto parser = CreateParserForSkiff(skiffSchema, &rowCollector);
 
     TStringStream dataStream;
     TCheckedSkiffWriter checkedSkiffWriter(CreateVariant16Schema({skiffSchema}), &dataStream);
@@ -2591,9 +2591,9 @@ TEST(TSkiffParser, TestOptionalNull)
     parser->Read(dataStream.Str());
     parser->Finish();
 
-    ASSERT_EQ(static_cast<int>(collectedRows.Size()), 2);
+    ASSERT_EQ(rowCollector.Size(), 2);
 
-    ASSERT_EQ(collectedRows.GetRowValue(0, "opt_null").Type, EValueType::Null);
+    ASSERT_EQ(rowCollector.GetRowValue(0, "opt_null").Type, EValueType::Null);
 }
 
 TEST(TSkiffParser, TestSparse)
@@ -2606,8 +2606,8 @@ TEST(TSkiffParser, TestSparse)
         })->SetName("$sparse_columns"),
     });
 
-    TCollectingValueConsumer collectedRows;
-    auto parser = CreateParserForSkiff(skiffSchema, &collectedRows);
+    TCollectingValueConsumer rowCollector;
+    auto parser = CreateParserForSkiff(skiffSchema, &rowCollector);
 
     TStringStream dataStream;
     TCheckedSkiffWriter checkedSkiffWriter(CreateVariant16Schema({skiffSchema}), &dataStream);
@@ -2633,15 +2633,15 @@ TEST(TSkiffParser, TestSparse)
     parser->Read(dataStream.Str());
     parser->Finish();
 
-    ASSERT_EQ(static_cast<int>(collectedRows.Size()), 2);
+    ASSERT_EQ(rowCollector.Size(), 2);
 
-    ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "int64")), -42);
-    ASSERT_EQ(GetUint64(collectedRows.GetRowValue(0, "uint64")), 54u);
-    ASSERT_FALSE(collectedRows.FindRowValue(0, "string32"));
+    ASSERT_EQ(GetInt64(rowCollector.GetRowValue(0, "int64")), -42);
+    ASSERT_EQ(GetUint64(rowCollector.GetRowValue(0, "uint64")), 54u);
+    ASSERT_FALSE(rowCollector.FindRowValue(0, "string32"));
 
-    ASSERT_FALSE(collectedRows.FindRowValue(1, "int64"));
-    ASSERT_FALSE(collectedRows.FindRowValue(1, "uint64"));
-    ASSERT_EQ(GetString(collectedRows.GetRowValue(1, "string32")), "foo");
+    ASSERT_FALSE(rowCollector.FindRowValue(1, "int64"));
+    ASSERT_FALSE(rowCollector.FindRowValue(1, "uint64"));
+    ASSERT_EQ(GetString(rowCollector.GetRowValue(1, "string32")), "foo");
 }
 
 TEST(TSkiffParser, TestYsonWireType)
@@ -2650,8 +2650,8 @@ TEST(TSkiffParser, TestYsonWireType)
         CreateSimpleTypeSchema(EWireType::Yson32)->SetName("yson"),
     });
 
-    TCollectingValueConsumer collectedRows;
-    auto parser = CreateParserForSkiff(skiffSchema, &collectedRows);
+    TCollectingValueConsumer rowCollector;
+    auto parser = CreateParserForSkiff(skiffSchema, &rowCollector);
 
     TStringStream dataStream;
     TCheckedSkiffWriter checkedSkiffWriter(CreateVariant16Schema({skiffSchema}), &dataStream);
@@ -2685,13 +2685,13 @@ TEST(TSkiffParser, TestYsonWireType)
     parser->Read(dataStream.Str());
     parser->Finish();
 
-    ASSERT_EQ(static_cast<int>(collectedRows.Size()), 6);
-    ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "yson")), -42);
-    ASSERT_EQ(GetUint64(collectedRows.GetRowValue(1, "yson")), 42u);
-    ASSERT_EQ(GetString(collectedRows.GetRowValue(2, "yson")), "foobar");
-    ASSERT_EQ(GetBoolean(collectedRows.GetRowValue(3, "yson")), true);
-    ASSERT_EQ(GetAny(collectedRows.GetRowValue(4, "yson"))->AsMap()->GetChildOrThrow("foo")->AsString()->GetValue(), "bar");
-    ASSERT_EQ(IsNull(collectedRows.GetRowValue(5, "yson")), true);
+    ASSERT_EQ(rowCollector.Size(), 6);
+    ASSERT_EQ(GetInt64(rowCollector.GetRowValue(0, "yson")), -42);
+    ASSERT_EQ(GetUint64(rowCollector.GetRowValue(1, "yson")), 42u);
+    ASSERT_EQ(GetString(rowCollector.GetRowValue(2, "yson")), "foobar");
+    ASSERT_EQ(GetBoolean(rowCollector.GetRowValue(3, "yson")), true);
+    ASSERT_EQ(GetAny(rowCollector.GetRowValue(4, "yson"))->AsMap()->GetChildOrThrow("foo")->AsString()->GetValue(), "bar");
+    ASSERT_EQ(IsNull(rowCollector.GetRowValue(5, "yson")), true);
 }
 
 TEST(TSkiffParser, TestBadYsonWireType)
@@ -2701,8 +2701,8 @@ TEST(TSkiffParser, TestBadYsonWireType)
     });
 
     auto parseYsonUsingSkiff = [&] (TStringBuf ysonValue) {
-        TCollectingValueConsumer collectedRows;
-        auto parser = CreateParserForSkiff(skiffSchema, &collectedRows);
+        TCollectingValueConsumer rowCollector;
+        auto parser = CreateParserForSkiff(skiffSchema, &rowCollector);
         TStringStream dataStream;
         ASSERT_NO_THROW({
             TCheckedSkiffWriter checkedSkiffWriter(CreateVariant16Schema({skiffSchema}), &dataStream);
@@ -2749,8 +2749,8 @@ TEST(TSkiffParser, TestSpecialColumns)
 
     for (const auto& skiffSchema : skiffSchemaList) {
         try {
-            TCollectingValueConsumer collectedRows;
-            auto parser = CreateParserForSkiff(skiffSchema, &collectedRows);
+            TCollectingValueConsumer rowCollector;
+            auto parser = CreateParserForSkiff(skiffSchema, &rowCollector);
         } catch (std::exception& e) {
             EXPECT_THAT(e.what(), testing::HasSubstr("Skiff parser does not support \"$key_switch\""));
         }
@@ -2764,8 +2764,8 @@ TEST(TSkiffParser, TestOtherColumns)
         CreateSimpleTypeSchema(EWireType::Yson32)->SetName("$other_columns"),
     });
 
-    TCollectingValueConsumer collectedRows;
-    auto parser = CreateParserForSkiff(skiffSchema, &collectedRows);
+    TCollectingValueConsumer rowCollector;
+    auto parser = CreateParserForSkiff(skiffSchema, &rowCollector);
 
     TStringStream dataStream;
     TCheckedSkiffWriter checkedSkiffWriter(CreateVariant16Schema({skiffSchema}), &dataStream);
@@ -2786,13 +2786,13 @@ TEST(TSkiffParser, TestOtherColumns)
     parser->Read(dataStream.Str());
     parser->Finish();
 
-    ASSERT_EQ(static_cast<int>(collectedRows.Size()), 2);
-    ASSERT_EQ(GetString(collectedRows.GetRowValue(0, "name")), "row_0");
-    ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "foo")), -42);
+    ASSERT_EQ(rowCollector.Size(), 2);
+    ASSERT_EQ(GetString(rowCollector.GetRowValue(0, "name")), "row_0");
+    ASSERT_EQ(GetInt64(rowCollector.GetRowValue(0, "foo")), -42);
 
-    ASSERT_EQ(GetString(collectedRows.GetRowValue(1, "name")), "row_1");
-    ASSERT_EQ(GetString(collectedRows.GetRowValue(1, "bar")), "qux");
-    ASSERT_EQ(ConvertToYsonTextStringStable(GetAny(collectedRows.GetRowValue(1, "baz"))), "{\"boolean\"=%false;}");
+    ASSERT_EQ(GetString(rowCollector.GetRowValue(1, "name")), "row_1");
+    ASSERT_EQ(GetString(rowCollector.GetRowValue(1, "bar")), "qux");
+    ASSERT_EQ(ConvertToYsonTextStringStable(GetAny(rowCollector.GetRowValue(1, "baz"))), "{\"boolean\"=%false;}");
 }
 
 TEST(TSkiffParser, TestComplexColumn)
@@ -2804,14 +2804,14 @@ TEST(TSkiffParser, TestComplexColumn)
         })->SetName("column")
     });
 
-    TCollectingValueConsumer collectedRows(
+    TCollectingValueConsumer rowCollector(
         New<TTableSchema>(std::vector{
             TColumnSchema("column", NTableClient::StructLogicalType({
                 {"key", NTableClient::SimpleLogicalType(ESimpleLogicalValueType::String)},
                 {"value", NTableClient::SimpleLogicalType(ESimpleLogicalValueType::Int64)}
             }))
         }));
-    auto parser = CreateParserForSkiff(skiffSchema, &collectedRows);
+    auto parser = CreateParserForSkiff(skiffSchema, &rowCollector);
 
     TStringStream dataStream;
     TCheckedSkiffWriter checkedSkiffWriter(CreateVariant16Schema({skiffSchema}), &dataStream);
@@ -2826,8 +2826,8 @@ TEST(TSkiffParser, TestComplexColumn)
     parser->Read(dataStream.Str());
     parser->Finish();
 
-    ASSERT_EQ(static_cast<int>(collectedRows.Size()), 1);
-    ASSERT_EQ(ConvertToYsonTextStringStable(GetComposite(collectedRows.GetRowValue(0, "column"))), "[\"row_0\";42;]");
+    ASSERT_EQ(rowCollector.Size(), 1);
+    ASSERT_EQ(ConvertToYsonTextStringStable(GetComposite(rowCollector.GetRowValue(0, "column"))), "[\"row_0\";42;]");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2838,25 +2838,25 @@ TEST(TSkiffParser, TestEmptyInput)
         CreateSimpleTypeSchema(EWireType::String32)->SetName("column"),
     });
 
-    TCollectingValueConsumer collectedRows;
+    TCollectingValueConsumer rowCollector;
 
     {
-        auto parser = CreateParserForSkiff(skiffSchema, &collectedRows);
+        auto parser = CreateParserForSkiff(skiffSchema, &rowCollector);
         parser->Finish();
-        ASSERT_EQ(static_cast<int>(collectedRows.Size()), 0);
+        ASSERT_EQ(rowCollector.Size(), 0);
     }
     {
-        auto parser = CreateParserForSkiff(skiffSchema, &collectedRows);
+        auto parser = CreateParserForSkiff(skiffSchema, &rowCollector);
         parser->Read("");
         parser->Finish();
-        ASSERT_EQ(static_cast<int>(collectedRows.Size()), 0);
+        ASSERT_EQ(rowCollector.Size(), 0);
     }
     {
-        auto parser = CreateParserForSkiff(skiffSchema, &collectedRows);
+        auto parser = CreateParserForSkiff(skiffSchema, &rowCollector);
         parser->Read("");
         parser->Read("");
         parser->Finish();
-        ASSERT_EQ(static_cast<int>(collectedRows.Size()), 0);
+        ASSERT_EQ(rowCollector.Size(), 0);
     }
 }
 
@@ -2869,9 +2869,9 @@ TEST(TSkiffParser, ColumnIds)
         CreateSimpleTypeSchema(EWireType::Uint64)->SetName("field_b")
     });
 
-    TCollectingValueConsumer collectedRows;
-    collectedRows.GetNameTable()->GetIdOrRegisterName("field_b");
-    auto parser = CreateParserForSkiff(skiffSchema, &collectedRows);
+    TCollectingValueConsumer rowCollector;
+    rowCollector.GetNameTable()->GetIdOrRegisterName("field_b");
+    auto parser = CreateParserForSkiff(skiffSchema, &rowCollector);
 
     TStringStream dataStream;
     TCheckedSkiffWriter checkedSkiffWriter(CreateVariant16Schema({skiffSchema}), &dataStream);
@@ -2885,10 +2885,10 @@ TEST(TSkiffParser, ColumnIds)
     parser->Read(dataStream.Str());
     parser->Finish();
 
-    ASSERT_EQ(static_cast<int>(collectedRows.Size()), 1);
+    ASSERT_EQ(rowCollector.Size(), 1);
 
-    ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "field_a")), -1);
-    ASSERT_EQ(GetUint64(collectedRows.GetRowValue(0, "field_b")), 2u);
+    ASSERT_EQ(GetInt64(rowCollector.GetRowValue(0, "field_a")), -1);
+    ASSERT_EQ(GetUint64(rowCollector.GetRowValue(0, "field_b")), 2u);
 }
 
 TEST(TSkiffParser, TestSparseComplexType)
@@ -2902,7 +2902,7 @@ TEST(TSkiffParser, TestSparseComplexType)
         })->SetName("$sparse_columns"),
     });
 
-    TCollectingValueConsumer collectedRows(
+    TCollectingValueConsumer rowCollector(
         New<TTableSchema>(std::vector{
             TColumnSchema("value", OptionalLogicalType(
                 StructLogicalType({
@@ -2910,7 +2910,7 @@ TEST(TSkiffParser, TestSparseComplexType)
                     {"value", SimpleLogicalType(ESimpleLogicalValueType::Int64)}
                 })))
         }));
-    auto parser = CreateParserForSkiff(skiffSchema, &collectedRows);
+    auto parser = CreateParserForSkiff(skiffSchema, &rowCollector);
 
     TStringStream dataStream;
     TCheckedSkiffWriter checkedSkiffWriter(CreateVariant16Schema({skiffSchema}), &dataStream);
@@ -2931,9 +2931,9 @@ TEST(TSkiffParser, TestSparseComplexType)
     parser->Read(dataStream.Str());
     parser->Finish();
 
-    ASSERT_EQ(static_cast<int>(collectedRows.Size()), 2);
-    EXPECT_EQ(ConvertToYsonTextStringStable(GetComposite(collectedRows.GetRowValue(0, "value"))), "[\"row_0\";10;]");
-    EXPECT_FALSE(collectedRows.FindRowValue(1, "value"));
+    ASSERT_EQ(rowCollector.Size(), 2);
+    EXPECT_EQ(ConvertToYsonTextStringStable(GetComposite(rowCollector.GetRowValue(0, "value"))), "[\"row_0\";10;]");
+    EXPECT_FALSE(rowCollector.FindRowValue(1, "value"));
 }
 
 TEST(TSkiffParser, TestSparseComplexTypeWithExtraOptional)
@@ -2950,7 +2950,7 @@ TEST(TSkiffParser, TestSparseComplexTypeWithExtraOptional)
         })->SetName("$sparse_columns"),
     });
 
-    TCollectingValueConsumer collectedRows(
+    TCollectingValueConsumer rowCollector(
         New<TTableSchema>(std::vector{
             TColumnSchema("column", OptionalLogicalType(
                 StructLogicalType({
@@ -2958,7 +2958,7 @@ TEST(TSkiffParser, TestSparseComplexTypeWithExtraOptional)
                     {"value", NTableClient::SimpleLogicalType(ESimpleLogicalValueType::Int64)}
                 })))
         }));
-    auto parser = CreateParserForSkiff(skiffSchema, &collectedRows);
+    auto parser = CreateParserForSkiff(skiffSchema, &rowCollector);
 
     TStringStream dataStream;
     TCheckedSkiffWriter checkedSkiffWriter(CreateVariant16Schema({skiffSchema}), &dataStream);
@@ -2980,9 +2980,9 @@ TEST(TSkiffParser, TestSparseComplexTypeWithExtraOptional)
     parser->Read(dataStream.Str());
     parser->Finish();
 
-    ASSERT_EQ(static_cast<int>(collectedRows.Size()), 2);
-    ASSERT_EQ(ConvertToYsonTextStringStable(GetComposite(collectedRows.GetRowValue(0, "column"))), "[\"row_0\";42;]");
-    ASSERT_FALSE(collectedRows.FindRowValue(1, "column"));
+    ASSERT_EQ(rowCollector.Size(), 2);
+    ASSERT_EQ(ConvertToYsonTextStringStable(GetComposite(rowCollector.GetRowValue(0, "column"))), "[\"row_0\";42;]");
+    ASSERT_FALSE(rowCollector.FindRowValue(1, "column"));
 }
 
 
@@ -2997,22 +2997,22 @@ TEST(TSkiffParser, TestBadWireTypeForSimpleColumn)
         })->SetName("opt_yson32"),
     });
 
-    TCollectingValueConsumer collectedRows;
+    TCollectingValueConsumer rowCollector;
     EXPECT_THROW_WITH_SUBSTRING(
-        CreateParserForSkiff(skiffSchema, &collectedRows),
+        CreateParserForSkiff(skiffSchema, &rowCollector),
         "cannot be represented with Skiff schema");
 }
 
 TEST(TSkiffParser, TestEmptyColumns)
 {
     auto skiffSchema = CreateTupleSchema({});
-    TCollectingValueConsumer collectedRows;
-    auto parser = CreateParserForSkiff(skiffSchema, &collectedRows);
+    TCollectingValueConsumer rowCollector;
+    auto parser = CreateParserForSkiff(skiffSchema, &rowCollector);
 
     parser->Read(TStringBuf("\x00\x00\x00\x00"sv));
     parser->Finish();
 
-    ASSERT_EQ(static_cast<int>(collectedRows.Size()), 2);
+    ASSERT_EQ(rowCollector.Size(), 2);
 }
 
 TEST(TSkiffFormat, TestTimestamp)

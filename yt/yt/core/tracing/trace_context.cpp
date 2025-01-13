@@ -315,7 +315,7 @@ void TTraceContext::SetAllocationTagList(TAllocationTagListPtr list) noexcept
 
 void TTraceContext::DoSetAllocationTags(TAllocationTags&& tags)
 {
-    VERIFY_SPINLOCK_AFFINITY(AllocationTagsLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(AllocationTagsLock_);
     auto holder = tags.empty() ? nullptr : New<TAllocationTagList>(std::move(tags));
     AllocationTagList_.Store(std::move(holder));
 }

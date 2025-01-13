@@ -282,9 +282,9 @@ i64 TColumnSchema::GetMemoryUsage() const
         (Group_ ? Group_->size() : 0);
 }
 
-i64 TColumnSchema::GetMemoryUsage(i64 limit) const
+i64 TColumnSchema::GetMemoryUsage(i64 threshold) const
 {
-    YT_ASSERT(limit > 0);
+    YT_ASSERT(threshold > 0);
 
     auto usage = static_cast<i64>(
         sizeof(TColumnSchema) +
@@ -295,11 +295,11 @@ i64 TColumnSchema::GetMemoryUsage(i64 limit) const
         (Aggregate_ ? Aggregate_->size() : 0) +
         (Group_ ? Group_->size() : 0));
 
-    if (usage >= limit) {
+    if (usage >= threshold) {
         return usage;
     }
 
-    return usage + LogicalType_->GetMemoryUsage(limit - usage);
+    return usage + LogicalType_->GetMemoryUsage(threshold - usage);
 }
 
 bool TColumnSchema::IsOfV1Type() const
@@ -1459,17 +1459,17 @@ i64 TTableSchema::GetMemoryUsage() const
     return usage;
 }
 
-i64 TTableSchema::GetMemoryUsage(i64 limit) const
+i64 TTableSchema::GetMemoryUsage(i64 threshold) const
 {
-    YT_ASSERT(limit > 0);
+    YT_ASSERT(threshold > 0);
 
     auto usage = static_cast<i64>(sizeof(TTableSchema));
     for (const auto& column : Columns()) {
-        if (usage >= limit) {
+        if (usage >= threshold) {
             return usage;
         }
 
-        usage += column.GetMemoryUsage(limit - usage);
+        usage += column.GetMemoryUsage(threshold - usage);
     }
     return usage;
 }
@@ -1613,19 +1613,19 @@ void PrintTo(const TTableSchema& tableSchema, std::ostream* os)
 
 TTableSchemaTruncatedFormatter::TTableSchemaTruncatedFormatter(
     const TTableSchemaPtr& schema,
-    i64 memoryLimit)
+    i64 memoryThreshold)
     : Schema_(schema.Get())
-    , Limit_(memoryLimit)
+    , Threshold_(memoryThreshold)
 {
-    YT_ASSERT(Limit_ >= 0);
+    YT_ASSERT(Threshold_ >= 0);
 }
 
 void TTableSchemaTruncatedFormatter::operator()(TStringBuilderBase* builder) const
 {
     if (!Schema_) {
         builder->AppendString(ToString(nullptr));
-    } else if (Limit_ > 0 && Schema_->GetMemoryUsage(Limit_) <= Limit_) {
-        builder->AppendFormat("%v", *Schema_);
+    } else if (Threshold_ > 0 && Schema_->GetMemoryUsage(Threshold_) < Threshold_) {
+        FormatValue(builder, *Schema_, "%v");
     } else {
         builder->AppendString("<schema memory usage is over the logging threshold>");
     }

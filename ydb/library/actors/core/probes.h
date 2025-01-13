@@ -151,24 +151,6 @@
     PROBE(EpollSendReadyWrite, GROUPS("EpollThread"),                                                                                 \
           TYPES(bool, bool, int),                                                                                                     \
           NAMES("hangup", "event", "fd"))                                                                                             \
-    PROBE(HardPreemption, GROUPS("UnitedWorker"),                                                                                     \
-          TYPES(ui32, ui32, ui32, ui32),                                                                                              \
-          NAMES("cpu", "prevPoolId", "prevWorkerId", "nextWorkerId"))                                                                 \
-    PROBE(SetPreemptionTimer, GROUPS("UnitedWorker", "PreemptionTimer"),                                                              \
-          TYPES(ui32, ui32, int, double, double),                                                                                     \
-          NAMES("cpu", "workerId", "fd", "nowMs", "preemptMs"))                                                                       \
-    PROBE(ResetPreemptionTimer, GROUPS("UnitedWorker", "PreemptionTimer"),                                                            \
-          TYPES(ui32, ui32, int, double, double),                                                                                     \
-          NAMES("cpu", "workerId", "fd", "nowMs", "preemptMs"))                                                                       \
-    PROBE(SlowWorkerActionRace, GROUPS("UnitedWorker"),                                                                               \
-          TYPES(ui32, ui32, ui64),                                                                                                    \
-          NAMES("cpu", "poolId", "slowPoolsMask"))                                                                                    \
-    PROBE(PoolStats, GROUPS("PoolCpuBalancer"),                                                                                       \
-          TYPES(ui32, TString, ui64, ui8, ui8, double, double, double, ui64, ui64, ui64),                                             \
-          NAMES("poolId", "pool", "currentCpus", "loadClass", "priority", "scaleFactor", "cpuIdle", "cpuLoad", "importance", "addImportance", "subImportance")) \
-    PROBE(MoveCpu, GROUPS("PoolCpuBalancer"),                                                                                         \
-          TYPES(ui32, ui64, TString, TString, ui32),                                                                                  \
-          NAMES("fromPoolId", "toPoolId", "fromPool", "toPool", "cpu"))                                                               \
     PROBE(ThreadCount, GROUPS("BasicThreadPool"),                                                                                     \
           TYPES(ui32, TString, ui32, ui32, ui32, ui32),                                                                               \
           NAMES("poolId", "pool", "threacCount", "minThreadCount", "maxThreadCount", "defaultThreadCount"))                           \

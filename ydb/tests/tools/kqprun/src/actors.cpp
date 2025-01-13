@@ -14,6 +14,7 @@ class TRunScriptActorMock : public NActors::TActorBootstrapped<TRunScriptActorMo
 public:
     TRunScriptActorMock(TQueryRequest request, NThreading::TPromise<TQueryResponse> promise, TProgressCallback progressCallback)
         : TargetNode_(request.TargetNode)
+        , QueryId_(request.QueryId)
         , Request_(std::move(request.Event))
         , Promise_(promise)
         , ResultRowsLimit_(std::numeric_limits<ui64>::max())
@@ -83,12 +84,14 @@ public:
 
     void Handle(NKikimr::NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
         if (ProgressCallback_) {
-            ProgressCallback_(ev->Get()->Record);
+            ProgressCallback_(QueryId_, ev->Get()->Record);
         }
     }
 
 private:
-    ui32 TargetNode_ = 0;
+    const ui32 TargetNode_ = 0;
+    const size_t QueryId_ = 0;
+
     std::unique_ptr<NKikimr::NKqp::TEvKqp::TEvQueryRequest> Request_;
     NThreading::TPromise<TQueryResponse> Promise_;
     ui64 ResultRowsLimit_;
@@ -296,6 +299,7 @@ public:
     TSessionHolderActor(TCreateSessionRequest request, NThreading::TPromise<TString> openPromise, NThreading::TPromise<void> closePromise)
         : TargetNode_(request.TargetNode)
         , TraceId_(request.Event->Record.GetTraceId())
+        , VerboseLevel_(request.VerboseLevel)
         , Request_(std::move(request.Event))
         , OpenPromise_(openPromise)
         , ClosePromise_(closePromise)
@@ -314,7 +318,9 @@ public:
         }
 
         SessionId_ = response.GetResponse().GetSessionId();
-        Cout << CoutColors_.Cyan() << "Created new session on node " << TargetNode_ << " with id " << SessionId_ << "\n";
+        if (VerboseLevel_ >= 1) {
+            Cout << CoutColors_.Cyan() << "Created new session on node " << TargetNode_ << " with id " << SessionId_ << "\n";
+        }
 
         PingSession();
     }
@@ -390,6 +396,7 @@ private:
 private:
     const ui32 TargetNode_;
     const TString TraceId_;
+    const ui8 VerboseLevel_;
     const NColorizer::TColors CoutColors_ = NColorizer::AutoColors(Cout);
 
     std::unique_ptr<NKikimr::NKqp::TEvKqp::TEvCreateSessionRequest> Request_;

@@ -64,7 +64,6 @@ private:
             }
         }
         WriteJson(&tagsStr, &tagsJson);
-        Cerr << "XXXXX tagsStr=" << tagsStr.Str() << Endl;
 
         TExecutorBuilder builder(SelfId(), RequestId_);
         builder

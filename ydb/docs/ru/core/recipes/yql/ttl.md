@@ -27,7 +27,7 @@ ALTER TABLE `mytable` SET (TTL = Interval("PT1H") ON modified_at AS SECONDS);
 {% include [OLTP_not_allow_note](../../_includes/not_allow_for_oltp_note.md) %}
 
 Для включения вытеснения требуется объект [external data source](../../concepts/datamodel/external_data_source.md), описывающий подключение к внешнему хранилищу.
-В приведённом ниже примере external data source `/Root/s3_cold_data` будет описывать подключение к бакету `test_cold_data`, расположенному в Yandex Object Storage, с авторизацией через статический ключ доступа.
+В приведённом ниже примере создаётся external data source `/Root/s3_cold_data`: он описывает подключение к бакету `test_cold_data`, расположенному в Yandex Object Storage, с авторизацией через статический ключ доступа, данные которого хранятся в секретах `access_key` и `secret_key`.
 
 ```yql
 CREATE OBJECT access_key (TYPE SECRET) WITH (value="...");

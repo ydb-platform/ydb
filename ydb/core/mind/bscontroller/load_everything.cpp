@@ -93,6 +93,11 @@ public:
                 Self->TryToRelocateBrokenDisksLocallyFirst = state.GetValue<T::TryToRelocateBrokenDisksLocallyFirst>();
                 Self->YamlConfig = state.GetValue<T::YamlConfig>();
                 Self->ConfigVersion = state.GetValue<T::ConfigVersion>();
+                if (state.HaveValue<T::ShredState>()) {
+                    TString buffer = state.GetValue<T::ShredState>();
+                    const bool success = Self->ShredState.ParseFromString(buffer);
+                    Y_ABORT_UNLESS(success);
+                }
             }
         }
 

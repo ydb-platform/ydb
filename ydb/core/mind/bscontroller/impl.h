@@ -71,6 +71,7 @@ public:
     class TTxUpdateLastSeenReady;
     class TTxUpdateNodeDrives;
     class TTxUpdateNodeDisconnectTimestamp;
+    class TTxUpdateShred;
 
     class TVSlotInfo;
     class TPDiskInfo;
@@ -1532,6 +1533,7 @@ private:
     TString YamlConfig;
     ui32 ConfigVersion = 0;
     TBackoffTimer GetBlockBackoff{1, 1000};
+    NKikimrBlobStorage::TShredState ShredState;
 
     THashMap<TPDiskId, std::reference_wrapper<const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk>> StaticPDiskMap;
     THashMap<TPDiskId, ui32> StaticPDiskSlotUsage;
@@ -1836,6 +1838,7 @@ private:
     void ForwardToSystemViewsCollector(STATEFN_SIG);
     void Handle(TEvPrivate::TEvUpdateSystemViews::TPtr &ev);
     void Handle(TEvBlobStorage::TEvGetBlockResult::TPtr &ev);
+    void Handle(TEvBlobStorage::TEvControllerShredRequest::TPtr ev);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Scrub handling
@@ -2075,6 +2078,7 @@ public:
             hFunc(TEvBlobStorage::TEvControllerGroupDecommittedNotify, Handle);
             cFunc(TEvPrivate::EvScrub, ScrubState.HandleTimer);
             cFunc(TEvPrivate::EvVSlotReadyUpdate, VSlotReadyUpdate);
+            hFunc(TEvBlobStorage::TEvControllerShredRequest, Handle);
         }
 
         if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {

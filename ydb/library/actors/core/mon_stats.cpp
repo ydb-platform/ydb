@@ -66,7 +66,6 @@ namespace NActors {
             std::max(RelaxedLoad(&WorstActivationTimeUs), RelaxedLoad(&other.WorstActivationTimeUs)));
         ElapsedTicks += RelaxedLoad(&other.ElapsedTicks);
         ParkedTicks += RelaxedLoad(&other.ParkedTicks);
-        BlockedTicks += RelaxedLoad(&other.BlockedTicks);
         MailboxPushedOutByTailSending += RelaxedLoad(&other.MailboxPushedOutByTailSending);
         MailboxPushedOutBySoftPreemption += RelaxedLoad(&other.MailboxPushedOutBySoftPreemption);
         MailboxPushedOutByTime += RelaxedLoad(&other.MailboxPushedOutByTime);

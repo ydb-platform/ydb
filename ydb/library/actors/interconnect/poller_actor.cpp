@@ -51,10 +51,10 @@ namespace NActors {
         struct TPollerWakeup {};
 
         struct TPollerUnregisterSocket {
-            TIntrusivePtr<TSharedDescriptor> Socket;
+            TIntrusivePtr<TSocketRecord> Record;
 
-            TPollerUnregisterSocket(TIntrusivePtr<TSharedDescriptor> socket)
-                : Socket(std::move(socket))
+            TPollerUnregisterSocket(TIntrusivePtr<TSocketRecord> record)
+                : Record(std::move(record))
             {}
         };
 
@@ -98,7 +98,7 @@ namespace NActors {
         }
 
         void UnregisterSocket(const TIntrusivePtr<TSocketRecord>& record) {
-            ExecuteSyncOperation(TPollerUnregisterSocket(record->Socket));
+            ExecuteSyncOperation(TPollerUnregisterSocket(record));
         }
 
     protected:
@@ -170,7 +170,7 @@ namespace NActors {
             do {
                 TPollerSyncOperationWrapper *op = SyncOperationsQ.Top();
                 if (auto *unregister = std::get_if<TPollerUnregisterSocket>(&op->Operation)) {
-                    static_cast<TDerived&>(*this).UnregisterSocketInLoop(unregister->Socket);
+                    static_cast<TDerived&>(*this).UnregisterSocketInLoop(unregister->Record->Socket);
                     op->SignalDone();
                 } else if (std::get_if<TPollerExitThread>(&op->Operation)) {
                     op->SignalDone();

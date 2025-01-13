@@ -102,6 +102,7 @@ protected:
     TActorId Uploader;
     ui32 RetryCount = 0;
     ui32 RowsBytes = 0;
+    ui32 Parent = 0;
     ui32 Child = 0;
 
     NDataShard::TUploadStatus UploadStatus;
@@ -112,11 +113,13 @@ public:
                    const TActorId& responseActorId,
                    ui64 buildIndexId,
                    TIndexBuildInfo::TSample::TRows init,
+                   ui32 parent,
                    ui32 child)
         : TargetTable(std::move(targetTable))
         , ResponseActorId(responseActorId)
         , BuildIndexId(buildIndexId)
         , Init(std::move(init))
+        , Parent(parent)
         , Child(child)
     {
         LogPrefix = TStringBuilder()
@@ -124,6 +127,7 @@ public:
             << " ResponseActorId: " << ResponseActorId;
         Limits.MaxUploadRowsRetryCount = limits.MaxRetries;
         Y_ASSERT(!Init.empty());
+        Y_ASSERT(Parent < Child);
         Y_ASSERT(Child != 0);
     }
 
@@ -148,10 +152,10 @@ public:
         Rows = std::make_shared<NTxProxy::TUploadRows>();
         Rows->reserve(Init.size());
         std::array<TCell, 2> PrimaryKeys;
-        PrimaryKeys[0] = TCell::Make(ui32{0});
+        PrimaryKeys[0] = TCell::Make(Parent);
         for (auto& [_, row] : Init) {
             RowsBytes += row.size();
-            PrimaryKeys[1] = TCell::Make(ui32{Child++});
+            PrimaryKeys[1] = TCell::Make(Child++);
             // TODO(mbkkt) we can avoid serialization of PrimaryKeys every iter
             Rows->emplace_back(TSerializedCellVec{PrimaryKeys}, std::move(row));
         }
@@ -701,7 +705,7 @@ private:
         Y_ASSERT(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
         auto actor = new TUploadSampleK(path.PathString(),
             buildInfo.Limits, Self->SelfId(), ui64(BuildId),
-            buildInfo.Sample.Rows, buildInfo.KMeans.ChildBegin);
+            buildInfo.Sample.Rows, buildInfo.KMeans.Parent, buildInfo.KMeans.ChildBegin);
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
         buildInfo.Sample.Sent = true;

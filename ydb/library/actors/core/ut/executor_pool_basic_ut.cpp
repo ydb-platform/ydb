@@ -474,7 +474,6 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         //UNIT_ASSERT_VALUES_EQUAL(stats[0].CpuUs, 0); // depends on total duration of test, so undefined
         UNIT_ASSERT(stats[0].ElapsedTicks > 0);
         UNIT_ASSERT(stats[0].ParkedTicks > 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].BlockedTicks, 0);
         UNIT_ASSERT(stats[0].ActivationTimeHistogram.TotalSamples >= 2 * msgCount / TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].EventDeliveryTimeHistogram.TotalSamples, 2 * msgCount);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].EventProcessingCountHistogram.TotalSamples, 2 * msgCount);

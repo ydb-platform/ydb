@@ -1723,6 +1723,8 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             desc->Ssl = kakfaConfig.HasSslCertificate();
 
             desc->EndpointId = NGRpcService::KafkaEndpointId;
+            endpoints.push_back(std::move(desc));
+
         }
 
         for (auto &sx : config.GetExtEndpoints()) {
@@ -2773,13 +2775,11 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         settings.CertificateFile = Config.GetKafkaProxyConfig().GetCert();
         settings.PrivateKeyFile = Config.GetKafkaProxyConfig().GetKey();
 
-        if (Config.GetKafkaProxyConfig().GetEnableEndpointDiscovery()) {
-            setup->LocalServices.emplace_back(
-                NKafka::MakeKafkaDiscoveryCacheID(),
-                TActorSetupCmd(CreateDiscoveryCache(NGRpcService::KafkaEndpointId),
-                    TMailboxType::HTSwap, appData->UserPoolId)
-            );
-        }
+        setup->LocalServices.emplace_back(
+            NKafka::MakeKafkaDiscoveryCacheID(),
+            TActorSetupCmd(CreateDiscoveryCache(NGRpcService::KafkaEndpointId),
+                TMailboxType::HTSwap, appData->UserPoolId)
+        );
         setup->LocalServices.emplace_back(
             TActorId(),
             TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig(),

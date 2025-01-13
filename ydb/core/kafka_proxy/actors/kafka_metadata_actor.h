@@ -12,7 +12,7 @@ namespace NKafka {
 class TKafkaMetadataActor: public NActors::TActorBootstrapped<TKafkaMetadataActor> {
 public:
     TKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TMetadataRequestData>& message,
-                        const TActorId& discoveryCacheActor = {})
+                        const TActorId& discoveryCacheActor)
         : Context(context)
         , CorrelationId(correlationId)
         , Message(message)
@@ -60,7 +60,6 @@ private:
     }
 
     TString LogPrefix() const;
-    void Die(const TActorContext& ctx) override;
 
 private:
     const TContext::TPtr Context;
@@ -76,7 +75,6 @@ private:
     EKafkaErrors ErrorCode = EKafkaErrors::NONE_ERROR;
 
     TActorId DiscoveryCacheActor;
-    bool OwnDiscoveryCache = false;
     bool NeedCurrentNode = false;
     bool HaveError = false;
     bool FallbackToIcDiscovery = false;

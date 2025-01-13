@@ -11,8 +11,9 @@ using namespace NKikimr::NGRpcProxy::V1;
 
 NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context,
                                           const ui64 correlationId,
-                                          const TMessagePtr<TMetadataRequestData>& message) {
-    return new TKafkaMetadataActor(context, correlationId, message);
+                                          const TMessagePtr<TMetadataRequestData>& message,
+                                          const TActorId& discoveryCacheActor) {
+    return new TKafkaMetadataActor(context, correlationId, message, discoveryCacheActor);
 }
 
 void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
@@ -23,10 +24,7 @@ void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
     if (WithProxy) {
         AddProxyNodeToBrokers();
     } else {
-        if (Context->Config.GetEnableEndpointDiscovery())
-            SendDiscoveryRequest();
-        else
-            RequestICNodeCache();
+        SendDiscoveryRequest();
 
         if (Message->Topics.size() == 0) {
             NeedCurrentNode = true;
@@ -42,10 +40,7 @@ void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
 }
 
 void TKafkaMetadataActor::SendDiscoveryRequest() {
-    if (!DiscoveryCacheActor) {
-        OwnDiscoveryCache = true;
-        DiscoveryCacheActor = Register(CreateDiscoveryCache(NGRpcService::KafkaEndpointId));
-    }
+    Y_VERIFY_DEBUG(DiscoveryCacheActor);
     PendingResponses++;
     Register(CreateDiscoverer(&MakeEndpointsBoardPath, Context->DatabasePath, SelfId(), DiscoveryCacheActor));
 }
@@ -270,6 +265,7 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
             return;
         }
         AddBroker(nodeIter->first, nodeIter->second.Host, nodeIter->second.Port);
+        NeedCurrentNode = false;
     }
     while (!PendingTopicResponses.empty()) {
         auto& [index, ev] = *PendingTopicResponses.begin();
@@ -291,14 +287,6 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
     }
 
     Respond();
-}
-
-void TKafkaMetadataActor::Die(const TActorContext& ctx) {
-    if (OwnDiscoveryCache) {
-        Send(DiscoveryCacheActor, new TEvents::TEvPoison());
-        OwnDiscoveryCache = false;
-    }
-    TActor::Die(ctx);
 }
 
 TString TKafkaMetadataActor::LogPrefix() const {

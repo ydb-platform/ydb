@@ -2031,15 +2031,27 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken) {
+    NMsgBusProxy::EResponseStatus TClient::CreateUser(const TString& parent, const TCreateUserOption& options, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
         op->SetWorkingDir(parent);
 
         auto* createUser = op->MutableAlterLogin()->MutableCreateUser();
-        createUser->SetUser(user);
-        createUser->SetPassword(password);
+        createUser->SetUser(options.User);
+        createUser->SetPassword(options.Password);
+
+        switch (options.CanLogin) {
+            case ETypeOfLogin::Undefined:
+            case ETypeOfLogin::Login: {
+                createUser->SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Login);
+                break;
+            }
+            case ETypeOfLogin::NoLogin: {
+                createUser->SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::NoLogin);
+                break;
+            }
+        }
 
         request->Record.SetSecurityToken(userToken);
 
@@ -2051,7 +2063,7 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::ModifyUser(const TString& parent, const TString& user, const TString& password, const TString& userToken) {
+    NMsgBusProxy::EResponseStatus TClient::ModifyUser(const TString& parent, const TModifyUserOption& options, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
@@ -2060,8 +2072,25 @@ namespace Tests {
         request->Record.SetSecurityToken(userToken);
 
         auto* modifyUser = op->MutableAlterLogin()->MutableModifyUser();
-        modifyUser->SetUser(user);
-        modifyUser->SetPassword(password);
+        modifyUser->SetUser(options.User);
+
+        if (options.Password.has_value()) {
+            modifyUser->SetPassword(options.Password.value());
+        }
+
+        switch (options.CanLogin) {
+            case ETypeOfLogin::Login: {
+                modifyUser->SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Login);
+                break;
+            }
+            case ETypeOfLogin::NoLogin: {
+                modifyUser->SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::NoLogin);
+                break;
+            }
+            case ETypeOfLogin::Undefined: {
+                break;
+            }
+        }
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);

@@ -919,7 +919,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     }
 
     bool IsSelfChangePasswordOperation(const NKikimrSchemeOp::TAlterLogin& alterLogin) {
-        if (alterLogin.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser) {
+        if (alterLogin.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser && alterLogin.GetModifyUser().HasPassword()) {
             if (UserToken) {
                 const auto& modifyUser = alterLogin.GetModifyUser();
                 return UserToken->GetUserSID() == modifyUser.GetUser();

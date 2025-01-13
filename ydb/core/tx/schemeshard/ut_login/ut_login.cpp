@@ -923,12 +923,13 @@ NHttp::THttpIncomingRequestPtr MakeLogoutRequest(const TString& cookieName, cons
 }
 
 Y_UNIT_TEST_SUITE(TWebLoginService) {
-
-    Y_UNIT_TEST(AuditLogLoginSuccess) {
+    void AuditLogLoginTest(bool isUserAdmin) {
         TTestBasicRuntime runtime;
-        runtime.AddAppDataInit([](ui32, NKikimr::TAppData& appData){
-            appData.AdministrationAllowedSIDs.emplace_back("user1");
-        });
+        if (isUserAdmin) {
+            runtime.AddAppDataInit([](ui32, NKikimr::TAppData& appData){
+                appData.AdministrationAllowedSIDs.emplace_back("user1");
+            });
+        }
 
         std::vector<std::string> lines;
         runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
@@ -968,8 +969,21 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT(!last.contains("reason"));
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1");
         UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token=");
-        UNIT_ASSERT_STRING_CONTAINS(last, "account_type=admin");
         UNIT_ASSERT(last.find("sanitized_token={none}") == std::string::npos);
+
+        if (isUserAdmin) {
+            UNIT_ASSERT_STRING_CONTAINS(last, "account_type=admin");
+        } else {
+            UNIT_ASSERT(!last.contains("account_type=admin"));
+        }
+    }
+
+    Y_UNIT_TEST(AuditLogAdminLoginSuccess) {
+        AuditLogLoginTest(true);
+    }
+
+    Y_UNIT_TEST(AuditLogLoginSuccess) {
+        AuditLogLoginTest(false);
     }
 
     Y_UNIT_TEST(AuditLogLoginBadPassword) {

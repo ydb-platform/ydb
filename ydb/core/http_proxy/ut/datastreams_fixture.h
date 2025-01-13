@@ -724,6 +724,7 @@ private:
            "Columns { Name: \"CustomQueueName\"  Type: \"Utf8\"}"
            "Columns { Name: \"EventTimestamp\"   Type: \"Uint64\"}"
            "Columns { Name: \"FolderId\"         Type: \"Utf8\"}"
+           "Columns { Name: \"Labels\"           Type: \"Utf8\"}"
            "KeyColumnNames: [\"Account\", \"QueueName\", \"EventType\"]"
         );
 

@@ -222,7 +222,9 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
             ) WITH (STORE=%s);
         )", isOlap ? "COLUMN" : "ROW");
     
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(appConfig));
 
         {
             auto driverConfig = TDriverConfig()

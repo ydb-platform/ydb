@@ -21,6 +21,7 @@ namespace NFake {
         EvCompacted = Base_ + 14,
         EvCompact   = Base_ + 15,
         EvCall      = Base_ + 16,
+        EvDataCleaned = Base_ + 17,
     };
 
     struct TEvTerm : public TEventLocal<TEvTerm, EvTerm> { };
@@ -75,6 +76,8 @@ namespace NFake {
 
         ui64 Table;
     };
+
+    struct TEvDataCleaned : public TEventLocal<TEvDataCleaned, EvDataCleaned> { };
 
     struct TEvCompact : public TEventLocal<TEvCompact, EvCompact> {
         TEvCompact(ui32 table, bool memOnly = false)

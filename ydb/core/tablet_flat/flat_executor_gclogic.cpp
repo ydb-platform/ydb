@@ -160,6 +160,14 @@ void TExecutorGCLogic::FollowersSyncComplete(bool isBoot) {
     AllowGarbageCollection = true;
 }
 
+TGCTime TExecutorGCLogic::GetCommitedGcBarrier(ui32 channel) {
+    if (const auto* info = ChannelInfo.FindPtr(channel)) {
+        return info->CommitedGcBarrier;
+    } else {
+        return TGCTime();
+    }
+}
+
 void TExecutorGCLogic::ApplyDelta(TGCTime time, TGCBlobDelta &delta) {
     for (const TLogoBlobID &blobId : delta.Created) {
         auto &channel = ChannelInfo[blobId.Channel()];
@@ -172,6 +180,14 @@ void TExecutorGCLogic::ApplyDelta(TGCTime time, TGCBlobDelta &delta) {
         auto &channel = ChannelInfo[blobId.Channel()];
         channel.CommittedDelta[time].Deleted.push_back(blobId);
     }
+}
+
+THashMap<ui32, TGCTime> TExecutorGCLogic::GetCommitedGcBarriers() {
+    THashMap<ui32, TGCTime> result;
+    for (const auto& [channel, info] : ChannelInfo) {
+        result[channel] = info.CommitedGcBarrier;
+    }
+    return result;
 }
 
 void TExecutorGCLogic::SendCollectGarbage(const TActorContext& ctx) {

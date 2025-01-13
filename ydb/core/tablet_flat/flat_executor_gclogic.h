@@ -49,6 +49,9 @@ public:
     void ReleaseBarrier(ui32 step);
     ui32 GetActiveGcBarrier();
     void FollowersSyncComplete(bool isBoot);
+    TGCTime GetCommitedGcBarrier(ui32 channel);
+    void SendCollectGarbage(const TActorContext& executor);
+    THashMap<ui32, TGCTime> GetCommitedGcBarriers();
 
     struct TIntrospection {
         ui64 UncommitedEntries;
@@ -105,7 +108,6 @@ protected:
     bool AllowGarbageCollection;
 
     void ApplyDelta(TGCTime time, TGCBlobDelta &delta);
-    void SendCollectGarbage(const TActorContext& executor);
     static inline void MergeVectors(THolder<TVector<TLogoBlobID>>& destination, const TVector<TLogoBlobID>& source);
     static inline void MergeVectors(TVector<TLogoBlobID>& destination, const TVector<TLogoBlobID>& source);
     static inline TVector<TLogoBlobID>* CreateVector(const TVector<TLogoBlobID>& source);

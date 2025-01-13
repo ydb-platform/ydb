@@ -998,7 +998,6 @@ struct TAdoptedShard {
     ui64 PrevOwner;
     TLocalShardIdx PrevShardIdx;
 };
-
 struct TShardInfo {
     TTabletId TabletID = InvalidTabletId;
     TTxId CurrentTxId = InvalidTxId; ///< @note we support only one modifying transaction on shard at time
@@ -1695,8 +1694,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     }
 
     TDuration GetTtlMinRunInterval() const {
-        static constexpr auto TtlMinRunInterval = TDuration::Seconds(1);
-        return TtlMinRunInterval;
+        static constexpr auto TtlMinRunInterval = TDuration::Minutes(15);
 
         if (!DatabaseQuotas) {
             return TtlMinRunInterval;

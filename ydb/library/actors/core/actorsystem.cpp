@@ -1,4 +1,5 @@
 #include "defs.h"
+#include "debug.h"
 #include "activity_guard.h"
 #include "actorsystem.h"
 #include "callstack.h"
@@ -85,11 +86,14 @@ namespace NActors {
         , StopExecuted(false)
         , CleanupExecuted(false)
     {
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::TActorSystem");
         ServiceMap.Reset(new TServiceMap());
     }
 
     TActorSystem::~TActorSystem() {
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::~TActorSystem: start");
         Cleanup();
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::~TActorSystem: end");
     }
 
     template <TActorSystem::TEPSendFunction EPSpecificSend>
@@ -273,16 +277,19 @@ namespace NActors {
     }
 
     void TActorSystem::Start() {
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: start");
         Y_ABORT_UNLESS(StartExecuted == false);
         StartExecuted = true;
 
         ScheduleQueue.Reset(new NSchedulerQueue::TQueueType());
         TVector<NSchedulerQueue::TReader*> scheduleReaders;
         scheduleReaders.push_back(&ScheduleQueue->Reader);
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: prepare start");
         CpuManager->PrepareStart(scheduleReaders, this);
         Scheduler->Prepare(this, &CurrentTimestamp, &CurrentMonotonic);
         Scheduler->PrepareSchedules(&scheduleReaders.front(), (ui32)scheduleReaders.size());
 
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: setup interconnect proxies start");
         // setup interconnect proxies
         {
             TInterconnectSetup& setup = SystemSetup->Interconnect;
@@ -297,6 +304,7 @@ namespace NActors {
             ProxyWrapperFactory = std::move(SystemSetup->Interconnect.ProxyWrapperFactory);
         }
 
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: setup local services start");
         // setup local services
         {
             for (ui32 i = 0, e = (ui32)SystemSetup->LocalServices.size(); i != e; ++i) {
@@ -308,10 +316,15 @@ namespace NActors {
             }
         }
 
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: prepare start");
         Scheduler->PrepareStart();
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: cpu manager start");
         CpuManager->Start();
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: send scheduler initialize");
         Send(MakeSchedulerActorId(), new TEvSchedulerInitialize(scheduleReaders, &CurrentTimestamp, &CurrentMonotonic));
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: scheduler start");
         Scheduler->Start();
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: end");
     }
 
     void TActorSystem::Stop() {

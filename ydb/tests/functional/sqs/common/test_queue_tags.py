@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import pytest
+from hamcrest import assert_that, raises
 
 from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
 
@@ -17,7 +18,7 @@ class TestQueueTags(KikimrSqsTestBase):
     def test_list_queue_tags(self, is_fifo, tables_format):
         self._init_with_params(is_fifo, tables_format)
 
-        queue_url = self._create_queue_and_assert(self.queue_name, use_http=True)
+        queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=True)
 
         def get_tags():
             return self._sqs_api.list_queue_tags(queue_url)
@@ -29,7 +30,7 @@ class TestQueueTags(KikimrSqsTestBase):
     def test_tag_queue(self, is_fifo, tables_format):
         self._init_with_params(is_fifo, tables_format)
 
-        queue_url = self._create_queue_and_assert(self.queue_name, use_http=True)
+        queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=True)
 
         def add_tags(tags):
             return self._sqs_api.tag_queue(queue_url, tags)
@@ -68,7 +69,7 @@ class TestQueueTags(KikimrSqsTestBase):
 
         self._init_with_params(is_fifo, tables_format)
 
-        queue_url = self._create_queue_and_assert(self.queue_name, use_http=True)
+        queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=True)
 
         def add_tags(tags):
             return self._sqs_api.tag_queue(queue_url, tags)
@@ -76,19 +77,15 @@ class TestQueueTags(KikimrSqsTestBase):
         def get_tags():
             return self._sqs_api.list_queue_tags(queue_url)
 
+        def check(tags, pattern):
+            assert_that(lambda: add_tags(tags), raises(RuntimeError, pattern=pattern))
+            assert get_tags() == {}
+
+        check({'': ''}, 'Tag key must not be empty.')
+
         # Delete this line:
         self._sqs_api._SqsHttpApi__raise_on_error = False
         # Replace with proper checks like this:
-        # def empty_key_value():
-        #     add_tags({'': ''})
-        #     assert get_tags() == {}
-        # assert_that(
-        #     empty_key_value,
-        #     raises(
-        #         RuntimeError,
-        #         pattern='Tag key must not be empty.'
-        #     )
-        # )
 
         add_tags({'': ''})
         assert get_tags() == {}
@@ -123,7 +120,7 @@ class TestQueueTags(KikimrSqsTestBase):
     def test_untag_queue(self, is_fifo, tables_format):
         self._init_with_params(is_fifo, tables_format)
 
-        queue_url = self._create_queue_and_assert(self.queue_name, use_http=True)
+        queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=True)
 
         def add_tags(tags):
             return self._sqs_api.tag_queue(queue_url, tags)

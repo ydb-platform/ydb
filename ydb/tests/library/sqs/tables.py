@@ -110,6 +110,7 @@ def create_events_table(root, session):
         ('CustomQueueName', ydb.PrimitiveType.Utf8),
         ('EventTimestamp', ydb.PrimitiveType.Uint64),
         ('FolderId', ydb.PrimitiveType.Utf8),
+        ('Labels', ydb.PrimitiveType.Utf8),
     ]
     _create_table(root, session, '.Events', columns, keys_count=3)
 

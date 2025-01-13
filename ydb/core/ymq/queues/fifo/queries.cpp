@@ -574,7 +574,7 @@ const char* const TagQueueQuery = R"__(
         (let queuesRowUpdate '(
             '('Tags tags)))
         (return (AsList (UpdateRow queuesTable queuesRow queuesRowUpdate)))
-    )	    )
+    )
 )__";
 
 const char* const ListQueuesQuery = R"__(

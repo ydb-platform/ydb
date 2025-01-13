@@ -197,8 +197,7 @@ bool TTagValidator::ValidateString(const TString& str, const bool isKey) {
     }
 
     if (isKey && !IsAsciiLower(str[0])) {
-        Error = isKey ? "Tag key must start with a lowercase letter (a-z)."
-                      : "Tag value must start with a lowercase letter (a-z).";
+        Error = "Tag key must start with a lowercase letter (a-z).";
         return false;
     }
 

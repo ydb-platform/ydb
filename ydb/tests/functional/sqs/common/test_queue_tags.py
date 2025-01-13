@@ -65,7 +65,7 @@ class TestQueueTags(KikimrSqsTestBase):
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_invalid_tag_queue(self, is_fifo, tables_format):
-        # Test invalid key/values
+        # Test invalid keys/values
 
         self._init_with_params(is_fifo, tables_format)
 
@@ -81,39 +81,15 @@ class TestQueueTags(KikimrSqsTestBase):
             assert_that(lambda: add_tags(tags), raises(RuntimeError, pattern=pattern))
             assert get_tags() == {}
 
-        check({'': ''}, 'Tag key must not be empty.')
-
-        # Delete this line:
-        self._sqs_api._SqsHttpApi__raise_on_error = False
-        # Replace with proper checks like this:
-
-        add_tags({'': ''})
-        assert get_tags() == {}
-
-        add_tags({'a': ''})
-        assert get_tags() == {}
-
-        add_tags({'': 'a'})
-        assert get_tags() == {}
-
-        add_tags({'^': 'a'})
-        assert get_tags() == {}
-
-        add_tags({'4': 'a'})
-        assert get_tags() == {}
-
-        add_tags({'a': '^'})
-        assert get_tags() == {}
-
-        add_tags({'a'*100: 'a'})
-        assert get_tags() == {}
-
-        add_tags({'a': 'a'*100})
-        assert get_tags() == {}
-
-        # Too many tags:
-        add_tags({f'k{i}': 'v' for i in range(80)})
-        assert get_tags() == {}
+        check({'': ''}, 'Tag key must not be empty')
+        check({'a': ''}, 'Tag value must not be empty')
+        check({'': 'a'}, 'Tag key must not be empty')
+        check({'^': 'a'}, 'Tag key must start with a lowercase letter')
+        check({'4': 'a'}, 'Tag key must start with a lowercase letter')
+        check({'a': '^'}, 'Tag value can only consist of ASCII lowercase letters, digits, dashes and underscores')
+        check({'a'*100: 'a'}, 'Tag key must not be longer than 63 characters')
+        check({'a': 'a'*100}, 'Tag value must not be longer than 63 characters')
+        check({f'k{i}': 'v' for i in range(80)}, 'Too many tags added for queue')
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)

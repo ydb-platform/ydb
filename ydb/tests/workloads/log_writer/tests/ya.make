@@ -8,12 +8,8 @@ TEST_SRCS(
     test_workload.py
 )
 
-IF (SANITIZER_TYPE)
-    SIZE(MEDIUM)
-    REQUIREMENTS(cpu:20)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(LARGE)
+REQUIREMENTS(cpu:20)
 
 
 DEPENDS(

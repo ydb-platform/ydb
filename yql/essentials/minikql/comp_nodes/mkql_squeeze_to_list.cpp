@@ -96,11 +96,11 @@ public:
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto value = GetNodeValue(Limit, ctx, block);
-        const auto limit = SelectInst::Create(IsExists(value, block), GetterFor<ui64>(value, context, block), ConstantInt::get(Type::getInt64Ty(context), std::numeric_limits<ui64>::max()), "limit", block);
+        const auto limit = SelectInst::Create(IsExists(value, block, context), GetterFor<ui64>(value, context, block), ConstantInt::get(Type::getInt64Ty(context), std::numeric_limits<ui64>::max()), "limit", block);
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
@@ -125,7 +125,7 @@ public:
 
         result->addIncoming(GetFinish(context), block);
 
-        BranchInst::Create(over, more, IsFinish(state, block), block);
+        BranchInst::Create(over, more, IsFinish(state, block, context), block);
 
         block = more;
 

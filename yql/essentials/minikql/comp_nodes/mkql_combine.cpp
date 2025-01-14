@@ -272,7 +272,7 @@ public:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto more = BasicBlock::Create(context, "more", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -338,8 +338,8 @@ public:
 
             const auto item = GetNodeValue(Flow, ctx, block);
 
-            const auto finsh = IsFinish(item, block);
-            const auto yield = IsYield(item, block);
+            const auto finsh = IsFinish(item, block, context);
+            const auto yield = IsYield(item, block, context);
             const auto special = BinaryOperator::CreateOr(finsh, yield, "special", block);
 
             const auto fin = SelectInst::Create(finsh, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "fin", block);
@@ -370,7 +370,7 @@ public:
             const auto next = BasicBlock::Create(context, "next", ctx.Func);
             const auto test = BasicBlock::Create(context, "test", ctx.Func);
 
-            BranchInst::Create(init, next, IsInvalid(place, block), block);
+            BranchInst::Create(init, next, IsInvalid(place, block, context), block);
 
             block = init;
             GetNodeValue(place, Nodes.InitResultNode, ctx, block);
@@ -421,7 +421,7 @@ public:
             } else if constexpr (StateContainerOpt) {
                 const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
 
-                BranchInst::Create(more, exit, IsEmpty(value, block), block);
+                BranchInst::Create(more, exit, IsEmpty(value, block, context), block);
                 block = exit;
 
                 const auto strip = GetOptionalValue(context, value, block);
@@ -429,7 +429,7 @@ public:
                 BranchInst::Create(over, block);
             } else {
                 result->addIncoming(value, block);
-                BranchInst::Create(more, over, IsEmpty(value, block), block);
+                BranchInst::Create(more, over, IsEmpty(value, block, context), block);
             }
         }
 
@@ -457,7 +457,7 @@ public:
         block = more;
 
         const auto current = new LoadInst(valueType, currentPtr, "current", block);
-        BranchInst::Create(pull, skip, HasValue(current, block), block);
+        BranchInst::Create(pull, skip, HasValue(current, block, context), block);
 
         {
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -495,7 +495,7 @@ public:
 
             const auto list = DoGenerateGetValue(ctx, statePtr, block);
             result->addIncoming(list, block);
-            BranchInst::Create(over, good, IsSpecial(list, block),  block);
+            BranchInst::Create(over, good, IsSpecial(list, block, context),  block);
 
             block = good;
             if constexpr (StateContainerOpt) {
@@ -738,7 +738,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -768,7 +767,7 @@ private:
             const auto skip = BasicBlock::Create(context, "skip", ctx.Func);
 
             const auto current = new LoadInst(valueType, currArg, "current", block);
-            BranchInst::Create(skip, pull, IsEmpty(current, block), block);
+            BranchInst::Create(skip, pull, IsEmpty(current, block, context), block);
 
             block = pull;
 
@@ -867,7 +866,7 @@ private:
             const auto next = BasicBlock::Create(context, "next", ctx.Func);
             const auto test = BasicBlock::Create(context, "test", ctx.Func);
 
-            BranchInst::Create(init, next, IsInvalid(place, block), block);
+            BranchInst::Create(init, next, IsInvalid(place, block, context), block);
 
             block = init;
             GetNodeValue(place, Nodes.InitResultNode, ctx, block);
@@ -923,12 +922,12 @@ private:
                     BranchInst::Create(more, block);
                 }
             } else {
-                SafeUnRefUnboxed(valuePtr, ctx, block);
+                SafeUnRefUnboxedOne(valuePtr, ctx, block);
                 GetNodeValue(valuePtr, Nodes.FinishResultNode, ctx, block);
                 const auto value = new LoadInst(valueType, valuePtr, "value", block);
 
                 const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
-                BranchInst::Create(more, exit, IsEmpty(value, block), block);
+                BranchInst::Create(more, exit, IsEmpty(value, block, context), block);
 
                 block = exit;
 

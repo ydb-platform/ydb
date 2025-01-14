@@ -981,6 +981,7 @@ public:
         }
         if (params.Get("filter_peer_role") == "any") {
             FilterPeerRole = EPeerRole::Any;
+            FilterDatabase = false;
         } else if (params.Get("filter_peer_role") == "database") {
             FilterPeerRole = EPeerRole::Database;
         } else if (params.Get("filter_peer_role") == "static") {

@@ -43,18 +43,23 @@ class TBloomfilter {
         Resize(size);
     }
 
-    void Resize(ui64 size) {
+    void Reserve(ui64 size) {
         size = std::max(size, CachelineSize);
         Bits_ = 6;
 
-        for (; (ui64(1)<<Bits_) < size; ++Bits_)
-            ;
+        for (; (ui64(1) << Bits_) < size; ++Bits_);
 
         Bits_ += 3; // -> multiply by 8
-        size = 1u<<(Bits_ - 6);
+        size = 1u << (Bits_ - 6);
+
+        Storage_.reserve(size + CachelineSize / sizeof(ui64) - 1);
+    }
+
+    void Resize(ui64 size) {
+        Reserve(size);
 
         Storage_.clear();
-        Storage_.resize(size + CachelineSize/sizeof(ui64) - 1);
+        Storage_.resize((1u << (Bits_ - 6)) + CachelineSize / sizeof(ui64) - 1);
 
         // align Ptr_ up to BlockSize
         Ptr_ = (ui64 *)((uintptr_t(Storage_.data()) + BlockSize - 1) & ~(BlockSize - 1));

@@ -8,11 +8,11 @@ Below are the steps required to enable the node authorization feature.
 
 Before enabling the node authorization feature, you must [configure gRPC traffic encryption](./tls.md#grpc) using the TLS protocol.
 
-When preparing node certificates for a cluster in which you plan to use the node authorization feature, you must ensure uniform rules for filling in the "Subject" field of the certificates. When checking the certificate during node registration, {{ ydb-short-name }} verifies that the connecting node has a trusted certificate, and checks that the "Subject" field is filled in to ensure that it meets the requirements set in the cluster static configuration. The "Subject" field may contain multiple components (such as `O` - organization, `OU` - organizational division, `C` - country, `CN` - common name of the subject), and checks can be configured against one or more of these components.
+When preparing node certificates for a cluster where you plan to use the node authorization feature, ensure uniform rules for populating the "Subject" field of the certificates. During node registration, {{ ydb-short-name }} verifies that the connecting node has a trusted certificate and checks that the "Subject" field meets the requirements specified in the cluster's static configuration. The "Subject" field may contain multiple components (such as `O` - organization, `OU` - organizational unit, `C` - country, `CN` - common name), and checks can be configured against one or more of these components.
 
-The proposed [example script](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/tls_cert_gen/) generates the self-signed certiticates for {{ ydb-short-name }} nodes, and ensures that the "Subject" field is filled with value `O=YDB` for all node certificates. The examples of settings shown below are prepared for certificates with exactly this type of filling of the "Subject" field.
+The proposed [example script](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/tls_cert_gen/) generates self-signed certificates for {{ ydb-short-name }} nodes and ensures that the "Subject" field is populated with the value `O=YDB` for all node certificates. The settings examples provided below are prepared for certificates with this specific "Subject" field configuration, but feel free to use your real organization name instead.
 
-The command line parameters for [starting database nodes](../../devops/manual/initial-deployment.md#start-dynnode) must be extended to include the options that set the paths to the trusted CA certificate, the node certificate, and the node key files. The required extra command line options are shown in the table below.
+The command-line parameters for [starting database nodes](../../devops/manual/initial-deployment.md#start-dynnode) must include options that specify the paths to the trusted CA certificate, the node certificate, and the node key files. The required additional command-line options are shown in the table below.
 
 | **Command line option**    | **Description** |
 |----------------------------|-----------------|
@@ -33,11 +33,11 @@ Below is the example of the complete command to start the database node, with th
     --node-broker grpcs://<ydb3>:2135
 ```
 
-## Enabling database node authorization
+## Enabling database node authentication and authorization
 
-To enable the mandatory database node authorization, add the following configuration blocks to the [static cluster configuration](./index.md) file:
+To enable mandatory database node authorization, add the following configuration blocks to the [static cluster configuration](./index.md) file:
 
-1. Add the block `client_certificate_authorization` at the root level, and define the requirements for the "Subject" field of trusted node certificates, for example:
+1. At the root level, add the `client_certificate_authorization` block to define the requirements for the "Subject" field of trusted node certificates. For example:
 
     ```yaml
     client_certificate_authorization:
@@ -49,9 +49,9 @@ To enable the mandatory database node authorization, add the following configura
             values: ["YDB"]
     ```
 
-    If the certificate is successfully verified, and the components of the "Subject" field of the certificate comply with the requirements defined in the `subject_terms` sub-block, the connection will be assigned the access subjects listed in the `member_groups` parameter. To separate those subjects from other types of user groups and user accounts, their names typically get the `@cert` suffix.
+    If the certificate is successfully verified and the components of the "Subject" field comply with the requirements defined in the `subject_terms` sub-block, the connection will be assigned the access subjects listed in the `member_groups` parameter. To distinguish these subjects from other user groups and accounts, their names typically have the `@cert` suffix.
 
-1. Add the `register_dynamic_node_allowed_sids` element to `domains_config / security_config` block, and list the desired list of subjects which are enabled for database node registration. For internal technical reasons, the list of subjects must include the `root@builtin` element. Example:
+1. Add the `register_dynamic_node_allowed_sids` element to the `domains_config / security_config` block, and list the subjects permitted for database node registration. For internal technical reasons, the list must include the `root@builtin` element. Example:
 
     ```yaml
     domains_config:

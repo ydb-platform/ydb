@@ -8,31 +8,31 @@ Dynamic configuration allows running dynamic [nodes](../../concepts/cluster/comm
 
 This configuration is uploaded to the cluster, where it is reliably stored and delivered to each dynamic node upon startup. [Certain settings](#dynamic-kinds) are updated on the fly without restarting nodes. Using dynamic configuration, you can centrally solve the following tasks:
 
-* Change logging levels for all or specific components on the entire cluster or on the specific groups of nodes;
-* Enable experimental features (feature flags) on specific databases;
+* Change logging levels for all or specific components across the entire cluster or for specific groups of nodes.
+* Enable experimental features (feature flags) on specific databases.
 * Change actor system settings on individual nodes or groups of nodes.
 
 ## Preparing to use the dynamic configuration {#preparation}
 
 The following tasks should be performed before using the dynamic configuration in the cluster:
 
-1. Enable the [database node authorization](../../reference/configuration/node_authorization.md) upon their registration in the cluster.
+1. Enable [database node authorization](../../reference/configuration/node_authorization.md) during their registration in the cluster.
 
-1. In case the [CMS-based configuration management](cms.md) has been used in the cluster, offload the current CMS settings in the YAML format using the following command:
+1. Export the current settings from the [CMS](../../concepts/glossary.md#cms) in YAML format using the following command if [CMS-based configuration management](cms.md) has been used in the cluster:
 
     ```bash
     ./ydbd -s grpcs://<node1.ydb.tech>:2135 --ca-file ca.crt --token-file ydbd-token \
          admin console configs dump-yaml > dynconfig.yaml
     ```
 
-    Before running the command shown above, obtain the authentication token using command `ydb auth get-token`, as shown in the [cluster initialization procedure](../../devops/manual/initial-deployment.md#initialize-cluster).
+    Before running the command shown above, obtain the authentication token using the `ydb auth get-token` command, as detailed in the [cluster initial deployment procedure](../../devops/manual/initial-deployment.md#initialize-cluster).
 
 1. Prepare the initial dynamic configuration file:
 
-   * In case there are non-empty CMS settings exported at the previous step, adjust the YAML file with the exported CMS settings:
-      * add the `metadata` section based on the [configuration example](#example);
-      * add the `yaml_config_enabled: true` parameter to the `config` section.
-   * In case there are no previous CMS-based settings, use the [minimal configuration example](#example).
+   * If there are non-empty CMS settings exported in the previous step, adjust the YAML file with the exported CMS settings:
+      * Add the `metadata` section based on the [configuration example](#example).
+      * Add the `yaml_config_enabled: true` parameter to the `config` section.
+   * If there are no previous CMS-based settings, use the [minimal configuration example](#example).
    * For clusters using TLS encryption for [actor system interconnect](../../concepts/glossary.md#actor-system-interconnect), add the [interconnect TLS settings](../../reference/configuration/tls.md#interconnect) to the `config` section.
 
 1. Apply the dynamic configuration settings file to the cluster:
@@ -44,7 +44,7 @@ The following tasks should be performed before using the dynamic configuration i
 
 {% note info %}
 
-After turning on the dynamic configuration support on {{ ydb-short-name }} cluster, old-style configuration management through CMS will become unavailable.
+The legacy configuration management via CMS will become unavailable after enabling dynamic configuration support on the {{ ydb-short-name }} cluster.
 
 {% endnote %}
 
@@ -81,9 +81,9 @@ selector_config: []
 
 Detailed configuration parameters are described on the [{#T}](../../reference/configuration/index.md) page.
 
-By default, the cluster configuration gets version 1. When applying a new configuration, the uploaded configuration's version is compared with the value specified in the YAML file, and automatically incremented by one.
+By default, the cluster configuration is assigned version 1. When applying a new configuration, the system compares the uploaded configuration's version with the value specified in the YAML file. If the versions match, the current version number is automatically incremented by one.
 
-Below is a more complete and complex example of the dynamic configuration with the typical global parameters defined, as well as some parameters specific to a particular database:
+Below is a more comprehensive example of a dynamic configuration that defines typical global parameters, as well as parameters specific to a particular database:
 
 ```yaml
 ---

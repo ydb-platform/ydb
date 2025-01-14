@@ -36,7 +36,7 @@ public:
 
         block = loop;
         const auto item = GetNodeValue(Flow, ctx, block);
-        BranchInst::Create(exit, skip, IsSpecial(item, block), block);
+        BranchInst::Create(exit, skip, IsSpecial(item, block, context), block);
 
         block = skip;
         ValueCleanup(Flow->GetRepresentation(), item, ctx, block);
@@ -176,7 +176,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 

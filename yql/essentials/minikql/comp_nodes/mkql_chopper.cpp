@@ -130,7 +130,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         ctx.Ctx = &*ctx.Func->arg_begin();
@@ -163,7 +162,7 @@ private:
 
             const auto item = GetNodeValue(Flow, ctx, block);
 
-            BranchInst::Create(exit, good, IsSpecial(item, block), block);
+            BranchInst::Create(exit, good, IsSpecial(item, block, context), block);
 
             block = good;
 
@@ -217,7 +216,7 @@ public:
 
             const auto item = GetNodeValue(Flow, ctx, block);
             result->addIncoming(item, block);
-            BranchInst::Create(exit, next, IsSpecial(item, block), block);
+            BranchInst::Create(exit, next, IsSpecial(item, block, context), block);
 
             block = next;
 
@@ -241,7 +240,7 @@ public:
             const auto state = new LoadInst(valueType, statePtr, "state", block);
 
             result->addIncoming(item, block);
-            BranchInst::Create(part, exit, IsFinish(item, block), block);
+            BranchInst::Create(part, exit, IsFinish(item, block, context), block);
 
             block = part;
 
@@ -565,7 +564,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -592,7 +590,7 @@ private:
             block = load;
 
             new StoreInst(ConstantInt::get(stateType, ui8(EState::Work)), stateArg, block);
-            SafeUnRefUnboxed(valuePtr, ctx, block);
+            SafeUnRefUnboxedOne(valuePtr, ctx, block);
             GetNodeValue(valuePtr, ItemArg, ctx, block);
             ReturnInst::Create(context, ConstantInt::get(statusType, ui32(NUdf::EFetchStatus::Ok)), block);
         }
@@ -624,7 +622,7 @@ private:
 
             block = pass;
 
-            SafeUnRefUnboxed(valuePtr, ctx, block);
+            SafeUnRefUnboxedOne(valuePtr, ctx, block);
             GetNodeValue(valuePtr, ItemArg, ctx, block);
             BranchInst::Create(exit, block);
 
@@ -662,7 +660,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -691,7 +688,7 @@ private:
         block = loop;
 
         const auto stream = new LoadInst(valueType, streamArg, "stream", block);
-        BranchInst::Create(next, work, IsEmpty(stream, block), block);
+        BranchInst::Create(next, work, IsEmpty(stream, block, context), block);
 
         {
             const auto good = BasicBlock::Create(context, "good", ctx.Func);

@@ -23,14 +23,14 @@ struct TSubString {
         const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(SubString));
         const auto start = StartOptional ?
             SelectInst::Create(
-                IsEmpty(st, block),
+                IsEmpty(st, block, context),
                 ConstantInt::get(GetTypeFor<ui32>(context), std::numeric_limits<ui32>::min()),
                 GetterFor<ui32>(st, context, block), "start", block
             ):
             GetterFor<ui32>(st, context, block);
         const auto count = CountOptional ?
             SelectInst::Create(
-                IsEmpty(cn, block),
+                IsEmpty(cn, block, context),
                 ConstantInt::get(GetTypeFor<ui32>(context), std::numeric_limits<ui32>::max()),
                 GetterFor<ui32>(cn, context, block), "count", block
             ):

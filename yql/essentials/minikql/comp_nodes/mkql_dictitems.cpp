@@ -168,7 +168,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -196,7 +195,7 @@ private:
         BranchInst::Create(good, done, status, block);
         block = good;
 
-        SafeUnRefUnboxed(valuePtr, ctx, block);
+        SafeUnRefUnboxedOne(valuePtr, ctx, block);
 
         const auto itemsType = PointerType::getUnqual(pairType);
         const auto itemsPtr = new AllocaInst(itemsType, 0U, "items_ptr", block);

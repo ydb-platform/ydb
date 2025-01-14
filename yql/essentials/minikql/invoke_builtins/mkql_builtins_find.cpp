@@ -29,7 +29,7 @@ struct TFind {
         const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(Find<Reverse>));
         const auto pos = PosOptional ?
             SelectInst::Create(
-                IsEmpty(p, block),
+                IsEmpty(p, block, context),
                 ConstantInt::get(GetTypeFor<std::string_view::size_type>(context), DefaultPos),
                 StaticCast<ui32, std::string_view::size_type>(GetterFor<ui32>(p, context, block), context, block),
             "pos", block):

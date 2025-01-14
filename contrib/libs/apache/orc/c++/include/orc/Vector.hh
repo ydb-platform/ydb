@@ -57,6 +57,8 @@ namespace orc {
     bool hasNulls;
     // whether the vector batch is encoded
     bool isEncoded;
+    // whether the dictionary is decoded into vector batch
+    bool dictionaryDecoded;
 
     // custom memory pool
     MemoryPool& memoryPool;
@@ -87,6 +89,14 @@ namespace orc {
      * Check whether the batch length varies depending on data.
      */
     virtual bool hasVariableLength();
+
+    /**
+     * Decode possible dictionary into vector batch.
+     */
+    void decodeDictionary();
+
+   protected:
+    virtual void decodeDictionaryImpl() {}
 
    private:
     ColumnVectorBatch(const ColumnVectorBatch&);
@@ -248,6 +258,10 @@ namespace orc {
     ~EncodedStringVectorBatch() override;
     std::string toString() const override;
     void resize(uint64_t capacity) override;
+
+    // Calculate data and length in StringVectorBatch from dictionary and index
+    void decodeDictionaryImpl() override;
+
     std::shared_ptr<StringDictionary> dictionary;
 
     // index for dictionary entry
@@ -264,6 +278,9 @@ namespace orc {
     bool hasVariableLength() override;
 
     std::vector<ColumnVectorBatch*> fields;
+
+   protected:
+    void decodeDictionaryImpl() override;
   };
 
   struct ListVectorBatch : public ColumnVectorBatch {
@@ -283,6 +300,9 @@ namespace orc {
 
     // the concatenated elements
     std::unique_ptr<ColumnVectorBatch> elements;
+
+   protected:
+    void decodeDictionaryImpl() override;
   };
 
   struct MapVectorBatch : public ColumnVectorBatch {
@@ -304,6 +324,9 @@ namespace orc {
     std::unique_ptr<ColumnVectorBatch> keys;
     // the concatenated elements
     std::unique_ptr<ColumnVectorBatch> elements;
+
+   protected:
+    void decodeDictionaryImpl() override;
   };
 
   struct UnionVectorBatch : public ColumnVectorBatch {
@@ -327,6 +350,9 @@ namespace orc {
 
     // the sub-columns
     std::vector<ColumnVectorBatch*> children;
+
+   protected:
+    void decodeDictionaryImpl() override;
   };
 
   struct Decimal {

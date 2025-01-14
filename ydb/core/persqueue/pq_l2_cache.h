@@ -93,6 +93,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvPqCache::TEvCacheL2Request, Handle);
+            HFuncTraced(TEvPqCache::TEvCacheKeysRequest, Handle);
             HFuncTraced(NMon::TEvHttpInfo, Handle);
         default:
             break;
@@ -109,6 +110,8 @@ private:
 
     void Handle(TEvPqCache::TEvCacheL2Request::TPtr& ev, const TActorContext& ctx);
     void SendResponses(const TActorContext& ctx, const THashMap<TKey, TCacheValue::TPtr>& evicted);
+
+    void Handle(TEvPqCache::TEvCacheKeysRequest::TPtr& ev, const TActorContext& ctx);
 
     void AddBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs,
                   THashMap<TKey, TCacheValue::TPtr>& outEvicted);

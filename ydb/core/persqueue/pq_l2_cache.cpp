@@ -72,6 +72,16 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
     }
 }
 
+void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheKeysRequest::TPtr& ev, const TActorContext& ctx)
+{
+    auto response = MakeHolder<TEvPqCache::TEvCacheKeysResponse>();
+    for (auto i = Cache.Begin(); i != Cache.End(); ++i) {
+        const auto& key = i.Key();
+        response->Keys.emplace_back(key.TabletId, key.Partition, key.Offset, key.PartNo);
+    }
+    ctx.Send(ev->Sender, response.Release());
+}
+
 /// @return outRemoved - map of evicted items. L1 should be noticed about them
 void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs,
                                  THashMap<TKey, TCacheValue::TPtr>& outEvicted)

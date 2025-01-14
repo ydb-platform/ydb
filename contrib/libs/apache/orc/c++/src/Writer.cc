@@ -429,8 +429,8 @@ namespace orc {
 
   void WriterImpl::addUserMetadata(const std::string& name, const std::string& value) {
     proto::UserMetadataItem* userMetadataItem = fileFooter.add_metadata();
-    userMetadataItem->set_name(TProtobufString(name));
-    userMetadataItem->set_value(TProtobufString(value));
+    userMetadataItem->set_name(name);
+    userMetadataItem->set_value(value);
   }
 
   void WriterImpl::init() {
@@ -510,7 +510,7 @@ namespace orc {
       *stripeFooter.add_columns() = encodings[i];
     }
 
-    stripeFooter.set_writer_timezone(TProtobufString(options.getTimezoneName()));
+    stripeFooter.set_writer_timezone(options.getTimezoneName());
 
     // add stripe statistics to metadata
     proto::StripeStatistics* stripeStats = metadata.add_stripe_stats();
@@ -679,8 +679,8 @@ namespace orc {
     for (auto& key : t.getAttributeKeys()) {
       const auto& value = t.getAttributeValue(key);
       auto protoAttr = protoType.add_attributes();
-      protoAttr->set_key(TProtobufString(key));
-      protoAttr->set_value(TProtobufString(value));
+      protoAttr->set_key(key);
+      protoAttr->set_value(value);
     }
 
     int pos = static_cast<int>(index);
@@ -689,7 +689,7 @@ namespace orc {
     for (uint64_t i = 0; i < t.getSubtypeCount(); ++i) {
       // only add subtypes' field names if this type is STRUCT
       if (t.getKind() == STRUCT) {
-        footer.mutable_types(pos)->add_field_names(TProtobufString(t.getFieldName(i)));
+        footer.mutable_types(pos)->add_field_names(t.getFieldName(i));
       }
       footer.mutable_types(pos)->add_subtypes(++index);
       buildFooterType(*t.getSubtype(i), footer, index);

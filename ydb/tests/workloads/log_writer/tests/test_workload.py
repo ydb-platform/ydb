@@ -10,7 +10,7 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 
 
-class TestYdbKvWorkload(object):
+class TestYdbKvWorkload(object):  # rebuild pls
     @classmethod
     def setup_class(cls):
         cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=Erasure.MIRROR_3_DC))

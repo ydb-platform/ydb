@@ -1093,6 +1093,9 @@ Y_UNIT_TEST_SUITE(TModifyUserTest) {
 
             // user cannot change isEnabled for self
             UNIT_ASSERT_VALUES_EQUAL(client.ModifyUser("/dc-1", { .User = "user2", .CanLogin = Tests::TClient::ETypeOfLogin::NoLogin}, user2Token), NMsgBusProxy::MSTATUS_ERROR);
+
+            // user cannot change isEnabled for self even together with password
+            UNIT_ASSERT_VALUES_EQUAL(client.ModifyUser("/dc-1", { .User = "user2", .Password = "password", .CanLogin = Tests::TClient::ETypeOfLogin::NoLogin}, user2Token), NMsgBusProxy::MSTATUS_ERROR);
         }
     }
 }

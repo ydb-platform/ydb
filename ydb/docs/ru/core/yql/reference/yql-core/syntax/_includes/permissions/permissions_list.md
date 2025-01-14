@@ -38,6 +38,14 @@
 {% note info %}
 
 Права `ydb.database.connect`, `ydb.granular.describe_schema`, `ydb.granular.select_row`, `ydb.granular.update_row` необходимо рассматривать как слои прав.
-Например, для изменения строк необходимо не только право `ydb.granular.update_row`, но и все предыдущие права.
+
+```mermaid
+graph TD;
+    ydb.database.connect --> ydb.granular.describe_schema;
+    ydb.granular.describe_schema --> ydb.granular.select_row;
+    ydb.granular.select_row --> ydb.granular.update_row;
+```
+
+Например, для изменения строк необходимо не только право `ydb.granular.update_row`, но и все вышележащие права.
 
 {% endnote %}

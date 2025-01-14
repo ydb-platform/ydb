@@ -310,10 +310,10 @@ protected:
             Response_.SetIsFifo(IsFifo_ ? *IsFifo_ : false);
             Response_.SetResourceId(GetQueueName());
             if (QueueTags_.Defined()) {
-                for (const auto& [k, v] : *QueueTags_) {
+                for (const auto& [k, v] : QueueTags_->GetMapSafe()) {
                     auto* tag = Response_.AddQueueTags();
                     tag->SetKey(k);
-                    tag->SetValue(v);
+                    tag->SetValue(v.GetStringSafe());
                 }
             }
         }
@@ -895,7 +895,7 @@ protected:
     TIntrusivePtr<TUserCounters> UserCounters_;
     TIntrusivePtr<TQueueCounters> QueueCounters_;
     TMaybe<TSqsEvents::TQueueAttributes> QueueAttributes_;
-    TMaybe<TSqsEvents::TQueueTags> QueueTags_;
+    TMaybe<NJson::TJsonMap> QueueTags_;
     NKikimrClient::TSqsResponse Response_;
     TActorId SchemeCache_;
     TActorId QueueLeader_;

@@ -158,8 +158,6 @@ struct TSqsEvents {
         // has operator<<
     };
 
-    using TQueueTags = THashMap<TString, TString>;
-
     struct TEvGetConfiguration : public NActors::TEventLocal<TEvGetConfiguration, EvGetConfiguration> {
         TString  RequestId;
         TString  UserName;
@@ -228,7 +226,7 @@ struct TSqsEvents {
         ui64 Shards = 1;
         bool Fifo = false;
         TMaybe<TQueueAttributes> QueueAttributes;
-        TMaybe<TQueueTags> QueueTags;
+        TMaybe<NJson::TJsonMap> QueueTags;
         TIntrusivePtr<TQuoterResourcesForActions> QuoterResources;
 
         // Counters

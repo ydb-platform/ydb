@@ -30,8 +30,9 @@ public:
     TTagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::TagQueue, std::move(cb))
     {
-        for (const auto& tag : Request().tags()) {
-            Tags_[tag.GetKey()] = tag.GetValue();
+        auto& map = Tags_.GetMapSafe();
+        for (const auto& t : Request().tags()) {
+            map.emplace(t.GetKey(), t.GetValue());
         }
     }
 
@@ -72,7 +73,8 @@ private:
             .Params()
                 .Utf8("NAME", GetQueueName())
                 .Utf8("USER_NAME", UserName_)
-                .Utf8("TAGS", TagsJson_);
+                .Utf8("TAGS", TagsJson_)
+                .Utf8("OLD_TAGS", TagsToJson(*QueueTags_));
 
         builder.Start();
     }
@@ -94,8 +96,16 @@ private:
         auto* result = Response_.MutableTagQueue();
 
         if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
-            RLOG_SQS_DEBUG("Sending clear attributes cache event for queue [" << UserName_ << "/" << GetQueueName() << "]");
-            Send(QueueLeader_, MakeHolder<TSqsEvents::TEvClearQueueAttributesCache>());
+            const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
+            bool updated = val["updated"];
+            if (updated) {
+                RLOG_SQS_DEBUG("Sending clear attributes cache event for queue [" << UserName_ << "/" << GetQueueName() << "]");
+                Send(QueueLeader_, MakeHolder<TSqsEvents::TEvClearQueueAttributesCache>());
+            } else {
+                auto message = "Tag queue query failed, conflicting query in parallel";
+                RLOG_SQS_ERROR(message << ": " << record);
+                MakeError(result, NErrors::INTERNAL_FAILURE, message);
+            }
         } else {
             RLOG_SQS_ERROR("Tag queue query failed answer: " << record);
             MakeError(result, NErrors::INTERNAL_FAILURE);
@@ -108,7 +118,7 @@ private:
     }
 
 private:
-    THashMap<TString, TString> Tags_;
+    NJson::TJsonMap Tags_;
     TString TagsJson_;
 };
 

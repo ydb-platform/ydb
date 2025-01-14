@@ -109,9 +109,10 @@ private:
         }
 
         {
-            TSqsEvents::TQueueTags tags;
-            for (const auto& tag : Request().GetTags()) {
-                tags.emplace(tag.GetKey(), tag.GetValue());
+            NJson::TJsonMap tags;
+            auto& map = tags.GetMapSafe();
+            for (const auto& t : Request().GetTags()) {
+                map.emplace(t.GetKey(), t.GetValue());
             }
             auto tagValidator = TTagValidator({}, tags);
             if (!tagValidator.Validate()) {

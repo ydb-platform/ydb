@@ -1,4 +1,5 @@
 #pragma once
+#include <library/cpp/json/json_writer.h>
 #include <ydb/core/ymq/proto/records.pb.h>
 
 #include <util/generic/strbuf.h>
@@ -16,9 +17,11 @@ bool ValidateQueueNameOrUserName(TStringBuf name);
 // Validation function for message body or string message attributes
 bool ValidateMessageBody(TStringBuf body, TString& errorDescription);
 
+TString TagsToJson(NJson::TJsonMap tags);
+
 class TTagValidator {
 public:
-    TTagValidator(const TMaybe<THashMap<TString, TString>>& currentTags, const THashMap<TString, TString>& newTags);
+    TTagValidator(const TMaybe<NJson::TJsonMap>& currentTags, const NJson::TJsonMap& newTags);
     bool Validate() const;
     TString GetJson() const;
     TString GetError() const;
@@ -28,8 +31,8 @@ private:
     TString Error;
     TString Json;
 private:
-    const TMaybe<THashMap<TString, TString>>& CurrentTags;
-    const THashMap<TString, TString>& NewTags;
+    const TMaybe<NJson::TJsonMap>& CurrentTags;
+    const NJson::TJsonMap& NewTags;
 };
 
 TString EncodeReceiptHandle(const TReceipt& receipt);

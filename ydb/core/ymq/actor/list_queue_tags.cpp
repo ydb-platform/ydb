@@ -41,10 +41,10 @@ private:
     void DoAction() override {
         auto* result = Response_.MutableListQueueTags();
         if (QueueTags_.Defined()) {
-            for (const auto& [k, v] : *QueueTags_) {
+            for (const auto& [k, v] : QueueTags_->GetMapSafe()) {
                 auto* tag = result->AddTags();
                 tag->SetKey(k);
-                tag->SetValue(v);
+                tag->SetValue(v.GetStringSafe());
             }
         }
         SendReplyAndDie();

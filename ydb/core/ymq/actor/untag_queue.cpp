@@ -4,6 +4,7 @@
 #include "log.h"
 
 #include <ydb/core/ymq/base/constants.h>
+#include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/base/dlq_helpers.h>
 #include <ydb/core/ymq/queues/common/key_hashes.h>
@@ -51,17 +52,17 @@ private:
     void DoAction() override {
         Become(&TThis::StateFunc);
 
-        NJson::TJsonMap tagsJson;
-        TStringStream tagsStr;
+        auto oldTags = TagsToJson(*QueueTags_);
+
+        NJson::TJsonMap tags;
         if (QueueTags_.Defined()) {
             for (const auto& k : TagKeys_) {
-                QueueTags_->erase(k);
+                QueueTags_->GetMapSafe().erase(k);
             }
-            for (const auto& [k, v] : *QueueTags_) {
-                tagsJson[k] = v;
+            for (const auto& [k, v] : QueueTags_->GetMap()) {
+                tags[k] = v;
             }
         }
-        WriteJson(&tagsStr, &tagsJson);
 
         TExecutorBuilder builder(SelfId(), RequestId_);
         builder
@@ -75,7 +76,8 @@ private:
             .Params()
                 .Utf8("NAME", GetQueueName())
                 .Utf8("USER_NAME", UserName_)
-                .Utf8("TAGS", tagsStr.Str());
+                .Utf8("TAGS", TagsToJson(tags))
+                .Utf8("OLD_TAGS", oldTags);
 
         builder.Start();
     }
@@ -97,8 +99,16 @@ private:
         auto* result = Response_.MutableUntagQueue();
 
         if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
-            RLOG_SQS_DEBUG("Sending clear attributes cache event for queue [" << UserName_ << "/" << GetQueueName() << "]");
-            Send(QueueLeader_, MakeHolder<TSqsEvents::TEvClearQueueAttributesCache>());
+            const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
+            bool updated = val["updated"];
+            if (updated) {
+                RLOG_SQS_DEBUG("Sending clear attributes cache event for queue [" << UserName_ << "/" << GetQueueName() << "]");
+                Send(QueueLeader_, MakeHolder<TSqsEvents::TEvClearQueueAttributesCache>());
+            } else {
+                auto message = "Untag queue query failed, conflicting query in parallel";
+                RLOG_SQS_ERROR(message << ": " << record);
+                MakeError(result, NErrors::INTERNAL_FAILURE, message);
+            }
         } else {
             RLOG_SQS_ERROR("Tag queue query failed, answer: " << record);
             MakeError(result, NErrors::INTERNAL_FAILURE);

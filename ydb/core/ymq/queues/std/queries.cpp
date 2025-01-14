@@ -585,7 +585,8 @@ const char* const TagQueueQuery = R"__(
     (
         (let name     (Parameter 'NAME (DataType 'Utf8)))
         (let userName (Parameter 'USER_NAME (DataType 'Utf8)))
-        (let tags  (Parameter 'TAGS (DataType 'Utf8)))
+        (let tags     (Parameter 'TAGS (DataType 'Utf8)))
+        (let oldTags  (Parameter 'OLD_TAGS (DataType 'Utf8)))
 
         (let queuesTable ')__" ROOT_PARAM R"__(/.Queues)
 
@@ -593,10 +594,18 @@ const char* const TagQueueQuery = R"__(
             '('Account userName)
             '('QueueName (Utf8 '")__" QUEUE_NAME_PARAM R"__("))))
 
+        (let queuesRead (SelectRow queuesTable queuesRow '('Tags)))
+
+        (let curTags (Coalesce (Member queuesRead 'Tags) (Utf8 '"{}")))
+
         (let queuesRowUpdate '(
             '('Tags tags)))
 
-        (return (AsList (UpdateRow queuesTable queuesRow queuesRowUpdate)))
+        (return
+            (If (Equal oldTags curTags)
+                (AsList (UpdateRow queuesTable queuesRow queuesRowUpdate)
+                        (SetResult 'updated (Bool 'true)))
+                (AsList (SetResult 'updated (Bool 'false)))))
     )
 )__";
 

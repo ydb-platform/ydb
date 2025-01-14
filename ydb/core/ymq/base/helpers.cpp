@@ -220,15 +220,27 @@ bool TTagValidator::ValidateString(const TString& str, const bool isKey) {
     return true;
 }
 
-TTagValidator::TTagValidator(const TMaybe<THashMap<TString, TString>>& currentTags, const THashMap<TString, TString>& newTags)
+TString TagsToJson(NJson::TJsonMap tags) {
+    TStringStream json;
+    NJson::WriteJson(&json, &tags, /*formatOutput=*/false, /*sortkeys=*/true);
+    return json.Str();
+}
+
+TTagValidator::TTagValidator(const TMaybe<NJson::TJsonMap>& currentTags, const NJson::TJsonMap& newTags)
     : CurrentTags(currentTags)
     , NewTags(newTags)
 {
-    for (const auto& [k, v] : newTags) {
-        if (!ValidateString(k, true) || !ValidateString(v, false)) {
+    if (newTags.GetMapSafe().size() > 50) {
+        Error = "Too many tags added for queue";
+        return;
+    }
+
+    for (const auto& [k, v] : newTags.GetMapSafe()) {
+        if (!ValidateString(k, true) || !ValidateString(v.GetStringSafe(), false)) {
             return;
         }
     }
+
     PrepareJson();
 }
 
@@ -237,25 +249,18 @@ bool TTagValidator::Validate() const {
 }
 
 void TTagValidator::PrepareJson() {
-    NJson::TJsonMap tagsJson;
+    auto tags = CurrentTags.GetOrElse(NJson::TJsonMap());
+    auto& map = tags.GetMapSafe();
 
-    if (CurrentTags.Defined()) {
-        for (const auto& [k, v] : *CurrentTags) {
-            tagsJson[k] = v;
+    for (const auto& [k, v] : NewTags.GetMapSafe()) {
+        map.emplace(k, v);
+        if (map.size() > 50) {
+            Error = "Too many tags added for queue";
+            return;
         }
     }
-    for (const auto& [k, v] : NewTags) {
-        tagsJson[k] = v;
-    }
 
-    if (tagsJson.GetMapSafe().size() > 50) {
-        Error = "Too many tags added for queue";
-        return;
-    }
-
-    TStringStream tags;
-    NJson::WriteJson(&tags, &tagsJson, /*formatOutput=*/false, /*sortkeys=*/true);
-    Json = tags.Str();
+    Json = TagsToJson(tags);
 }
 
 TString TTagValidator::GetJson() const {

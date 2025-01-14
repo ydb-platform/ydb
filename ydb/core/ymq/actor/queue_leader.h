@@ -200,7 +200,7 @@ private:
     TMaybe<TSqsEvents::TQueueAttributes> QueueAttributes_;
 
     // tags cache
-    TMaybe<TSqsEvents::TQueueTags> QueueTags_;
+    TMaybe<NJson::TJsonMap> QueueTags_;
 
     // counters
     TIntrusivePtr<TQueueCounters> Counters_;

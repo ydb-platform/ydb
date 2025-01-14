@@ -106,6 +106,6 @@ private:
     const ui64 TotalColumnsCnt;
 };
 
-} // namespace NYdbWorkload
-
 } // namespace NLogWriter
+
+} // namespace NYdbWorkload

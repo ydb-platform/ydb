@@ -138,7 +138,6 @@ std::string TLogWriterWorkloadGenerator::GetDDLQueries() const {
             if (Params.PartitionsByLoad) {
                 ss << "AUTO_PARTITIONING_BY_LOAD = ENABLED, ";
             }
-            ss << "UNIFORM_PARTITIONS = " << Params.MinPartitions << ", ";
             ss << "AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = " << Max(Params.MinPartitions, Params.MaxPartitions) << ", ";
             ss << "AUTO_PARTITIONING_PARTITION_SIZE_MB = " << Params.PartitionSizeMb << ", ";
             break;
@@ -385,6 +384,6 @@ TString TLogWriterWorkloadParams::GetWorkloadName() const {
     return "Log Writer";
 }
 
-} // namespace NYdbWorkload
-
 } // namespace NLogWriter
+
+} // namespace NYdbWorkload

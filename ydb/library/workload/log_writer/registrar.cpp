@@ -7,6 +7,6 @@ namespace NLogWriter {
 
 TWorkloadFactory::TRegistrator<TLogWriterWorkloadParams> Registrar("log_writer");
 
-} // namespace NYdbWorkload
-
 } // namespace NLogWriter
+
+} // namespace NYdbWorkload

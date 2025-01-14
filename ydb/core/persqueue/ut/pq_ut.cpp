@@ -2601,48 +2601,102 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
     UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
 }
 
+TVector<TString> GetTabletKeys(const TTestContext& tc)
+{
+    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+    request->Record.SetCookie(12345);
+
+    auto* readRange = request->Record.AddCmdReadRange();
+    readRange->SetIncludeData(false);
+
+    auto* range = readRange->MutableRange();
+    range->SetFrom("\x00");
+    range->SetIncludeFrom(true);
+    range->SetTo("\xFF");
+    range->SetIncludeTo(true);
+
+    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    TEvKeyValue::TEvResponse* result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+
+    TVector<TString> keys;
+
+    for (const auto& pair : result->Record.GetReadRangeResult(0).GetPair()) {
+        const TString& key = pair.GetKey();
+        if (key.empty() ||
+            ((std::tolower(key.front()) != TKeyPrefix::TypeData) &&
+             (std::tolower(key.front()) != TKeyPrefix::TypeTmpData))) {
+            continue;
+        }
+        keys.push_back(key);
+    }
+
+    return keys;
+}
+
+TVector<TEvPqCache::TEvCacheKeysResponse::TKey> GetPQCacheKeys(const TTestContext& tc)
+{
+    auto request = MakeHolder<TEvPqCache::TEvCacheKeysRequest>();
+
+    tc.Runtime->Send(MakePersQueueL2CacheID(), tc.Edge, request.Release());
+
+    TAutoPtr<IEventHandle> handle;
+    auto* result = tc.Runtime->GrabEdgeEvent<TEvPqCache::TEvCacheKeysResponse>(handle);
+
+    return result->Keys;
+}
+
+void EnsureKeysIsEqual(const TTestContext& tc, size_t seqNo)
+{
+    auto tabletKeys = GetTabletKeys(tc);
+    auto cacheKeys = GetPQCacheKeys(tc);
+
+    UNIT_ASSERT_VALUES_EQUAL_C(tabletKeys.size(), cacheKeys.size(), "seqNo=" << seqNo);
+
+    auto compareBlobId = [](const TEvPqCache::TEvCacheKeysResponse::TKey& lhs,
+                            const TEvPqCache::TEvCacheKeysResponse::TKey& rhs) {
+        auto makeTuple = [](const TEvPqCache::TEvCacheKeysResponse::TKey& v) {
+            return std::make_tuple(v.TabletId,
+                                   v.Partition,
+                                   v.Offset,
+                                   v.PartNo);
+        };
+
+        return makeTuple(lhs) < makeTuple(rhs);
+    };
+
+    std::sort(tabletKeys.begin(), tabletKeys.end());
+    std::sort(cacheKeys.begin(), cacheKeys.end(), compareBlobId);
+
+    for (size_t i = 0; i < tabletKeys.size(); ++i) {
+        const TKey key(tabletKeys[i]);
+        const auto& blobId = cacheKeys[i];
+
+        UNIT_ASSERT_VALUES_EQUAL_C(key.GetPartition().InternalPartitionId, blobId.Partition.InternalPartitionId,
+                                   "seqNo=" << seqNo << ", i=" << i);
+        UNIT_ASSERT_VALUES_EQUAL_C(key.GetOffset(), blobId.Offset,
+                                   "seqNo=" << seqNo << ", i=" << i);
+        UNIT_ASSERT_VALUES_EQUAL_C(key.GetPartNo(), blobId.PartNo,
+                                   "seqNo=" << seqNo << ", i=" << i);
+    }
+}
+
+void WriteToPartition(ui32 partition, unsigned seqNo, unsigned count, size_t size, TTestContext& tc)
+{
+    for (unsigned i = 0; i < count; ++i, ++seqNo) {
+        TVector<std::pair<ui64, TString>> data;
+        TString s{size, 'x'};
+        data.push_back({seqNo, s});
+
+        CmdWrite(partition, "source_id", data, tc);
+
+        EnsureKeysIsEqual(tc, seqNo);
+    }
+}
+
 Y_UNIT_TEST(Foo)
 {
-    auto dumpTabletKeys = [](const TTestContext& tc) {
-        auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-        request->Record.SetCookie(12345);
-
-        auto* readRange = request->Record.AddCmdReadRange();
-        readRange->SetIncludeData(false);
-
-        auto* range = readRange->MutableRange();
-        range->SetFrom("\x00");
-        range->SetIncludeFrom(true);
-        range->SetTo("\xFF");
-        range->SetIncludeTo(true);
-
-        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-
-        TAutoPtr<IEventHandle> handle;
-        TEvKeyValue::TEvResponse* result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
-
-        for (const auto& pair : result->Record.GetReadRangeResult(0).GetPair()) {
-            const TString key = pair.GetKey();
-            if (key.empty() || key.front() != 'd') {
-                continue;
-            }
-            Cerr << key << Endl;
-        }
-    };
-
-    auto dumpCacheKeys = [](const TTestContext& tc) {
-        auto request = MakeHolder<TEvPqCache::TEvCacheKeysRequest>();
-
-        tc.Runtime->Send(MakePersQueueL2CacheID(), tc.Edge, request.Release());
-
-        TAutoPtr<IEventHandle> handle;
-        auto* result = tc.Runtime->GrabEdgeEvent<TEvPqCache::TEvCacheKeysResponse>(handle);
-
-        for (const auto& key : result->Keys) {
-            Cerr << key.TabletId << " " << key.Partition << " " << key.Offset << " " << key.PartNo << Endl;
-        }
-    };
-
     TTestContext tc;
     TFinalizer finalizer(tc);
     tc.Prepare();
@@ -2653,33 +2707,8 @@ Y_UNIT_TEST(Foo)
 
     PQTabletPrepare({}, {{"consumer", true}}, tc);
 
-#if 1
-    for (unsigned seqNo = 1; seqNo <= 252; ++seqNo) {
-        TVector<std::pair<ui64, TString>> data;
-        TString s{100, 'x'};
-        data.push_back({seqNo, s});
-        CmdWrite(0, "source_id", data, tc);
-
-        Cerr << "==== tablet keys #" << seqNo << " ====" << Endl;
-        dumpTabletKeys(tc);
-        Cerr << "==== cache keys #" << seqNo << " ====" << Endl;
-        dumpCacheKeys(tc);
-        Cerr << "============" << Endl;
-    }
-#else
-    for (unsigned seqNo = 1; seqNo <= 1; ++seqNo) {
-        TVector<std::pair<ui64, TString>> data;
-        TString s{36'789'012, 'x'};
-        data.push_back({seqNo, s});
-        CmdWrite(0, "source_id", data, tc);
-
-        Cerr << "==== tablet keys #" << seqNo << " ====" << Endl;
-        dumpTabletKeys(tc);
-        Cerr << "==== cache keys #" << seqNo << " ====" << Endl;
-        dumpCacheKeys(tc);
-        Cerr << "============" << Endl;
-    }
-#endif
+    WriteToPartition(0, 1, 252, 100'000, tc);
+    //WriteToPartition(0, 1, 1, 36'789'012, tc);
 }
 
 } // Y_UNIT_TEST_SUITE(TPQTest)

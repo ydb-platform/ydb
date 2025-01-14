@@ -54,7 +54,7 @@ const bool ENABLE_REBOOT_DISPATCH_LOG = true;
 const bool TRACE_DELAY_TIMING = true;
 const bool SUPPRESS_DELAYS = false;
 const bool VARIATE_RANDOM_SEED = false;
-const ui64 PQ_CACHE_MAX_SIZE_MB = 32;
+const ui64 PQ_CACHE_MAX_SIZE_MB = 64;
 const TDuration PQ_CACHE_KEEP_TIMEOUT = TDuration::Seconds(10);
 
 static NActors::TTestActorRuntime& AsKikimrRuntime(NActors::TTestActorRuntimeBase& r) {

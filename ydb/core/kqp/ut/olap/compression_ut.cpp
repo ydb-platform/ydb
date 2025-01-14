@@ -8,32 +8,25 @@
 namespace NKikimr::NKqp {
 
 std::pair<ui64, ui64> GetVolumes(
-    const TKikimrRunner& runner, const TString& tablePath, const std::vector<TString> columnNames, const bool verbose = false) {
+    const TKikimrRunner& runner, const TString& tablePath, const std::vector<TString> columnNames) {
     TString selectQuery = "SELECT * FROM `" + tablePath + "/.sys/primary_index_stats` WHERE Activity == 1";
     if (columnNames.size()) {
         selectQuery += " AND EntityName IN ('" + JoinSeq("','", columnNames) + "')";
     }
-
     auto tableClient = runner.GetTableClient();
     std::optional<ui64> rawBytesPred;
     std::optional<ui64> bytesPred;
     while (true) {
-        auto rows = ExecuteScanQuery(tableClient, selectQuery, verbose);
+        auto rows = ExecuteScanQuery(tableClient, selectQuery, false);
         ui64 rawBytes = 0;
         ui64 bytes = 0;
         for (auto&& r : rows) {
-            if (verbose) {
-                Cerr << "-------" << Endl;
-            }
             for (auto&& c : r) {
                 if (c.first == "RawBytes") {
                     rawBytes += GetUint64(c.second);
                 }
                 if (c.first == "BlobRangeSize") {
                     bytes += GetUint64(c.second);
-                }
-                if (verbose) {
-                    Cerr << c.first << ":" << Endl << c.second.GetProto().DebugString() << Endl;
                 }
             }
         }
@@ -117,7 +110,6 @@ Y_UNIT_TEST_SUITE(KqpOlapCompression) {
         if (CSConfig.has_value()) {
             *appConfig.MutableColumnShardConfig() = CSConfig.value();
         }
-        Cerr << appConfig.columnshardconfig().HasDefaultCompression() << Endl;
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig);
         TTestHelper testHelper(settings);
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
@@ -137,10 +129,10 @@ Y_UNIT_TEST_SUITE(KqpOlapCompression) {
         dataBuilders.push_back(
             NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable(
                 "pk_int", false));
-        auto batch = NArrow::NConstruction::TRecordBatchConstructor(dataBuilders).BuildBatch(1000000);
+        auto batch = NArrow::NConstruction::TRecordBatchConstructor(dataBuilders).BuildBatch(100000);
         testHelper.BulkUpsert(testTable, batch);
         csController->WaitCompactions(TDuration::Seconds(10));
-        return GetVolumes(testHelper.GetKikimr(), tableName, { "pk_int" }, true);
+        return GetVolumes(testHelper.GetKikimr(), tableName, { "pk_int" });
     }
 
     Y_UNIT_TEST(DefaultCompressionViaCSConfig) {
@@ -148,8 +140,6 @@ Y_UNIT_TEST_SUITE(KqpOlapCompression) {
         csConfig.SetDefaultCompression(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
         auto [rawBytesPK1, bytesPK1] = GetVolumesColumnWithCompression(csConfig);
         auto [rawBytesPK2, bytesPK2] = GetVolumesColumnWithCompression();  // Default compression (ZSTD, 1)
-        Cerr << rawBytesPK1 << " " << bytesPK1 << Endl;
-        Cerr << rawBytesPK2 << " " << bytesPK2 << Endl;
         AFL_VERIFY(rawBytesPK2 == rawBytesPK1)("pk1", rawBytesPK1)("pk2", rawBytesPK2);
         AFL_VERIFY(bytesPK2 < bytesPK1 / 3)("pk1", bytesPK1)("pk2", bytesPK2);
     }

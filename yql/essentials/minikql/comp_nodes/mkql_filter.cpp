@@ -39,7 +39,7 @@ public:
 
         block = loop;
         const auto item = GetNodeValue(Flow, ctx, block);
-        BranchInst::Create(exit, good, IsSpecial(item, block), block);
+        BranchInst::Create(exit, good, IsSpecial(item, block, context), block);
 
         block = good;
         codegenItem->CreateSetValue(ctx, block, item);
@@ -107,7 +107,7 @@ public:
         const auto valueType = Type::getInt128Ty(context);
         const auto result = PHINode::Create(valueType, 3U, "result", exit);
 
-        BranchInst::Create(init, test, IsInvalid(statePtr, block), block);
+        BranchInst::Create(init, test, IsInvalid(statePtr, block, context), block);
 
         block = init;
 
@@ -124,7 +124,7 @@ public:
         block = loop;
         const auto item = GetNodeValue(Flow, ctx, block);
         result->addIncoming(item, block);
-        BranchInst::Create(exit, step, IsSpecial(item, block), block);
+        BranchInst::Create(exit, step, IsSpecial(item, block, context), block);
 
         block = step;
         codegenItem->CreateSetValue(ctx, block, item);
@@ -289,7 +289,6 @@ protected:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -330,7 +329,7 @@ protected:
         BranchInst::Create(pass, loop, boolPred, block);
         block = pass;
 
-        SafeUnRefUnboxed(valuePtr, ctx, block);
+        SafeUnRefUnboxedOne(valuePtr, ctx, block);
         new StoreInst(item, valuePtr, block);
         ValueAddRef(Item->GetRepresentation(), valuePtr, ctx, block);
         BranchInst::Create(done, block);
@@ -498,7 +497,6 @@ protected:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -553,7 +551,7 @@ protected:
         const auto decr = BinaryOperator::CreateSub(limit, ConstantInt::get(limit->getType(), 1ULL), "decr", block);
         new StoreInst(decr, limitArg, block);
 
-        SafeUnRefUnboxed(valuePtr, ctx, block);
+        SafeUnRefUnboxedOne(valuePtr, ctx, block);
         new StoreInst(item, valuePtr, block);
         ValueAddRef(Item->GetRepresentation(), valuePtr, ctx, block);
         BranchInst::Create(done, block);

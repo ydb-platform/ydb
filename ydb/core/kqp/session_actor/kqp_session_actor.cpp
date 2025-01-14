@@ -795,7 +795,6 @@ public:
 
     void BeginTx(const Ydb::Table::TransactionSettings& settings) {
         QueryState->TxId.SetValue(UlidGen.Next());
-        TerminateBufferActor();
         QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
             AppData()->TimeProvider, AppData()->RandomProvider);
 
@@ -882,7 +881,6 @@ public:
                     break;
             }
         } else {
-            TerminateBufferActor();
             QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
                 AppData()->TimeProvider, AppData()->RandomProvider);
             QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
@@ -2231,9 +2229,11 @@ public:
                 Transactions.AddToBeAborted(txCtx);
                 Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
             }
-            TerminateBufferActor();
             DiscardPersistentSnapshot(txCtx->SnapshotHandle);
         }
+
+        if (isFinal)
+            TerminateBufferActor();
 
         if (isFinal)
             Counters->ReportSessionActorClosedRequest(Settings.DbCounters);

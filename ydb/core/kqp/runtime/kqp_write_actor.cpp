@@ -388,16 +388,6 @@ public:
         }
     }
 
-    STFUNC(StateTerminating) {
-        try {
-            switch (ev->GetTypeRewrite()) {
-                hFunc(TEvPrivate::TEvTerminate, Handle);
-            }
-        } catch (const yexception& e) {
-            CA_LOG_W(e.what());
-        }
-    }
-
     bool IsResolving() const {
         return ResolveAttempts > 0;
     }
@@ -952,10 +942,6 @@ public:
         RetryShard(ev->Get()->ShardId, ev->Cookie);
     }
 
-    void Handle(TEvPrivate::TEvTerminate::TPtr&) {
-        PassAway();
-    }
-
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
         if (InconsistentTx) {
@@ -1002,14 +988,13 @@ public:
     }
 
     void PassAway() override {;
-        CA_LOG_D("PassAway");
+        Counters->WriteActorsCount->Dec();
         Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
         TActorBootstrapped<TKqpTableWriteActor>::PassAway();
     }
 
     void Terminate() {
-        Become(&TKqpTableWriteActor::StateTerminating);
-        Send(this->SelfId(), new TEvPrivate::TEvTerminate{});
+        PassAway();
     }
 
     void UpdateStats(const NKikimrQueryStats::TTxStats& txStats) {
@@ -1398,6 +1383,8 @@ struct TEvBufferWrite : public TEventLocal<TEvBufferWrite, TKqpEvents::EvBufferW
     std::optional<TWriteToken> Token;
     std::optional<TWriteSettings> Settings;
     IDataBatchPtr Data;
+
+    TInstant SendTime;
 };
 
 struct TEvBufferWriteResult : public TEventLocal<TEvBufferWriteResult, TKqpEvents::EvBufferWriteResult> {
@@ -1470,6 +1457,8 @@ public:
     }
 
     void Handle(TEvBufferWrite::TPtr& ev) {
+        Counters->ForwardActorWritesLatencyHistogram->Collect((TInstant::Now() - ev->Get()->SendTime).MicroSeconds());
+
         TWriteToken token;
         if (!ev->Get()->Token) {
             AFL_ENSURE(ev->Get()->Settings);
@@ -1879,6 +1868,7 @@ public:
     }
 
     void PassAway() override {
+        Counters->BufferActorsCount->Dec();
         for (auto& [_, queue] : DataQueues) {
             while (!queue.empty()) {
                 queue.pop();
@@ -1997,6 +1987,9 @@ public:
     }
 
     void Handle(TEvKqpBuffer::TEvTerminate::TPtr&) {
+        if (State != EState::ROLLINGBACK) {
+            Rollback();
+        }
         PassAway();
     }
 
@@ -2032,7 +2025,6 @@ public:
 
     void RollbackAndDie() {
         Rollback();
-        State = EState::FINISHED;
         Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
         PassAway();
     }
@@ -2329,6 +2321,7 @@ public:
     }
 
     void OnFlushed() {
+        YQL_ENSURE(State == EState::FLUSHING);
         BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
             "BufferWriteActorState::Writing", NWilson::EFlags::AUTO_END);
         CA_LOG_D("Flushed");
@@ -2352,8 +2345,9 @@ public:
         Y_ABORT_UNLESS(!HasError);
         HasError = true;
         if (State != EState::ROLLINGBACK) {
+            Rollback();
             // Rollback can't finish with error
-            Send(SessionActorId, new TEvKqpBuffer::TEvError{
+            Send<ESendingType::Tail>(SessionActorId, new TEvKqpBuffer::TEvError{
                 message,
                 statusCode,
                 subIssues,
@@ -2437,7 +2431,6 @@ public:
         , ForwardWriteActorSpan(TWilsonKqp::ForwardWriteActor, NWilson::TTraceId(args.TraceId), "TKqpForwardWriteActor")
     {
         EgressStats.Level = args.StatsLevel;
-        Counters->ForwardActorsCount->Inc();
 
         TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(
             Settings.GetColumns().begin(),
@@ -2453,6 +2446,7 @@ public:
     }
 
     void Bootstrap() {
+        Counters->ForwardActorsCount->Inc();
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
         Become(&TKqpForwardWriteActor::StateFuncFwd);
     }
@@ -2474,14 +2468,6 @@ private:
 
     void Handle(TEvBufferWriteResult::TPtr& result) {
         CA_LOG_D("TKqpForwardWriteActor recieve EvBufferWriteResult from " << BufferActorId);
-        // TODO: move
-        EgressStats.Bytes += DataSize;
-        EgressStats.Chunks++;
-        EgressStats.Splits++;
-        EgressStats.Resume();
-
-        Counters->ForwardActorWritesSizeHistogram->Collect(DataSize);
-        Counters->ForwardActorWritesLatencyHistogram->Collect((TInstant::Now() - SendTime).MicroSeconds());
 
         WriteToken = result->Get()->Token;
         DataSize = 0;
@@ -2534,10 +2520,17 @@ private:
             };
         }
 
-        SendTime = TInstant::Now();
+        ev->SendTime = TInstant::Now();
 
         CA_LOG_D("Send data=" << DataSize << ", closed=" << Closed << ", bufferActorId=" << BufferActorId);
         AFL_ENSURE(Send<ESendingType::Tail>(BufferActorId, ev.release()));
+
+        EgressStats.Bytes += DataSize;
+        EgressStats.Chunks++;
+        EgressStats.Splits++;
+        EgressStats.Resume();
+
+        Counters->ForwardActorWritesSizeHistogram->Collect(DataSize);
 
         if (Closed) {
             CA_LOG_D("Finished");
@@ -2596,6 +2589,7 @@ private:
     }
 
     void PassAway() override {
+        Counters->ForwardActorsCount->Dec();
         TActorBootstrapped<TKqpForwardWriteActor>::PassAway();
     }
 
@@ -2615,8 +2609,6 @@ private:
 
     const ui64 TxId;
     const TTableId TableId;
-
-    TInstant SendTime;
 
     TWriteToken WriteToken;
     NWilson::TSpan ForwardWriteActorSpan;

@@ -141,7 +141,7 @@ void TChannelPool::GetStubsHolderLocked(
                 }
             }
         }
-        auto mutator = NImpl::GetGRpcKeepAliveSocketMutator(TcpKeepAliveSettings_);
+        auto mutator = NImpl::CreateGRpcKeepAliveSocketMutator(TcpKeepAliveSettings_);
         // will be destroyed inside grpc
         cb(Pool_.emplace(channelId, CreateChannelInterface(config, mutator)).first->second);
         LastUsedQueue_.emplace(Pool_.at(channelId).GetLastUseTime(), channelId);
@@ -581,9 +581,8 @@ void TGRpcClientLow::ForgetContext(TContextImpl* context) {
     }
 }
 
-grpc_socket_mutator* NImpl::GetGRpcKeepAliveSocketMutator(const TTcpKeepAliveSettings& TcpKeepAliveSettings_) {
+grpc_socket_mutator* NImpl::CreateGRpcKeepAliveSocketMutator(const TTcpKeepAliveSettings& TcpKeepAliveSettings_) {
     TGRpcKeepAliveSocketMutator* mutator = nullptr;
-    // will be destroyed inside grpc
     if (TcpKeepAliveSettings_.Enabled) {
         mutator = new TGRpcKeepAliveSocketMutator(
                 TcpKeepAliveSettings_.Idle,

@@ -8,6 +8,7 @@ SRCS(
     metarequest_ut.cpp
     port_discovery_ut.cpp
 )
+TIMEOUT(30)
 
 PEERDIR(
     ydb/core/kafka_proxy

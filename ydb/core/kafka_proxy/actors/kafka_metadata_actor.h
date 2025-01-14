@@ -6,6 +6,8 @@
 #include <ydb/services/persqueue_v1/actors/events.h>
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
 #include <ydb/core/discovery/discovery.h>
+#include <ydb/core/kafka_proxy/kafka_listener.h>
+
 
 namespace NKafka {
 
@@ -35,7 +37,7 @@ private:
     void HandleLocationResponse(TEvLocationResponse::TPtr ev, const NActors::TActorContext& ctx);
     void HandleNodesResponse(NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev,
                              const NActors::TActorContext& ctx);
-    void HandleDiscoveryData(NKikimr::TEvDiscovery::TEvDiscoveryData::TPtr& ev, const NActors::TActorContext& ctx);
+    void HandleDiscoveryData(NKikimr::TEvDiscovery::TEvDiscoveryData::TPtr& ev);
     void HandleDiscoveryError(NKikimr::TEvDiscovery::TEvError::TPtr& ev);
 
     void AddTopicResponse(TMetadataResponseData::TMetadataResponseTopic& topic, TEvLocationResponse* response,
@@ -54,7 +56,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvLocationResponse, HandleLocationResponse);
             HFunc(NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse, HandleNodesResponse);
-            HFunc(NKikimr::TEvDiscovery::TEvDiscoveryData, HandleDiscoveryData);
+            hFunc(NKikimr::TEvDiscovery::TEvDiscoveryData, HandleDiscoveryData);
             hFunc(NKikimr::TEvDiscovery::TEvError, HandleDiscoveryError);
         }
     }

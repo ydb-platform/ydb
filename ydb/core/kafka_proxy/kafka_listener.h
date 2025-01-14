@@ -8,10 +8,7 @@ namespace NKafka {
 using namespace NKikimr::NRawSocket;
 
 
-TActorId MakeKafkaDiscoveryCacheID() {
-    static const char x[12] = "kafka_dsc_c";
-    return TActorId(0, TStringBuf(x, 12));
-}
+TActorId MakeKafkaDiscoveryCacheID();
 
 inline NActors::IActor* CreateKafkaListener(
         const NActors::TActorId& poller, const TListenerSettings& settings, const NKikimrConfig::TKafkaProxyConfig& config,

@@ -9,6 +9,11 @@ namespace NKafka {
 using namespace NKikimr;
 using namespace NKikimr::NGRpcProxy::V1;
 
+TActorId MakeKafkaDiscoveryCacheID() {
+    static const char x[12] = "kafka_dsc_c";
+    return TActorId(0, TStringBuf(x, 12));
+}
+
 NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context,
                                           const ui64 correlationId,
                                           const TMessagePtr<TMetadataRequestData>& message,
@@ -49,10 +54,13 @@ void TKafkaMetadataActor::SendDiscoveryRequest() {
 void TKafkaMetadataActor::HandleDiscoveryError(TEvDiscovery::TEvError::TPtr& ev) {
     PendingResponses--;
     HaveError = true;
+    KAFKA_LOG_ERROR("Port discovery failed for database '" << Context->DatabasePath << "' with error '" << ev->Get()->Error
+                    << ", request " << CorrelationId);
+
     RespondIfRequired(ActorContext());
 }
 
-void TKafkaMetadataActor::HandleDiscoveryData(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const NActors::TActorContext& ctx) {
+void TKafkaMetadataActor::HandleDiscoveryData(TEvDiscovery::TEvDiscoveryData::TPtr& ev) {
     PendingResponses--;
     ProcessDiscoveryData(ev);
     RespondIfRequired(ActorContext());
@@ -74,6 +82,7 @@ void TKafkaMetadataActor::ProcessDiscoveryData(TEvDiscovery::TEvDiscoveryData::T
         ok = leResponse.operation().result().UnpackTo(&leResult);
     }
     if (!ok) {
+        KAFKA_LOG_ERROR("Port discovery failed, unable to parse discovery respose for request " << CorrelationId);
         HaveError = true;
         return;
     }
@@ -260,7 +269,6 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
         auto nodeIter = Nodes.find(SelfId().NodeId());
         if (nodeIter.IsEnd()) {
             // Node info was not found, request from IC nodes cache instead
-            Y_ABORT_UNLESS(!FallbackToIcDiscovery);
             RequestICNodeCache();
             return;
         }
@@ -278,6 +286,7 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
                 return;
             } else {
                 // Already tried both YDB discovery and interconnect, still couldn't find the node for partition. Throw error
+                KAFKA_LOG_ERROR("Could not discovery kafka port for topic '" << topic.Name);
                 AddTopicError(topic, EKafkaErrors::UNKNOWN_SERVER_ERROR);
             }
         } else {

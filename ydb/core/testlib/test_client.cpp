@@ -62,6 +62,7 @@
 #include <ydb/core/health_check/health_check.h>
 #include <ydb/core/kafka_proxy/actors/kafka_metrics_actor.h>
 #include <ydb/core/kafka_proxy/kafka_listener.h>
+#include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
 #include <ydb/core/kafka_proxy/kafka_metrics.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -1091,8 +1092,12 @@ namespace Tests {
             TActorId actorId = Runtime->Register(actor, nodeIdx, Runtime->GetAppData(nodeIdx).SystemPoolId);
             Runtime->RegisterService(MakePollerActorId(), actorId, nodeIdx);
         }
-
         if (Settings->AppConfig->GetKafkaProxyConfig().GetEnableKafkaProxy()) {
+
+            IActor* discoveryCache = CreateDiscoveryCache(NGRpcService::KafkaEndpointId);
+            TActorId discoveryCacheId = Runtime->Register(discoveryCache, nodeIdx, userPoolId);
+	    Runtime->RegisterService(NKafka::MakeKafkaDiscoveryCacheID(), discoveryCacheId, nodeIdx);
+
             NKafka::TListenerSettings settings;
             settings.Port = Settings->AppConfig->GetKafkaProxyConfig().GetListeningPort();
             bool ssl = false;
@@ -1102,7 +1107,7 @@ namespace Tests {
             }
 
             IActor* actor = NKafka::CreateKafkaListener(MakePollerActorId(), settings, Settings->AppConfig->GetKafkaProxyConfig(),
-                                                        TActorId{});
+                                                        discoveryCacheId);
             TActorId actorId = Runtime->Register(actor, nodeIdx, userPoolId);
             Runtime->RegisterService(TActorId{}, actorId, nodeIdx);
 

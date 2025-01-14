@@ -73,7 +73,7 @@ TVector<TString> GetAllPathsFromRequestList(const TNode& requestList)
 
 TEST(TBatchRequestImplTest, ParseResponse) {
     TClientContext context;
-    TRawBatchRequest batchRequest(context.Config);
+    THttpRawBatchRequest batchRequest(context.Config);
 
     EXPECT_EQ(batchRequest.BatchSize(), 0u);
 

@@ -24,7 +24,7 @@ namespace NYT::NDetail::NRawClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRawBatchRequest
+class THttpRawBatchRequest
     : public TThrRefBase
 {
 public:
@@ -38,8 +38,8 @@ public:
     };
 
 public:
-    TRawBatchRequest(const TConfigPtr& config);
-    ~TRawBatchRequest();
+    THttpRawBatchRequest(const TConfigPtr& config);
+    ~THttpRawBatchRequest();
 
     void ExecuteBatch(
         IRequestRetryPolicyPtr retryPolicy,

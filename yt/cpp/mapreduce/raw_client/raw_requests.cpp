@@ -265,7 +265,7 @@ TVector<TRichYPath> CanonizeYPaths(
     const TClientContext& context,
     const TVector<TRichYPath>& paths)
 {
-    TRawBatchRequest batch(context.Config);
+    THttpRawBatchRequest batch(context.Config);
     TVector<NThreading::TFuture<TRichYPath>> futures;
     futures.reserve(paths.size());
     for (int i = 0; i < static_cast<int>(paths.size()); ++i) {

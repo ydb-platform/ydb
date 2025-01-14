@@ -42,7 +42,7 @@ public:
         , Transaction_(std::move(transaction))
     { }
 
-    void PrepareRequest(NRawClient::TRawBatchRequest* batchRequest) override
+    void PrepareRequest(NRawClient::THttpRawBatchRequest* batchRequest) override
     {
         Future_ = batchRequest->GetOperation(
             OperationId_,
@@ -213,7 +213,7 @@ void TOperationPreparer::LockFiles(TVector<TRichYPath>* paths)
 
     TVector<::NThreading::TFuture<TLockId>> lockIdFutures;
     lockIdFutures.reserve(paths->size());
-    NRawClient::TRawBatchRequest lockRequest(GetContext().Config);
+    NRawClient::THttpRawBatchRequest lockRequest(GetContext().Config);
     for (const auto& path : *paths) {
         lockIdFutures.push_back(lockRequest.Lock(
             FileTransaction_->GetId(),
@@ -225,7 +225,7 @@ void TOperationPreparer::LockFiles(TVector<TRichYPath>* paths)
 
     TVector<::NThreading::TFuture<TNode>> nodeIdFutures;
     nodeIdFutures.reserve(paths->size());
-    NRawClient::TRawBatchRequest getNodeIdRequest(GetContext().Config);
+    NRawClient::THttpRawBatchRequest getNodeIdRequest(GetContext().Config);
     for (const auto& lockIdFuture : lockIdFutures) {
         nodeIdFutures.push_back(getNodeIdRequest.Get(
             FileTransaction_->GetId(),

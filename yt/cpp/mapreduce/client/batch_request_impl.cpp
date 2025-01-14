@@ -36,11 +36,11 @@ using ::NThreading::NewPromise;
 
 TBatchRequest::TBatchRequest(const TTransactionId& defaultTransaction, ::TIntrusivePtr<TClient> client)
     : DefaultTransaction_(defaultTransaction)
-    , Impl_(MakeIntrusive<TRawBatchRequest>(client->GetContext().Config))
+    , Impl_(MakeIntrusive<THttpRawBatchRequest>(client->GetContext().Config))
     , Client_(client)
 { }
 
-TBatchRequest::TBatchRequest(TRawBatchRequest* impl, ::TIntrusivePtr<TClient> client)
+TBatchRequest::TBatchRequest(THttpRawBatchRequest* impl, ::TIntrusivePtr<TClient> client)
     : Impl_(impl)
     , Client_(std::move(client))
 { }

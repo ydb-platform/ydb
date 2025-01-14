@@ -92,7 +92,7 @@ void TYtPoller::WatchLoop()
             Y_ABORT_UNLESS(!InProgress_.empty());
         }
 
-        TRawBatchRequest rawBatchRequest(Context_.Config);
+        THttpRawBatchRequest rawBatchRequest(Context_.Config);
 
         for (auto& item : InProgress_) {
             item->PrepareRequest(&rawBatchRequest);

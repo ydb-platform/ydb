@@ -77,7 +77,7 @@ int TOperationPreparationContext::GetOutputCount() const
 const TVector<TTableSchema>& TOperationPreparationContext::GetInputSchemas() const
 {
     TVector<::NThreading::TFuture<TNode>> schemaFutures;
-    NRawClient::TRawBatchRequest batch(Context_.Config);
+    NRawClient::THttpRawBatchRequest batch(Context_.Config);
     for (int tableIndex = 0; tableIndex < static_cast<int>(InputSchemas_.size()); ++tableIndex) {
         if (InputSchemasLoaded_[tableIndex]) {
             schemaFutures.emplace_back();

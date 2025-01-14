@@ -59,7 +59,7 @@ auto BatchTransform(
     TBatchAdder batchAdder,
     const TExecuteBatchOptions& executeBatchOptions = {})
 {
-    TRawBatchRequest batch(context.Config);
+    THttpRawBatchRequest batch(context.Config);
     using TFuture = decltype(batchAdder(batch, *std::begin(src)));
     TVector<TFuture> futures;
     for (const auto& el : src) {

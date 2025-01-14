@@ -64,9 +64,18 @@ void ExecuteBatch(
             auto body = NodeToYsonString(parameters);
             THttpHeader header("POST", "execute_batch");
             header.AddMutationId();
-            NDetail::TResponseInfo result;
+            TResponseInfo result;
             try {
-                result = RetryRequestWithPolicy(retryPolicy, context, header, body);
+                result = RequestWithRetry<TResponseInfo>(
+                    retryPolicy,
+                    [&context, &header, &body] (TMutationId& mutationId) {
+                        auto response = RequestWithoutRetry(context, mutationId, header, body);
+                        return TResponseInfo{
+                            .RequestId = response->GetRequestId(),
+                            .Response = response->GetResponse(),
+                            .HttpCode = response->GetStatusCode(),
+                        };
+                    });
             } catch (const std::exception& e) {
                 batchRequest.SetErrorResult(std::current_exception());
                 retryBatch.SetErrorResult(std::current_exception());

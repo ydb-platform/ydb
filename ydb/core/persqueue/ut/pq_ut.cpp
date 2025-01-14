@@ -3,6 +3,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/partition.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
+#include <ydb/core/persqueue/pq_l2_service.h>
 #include <ydb/core/security/ticket_parser.h>
 
 #include <ydb/core/testlib/fake_scheme_shard.h>
@@ -2598,6 +2599,87 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
     // Making sure that the blobs for messages with offsets 2 and 3 are removed
     UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
     UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
+}
+
+Y_UNIT_TEST(Foo)
+{
+    auto dumpTabletKeys = [](const TTestContext& tc) {
+        auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+        request->Record.SetCookie(12345);
+
+        auto* readRange = request->Record.AddCmdReadRange();
+        readRange->SetIncludeData(false);
+
+        auto* range = readRange->MutableRange();
+        range->SetFrom("\x00");
+        range->SetIncludeFrom(true);
+        range->SetTo("\xFF");
+        range->SetIncludeTo(true);
+
+        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+
+        TAutoPtr<IEventHandle> handle;
+        TEvKeyValue::TEvResponse* result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+
+        for (const auto& pair : result->Record.GetReadRangeResult(0).GetPair()) {
+            const TString key = pair.GetKey();
+            if (key.empty() || key.front() != 'd') {
+                continue;
+            }
+            Cerr << key << Endl;
+        }
+    };
+
+    auto dumpCacheKeys = [](const TTestContext& tc) {
+        auto request = MakeHolder<TEvPqCache::TEvCacheKeysRequest>();
+
+        tc.Runtime->Send(MakePersQueueL2CacheID(), tc.Edge, request.Release());
+
+        TAutoPtr<IEventHandle> handle;
+        auto* result = tc.Runtime->GrabEdgeEvent<TEvPqCache::TEvCacheKeysResponse>(handle);
+
+        for (const auto& key : result->Keys) {
+            Cerr << key.TabletId << " " << key.Partition << " " << key.Offset << " " << key.PartNo << Endl;
+        }
+    };
+
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+
+    tc.Runtime->SetScheduledLimit(150);
+    tc.Runtime->SetDispatchTimeout(TDuration::Seconds(1));
+    tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+
+    PQTabletPrepare({}, {{"consumer", true}}, tc);
+
+#if 1
+    for (unsigned seqNo = 1; seqNo <= 252; ++seqNo) {
+        TVector<std::pair<ui64, TString>> data;
+        TString s{100, 'x'};
+        data.push_back({seqNo, s});
+        CmdWrite(0, "source_id", data, tc);
+
+        Cerr << "==== tablet keys #" << seqNo << " ====" << Endl;
+        dumpTabletKeys(tc);
+        Cerr << "==== cache keys #" << seqNo << " ====" << Endl;
+        dumpCacheKeys(tc);
+        Cerr << "============" << Endl;
+    }
+#else
+    for (unsigned seqNo = 1; seqNo <= 1; ++seqNo) {
+        TVector<std::pair<ui64, TString>> data;
+        TString s{36'789'012, 'x'};
+        data.push_back({seqNo, s});
+        CmdWrite(0, "source_id", data, tc);
+
+        Cerr << "==== tablet keys #" << seqNo << " ====" << Endl;
+        dumpTabletKeys(tc);
+        Cerr << "==== cache keys #" << seqNo << " ====" << Endl;
+        dumpCacheKeys(tc);
+        Cerr << "============" << Endl;
+    }
+#endif
 }
 
 } // Y_UNIT_TEST_SUITE(TPQTest)

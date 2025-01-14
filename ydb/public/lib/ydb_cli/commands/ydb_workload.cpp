@@ -154,7 +154,7 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
 
     auto runTableClient = [this, &queryInfo, &dataQuerySettings, &retryCount] (NYdb::NTable::TSession session) -> NYdb::TStatus {
         if (!TableClient) {
-            Y_FAIL_S("TableClient is not inited .");
+            Y_FAIL_S("TableClient is not initialized.");
         }
         ++retryCount;
         if (queryInfo.AlterTable) {
@@ -187,7 +187,7 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
 
     auto runQueryClient = [this, &queryInfo, &genericQuerySettings, &retryCount] (NYdb::NQuery::TSession session) -> NYdb::NQuery::TAsyncExecuteQueryResult {
         if (!QueryClient) {
-            Y_FAIL_S("QueryClient is not inited.");
+            Y_FAIL_S("QueryClient is not initialized.");
         }
         ++retryCount;
         if (queryInfo.AlterTable) {

@@ -6,8 +6,6 @@
 #include <library/cpp/uri/uri.h>
 #include <util/string/builder.h>
 
-#include <regex>
-
 namespace NKikimr::NColumnShard::NTiers {
 
 class TS3Uri {
@@ -23,6 +21,8 @@ private:
         VIRTUAL_HOSTED_STYLE = 2,
     };
 
+    inline static const std::vector<TString> BucketHostSeparators = { ".s3.", ".s3-" };
+
 private:
     static TStringBuf StripPath(const TStringBuf& path) {
         TStringBuf stripped = path;
@@ -34,18 +34,6 @@ private:
     }
 
     static std::optional<TUriStyle> DeduceUriStyle(const NUri::TUri& uri) {
-        {
-            static const std::regex StrictEndpointPattern = std::regex{ "^(.+\\.)?s3[.-].*" };
-            std::match_results<TString::const_iterator> match;
-            if (std::regex_match(uri.GetHost().begin(), uri.GetHost().end(), match, StrictEndpointPattern)) {
-                if (match[1].length()) {
-                    return VIRTUAL_HOSTED_STYLE;
-                } else {
-                    return PATH_STYLE;
-                }
-            }
-        }
-
         const bool hasSubdomain = std::count(uri.GetHost().begin(), uri.GetHost().end(), '.') >= 2;
         const bool hasPath = !StripPath(uri.GetField(NUri::TField::FieldPath)).Empty();
         if (hasSubdomain && !hasPath) {
@@ -53,6 +41,16 @@ private:
         }
         if (!hasSubdomain && hasPath) {
             return PATH_STYLE;
+        }
+
+        // URI style deduction copied from AWS SDK for Java
+        for (const TString& sep : BucketHostSeparators) {
+            if (uri.GetHost().StartsWith(sep.substr(1))) {
+                return PATH_STYLE;
+            }
+            if (uri.GetHost().Contains(sep)) {
+                return VIRTUAL_HOSTED_STYLE;
+            }
         }
 
         return std::nullopt;
@@ -87,7 +85,14 @@ private:
     static TConclusion<TS3Uri> ParseVirtualHostedStyleUri(const NUri::TUri& input) {
         TS3Uri result;
 
-        {
+        for (const TString& sep : BucketHostSeparators) {
+            if (const ui64 findSep = input.GetHost().find(sep)) {
+                result.Bucket = input.GetHost().SubStr(0, findSep);
+                result.Host = input.GetHost().SubStr(findSep + 1);
+                break;
+            }
+        }
+        if (result.Host.empty()) {
             TStringBuf host;
             TStringBuf bucket;
             if (input.GetHost().TrySplit('.', bucket, host)) {

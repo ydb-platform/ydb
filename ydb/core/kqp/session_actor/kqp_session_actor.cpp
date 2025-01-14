@@ -279,7 +279,11 @@ public:
         auto txId = TTxId::FromString(txControl.tx_id());
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {
             ctx->Invalidate();
-            Transactions.AddToBeAborted(std::move(ctx));
+            if (!ctx->BufferActorId) {
+                Transactions.AddToBeAborted(std::move(ctx));
+            } else {
+                TerminateBufferActor();
+            }
             ReplySuccess();
         } else {
             ReplyTransactionNotFound(txControl.tx_id());
@@ -1985,7 +1989,11 @@ public:
         LOG_W("ReplyQueryCompileError, status " << QueryState->CompileResult->Status << " remove tx with tx_id: " << txId.GetHumanStr());
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {
             ctx->Invalidate();
-            Transactions.AddToBeAborted(std::move(ctx));
+            if (!ctx->BufferActorId) {
+                Transactions.AddToBeAborted(std::move(ctx));
+            } else {
+                TerminateBufferActor();
+            }
         }
 
         auto* record = &QueryResponse->Record;
@@ -2006,7 +2014,11 @@ public:
         auto txId = TTxId();
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {
             ctx->Invalidate();
-            Transactions.AddToBeAborted(std::move(ctx));
+            if (!ctx->BufferActorId) {
+                Transactions.AddToBeAborted(std::move(ctx));
+            } else {
+                TerminateBufferActor();
+            }
         }
 
         FillTxInfo(record.MutableResponse());
@@ -2226,7 +2238,11 @@ public:
         if (QueryState && QueryState->TxCtx) {
             auto& txCtx = QueryState->TxCtx;
             if (txCtx->IsInvalidated()) {
-                Transactions.AddToBeAborted(txCtx);
+                if (!txCtx->TxManager) {
+                    Transactions.AddToBeAborted(txCtx);
+                } else {
+                    TerminateBufferActor();
+                }
                 Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
             }
             DiscardPersistentSnapshot(txCtx->SnapshotHandle);

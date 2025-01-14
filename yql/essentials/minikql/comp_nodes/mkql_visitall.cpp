@@ -104,7 +104,7 @@ public:
         const auto valueType = Type::getInt128Ty(context);
         const auto result = PHINode::Create(valueType, NewNodes.size() + 2U, "result", done);
 
-        BranchInst::Create(init, work, IsInvalid(statePtr, block), block);
+        BranchInst::Create(init, work, IsInvalid(statePtr, block, context), block);
 
         {
             block = init;
@@ -199,7 +199,7 @@ public:
         const auto resultType = Type::getInt32Ty(context);
         const auto result = PHINode::Create(resultType, NewNodes.size() + 2U, "result", done);
 
-        BranchInst::Create(init, work, IsInvalid(statePtr, block), block);
+        BranchInst::Create(init, work, IsInvalid(statePtr, block, context), block);
 
         {
             block = init;

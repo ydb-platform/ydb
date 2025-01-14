@@ -74,7 +74,7 @@ public:
             const auto item = GetNodeValue(Flow, ctx, block);
             result->addIncoming(item, block);
 
-            BranchInst::Create(pass, work, IsSpecial(item, block), block);
+            BranchInst::Create(pass, work, IsSpecial(item, block, context), block);
 
             block = work;
 
@@ -344,7 +344,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -359,7 +358,7 @@ private:
         const auto container = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
             new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
 
-        const auto position = new LoadInst(positionArg->getType()->getPointerElementType(), positionArg, "position", false, block);
+        const auto position = new LoadInst(positionType, positionArg, "position", false, block);
 
         const auto zero = BasicBlock::Create(context, "zero", ctx.Func);
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -373,7 +372,7 @@ private:
 
             block = part;
 
-            SafeUnRefUnboxed(valuePtr, ctx, block);
+            SafeUnRefUnboxedOne(valuePtr, ctx, block);
             GetNodeValue(valuePtr, NewItems[i], ctx, block);
             const auto next = ++i;
             new StoreInst(ConstantInt::get(positionType, NewItems.size() <= next ? 0 : next), positionArg, block);
@@ -388,7 +387,7 @@ private:
         BranchInst::Create(good, done, status, block);
         block = good;
 
-        SafeUnRefUnboxed(valuePtr, ctx, block);
+        SafeUnRefUnboxedOne(valuePtr, ctx, block);
         GetNodeValue(valuePtr, NewItems.front(), ctx, block);
         new StoreInst(ConstantInt::get(positionType, 1), positionArg, block);
 

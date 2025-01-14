@@ -113,7 +113,7 @@ public:
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -259,7 +259,7 @@ public:
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -379,7 +379,7 @@ public:
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
         const auto load = new LoadInst(valueType, statePtr, "load", block);
-        const auto start = SelectInst::Create(IsInvalid(load, block), ConstantInt::get(indexType, 0ULL), GetterFor<ui64>(load, context, block), "start", block);
+        const auto start = SelectInst::Create(IsInvalid(load, block, context), ConstantInt::get(indexType, 0ULL), GetterFor<ui64>(load, context, block), "start", block);
         const auto index = PHINode::Create(indexType, 2U, "index", main);
         index->addIncoming(start, block);
 
@@ -479,7 +479,7 @@ public:
         const auto indexType = Type::getInt64Ty(context);
 
         const auto load = new LoadInst(valueType, statePtr, "load", block);
-        const auto state = SelectInst::Create(IsInvalid(load, block), ConstantInt::get(indexType, 0ULL), GetterFor<ui64>(load, context, block), "index", block);
+        const auto state = SelectInst::Create(IsInvalid(load, block, context), ConstantInt::get(indexType, 0ULL), GetterFor<ui64>(load, context, block), "index", block);
 
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto next = BasicBlock::Create(context, "next", ctx.Func);
@@ -503,7 +503,7 @@ public:
             block = flow;
             const auto item = GetNodeValue(Flows_[i], ctx, block);
             result->addIncoming(item, block);
-            BranchInst::Create(next, done, IsFinish(item, block), block);
+            BranchInst::Create(next, done, IsFinish(item, block, context), block);
         }
 
         block = next;

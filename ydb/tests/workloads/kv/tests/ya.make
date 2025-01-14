@@ -9,6 +9,7 @@ TEST_SRCS(
 )
 
 SIZE(LARGE)
+TAG(ya:fat)
 REQUIREMENTS(cpu:20)
 
 DEPENDS(

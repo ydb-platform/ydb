@@ -141,6 +141,8 @@ public:
         limit.hard = false;
         limit.limit = GetSoftLimitBytes(Config, hardLimitBytes);
         tcmalloc::MallocExtension::SetMemoryLimit(limit);
+
+        LOG_NOTICE_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Set tcmalloc soft limit " << limit.limit);
 #endif
 
         HandleWakeup(ctx);

@@ -1,11 +1,5 @@
 from devtools.yamaker import fileutil
-from devtools.yamaker import platform_macros
-from devtools.yamaker.modules import Linkable, Switch
 from devtools.yamaker.project import CMakeNinjaNixProject
-
-
-ATEXIT_SRC = """
-"""
 
 
 def post_install(self):
@@ -45,7 +39,7 @@ def post_install(self):
         libcxxabi.after(
             "SRCS",
             """
-            IF (NOT MUSL) 
+            IF (NOT MUSL)
                 CFLAGS(
                     -DHAVE___CXA_THREAD_ATEXIT_IMPL
                 )

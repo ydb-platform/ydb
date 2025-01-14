@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/services/etcd)
+UNITTEST_FOR(ydb/apps/etcd_proxy/service)
 
 SIZE(MEDIUM)
 
@@ -10,7 +10,7 @@ PEERDIR(
     library/cpp/logger
     ydb/core/protos
     ydb/core/testlib/default
-    ydb/services/etcd
+    ydb/apps/etcd_proxy/service
     ydb/services/keyvalue
 )
 

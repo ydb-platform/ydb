@@ -10,7 +10,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/services/etcd/grpc_service.h>
+#include <ydb/apps/etcd_proxy/service/grpc_service.h>
 #include <ydb/core/grpc_services/base/base.h>
 
 #include "proxy.h"

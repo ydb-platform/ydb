@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    etcd_impl.cpp
     grpc_service.cpp
 )
 

@@ -13,7 +13,7 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_discovery
     ydb/public/sdk/cpp/client/ydb_query
     ydb/library/grpc/server
-    ydb/services/etcd
+    ydb/apps/etcd_proxy/service
     yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/exception_policy
 )

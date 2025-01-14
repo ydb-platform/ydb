@@ -157,7 +157,6 @@ PEERDIR(
     ydb/services/backup
     ydb/services/bsconfig
     ydb/services/cms
-    ydb/services/etcd
     ydb/services/dynamic_config
     ydb/services/datastreams
     ydb/services/discovery

@@ -1,8 +1,8 @@
 #include "grpc_service.h"
+#include "etcd_impl.h"
 
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
-#include <ydb/core/grpc_services/service_etcd.h>
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
 #include <ydb/library/grpc/server/grpc_method_setup.h>
 

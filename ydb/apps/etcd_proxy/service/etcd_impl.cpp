@@ -1,4 +1,4 @@
-#include "service_etcd.h"
+#include "etcd_impl.h"
 
 #include <ydb/public/api/grpc/etcd/rpc.pb.h>
 

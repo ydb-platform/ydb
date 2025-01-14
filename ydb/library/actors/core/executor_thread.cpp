@@ -59,7 +59,6 @@ namespace NActors {
             ui64(-1), // infinite soft deadline
             &SharedStats[ExecutorPool->PoolId]);
         CurrentPoolId = ExecutorPool->PoolId;
-        SwitchMailboxCache(CurrentPoolId, mailboxTable);
     }
 
     TGenericExecutorThread::TGenericExecutorThread(TWorkerId workerId,

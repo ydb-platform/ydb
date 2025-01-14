@@ -91,8 +91,6 @@ namespace NActors {
 
         void UpdateThreadStats();
 
-        void SwitchMailboxCache(i16 poolId, TMailboxTable* mailboxTable);
-
     public:
         TActorSystem* const ActorSystem;
         std::atomic<bool> StopFlag = false;

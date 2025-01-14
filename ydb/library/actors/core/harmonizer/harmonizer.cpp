@@ -328,7 +328,7 @@ void THarmonizer::Harmonize(ui64 ts) {
         if (PriorityOrder.empty()) {
             CalculatePriorityOrder();
             CpuConsumption.Init(Pools.size());
-            SharedInfo.Init(Pools.size(), *Shared);
+            SharedInfo.Init(Pools.size(), Shared);
         }
 
         PullStats(ts);

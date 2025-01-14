@@ -1,7 +1,7 @@
 import ydb.apps.dstool.lib.common as common
 import sys
 
-description = 'Stop PDisk'
+description = 'Restart PDisk'
 
 
 def add_options(p):
@@ -14,7 +14,7 @@ def add_options(p):
 
 def create_request(args, pdisk):
     request = common.create_bsc_request(args)
-    cmd = request.Command.add().StopPDisk
+    cmd = request.Command.add().RestartPDisk
 
     cmd.TargetPDiskId.NodeId = pdisk[0]
     cmd.TargetPDiskId.PDiskId = pdisk[1]
@@ -38,7 +38,7 @@ def do(args):
     pdisks = common.get_selected_pdisks(args, base_config)
 
     if len(pdisks) != 1:
-        common.print_status(args, success=False, error_reason='Only stop one PDisk at a time')
+        common.print_status(args, success=False, error_reason='Only restart one PDisk at a time')
         sys.exit(1)
 
     success = True

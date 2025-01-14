@@ -10,6 +10,8 @@
 #include "self_heal.h"
 #include "storage_pool_stat.h"
 
+#include <util/generic/hash_multi_map.h>
+
 inline IOutputStream& operator <<(IOutputStream& o, NKikimr::TErasureType::EErasureSpecies p) {
     return o << NKikimr::TErasureType::ErasureSpeciesName(p);
 }
@@ -1421,12 +1423,14 @@ public:
     class THostRecordMapImpl {
         THashMap<THostId, THostRecord> HostIdToRecord;
         THashMap<TNodeId, THostId> NodeIdToHostId;
+        THashMultiMap<TString, TNodeId> FqdnToNodeId;
 
     public:
         THostRecordMapImpl(TEvInterconnect::TEvNodesInfo *msg) {
             for (TEvInterconnect::TNodeInfo& nodeInfo : msg->Nodes) {
                 const THostId hostId(nodeInfo.Host, nodeInfo.Port);
                 NodeIdToHostId.emplace(nodeInfo.NodeId, hostId);
+                FqdnToNodeId.emplace(nodeInfo.Host, nodeInfo.NodeId);
                 HostIdToRecord.emplace(hostId, std::move(nodeInfo));
             }
         }
@@ -1458,6 +1462,10 @@ public:
             } else {
                 return {};
             }
+        }
+
+        auto ResolveNodeId(const TString& fqdn) const {
+            return FqdnToNodeId.equal_range(fqdn);
         }
 
         auto begin() const {

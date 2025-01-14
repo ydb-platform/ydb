@@ -13,7 +13,9 @@ PY_SRCS(
 
     dstool_cmd_pdisk_add_by_serial.py
     dstool_cmd_pdisk_list.py
+    dstool_cmd_pdisk_readonly.py
     dstool_cmd_pdisk_remove_by_serial.py
+    dstool_cmd_pdisk_restart.py
     dstool_cmd_pdisk_set.py
     dstool_cmd_pdisk_stop.py
 

@@ -431,6 +431,7 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(TEvTabletPipe::TEvClientConnected, ConsoleInteraction->Handle);
         hFunc(TEvTabletPipe::TEvClientDestroyed, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvGetBlockResult, ConsoleInteraction->Handle);
+        fFunc(TEvBlobStorage::EvControllerShredRequest, EnqueueIncomingEvent);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),
@@ -508,6 +509,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         case TEvBlobStorage::EvControllerScrubQuantumFinished:         return 2;
         case TEvBlobStorage::EvControllerScrubReportQuantumInProgress: return 2;
         case TEvBlobStorage::EvControllerUpdateNodeDrives:             return 2;
+        case TEvBlobStorage::EvControllerShredRequest:                 return 2;
 
         // hive-related commands
         case TEvBlobStorage::EvControllerSelectGroups:                 return 4;

@@ -43,7 +43,7 @@ public:
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
             const auto none = BasicBlock::Create(context, "none", ctx.Func);
 
-            BranchInst::Create(none, good, IsEmpty(var, block), block);
+            BranchInst::Create(none, good, IsEmpty(var, block, context), block);
 
             block = none;
             new StoreInst(var, pointer, block);

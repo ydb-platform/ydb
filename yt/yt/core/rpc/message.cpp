@@ -35,7 +35,7 @@ namespace {
 size_t GetAllocationSpaceForProtoWithHeader(const google::protobuf::MessageLite& message)
 {
     return
-        sizeof (TFixedMessageHeader) +
+        sizeof(TFixedMessageHeader) +
         message.ByteSizeLong();
 }
 
@@ -45,7 +45,7 @@ void SerializeAndAddProtoWithHeader(
     const google::protobuf::MessageLite& message)
 {
     auto ref = builder->AllocateAndAdd(
-        sizeof (TFixedMessageHeader) +
+        sizeof(TFixedMessageHeader) +
         message.GetCachedSize());
     ::memcpy(ref.Begin(), &fixedHeader, sizeof(fixedHeader));
     message.SerializeWithCachedSizesToArray(reinterpret_cast<google::protobuf::uint8*>(ref.Begin() + sizeof(fixedHeader)));

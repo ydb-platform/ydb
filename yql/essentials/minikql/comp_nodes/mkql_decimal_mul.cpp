@@ -76,7 +76,7 @@ public:
             const auto result = PHINode::Create(valType, 2, "result", done);
             result->addIncoming(test, block);
 
-            BranchInst::Create(done, good, IsEmpty(test, block), block);
+            BranchInst::Create(done, good, IsEmpty(test, block, context), block);
 
             block = good;
 
@@ -229,7 +229,7 @@ public:
             const auto result = PHINode::Create(valType, 2, "result", done);
             result->addIncoming(test, block);
 
-            BranchInst::Create(done, good, IsEmpty(test, block), block);
+            BranchInst::Create(done, good, IsEmpty(test, block, context), block);
 
             block = good;
 

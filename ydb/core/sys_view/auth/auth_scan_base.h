@@ -14,9 +14,15 @@ using namespace NSchemeShard;
 using namespace NActors;
 using namespace NSchemeCache;
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+using TPath = TVector<TString>;
 
 template <typename TDerived>
 class TAuthScanBase : public TScanActorBase<TDerived> {
+    struct TTraversingChildren {
+        TNavigate::TEntry Entry;
+        size_t Index = 0;
+    };
+
 public:
     using TBase = TScanActorBase<TDerived>;
 
@@ -47,16 +53,7 @@ public:
 protected:
     void ProceedToScan() override {
         TBase::Become(&TAuthScanBase::StateScan);
-        if (TBase::AckReceived) {
-            StartScan();
-        }
-    }
 
-    void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr&) {
-        StartScan();
-    }
-
-    void StartScan() {
         // TODO: support TableRange filter
         if (auto cellsFrom = TBase::TableRange.From.GetCells(); cellsFrom.size() > 0 && !cellsFrom[0].IsNull()) {
             TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "TableRange.From filter is not supported");
@@ -67,18 +64,58 @@ protected:
             return;
         }
 
-        NavigatePath(TBase::TenantName);
+        auto& last = DeepFirstSearchStack.emplace_back();
+        last.Index = Max<size_t>(); // tenant root
+
+        if (TBase::AckReceived) {
+            ContinueScan();
+        }
+    }
+
+    void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr&) {
+        ContinueScan();
+    }
+
+    void ContinueScan() {
+        while (DeepFirstSearchStack) {
+            auto& last = DeepFirstSearchStack.back();
+
+            if (last.Index == Max<size_t>()) { // tenant root
+                NavigatePath(SplitPath(TBase::TenantName));
+                DeepFirstSearchStack.pop_back();
+                return;
+            }
+
+            auto& children = last.Entry.ListNodeEntry->Children;
+            if (last.Index < children.size()) {
+                auto& child = children.at(last.Index++);
+
+                if (child.Kind == TSchemeCacheNavigate::KindExtSubdomain || child.Kind == TSchemeCacheNavigate::KindSubdomain) {
+                    continue;
+                }
+
+                last.Entry.Path.push_back(child.Name);
+                NavigatePath(last.Entry.Path);
+                last.Entry.Path.pop_back();
+                return;
+            } else {
+                DeepFirstSearchStack.pop_back();
+            }
+        }
+
+        TBase::ReplyEmptyAndDie();
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         THolder<NSchemeCache::TSchemeCacheNavigate> request(ev->Get()->Request.Release());
+
+        Y_ABORT_UNLESS(request->ResultSet.size() == 1);
+        auto& entry = request->ResultSet.back();
         
-        for (const auto& entry : request->ResultSet) {
-            if (entry.Status != TNavigate::EStatus::Ok) {
-                TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << 
-                    "Failed to navigate " << CanonizePath(entry.Path) << ": " << entry.Status);
-                return;
-            }
+        if (entry.Status != TNavigate::EStatus::Ok) {
+            TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << 
+                "Failed to navigate " << CanonizePath(entry.Path) << ": " << entry.Status);
+            return;
         }
 
         LOG_TRACE_S(ctx, NKikimrServices::SYSTEM_VIEWS,
@@ -86,7 +123,13 @@ protected:
         
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
 
-        FillBatch(*batch, request->ResultSet);
+        FillBatch(*batch, entry);
+
+        if (!batch->Finished && entry.ListNodeEntry) {
+            DeepFirstSearchStack.emplace_back(std::move(entry));
+        }
+
+        batch->Finished = DeepFirstSearchStack.empty();
 
         TBase::SendBatch(std::move(batch));
     }
@@ -99,23 +142,25 @@ protected:
         TBase::PassAway();
     }
 
-    void NavigatePath(TString path) {
+    void NavigatePath(TPath path) {
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
 
         auto& entry = request->ResultSet.emplace_back();
         entry.RequestType = TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
-        entry.Path = SplitPath(path);
-        entry.Operation = TSchemeCacheNavigate::OpPath;
+        entry.Path = std::move(path);
+        entry.Operation = TSchemeCacheNavigate::OpList;
         entry.RedirectRequired = false;
 
         LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Navigate " << path << ": " << request->ToString(*AppData()->TypeRegistry));
+            "Navigate " << request->ToString(*AppData()->TypeRegistry));
 
         TBase::Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
     }
 
-    virtual void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TNavigate::TResultSet& resultSet) = 0;
+    virtual void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TNavigate::TEntry& entry) = 0;
 
+private:
+    TVector<TTraversingChildren> DeepFirstSearchStack;
 };
 
 }

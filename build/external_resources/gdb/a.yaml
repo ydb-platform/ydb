@@ -47,7 +47,7 @@ ci:
       jobs:
         build:
           title: Build
-          task: projects/devtools/contrib/toolchain_registry/build
+          task: projects/devtools/toolchain_registry/build
           input:
             <<: *base-input
             revision: ${flow-vars.revision}
@@ -69,7 +69,7 @@ ci:
 
         release:
           title: Release
-          task: projects/devtools/contrib/toolchain_registry/release
+          task: projects/devtools/toolchain_registry/release
           needs: update-mapping
           input:
             <<: *base-input

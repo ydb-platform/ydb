@@ -3,7 +3,10 @@
 #include "raw_batch_request.h"
 
 #include <yt/cpp/mapreduce/common/fwd.h>
+
 #include <yt/cpp/mapreduce/http/context.h>
+
+#include <yt/cpp/mapreduce/interface/client.h>
 #include <yt/cpp/mapreduce/interface/client_method_options.h>
 #include <yt/cpp/mapreduce/interface/operation.h>
 
@@ -36,8 +39,6 @@ void ExecuteBatch(
     TRawBatchRequest& batchRequest,
     const TExecuteBatchOptions& options = {});
 
-// Misc
-
 TRichYPath CanonizeYPath(
     const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,
@@ -47,6 +48,13 @@ TVector<TRichYPath> CanonizeYPaths(
     const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,
     const TVector<TRichYPath>& paths);
+
+NHttpClient::IHttpResponsePtr SkyShareTable(
+    const TClientContext& context,
+    const std::vector<TYPath>& tablePaths,
+    const TSkyShareTableOptions& options);
+
+TAuthorizationInfo WhoAmI(const TClientContext& context);
 
 ////////////////////////////////////////////////////////////////////////////////
 

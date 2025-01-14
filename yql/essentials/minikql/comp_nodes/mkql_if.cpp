@@ -41,7 +41,7 @@ public:
         if (IsOptional) {
             result->addIncoming(value, block);
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
-            BranchInst::Create(done, good, IsEmpty(value, block), block);
+            BranchInst::Create(done, good, IsEmpty(value, block, context), block);
 
             block = good;
         }
@@ -112,7 +112,7 @@ public:
         const auto elsb = BasicBlock::Create(context, "else", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        BranchInst::Create(init, test, IsInvalid(statePtr, block), block);
+        BranchInst::Create(init, test, IsInvalid(statePtr, block, context), block);
 
         block = init;
 
@@ -129,7 +129,7 @@ public:
         if (IsOptional) {
             result->addIncoming(state, block);
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
-            BranchInst::Create(done, good, IsEmpty(state, block), block);
+            BranchInst::Create(done, good, IsEmpty(state, block, context), block);
 
             block = good;
         }
@@ -194,7 +194,7 @@ public:
         const auto elsb = BasicBlock::Create(context, "else", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        BranchInst::Create(init, test, IsInvalid(statePtr, block), block);
+        BranchInst::Create(init, test, IsInvalid(statePtr, block, context), block);
 
         block = init;
 

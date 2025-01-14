@@ -35,7 +35,7 @@ public:
     //! dispatch compression callbacks. This invoker is a wrapper around compression pool invoker.
     const IPrioritizedInvokerPtr& GetPrioritizedCompressionPoolInvoker();
     //! Returns the fair-share thread pool with the similar semantics as previous two.
-    //! NB: this thread pool is different from the underlying thread pool beneath two previous invokers.
+    //! NB: This thread pool is different from the underlying thread pool beneath two previous invokers.
     const NConcurrency::IFairShareThreadPoolPtr& GetFairShareCompressionThreadPool();
 
     //! Returns true if alert must be issued when a request is missing request info.

@@ -77,10 +77,6 @@ public:
             16000000
             ).release());
         Runtime.EnableScheduleForActor(TopicSession);
-
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(NActors::TEvents::TSystem::Bootstrap, 1);
-        UNIT_ASSERT(Runtime.DispatchEvents(options));
     }
 
     void StartSession(TActorId readActorId, const NYql::NPq::NProto::TDqPqTopicSource& source, TMaybe<ui64> readOffset = Nothing(), bool expectedError = false) {
@@ -424,7 +420,6 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
                 PQWrite(data, topicName);
             }
             Sleep(TDuration::MilliSeconds(100));
-            Runtime.DispatchEvents({}, Runtime.GetCurrentTime() - TDuration::MilliSeconds(1));
         };
 
         writeMessages();
@@ -442,7 +437,6 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         UNIT_ASSERT_VALUES_EQUAL(readMessages, messagesSize);
 
         Sleep(TDuration::MilliSeconds(100));
-        Runtime.DispatchEvents({}, Runtime.GetCurrentTime() - TDuration::MilliSeconds(1));
 
         readMessages = ReadMessages(ReadActorId1);
         UNIT_ASSERT_VALUES_EQUAL(readMessages, messagesSize);
@@ -450,7 +444,6 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         writeMessages();
         StopSession(ReadActorId2, source);      // delete slow client, clear unread buffer
         Sleep(TDuration::MilliSeconds(100));
-        Runtime.DispatchEvents({}, Runtime.GetCurrentTime() - TDuration::MilliSeconds(1));
 
         readMessages = ReadMessages(ReadActorId1);
         UNIT_ASSERT_VALUES_EQUAL(readMessages, messagesSize);

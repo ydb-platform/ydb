@@ -1,5 +1,7 @@
 #pragma once
 #include <util/system/types.h>
+#include <util/stream/output.h>
+#include <util/generic/typetraits.h>
 
 namespace NKikimr {
 
@@ -9,6 +11,10 @@ private:
 public:
     TPositiveControlInteger() = default;
     TPositiveControlInteger(const ui64 value)
+        : Value(value) {
+
+    }
+    TPositiveControlInteger(const ui32 value)
         : Value(value) {
 
     }

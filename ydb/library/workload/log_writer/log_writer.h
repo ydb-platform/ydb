@@ -14,7 +14,6 @@ enum LogWriterWorkloadConstants : ui64 {
     MIN_PARTITIONS = 40,
     MAX_PARTITIONS = 1000,
     PARTITION_SIZE_MB = 2000,
-    INIT_ROW_COUNT = 1000,
     STRING_LEN = 8,
     STR_COLUMNS_CNT = 1,
     INT_COLUMNS_CNT = 1,
@@ -22,11 +21,7 @@ enum LogWriterWorkloadConstants : ui64 {
     ROWS_CNT = 1,
     PARTITIONS_BY_LOAD = true,
 
-    MIXED_CHANGE_PARTITIONS_SIZE = false,
-    MIXED_DO_READ_ROWS = false,
-    MIXED_DO_SELECT = true,
-
-    STALE_RO = false,
+    TIMESTAMP_STANDARD_DEVIATION = 0,
 };
 
 class TLogWriterWorkloadParams : public TWorkloadParams {
@@ -42,17 +37,16 @@ public:
     ui64 MinPartitions = LogWriterWorkloadConstants::MIN_PARTITIONS;
     ui64 MaxPartitions = LogWriterWorkloadConstants::MAX_PARTITIONS;
     ui64 PartitionSizeMb = LogWriterWorkloadConstants::PARTITION_SIZE_MB;
-    ui64 InitRowCount = LogWriterWorkloadConstants::INIT_ROW_COUNT;
     ui64 StringLen = LogWriterWorkloadConstants::STRING_LEN;
     ui64 StrColumnsCnt = LogWriterWorkloadConstants::STR_COLUMNS_CNT;
     ui64 IntColumnsCnt = LogWriterWorkloadConstants::INT_COLUMNS_CNT;
     ui64 KeyColumnsCnt = LogWriterWorkloadConstants::KEY_COLUMNS_CNT;
+    ui64 TimestampStandardDeviation = LogWriterWorkloadConstants::TIMESTAMP_STANDARD_DEVIATION;
     ui64 RowsCnt = LogWriterWorkloadConstants::ROWS_CNT;
     bool PartitionsByLoad = LogWriterWorkloadConstants::PARTITIONS_BY_LOAD;
 
     std::string TableName = "log_writer_test";
 
-    bool StaleRO = LogWriterWorkloadConstants::STALE_RO;
     YDB_READONLY(EStoreType, StoreType, EStoreType::Row);
 };
 
@@ -93,17 +87,22 @@ public:
     TVector<TWorkloadType> GetSupportedWorkloadTypes() const override;
 
     enum class EType {
+        Insert,
         Upsert,
         BulkUpsert,
     };
 
 private:
     TQueryInfoList WriteRows(TString operation, TVector<TRow>&& rows);
+    TQueryInfoList Insert(TVector<TRow>&& rows);
     TQueryInfoList Upsert(TVector<TRow>&& rows);
     TQueryInfoList BulkUpsert(TVector<TRow>&& rows);
     TVector<TRow> GenerateRandomRows();
 
     const ui64 TotalColumnsCnt;
+
+    std::random_device RandomDevice;
+    std::mt19937 Mt19937;
 };
 
 } // namespace NLogWriter

@@ -20,76 +20,12 @@ namespace NLogWriter {
 
 using TRow = TLogWriterWorkloadGenerator::TRow;
 
-void Fail() {
-    // Note: sleep helps to detect more fails
-    std::this_thread::sleep_for(std::chrono::seconds(3));
-    Y_ABORT();
-}
-
-void AddResultSet(const NYdb::TResultSet& resultSet, TVector<TRow>& rows) {
-    NYdb::TResultSetParser parser(resultSet);
-    while (parser.TryNextRow()) {
-        TRow row;
-
-        for (size_t col = 0; col < parser.ColumnsCount(); col++) {
-            auto& valueParser = parser.ColumnParser(col);
-            bool optional = valueParser.GetKind() == NYdb::TTypeParser::ETypeKind::Optional; 
-            if (optional) {
-                valueParser.OpenOptional();
-            }
-            if (valueParser.GetPrimitiveType() == NYdb::EPrimitiveType::Uint64) {
-                row.Ints.push_back(valueParser.GetUint64());
-            } else {
-                row.Strings.push_back(valueParser.GetString());
-            }
-            if (optional) {
-                valueParser.CloseOptional();
-            }
-        }
-
-        rows.push_back(std::move(row));
-    }
-}
-
-void VerifyRows(const TRow& checkRow, const TVector<TRow>& readRows, TString message) {
-    if (readRows.empty()) {
-        Cerr << "Expected to have " << checkRow.ToString()
-            << " but got empty "
-            << message
-            << Endl;
-
-        Fail();
-    }
-
-    if (readRows.size() > 1) {
-        Cerr << "Expected to have " << checkRow.ToString()
-            << " but got " << readRows.size() << " rows "
-            << message
-            << Endl;
-
-        for (auto r : readRows) {
-            Cerr << r.ToString() << Endl;
-        }
-
-        Fail();
-    }
-
-    if (readRows[0] != checkRow) {
-        Cerr << "Expected to have " << checkRow.ToString()
-            << " but got " << readRows[0].ToString() << " "
-            << message
-            << Endl;
-
-        Fail();
-    } else {
-        // Cerr << "OK " << checkRow.ToString() << " " << message << Endl;
-    }
-}
-
 
 TLogWriterWorkloadGenerator::TLogWriterWorkloadGenerator(const TLogWriterWorkloadParams* params)
     : TBase(params)
     , TotalColumnsCnt(1 + Params.IntColumnsCnt + Params.StrColumnsCnt)
+    , RandomDevice()
+    , Mt19937(RandomDevice())
 {
     Y_ABORT_UNLESS(TotalColumnsCnt >= Params.KeyColumnsCnt);
 }
@@ -132,14 +68,8 @@ std::string TLogWriterWorkloadGenerator::GetDDLQueries() const {
     ss << "TTL = Interval(\"PT7H\") ON ts, ";
 
     switch (Params.GetStoreType()) {
-
         case TLogWriterWorkloadParams::EStoreType::Row:
             ss << "STORE = ROW, ";
-            if (Params.PartitionsByLoad) {
-                ss << "AUTO_PARTITIONING_BY_LOAD = ENABLED, ";
-            }
-            ss << "AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = " << Max(Params.MinPartitions, Params.MaxPartitions) << ", ";
-            ss << "AUTO_PARTITIONING_PARTITION_SIZE_MB = " << Params.PartitionSizeMb << ", ";
             break;
         case TLogWriterWorkloadParams::EStoreType::Column:
             ss << "STORE = COLUMN, ";
@@ -147,12 +77,19 @@ std::string TLogWriterWorkloadGenerator::GetDDLQueries() const {
         default:
             throw yexception() << "Unsupported store type: " << Params.GetStoreType();
     }
+    if (Params.PartitionsByLoad) {
+        ss << "AUTO_PARTITIONING_BY_LOAD = ENABLED, ";
+    }
+    ss << "AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = " << Max(Params.MinPartitions, Params.MaxPartitions) << ", ";
+    ss << "AUTO_PARTITIONING_PARTITION_SIZE_MB = " << Params.PartitionSizeMb << ", ";
     ss << "AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << Params.MinPartitions << ")";
     return ss.str();
 }
 
 TQueryInfoList TLogWriterWorkloadGenerator::GetWorkload(int type) {
     switch (static_cast<EType>(type)) {
+        case EType::Insert:
+            return Insert(GenerateRandomRows());
         case EType::Upsert:
             return Upsert(GenerateRandomRows());
         case EType::BulkUpsert:
@@ -165,6 +102,7 @@ TQueryInfoList TLogWriterWorkloadGenerator::GetWorkload(int type) {
 
 TVector<IWorkloadQueryGenerator::TWorkloadType> TLogWriterWorkloadGenerator::GetSupportedWorkloadTypes() const {
     TVector<TWorkloadType> result;
+    result.emplace_back(static_cast<int>(EType::Upsert), "insert", "Insert random rows into table near current ts");
     result.emplace_back(static_cast<int>(EType::Upsert), "upsert", "Upsert random rows into table near current ts");
     result.emplace_back(static_cast<int>(EType::BulkUpsert), "bulk_upsert", "Bulk upsert random rows into table near current ts");
     return result;
@@ -230,8 +168,11 @@ TQueryInfoList TLogWriterWorkloadGenerator::WriteRows(TString operation, TVector
         }
     }
     auto params = paramsBuilder.Build();
-
     return TQueryInfoList(1, TQueryInfo(ss.str(), std::move(params)));
+}
+
+TQueryInfoList TLogWriterWorkloadGenerator::Insert(TVector<TRow>&& rows) {
+    return WriteRows("INSERT", std::move(rows));
 }
 
 TQueryInfoList TLogWriterWorkloadGenerator::Upsert(TVector<TRow>&& rows) {
@@ -273,11 +214,6 @@ TQueryInfoList TLogWriterWorkloadGenerator::BulkUpsert(TVector<TRow>&& rows) {
 
 TQueryInfoList TLogWriterWorkloadGenerator::GetInitialData() {
     TQueryInfoList res;
-    for (size_t i = 0; i < Params.InitRowCount; ++i) {
-        auto queryInfos = Upsert(GenerateRandomRows());
-        res.insert(res.end(), queryInfos.begin(), queryInfos.end());
-    }
-
     return res;
 }
 
@@ -288,8 +224,19 @@ TVector<std::string> TLogWriterWorkloadGenerator::GetCleanPaths() const {
 TVector<TRow> TLogWriterWorkloadGenerator::GenerateRandomRows() {
     TVector<TRow> result(Params.RowsCnt);
 
+    std::normal_distribution<double> normal_distribution_generator(0, static_cast<double>(Params.TimestampStandardDeviation));
     for (size_t row = 0; row < Params.RowsCnt; ++row) {
         result[row].Ts = TInstant::Now();
+        i64 millisecondsDiff = 60*1000*normal_distribution_generator(Mt19937);
+        if (millisecondsDiff >= 0)  // TDuration::MilliSeconds can't be negative for some reason...
+        {
+            result[row].Ts = result[row].Ts + TDuration::MilliSeconds(millisecondsDiff);
+        }
+        else
+        {
+            result[row].Ts = result[row].Ts - TDuration::MilliSeconds(-millisecondsDiff);
+        }
+
         result[row].Ints.resize(Params.IntColumnsCnt);
         result[row].Strings.resize(Params.StrColumnsCnt);
 
@@ -322,8 +269,6 @@ void TLogWriterWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECo
         });
     switch (commandType) {
     case TWorkloadParams::ECommandType::Init:
-        opts.AddLongOption("init-upserts", "count of upserts need to create while table initialization")
-            .DefaultValue((ui64)LogWriterWorkloadConstants::INIT_ROW_COUNT).StoreResult(&InitRowCount);
         opts.AddLongOption("min-partitions", "Minimum partitions for tables.")
             .DefaultValue((ui64)LogWriterWorkloadConstants::MIN_PARTITIONS).StoreResult(&MinPartitions);
         opts.AddLongOption("max-partitions", "Maximum partitions for tables.")
@@ -362,12 +307,15 @@ void TLogWriterWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECo
         opts.AddLongOption("key-cols", "Number of key columns")
             .DefaultValue((ui64)LogWriterWorkloadConstants::KEY_COLUMNS_CNT).StoreResult(&KeyColumnsCnt);
         switch (static_cast<TLogWriterWorkloadGenerator::EType>(workloadType)) {
-        case TLogWriterWorkloadGenerator::EType::BulkUpsert:
+        case TLogWriterWorkloadGenerator::EType::Insert:
         case TLogWriterWorkloadGenerator::EType::Upsert:
+        case TLogWriterWorkloadGenerator::EType::BulkUpsert:
             opts.AddLongOption("len", "String len")
                 .DefaultValue((ui64)LogWriterWorkloadConstants::STRING_LEN).StoreResult(&StringLen);
             opts.AddLongOption("rows", "Number of rows to upsert")
                 .DefaultValue((ui64)LogWriterWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
+            opts.AddLongOption("timestamp_deviation_minutes", "Standard deviation. For each timestamp, a random variable with a specified standard deviation in minutes is added.")
+                .DefaultValue((ui64)LogWriterWorkloadConstants::TIMESTAMP_STANDARD_DEVIATION).StoreResult(&TimestampStandardDeviation);
             break;
         }
         break;

@@ -1230,16 +1230,16 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         if (domains.DomainSize() == 1) {
             const auto& domain = domains.GetDomain(0);
 
-            auto updateConfig = [&](bool needMerge, auto *to, const auto& from) {
+            auto updateConfig = [&](bool needMerge, auto *to, const auto& from, const char *entity) {
                 if (needMerge) {
-                    char prefix[TActorId::MaxServiceIDLength] = {0};
-                    auto toInfo = BuildStateStorageInfo(prefix, *to);
-                    auto fromInfo = BuildStateStorageInfo(prefix, from);
-                    if (toInfo->NToSelect != fromInfo->NToSelect) {
-                        *errorReason = "NToSelect differs";
-                        return false;
-                    } else if (toInfo->SelectAllReplicas() != fromInfo->SelectAllReplicas()) {
-                        *errorReason = "StateStorage rings differ";
+                    char toPrefix[TActorId::MaxServiceIDLength] = {0};
+                    char fromPrefix[TActorId::MaxServiceIDLength] = {0};
+                    auto toInfo = BuildStateStorageInfo(toPrefix, *to);
+                    auto fromInfo = BuildStateStorageInfo(fromPrefix, from);
+                    if (toInfo->NToSelect != fromInfo->NToSelect || toInfo->SelectAllReplicas() != fromInfo->SelectAllReplicas()) {
+                        *errorReason = TStringBuilder() << entity << " NToSelect/rings differs"
+                            << " from# " << SingleLineProto(from)
+                            << " to# " << SingleLineProto(*to);
                         return false;
                     }
                 }
@@ -1254,9 +1254,9 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                     const bool hadStateStorageConfig = config->HasStateStorageConfig();
                     const bool hadStateStorageBoardConfig = config->HasStateStorageBoardConfig();
                     const bool hadSchemeBoardConfig = config->HasSchemeBoardConfig();
-                    if (!updateConfig(hadStateStorageConfig, config->MutableStateStorageConfig(), ss) ||
-                            !updateConfig(hadStateStorageBoardConfig, config->MutableStateStorageBoardConfig(), ss) ||
-                            !updateConfig(hadSchemeBoardConfig, config->MutableSchemeBoardConfig(), ss)) {
+                    if (!updateConfig(hadStateStorageConfig, config->MutableStateStorageConfig(), ss, "StateStorage") ||
+                            !updateConfig(hadStateStorageBoardConfig, config->MutableStateStorageBoardConfig(), ss, "StateStorageBoard") ||
+                            !updateConfig(hadSchemeBoardConfig, config->MutableSchemeBoardConfig(), ss, "SchemeBoard")) {
                         return false;
                     }
                     break;

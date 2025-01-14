@@ -678,7 +678,7 @@ namespace NKikimr::NStorage {
 
             if (Self->StorageConfigYamlVersion && newYamlVersion != *Self->StorageConfigYamlVersion + 1) {
                 return FinishWithError(TResult::ERROR, TStringBuilder() << "version must be increasing by one"
-                    << " new version# " << newYamlVersion << " expected version# " << *Self->StorageConfigYamlVersion);
+                    << " new version# " << newYamlVersion << " expected version# " << *Self->StorageConfigYamlVersion + 1);
             }
 
             TString errorReason;

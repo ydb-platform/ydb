@@ -71,6 +71,7 @@ target_sources(libs-apache-orc PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/TypeImpl.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Vector.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Writer.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/io/Cache.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/io/InputStream.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/io/OutputStream.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/ExpressionTree.cc

@@ -91,9 +91,6 @@ namespace NYql::NDq {
         };
 
         struct TEvRetry: NActors::TEventLocal<TEvRetry, EvRetry> {
-            explicit TEvRetry()
-            {
-            }
         };
 
     protected: // TODO move common logic here

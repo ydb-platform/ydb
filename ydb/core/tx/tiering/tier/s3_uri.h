@@ -86,7 +86,7 @@ private:
         TS3Uri result;
 
         for (const TString& sep : BucketHostSeparators) {
-            if (const ui64 findSep = input.GetHost().find(sep)) {
+            if (const ui64 findSep = input.GetHost().find(sep); findSep != TStringBuf::npos) {
                 result.Bucket = input.GetHost().SubStr(0, findSep);
                 result.Host = input.GetHost().SubStr(findSep + 1);
                 break;

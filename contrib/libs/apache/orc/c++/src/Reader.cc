@@ -691,7 +691,7 @@ namespace orc {
 
   std::string ReaderImpl::getMetadataValue(const std::string& key) const {
     for (int i = 0; i < footer->metadata_size(); ++i) {
-      if (footer->metadata(i).name() == TProtobufString(key)) {
+      if (footer->metadata(i).name() == key) {
         return footer->metadata(i).value();
       }
     }
@@ -741,7 +741,7 @@ namespace orc {
 
   bool ReaderImpl::hasMetadataValue(const std::string& key) const {
     for (int i = 0; i < footer->metadata_size(); ++i) {
-      if (footer->metadata(i).name() == TProtobufString(key)) {
+      if (footer->metadata(i).name() == key) {
         return true;
       }
     }
@@ -1367,7 +1367,7 @@ namespace orc {
     if (serializedFooter.length() != 0) {
       // Parse the file tail from the serialized one.
       proto::FileTail tail;
-      if (!tail.ParseFromString(TProtobufString(serializedFooter))) {
+      if (!tail.ParseFromString(serializedFooter)) {
         throw ParseError("Failed to parse the file tail from string");
       }
       contents->postscript = std::make_unique<proto::PostScript>(tail.postscript());

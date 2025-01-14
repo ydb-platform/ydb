@@ -1047,7 +1047,6 @@ TFiberSchedulerThread::TFiberSchedulerThread(
     , ThreadGroupName_(std::move(threadGroupName))
 { }
 
-
 void TFiberSchedulerThread::ThreadMain()
 {
     // Hold this strongly.

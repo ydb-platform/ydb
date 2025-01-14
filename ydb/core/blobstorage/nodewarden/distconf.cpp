@@ -63,7 +63,8 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
-        if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration()) {
+        if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration() ||
+                (!IsSelfStatic && !config.GetGeneration() && !config.GetSelfManagementConfig().GetEnabled())) {
             StorageConfigYaml = StorageConfigFetchYaml = {};
             StorageConfigFetchYamlHash = 0;
             StorageConfigYamlVersion.reset();
@@ -100,10 +101,9 @@ namespace NKikimr::NStorage {
             if (IsSelfStatic) {
                 PersistConfig({});
                 ApplyConfigUpdateToDynamicNodes(false);
+                ConnectToConsole();
+                SendConfigProposeRequest();
             }
-
-            ConnectToConsole();
-            SendConfigProposeRequest();
 
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&

@@ -5,11 +5,9 @@ TEST_SRCS(
     test_workload.py
 )
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32)
-ENDIF()
-
-SIZE(MEDIUM)
+SIZE(LARGE)
+TAG(ya:fat)
+REQUIREMENTS(cpu:20)
 
 DEPENDS(
     ydb/apps/ydbd

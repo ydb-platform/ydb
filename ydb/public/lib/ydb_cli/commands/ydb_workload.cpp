@@ -123,12 +123,13 @@ void TWorkloadCommand::PrepareForRun(TConfig& config) {
         driverConfig.UseSecureConnection(config.CaCerts);
     }
     Driver = std::make_unique<NYdb::TDriver>(NYdb::TDriver(driverConfig));
+    auto tableClientSettings = NTable::TClientSettings()
+                        .SessionPoolSettings(
+                            NTable::TSessionPoolSettings()
+                                .MaxActiveSessions(10+Threads));
+    TableClient = std::make_unique<NTable::TTableClient>(*Driver, tableClientSettings);
     if (QueryExecuterType == "data") {
-        auto tableClientSettings = NTable::TClientSettings()
-                            .SessionPoolSettings(
-                                NTable::TSessionPoolSettings()
-                                    .MaxActiveSessions(10+Threads));
-        TableClient = std::make_unique<NTable::TTableClient>(*Driver, tableClientSettings);
+        // nothing to do
     } else if (QueryExecuterType == "generic") {
         auto queryClientSettings = NQuery::TClientSettings()
                             .SessionPoolSettings(
@@ -153,7 +154,7 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
 
     auto runTableClient = [this, &queryInfo, &dataQuerySettings, &retryCount] (NYdb::NTable::TSession session) -> NYdb::TStatus {
         if (!TableClient) {
-            Y_FAIL_S("Only data query executer type supported.");
+            Y_FAIL_S("TableClient is not inited .");
         }
         ++retryCount;
         if (queryInfo.AlterTable) {
@@ -167,6 +168,9 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
             if (queryInfo.ReadRowsResultCallback) {
                 queryInfo.ReadRowsResultCallback.value()(result);
             }
+            return result;
+        } else if (queryInfo.TableOperation) {
+            auto result = queryInfo.TableOperation(*TableClient);
             return result;
         } else {
             auto mode = queryInfo.UseStaleRO ? NYdb::NTable::TTxSettings::StaleRO() : NYdb::NTable::TTxSettings::SerializableRW();
@@ -183,7 +187,7 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
 
     auto runQueryClient = [this, &queryInfo, &genericQuerySettings, &retryCount] (NYdb::NQuery::TSession session) -> NYdb::NQuery::TAsyncExecuteQueryResult {
         if (!QueryClient) {
-            Y_FAIL_S("Only generic query executer type supported.");
+            Y_FAIL_S("QueryClient is not inited.");
         }
         ++retryCount;
         if (queryInfo.AlterTable) {
@@ -200,8 +204,7 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
     };
 
     auto runQuery = [this, &runQueryClient, &runTableClient, &queryInfo]() -> NYdb::TStatus {
-        Y_ENSURE_BT(TableClient || QueryClient);
-        if (TableClient) {
+        if (QueryExecuterType == "data") {
             return TableClient->RetryOperationSync(runTableClient);
         } else {
             auto result = QueryClient->RetryQuery(runQueryClient).GetValueSync();
@@ -233,7 +236,7 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
             }
 
             queryInfo = *it;
-            auto status = runQuery();
+            auto status = queryInfo.TableOperation ? TableClient->RetryOperationSync(runTableClient) : runQuery();
             if (status.IsSuccess()) {
                 TotalQueries++;
             } else {

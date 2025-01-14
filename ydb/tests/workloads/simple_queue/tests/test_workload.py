@@ -6,7 +6,7 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 
 
-class TestYdbWorkload(object):
+class TestYdbWorkload(object):  # rebuild pls
     @classmethod
     def setup_class(cls):
         cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=Erasure.MIRROR_3_DC))
@@ -24,7 +24,7 @@ class TestYdbWorkload(object):
                 workload_path,
                 "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
                 "--database=/Root",
-                "--duration", "60",
+                "--duration", "600",
                 "--mode", store,
             ],
             wait=True

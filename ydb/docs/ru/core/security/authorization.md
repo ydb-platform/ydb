@@ -13,9 +13,10 @@
 * [Группа](../concepts/glossary.md#access-group)
 
 Независимо от метода [аутентификации](https://ru.wikipedia.org/wiki/Аутентификация), [авторизация](https://ru.wikipedia.org/wiki/Авторизация) всегда выполняется на серверной стороне {{ ydb-short-name }} на основе хранящейся в ней информации об объектах и правах доступа. Права доступа определяют набор доступных для выполнения операций.
+
 Авторизация выполняется на каждое действие пользователя: его права не кешируются, так как могут быть отозваны или предоставлены в любой момент времени.
 
-### SID {#sid}
+## SID {#sid}
 
 {{ ydb-short-name }} позволяет работать с [пользователями](../concepts/glossary.md#access-user) из разных каталогов и систем, и они отличаются с использованием суффикса.
 
@@ -24,7 +25,7 @@
 Суффикс `@<subsystem>` идентифицирует «источник пользователя» или «auth-домен», внутри которых гарантируется уникальность всех `login`. Например, в случае [аутентификации LDAP](authentication.md#ldap-auth-provider) имена пользователей будут `user1@ldap` и `user2@ldap`.  
 Если указан `login` без суффикса, то имеются в виду пользователи, непосредственно созданные в кластере {{ ydb-short-name }}.
 
-### Пользователь {#user}
+## Пользователь {#user}
 
 Для создания, изменения и удаления пользователей {{ ydb-short-name }} есть команды:
 
@@ -46,7 +47,7 @@
 
 {% endnote %}
 
-### Группа {#group}
+## Группа {#group}
 
 Любого [пользователя](../concepts/glossary.md#access-user) можно включить в ту или иную [группу доступа](../concepts/glossary.md#access-group) или исключить из неё. Как только [пользователь](../concepts/glossary.md#access-user) включается в [группу](../concepts/glossary.md#access-group), он получает все права на [объекты базы данных](../concepts/glossary.md#access-object), которые предоставлялись [группе доступа](../concepts/glossary.md#access-group).
 Так, с помощью [групп доступа](../concepts/glossary.md#access-group) {{ ydb-short-name }} можно реализовать бизнес-роли пользовательских приложений, заранее настроив требуемые права доступа на нужные объекты.
@@ -67,7 +68,9 @@
 
 ## Право {#right}
 
-[Права](../concepts/glossary.md#access-right) в {{ ydb-short-name }}привязаны не [субъекту](../concepts/glossary.md#access-subject), а к [объекту доступа](../concepts/glossary.md#access-object).
+[Права](../concepts/glossary.md#access-right) в {{ ydb-short-name }} привязаны не [субъекту](../concepts/glossary.md#access-subject), а к [объекту доступа](../concepts/glossary.md#access-object).
+
+У каждого [объекта доступа](../concepts/glossary.md#object) есть список разрешений — ACL (Access Control List) — он хранит все предоставленные [субъектам доступа](../concepts/glossary.md#subject) (пользователям и группам) [права](../concepts/glossary.md#right) на объект.
 
 По умолчанию, права наследуются от родителей потомкам по дереву объектов доступа.
 
@@ -83,9 +86,13 @@
 * [revoke](../reference/ydb-cli/commands/scheme-permissions.md#grant-revoke)
 * [set](../reference/ydb-cli/commands/scheme-permissions.md#set)
 * [clear](../reference/ydb-cli/commands/scheme-permissions.md#clear)
-* [list](../reference/ydb-cli/commands/scheme-permissions.md#list)
+* [clear-inheritance](../reference/ydb-cli/commands/scheme-permissions.md#clear-inheritance)
+* [set-inheritance](../reference/ydb-cli/commands/scheme-permissions.md#set-inheritance)
 
-Просматривать ACL объекта доступа можно с помощью CLI команды [`describe`](../reference/ydb-cli/commands/scheme-describe.md).
+Для просмотра ACL объекта доступа служат следующие CLI-команды:
+
+* [describe](../reference/ydb-cli/commands/scheme-describe.md)
+* [list](../reference/ydb-cli/commands/scheme-permissions.md#list)
 
 ## Владелец объекта {#owner}
 
@@ -104,14 +111,3 @@
 Сменить владельца можно с помощью CLI команды [`chown`](../reference/ydb-cli/commands/scheme-permissions.md#chown).
 
 Просматривать владельца объекта можно с помощью CLI команды [`describe`](../reference/ydb-cli/commands/scheme-describe.md).
-
-## Список разрешений {#acl}
-
-У каждого [объекта доступа](../concepts/glossary.md#object) есть список разрешений — ACL (Access Control List) — он хранит все предоставленные [субъектам доступа](../concepts/glossary.md#subject) (пользователям и группам) [права](../concepts/glossary.md#right) на объект.
-
-Для изменения [ACL](../concepts/glossary.md#access-acl) (управления правами) служат следующие виды YQL запросов:
-
-* [{#T}](../yql/reference/syntax/grant.md).
-* [{#T}](../yql/reference/syntax/revoke.md).
-
-Просматривать ACL объекта доступа можно с помощью CLI команды [`describe`](../reference/ydb-cli/commands/scheme-describe.md).

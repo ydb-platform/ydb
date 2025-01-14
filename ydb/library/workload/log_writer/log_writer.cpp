@@ -65,7 +65,7 @@ std::string TLogWriterWorkloadGenerator::GetDDLQueries() const {
     }
     ss << ")) WITH (";
 
-    ss << "TTL = Interval(\"PT7H\") ON ts, ";
+    ss << "TTL = Interval(\"PT" << Params.TimeStampTtlMinutes << "M\") ON ts, ";
 
     switch (Params.GetStoreType()) {
         case TLogWriterWorkloadParams::EStoreType::Row:
@@ -224,7 +224,7 @@ TVector<std::string> TLogWriterWorkloadGenerator::GetCleanPaths() const {
 TVector<TRow> TLogWriterWorkloadGenerator::GenerateRandomRows() {
     TVector<TRow> result(Params.RowsCnt);
 
-    std::normal_distribution<double> normal_distribution_generator(0, static_cast<double>(Params.TimestampStandardDeviation));
+    std::normal_distribution<double> normal_distribution_generator(0, static_cast<double>(Params.TimestampStandardDeviationMinutes));
     for (size_t row = 0; row < Params.RowsCnt; ++row) {
         result[row].Ts = TInstant::Now();
         i64 millisecondsDiff = 60*1000*normal_distribution_generator(Mt19937);
@@ -287,6 +287,8 @@ void TLogWriterWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECo
             .DefaultValue((ui64)LogWriterWorkloadConstants::KEY_COLUMNS_CNT).StoreResult(&KeyColumnsCnt);
         opts.AddLongOption("rows", "Number of rows")
             .DefaultValue((ui64)LogWriterWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
+        opts.AddLongOption("ttl_minutes", "TTL for timestamp column")
+            .DefaultValue((ui64)LogWriterWorkloadConstants::TIMESTAMP_STANDARD_DEVIATION_MINUTES).StoreResult(&TimeStampTtlMinutes);
         opts.AddLongOption("store", "Storage type."
                 " Options: row, column\n"
                 "  row - use row-based storage engine;\n"
@@ -315,7 +317,7 @@ void TLogWriterWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECo
             opts.AddLongOption("rows", "Number of rows to upsert")
                 .DefaultValue((ui64)LogWriterWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
             opts.AddLongOption("timestamp_deviation_minutes", "Standard deviation. For each timestamp, a random variable with a specified standard deviation in minutes is added.")
-                .DefaultValue((ui64)LogWriterWorkloadConstants::TIMESTAMP_STANDARD_DEVIATION).StoreResult(&TimestampStandardDeviation);
+                .DefaultValue((ui64)LogWriterWorkloadConstants::TIMESTAMP_STANDARD_DEVIATION_MINUTES).StoreResult(&TimestampStandardDeviationMinutes);
             break;
         }
         break;

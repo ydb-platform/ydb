@@ -21,7 +21,8 @@ enum LogWriterWorkloadConstants : ui64 {
     ROWS_CNT = 1,
     PARTITIONS_BY_LOAD = true,
 
-    TIMESTAMP_STANDARD_DEVIATION = 0,
+    TIMESTAMP_STANDARD_DEVIATION_MINUTES = 0,
+    TIMESTAMP_TTL_MIN = 60,
 };
 
 class TLogWriterWorkloadParams : public TWorkloadParams {
@@ -41,7 +42,8 @@ public:
     ui64 StrColumnsCnt = LogWriterWorkloadConstants::STR_COLUMNS_CNT;
     ui64 IntColumnsCnt = LogWriterWorkloadConstants::INT_COLUMNS_CNT;
     ui64 KeyColumnsCnt = LogWriterWorkloadConstants::KEY_COLUMNS_CNT;
-    ui64 TimestampStandardDeviation = LogWriterWorkloadConstants::TIMESTAMP_STANDARD_DEVIATION;
+    ui64 TimestampStandardDeviationMinutes = LogWriterWorkloadConstants::TIMESTAMP_STANDARD_DEVIATION_MINUTES;
+    ui64 TimeStampTtlMinutes = LogWriterWorkloadConstants::TIMESTAMP_STANDARD_DEVIATION_MINUTES;
     ui64 RowsCnt = LogWriterWorkloadConstants::ROWS_CNT;
     bool PartitionsByLoad = LogWriterWorkloadConstants::PARTITIONS_BY_LOAD;
 

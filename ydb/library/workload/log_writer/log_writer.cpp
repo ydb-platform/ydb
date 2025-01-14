@@ -65,7 +65,7 @@ std::string TLogWriterWorkloadGenerator::GetDDLQueries() const {
     }
     ss << ")) WITH (";
 
-    ss << "TTL = Interval(\"PT" << Params.TimeStampTtlMinutes << "M\") ON ts, ";
+    ss << "TTL = Interval(\"PT" << Params.TimestampTtlMinutes << "M\") ON ts, ";
 
     switch (Params.GetStoreType()) {
         case TLogWriterWorkloadParams::EStoreType::Row:
@@ -281,14 +281,12 @@ void TLogWriterWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECo
             .DefaultValue((ui64)LogWriterWorkloadConstants::STRING_LEN).StoreResult(&StringLen);
         opts.AddLongOption("int-cols", "Number of int columns")
             .DefaultValue((ui64)LogWriterWorkloadConstants::INT_COLUMNS_CNT).StoreResult(&IntColumnsCnt);
-        opts.AddLongOption("str-cols", "Number of columns")
+        opts.AddLongOption("str-cols", "Number of string columns")
             .DefaultValue((ui64)LogWriterWorkloadConstants::STR_COLUMNS_CNT).StoreResult(&StrColumnsCnt);
         opts.AddLongOption("key-cols", "Number of key columns")
             .DefaultValue((ui64)LogWriterWorkloadConstants::KEY_COLUMNS_CNT).StoreResult(&KeyColumnsCnt);
-        opts.AddLongOption("rows", "Number of rows")
-            .DefaultValue((ui64)LogWriterWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
         opts.AddLongOption("ttl_minutes", "TTL for timestamp column")
-            .DefaultValue((ui64)LogWriterWorkloadConstants::TIMESTAMP_STANDARD_DEVIATION_MINUTES).StoreResult(&TimeStampTtlMinutes);
+            .DefaultValue((ui64)LogWriterWorkloadConstants::TIMESTAMP_TTL_MIN).StoreResult(&TimestampTtlMinutes);
         opts.AddLongOption("store", "Storage type."
                 " Options: row, column\n"
                 "  row - use row-based storage engine;\n"
@@ -302,10 +300,10 @@ void TLogWriterWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECo
             });
         break;
     case TWorkloadParams::ECommandType::Run:
-        opts.AddLongOption("str-cols", "Number of int columns")
-            .DefaultValue((ui64)LogWriterWorkloadConstants::INT_COLUMNS_CNT).StoreResult(&StrColumnsCnt);
         opts.AddLongOption("int-cols", "Number of int columns")
             .DefaultValue((ui64)LogWriterWorkloadConstants::INT_COLUMNS_CNT).StoreResult(&IntColumnsCnt);
+        opts.AddLongOption("str-cols", "Number of string columns")
+            .DefaultValue((ui64)LogWriterWorkloadConstants::STR_COLUMNS_CNT).StoreResult(&StrColumnsCnt);
         opts.AddLongOption("key-cols", "Number of key columns")
             .DefaultValue((ui64)LogWriterWorkloadConstants::KEY_COLUMNS_CNT).StoreResult(&KeyColumnsCnt);
         switch (static_cast<TLogWriterWorkloadGenerator::EType>(workloadType)) {

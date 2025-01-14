@@ -43,7 +43,7 @@ public:
     ui64 IntColumnsCnt = LogWriterWorkloadConstants::INT_COLUMNS_CNT;
     ui64 KeyColumnsCnt = LogWriterWorkloadConstants::KEY_COLUMNS_CNT;
     ui64 TimestampStandardDeviationMinutes = LogWriterWorkloadConstants::TIMESTAMP_STANDARD_DEVIATION_MINUTES;
-    ui64 TimeStampTtlMinutes = LogWriterWorkloadConstants::TIMESTAMP_STANDARD_DEVIATION_MINUTES;
+    ui64 TimestampTtlMinutes = LogWriterWorkloadConstants::TIMESTAMP_STANDARD_DEVIATION_MINUTES;
     ui64 RowsCnt = LogWriterWorkloadConstants::ROWS_CNT;
     bool PartitionsByLoad = LogWriterWorkloadConstants::PARTITIONS_BY_LOAD;
 

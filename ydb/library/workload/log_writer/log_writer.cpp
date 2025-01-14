@@ -3,8 +3,6 @@
 #include <util/random/random.h>
 #include <util/datetime/base.h>
 
-#include <ydb/core/util/lz4_data_generator.h>
-
 #include <cmath>
 #include <iomanip>
 #include <string>

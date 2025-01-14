@@ -276,7 +276,7 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         } else if (ModifyResult) {
             OnModifyResult(txc, ctx);
         } else if (SchemeUploadResult) {
-            OnSchemeUploadResult(txc, ctx);
+            OnSchemeUploadResult(txc);
         } else if (CompletedTxId) {
             OnNotifyResult(txc, ctx);
         } else {
@@ -910,7 +910,7 @@ private:
         SubscribeTx(txId);
     }
 
-    void OnSchemeUploadResult(TTransactionContext& txc, const TActorContext& ctx) {
+    void OnSchemeUploadResult(TTransactionContext& txc) {
         Y_ABORT_UNLESS(SchemeUploadResult);
         const auto& result = *SchemeUploadResult.Get()->Get();
 

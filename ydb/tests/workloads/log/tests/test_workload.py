@@ -10,7 +10,7 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 
 
-class TestYdbKvWorkload(object):
+class TestYdbLogWorkload(object):
     @classmethod
     def setup_class(cls):
         cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=Erasure.MIRROR_3_DC))
@@ -20,7 +20,7 @@ class TestYdbKvWorkload(object):
             "--verbose",
             "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
             "--database=/Root",
-            "workload", "log_writer", "init",
+            "workload", "log", "init",
             "--min-partitions", "100",
             "--partition-size", "10",
             "--auto-partition", "0",
@@ -33,7 +33,7 @@ class TestYdbKvWorkload(object):
             "--verbose",
             "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
             "--database=/Root",
-            "workload", "log_writer", "run", "bulk_upsert",
+            "workload", "log", "run", "bulk_upsert",
             "--seconds", "10",
             "--threads", "10",
             "--len", "200",

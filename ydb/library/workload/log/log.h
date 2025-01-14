@@ -8,9 +8,9 @@
 
 namespace NYdbWorkload {
 
-namespace NLogWriter {
+namespace NLog {
 
-enum LogWriterWorkloadConstants : ui64 {
+enum LogWorkloadConstants : ui64 {
     MIN_PARTITIONS = 40,
     MAX_PARTITIONS = 1000,
     PARTITION_SIZE_MB = 2000,
@@ -25,7 +25,7 @@ enum LogWriterWorkloadConstants : ui64 {
     TIMESTAMP_TTL_MIN = 60,
 };
 
-class TLogWriterWorkloadParams : public TWorkloadParams {
+class TLogWorkloadParams : public TWorkloadParams {
 public:
     enum class EStoreType {
         Row     /* "row"    */,
@@ -35,26 +35,26 @@ public:
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
     TString GetWorkloadName() const override;
-    ui64 MinPartitions = LogWriterWorkloadConstants::MIN_PARTITIONS;
-    ui64 MaxPartitions = LogWriterWorkloadConstants::MAX_PARTITIONS;
-    ui64 PartitionSizeMb = LogWriterWorkloadConstants::PARTITION_SIZE_MB;
-    ui64 StringLen = LogWriterWorkloadConstants::STRING_LEN;
-    ui64 StrColumnsCnt = LogWriterWorkloadConstants::STR_COLUMNS_CNT;
-    ui64 IntColumnsCnt = LogWriterWorkloadConstants::INT_COLUMNS_CNT;
-    ui64 KeyColumnsCnt = LogWriterWorkloadConstants::KEY_COLUMNS_CNT;
-    ui64 TimestampStandardDeviationMinutes = LogWriterWorkloadConstants::TIMESTAMP_STANDARD_DEVIATION_MINUTES;
-    ui64 TimestampTtlMinutes = LogWriterWorkloadConstants::TIMESTAMP_STANDARD_DEVIATION_MINUTES;
-    ui64 RowsCnt = LogWriterWorkloadConstants::ROWS_CNT;
-    bool PartitionsByLoad = LogWriterWorkloadConstants::PARTITIONS_BY_LOAD;
+    ui64 MinPartitions = LogWorkloadConstants::MIN_PARTITIONS;
+    ui64 MaxPartitions = LogWorkloadConstants::MAX_PARTITIONS;
+    ui64 PartitionSizeMb = LogWorkloadConstants::PARTITION_SIZE_MB;
+    ui64 StringLen = LogWorkloadConstants::STRING_LEN;
+    ui64 StrColumnsCnt = LogWorkloadConstants::STR_COLUMNS_CNT;
+    ui64 IntColumnsCnt = LogWorkloadConstants::INT_COLUMNS_CNT;
+    ui64 KeyColumnsCnt = LogWorkloadConstants::KEY_COLUMNS_CNT;
+    ui64 TimestampStandardDeviationMinutes = LogWorkloadConstants::TIMESTAMP_STANDARD_DEVIATION_MINUTES;
+    ui64 TimestampTtlMinutes = LogWorkloadConstants::TIMESTAMP_STANDARD_DEVIATION_MINUTES;
+    ui64 RowsCnt = LogWorkloadConstants::ROWS_CNT;
+    bool PartitionsByLoad = LogWorkloadConstants::PARTITIONS_BY_LOAD;
 
     std::string TableName = "log_writer_test";
 
     YDB_READONLY(EStoreType, StoreType, EStoreType::Row);
 };
 
-class TLogWriterWorkloadGenerator final: public TWorkloadQueryGeneratorBase<TLogWriterWorkloadParams> {
+class TLogGenerator final: public TWorkloadQueryGeneratorBase<TLogWorkloadParams> {
 public:
-    using TBase = TWorkloadQueryGeneratorBase<TLogWriterWorkloadParams>;
+    using TBase = TWorkloadQueryGeneratorBase<TLogWorkloadParams>;
     struct TRow {
         TInstant Ts;
         TVector<ui64> Ints;
@@ -77,7 +77,7 @@ public:
             return Ts == other.Ts && Ints == other.Ints && Strings == other.Strings;
         }
     };
-    TLogWriterWorkloadGenerator(const TLogWriterWorkloadParams* params);
+    TLogGenerator(const TLogWorkloadParams* params);
 
     std::string GetDDLQueries() const override;
 
@@ -107,6 +107,6 @@ private:
     std::mt19937 Mt19937;
 };
 
-} // namespace NLogWriter
+} // namespace NLog
 
 } // namespace NYdbWorkload

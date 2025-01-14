@@ -1,4 +1,3 @@
-IF (NOT SANITIZER_TYPE AND NOT WITH_VALGRIND)
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
@@ -10,7 +9,7 @@ TEST_SRCS(
 )
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32)
+    REQUIREMENTS(cpu:all)
 ENDIF()
 
 SIZE(MEDIUM)
@@ -26,5 +25,3 @@ PEERDIR(
 
 
 END()
-
-ENDIF()

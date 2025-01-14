@@ -183,6 +183,8 @@ runs:
         else
           YA_MAKE_TARGET=${{ inputs.build_target }}
         fi
+        
+        YA_MAKE_TARGET=ydb/tests/workloads
 
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
         readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")

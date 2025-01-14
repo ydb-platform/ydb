@@ -8,7 +8,7 @@ class TTxUnlockTabletExecution : public TTransactionBase<THive> {
     const ui64 TabletId;
     const TActorId OwnerActor;
     const ui64 SeqNo;
-    const NKikimrHive::ELockLostReason Reason = NKikimrHive::LOCK_LOST_REASON_NO;
+    const NKikimrHive::ELockLostReason Reason = NKikimrHive::LOCK_LOST_REASON_UNKNOWN;
 
     const TActorId Sender;
     const ui64 Cookie;

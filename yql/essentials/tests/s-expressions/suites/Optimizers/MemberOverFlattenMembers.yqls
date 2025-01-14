@@ -1,7 +1,6 @@
 (
 #comment
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 (let res_sink (DataSink 'result))
 (let myStruct1 (AsStruct '('a (String 'z))))

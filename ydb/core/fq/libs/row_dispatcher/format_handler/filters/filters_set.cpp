@@ -236,7 +236,7 @@ public:
     }
 
 private:
-    void PushToFilter(const TFilterHandler& filterHandler, const TVector<ui64>& offsets, const TVector<ui64>& columnIndex, const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values, ui64 numberRows) {
+    void PushToFilter(const TFilterHandler& filterHandler, const TVector<ui64>& /* offsets */, const TVector<ui64>& columnIndex, const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values, ui64 numberRows) {
         const auto consumer = filterHandler.GetConsumer();
         const auto& columnIds = consumer->GetColumnIds();
 

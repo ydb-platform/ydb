@@ -62,4 +62,15 @@ DEFINE_REFCOUNTED_TYPE(IUnversionedWriter)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct IUnversionedTableFragmentWriter
+    : public IUnversionedWriter
+{
+    //! Returns signed write result. Only safe to use after |Stop|.
+    virtual TSignedWriteFragmentResultPtr GetWriteFragmentResult() const = 0;
+};
+
+DEFINE_REFCOUNTED_TYPE(IUnversionedTableFragmentWriter)
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NTableClient

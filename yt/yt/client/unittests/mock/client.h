@@ -831,19 +831,19 @@ public:
         const TGetFlowViewOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TDistributedWriteSessionPtr>, StartDistributedWriteSession, (
+    MOCK_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (
         const NYPath::TRichYPath& path,
         const TDistributedWriteSessionStartOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, FinishDistributedWriteSession, (
-        TDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<ITableWriterPtr>, CreateFragmentTableWriter, (
-        const TFragmentWriteCookiePtr& cookie,
-        const TFragmentTableWriterOptions& options),
+    MOCK_METHOD(TFuture<ITableFragmentWriterPtr>, CreateTableFragmentWriter, (
+        const TSignedWriteFragmentCookiePtr& cookie,
+        const TTableFragmentWriterOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TShuffleHandlePtr>, StartShuffle, (

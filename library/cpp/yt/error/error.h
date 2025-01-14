@@ -6,8 +6,6 @@
 
 #include <library/cpp/yt/error/mergeable_dictionary.h>
 
-#include <library/cpp/yt/yson/public.h>
-
 #include <library/cpp/yt/yson_string/convert.h>
 #include <library/cpp/yt/yson_string/string.h>
 

@@ -396,6 +396,7 @@ message TRequestedBloomNGrammFilter {
     optional uint32 FilterSizeBytes = 2;
     optional uint32 HashesCount = 3;
     optional string ColumnName = 4;
+    optional uint32 RecordsCount = 5;
 }
 
 message TRequestedMaxIndex {
@@ -432,6 +433,7 @@ message TBloomNGrammFilter {
     optional uint32 FilterSizeBytes = 2;
     optional uint32 HashesCount = 3;
     optional uint32 ColumnId = 4;
+    optional uint32 RecordsCount = 5;
 }
 
 message TMaxIndex {
@@ -482,6 +484,7 @@ message TCompactionLevelConstructorContainer {
     message TZeroLevel {
         optional uint32 PortionsLiveDurationSeconds = 1;
         optional uint64 ExpectedBlobsSize = 2;
+        optional uint64 PortionsCountAvailable = 3;
     }
 
     oneof Implementation {
@@ -1259,6 +1262,8 @@ message TRestoreTask {
     oneof Settings {
         TS3Settings S3Settings = 6;
     }
+
+    optional bool ValidateChecksums = 7; // currently available for s3
 }
 
 message TPersQueueGroupAllocate {

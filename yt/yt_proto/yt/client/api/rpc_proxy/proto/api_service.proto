@@ -1448,6 +1448,7 @@ message TIndexInfo
     required int32 index_kind = 2; // NTableClient::ESecondaryIndexKind
     optional string predicate = 3;
     optional string unfolded_column = 4;
+    optional int32 index_correspondence = 6; // NTableClient::ESecondaryIndexState
 }
 
 message TReqGetTableMountInfo
@@ -3426,20 +3427,23 @@ message TRspGetQueryTrackerInfo
 message TReqStartDistributedWriteSession
 {
     required string path = 1;
+    required int32 cookie_count = 2;
 
     optional TTransactionalOptions transactional_options = 100;
 }
 
 message TRspStartDistributedWriteSession
 {
-    required bytes session = 1; // YSON-serialized TDistributedWriteSession
+    required bytes signed_session = 1; // YSON-serialized TSignedDistributedWriteSessionPtr
+    repeated bytes signed_cookies = 2; // vector of YSON-serialized TSignedDistributedWriteCookiePtr
 }
 
 message TReqFinishDistributedWriteSession
 {
-    required bytes session = 1; // YSON-serialized TDistributedWriteSession
+    required bytes signed_session = 1; // YSON-serialized TSignedDistributedWriteSessionPtr
+    repeated bytes signed_write_results = 2; // vector of YSON-serialized TSignedWriteFragmentResultPtr
 
-    required int32 max_children_per_attach_request = 2;
+    required int32 max_children_per_attach_request = 3;
 }
 
 message TRspFinishDistributedWriteSession
@@ -3452,12 +3456,12 @@ message TReqWriteTableFragment
 
     optional bytes format = 2; // YSON-serialized TFormat
 
-    required bytes cookie = 3; // YSON-serialized TFragmentWriteCookie
+    required bytes signed_cookie = 3; // YSON-serialized TSignedWriteFragmentCookiePtr
 }
 
 message TRspWriteTableFragment
 {
-    required bytes cookie = 1; // YSON-serialized TFragmentWriteCookie
+    required bytes signed_write_result = 1; // YSON-serialized TSignedWriteFragmentResultPtr
 }
 
 ///////////////////////////////////////////////////////////////////////////////

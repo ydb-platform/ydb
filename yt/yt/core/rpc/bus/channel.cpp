@@ -79,7 +79,7 @@ public:
         IClientResponseHandlerPtr responseHandler,
         const TSendOptions& options) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         TSessionPtr session;
 
@@ -99,7 +99,7 @@ public:
     void Terminate(const TError& error) override
     {
         YT_VERIFY(!error.IsOK());
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         if (TerminationFlag_.exchange(true)) {
             return;
@@ -359,7 +359,7 @@ private:
         {
             YT_VERIFY(request);
             YT_VERIFY(responseHandler);
-            VERIFY_THREAD_AFFINITY_ANY();
+            YT_ASSERT_THREAD_AFFINITY_ANY();
 
             auto requestControl = New<TClientRequestControl>(
                 this,
@@ -415,7 +415,7 @@ private:
 
         YT_PREVENT_TLS_CACHING void Cancel(const TClientRequestControlPtr& requestControl)
         {
-            VERIFY_THREAD_AFFINITY_ANY();
+            YT_ASSERT_THREAD_AFFINITY_ANY();
 
             auto requestId = requestControl->GetRequestId();
             auto* bucket = GetBucketForRequest(requestId);
@@ -483,7 +483,7 @@ private:
             const TClientRequestControlPtr& requestControl,
             const TStreamingPayload& payload)
         {
-            VERIFY_THREAD_AFFINITY_ANY();
+            YT_ASSERT_THREAD_AFFINITY_ANY();
 
             if (TerminationFlag_.load()) {
                 return MakeFuture(TError(NRpc::EErrorCode::TransportError, "Session is terminated"));
@@ -509,7 +509,7 @@ private:
             const TClientRequestControlPtr& requestControl,
             const TStreamingFeedback& feedback)
         {
-            VERIFY_THREAD_AFFINITY_ANY();
+            YT_ASSERT_THREAD_AFFINITY_ANY();
 
             if (TerminationFlag_.load()) {
                 return MakeFuture(TError(NRpc::EErrorCode::TransportError, "Session is terminated"));
@@ -532,7 +532,7 @@ private:
 
         void HandleTimeout(const TClientRequestControlPtr& requestControl, bool aborted)
         {
-            VERIFY_THREAD_AFFINITY_ANY();
+            YT_ASSERT_THREAD_AFFINITY_ANY();
 
             auto requestId = requestControl->GetRequestId();
             auto* bucket = GetBucketForRequest(requestId);
@@ -568,7 +568,7 @@ private:
 
         void HandleAcknowledgementTimeout(const TClientRequestControlPtr& requestControl, bool aborted)
         {
-            VERIFY_THREAD_AFFINITY_ANY();
+            YT_ASSERT_THREAD_AFFINITY_ANY();
 
             if (aborted) {
                 return;
@@ -614,7 +614,7 @@ private:
 
         void HandleMessage(TSharedRefArray message, IBusPtr /*replyBus*/) noexcept override
         {
-            VERIFY_THREAD_AFFINITY_ANY();
+            YT_ASSERT_THREAD_AFFINITY_ANY();
 
             auto messageType = GetMessageType(message);
             switch (messageType) {
@@ -752,7 +752,7 @@ private:
 
         std::pair<IClientResponseHandlerPtr, NTracing::TCurrentTraceContextGuard> FindResponseHandlerAndTraceContextGuard(TRequestId requestId)
         {
-            VERIFY_THREAD_AFFINITY_ANY();
+            YT_ASSERT_THREAD_AFFINITY_ANY();
 
             auto* bucket = GetBucketForRequest(requestId);
             auto guard = Guard(*bucket);
@@ -772,7 +772,7 @@ private:
             const TSendOptions& options,
             TErrorOr<TSharedRefArray> requestMessageOrError)
         {
-            VERIFY_THREAD_AFFINITY_ANY();
+            YT_ASSERT_THREAD_AFFINITY_ANY();
 
             if (requestMessageOrError.IsOK()) {
                 auto requestMessageError = CheckBusMessageLimits(requestMessageOrError.Value());
@@ -1065,7 +1065,7 @@ private:
 
         void OnAcknowledgement(bool requestAcknowledgement, TRequestId requestId, const TError& error)
         {
-            VERIFY_THREAD_AFFINITY_ANY();
+            YT_ASSERT_THREAD_AFFINITY_ANY();
 
             if (!requestAcknowledgement && error.IsOK()) {
                 return;

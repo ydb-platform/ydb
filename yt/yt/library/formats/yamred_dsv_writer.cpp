@@ -85,7 +85,7 @@ private:
         RowValues_.resize(NameTableSize_);
         // Invariant: at the beginning of each loop iteration RowValues contains
         // nullptr in each element.
-        int rowCount = static_cast<int>(rows.Size());
+        int rowCount = std::ssize(rows);
         for (int index = 0; index < rowCount; index++) {
             auto row = rows[index];
             if (CheckKeySwitch(row, index + 1 == rowCount /* isLastRow */)) {

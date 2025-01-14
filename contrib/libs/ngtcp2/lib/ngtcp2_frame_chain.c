@@ -27,7 +27,7 @@
 #include <string.h>
 #include <assert.h>
 
-ngtcp2_objalloc_def(frame_chain, ngtcp2_frame_chain, oplent);
+ngtcp2_objalloc_def(frame_chain, ngtcp2_frame_chain, oplent)
 
 int ngtcp2_frame_chain_new(ngtcp2_frame_chain **pfrc, const ngtcp2_mem *mem) {
   *pfrc = ngtcp2_mem_malloc(mem, sizeof(ngtcp2_frame_chain));

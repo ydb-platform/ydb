@@ -49,6 +49,13 @@ constexpr TStringBuf PgTablesName = "pg_tables";
 constexpr TStringBuf InformationSchemaTablesName = "tables";
 constexpr TStringBuf PgClassName = "pg_class";
 
+namespace NAuth {
+    constexpr TStringBuf UsersName = "auth_users";
+    constexpr TStringBuf GroupsName = "auth_groups";
+    constexpr TStringBuf GroupMembersName = "auth_group_members";
+    constexpr TStringBuf OwnersName = "auth_owners";
+}
+
 
 struct Schema : NIceDb::Schema {
     struct PartitionStats : Table<1> {
@@ -611,6 +618,45 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct AuthUsers : Table<15> {
+        struct Sid: Column<1, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Sid>;
+        using TColumns = TableColumns<
+            Sid
+        >;
+    };
+
+    struct AuthGroups : Table<16> {
+        struct Sid: Column<1, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Sid>;
+        using TColumns = TableColumns<
+            Sid
+        >;
+    };
+
+    struct AuthGroupMembers : Table<17> {
+        struct GroupSid: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct MemberSid: Column<2, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<GroupSid, MemberSid>;
+        using TColumns = TableColumns<
+            GroupSid,
+            MemberSid
+        >;
+    };
+
+    struct AuthOwners : Table<18> {
+        struct Path: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Sid: Column<2, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Path, Sid>;
+        using TColumns = TableColumns<
+            Path,
+            Sid
+        >;
+    };
 
     struct PgColumn {
         NIceDb::TColumnId _ColumnId;

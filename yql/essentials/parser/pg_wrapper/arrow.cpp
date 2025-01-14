@@ -643,7 +643,7 @@ public:
 
     arrow::Datum ConvertDict(std::shared_ptr<arrow::ArrayData> data) {
         arrow::DictionaryArray dict(data);
-        auto values = data->dictionary->GetValues<T>(0);
+        auto values = dict.dictionary()->data()->GetValues<T>(1);
         auto indices = dict.indices()->data()->GetValues<ui32>(1);
         if (dict.null_count()) {
             for (i64 i = 0; i < data->length; ++i) {

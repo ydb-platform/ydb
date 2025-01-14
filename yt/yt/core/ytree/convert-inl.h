@@ -8,7 +8,6 @@
 #include "default_building_consumer.h"
 #include "serialize.h"
 #include "tree_builder.h"
-#include "helpers.h"
 
 #include <yt/yt/core/ypath/token.h>
 
@@ -158,7 +157,10 @@ INodePtr ConvertToNode(
 template <class T>
 IAttributeDictionaryPtr ConvertToAttributes(const T& value)
 {
-    auto attributes = CreateEphemeralAttributes();
+    // Forward declaration.
+    IAttributeDictionaryPtr CreateEphemeralAttributes(std::optional<int> ysonNestingLevelLimit);
+
+    auto attributes = CreateEphemeralAttributes(std::nullopt);
     TAttributeConsumer consumer(attributes.Get());
     Serialize(value, &consumer);
     return attributes;
@@ -332,9 +334,9 @@ namespace NYT::NAttributeValueConversionImpl {
 
 template <class T>
     requires (!CPrimitiveConvertible<T>)
-T TagInvoke(TFrom<T>, const NYson::TYsonString& value)
+T TagInvoke(TFrom<T>, TStringBuf value)
 {
-    return NYTree::ConvertTo<T>(value);
+    return NYTree::ConvertTo<T>(NYson::TYsonString(value));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

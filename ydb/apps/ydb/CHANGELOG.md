@@ -1,10 +1,11 @@
+* Added `--skip-checksum-validation` option to `ydb import s3` command to skip server-side checksum validation.
 
 ## 2.18.0 ##
 
-* Query plan and statistics improvements:
-  * Expression and attributes added to various operator properties (i.e. GroupBy)
-  * Per operator statistics (Rows)
-  * Statistics from Column Shards (Rows and Bytes)
+* _awaiting release ydb server 24.4_ Query plan and statistics provide additional information:
+  * Expression and attributes added to various operator properties (e.g., `GroupBy`)
+  * Per-operator statistics (Rows)
+  * Statistics for [column-oriented tables](./concepts/datamodel/table.md#column-oriented-tables) (Rows and Bytes)
 * Fixed a bug where `ydb workload * run` command could crash in `--dry-run` mode.
 * Added support for views in local backups: `ydb tools dump` and `ydb tools restore`. Views are backed up as `CREATE VIEW` queries saved in the `create_view.sql` files, which can be executed to recreate the original views.
 * Replaced option `--query-settings` by `--query-prefix` one in `ydb workload <workload> run`.

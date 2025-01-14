@@ -130,7 +130,7 @@ SRCS(
     misc/digest.cpp
     misc/error.cpp
     misc/fs.cpp
-    # NB: it is necessary to prevent linker optimization of
+    # NB: It is necessary to prevent linker optimization of
     # REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION macros for TGuid.
     GLOBAL misc/guid.cpp
     misc/hazard_ptr.cpp
@@ -143,7 +143,6 @@ SRCS(
     misc/relaxed_mpsc_queue.cpp
     misc/parser_helpers.cpp
     misc/pattern_formatter.cpp
-    misc/phoenix.cpp
     misc/pool_allocator.cpp
     misc/proc.cpp
     misc/process_exit_profiler.cpp
@@ -301,6 +300,7 @@ SRCS(
     ytree/ypath_service.cpp
     ytree/yson_struct.cpp
     ytree/yson_struct_detail.cpp
+    ytree/yson_struct_update.cpp
 
     json/config.cpp
     json/json_callbacks.cpp
@@ -362,7 +362,7 @@ PEERDIR(
     library/cpp/yt/backtrace
     library/cpp/yt/coding
     library/cpp/yt/malloc
-    library/cpp/yt/small_containers
+    library/cpp/yt/compact_containers
     library/cpp/yt/system
     library/cpp/yt/threading
 

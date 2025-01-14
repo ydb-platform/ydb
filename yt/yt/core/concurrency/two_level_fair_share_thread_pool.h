@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-#include <yt/yt/core/actions/public.h>
+#include <yt/yt/core/actions/signal.h>
 
 namespace NYT::NConcurrency {
 
@@ -31,8 +31,11 @@ struct ITwoLevelFairShareThreadPool
 
     virtual void Shutdown() = 0;
 
-    using TWaitTimeObserver = std::function<void(TDuration)>;
-    virtual void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver) = 0;
+    //! Invoked to inform of the current wait time for invocations via this invoker.
+    //! These invocations, however, are not guaranteed.
+    using TWaitTimeObserver = TCallback<void(TDuration waitTime)>;
+
+    DECLARE_INTERFACE_SIGNAL(TWaitTimeObserver::TSignature, WaitTimeObserved);
 };
 
 DEFINE_REFCOUNTED_TYPE(ITwoLevelFairShareThreadPool)

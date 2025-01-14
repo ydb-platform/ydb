@@ -917,6 +917,7 @@ NKikimrViewer::EFlag GetPDiskStateFlag(const NKikimrWhiteboard::TPDiskStateInfo&
         case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError:
         case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError:
         case NKikimrBlobStorage::TPDiskState::OpenFileError:
+        case NKikimrBlobStorage::TPDiskState::Stopped:
             flag = NKikimrViewer::EFlag::Red;
             break;
         default:

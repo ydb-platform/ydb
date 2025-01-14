@@ -35,7 +35,6 @@ SRCS(
     msgbus_server_request.h
     msgbus_server_scheme_initroot.cpp
     msgbus_server_scheme_request.cpp
-    msgbus_server_sqs.cpp
     msgbus_server_tablet_counters.cpp
     msgbus_server_tablet_kill.cpp
     msgbus_server_tablet_state.cpp

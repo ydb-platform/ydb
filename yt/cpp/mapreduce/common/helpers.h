@@ -32,6 +32,8 @@ TString GetReadTableCommand(const TString& apiVersion);
 TString GetWriteFileCommand(const TString& apiVersion);
 TString GetReadFileCommand(const TString& apiVersion);
 
+TString GetDefaultTransactionTitle();
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

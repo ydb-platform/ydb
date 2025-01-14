@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:25:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:37:5: Warning: At function: OrderedFlatMapWarn
+        	    ListFlatMap($list, ($item) -> { return $item / 0; }) AS flatmap,
+	    ^
+            <tmp_path>/program.sql:<main>:37:5: Warning: ListFlatMap with optional result is deprecated, please use ListNotNull and ListMap instead
+            	    ListFlatMap($list, ($item) -> { return $item / 0; }) AS flatmap,
+	    ^

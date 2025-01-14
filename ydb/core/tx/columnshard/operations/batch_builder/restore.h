@@ -12,11 +12,10 @@ class TModificationRestoreTask: public NDataReader::IRestoreTask, public NColumn
 private:
     using TBase = NDataReader::IRestoreTask;
     NEvWrite::TWriteData WriteData;
-    const NActors::TActorId BufferActorId;
     std::shared_ptr<IMerger> Merger;
     const ui64 LocalPathId;
     const TSnapshot Snapshot;
-    std::shared_ptr<arrow::RecordBatch> IncomingData;
+    NArrow::TContainerWithIndexes<arrow::RecordBatch> IncomingData;
     const TWritingContext Context;
     virtual std::unique_ptr<TEvColumnShard::TEvInternalScan> DoBuildRequestInitiator() const override;
 
@@ -32,8 +31,8 @@ public:
 
     virtual TDuration GetTimeout() const override;
 
-    TModificationRestoreTask(const NActors::TActorId bufferActorId, NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger,
-        const TSnapshot actualSnapshot, const std::shared_ptr<arrow::RecordBatch>& incomingData, const TWritingContext& context);
+    TModificationRestoreTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger, const TSnapshot actualSnapshot,
+        const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incomingData, const TWritingContext& context);
 };
 
 }   // namespace NKikimr::NOlap

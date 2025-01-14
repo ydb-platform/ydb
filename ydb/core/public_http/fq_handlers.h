@@ -422,7 +422,7 @@ public:
         TIntrusivePtr<TGrpcRequestContextWrapper> requestContext = MakeIntrusive<TGrpcRequestContextWrapper>(
             RequestContext,
             std::move(describeRequest),
-            [query_id = std::move(queryId), actorSystem = TActivationContext::ActorSystem()](const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 status) {
+            [query_id = std::move(queryId), actorSystem = TActivationContext::ActorSystem()](const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 /* status */) {
 
             Y_ABORT_UNLESS(resp);
             Y_ABORT_UNLESS(resp->GetArena());

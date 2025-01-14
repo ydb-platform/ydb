@@ -1,7 +1,6 @@
 RECURSE(
     actor
     base
-    client
     http
     queues
 )

@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/data_sharing/common/transactions/tx_extension.h>
+#include <ydb/core/tx/columnshard/tablet/ext_tx_base.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
@@ -12,10 +12,10 @@ namespace NKikimr::NColumnShard {
 
 class TColumnShard;
 
-class TTxBlobsWritingFinished: public NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard> {
+class TTxBlobsWritingFinished: public TExtendedTransactionBase {
 private:
-    using TBase = NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard>;
-    std::vector<TInsertedPortions> Packs;
+    using TBase = TExtendedTransactionBase;
+    TInsertedPortions Pack;
     const std::shared_ptr<NOlap::IBlobsWritingAction> WritingActions;
     std::optional<NOlap::TSnapshot> CommitSnapshot;
 
@@ -37,12 +37,13 @@ private:
         }
     };
 
+    std::vector<TInsertWriteId> InsertWriteIds;
     std::vector<TReplyInfo> Results;
+    std::optional<EOperationBehaviour> PackBehaviour;
 
 public:
     TTxBlobsWritingFinished(TColumnShard* self, const NKikimrProto::EReplyStatus writeStatus,
-        const std::shared_ptr<NOlap::IBlobsWritingAction>& writingActions, std::vector<TInsertedPortions>&& packs,
-        const std::vector<TNoDataWrite>& noDataWrites);
+        const std::shared_ptr<NOlap::IBlobsWritingAction>& writingActions, TInsertedPortions&& pack);
 
     virtual bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void DoComplete(const TActorContext& ctx) override;
@@ -51,11 +52,11 @@ public:
     }
 };
 
-class TTxBlobsWritingFailed: public NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard> {
+class TTxBlobsWritingFailed: public TExtendedTransactionBase {
 private:
-    using TBase = NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard>;
+    using TBase = TExtendedTransactionBase;
     const NKikimrProto::EReplyStatus PutBlobResult;
-    std::vector<TInsertedPortions> Packs;
+    TInsertedPortions Pack;
 
     class TReplyInfo {
     private:
@@ -78,10 +79,10 @@ private:
     std::vector<TReplyInfo> Results;
 
 public:
-    TTxBlobsWritingFailed(TColumnShard* self, const NKikimrProto::EReplyStatus writeStatus, std::vector<TInsertedPortions>&& packs)
+    TTxBlobsWritingFailed(TColumnShard* self, const NKikimrProto::EReplyStatus writeStatus, TInsertedPortions&& pack)
         : TBase(self)
         , PutBlobResult(writeStatus)
-        , Packs(std::move(packs)) {
+        , Pack(std::move(pack)) {
     }
 
     virtual bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override;

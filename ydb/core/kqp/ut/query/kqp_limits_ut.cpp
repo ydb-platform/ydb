@@ -759,6 +759,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         }
 
         WaitForZeroSessions(counters);
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
     }
 
     void DoCancelAfterRo(bool follower, bool streamLookup, bool dependedRead) {
@@ -869,6 +870,11 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             UNIT_ASSERT(wasCanceled);
         }
         WaitForZeroSessions(counters);
+
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
+        if (follower) {
+            WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/OneShardWithFolower");
+        }
     }
 
     Y_UNIT_TEST(CancelAfterRoTx) {

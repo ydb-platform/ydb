@@ -329,6 +329,48 @@ TVector<TRichYPath> CanonizeYPaths(
     return result;
 }
 
+NHttpClient::IHttpResponsePtr SkyShareTable(
+    const TClientContext& context,
+    const std::vector<TYPath>& tablePaths,
+    const TSkyShareTableOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("POST", "api/v1/share", /*IsApi*/ false);
+
+    auto proxyName = context.ServerName.substr(0,  context.ServerName.find('.'));
+
+    auto host = context.Config->SkynetApiHost;
+    if (host == "") {
+        host = "skynet." + proxyName + ".yt.yandex.net";
+    }
+
+    TSkyShareTableOptions patchedOptions = options;
+
+    if (context.Config->Pool && !patchedOptions.Pool_) {
+        patchedOptions.Pool(context.Config->Pool);
+    }
+
+    header.MergeParameters(SerializeParamsForSkyShareTable(proxyName, context.Config->Prefix, tablePaths, patchedOptions));
+    TClientContext skyApiHost({.ServerName = host, .HttpClient = NHttpClient::CreateDefaultHttpClient()});
+
+    return RequestWithoutRetry(skyApiHost, mutationId, header, "");
+}
+
+TAuthorizationInfo WhoAmI(const TClientContext& context)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "auth/whoami", /*isApi*/ false);
+    auto requestResult = RequestWithoutRetry(context, mutationId, header);
+    TAuthorizationInfo result;
+
+    NJson::TJsonValue jsonValue;
+    bool ok = NJson::ReadJsonTree(requestResult->GetResponse(), &jsonValue, /*throwOnError*/ true);
+    Y_ABORT_UNLESS(ok);
+    result.Login = jsonValue["login"].GetString();
+    result.Realm = jsonValue["realm"].GetString();
+    return result;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDetail::NRawClient

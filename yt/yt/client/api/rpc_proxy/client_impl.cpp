@@ -16,6 +16,8 @@
 
 #include <yt/yt/client/scheduler/operation_id_or_alias.h>
 
+#include <yt/yt/client/signature/signature.h>
+
 #include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/schema.h>
 #include <yt/yt/client/table_client/unversioned_row.h>
@@ -99,7 +101,7 @@ IChannelPtr TClient::CreateSequoiaAwareRetryingChannel(IChannelPtr channel, bool
 {
     const auto& config = Connection_->GetConfig();
     bool retrySequoiaErrorsOnly = !config->EnableRetries;
-    // NB: even if client's retries are disabled Sequoia transient failures are
+    // NB: Even if client's retries are disabled Sequoia transient failures are
     // still retriable. See IsRetriableError().
     return CreateRetryingChannel(
         config->RetryingChannel,
@@ -742,11 +744,12 @@ TFuture<void> TClient::AlterReplicationCard(
     return req->Invoke().As<void>();
 }
 
-TFuture<ITableWriterPtr> TClient::CreateFragmentTableWriter(
-    const TFragmentWriteCookiePtr& cookie,
-    const TFragmentTableWriterOptions& options)
+TFuture<ITableFragmentWriterPtr> TClient::CreateTableFragmentWriter(
+    const TSignedWriteFragmentCookiePtr& cookie,
+    const TTableFragmentWriterOptions& options)
 {
     using TRspPtr = TIntrusivePtr<NRpc::TTypedClientResponse<NProto::TRspWriteTableFragment>>;
+    YT_VERIFY(cookie);
 
     auto proxy = CreateApiServiceProxy();
     auto req = proxy.WriteTableFragment();
@@ -755,22 +758,29 @@ TFuture<ITableWriterPtr> TClient::CreateFragmentTableWriter(
     FillRequest(req.Get(), cookie, options);
 
     auto schema = New<TTableSchema>();
+    auto promise = NewPromise<TSignedWriteFragmentResultPtr>();
+
+    // NB(arkady-e1ppa): Whenever stream is over, rsp future is set
+    // with the value of write result. We create a channel via promise-future
+    // to transfer this write result to the TableWriter adapter. In order to avoid races
+    // when TableWriter is already closed (and so is stream) but the promise with
+    // write result is not yet set, consider writer closed only after said promise is set.
     return CreateRpcClientOutputStream(
         std::move(req),
         BIND ([=] (const TSharedRef& metaRef) {
             NApi::NRpcProxy::NProto::TWriteTableMeta meta;
             if (!TryDeserializeProto(&meta, metaRef)) {
-                THROW_ERROR_EXCEPTION("Failed to deserialize schema for fragment table writer");
+                THROW_ERROR_EXCEPTION("Failed to deserialize schema for table fragment writer");
             }
 
             FromProto(schema.Get(), meta.schema());
         }),
-        BIND([=] (TRspPtr&& rsp) mutable {
-            Deserialize(*cookie, ConvertToNode(TYsonString(rsp->cookie())));
+        BIND([=] (TRspPtr&& rsp)  {
+            promise.Set(ConvertTo<TSignedWriteFragmentResultPtr>(TYsonString(rsp->signed_write_result())));
         }))
-        .ApplyUnique(BIND([=] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {
-            return NRpcProxy::CreateTableWriter(std::move(outputStream), std::move(schema));
-        })).As<ITableWriterPtr>();
+        .ApplyUnique(BIND([=, future = promise.ToFuture()] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {
+            return NRpcProxy::CreateTableFragmentWriter(std::move(outputStream), std::move(schema), std::move(future));
+        }));
 }
 
 TFuture<IQueueRowsetPtr> TClient::PullQueue(
@@ -1705,9 +1715,13 @@ TFuture<std::vector<TColumnarStatistics>> TClient::GetColumnarStatistics(
 
     req->set_fetcher_mode(static_cast<NProto::EColumnarStatisticsFetcherMode>(options.FetcherMode));
 
-    ToProto(req->mutable_fetch_chunk_spec_config(), options.FetchChunkSpecConfig);
+    if (options.FetchChunkSpecConfig) {
+        ToProto(req->mutable_fetch_chunk_spec_config(), options.FetchChunkSpecConfig);
+    }
 
-    ToProto(req->mutable_fetcher_config(), options.FetcherConfig);
+    if (options.FetcherConfig) {
+        ToProto(req->mutable_fetcher_config(), options.FetcherConfig);
+    }
 
     req->set_enable_early_finish(options.EnableEarlyFinish);
 
@@ -1735,12 +1749,18 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
         req->add_paths(ToString(path));
     }
 
-    ToProto(req->mutable_fetch_chunk_spec_config(), options.FetchChunkSpecConfig);
+    if (options.FetchChunkSpecConfig) {
+        ToProto(req->mutable_fetch_chunk_spec_config(), options.FetchChunkSpecConfig);
+    }
 
-    ToProto(req->mutable_fetcher_config(), options.FetcherConfig);
+    if (options.FetcherConfig) {
+        ToProto(req->mutable_fetcher_config(), options.FetcherConfig);
+    }
 
-    req->mutable_chunk_slice_fetcher_config()->set_max_slices_per_fetch(
-        options.ChunkSliceFetcherConfig->MaxSlicesPerFetch);
+    if (options.ChunkSliceFetcherConfig) {
+        req->mutable_chunk_slice_fetcher_config()->set_max_slices_per_fetch(
+            options.ChunkSliceFetcherConfig->MaxSlicesPerFetch);
+    }
 
     req->set_partition_mode(static_cast<NProto::EPartitionTablesMode>(options.PartitionMode));
 

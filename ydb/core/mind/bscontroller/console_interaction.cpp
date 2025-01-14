@@ -9,7 +9,6 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::StartConsoleInteraction() {
         ConsoleInteraction = std::make_unique<TConsoleInteraction>(*this);
-        ConsoleInteraction->Start();
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC22, "Console interaction started");
     }
 
@@ -46,7 +45,7 @@ namespace NKikimr::NBsController {
         MakeGetBlock();
     }
 
-    void TBlobStorageController::TConsoleInteraction::MakeCommitToConsole(TString& config, ui32 configVersion) {
+    void TBlobStorageController::TConsoleInteraction::MakeCommitToConsole(TString& /* config */, ui32 /* configVersion */) {
         auto ev = MakeHolder<TEvBlobStorage::TEvControllerConsoleCommitRequest>();
         ev->Record.SetYAML(Self.YamlConfig);
         NTabletPipe::SendData(Self.SelfId(), ConsolePipe, ev.Release());
@@ -54,8 +53,8 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConsoleInteraction::MakeGetBlock() {
         auto ev = MakeHolder<TEvBlobStorage::TEvGetBlock>(Self.TabletID(), TInstant::Max());
-        auto proxyId = MakeBlobStorageProxyID(Self.Info()->GroupFor(0, Self.Executor()->Generation()));
-        TActivationContext::Schedule(TDuration::MilliSeconds(GetBlockBackoff.NextBackoffMs()), new IEventHandle(proxyId, Self.SelfId(), ev.Release()));
+        auto bsProxyEv = CreateEventForBSProxy(Self.SelfId(), Self.Info()->GroupFor(0, Self.Executor()->Generation()), ev.Release(), 0);
+        TActivationContext::Schedule(TDuration::MilliSeconds(GetBlockBackoff.NextBackoffMs()), bsProxyEv);
     }
 
     void TBlobStorageController::TConsoleInteraction::MakeRetrySession() {
@@ -112,7 +111,6 @@ namespace NKikimr::NBsController {
         }
     }
 
-
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvControllerConsoleCommitResponse::TPtr &ev) {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC20, "Console commit config response", (Response, ev->Get()->Record));
         auto& record = ev->Get()->Record;
@@ -149,7 +147,8 @@ namespace NKikimr::NBsController {
         GRPCSenderId = ev->Sender;
         if (!record.GetSkipConsoleValidation()) {
             if (!ValidationTimeout) {
-                TActivationContext::Schedule(TDuration::Minutes(2), new IEventHandle(Self.SelfId(), Self.SelfId(), new TEvPrivate::TEvValidationTimeout()));
+                TActivationContext::Schedule(TDuration::Minutes(2), new IEventHandle(Self.SelfId(), Self.SelfId(),
+                    new TEvPrivate::TEvValidationTimeout()));
             }
             ValidationTimeout = TActivationContext::Now() + TDuration::Minutes(2);
             auto validateConfigEv = std::make_unique<TEvBlobStorage::TEvControllerValidateConfigRequest>();
@@ -163,7 +162,8 @@ namespace NKikimr::NBsController {
         Self.Send(ev->Sender, validateConfigResponse.release());
     }
 
-    bool TBlobStorageController::TConsoleInteraction::ParseConfig(const TString& config, ui32& configVersion, NKikimrBlobStorage::TStorageConfig& storageConfig) {
+    bool TBlobStorageController::TConsoleInteraction::ParseConfig(const TString& config, ui32& /*configVersion*/,
+            NKikimrBlobStorage::TStorageConfig& storageConfig) {
         NKikimrConfig::TAppConfig appConfig;
         try {
             appConfig = NKikimr::NYaml::Parse(config);
@@ -174,8 +174,9 @@ namespace NKikimr::NBsController {
         return success;
     }
 
-    TBlobStorageController::TConsoleInteraction::TCommitConfigResult::EStatus TBlobStorageController::TConsoleInteraction::CheckConfig(const TString& config, ui32& configVersion, bool skipBSCValidation, 
-                                                                                                                                       NKikimrBlobStorage::TStorageConfig& storageConfig) {
+    TBlobStorageController::TConsoleInteraction::TCommitConfigResult::EStatus
+            TBlobStorageController::TConsoleInteraction::CheckConfig(const TString& config, ui32& configVersion,
+            bool skipBSCValidation, NKikimrBlobStorage::TStorageConfig& storageConfig) {
         if (!ParseConfig(config, configVersion, storageConfig)) {
             return TConsoleInteraction::TCommitConfigResult::EStatus::ParseError;
         }
@@ -188,7 +189,7 @@ namespace NKikimr::NBsController {
         return TConsoleInteraction::TCommitConfigResult::EStatus::Success;
     }
 
-    void TBlobStorageController::TConsoleInteraction::Handle(TBlobStorageController::TConsoleInteraction::TEvPrivate::TEvValidationTimeout::TPtr &ev) {
+    void TBlobStorageController::TConsoleInteraction::Handle(TBlobStorageController::TConsoleInteraction::TEvPrivate::TEvValidationTimeout::TPtr& /* ev */) {
         if (TActivationContext::Now() < ValidationTimeout) {
             return;
         }
@@ -221,7 +222,8 @@ namespace NKikimr::NBsController {
         NKikimrBlobStorage::TStorageConfig StorageConfig;
         TString yamlConfig = record.GetYAML();
         ui32 configVersion = record.GetConfigVersion();
-        if (CheckConfig(yamlConfig, configVersion, record.GetSkipBSCValidation(), StorageConfig) == TConsoleInteraction::TCommitConfigResult::EStatus::Success) {
+        if (CheckConfig(yamlConfig, configVersion, record.GetSkipBSCValidation(), StorageConfig) ==
+                TConsoleInteraction::TCommitConfigResult::EStatus::Success) {
             Self.Execute(Self.CreateTxCommitConfig(yamlConfig, configVersion, StorageConfig));
             return;
         }
@@ -237,15 +239,17 @@ namespace NKikimr::NBsController {
         switch (status) {
             case NKikimrProto::OK:
                 if (generation <= blockedGeneration) {
-                    Self.PassAway();
+                    Self.HandlePoison(TActivationContext::AsActorContext());
+                    return;
                 }
                 if (generation == blockedGeneration + 1 && NeedRetrySession) {
                     MakeRetrySession();
                     return;
                 }
+                Y_VERIFY_DEBUG_S(generation == blockedGeneration + 1, "BlockedGeneration#" << blockedGeneration << " Tablet generation#" << generation);
                 break;
             case NKikimrProto::BLOCKED:
-                Self.PassAway();
+                Self.HandlePoison(TActivationContext::AsActorContext());
                 break;
             case NKikimrProto::DEADLINE:
             case NKikimrProto::RACE:

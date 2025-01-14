@@ -93,6 +93,7 @@
 #include <ydb/core/mind/tenant_slot_broker.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/core/mind/node_broker.h>
+#include <ydb/core/mon_alloc/monitor.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
@@ -613,6 +614,7 @@ namespace Tests {
 
         NKikimrBlobStorage::TDefineBox boxConfig;
         boxConfig.SetBoxId(Settings->BOX_ID);
+        boxConfig.SetItemConfigGeneration(Settings->StorageGeneration);
 
         ui32 nodeId = Runtime->GetNodeId(0);
         Y_ABORT_UNLESS(nodesInfo->Nodes[0].NodeId == nodeId);
@@ -620,11 +622,13 @@ namespace Tests {
 
         NKikimrBlobStorage::TDefineHostConfig hostConfig;
         hostConfig.SetHostConfigId(nodeId);
+        hostConfig.SetItemConfigGeneration(Settings->StorageGeneration);
         TString path;
         if (Settings->UseSectorMap) {
             path ="SectorMap:test-client[:2000]";
         } else {
-            path = TStringBuilder() << Runtime->GetTempDir() << "pdisk_1.dat";
+            TString diskPath = Settings->CustomDiskParams.DiskPath;
+            path = TStringBuilder() << (diskPath ? diskPath : Runtime->GetTempDir()) << "pdisk_1.dat";
         }
         hostConfig.AddDrive()->SetPath(path);
         if (Settings->Verbose) {
@@ -640,7 +644,9 @@ namespace Tests {
 
         for (const auto& [poolKind, storagePool] : Settings->StoragePoolTypes) {
             if (storagePool.GetNumGroups() > 0) {
-                bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(storagePool);
+                auto* command = bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool();
+                command->CopyFrom(storagePool);
+                command->SetItemConfigGeneration(Settings->StorageGeneration);
             }
         }
 
@@ -1071,6 +1077,28 @@ namespace Tests {
                     Cerr << "TMeteringWriterInitializer: failed to open file '" << Settings->MeteringFilePath << "': "
                          << ex.what() << Endl;
                 }
+            }
+        }
+
+        {
+            if (Settings->NeedStatsCollectors) {
+                TString filePathPrefix;
+                if (Settings->AppConfig->HasMonitoringConfig()) {
+                    filePathPrefix = Settings->AppConfig->GetMonitoringConfig().GetMemAllocDumpPathPrefix();
+                }
+
+                const TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider(MakeIntrusive<NMemory::TProcessMemoryInfoProvider>());
+
+                IActor* monitorActor = CreateMemProfMonitor(TDuration::Seconds(1), processMemoryInfoProvider,
+                    Runtime->GetAppData(nodeIdx).Counters, filePathPrefix);
+                const TActorId monitorActorId = Runtime->Register(monitorActor, nodeIdx, Runtime->GetAppData(nodeIdx).BatchPoolId);
+                Runtime->RegisterService(MakeMemProfMonitorID(Runtime->GetNodeId(nodeIdx)), monitorActorId, nodeIdx);
+
+                IActor* controllerActor = NMemory::CreateMemoryController(TDuration::Seconds(1), processMemoryInfoProvider,
+                    Settings->AppConfig->GetMemoryControllerConfig(), NKikimrConfigHelpers::CreateMemoryControllerResourceBrokerConfig(*Settings->AppConfig),
+                    Runtime->GetAppData(nodeIdx).Counters);
+                const TActorId controllerActorId = Runtime->Register(controllerActor, nodeIdx, Runtime->GetAppData(nodeIdx).BatchPoolId);
+                Runtime->RegisterService(NMemory::MakeMemoryControllerId(0), controllerActorId, nodeIdx);
             }
         }
 
@@ -1772,6 +1800,39 @@ namespace Tests {
         return event->Record;
     }
 
+    NMsgBusProxy::EResponseStatus TClient::CreateGroup(const TString& parent, const TString& group) {
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
+        op->SetWorkingDir(parent);
+
+        auto* createUser = op->MutableAlterLogin()->MutableCreateGroup();
+        createUser->SetGroup(group);
+
+        TAutoPtr<NBus::TBusMessage> reply;
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+
+    NMsgBusProxy::EResponseStatus TClient::AddGroupMembership(const TString& parent, const TString& group, const TString& member) {
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
+        op->SetWorkingDir(parent);
+
+        auto* createUser = op->MutableAlterLogin()->MutableAddGroupMembership();
+        createUser->SetGroup(group);
+        createUser->SetMember(member);
+
+        TAutoPtr<NBus::TBusMessage> reply;
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+
     NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
@@ -2219,6 +2280,24 @@ namespace Tests {
         NMsgBusProxy::TBusResponse* res = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Release());
         UNIT_ASSERT(res);
         return res;
+    }
+
+    NKikimrScheme::TEvDescribeSchemeResult TClient::Describe(TTestActorRuntime* runtime, const TString& path, ui64 tabletId) {
+        TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> request(new NSchemeShard::TEvSchemeShard::TEvDescribeScheme());
+        request->Record.SetPath(path);
+        const ui64 schemeRoot = GetPatchedSchemeRoot(tabletId, Domain, SupportsRedirect);
+        TActorId sender = runtime->AllocateEdgeActor(0);
+        ForwardToTablet(*runtime, schemeRoot, sender, request.Release(), 0);
+
+        TAutoPtr<IEventHandle> handle;
+        runtime->GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+        auto& record = handle->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->GetRecord();
+
+        if (auto schemeShardId = record.GetPathDescription().GetDomainDescription().GetProcessingParams().GetSchemeShard(); schemeShardId && schemeShardId != tabletId) {
+            return Describe(runtime, path, schemeShardId);
+        } else {
+            return record;
+        }
     }
 
     TString TClient::CreateStoragePool(const TString& poolKind, const TString& partOfName, ui32 groups) {

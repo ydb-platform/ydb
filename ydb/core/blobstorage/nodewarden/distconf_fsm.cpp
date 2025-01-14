@@ -40,9 +40,14 @@ namespace NKikimr::NStorage {
         task.SetTaskId(RandomNumber<ui64>());
         task.MutableCollectConfigs();
         IssueScatterTask(TActorId(), std::move(task));
+
+        // establish connection to console tablet (if we have means to do it)
+        Y_ABORT_UNLESS(!ConsolePipeId);
+        ConnectToConsole();
     }
 
     void TDistributedConfigKeeper::UnbecomeRoot() {
+        DisconnectFromConsole();
     }
 
     void TDistributedConfigKeeper::SwitchToError(const TString& reason) {
@@ -349,8 +354,7 @@ namespace NKikimr::NStorage {
                 configToPropose = persistedConfig;
             }
         } else if (baseConfig && !baseConfig->GetGeneration()) {
-            const bool canBootstrapAutomatically = baseConfig->HasSelfManagementConfig() &&
-                baseConfig->GetSelfManagementConfig().GetEnabled() &&
+            const bool canBootstrapAutomatically = baseConfig->GetSelfManagementConfig().GetEnabled() &&
                 baseConfig->GetSelfManagementConfig().GetAutomaticBootstrap();
             if (canBootstrapAutomatically || selfAssemblyUUID) {
                 if (!selfAssemblyUUID) {
@@ -477,9 +481,7 @@ namespace NKikimr::NStorage {
                     // issue notification to node warden
                     if (StorageConfig && StorageConfig->GetGeneration() &&
                             StorageConfig->GetGeneration() < ProposedStorageConfig->GetGeneration()) {
-                        const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-                        auto ev = std::make_unique<TEvNodeWardenStorageConfig>(*StorageConfig, &ProposedStorageConfig.value());
-                        Send(wardenId, ev.release(), 0, cookie);
+                        ReportStorageConfigToNodeWarden(cookie);
                         ++task.AsyncOperationsPending;
                         ++ProposedStorageConfigCookieUsage;
                     }

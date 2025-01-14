@@ -4,7 +4,6 @@
 (import alterto_module '"alterto.yql")
 
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 # Int32->Int16
 (let world (Apply (bind alterto_module 'doAlterTo) world (Int32 '10) (DataType 'Int16) (Int16 '100)))

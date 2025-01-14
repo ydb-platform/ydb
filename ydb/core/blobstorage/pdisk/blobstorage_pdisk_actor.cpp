@@ -675,7 +675,8 @@ public:
             str << "Unknown, something went very wrong in PDisk. Marker# BSY06";
         }
         str << " StateErrorReason# " << StateErrorReason;
-        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, str.Str()));
+        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED,
+            0, str.Str(), PDisk->LogChunks.size()));
         result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
         PDisk->Mon.WriteLog.CountRequest(0);
         Send(ev->Sender, result.Release());
@@ -695,7 +696,8 @@ public:
             str << "Unknown, something went very wrong in PDisk. Marker# BSY12";
         }
         str << " StateErrorReason# " << StateErrorReason;
-        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, str.Str()));
+        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED,
+            0, str.Str(), PDisk->LogChunks.size()));
         for (auto &[log, _] : evMultiLog.Logs) {
             result->Results.push_back(NPDisk::TEvLogResult::TRecord(log->Lsn, log->Cookie));
         }

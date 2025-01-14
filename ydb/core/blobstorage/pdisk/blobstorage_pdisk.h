@@ -407,11 +407,16 @@ struct TEvLogResult : public TEventLocal<TEvLogResult, TEvBlobStorage::EvLogResu
     NKikimrProto::EReplyStatus Status;
     TStatusFlags StatusFlags;
     TString ErrorReason;
+    ui32 LogChunkCount = 0;
 
-    TEvLogResult(NKikimrProto::EReplyStatus status, TStatusFlags statusFlags, const TString &errorReason)
+    TEvLogResult(NKikimrProto::EReplyStatus status,
+            TStatusFlags statusFlags,
+            const TString &errorReason,
+            ui32 logChunkCount)
         : Status(status)
         , StatusFlags(statusFlags)
         , ErrorReason(errorReason)
+        , LogChunkCount(logChunkCount)
     {}
 };
 

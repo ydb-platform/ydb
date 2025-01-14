@@ -1689,6 +1689,7 @@ namespace NKikimr {
             if (VDiskCompactionState && !results.empty()) {
                 VDiskCompactionState->Logged(ctx, results.back().Lsn);
             }
+            OverloadHandler->SetLogChunkCount(ev->Get()->LogChunkCount);
         }
 
         ////////////////////////////////////////////////////////////////////////

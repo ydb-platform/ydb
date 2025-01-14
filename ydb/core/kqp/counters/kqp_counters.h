@@ -453,6 +453,9 @@ public:
 
     NMonitoring::TDynamicCounters::TCounterPtr RowsDuplicationsFound;
 
+    NMonitoring::TDynamicCounters::TCounterPtr TotalSingleShardTxCount;
+    NMonitoring::TDynamicCounters::TCounterPtr NonLocalSingleShardTxCount;
+
     TAlignedPagePoolCounters AllocCounters;
 
     // db counters

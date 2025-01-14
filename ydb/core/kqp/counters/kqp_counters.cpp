@@ -866,6 +866,9 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     SchedulerDelays = KqpGroup->GetHistogram("NodeScheduler/Delay", NMonitoring::ExponentialHistogram(20, 2, 1));
 
     RowsDuplicationsFound = KqpGroup->GetCounter("RowsDuplicationFound", true);
+
+    TotalSingleShardTxCount = KqpGroup->GetCounter("TotalSingleShardTxCount", true);
+    NonLocalSingleShardTxCount = KqpGroup->GetCounter("NonLocalSingleShardTxCount", true);
 }
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetKqpCounters() const {

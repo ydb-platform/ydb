@@ -1,0 +1,6 @@
+requirements:
+  - autocommand: null
+exclude:
+  - "jaraco/text/Lorem ipsum.txt"
+keep:
+  - jaraco/text/Lorem_ipsum.txt

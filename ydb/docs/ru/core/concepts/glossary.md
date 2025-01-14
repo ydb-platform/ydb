@@ -287,7 +287,7 @@
 
 ### Право доступа {#access-right}
 
-**[Право доступа](../security/authentication.md#right)** или **access right** — сущность, отражающая разрешение [субъекту](#access-subject) выполнять конкретный набор операций в кластере или базе данных над конкретным [объектом](#access-object).
+**[Право доступа](../security/authentication.md#right)** или **access right** — сущность, отражающая разрешение [субъекту доступа](#access-subject) выполнять конкретный набор операций в кластере или базе данных над конкретным [объектом доступа](#access-object).
 
 ### Список разрешений {#access-control-list}
 
@@ -304,6 +304,10 @@
 ### Группа {#access-group}
 
 **[Группа](../security/authentication.md#group)** или **группа доступа** - именованное множество [пользователей](#access-user) с одинаковыми [правами доступа](#access-right) к тем или иным [объектам доступа](#access-object).
+
+### SID {#access-sid}
+
+ **SID** (**Security Identifier**) - строка вида `<login>[@<subsystem>]`, идентифицирующая [субъект доступа](../concepts/glossary.md#access-subject) в [списках разрешений](#access-control-list).
 
 ### Оптимизатор запросов {#optimizer}
 

@@ -96,7 +96,7 @@ TQueryInfoList TLogGenerator::GetWorkload(int type) {
 
 TVector<IWorkloadQueryGenerator::TWorkloadType> TLogGenerator::GetSupportedWorkloadTypes() const {
     TVector<TWorkloadType> result;
-    result.emplace_back(static_cast<int>(EType::Upsert), "insert", "Insert random rows into table near current ts");
+    result.emplace_back(static_cast<int>(EType::Insert), "insert", "Insert random rows into table near current ts");
     result.emplace_back(static_cast<int>(EType::Upsert), "upsert", "Upsert random rows into table near current ts");
     result.emplace_back(static_cast<int>(EType::BulkUpsert), "bulk_upsert", "Bulk upsert random rows into table near current ts");
     return result;
@@ -299,7 +299,7 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
                 .DefaultValue((ui64)LogWorkloadConstants::STRING_LEN).StoreResult(&StringLen);
             opts.AddLongOption("rows", "Number of rows to upsert")
                 .DefaultValue((ui64)LogWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
-            opts.AddLongOption("timestamp_deviation_minutes", "Standard deviation. For each timestamp, a random variable with a specified standard deviation in minutes is added.")
+            opts.AddLongOption("timestamp_deviation", "Standard deviation. For each timestamp, a random variable with a specified standard deviation in minutes is added.")
                 .DefaultValue((ui64)LogWorkloadConstants::TIMESTAMP_STANDARD_DEVIATION_MINUTES).StoreResult(&TimestampStandardDeviationMinutes);
             break;
         }

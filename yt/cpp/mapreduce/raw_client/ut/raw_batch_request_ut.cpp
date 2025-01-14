@@ -97,7 +97,6 @@ TEST(TBatchRequestImplTest, ParseResponse) {
     auto testRetryPolicy = MakeIntrusive<TTestRetryPolicy>();
     const TInstant now = TInstant::Seconds(100500);
 
-    TRawBatchRequest retryBatch(context.Config);
     batchRequest.ParseResponse(
         TNode()
             .Add(TNode()("output", 5))
@@ -107,15 +106,13 @@ TEST(TBatchRequestImplTest, ParseResponse) {
                     TTestRetryPolicy::GenerateRetriableError(TDuration::Seconds(5)))),
             "<no-request-id>",
             testRetryPolicy,
-            &retryBatch,
             now);
 
-    EXPECT_EQ(batchRequest.BatchSize(), 0u);
-    EXPECT_EQ(retryBatch.BatchSize(), 2u);
+    EXPECT_EQ(batchRequest.BatchSize(), 2u);
 
     TNode retryParameterList;
     TInstant nextTry;
-    retryBatch.FillParameterList(3, &retryParameterList, &nextTry);
+    batchRequest.FillParameterList(3, &retryParameterList, &nextTry);
     EXPECT_EQ(
         GetAllPathsFromRequestList(retryParameterList),
         TVector<TString>({"//getError-3", "//getError-5"}));

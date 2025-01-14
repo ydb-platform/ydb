@@ -221,7 +221,7 @@ void TOperationPreparer::LockFiles(TVector<TRichYPath>* paths)
             ELockMode::LM_SNAPSHOT,
             TLockOptions().Waitable(true)));
     }
-    ExecuteBatch(ClientRetryPolicy_->CreatePolicyForGenericRequest(), GetContext(), lockRequest);
+    lockRequest.ExecuteBatch(ClientRetryPolicy_->CreatePolicyForGenericRequest(), GetContext());
 
     TVector<::NThreading::TFuture<TNode>> nodeIdFutures;
     nodeIdFutures.reserve(paths->size());
@@ -232,7 +232,7 @@ void TOperationPreparer::LockFiles(TVector<TRichYPath>* paths)
             ::TStringBuilder() << '#' << GetGuidAsString(lockIdFuture.GetValue()) << "/@node_id",
             TGetOptions()));
     }
-    ExecuteBatch(ClientRetryPolicy_->CreatePolicyForGenericRequest(), GetContext(), getNodeIdRequest);
+    getNodeIdRequest.ExecuteBatch(ClientRetryPolicy_->CreatePolicyForGenericRequest(), GetContext());
 
     for (size_t i = 0; i != paths->size(); ++i) {
         auto& richPath = (*paths)[i];

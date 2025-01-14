@@ -87,10 +87,7 @@ const TVector<TTableSchema>& TOperationPreparationContext::GetInputSchemas() con
         schemaFutures.push_back(batch.Get(TransactionId_, Inputs_[tableIndex]->Path_ + "/@schema", TGetOptions{}));
     }
 
-    NRawClient::ExecuteBatch(
-        RetryPolicy_->CreatePolicyForGenericRequest(),
-        Context_,
-        batch);
+    batch.ExecuteBatch(RetryPolicy_->CreatePolicyForGenericRequest(), Context_);
 
     for (int tableIndex = 0; tableIndex < static_cast<int>(InputSchemas_.size()); ++tableIndex) {
         if (schemaFutures[tableIndex].Initialized()) {

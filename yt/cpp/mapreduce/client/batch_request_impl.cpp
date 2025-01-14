@@ -189,7 +189,7 @@ TFuture<TCheckPermissionResponse> TBatchRequest::CheckPermission(
 
 void TBatchRequest::ExecuteBatch(const TExecuteBatchOptions& options)
 {
-    NYT::NDetail::ExecuteBatch(Client_->GetRetryPolicy()->CreatePolicyForGenericRequest(), Client_->GetContext(), *Impl_, options);
+    Impl_->ExecuteBatch(Client_->GetRetryPolicy()->CreatePolicyForGenericRequest(), Client_->GetContext(), options);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

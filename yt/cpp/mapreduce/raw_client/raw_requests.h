@@ -32,13 +32,6 @@ TCheckPermissionResponse ParseCheckPermissionResponse(const TNode& node);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// marks `batchRequest' as executed
-void ExecuteBatch(
-    IRequestRetryPolicyPtr retryPolicy,
-    const TClientContext& context,
-    TRawBatchRequest& batchRequest,
-    const TExecuteBatchOptions& options = {});
-
 TRichYPath CanonizeYPath(
     const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,
@@ -72,7 +65,7 @@ auto BatchTransform(
     for (const auto& el : src) {
         futures.push_back(batchAdder(batch, el));
     }
-    ExecuteBatch(retryPolicy, context, batch, executeBatchOptions);
+    batch.ExecuteBatch(retryPolicy, context, executeBatchOptions);
     using TDst = decltype(futures[0].ExtractValueSync());
     TVector<TDst> result;
     result.reserve(std::size(src));

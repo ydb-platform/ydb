@@ -99,7 +99,7 @@ void TYtPoller::WatchLoop()
         }
 
         try {
-            ExecuteBatch(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, rawBatchRequest);
+            rawBatchRequest.ExecuteBatch(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_);
         } catch (const std::exception& ex) {
             YT_LOG_ERROR("Exception while executing batch request: %v", ex.what());
         }

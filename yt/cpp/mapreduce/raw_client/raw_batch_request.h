@@ -41,6 +41,11 @@ public:
     TRawBatchRequest(const TConfigPtr& config);
     ~TRawBatchRequest();
 
+    void ExecuteBatch(
+        IRequestRetryPolicyPtr retryPolicy,
+        const TClientContext& context,
+        const TExecuteBatchOptions& options = {});
+
     bool IsExecuted() const;
     void MarkExecuted();
 
@@ -51,13 +56,11 @@ public:
     void ParseResponse(
         const TResponseInfo& requestResult,
         const IRequestRetryPolicyPtr& retryPolicy,
-        TRawBatchRequest* retryBatch,
         TInstant now = TInstant::Now());
     void ParseResponse(
         TNode response,
         const TString& requestId,
         const IRequestRetryPolicyPtr& retryPolicy,
-        TRawBatchRequest* retryBatch,
         TInstant now = TInstant::Now());
     void SetErrorResult(std::exception_ptr e) const;
 

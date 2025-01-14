@@ -1,6 +1,5 @@
 import time
 from conftest import BaseTestSet
-from multiprocessing import Process
 from ydb.tests.olap.scenario.helpers import (
     ScenarioTestHelper,
     TestContext,

@@ -35,18 +35,14 @@ std::string TLogGenerator::GetDDLQueries() const {
     ss << "CREATE TABLE `" << Params.DbPath << "/" << Params.TableName << "`(";
 
     for (size_t i = 0; i < TotalColumnsCnt; ++i) {
-        if (i == 0)
-        {
+        if (i == 0) {
             ss << "ts Timestamp";
-
-        }
-        else if (i < Params.IntColumnsCnt + 1) {
+        } else if (i < Params.IntColumnsCnt + 1) {
             ss << "c" << i << " Uint64";
-        }
-        else
-        {
+        } else {
             ss << "c" << i << " String";
         }
+
         if (i < Params.KeyColumnsCnt && Params.GetStoreType() == TLogWorkloadParams::EStoreType::Column) {
             ss << " NOT NULL";
         }
@@ -116,12 +112,10 @@ TQueryInfoList TLogGenerator::WriteRows(TString operation, TVector<TRow>&& rows)
     for (size_t row = 0; row < Params.RowsCnt; ++row) {
         for (size_t col = 0; col < TotalColumnsCnt; ++col) {
             TString cname = "$c" + std::to_string(row) + "_" + std::to_string(col);
-            if (col == 0)
-            {
+            if (col == 0) {
                 ss << "DECLARE " << cname << " AS Timestamp;\n";
                 paramsBuilder.AddParam(cname).Timestamp(rows[row].Ts).Build();
-            }
-            else if (col < Params.IntColumnsCnt + 1) {
+            } else if (col < Params.IntColumnsCnt + 1) {
                 ss << "DECLARE " << cname << " AS Uint64;\n";
                 paramsBuilder.AddParam(cname).Uint64(rows[row].Ints[col - 1]).Build();
             } else {
@@ -134,14 +128,12 @@ TQueryInfoList TLogGenerator::WriteRows(TString operation, TVector<TRow>&& rows)
     ss << operation << " INTO `" << Params.TableName << "` (";
 
     for (size_t col = 0; col < TotalColumnsCnt; ++col) {
-        if (col != 0)
-        {
+        if (col != 0) {
             ss << "c" << col;
-        }
-        else
-        {
+        } else {
             ss << "ts";
         }
+
         if (col + 1 < TotalColumnsCnt) {
             ss << ", ";
         }
@@ -184,11 +176,9 @@ TQueryInfoList TLogGenerator::BulkUpsert(TVector<TRow>&& rows) {
         auto &listItem = valueBuilder.AddListItem();
         listItem.BeginStruct();
         for (size_t col = 0; col < TotalColumnsCnt; ++col) {
-            if (col == 0)
-            {
+            if (col == 0) {
                 listItem.AddMember("ts").Timestamp(row.Ts);
-            }
-            else if (col < Params.IntColumnsCnt + 1) {
+            } else if (col < Params.IntColumnsCnt + 1) {
                 listItem.AddMember(std::format("c{}", col)).Uint64(row.Ints[col-1]);
             } else {
                 listItem.AddMember(std::format("c{}", col)).String(row.Strings[col - Params.IntColumnsCnt - 1]);
@@ -226,12 +216,9 @@ TVector<TRow> TLogGenerator::GenerateRandomRows() {
     for (size_t row = 0; row < Params.RowsCnt; ++row) {
         result[row].Ts = TInstant::Now();
         i64 millisecondsDiff = 60*1000*normal_distribution_generator(Mt19937);
-        if (millisecondsDiff >= 0)  // TDuration::MilliSeconds can't be negative for some reason...
-        {
+        if (millisecondsDiff >= 0) { // TDuration::MilliSeconds can't be negative for some reason...
             result[row].Ts = result[row].Ts + TDuration::MilliSeconds(millisecondsDiff);
-        }
-        else
-        {
+        } else {
             result[row].Ts = result[row].Ts - TDuration::MilliSeconds(-millisecondsDiff);
         }
 
@@ -283,7 +270,7 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
             .DefaultValue((ui64)LogWorkloadConstants::STR_COLUMNS_CNT).StoreResult(&StrColumnsCnt);
         opts.AddLongOption("key-cols", "Number of key columns")
             .DefaultValue((ui64)LogWorkloadConstants::KEY_COLUMNS_CNT).StoreResult(&KeyColumnsCnt);
-        opts.AddLongOption("ttl_minutes", "TTL for timestamp column")
+        opts.AddLongOption("ttl", "TTL for timestamp column in minutes")
             .DefaultValue((ui64)LogWorkloadConstants::TIMESTAMP_TTL_MIN).StoreResult(&TimestampTtlMinutes);
         opts.AddLongOption("store", "Storage type."
                 " Options: row, column\n"

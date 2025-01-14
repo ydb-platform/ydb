@@ -284,11 +284,12 @@ namespace NPQ {
 
             for (ui32 i = 0; i < srcRequest.CmdWriteSize(); ++i) {
                 const auto& cmd = srcRequest.GetCmdWrite(i);
-                if (cmd.HasKeyToCache()) {
-                    const TString& strKey = cmd.GetKeyToCache();
-                    Y_ABORT_UNLESS(strKey.size() == TKey::KeySize(), "Unexpected key size: %" PRIu64, strKey.size());
+                const TString& strKey = cmd.GetKey();
+                if (IsDataKey(strKey)) {
+                    Y_ABORT_UNLESS((strKey.size() >= TKey::KeySize()) && (strKey.size() - TKey::KeySize() <= 1),
+                                   "Unexpected key size: %" PRIu64 " (%s)",
+                                   strKey.size(), strKey.data());
                     TKey key(strKey);
-                    Y_ABORT_UNLESS(!key.IsHead());
 
                     const TString& value = cmd.GetValue();
                     kvReq.Partition = key.GetPartition();

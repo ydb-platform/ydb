@@ -1,7 +1,7 @@
 import ydb.apps.dstool.lib.common as common
 import sys
 
-description = 'Stop PDisk'
+description = 'Change PDisk read-only status'
 
 
 def add_options(p):
@@ -10,14 +10,17 @@ def add_options(p):
     common.add_ignore_failure_model_group_check_option(p)
     common.add_ignore_vslot_quotas_option(p)
     common.add_basic_format_options(p)
+    p.add_argument('--enabled', type=str, choices=['true', 'false'], help='Enable read-only mode')
 
 
 def create_request(args, pdisk):
     request = common.create_bsc_request(args)
-    cmd = request.Command.add().StopPDisk
+    cmd = request.Command.add().SetPDiskReadOnly
 
     cmd.TargetPDiskId.NodeId = pdisk[0]
     cmd.TargetPDiskId.PDiskId = pdisk[1]
+
+    cmd.Value = args.enabled == 'true'
 
     return request
 
@@ -38,7 +41,7 @@ def do(args):
     pdisks = common.get_selected_pdisks(args, base_config)
 
     if len(pdisks) != 1:
-        common.print_status(args, success=False, error_reason='Only stop one PDisk at a time')
+        common.print_status(args, success=False, error_reason='Only change one PDisk read-only status at a time')
         sys.exit(1)
 
     success = True

@@ -29,7 +29,7 @@ namespace NKikimr {
 bool FillConsumer(Ydb::Topic::Consumer *rr, const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
     Ydb::StatusIds_StatusCode& status, TString& error);
 bool FillConsumer(Ydb::Topic::Consumer* rr, const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
-                        const NActors::TActorContext& ctx, Ydb::StatusIds_StatusCode& status, TString& error);
+    const NActors::TActorContext& ctx, Ydb::StatusIds_StatusCode& status, TString& error);
 bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSchemeOp::TPersQueueGroupDescription& in, const NKikimrPQ::TPQConfig& pqConfig,
     const NKikimrSchemeOp::TDirEntry &fromDirEntry, const TMaybe<TString>& cdcName,
     bool EnableTopicSplitMerge, NYql::TIssue& issue, const NActors::TActorContext& ctx, const TString& consumer, bool includeStats, bool includeLocation);

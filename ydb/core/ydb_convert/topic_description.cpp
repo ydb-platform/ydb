@@ -15,10 +15,10 @@
 namespace NKikimr {
 
 bool FillConsumer(Ydb::Topic::Consumer *rr, const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
+    const TString& consumerName,
     const NKikimrPQ::TPQConfig& pqConfig,
     Ydb::StatusIds_StatusCode& status, TString& error)
 {
-    auto consumerName = NPersQueue::ConvertOldConsumerName(consumer.GetName());
     rr->set_name(consumerName);
     rr->mutable_read_from()->set_seconds(consumer.GetReadFromTimestampsMs() / 1000);
     auto version = consumer.GetVersion();
@@ -45,17 +45,19 @@ bool FillConsumer(Ydb::Topic::Consumer *rr, const NKikimrPQ::TPQTabletConfig::TC
 }
 
 bool FillConsumer(Ydb::Topic::Consumer* rr, const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
-                        const NActors::TActorContext& ctx, Ydb::StatusIds_StatusCode& status, TString& error)
+    const NActors::TActorContext& ctx, Ydb::StatusIds_StatusCode& status, TString& error)
 {
     const auto& pqConfig = AppData(ctx)->PQConfig;
-    return FillConsumer(rr, consumer, pqConfig, status, error);
+    auto consumerName = NPersQueue::ConvertOldConsumerName(consumer.GetName(), ctx);
+    return FillConsumer(rr, consumer, consumerName, pqConfig, status, error);
 }
 
 bool FillConsumer(Ydb::Topic::Consumer *rr, const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
     Ydb::StatusIds_StatusCode& status, TString& error)
 {
     const auto& pqConfig = AppData()->PQConfig;
-    return FillConsumer(rr, consumer, pqConfig, status, error);
+    auto consumerName = NPersQueue::ConvertOldConsumerName(consumer.GetName());
+    return FillConsumer(rr, consumer, consumerName, pqConfig, status, error);
 }
 
 bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSchemeOp::TPersQueueGroupDescription& in,

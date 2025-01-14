@@ -10,11 +10,11 @@ namespace NKikimr::NColumnShard::NTiers {
 
 class TS3Uri {
 private:
-    YDB_READONLY_DEF(TString, Host);
-    YDB_READONLY_DEF(TString, Bucket);
-    YDB_READONLY_DEF(std::optional<TString>, Folder)
-    YDB_READONLY_DEF(std::optional<ui16>, Port);
     YDB_READONLY_DEF(std::optional<NKikimrSchemeOp::TS3Settings_EScheme>, Scheme);
+    YDB_READONLY_DEF(TString, Bucket);
+    YDB_READONLY_DEF(TString, Host);
+    YDB_READONLY_DEF(std::optional<ui16>, Port);
+    YDB_READONLY_DEF(std::optional<TString>, Folder);
 
     enum TUriStyle {
         PATH_STYLE = 1,

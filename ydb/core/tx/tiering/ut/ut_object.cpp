@@ -71,16 +71,26 @@ Y_UNIT_TEST_SUITE(S3SettingsConversion) {
         ValidateConversion(input, output);
     }
 
-    Y_UNIT_TEST(Folders) {
+    Y_UNIT_TEST(FoldersStrictStyle) {
         std::vector<TString> uris = {
             "http://s3.yandexcloud.net:8080/my-folder/subfolder/bucket",
             "http://bucket.s3.yandexcloud.net:8080/my-folder/subfolder",
+        };
+        for (const auto& input : uris) {
+            NTiers::TS3Uri uri = NTiers::TS3Uri::ParseUri(input).DetachResult();
+            UNIT_ASSERT_STRINGS_EQUAL_C(uri.GetEndpoint(), "s3.yandexcloud.net:8080/my-folder/subfolder", input);
+            UNIT_ASSERT_STRINGS_EQUAL_C(uri.GetBucket(), "bucket", input);
+        }
+    }
+
+    Y_UNIT_TEST(FoldersStyleDeduction) {
+        std::vector<TString> uris = {
             "http://storage.yandexcloud.net:8080/my-folder/subfolder/bucket",
             "http://storage.yandexcloud.net:8080///my-folder/subfolder/bucket//",
         };
         for (const auto& input : uris) {
             NTiers::TS3Uri uri = NTiers::TS3Uri::ParseUri(input).DetachResult();
-            UNIT_ASSERT_STRINGS_EQUAL_C(uri.GetEndpoint(), "s3.yandexcloud.net:8080/my-folder/subfolder", input);
+            UNIT_ASSERT_STRINGS_EQUAL_C(uri.GetEndpoint(), "storage.yandexcloud.net:8080/my-folder/subfolder", input);
             UNIT_ASSERT_STRINGS_EQUAL_C(uri.GetBucket(), "bucket", input);
         }
     }

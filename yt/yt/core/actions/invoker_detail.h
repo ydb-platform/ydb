@@ -55,7 +55,7 @@ class TInvokerProfileWrapper
 public:
     /*!
     *  #registry defines a profile registry where sensors data is stored.
-    *  #invokerFamily defines a family of invokers, e.g. "serialized" or "prioriized" and appears in sensor's name.
+    *  #invokerFamily defines a family of invokers, e.g. "serialized" or "prioritized" and appears in sensor's name.
     *  #tagSet defines a particular instance of the invoker and appears in sensor's tags.
     */
     TInvokerProfileWrapper(NProfiling::IRegistryPtr registry, const TString& invokerFamily, const NProfiling::TTagSet& tagSet);

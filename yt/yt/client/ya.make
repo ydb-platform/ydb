@@ -102,6 +102,8 @@ SRCS(
     security_client/helpers.cpp
 
     signature/signature.cpp
+    signature/validator.cpp
+    signature/generator.cpp
 
     table_client/public.cpp
     table_client/adapters.cpp
@@ -190,10 +192,6 @@ SRCS(
     complex_types/time_text.cpp
     complex_types/uuid_text.cpp
     complex_types/yson_format_conversion.cpp
-
-    zookeeper/packet.cpp
-    zookeeper/protocol.cpp
-    zookeeper/requests.cpp
 
     kafka/packet.cpp
     kafka/protocol.cpp

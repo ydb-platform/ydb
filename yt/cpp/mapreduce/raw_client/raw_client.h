@@ -136,6 +136,12 @@ public:
 
     // Operations
 
+    TOperationId StartOperation(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        EOperationType type,
+        const TNode& spec) override;
+
     TOperationAttributes GetOperation(
         const TOperationId& operationId,
         const TGetOperationOptions& options = {}) override;
@@ -188,11 +194,6 @@ public:
         const TJobId& jobId,
         const TGetJobFailContextOptions& options = {}) override;
 
-    TString GetJobStderrWithRetries(
-        const TOperationId& operationId,
-        const TJobId& jobId,
-        const TGetJobStderrOptions& options = {}) override;
-
     IFileReaderPtr GetJobStderr(
         const TOperationId& operationId,
         const TJobId& jobId,
@@ -209,6 +210,7 @@ public:
         const TSkyShareTableOptions& options = {}) override;
 
     // Files
+
     std::unique_ptr<IInputStream> ReadFile(
         const TTransactionId& transactionId,
         const TRichYPath& path,

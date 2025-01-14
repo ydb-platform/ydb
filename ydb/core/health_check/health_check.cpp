@@ -2170,6 +2170,7 @@ public:
         if (pDiskInfo.HasState()) {
             switch (pDiskInfo.GetState()) {
                 case NKikimrBlobStorage::TPDiskState::Normal:
+                case NKikimrBlobStorage::TPDiskState::Stopped:
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                     break;
                 case NKikimrBlobStorage::TPDiskState::Initial:
@@ -2197,9 +2198,9 @@ public:
                                          TStringBuilder() << "PDisk state is " << NKikimrBlobStorage::TPDiskState::E_Name(pDiskInfo.GetState()),
                                          ETags::PDiskState);
                     break;
-                case NKikimrBlobStorage::TPDiskState::Reserved14:
                 case NKikimrBlobStorage::TPDiskState::Reserved15:
                 case NKikimrBlobStorage::TPDiskState::Reserved16:
+                case NKikimrBlobStorage::TPDiskState::Reserved17:
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Unknown PDisk state");
                     break;
             }

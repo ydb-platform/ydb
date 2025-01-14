@@ -37,10 +37,10 @@ public:
             THROW_ERROR_EXCEPTION("Singletons have already been configured");
         }
 
-        Config_ = config;
+        Config_ = CloneYsonStruct(config);
 
         for (const auto& [name, traits] : Singletons()) {
-            const auto& field = GetOrCrash(config->NameToConfig_, name);
+            const auto& field = GetOrCrash(Config_->NameToConfig_, name);
             traits.Configure(field);
         }
     }
@@ -53,13 +53,27 @@ public:
             THROW_ERROR_EXCEPTION("Singletons are not configured yet");
         }
 
+        DynamicConfig_ = CloneYsonStruct(dynamicConfig);
+
         for (const auto& [name, traits] : Singletons()) {
             if (const auto& reconfigure = traits.Reconfigure) {
                 const auto& singletonConfig = GetOrCrash(Config_->NameToConfig_, name);
-                const auto& singletonDynamicConfig = GetOrCrash(dynamicConfig->NameToConfig_, name);
+                const auto& singletonDynamicConfig = GetOrCrash(DynamicConfig_->NameToConfig_, name);
                 reconfigure(singletonConfig, singletonDynamicConfig);
             }
         }
+    }
+
+    TSingletonsConfigPtr GetConfig()
+    {
+        auto guard = Guard(ConfigureLock_);
+        return Config_;
+    }
+
+    TSingletonsDynamicConfigPtr GetDynamicConfig()
+    {
+        auto guard = Guard(ConfigureLock_);
+        return DynamicConfig_;
     }
 
     using TSingletonMap = THashMap<std::string, TSingletonTraits>;
@@ -79,6 +93,7 @@ private:
 
     NThreading::TSpinLock ConfigureLock_;
     TSingletonsConfigPtr Config_;
+    TSingletonsDynamicConfigPtr DynamicConfig_;
     bool Configured_ = false;
 };
 
@@ -126,6 +141,16 @@ void TSingletonManager::Configure(const TSingletonsConfigPtr& config)
 void TSingletonManager::Reconfigure(const TSingletonsDynamicConfigPtr& dynamicConfig)
 {
     NDetail::TSingletonManagerImpl::Get()->Reconfigure(dynamicConfig);
+}
+
+TSingletonsConfigPtr TSingletonManager::GetConfig()
+{
+    return NDetail::TSingletonManagerImpl::Get()->GetConfig();
+}
+
+TSingletonsDynamicConfigPtr TSingletonManager::GetDynamicConfig()
+{
+    return NDetail::TSingletonManagerImpl::Get()->GetDynamicConfig();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -78,22 +78,6 @@ static void SetFirstLastTabletIndex(TNode* node, const TOptions& options)
     }
 }
 
-static TString GetDefaultTransactionTitle()
-{
-    const auto processState = TProcessState::Get();
-    TStringStream res;
-
-    res << "User transaction. Created by: " << processState->UserName << " on " << processState->FqdnHostName
-        << " client: " << processState->ClientVersion << " pid: " << processState->Pid;
-    res << " program: " << processState->BinaryName;
-
-#ifndef NDEBUG
-    res << " build: debug";
-#endif
-
-    return res.Str();
-}
-
 template <typename T>
 void SerializeMasterReadOptions(TNode* node, const TMasterReadOptions<T>& options)
 {
@@ -190,7 +174,7 @@ TNode SerializeParamsForMultisetAttributes(
     const TTransactionId& transactionId,
     const TString& pathPrefix,
     const TYPath& path,
-    [[maybe_unused]] const TMultisetAttributesOptions& options)
+    const TMultisetAttributesOptions& options)
 {
     TNode result;
     SetTransactionIdParam(&result, transactionId);
@@ -393,7 +377,21 @@ TNode SerializeParamsForListOperations(
     return result;
 }
 
-TNode SerializeParamsForGetOperation(const std::variant<TString, TOperationId>& aliasOrOperationId, const TGetOperationOptions& options)
+TNode SerializeParamsForStartOperation(
+    const TTransactionId& transactionId,
+    EOperationType type,
+    const TNode& spec)
+{
+    TNode result;
+    SetTransactionIdParam(&result, transactionId);
+    result["operation_type"] = ToString(type);
+    result["spec"] = spec;
+    return result;
+}
+
+TNode SerializeParamsForGetOperation(
+    const std::variant<TString, TOperationId>& aliasOrOperationId,
+    const TGetOperationOptions& options)
 {
     auto includeRuntime = options.IncludeRuntime_;
     TNode result;
@@ -649,8 +647,6 @@ TNode SerializeParametersForTrimRows(
 
 TNode SerializeParamsForReadTable(
     const TTransactionId& transactionId,
-    const TString& pathPrefix,
-    const TRichYPath& path,
     const TTableReaderOptions& options)
 {
     TNode result;

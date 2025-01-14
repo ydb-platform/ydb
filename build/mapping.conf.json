@@ -468,6 +468,8 @@
         "7706227677": "https://devtools-registry.s3.yandex.net/7706227677",
         "7717368273": "https://devtools-registry.s3.yandex.net/7717368273",
         "7717387253": "https://devtools-registry.s3.yandex.net/7717387253",
+        "7750415386": "https://devtools-registry.s3.yandex.net/7750415386",
+        "7750425697": "https://devtools-registry.s3.yandex.net/7750425697",
         "5486731632": "https://devtools-registry.s3.yandex.net/5486731632",
         "5514350352": "https://devtools-registry.s3.yandex.net/5514350352",
         "5514360398": "https://devtools-registry.s3.yandex.net/5514360398",
@@ -1139,7 +1141,13 @@
         "7686710688": "https://devtools-registry.s3.yandex.net/7686710688",
         "2980468199": "https://devtools-registry.s3.yandex.net/2980468199",
         "5562224408": "https://devtools-registry.s3.yandex.net/5562224408",
-        "7663495611": "https://devtools-registry.s3.yandex.net/7663495611"
+        "7663495611": "https://devtools-registry.s3.yandex.net/7663495611",
+        "6442167169": "https://devtools-registry.s3.yandex.net/6442167169",
+        "7503032594": "https://devtools-registry.s3.yandex.net/7503032594",
+        "7633866901": "https://devtools-registry.s3.yandex.net/7633866901",
+        "7633869171": "https://devtools-registry.s3.yandex.net/7633869171",
+        "7633871466": "https://devtools-registry.s3.yandex.net/7633871466",
+        "7633873137": "https://devtools-registry.s3.yandex.net/7633873137"
     },
     "resources_descriptions": {
         "6277415836": "Allure 2.29.0",
@@ -1609,6 +1617,8 @@
         "7706227677": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
         "7717368273": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
         "7717387253": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
+        "7750415386": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
+        "7750425697": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
         "5486731632": "devtools/ya/test/programs/test_tool/bin3/test_tool3 for linux",
         "5514350352": "devtools/ya/test/programs/test_tool/bin3/test_tool3 for linux",
         "5514360398": "devtools/ya/test/programs/test_tool/bin3/test_tool3 for linux",
@@ -2280,7 +2290,13 @@
         "7686710688": "yt/go/ytrecipe/cmd/ytexec for linux",
         "2980468199": "ytexec for linux",
         "5562224408": "ytexec for linux",
-        "7663495611": "ytexec for linux"
+        "7663495611": "ytexec for linux",
+        "6442167169": "pnpm 8.6.12",
+        "7503032594": "pnpm 9.12.3 (default)",
+        "7633866901": "Node.js 20.18.1 for linux-x64",
+        "7633869171": "Node.js 20.18.1 for linux-arm64",
+        "7633871466": "Node.js 20.18.1 for darwin-x64",
+        "7633873137": "Node.js 20.18.1 for darwin-arm64"
     },
     "resources_info": {},
     "tasks": {}

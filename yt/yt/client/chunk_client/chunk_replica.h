@@ -37,7 +37,7 @@ public:
     int GetMediumIndex() const;
 
     TChunkReplica ToChunkReplica() const;
-    static TChunkReplicaList ToChunkReplicas(const TChunkReplicaWithMediumList& replicasWithMedia);
+    static TChunkReplicaList ToChunkReplicas(TRange<TChunkReplicaWithMedium> replicasWithMedia);
 
 private:
     /*!

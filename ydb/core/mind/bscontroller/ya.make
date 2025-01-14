@@ -7,11 +7,14 @@ SRCS(
     cmds_drive_status.cpp
     cmds_host_config.cpp
     cmds_storage_pool.cpp
+    commit_config.cpp
     config_cmd.cpp
     config.cpp
     config_fit_groups.cpp
     config_fit_pdisks.cpp
     config.h
+    console_interaction.h
+    console_interaction.cpp
     defs.h
     diff.h
     disk_metrics.cpp
@@ -67,6 +70,7 @@ PEERDIR(
     ydb/core/blobstorage
     ydb/core/blobstorage/base
     ydb/core/blobstorage/groupinfo
+    ydb/core/blobstorage/nodewarden
     ydb/core/blob_depot
     ydb/core/engine/minikql
     ydb/core/protos

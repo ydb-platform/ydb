@@ -27,12 +27,12 @@ private:
 public:
     TFetchingStepSignals(NColumnShard::TCommonCountersOwner&& owner)
         : TBase(std::move(owner))
-        , DurationCounter(TBase::GetDeriviative("duration_ms"))
-        , BytesCounter(TBase::GetDeriviative("bytes_ms")) {
+        , DurationCounter(TBase::GetDeriviative("Duration/Us"))
+        , BytesCounter(TBase::GetDeriviative("Bytes/Count")) {
     }
 
     void AddDuration(const TDuration d) const {
-        DurationCounter->Add(d.MilliSeconds());
+        DurationCounter->Add(d.MicroSeconds());
     }
 
     void AddBytes(const ui32 v) const {
@@ -56,7 +56,7 @@ private:
 
 public:
     TFetchingStepsSignalsCollection()
-        : TBase("scan_steps") {
+        : TBase("ScanSteps") {
     }
 
     static TFetchingStepSignals GetSignals(const TString& name) {

@@ -964,3 +964,105 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         }
     }
 }
+
+Y_UNIT_TEST_SUITE(TModifyUserTest) {
+    void UpdateSecurityState(Tests::TClient& client, TTestActorRuntime& runtime) {
+        auto lsResp = client.Ls("/dc-1");
+        const auto& desc = lsResp->Record;
+        UNIT_ASSERT(desc.HasPathDescription());
+        UNIT_ASSERT(desc.GetPathDescription().HasDomainDescription());
+        UNIT_ASSERT(desc.GetPathDescription().GetDomainDescription().HasSecurityState());
+
+        const auto& secState = desc.GetPathDescription().GetDomainDescription().GetSecurityState();
+        TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(secState)));
+    }
+
+    TString CheckLogin(Tests::TClient& client, TTestActorRuntime& runtime, const TString& username, const TString& password) {
+        NKikimrScheme::TEvLoginResult loginResult = client.Login(runtime, username, password);
+        UNIT_ASSERT_VALUES_EQUAL(loginResult.GetError(), "");
+        UpdateSecurityState(client, runtime);
+        return loginResult.GetToken();
+    }
+
+    Y_UNIT_TEST(ModifyUser) {
+        TTestEnv env;
+
+        {
+            auto subdomain = GetSubDomainDeclareSetting("USER_0", env.GetPools());
+            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateSubdomain("/dc-1", subdomain));
+        }
+
+        auto& client = env.GetClient();
+        TString user1Token;
+        {
+            client.CreateUser("/dc-1", "user1", "pass1", "root@builtin");
+            user1Token = CheckLogin(client, env.GetRuntime(), "user1", "pass1");
+        }
+
+        TString user2Token;
+        {
+            client.CreateUser("/dc-1", "user2", "pass2", "root@builtin");
+            user2Token = CheckLogin(client, env.GetRuntime(), "user2", "pass2");
+        }
+
+        {
+            // user2 cannot change password for user1. user2 has not ydb.granular.alter_schema permission
+            UNIT_ASSERT_VALUES_EQUAL(client.ModifyUser("/dc-1", "user1", "password1", user2Token), NMsgBusProxy::MSTATUS_ERROR);
+
+            //user2 can change password for self
+            UNIT_ASSERT_VALUES_EQUAL(client.ModifyUser("/dc-1", "user2", "password2", user2Token), NMsgBusProxy::MSTATUS_OK);
+
+            // cannot login with old password
+            NKikimrScheme::TEvLoginResult loginResult = client.Login(env.GetRuntime(), "user2", "pass2");
+            UNIT_ASSERT_VALUES_EQUAL(loginResult.GetError(), "Invalid password");
+        }
+
+        // user2 login with new password
+        user2Token = CheckLogin(client, env.GetRuntime(), "user2", "password2");
+
+        {
+            // user1 cannot change password for user2. user1 has not ydb.granular.alter_schema permission
+            UNIT_ASSERT_VALUES_EQUAL(client.ModifyUser("/dc-1", "user2", "pass2", user1Token), NMsgBusProxy::MSTATUS_ERROR);
+
+            //user1 can change password for self
+            UNIT_ASSERT_VALUES_EQUAL(client.ModifyUser("/dc-1", "user1", "password1", user1Token), NMsgBusProxy::MSTATUS_OK);
+
+            // cannot login with old password
+            NKikimrScheme::TEvLoginResult loginResult = client.Login(env.GetRuntime(), "user1", "pass1");
+            UNIT_ASSERT_VALUES_EQUAL(loginResult.GetError(), "Invalid password");
+        }
+
+        // user1 login with new password
+        user1Token = CheckLogin(client, env.GetRuntime(), "user1", "password1");
+
+        // grant permission ydb.granular.alter_schema to user1
+        {
+            client.Grant("/", "dc-1", "user1", NACLib::EAccessRights::AlterSchema);
+
+            // user1 can change password for user2. user1 has ydb.granular.alter_schema permission
+            UNIT_ASSERT_VALUES_EQUAL(client.ModifyUser("/dc-1", "user2", "pas2user", user1Token), NMsgBusProxy::MSTATUS_OK);
+        }
+
+        // user2 login with new password
+        user2Token = CheckLogin(client, env.GetRuntime(), "user2", "pas2user");
+    }
+
+    Y_UNIT_TEST(ModifyLdapUser) {
+        TTestEnv env;
+
+        {
+            auto subdomain = GetSubDomainDeclareSetting("USER_0", env.GetPools());
+            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateSubdomain("/dc-1", subdomain));
+        }
+
+        // Try self-change password for ldap user
+        {
+            auto& client = env.GetClient();
+            TString ldapUserToken = CheckLogin(client, env.GetRuntime(), "user@ldap", "ldapuser");
+
+            // ldap user cannot self change password
+            UNIT_ASSERT_VALUES_EQUAL(client.ModifyUser("/dc-1", "user@ldap", "ldapuserpass", ldapUserToken), NMsgBusProxy::MSTATUS_ERROR);
+        }
+    }
+}

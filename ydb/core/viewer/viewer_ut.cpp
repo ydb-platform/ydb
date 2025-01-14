@@ -1599,7 +1599,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         void Success(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
             ++AuthorizeTicketSuccesses;
             NACLib::TUserToken::TUserTokenInitFields args;
-            args.UserSID = "user_name";
+            args.UserSID = "username";
             args.GroupSIDs.push_back("group_name");
             TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
             LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Send TEvAuthorizeTicketResult success");
@@ -1616,13 +1616,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
     }
 
     void GrantConnect(TClient& client) {
-        client.GrantConnect("user_name");
+        client.CreateUser("/Root", "username", "password");
+        client.GrantConnect("username");
 
         const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
             { "folder_id", "test_folder_id" },
             { "database_id", "test_database_id" },
         });
-        UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);        
+        UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
     }
 
     TString PostQuery(TKeepAliveHttpClient& httpClient, TString query, TString action = "", TString transactionMode = "") {
@@ -1662,9 +1663,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         client.InitRootScheme();
-        
+
         GrantConnect(client);
-        
+
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
 
@@ -1698,9 +1699,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         client.InitRootScheme();
-        
+
         GrantConnect(client);
-        
+
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
 
@@ -1797,7 +1798,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
-        
+
         GrantConnect(client);
 
         TTestActorRuntime& runtime = *server.GetRuntime();

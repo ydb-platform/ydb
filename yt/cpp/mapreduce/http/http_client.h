@@ -2,7 +2,7 @@
 
 #include "fwd.h"
 
-#include <yt/cpp/mapreduce/interface/fwd.h>
+#include <yt/cpp/mapreduce/interface/io.h>
 
 #include <util/datetime/base.h>
 
@@ -65,7 +65,7 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 
 class THttpResponseStream
-    : public IInputStream
+    : public IFileReader
 {
 public:
     THttpResponseStream(IHttpResponsePtr response)

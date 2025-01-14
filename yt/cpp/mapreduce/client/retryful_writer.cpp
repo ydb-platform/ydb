@@ -104,7 +104,7 @@ void TRetryfulWriter::Send(const TBuffer& buffer)
     header.MergeParameters(Parameters_);
 
     auto streamMaker = [&buffer] () {
-        return MakeHolder<TBufferInput>(buffer);
+        return std::make_unique<TBufferInput>(buffer);
     };
 
     auto transactionId = (WriteTransaction_ ? WriteTransaction_->GetId() : ParentTransactionId_);

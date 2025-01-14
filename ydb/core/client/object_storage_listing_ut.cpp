@@ -774,7 +774,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         cleverServer.EnableGRpc(GRPC_PORT);
 
         // Disable shared cache to trigger restarts
-        cleverServer.GetRuntime()->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
+        cleverServer.GetRuntime()->Send(NSharedCache::MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
 
         TFlatMsgBusClient annoyingClient(port);
 
@@ -1053,7 +1053,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
         TVector<TString> folders;
         TVector<TString> files;
-        DoS3Listing(GRPC_PORT, 100, "/", "/", nullptr, nullptr, {}, 1000, folders, files, Ydb::ObjectStorage::ListingRequest_EMatchType_EQUAL);
+        DoS3Listing(GRPC_PORT, 100, "/", "/", "", "", {}, 1000, folders, files, Ydb::ObjectStorage::ListingRequest_EMatchType_EQUAL);
 
         TVector<TString> expectedFolders = {"/Photos/"};
         TVector<TString> expectedFiles = {};

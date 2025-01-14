@@ -153,7 +153,7 @@ bool CompatibleSort(TOptimizerStatistics::TSortColumns& existingOrder, const TCo
 TExprBase KqpBuildTopStageRemoveSort(
     TExprBase node, 
     TExprContext& ctx, 
-    IOptimizationContext& optCtx, 
+    IOptimizationContext& /* optCtx */, 
     TTypeAnnotationContext& typeCtx,
     const TParentsMap& parentsMap, 
     bool allowStageMultiUsage,

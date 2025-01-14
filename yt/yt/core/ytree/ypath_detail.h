@@ -63,13 +63,13 @@ DEFINE_REFCOUNTED_TYPE(TYPathServiceContextWrapper)
 ////////////////////////////////////////////////////////////////////////////////
 
 #define DECLARE_YPATH_SERVICE_METHOD(ns, method) \
-    using TCtx##method = TYPathTypedServiceContextImpl<ns::TReq##method, ns::TRsp##method>; \
+    using TCtx##method = ::NYT::NYTree::TTypedYPathServiceContext<ns::TReq##method, ns::TRsp##method>; \
     using TCtx##method##Ptr = ::NYT::TIntrusivePtr<TCtx##method>; \
     using TReq##method = TCtx##method::TTypedRequest; \
     using TRsp##method = TCtx##method::TTypedResponse; \
     \
     void method##Thunk( \
-        const ::NYT::TIntrusivePtr<IYPathServiceContextImpl>& context, \
+        const ::NYT::NYTree::IYPathServiceContextPtr& context, \
         const ::NYT::NRpc::THandlerInvocationOptions& options) \
     { \
         auto typedContext = ::NYT::New<TCtx##method>(context, options); \
@@ -103,16 +103,6 @@ DEFINE_REFCOUNTED_TYPE(TYPathServiceContextWrapper)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! These aliases provide an option to replace default typed service context class
-//! with a custom one which may be richer in some way.
-#define DEFINE_YPATH_CONTEXT_IMPL(serviceContext, typedServiceContext) \
-    using IYPathServiceContextImpl = serviceContext; \
-    \
-    template <class RequestMessage, class ResponseMessage> \
-    using TYPathTypedServiceContextImpl = typedServiceContext<RequestMessage, ResponseMessage>;
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TYPathServiceBase
     : public virtual IYPathService
 {
@@ -126,8 +116,6 @@ public:
     bool ShouldHideAttributes() override;
 
 protected:
-    DEFINE_YPATH_CONTEXT_IMPL(IYPathServiceContext, TTypedYPathServiceContext);
-
     virtual void BeforeInvoke(const IYPathServiceContextPtr& context);
     virtual bool DoInvoke(const IYPathServiceContextPtr& context);
     virtual void AfterInvoke(const IYPathServiceContextPtr& context);
@@ -194,8 +182,6 @@ protected:
     }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-DEFINE_YPATH_CONTEXT_IMPL(IYPathServiceContext, TTypedYPathServiceContext);
 
 class TSupportsExistsBase
 {

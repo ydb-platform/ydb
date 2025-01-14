@@ -565,7 +565,7 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
         TModulesTable modules;
         FillUserDataTableFromFileSystem(*RunOptions_.MountConfig, RunOptions_.DataTable);
 
-        if (!CompileLibraries(RunOptions_.DataTable, ctx, modules)) {
+        if (!CompileLibraries(RunOptions_.DataTable, ctx, modules, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate)) {
             *RunOptions_.ErrStream << "Errors on compile libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
             return -1;

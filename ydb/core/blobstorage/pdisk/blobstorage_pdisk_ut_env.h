@@ -64,7 +64,7 @@ public:
             TestCtx.SectorMap->ZeroInit(1_MB / NPDisk::NSectorMap::SECTOR_SIZE);
         }
 
-        if (!Settings.ReadOnly) {
+        if (!Settings.ReadOnly && !Settings.InitiallyZeroed) {
             if (Settings.DiskSize) {
                 FormatPDiskForTest(TestCtx.Path, formatGuid, Settings.ChunkSize, Settings.DiskSize, false, TestCtx.SectorMap, Settings.SmallDisk);
             } else {

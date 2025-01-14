@@ -60,7 +60,8 @@ NKikimr::TConclusionStatus TUpdateMerger::OnEqualKeys(const NArrow::NMerger::TSo
     return TConclusionStatus::Success();
 }
 
-TUpdateMerger::TUpdateMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema,
+TUpdateMerger::TUpdateMerger(const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incoming,
+    const std::shared_ptr<ISnapshotSchema>& actualSchema,
     const TString& insertDenyReason, const std::optional<NArrow::NMerger::TSortableBatchPosition>& defaultExists /*= {}*/)
     : TBase(incoming, actualSchema)
     , Builder({ actualSchema->GetIndexInfo().ArrowSchema().begin(), actualSchema->GetIndexInfo().ArrowSchema().end() })
@@ -85,4 +86,12 @@ TUpdateMerger::TUpdateMerger(const std::shared_ptr<arrow::RecordBatch>& incoming
         }
     }
 }
+
+NArrow::TContainerWithIndexes<arrow::RecordBatch> TUpdateMerger::BuildResultBatch() {
+    auto resultBatch = Builder.Finalize();
+    AFL_VERIFY(Schema->GetColumnsCount() == (ui32)resultBatch->num_columns() + IIndexInfo::SpecialColumnsCount)("schema",
+                                                                               Schema->GetColumnsCount())("result", resultBatch->num_columns());
+    return NArrow::TContainerWithIndexes<arrow::RecordBatch>(resultBatch);
+}
+
 }

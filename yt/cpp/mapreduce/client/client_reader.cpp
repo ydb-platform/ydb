@@ -58,7 +58,7 @@ TClientReader::TClientReader(
 {
     if (options.CreateTransaction_) {
         Y_ABORT_UNLESS(transactionPinger, "Internal error: transactionPinger is null");
-        ReadTransaction_ = MakeHolder<TPingableTransaction>(
+        ReadTransaction_ = std::make_unique<TPingableTransaction>(
             RawClient_,
             ClientRetryPolicy_,
             Context_,

@@ -139,6 +139,12 @@ public:
 
     // Operations
 
+    virtual TOperationId StartOperation(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        EOperationType type,
+        const TNode& spec) = 0;
+
     virtual TOperationAttributes GetOperation(
         const TOperationId& operationId,
         const TGetOperationOptions& options = {}) = 0;
@@ -188,11 +194,6 @@ public:
         const TOperationId& operationId,
         const TJobId& jobId,
         const TGetJobFailContextOptions& options = {}) = 0;
-
-    virtual TString GetJobStderrWithRetries(
-        const TOperationId& operationId,
-        const TJobId& jobId,
-        const TGetJobStderrOptions& options = {}) = 0;
 
     virtual IFileReaderPtr GetJobStderr(
         const TOperationId& operationId,

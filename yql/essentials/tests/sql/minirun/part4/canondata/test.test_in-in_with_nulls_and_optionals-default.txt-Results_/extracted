@@ -1,0 +1,113 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:6:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:6:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:9:7: Warning: At function: SqlIn
+            	    1/1   IN $pt, -- Just(true)
+	      ^
+                <tmp_path>/program.sql:<main>:9:7: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	    1/1   IN $pt, -- Just(true)
+	      ^
+        <tmp_path>/program.sql:<main>:6:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:10:7: Warning: At function: SqlIn
+            	    1/0   IN $pt, -- Nothing(bool)
+	      ^
+                <tmp_path>/program.sql:<main>:10:7: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	    1/0   IN $pt, -- Nothing(bool)
+	      ^
+        <tmp_path>/program.sql:<main>:6:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:11:5: Warning: At function: SqlIn
+            	    NULL  IN $pt, -- Nothing(bool)
+	    ^
+                <tmp_path>/program.sql:<main>:11:5: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	    NULL  IN $pt, -- Nothing(bool)
+	    ^
+        <tmp_path>/program.sql:<main>:6:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:15:7: Warning: At function: SqlIn
+            	    1/1   IN Just($pt), -- Just(true)
+	      ^
+                <tmp_path>/program.sql:<main>:15:7: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	    1/1   IN Just($pt), -- Just(true)
+	      ^
+        <tmp_path>/program.sql:<main>:6:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:16:7: Warning: At function: SqlIn
+            	    1/0   IN Just($pt), -- Nothing(bool)
+	      ^
+                <tmp_path>/program.sql:<main>:16:7: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	    1/0   IN Just($pt), -- Nothing(bool)
+	      ^
+        <tmp_path>/program.sql:<main>:6:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:17:5: Warning: At function: SqlIn
+            	    NULL  IN Just($pt), -- Nothing(bool)
+	    ^
+                <tmp_path>/program.sql:<main>:17:5: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	    NULL  IN Just($pt), -- Nothing(bool)
+	    ^
+        <tmp_path>/program.sql:<main>:6:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:21:7: Warning: At function: SqlIn
+            	    1/1   IN $et,
+	      ^
+                <tmp_path>/program.sql:<main>:21:7: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	    1/1   IN $et,
+	      ^
+        <tmp_path>/program.sql:<main>:6:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:22:7: Warning: At function: SqlIn
+            	    1/0   IN $et,
+	      ^
+                <tmp_path>/program.sql:<main>:22:7: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	    1/0   IN $et,
+	      ^
+        <tmp_path>/program.sql:<main>:6:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:23:5: Warning: At function: SqlIn
+            	    NULL  IN $et,
+	    ^
+                <tmp_path>/program.sql:<main>:23:5: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	    NULL  IN $et,
+	    ^
+        <tmp_path>/program.sql:<main>:6:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:27:7: Warning: At function: SqlIn
+            	    1/1   IN NULL,
+	      ^
+                <tmp_path>/program.sql:<main>:27:7: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	    1/1   IN NULL,
+	      ^
+        <tmp_path>/program.sql:<main>:6:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:28:7: Warning: At function: SqlIn
+            	    1/0   IN NULL,
+	      ^
+                <tmp_path>/program.sql:<main>:28:7: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	    1/0   IN NULL,
+	      ^
+        <tmp_path>/program.sql:<main>:6:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:29:5: Warning: At function: SqlIn
+            	    NULL  IN NULL;
+	    ^
+                <tmp_path>/program.sql:<main>:29:5: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	    NULL  IN NULL;
+	    ^

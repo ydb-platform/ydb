@@ -82,6 +82,9 @@ class TSingletonManager
 public:
     static void Configure(const TSingletonsConfigPtr& config);
     static void Reconfigure(const TSingletonsDynamicConfigPtr& dynamicConfig);
+
+    static TSingletonsConfigPtr GetConfig();
+    static TSingletonsDynamicConfigPtr GetDynamicConfig();
 };
 
 ////////////////////////////////////////////////////////////////////////////////

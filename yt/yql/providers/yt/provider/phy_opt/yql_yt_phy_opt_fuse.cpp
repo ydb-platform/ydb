@@ -364,7 +364,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduceWithTrivialMa
 
             const TParentsMap* parents = getParents();
             if (IsOutputUsedMultipleTimes(path.Table().Cast<TYtOutput>().Ref(), *parents)) {
-                // Inner reduce output is used more than once
+                // Inner map output is used more than once
                 newPaths.push_back(path);
                 continue;
             }
@@ -452,7 +452,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduceWithTrivialMa
     }
 
     YQL_ENSURE(newInput.size() >= origReduceInputs);
-    YQL_ENSURE(newInput.size() - origReduceInputs <= 1);
+    // one section can be rewritten into 3:
+    // (ABA) -> (A), (C), (A)
+    YQL_ENSURE(newInput.size() - origReduceInputs <= 2);
 
     TExprNode::TPtr remapLambda = ctx.Builder(fusedMap->MapLambda.Pos())
         .Lambda()

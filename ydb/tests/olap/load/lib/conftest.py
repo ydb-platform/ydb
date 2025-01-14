@@ -96,10 +96,9 @@ class LoadSuiteBase:
         hosts = [node.host for node in filter(lambda x: x.role == YdbCluster.Node.Role.STORAGE, YdbCluster.get_cluster_nodes())]
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).isoformat()
-        cmd = f"ulimit -n 100500;unified_agent select -S '{start}' -s {{storage}} -m k8s_container:{{container}}"
+        cmd = f"ulimit -n 100500;unified_agent select -S '{start}' -s {{storage}}{{container}}"
         exec_kikimr = {
-            'ydb-dynamic': {},
-            'ydb-storage': {},
+            '': {},
         }
         exec_start = deepcopy(exec_kikimr)
         ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
@@ -112,12 +111,18 @@ class LoadSuiteBase:
         for host in hosts:
             for c in exec_kikimr.keys():
                 try:
-                    exec_kikimr[c][host] = yatest.common.execute(ssh_cmd + [host, cmd.format(storage='kikimr', container=c)], wait=False)
+                    exec_kikimr[c][host] = yatest.common.execute(ssh_cmd + [host, cmd.format(
+                        storage='kikimr',
+                        container=f' -m k8s_container:{c}' if c else '')],
+                        wait=False)
                 except BaseException as e:
                     logging.error(e)
             for c in exec_start.keys():
                 try:
-                    exec_start[c][host] = yatest.common.execute(ssh_cmd + [host, cmd.format(storage='kikimr-start', container=c)], wait=False)
+                    exec_start[c][host] = yatest.common.execute(ssh_cmd + [host, cmd.format(
+                        storage='kikimr-start',
+                        container=f' -m k8s_container:{c}' if c else '')],
+                        wait=False)
                 except BaseException as e:
                     logging.error(e)
 

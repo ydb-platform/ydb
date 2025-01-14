@@ -1716,7 +1716,7 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateUser(const TString& parent, const TString& user, const TString& password) {
+    NMsgBusProxy::EResponseStatus TClient::CreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
@@ -1725,6 +1725,78 @@ namespace Tests {
         auto* createUser = op->MutableAlterLogin()->MutableCreateUser();
         createUser->SetUser(user);
         createUser->SetPassword(password);
+
+        request->Record.SetSecurityToken(userToken);
+
+        TAutoPtr<NBus::TBusMessage> reply;
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
+        UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), NMsgBusProxy::EResponseStatus::MSTATUS_OK, response.GetErrorReason());
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+
+    NMsgBusProxy::EResponseStatus TClient::ModifyUser(const TString& parent, const TString& user, const TString& password, const TString& userToken) {
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
+        op->SetWorkingDir(parent);
+
+        request->Record.SetSecurityToken(userToken);
+
+        auto* modifyUser = op->MutableAlterLogin()->MutableModifyUser();
+        modifyUser->SetUser(user);
+        modifyUser->SetPassword(password);
+
+        TAutoPtr<NBus::TBusMessage> reply;
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+
+    NKikimrScheme::TEvLoginResult TClient::Login(TTestActorRuntime& runtime, const TString& user, const TString& password) {
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<NSchemeShard::TEvSchemeShard::TEvLogin> evLogin(new NSchemeShard::TEvSchemeShard::TEvLogin());
+        evLogin->Record.SetUser(user);
+        evLogin->Record.SetPassword(password);
+
+        if (auto ldapDomain = runtime.GetAppData().AuthConfig.GetLdapAuthenticationDomain(); user.EndsWith("@" + ldapDomain)) {
+            evLogin->Record.SetExternalAuth(ldapDomain);
+        }
+        const ui64 schemeRoot = GetPatchedSchemeRoot(SchemeRoot, Domain, SupportsRedirect);
+        ForwardToTablet(runtime, schemeRoot, sender, evLogin.Release());
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvLoginResult>(handle);
+        UNIT_ASSERT(event);
+        return event->Record;
+    }
+
+    NMsgBusProxy::EResponseStatus TClient::CreateGroup(const TString& parent, const TString& group) {
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
+        op->SetWorkingDir(parent);
+
+        auto* createUser = op->MutableAlterLogin()->MutableCreateGroup();
+        createUser->SetGroup(group);
+
+        TAutoPtr<NBus::TBusMessage> reply;
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+
+    NMsgBusProxy::EResponseStatus TClient::AddGroupMembership(const TString& parent, const TString& group, const TString& member) {
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
+        op->SetWorkingDir(parent);
+
+        auto* createUser = op->MutableAlterLogin()->MutableAddGroupMembership();
+        createUser->SetGroup(group);
+        createUser->SetMember(member);
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
@@ -2143,7 +2215,7 @@ namespace Tests {
 
     void TClient::GrantConnect(const TString& subject) {
         Grant("/", DomainName, subject, NACLib::EAccessRights::ConnectDatabase);
-    } 
+    }
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type,
                                                                const TVector<ui32>& allowed_node_ids,
@@ -2180,6 +2252,24 @@ namespace Tests {
         NMsgBusProxy::TBusResponse* res = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Release());
         UNIT_ASSERT(res);
         return res;
+    }
+
+    NKikimrScheme::TEvDescribeSchemeResult TClient::Describe(TTestActorRuntime* runtime, const TString& path, ui64 tabletId) {
+        TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> request(new NSchemeShard::TEvSchemeShard::TEvDescribeScheme());
+        request->Record.SetPath(path);
+        const ui64 schemeRoot = GetPatchedSchemeRoot(tabletId, Domain, SupportsRedirect);
+        TActorId sender = runtime->AllocateEdgeActor(0);
+        ForwardToTablet(*runtime, schemeRoot, sender, request.Release(), 0);
+
+        TAutoPtr<IEventHandle> handle;
+        runtime->GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+        auto& record = handle->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->GetRecord();
+
+        if (auto schemeShardId = record.GetPathDescription().GetDomainDescription().GetProcessingParams().GetSchemeShard(); schemeShardId && schemeShardId != tabletId) {
+            return Describe(runtime, path, schemeShardId);
+        } else {
+            return record;
+        }
     }
 
     TString TClient::CreateStoragePool(const TString& poolKind, const TString& partOfName, ui32 groups) {

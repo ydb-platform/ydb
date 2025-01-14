@@ -12,6 +12,7 @@ public:
 private:
     std::optional<TDuration> PortionsLiveDuration;
     std::optional<ui64> ExpectedBlobsSize;
+    std::optional<ui64> PortionsCountAvailable;
 
     virtual std::shared_ptr<IPortionsLevel> DoBuildLevel(
         const std::shared_ptr<IPortionsLevel>& nextLevel, const ui32 indexLevel, const TLevelCounters& counters) const override;
@@ -23,7 +24,8 @@ private:
         return PortionsLiveDuration == itemCast.PortionsLiveDuration && ExpectedBlobsSize == itemCast.ExpectedBlobsSize;
     }
 
-    static const inline TFactory::TRegistrator<TZeroLevelConstructor> Registrator = TFactory::TRegistrator<TZeroLevelConstructor>(GetClassNameStatic());
+    static const inline TFactory::TRegistrator<TZeroLevelConstructor> Registrator =
+        TFactory::TRegistrator<TZeroLevelConstructor>(GetClassNameStatic());
 
 public:
     virtual TString GetClassName() const override {

@@ -345,7 +345,7 @@ public:
         YT_ASSERT(child);
 
         if (beforeIndex < 0) {
-            YT_VERIFY(ChildToIndex_.emplace(child, static_cast<int>(IndexToChild_.size())).second);
+            YT_VERIFY(ChildToIndex_.emplace(child, std::ssize(IndexToChild_)).second);
             IndexToChild_.push_back(child);
         } else {
             YT_VERIFY(beforeIndex <= std::ssize(IndexToChild_));

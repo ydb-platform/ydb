@@ -130,14 +130,17 @@ public:
             NavigateKeySetResult[Database] = MakeRequestSchemeCacheNavigate(Database);
             if (Database != DomainPath) {
                 TenantStatusResponses[Database] = MakeRequestConsoleGetTenantStatus(Database);
-            } else {
-                NKikimrViewer::TTenant& tenant = TenantBySubDomainKey[rootPathId];
-                tenant.SetId(RootId);
-                tenant.SetState(Ydb::Cms::GetDatabaseStatusResult::RUNNING);
-                tenant.SetType(NKikimrViewer::Domain);
-                tenant.SetName(DomainPath);
-                RequestMetadataCacheHealthCheck(DomainPath);
             }
+        }
+
+        if (Database.empty() || Database == DomainPath) {
+            NKikimrViewer::TTenant& tenant = TenantBySubDomainKey[rootPathId];
+            tenant.SetId(RootId);
+            tenant.SetState(Ydb::Cms::GetDatabaseStatusResult::RUNNING);
+            tenant.SetType(NKikimrViewer::Domain);
+            tenant.SetName(DomainPath);
+            RequestMetadataCacheHealthCheck(DomainPath);
+            NavigateKeySetResult[DomainPath] = MakeRequestSchemeCacheNavigate(DomainPath);
         }
 
         HiveDomainStats[RootHiveId] = MakeRequestHiveDomainStats(RootHiveId);

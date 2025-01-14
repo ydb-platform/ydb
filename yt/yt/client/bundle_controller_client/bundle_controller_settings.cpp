@@ -32,6 +32,8 @@ void TMemoryLimits::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("reserved", &TThis::Reserved)
         .Optional();
+    registrar.Parameter("query", &TThis::Query)
+        .Optional();
 }
 
 void TInstanceResources::Register(TRegistrar registrar)
@@ -158,6 +160,8 @@ void ToProto(NBundleController::NProto::TMemoryLimits* protoMemoryLimits, const 
     YT_TOPROTO_OPTIONAL_PTR(protoMemoryLimits, versioned_chunk_meta, memoryLimits, VersionedChunkMeta);
 
     YT_TOPROTO_OPTIONAL_PTR(protoMemoryLimits, reserved, memoryLimits, Reserved);
+
+    YT_TOPROTO_OPTIONAL_PTR(protoMemoryLimits, query, memoryLimits, Query);
 }
 
 void FromProto(NBundleControllerClient::TMemoryLimitsPtr memoryLimits, const NBundleController::NProto::TMemoryLimits* protoMemoryLimits)
@@ -174,6 +178,8 @@ void FromProto(NBundleControllerClient::TMemoryLimitsPtr memoryLimits, const NBu
     YT_FROMPROTO_OPTIONAL_PTR(protoMemoryLimits, versioned_chunk_meta, memoryLimits, VersionedChunkMeta);
 
     YT_FROMPROTO_OPTIONAL_PTR(protoMemoryLimits, reserved, memoryLimits, Reserved);
+
+    YT_FROMPROTO_OPTIONAL_PTR(protoMemoryLimits, query, memoryLimits, Query);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

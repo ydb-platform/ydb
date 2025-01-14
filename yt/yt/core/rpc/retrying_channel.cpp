@@ -111,7 +111,7 @@ private:
             // this one may be invoked multiple times.
             void SetNewUnderlying(IClientRequestControlPtr newUnderlying)
             {
-                VERIFY_THREAD_AFFINITY_ANY();
+                YT_ASSERT_THREAD_AFFINITY_ANY();
 
                 if (!newUnderlying) {
                     return;
@@ -140,7 +140,7 @@ private:
 
             void Cancel() override
             {
-                VERIFY_THREAD_AFFINITY_ANY();
+                YT_ASSERT_THREAD_AFFINITY_ANY();
 
                 auto guard = Guard(SpinLock_);
                 Canceled_.store(true);
@@ -154,21 +154,21 @@ private:
 
             bool IsCanceled() const
             {
-                VERIFY_THREAD_AFFINITY_ANY();
+                YT_ASSERT_THREAD_AFFINITY_ANY();
 
                 return Canceled_.load();
             }
 
             TFuture<void> SendStreamingPayload(const TStreamingPayload& /*payload*/) override
             {
-                VERIFY_THREAD_AFFINITY_ANY();
+                YT_ASSERT_THREAD_AFFINITY_ANY();
 
                 return MakeFuture<void>(TError("Retrying channel does not support streaming"));
             }
 
             TFuture<void> SendStreamingFeedback(const TStreamingFeedback& /*feedback*/) override
             {
-                VERIFY_THREAD_AFFINITY_ANY();
+                YT_ASSERT_THREAD_AFFINITY_ANY();
 
                 return MakeFuture<void>(TError("Retrying channel does not support streaming"));
             }

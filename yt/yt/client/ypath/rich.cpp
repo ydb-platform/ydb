@@ -336,7 +336,7 @@ NChunkClient::TReadRange RangeNodeToReadRange(
             // Perform type conversion, if required.
             if (!conversionTypeHints.empty()) {
                 TUnversionedOwningRowBuilder newOwningKey;
-                const int typedKeyCount = std::min(owningKey.GetCount(), static_cast<int>(conversionTypeHints.size()));
+                int typedKeyCount = std::min<int>(owningKey.GetCount(), std::ssize(conversionTypeHints));
                 for (int i = 0; i < typedKeyCount; ++i) {
                     newOwningKey.AddValue(TryConvertValue(owningKey[i], conversionTypeHints[i]));
                 }

@@ -129,8 +129,7 @@ private:
     bool IsCorrectFlag = true;
 public:
     TChunkedBatchReader(const std::vector<TChunkedColumnReader>& columnReaders)
-        : Columns(columnReaders)
-    {
+        : Columns(columnReaders) {
         AFL_VERIFY(Columns.size());
         for (auto&& i : Columns) {
             AFL_VERIFY(i.IsCorrect());

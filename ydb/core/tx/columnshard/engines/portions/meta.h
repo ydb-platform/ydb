@@ -14,8 +14,56 @@ namespace NKikimr::NOlap {
 
 struct TIndexInfo;
 
-struct TPortionMeta {
+class TPortionMetaBase {
+protected:
+    std::vector<TUnifiedBlobId> BlobIds;
+public:
+    const std::vector<TUnifiedBlobId>& GetBlobIds() const {
+        return BlobIds;
+    }
+
+    const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
+        AFL_VERIFY(linkId < GetBlobIds().size());
+        return BlobIds[linkId];
+    }
+
+    ui32 GetBlobIdsCount() const {
+        return BlobIds.size();
+    }
+
+    void FullValidation() const {
+        for (auto&& i : BlobIds) {
+            AFL_VERIFY(i.BlobSize());
+        }
+        AFL_VERIFY(BlobIds.size());
+    }
+
+    std::optional<TBlobRangeLink16::TLinkId> GetBlobIdxOptional(const TUnifiedBlobId& blobId) const {
+        AFL_VERIFY(blobId.IsValid());
+        TBlobRangeLink16::TLinkId idx = 0;
+        for (auto&& i : BlobIds) {
+            if (i == blobId) {
+                return idx;
+            }
+            ++idx;
+        }
+        return std::nullopt;
+    }
+
+    ui64 GetMetadataMemorySize() const {
+        return GetBlobIds().size() * sizeof(TUnifiedBlobId);
+    }
+
+    TBlobRangeLink16::TLinkId GetBlobIdxVerified(const TUnifiedBlobId& blobId) const {
+        auto result = GetBlobIdxOptional(blobId);
+        AFL_VERIFY(result);
+        return *result;
+    }
+};
+
+class TPortionMeta: public TPortionMetaBase {
 private:
+    using TBase = TPortionMetaBase;
     NArrow::TFirstLastSpecialKeys ReplaceKeyEdges;   // first and last PK rows
     YDB_READONLY_DEF(TString, TierName);
     YDB_READONLY(ui32, DeletionsCount, 0);
@@ -25,7 +73,6 @@ private:
     YDB_READONLY(ui32, ColumnBlobBytes, 0);
     YDB_READONLY(ui32, IndexRawBytes, 0);
     YDB_READONLY(ui32, IndexBlobBytes, 0);
-    YDB_READONLY_DEF(std::vector<TUnifiedBlobId>, BlobIds);
 
     friend class TPortionMetaConstructor;
     friend class TPortionInfo;
@@ -41,10 +88,7 @@ private:
     TSnapshot RecordSnapshotMax;
 
     void FullValidation() const {
-        for (auto&& i : BlobIds) {
-            AFL_VERIFY(i.BlobSize());
-        }
-        AFL_VERIFY(BlobIds.size());
+        TBase::FullValidation();
         AFL_VERIFY(RecordsCount);
         AFL_VERIFY(ColumnRawBytes);
         AFL_VERIFY(ColumnBlobBytes);
@@ -55,35 +99,8 @@ public:
         return ReplaceKeyEdges;
     }
 
-    const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
-        AFL_VERIFY(linkId < GetBlobIds().size());
-        return BlobIds[linkId];
-    }
-
-    ui32 GetBlobIdsCount() const {
-        return BlobIds.size();
-    }
-
     void ResetCompactionLevel(const ui32 level) {
         CompactionLevel = level;
-    }
-
-    std::optional<TBlobRangeLink16::TLinkId> GetBlobIdxOptional(const TUnifiedBlobId& blobId) const {
-        AFL_VERIFY(blobId.IsValid());
-        TBlobRangeLink16::TLinkId idx = 0;
-        for (auto&& i : BlobIds) {
-            if (i == blobId) {
-                return idx;
-            }
-            ++idx;
-        }
-        return std::nullopt;
-    }
-
-    TBlobRangeLink16::TLinkId GetBlobIdxVerified(const TUnifiedBlobId& blobId) const {
-        auto result = GetBlobIdxOptional(blobId);
-        AFL_VERIFY(result);
-        return *result;
     }
 
     using EProduced = NPortion::EProduced;
@@ -96,7 +113,7 @@ public:
     std::optional<TString> GetTierNameOptional() const;
 
     ui64 GetMetadataMemorySize() const {
-        return sizeof(TPortionMeta) + ReplaceKeyEdges.GetMemorySize() + BlobIds.size() * sizeof(TUnifiedBlobId);
+        return sizeof(TPortionMeta) + ReplaceKeyEdges.GetMemorySize() + TBase::GetMetadataMemorySize();
     }
 
     NKikimrTxColumnShard::TIndexPortionMeta SerializeToProto() const;

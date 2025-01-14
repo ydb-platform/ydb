@@ -1104,7 +1104,6 @@ public:
         , KeepConfigChanges(keepConfigChanges)
         , IsInternalCall(isInternalCall)
         , FederatedQuerySetup(federatedQuerySetup)
-        , SessionCtx(new TKikimrSessionContext(funcRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider, userToken, nullptr, userRequestContext))
         , Config(config)
         , TypesCtx(MakeIntrusive<TTypeAnnotationContext>())
         , PlanBuilder(CreatePlanBuilder(*TypesCtx))
@@ -1119,6 +1118,8 @@ public:
             FuncRegistryHolder = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry());
             FuncRegistry = FuncRegistryHolder.Get();
         }
+
+        SessionCtx = MakeIntrusive<TKikimrSessionContext>(funcRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider, userToken, nullptr, userRequestContext);
 
         SessionCtx->SetDatabase(database);
         SessionCtx->SetDatabaseId(Gateway->GetDatabaseId());

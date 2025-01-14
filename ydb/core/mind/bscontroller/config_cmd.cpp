@@ -353,6 +353,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(SetVDiskReadOnly)
                     HANDLE_COMMAND(RestartPDisk)
                     HANDLE_COMMAND(SetPDiskReadOnly)
+                    HANDLE_COMMAND(StopPDisk)
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:

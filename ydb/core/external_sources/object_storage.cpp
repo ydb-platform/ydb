@@ -70,12 +70,12 @@ struct TObjectStorageExternalSource : public IExternalSource {
             } else if (IsIn({"file_pattern"sv, "data.interval.unit"sv, "data.datetime.format_name"sv, "data.datetime.format"sv, "data.timestamp.format_name"sv, "data.timestamp.format"sv, "data.date.format"sv, "csv_delimiter"sv}, lowerKey)) {
                 objectStorage.mutable_format_setting()->insert({lowerKey, value});
             } else {
-                ythrow TExternalSourceException() << "Unknown attribute " << key;
+                throw TExternalSourceException() << "Unknown attribute " << key;
             }
         }
 
         if (auto issues = Validate(schema, objectStorage, PathsLimit, general.location())) {
-            ythrow TExternalSourceException() << issues.ToString();
+            throw TExternalSourceException() << issues.ToString();
         }
 
         return objectStorage.SerializeAsString();
@@ -136,7 +136,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         }
 
         if (!proto.GetProperties().GetProperties().empty()) {
-            ythrow TExternalSourceException() << "ObjectStorage source doesn't support any properties";
+            throw TExternalSourceException() << "ObjectStorage source doesn't support any properties";
         }
 
         ValidateHostname(HostnamePatterns, proto.GetLocation());
@@ -546,7 +546,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             if (value.Success()) {
                 return value.Metadata;
             }
-            ythrow TExternalSourceException{} << value.Issues().ToOneLineString();
+            throw TExternalSourceException{} << value.Issues().ToOneLineString();
         });
     }
 

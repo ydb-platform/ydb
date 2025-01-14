@@ -43,6 +43,8 @@
 #include <util/stream/file.h>
 
 #include <arrow/ipc/writer.h>
+#include <arrow/ipc/reader.h>
+#include <arrow/record_batch.h>
 #include <arrow/util/key_value_metadata.h>
 
 #include <functional>

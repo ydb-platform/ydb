@@ -2900,6 +2900,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         });
     }
 
+    // Incorrect test, muted
     Y_UNIT_TEST(TestReassignUseRelativeSpace) {
         // TODO: Remove this code after issue https://github.com/ydb-platform/ydb/issues/12255 will be resolved
         ui64 prevSeed = NActors::DefaultRandomSeed;

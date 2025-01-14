@@ -159,6 +159,11 @@
             "uri": "file://test.test_Serialize_/results.txt"
         }
     ],
+    "test.test[StringStrictError]": [
+        {
+            "uri": "file://test.test_StringStrictError_/extracted"
+        }
+    ],
     "test.test[WeakYsonRest]": [
         {
             "uri": "file://test.test_WeakYsonRest_/results.txt"

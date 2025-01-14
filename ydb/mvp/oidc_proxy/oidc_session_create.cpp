@@ -78,6 +78,7 @@ void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse:
                 errorMessage =  "Wrong OIDC response";
             }
             NHttp::THeadersBuilder responseHeaders;
+            SetCORS(Request, &responseHeaders);
             responseHeaders.Set("Content-Type", "text/plain");
             return ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, errorMessage));
         } else {
@@ -87,6 +88,7 @@ void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse:
         }
     } else {
         NHttp::THeadersBuilder responseHeaders;
+        SetCORS(Request, &responseHeaders);
         responseHeaders.Set("Content-Type", "text/plain");
         return ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error));
     }

@@ -1757,6 +1757,9 @@ public:
                     auto inputIndex = protoSource.GetInputIndex();
                     if (auto* sourceInfoPtr = SourcesMap.FindPtr(inputIndex)) {
                         auto& sourceInfo = *sourceInfoPtr;
+                        if (!sourceInfo.AsyncInput)
+                            continue;
+
                         protoSource.SetIngressName(sourceInfo.Type);
                         const auto& ingressStats = sourceInfo.AsyncInput->GetIngressStats();
                         FillAsyncStats(*protoSource.MutableIngress(), ingressStats);

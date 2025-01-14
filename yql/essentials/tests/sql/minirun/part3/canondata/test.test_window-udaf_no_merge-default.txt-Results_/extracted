@@ -1,0 +1,5 @@
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:6:17: Warning: Symbol $item is not used
+    	       ($state, $item, $_) -> ($state),
+	                ^

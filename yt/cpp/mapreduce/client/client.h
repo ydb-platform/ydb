@@ -333,7 +333,7 @@ protected:
 
 private:
     ITransactionPingerPtr TransactionPinger_;
-    THolder<TPingableTransaction> PingableTx_;
+    std::unique_ptr<TPingableTransaction> PingableTx_;
     TClientPtr ParentClient_;
 };
 
@@ -502,7 +502,7 @@ private:
 
     std::atomic<bool> Shutdown_ = false;
     TMutex Lock_;
-    THolder<TYtPoller> YtPoller_;
+    std::unique_ptr<TYtPoller> YtPoller_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

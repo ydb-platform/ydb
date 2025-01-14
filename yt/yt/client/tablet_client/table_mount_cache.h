@@ -66,6 +66,7 @@ struct TIndexInfo
     ESecondaryIndexKind Kind;
     std::optional<TString> Predicate;
     std::optional<TString> UnfoldedColumn;
+    ETableToIndexCorrespondence Correspondence;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

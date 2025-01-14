@@ -91,6 +91,8 @@ public:
                 Self->SysViewChangedSettings = true;
                 Self->UseSelfHealLocalPolicy = state.GetValue<T::UseSelfHealLocalPolicy>();
                 Self->TryToRelocateBrokenDisksLocallyFirst = state.GetValue<T::TryToRelocateBrokenDisksLocallyFirst>();
+                Self->YamlConfig = state.GetValue<T::YamlConfig>();
+                Self->ConfigVersion = state.GetValue<T::ConfigVersion>();
             }
         }
 

@@ -13,7 +13,6 @@ RECURSE(
     encryption
     hive
     kqp
-    kv_workload
     large_serializable
     limits
     postgresql

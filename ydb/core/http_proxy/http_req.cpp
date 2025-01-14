@@ -1192,8 +1192,7 @@ namespace NKikimr::NHttpProxy {
                 response->Set(CRC32_HEADER, ToString(crc32(body.data(), body.size())));
                 response->Set<&NHttp::THttpResponse::ContentType>(contentType);
                 if (!request->Endpoint->CompressContentTypes.empty()) {
-                    contentType = contentType.Before(';');
-                    NHttp::Trim(contentType, ' ');
+                    contentType = NHttp::Trim(contentType.Before(';'), ' ');
                     if (Count(request->Endpoint->CompressContentTypes, contentType) != 0) {
                         response->EnableCompression();
                     }

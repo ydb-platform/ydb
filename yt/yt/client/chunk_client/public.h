@@ -125,12 +125,13 @@ using TMediumMap = THashMap<int, T>;
 template <typename T>
 using TCompactMediumMap = TCompactFlatMap<int, T, 4>;
 
+constexpr int UpperReplicaCountBound = 24;
 //! Used as an expected upper bound in TCompactVector.
 /*
  *  Maximum regular number of replicas is 16 (for LRC codec).
  *  Additional +8 enables some flexibility during balancing.
  */
-constexpr int TypicalReplicaCount = 24;
+constexpr int TypicalReplicaCount = 3;
 constexpr int GenericChunkReplicaIndex = 16;  // no specific replica; the default one for non-erasure chunks
 
 //! Valid indexes are in range |[0, ChunkReplicaIndexBound)|.
@@ -145,15 +146,16 @@ constexpr int DefaultSlotsMediumIndex =   0;
 constexpr int MediumIndexBound = AllMediaIndex + 1;
 
 class TChunkReplicaWithMedium;
-using TChunkReplicaWithMediumList = TCompactVector<TChunkReplicaWithMedium, TypicalReplicaCount>;
+using TChunkReplicaWithMediumList = TCompactVector<TChunkReplicaWithMedium, UpperReplicaCountBound>;
+using TChunkReplicaWithMediumSlimList = TCompactVector<TChunkReplicaWithMedium, TypicalReplicaCount>;
 
 class TChunkReplicaWithLocation;
-using TChunkReplicaWithLocationList = TCompactVector<TChunkReplicaWithLocation, TypicalReplicaCount>;
+using TChunkReplicaWithLocationList = TCompactVector<TChunkReplicaWithLocation, UpperReplicaCountBound>;
 
 struct TWrittenChunkReplicasInfo;
 
 class TChunkReplica;
-using TChunkReplicaList = TCompactVector<TChunkReplica, TypicalReplicaCount>;
+using TChunkReplicaList = TCompactVector<TChunkReplica, UpperReplicaCountBound>;
 
 extern const TString DefaultStoreAccountName;
 extern const TString DefaultStoreMediumName;

@@ -69,4 +69,5 @@ RECURSE_FOR_TESTS(
     ut_vdisk_restart
     ut_restart_pdisk
     ut_read_only_pdisk
+    ut_stop_pdisk
 )

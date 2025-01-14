@@ -120,6 +120,9 @@ namespace NKikimr::NBsController {
                     case NBsController::TPDiskMood::EValue::ReadOnly:
                         pdisk->SetReadOnly(true);
                         break;
+                    case NBsController::TPDiskMood::EValue::Stop:
+                        pdisk->SetStop(true);
+                        break;
                 }
 
                 return pdisk;

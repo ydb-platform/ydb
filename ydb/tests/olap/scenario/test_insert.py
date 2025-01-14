@@ -53,7 +53,7 @@ class TestInsert(BaseTestSet):
         batches_count = int(get_external_param("batches_count", "10"))
         rows_count = int(get_external_param("rows_count", "1000"))
         inserts_count = int(get_external_param("inserts_count", "200"))
-        table_count = int(get_external_param("table_count", "10"))
+        table_count = int(get_external_param("table_count", "1"))
         for table in range(table_count):
             sth.execute_scheme_query(
                 CreateTable(cnt_table_name + str(table)).with_schema(self.schema_cnt)

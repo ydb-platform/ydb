@@ -16,8 +16,8 @@ RECURSE(
     abstract
     benchmark_base
     clickbench
-    dev_log
     kv
+    log_writer
     stock
     tpc_base
     tpcds

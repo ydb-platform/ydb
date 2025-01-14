@@ -5,9 +5,6 @@ from devtools.yamaker.project import CMakeNinjaNixProject
 
 
 ATEXIT_SRC = """
-SRC_C_PIC(
-    src/cxa_thread_atexit.cpp -fno-lto
-)
 """
 
 
@@ -40,37 +37,38 @@ def post_install(self):
         # We link libpthread.so automatically depending on the target platform
         libcxxabi.CFLAGS.remove("-D_LIBCXXABI_LINK_PTHREAD_LIB")
 
-        # -DHAVE___CXA_THREAD_ATEXIT_IMPL MUST NOT BE SET
-        # until we will start to compile against pure OS_SDK=ubuntu-14 by default
-        libcxxabi.CFLAGS.remove("-DHAVE___CXA_THREAD_ATEXIT_IMPL")
-
-        # Do not create loop from libcxx, libcxxrt and libcxxabi
         libcxxabi.NO_UTIL = True
         libcxxabi.NO_RUNTIME = True
 
-        # disable lto to allow replacing __cxa_thread_atexit_impl in runtime
-        libcxxabi.SRCS.remove("src/cxa_thread_atexit.cpp")
-        libcxxabi.after("SRCS", ATEXIT_SRC)
+        # As of 1.2.3, musl libc does not provide __cxa_thread_atexit_impl.
+        libcxxabi.CFLAGS.remove("-DHAVE___CXA_THREAD_ATEXIT_IMPL")
+        libcxxabi.after(
+            "SRCS",
+            """
+            IF (NOT MUSL) 
+                CFLAGS(
+                    -DHAVE___CXA_THREAD_ATEXIT_IMPL
+                )
+            ENDIF()
+            """,
+        )
 
         libcxxabi.after(
             "SRCS",
-            Switch(
-                {
-                    "OS_EMSCRIPTEN AND NOT ARCH_WASM32": Linkable(
-                        CFLAGS=[
-                            "-D_LIBCPP_SAFE_STATIC=",
-                            "-D_LIBCXXABI_DTOR_FUNC=",
-                            "-D__USING_WASM_EXCEPTIONS__",
-                        ]
-                    ),
-                    "OS_EMSCRIPTEN AND ARCH_WASM32": Linkable(
-                        CFLAGS=[
-                            "-D_LIBCPP_SAFE_STATIC=",
-                            "-D_LIBCXXABI_DTOR_FUNC=",
-                        ]
-                    ),
-                }
-            ),
+            """
+            IF (OS_EMSCRIPTEN AND ARCH_WASM64)
+                CFLAGS(
+                    -D_LIBCPP_SAFE_STATIC=
+                    -D_LIBCXXABI_DTOR_FUNC=
+                    -D__USING_WASM_EXCEPTIONS__
+                )
+            ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32)
+                CFLAGS(
+                    -D_LIBCPP_SAFE_STATIC=
+                    -D_LIBCXXABI_DTOR_FUNC=
+                )
+            ENDIF()
+            """,
         )
 
         libcxxabi.PEERDIR.add("library/cpp/sanitizer/include")
@@ -79,6 +77,7 @@ def post_install(self):
 llvm_libcxxabi = CMakeNinjaNixProject(
     owners=["g:cpp-committee", "g:cpp-contrib"],
     arcdir="contrib/libs/cxxsupp/libcxxabi",
+    nixattr="llvmPackages_16.libcxxabi",
     copy_sources=[
         "include/__cxxabi_config.h",
         "include/cxxabi.h",
@@ -86,6 +85,5 @@ llvm_libcxxabi = CMakeNinjaNixProject(
     disable_includes=[
         "aix_state_tab_eh.inc",
     ],
-    nixattr=platform_macros.make_llvm_nixattr("libcxxabi"),
     post_install=post_install,
 )

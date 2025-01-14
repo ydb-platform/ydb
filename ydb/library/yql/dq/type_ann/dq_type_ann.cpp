@@ -625,8 +625,13 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
         ctx.AddError(TIssue(ctx.GetPosition(joinType.Pos()), "Streamlookup supports only LEFT JOIN ... ANY"));
         return TStatus::Error;
     }
+    auto rightInput = cnStreamLookup.RightInput();
+    if (!rightInput.Raw()->IsCallable("TDqLookupSourceWrap")) {
+        ctx.AddError(TIssue(ctx.GetPosition(rightInput.Pos()), "Unknown DqCnStreamLookup RightInput type (must be TDqLookupSourceWrap)"));
+        return TStatus::Error;
+    }
     const auto leftRowType = GetSeqItemType(leftInputType);
-    const auto rightRowType = GetSeqItemType(cnStreamLookup.RightInput().Raw()->GetTypeAnn());
+    const auto rightRowType = GetSeqItemType(rightInput.Raw()->GetTypeAnn());
     const auto outputRowType = GetDqJoinResultType<true>(
         input->Pos(),
         *leftRowType->Cast<TStructExprType>(),

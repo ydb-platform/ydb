@@ -232,10 +232,13 @@ protected:
             return node;
         }
         const auto left = equiJoin.Arg(0).Cast<TCoEquiJoinInput>().List();
-        const auto right = equiJoin.Arg(1).Cast<TCoEquiJoinInput>().List();
+        auto right = equiJoin.Arg(1).Cast<TCoEquiJoinInput>().List();
         const auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
         if (!IsStreamLookup(joinTuple)) {
             return node;
+        }
+        if (auto maybeRightExtractMembers = right.Maybe<TCoExtractMembers>()) {
+            right = maybeRightExtractMembers.Cast().Input();
         }
         if (!right.Maybe<TDqSourceWrap>() && !right.Maybe<TDqReadWrap>()) {
             return node;

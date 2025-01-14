@@ -20,14 +20,12 @@ class TestYdbKvWorkload(object):  # rebuild pls
             "--verbose",
             "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
             "--database=/Root",
-            "workload", "kv", "init",
-            "--min-partitions", "1",
+            "workload", "log_writer", "init",
+            "--min-partitions", "100",
             "--partition-size", "10",
             "--auto-partition", "0",
-            "--init-upserts", "0",
-            "--cols", "5",
-            "--int-cols", "2",
-            "--key-cols", "3",
+            "--int-cols", "10",
+            "--key-cols", "10",
         ]
 
         cls.run_command_prefix = [
@@ -35,13 +33,12 @@ class TestYdbKvWorkload(object):  # rebuild pls
             "--verbose",
             "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
             "--database=/Root",
-            "workload", "kv", "run", "mixed",
-            "--seconds", "100",
+            "workload", "log_writer", "run", "bulk_upsert",
+            "--seconds", "10",
             "--threads", "10",
-            "--cols", "5",
             "--len", "200",
-            "--int-cols", "2",
-            "--key-cols", "3"
+            "--int-cols", "10",
+            "--key-cols", "10",
         ]
 
     @classmethod

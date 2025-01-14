@@ -225,39 +225,60 @@ protected:
         return TDqLookupSourceWrap(lookupSourceWrap);
     }
 
+    // Recursively walk join tree and replace right-side of StreamLookupJoin
+    ui32 RewriteStreamJoinTuple(ui32 leftIdx, const TCoEquiJoin& equiJoin, const TCoEquiJoinTuple& joinTuple, std::vector<TExprNode::TPtr>& args, TExprContext& ctx, bool& changed) {
+        auto rightIdx = leftIdx + 1;
+        if (!joinTuple.LeftScope().Maybe<TCoAtom>()) {
+            rightIdx = RewriteStreamJoinTuple(leftIdx, equiJoin, joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), args, ctx, changed);
+        }
+        if (!joinTuple.RightScope().Maybe<TCoAtom>()) {
+            return RewriteStreamJoinTuple(rightIdx, equiJoin, joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), args, ctx, changed);
+        }
+        do { // not a loop
+            if (!IsStreamLookup(joinTuple)) {
+                break;
+            }
+            auto right = equiJoin.Arg(rightIdx).Cast<TCoEquiJoinInput>();
+            auto rightList = right.List();
+            if (auto maybeExtractMembers = rightList.Maybe<TCoExtractMembers>()) {
+                rightList = maybeExtractMembers.Cast().Input();
+            }
+            TExprNode::TPtr lookupSourceWrap;
+            if (auto maybeSource = rightList.Maybe<TDqSourceWrap>()) {
+                lookupSourceWrap = LookupSourceFromSource(maybeSource.Cast(), ctx).Ptr();
+            } else if (auto maybeRead = rightList.Maybe<TDqReadWrap>()) {
+                lookupSourceWrap = LookupSourceFromRead(maybeRead.Cast(), ctx).Ptr();
+            } else {
+                break;
+            }
+            changed = true;
+            args[rightIdx] =
+                Build<TCoEquiJoinInput>(ctx, joinTuple.Pos())
+                    .List(lookupSourceWrap)
+                    .Scope(right.Scope())
+                .Done().Ptr();
+        } while(0);
+        return rightIdx + 1;
+    }
+
     TMaybeNode<TExprBase> RewriteStreamEquiJoinWithLookup(TExprBase node, TExprContext& ctx) {
         Y_UNUSED(ctx);
         const auto equiJoin = node.Cast<TCoEquiJoin>();
-        if (equiJoin.ArgCount() != 4) { // 2 parties join
+        auto argCount = equiJoin.ArgCount();
+        const auto joinTuple = equiJoin.Arg(argCount - 2).Cast<TCoEquiJoinTuple>();
+        std::vector<TExprNode::TPtr> args(argCount);
+        bool changed = false;
+        auto rightIdx = RewriteStreamJoinTuple(0u, equiJoin, joinTuple, args, ctx, changed);
+        Y_ENSURE(rightIdx + 2 == argCount);
+        if (!changed) {
             return node;
         }
-        const auto left = equiJoin.Arg(0).Cast<TCoEquiJoinInput>().List();
-        auto right = equiJoin.Arg(1).Cast<TCoEquiJoinInput>().List();
-        const auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
-        if (!IsStreamLookup(joinTuple)) {
-            return node;
+        for (ui32 i = 0; i < argCount; ++i) {
+            if (!args[i]) {
+                args[i] = equiJoin.Arg(i).Ptr();
+            }
         }
-        if (auto maybeRightExtractMembers = right.Maybe<TCoExtractMembers>()) {
-            right = maybeRightExtractMembers.Cast().Input();
-        }
-        if (!right.Maybe<TDqSourceWrap>() && !right.Maybe<TDqReadWrap>()) {
-            return node;
-        }
-
-        TDqLookupSourceWrap lookupSourceWrap =  right.Maybe<TDqSourceWrap>()
-            ? LookupSourceFromSource(right.Cast<TDqSourceWrap>(), ctx)
-            : LookupSourceFromRead(right.Cast<TDqReadWrap>(), ctx)
-        ;
-
-        return Build<TCoEquiJoin>(ctx, node.Pos())
-                .Add(equiJoin.Arg(0))
-                .Add<TCoEquiJoinInput>()
-                        .List(lookupSourceWrap)
-                        .Scope(equiJoin.Arg(1).Cast<TCoEquiJoinInput>().Scope())
-                .Build()
-                .Add(equiJoin.Arg(2))
-                .Add(equiJoin.Arg(3))
-            .Done();
+        return Build<TCoEquiJoin>(ctx, node.Pos()).Add(std::move(args)).Done();
     }
 
     TMaybeNode<TExprBase> OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx) {

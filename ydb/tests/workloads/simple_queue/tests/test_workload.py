@@ -24,7 +24,7 @@ class TestYdbWorkload(object):  # rebuild pls
                 workload_path,
                 "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
                 "--database=/Root",
-                "--duration", "60",
+                "--duration", "600",
                 "--mode", store,
             ],
             wait=True

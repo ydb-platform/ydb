@@ -36,7 +36,7 @@ class TestYdbKvWorkload(object):  # rebuild pls
             "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
             "--database=/Root",
             "workload", "kv", "run", "mixed",
-            "--seconds", "100",
+            "--seconds", "600",
             "--threads", "10",
             "--cols", "5",
             "--len", "200",

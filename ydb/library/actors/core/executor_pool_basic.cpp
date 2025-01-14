@@ -268,11 +268,7 @@ namespace NActors {
             ui32 activation = LocalQueues[workerId].front();
             LocalQueues[workerId].pop();
             ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", wctx.WorkerId, " TBasicExecutorPool::GetReadyActivation: local queue: activation found");
-            if (SharedPool) {
-                return SharedPool->MailboxTable->Get(activation);
-            } else {
-                return MailboxTable->Get(activation);
-            }
+            return MailboxTable->Get(activation);
         } else {
             TlsThreadContext->WriteTurn = 0;
             TlsThreadContext->LocalQueueSize = LocalQueueSize.load(std::memory_order_relaxed);
@@ -785,7 +781,7 @@ namespace NActors {
                     SharedPool->Threads[workerId].SetWork();
                     AtomicDecrement(Semaphore);
                     ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", workerId, " Shared_", PoolId, " TBasicExecutorPool::GetReadyActivationShared: activation == ", activation, " semaphore == ", semaphore.OldSemaphore);
-                    return SharedPool ? SharedPool->MailboxTable->Get(activation) : MailboxTable->Get(activation);
+                    return MailboxTable->Get(activation);
                 }
             }
 

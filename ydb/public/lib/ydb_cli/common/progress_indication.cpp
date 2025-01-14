@@ -39,13 +39,13 @@ void TProgressIndication::Render()
     }
     Cerr << "Progress: ";
 
-    Cerr << PrettyNumber(CurrentStats.ReadRows) << " read rows, " << PrettySize(CurrentStats.ReadBytes) << " read bytes"; 
+    Cerr << PrettyNumber(CurrentStats.ReadRows) << " rows read, " << PrettySize(CurrentStats.ReadBytes) << " read"; 
     
     if (OnlyReadStats) {
         Cerr << ".";
     } else {
-        Cerr << ", " << PrettyNumber(CurrentStats.UpdateRows) << " update rows, " << PrettySize(CurrentStats.UpdateBytes) << " update bytes, " <<
-        PrettyNumber(CurrentStats.DeleteRows) << " delete rows, " << PrettySize(CurrentStats.DeleteBytes) << " delete bytes.";
+        Cerr << ", " << PrettyNumber(CurrentStats.UpdateRows) << " rows updated, " << PrettySize(CurrentStats.UpdateBytes) << " updated, " <<
+        PrettyNumber(CurrentStats.DeleteRows) << " rows deleted, " << PrettySize(CurrentStats.DeleteBytes) << " deleted.";
     }
 
     RendersCount++;

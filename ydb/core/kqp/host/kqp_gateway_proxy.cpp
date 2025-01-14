@@ -1550,7 +1550,12 @@ public:
             schemeTx.SetWorkingDir(database);
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
             auto& alterUser = *schemeTx.MutableAlterLogin()->MutableModifyUser();
+
             alterUser.SetUser(settings.UserName);
+
+            if (settings.Password.has_value()) {
+                alterUser.SetPassword(settings.Password.value());
+            }
 
             switch (settings.CanLogin) {
                 case TAlterUserSettings::ETypeOfLogin::Login:

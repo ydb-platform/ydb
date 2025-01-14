@@ -1429,6 +1429,10 @@ public:
 
             alterUser.SetUser(settings.UserName);
 
+            if (settings.Password.has_value()) {
+                alterUser.SetPassword(settings.Password.value());
+            }
+
             switch (settings.CanLogin) {
                 case NYql::TAlterUserSettings::ETypeOfLogin::Login:
                 {

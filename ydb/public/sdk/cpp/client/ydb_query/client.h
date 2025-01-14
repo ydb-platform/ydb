@@ -214,7 +214,10 @@ public:
     const TResultSet& GetResultSet() const { return *ResultSet_; }
     TResultSet ExtractResultSet() { return std::move(*ResultSet_); }
 
+    bool HasStats() const { return Stats_.Defined(); }
     const TMaybe<TExecStats>& GetStats() const { return Stats_; }
+    TExecStats ExtractStats() const { return std::move(*Stats_); }
+
     const TMaybe<TTransaction>& GetTransaction() const { return Transaction_; }
 
     TExecuteQueryPart(TStatus&& status, TMaybe<TExecStats>&& queryStats, TMaybe<TTransaction>&& tx)

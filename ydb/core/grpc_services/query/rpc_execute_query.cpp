@@ -282,6 +282,10 @@ private:
             settings,
             req->pool_id());
 
+        if (req->with_progress()) {
+            ev->SetProgressStatsPeriod(TDuration::MilliSeconds(300));
+        }
+
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0, Span_.GetTraceId())) {
             NYql::TIssues issues;
             issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Internal error"));
@@ -359,6 +363,7 @@ private:
 
         Ydb::Query::ExecuteQueryResponsePart response;
         response.set_status(Ydb::StatusIds::SUCCESS);
+
         if (NeedReportStats(*Request_->GetProtoRequest())) {
             FillQueryStats(*response.mutable_exec_stats(), record.GetQueryStats());
         }

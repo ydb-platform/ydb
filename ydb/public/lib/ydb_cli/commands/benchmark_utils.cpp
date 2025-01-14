@@ -14,6 +14,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb/public/lib/ydb_cli/common/progress_indication.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <ydb/public/api/protos/ydb_query.pb.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
@@ -180,8 +182,12 @@ public:
 
     template <typename TIterator>
     bool Scan(TIterator& it) {
+
+        TProgressIndication progressIndication(true);
+        TMaybe<NQuery::TExecStats> execStats;
+
         for (;;) {
-            auto streamPart = it.ReadNext().GetValueSync();
+            auto streamPart = it.ReadNext().ExtractValueSync();
             ui64 rsIndex = 0;
 
             if constexpr (std::is_same_v<TIterator, NTable::TScanQueryPartIterator>) {
@@ -191,13 +197,22 @@ public:
                     PlanAst = streamPart.GetQueryStats().GetAst().GetOrElse("");
                 }
             } else {
-                const auto& stats = streamPart.GetStats();
-                rsIndex = streamPart.GetResultSetIndex();
-                if (stats) {
-                    ServerTiming += stats->GetTotalDuration();
-                    QueryPlan = stats->GetPlan().GetOrElse("");
-                    PlanAst = stats->GetAst().GetOrElse("");
+                if (streamPart.HasStats()) {
+                    execStats = streamPart.ExtractStats();
+
+                    const auto& protoStats = TProtoAccessor::GetProto(execStats.GetRef());
+                    for (const auto& queryPhase : protoStats.query_phases()) {
+                        for (const auto& tableAccessStats : queryPhase.table_access()) {
+                            progressIndication.UpdateProgress({tableAccessStats.reads().rows(), tableAccessStats.reads().bytes(),
+                                tableAccessStats.updates().rows(), tableAccessStats.updates().bytes(),
+                                tableAccessStats.deletes().rows(), tableAccessStats.deletes().bytes()});
+                        }
+                    }
+                    
+                    progressIndication.Render();
                 }
+
+                rsIndex = streamPart.GetResultSetIndex();
             }
 
             if (!streamPart.IsSuccess()) {
@@ -211,6 +226,12 @@ public:
             if (streamPart.HasResultSet()) {
                 RawResults[rsIndex].emplace_back(streamPart.ExtractResultSet());
             }
+        }
+
+        if (execStats) {
+            ServerTiming += execStats->GetTotalDuration();
+            QueryPlan = execStats->GetPlan().GetOrElse("");
+            PlanAst = execStats->GetAst().GetOrElse("");
         }
         return true;
     }
@@ -267,6 +288,7 @@ TQueryBenchmarkResult ExecuteImpl(const TString& query, NQuery::TQueryClient& cl
     NQuery::TExecuteQuerySettings settings;
     settings.StatsMode(NQuery::EStatsMode::Full);
     settings.ExecMode(explainOnly ? NQuery::EExecMode::Explain : NQuery::EExecMode::Execute);
+    settings.WithProgress(true);
     if (auto error = SetTimeoutSettings(settings, deadline)) {
         return *error;
     }

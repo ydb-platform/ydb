@@ -175,6 +175,8 @@ message ExecuteQueryRequest {
     int64 response_part_limit_bytes = 9 [(Ydb.value) = "[0; 33554432]"];
 
     string pool_id = 10; // Workload manager pool id
+
+    bool with_progress = 11;
 }
 
 message ResultSetMeta {

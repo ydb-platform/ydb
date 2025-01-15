@@ -4,6 +4,8 @@ import yatest.common
 import random
 import logging
 import sys
+import tempfile
+
 
 from datetime import date
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -92,10 +94,10 @@ class TpchTestBaseH1(TestBase):
         args.extend(argv)
 
         return yatest.common.execute([cls.ydb_cli_path] + args,
-            # stderr=sys.stderr,
-            # wait=True,
-            # stdout=sys.stdout
-            )
+            #stderr=stderr_file,
+            wait=True,
+            #stdout=stdout_file
+            ).stdout.decode("utf-8")
 
     def setup_method(cls):
         super().setup_method()
@@ -106,7 +108,7 @@ class TpchTestBaseH1(TestBase):
 
     def setup_tpch(cls):
         cls.run_cli(['workload', 'tpch', '-p', cls.tpch_default_path()+'/', 'init', '--store=column', '--datetime'])
-        cls.run_cli(['workload', 'tpch', '-p', cls.tpch_default_path()+'/', 'import', 'generator', '--scale=1'])
+        # cls.run_cli(['workload', 'tpch', '-p', cls.tpch_default_path()+'/', 'import', 'generator', '--scale=1'])
 
     def teardown_tpch(cls):
         cls.run_cli(['scheme', 'rmdir', '-r', '-f', cls.tpch_default_path()])

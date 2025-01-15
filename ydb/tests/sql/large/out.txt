@@ -1,0 +1,1560 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.8, pytest-7.4.4, pluggy-1.5.0
+rootdir: /home/slonn/.ya/build/build_root/3fov/000011/ydb/tests/sql/large/test-results/py3test/chunk4
+configfile: pkg:library.python.pytest:pytest.yatest.ini
+collected 16 items / 15 deselected / 1 selected
+
+============================ 15 deselected in 0.40s ============================
+============================= test session starts ==============================
+platform linux -- Python 3.12.8, pytest-7.4.4, pluggy-1.5.0
+============================= test session starts ==============================
+rootdir: /home/slonn/.ya/build/build_root/3fov/000008/ydb/tests/sql/large/test-results/py3test/chunk3
+platform linux -- Python 3.12.8, pytest-7.4.4, pluggy-1.5.0
+configfile: pkg:library.python.pytest:pytest.yatest.ini
+rootdir: /home/slonn/.ya/build/build_root/3fov/00000e/ydb/tests/sql/large/test-results/py3test/chunk2
+collected 16 items / 15 deselected / 1 selected
+
+============================ 15 deselected in 0.41s ============================
+configfile: pkg:library.python.pytest:pytest.yatest.ini
+collected 16 items / 15 deselected / 1 selected
+
+============================ 15 deselected in 0.39s ============================
+============================= test session starts ==============================
+platform linux -- Python 3.12.8, pytest-7.4.4, pluggy-1.5.0
+rootdir: /home/slonn/.ya/build/build_root/3fov/000010/ydb/tests/sql/large/test-results/py3test/chunk9
+configfile: pkg:library.python.pytest:pytest.yatest.ini
+collected 16 items / 15 deselected / 1 selected
+
+============================ 15 deselected in 0.41s ============================
+============================= test session starts ==============================
+platform linux -- Python 3.12.8, pytest-7.4.4, pluggy-1.5.0
+rootdir: /home/slonn/.ya/build/build_root/3fov/00000a/ydb/tests/sql/large/test-results/py3test/chunk7
+configfile: pkg:library.python.pytest:pytest.yatest.ini
+collected 16 items / 15 deselected / 1 selected
+
+============================ 15 deselected in 0.40s ============================
+============================= test session starts ==============================
+platform linux -- Python 3.12.8, pytest-7.4.4, pluggy-1.5.0
+rootdir: /home/slonn/.ya/build/build_root/3fov/00000d/ydb/tests/sql/large/test-results/py3test/chunk8
+configfile: pkg:library.python.pytest:pytest.yatest.ini
+collected 16 items / 15 deselected / 1 selected
+
+============================ 15 deselected in 0.39s ============================
+============================= test session starts ==============================
+============================= test session starts ==============================
+platform linux -- Python 3.12.8, pytest-7.4.4, pluggy-1.5.0
+rootdir: /home/slonn/.ya/build/build_root/3fov/00000f/ydb/tests/sql/large/test-results/py3test/chunk6
+platform linux -- Python 3.12.8, pytest-7.4.4, pluggy-1.5.0
+rootdir: /home/slonn/.ya/build/build_root/3fov/000009/ydb/tests/sql/large/test-results/py3test/chunk1
+configfile: pkg:library.python.pytest:pytest.yatest.ini
+collected 16 items / 15 deselected / 1 selected
+
+============================ 15 deselected in 0.39s ============================
+configfile: pkg:library.python.pytest:pytest.yatest.ini
+collected 16 items / 15 deselected / 1 selected
+
+============================ 15 deselected in 0.38s ============================
+Test test_workload_manager.py::TestWorkloadManager::test_resource_pool_queue_size_limit started
+============================= test session starts ==============================
+platform linux -- Python 3.12.8, pytest-7.4.4, pluggy-1.5.0
+rootdir: /home/slonn/.ya/build/build_root/3fov/00000c/ydb/tests/sql/large/test-results/py3test/chunk0
+configfile: pkg:library.python.pytest:pytest.yatest.ini
+collected 16 items / 15 deselected / 1 selected
+
+test_workload_manager.py 
+============================= test session starts ==============================
+platform linux -- Python 3.12.8, pytest-7.4.4, pluggy-1.5.0
+rootdir: /home/slonn/.ya/build/build_root/3fov/00000b/ydb/tests/sql/large/test-results/py3test/chunk5
+configfile: pkg:library.python.pytest:pytest.yatest.ini
+collected 16 items / 15 deselected / 1 selected
+
+============================ 15 deselected in 0.40s ============================
+Test test_workload_manager.py::TestWorkloadManager::test_resource_pool_queue_size_limit started
+Test test_workload_manager.py::TestWorkloadManager::test_resource_pool_queue_size_limit finished
+test_resource_pool_queue_size_limit
+before creating pool
+before
+sending command 0
+sending command 1
+sending command 2
+sending command 3
+sending command 4
+sending command 5
+sending command 6
+sending command 7
+sending command 8
+sending command 9
+sending command 10
+sending command 11
+sending command 12
+sending command 13
+sending command 14
+sending command 15
+sending command 16
+sending command 17
+sending command 18
+sending command 19
+sending command 20
+sending command 21
+success
+success
+success
+success
+waiting for the queue
+success
+success
+success
+success
+success
+success
+success
+success
+success
+success
+success
+success
+success
+success
+success
+success
+success
+success
+F
+Test test_workload_manager.py::TestWorkloadManager::test_resource_pool_queue_size_limit finished
+
+
+=================================== FAILURES ===================================
+___________ TestWorkloadManager.test_resource_pool_queue_size_limit ____________
+ydb/tests/sql/large/test_workload_manager.py:272: in test_resource_pool_queue_size_limit
+    assert success_count == queue_size, f"Expected {queue_size} successful queries, got {success_count}"
+E   AssertionError: Expected 2 successful queries, got 22
+E   assert 22 == 2
+------------------------------ Captured log setup ------------------------------
+INFO     ya.test:ya.py:418 ####################################################################################################
+INFO     ya.test:ya.py:419 test_resource_pool_queue_size_limit
+INFO     ya.test:ya.py:420 ####################################################################################################
+INFO     ya.test:ya.py:421 Test setup
+DEBUG    ya.test:process.py:678 Command out will be placed to ydbd.out
+DEBUG    ya.test:process.py:678 Command err will be placed to ydbd.err
+DEBUG    ya.test:process.py:610 Executing '['/home/slonn/.ya/build/build_root/3fov/00000c/ydb/apps/ydbd/ydbd', '-V']' in 'None' (waiting)
+DEBUG    ya.test:process.py:628 Command pid: 382568
+DEBUG    ya.test:process.py:259 Command (pid 382568) rc: 0
+DEBUG    ya.test:process.py:260 Command (pid 382568) elapsed time (sec): 0.20278596878051758
+DEBUG    ya.test:process.py:263 Command (pid 382568) idrss: 0
+DEBUG    ya.test:process.py:263 Command (pid 382568) inblock: 0
+DEBUG    ya.test:process.py:263 Command (pid 382568) isrss: 0
+DEBUG    ya.test:process.py:263 Command (pid 382568) ixrss: 0
+DEBUG    ya.test:process.py:263 Command (pid 382568) majflt: 0
+DEBUG    ya.test:process.py:263 Command (pid 382568) maxrss: 497280
+DEBUG    ya.test:process.py:263 Command (pid 382568) minflt: 16192
+DEBUG    ya.test:process.py:263 Command (pid 382568) msgrcv: 0
+DEBUG    ya.test:process.py:263 Command (pid 382568) msgsnd: 0
+DEBUG    ya.test:process.py:263 Command (pid 382568) nivcsw: 1
+DEBUG    ya.test:process.py:263 Command (pid 382568) nsignals: 0
+DEBUG    ya.test:process.py:263 Command (pid 382568) nswap: 0
+DEBUG    ya.test:process.py:263 Command (pid 382568) nvcsw: 13
+DEBUG    ya.test:process.py:263 Command (pid 382568) oublock: 8
+DEBUG    ya.test:process.py:263 Command (pid 382568) stime: 0.10042799999999999
+DEBUG    ya.test:process.py:263 Command (pid 382568) utime: 0.054230999999999994
+DEBUG    ya.test:process.py:263 Command (pid 382568) wtime: 0.204
+DEBUG    ya.test:process.py:275 Command (pid 382568) output:
+Git info:
+    Commit: 8ed8d646b10cb2b05c830261c4e95518ba1afae9
+    Branch: heads/main
+    Author: Alexey Dmitriev <slonnn@yandex-team.ru>
+    Summary: updates
+
+Other info:
+    Build by: slonn
+    Top src dir: /home/slonn/ydb
+    Top build dir: /home/slonn/.ya/build
+    Hostname: work-machine
+    Host information: 
+        Linux work-machine 6.8.0-51-generic #52-Ubuntu SMP PREEMPT_DYNAMIC Thu Dec  5 13:09:44 UTC 2024 x86_64
+
+    
+Build info:
+    Compiler: /home/slonn/.ya/tools/v4/7599469156/bin/clang++
+    Compiler version: 
+        clang version 18.1.8
+        Target: x86_64-unknown-linux-gnu
+        Thread model: posix
+        InstalledDir: /home/slonn/.ya/tools/v4/7599469156/bin
+    Compile flags: -pipe -m64 -O3 -g -fdebug-default-version=4 -ggnu-pubnames -fdebug-info-for-profiling -fexceptions -fno-common -ffunction-sections -fdata-sections -fuse-init-array -fcolor-diagnostics -faligned-allocation -Werror -Wall -Wextra -Wno-parentheses -Wno-implicit-const-int-float-conversion -Wno-unknown-warning-option -D_THREAD_SAFE -D_PTHREADS -D_REENTRANT -D_LARGEFILE_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE -D__LONG_LONG_SUPPORTED -DSSE_ENABLED=1 -DSSE3_ENABLED=1 -DSSSE3_ENABLED=1 -DSSE41_ENABLED=1 -DSSE42_ENABLED=1 -DPOPCNT_ENABLED=1 -DCX16_ENABLED=1 -fno-omit-frame-pointer -Wno-unknown-argument -UNDEBUG -Wno-array-parameter -Wno-deprecate-lax-vec-conv-all -Wno-unqualified-std-cast-call -Wno-unused-but-set-parameter -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-function-pointer-types -Wno-address-of-packed-member -Wno-deprecated-this-capture -Wno-c++11-narrowing-const-reference -Wno-missing-designated-field-initializers -Wno-packed-non-pod -Wno-format -Wno-vla-cxx-extension -Wno-invalid-offsetof -Wno-include-angled-in-module-purview -DCATBOOST_OPENSOURCE=yes -msse2 -msse3 -mssse3 -msse4.1 -msse4.2 -mpopcnt -mcx16 -UNDEBUG -Wno-array-parameter -Wno-deprecate-lax-vec-conv-all -Wno-unqualified-std-cast-call -Wno-unused-but-set-parameter -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-function-pointer-types -Wno-address-of-packed-member -Wno-deprecated-this-capture -Wno-c++11-narrowing-const-reference -Wno-missing-designated-field-initializers -Wno-packed-non-pod -Wno-format -Wno-vla-cxx-extension -Wno-invalid-offsetof -Wno-include-angled-in-module-purview -std=c++20 -Wimport-preprocessor-directive-pedantic -Woverloaded-virtual -Wno-ambiguous-reversed-operator -Wno-defaulted-function-deleted -Wno-deprecated-anon-enum-enum-conversion -Wno-deprecated-enum-enum-conversion -Wno-deprecated-enum-float-conversion -Wno-deprecated-volatile -Wno-pessimizing-move -Wno-undefined-var-template -nostdinc++ -DCATBOOST_OPENSOURCE=yes -nostdinc++
+
+DEBUG    ya.test:process.py:276 Command (pid 382568) errors:
+
+ERROR    ydb.tests.sql.lib.test_base:test_base.py:26 Git info:
+    Commit: 8ed8d646b10cb2b05c830261c4e95518ba1afae9
+    Branch: heads/main
+    Author: Alexey Dmitriev <slonnn@yandex-team.ru>
+    Summary: updates
+
+Other info:
+    Build by: slonn
+    Top src dir: /home/slonn/ydb
+    Top build dir: /home/slonn/.ya/build
+    Hostname: work-machine
+    Host information: 
+        Linux work-machine 6.8.0-51-generic #52-Ubuntu SMP PREEMPT_DYNAMIC Thu Dec  5 13:09:44 UTC 2024 x86_64
+
+    
+Build info:
+    Compiler: /home/slonn/.ya/tools/v4/7599469156/bin/clang++
+    Compiler version: 
+        clang version 18.1.8
+        Target: x86_64-unknown-linux-gnu
+        Thread model: posix
+        InstalledDir: /home/slonn/.ya/tools/v4/7599469156/bin
+    Compile flags: -pipe -m64 -O3 -g -fdebug-default-version=4 -ggnu-pubnames -fdebug-info-for-profiling -fexceptions -fno-common -ffunction-sections -fdata-sections -fuse-init-array -fcolor-diagnostics -faligned-allocation -Werror -Wall -Wextra -Wno-parentheses -Wno-implicit-const-int-float-conversion -Wno-unknown-warning-option -D_THREAD_SAFE -D_PTHREADS -D_REENTRANT -D_LARGEFILE_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE -D__LONG_LONG_SUPPORTED -DSSE_ENABLED=1 -DSSE3_ENABLED=1 -DSSSE3_ENABLED=1 -DSSE41_ENABLED=1 -DSSE42_ENABLED=1 -DPOPCNT_ENABLED=1 -DCX16_ENABLED=1 -fno-omit-frame-pointer -Wno-unknown-argument -UNDEBUG -Wno-array-parameter -Wno-deprecate-lax-vec-conv-all -Wno-unqualified-std-cast-call -Wno-unused-but-set-parameter -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-function-pointer-types -Wno-address-of-packed-member -Wno-deprecated-this-capture -Wno-c++11-narrowing-const-reference -Wno-missing-designated-field-initializers -Wno-packed-non-pod -Wno-format -Wno-vla-cxx-extension -Wno-invalid-offsetof -Wno-include-angled-in-module-purview -DCATBOOST_OPENSOURCE=yes -msse2 -msse3 -mssse3 -msse4.1 -msse4.2 -mpopcnt -mcx16 -UNDEBUG -Wno-array-parameter -Wno-deprecate-lax-vec-conv-all -Wno-unqualified-std-cast-call -Wno-unused-but-set-parameter -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-function-pointer-types -Wno-address-of-packed-member -Wno-deprecated-this-capture -Wno-c++11-narrowing-const-reference -Wno-missing-designated-field-initializers -Wno-packed-non-pod -Wno-format -Wno-vla-cxx-extension -Wno-invalid-offsetof -Wno-include-angled-in-module-purview -std=c++20 -Wimport-preprocessor-directive-pedantic -Woverloaded-virtual -Wno-ambiguous-reversed-operator -Wno-defaulted-function-deleted -Wno-deprecated-anon-enum-enum-conversion -Wno-deprecated-enum-enum-conversion -Wno-deprecated-enum-float-conversion -Wno-deprecated-volatile -Wno-pessimizing-move -Wno-undefined-var-template -nostdinc++ -DCATBOOST_OPENSOURCE=yes -nostdinc++
+
+DEBUG    library.python.filelock:__init__.py:115 Acquiring FileLock (blocking=False): /home/slonn/.ya/build/port_sync_dir/10679
+DEBUG    ydb.tests.library.harness.kikimr_runner:kikimr_runner.py:299 Working directory: /home/slonn/.ya/build/build_root/3fov/00000c/r3tmp/kikimr_cluster_nuatfe28
+DEBUG    ya.test:ya.py:176 Binary was found by /home/slonn/.ya/build/build_root/3fov/00000c/ydb/apps/ydbd/ydbd
+DEBUG    library.python.filelock:__init__.py:115 Acquiring FileLock (blocking=False): /home/slonn/.ya/build/port_sync_dir/12281
+DEBUG    library.python.filelock:__init__.py:115 Acquiring FileLock (blocking=False): /home/slonn/.ya/build/port_sync_dir/14203
+DEBUG    library.python.filelock:__init__.py:115 Acquiring FileLock (blocking=False): /home/slonn/.ya/build/port_sync_dir/23091
+DEBUG    library.python.filelock:__init__.py:115 Acquiring FileLock (blocking=False): /home/slonn/.ya/build/port_sync_dir/20749
+INFO     ydb.tests.library.harness.kikimr_runner:kikimr_runner.py:193 CFG_DIR_PATH="/home/slonn/.ya/build/build_root/3fov/00000c/ydb/tests/sql/large/test-results/py3test/chunk0/testing_out_stuff/test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_size_limit/cluster/kikimr_configs"
+INFO     ydb.tests.library.harness.kikimr_runner:kikimr_runner.py:194 Final command: /home/slonn/.ya/build/build_root/3fov/00000c/ydb/apps/ydbd/ydbd server --suppress-version-check --node=1 --log-file-name=/home/slonn/.ya/build/build_root/3fov/00000c/ydb/tests/sql/large/test-results/py3test/chunk0/testing_out_stuff/test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_size_limit/cluster/node_1/logfile_qgq_xlrr.log --yaml-config=$CFG_DIR_PATH/config.yaml --grpc-port=12281 --mon-port=14203 --ic-port=10679
+DEBUG    ydb.tests.library.harness.kikimr_runner:kikimr_runner.py:118 Formatting pdisk SectorMap:1:64 on node localhost:12281/1, disk_size 68719476736
+DEBUG    ya.test:process.py:610 Executing '('/home/slonn/.ya/build/build_root/3fov/00000c/ydb/apps/ydbd/ydbd', 'server', '--suppress-version-check', '--node=1', '--log-file-name=/home/slonn/.ya/build/build_root/3fov/00000c/ydb/tests/sql/large/test-results/py3test/chunk0/testing_out_stuff/test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_size_limit/cluster/node_1/logfile_qgq_xlrr.log', '--yaml-config=/home/slonn/.ya/build/build_root/3fov/00000c/ydb/tests/sql/large/test-results/py3test/chunk0/testing_out_stuff/test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_size_limit/cluster/kikimr_configs/config.yaml', '--grpc-port=12281', '--mon-port=14203', '--ic-port=10679')' in '/home/slonn/.ya/build/build_root/3fov/00000c/ydb/tests/sql/large/test-results/py3test/chunk0/testing_out_stuff/test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_size_limit/cluster/node_1' (no wait)
+DEBUG    ya.test:process.py:628 Command pid: 382604
+INFO     ydb.tests.library.harness.kikimr_runner:kikimr_runner.py:229 Started node localhost:12281/1
+DEBUG    ya.test:ya.py:176 Binary was found by /home/slonn/.ya/build/build_root/3fov/00000c/ydb/apps/ydbd/ydbd
+DEBUG    ydb.tests.library.harness.kikimr_runner:kikimr_runner.py:281 Executing command = ['/home/slonn/.ya/build/build_root/3fov/00000c/ydb/apps/ydbd/ydbd', '--server=grpc://localhost:12281', 'admin', 'blobstorage', 'config', 'invoke', '--proto=Command {\n  DefineHostConfig {\n    HostConfigId: 1\n    Drive {\n      Path: "SectorMap:1:64"\n    }\n  }\n}\nCommand {\n  DefineBox {\n    BoxId: 1\n    Host {\n      Key {\n        Fqdn: "localhost"\n        IcPort: 10679\n      }\n      HostConfigId: 1\n    }\n  }\n}\n']
+DEBUG    ya.test:process.py:678 Command out will be placed to ydbd.out.0
+DEBUG    ya.test:process.py:678 Command err will be placed to ydbd.err.0
+DEBUG    ya.test:process.py:610 Executing '['/home/slonn/.ya/build/build_root/3fov/00000c/ydb/apps/ydbd/ydbd', '--server=grpc://localhost:12281', 'admin', 'blobstorage', 'config', 'invoke', '--proto=Command {\n  DefineHostConfig {\n    HostConfigId: 1\n    Drive {\n      Path: "SectorMap:1:64"\n    }\n  }\n}\nCommand {\n  DefineBox {\n    BoxId: 1\n    Host {\n      Key {\n        Fqdn: "localhost"\n        IcPort: 10679\n      }\n      HostConfigId: 1\n    }\n  }\n}\n']' in 'None' (waiting)
+DEBUG    ya.test:process.py:628 Command pid: 382742
+DEBUG    ya.test:process.py:259 Command (pid 382742) rc: 0
+DEBUG    ya.test:process.py:260 Command (pid 382742) elapsed time (sec): 0.17730164527893066
+DEBUG    ya.test:process.py:263 Command (pid 382742) idrss: 0
+DEBUG    ya.test:process.py:263 Command (pid 382742) inblock: 0
+DEBUG    ya.test:process.py:263 Command (pid 382742) isrss: 0
+DEBUG    ya.test:process.py:263 Command (pid 382742) ixrss: 0
+DEBUG    ya.test:process.py:263 Command (pid 382742) majflt: 0
+DEBUG    ya.test:process.py:263 Command (pid 382742) maxrss: 504800
+DEBUG    ya.test:process.py:263 Command (pid 382742) minflt: 18130
+DEBUG    ya.test:process.py:263 Command (pid 382742) msgrcv: 0
+DEBUG    ya.test:process.py:263 Command (pid 382742) msgsnd: 0
+DEBUG    ya.test:process.py:263 Command (pid 382742) nivcsw: 1
+DEBUG    ya.test:process.py:263 Command (pid 382742) nsignals: 0
+DEBUG    ya.test:process.py:263 Command (pid 382742) nswap: 0
+DEBUG    ya.test:process.py:263 Command (pid 382742) nvcsw: 99
+DEBUG    ya.test:process.py:263 Command (pid 382742) oublock: 8
+DEBUG    ya.test:process.py:263 Command (pid 382742) stime: 0.078458
+DEBUG    ya.test:process.py:263 Command (pid 382742) utime: 0.053939999999999995
+DEBUG    ya.test:process.py:263 Command (pid 382742) wtime: 0.178
+DEBUG    ya.test:process.py:275 Command (pid 382742) output:
+Status {
+  Success: true
+}
+Status {
+  Success: true
+}
+Success: true
+ConfigTxSeqNo: 4
+
+DEBUG    ya.test:process.py:276 Command (pid 382742) errors:
+
+DEBUG    ya.test:ya.py:176 Binary was found by /home/slonn/.ya/build/build_root/3fov/00000c/ydb/apps/ydbd/ydbd
+DEBUG    ydb.tests.library.harness.kikimr_runner:kikimr_runner.py:281 Executing command = ['/home/slonn/.ya/build/build_root/3fov/00000c/ydb/apps/ydbd/ydbd', '--server=grpc://localhost:12281', 'admin', 'blobstorage', 'config', 'invoke', '--proto=Command {\n  DefineStoragePool {\n    BoxId: 1\n    StoragePoolId: 1\n    Name: "dynamic_storage_pool:1"\n    ErasureSpecies: "none"\n    VDiskKind: "Default"\n    Kind: "hdd"\n    NumGroups: 2\n    PDiskFilter {\n      Property {\n        Type: ROT\n      }\n      Property {\n        Kind: 0\n      }\n    }\n  }\n}\n']
+DEBUG    ya.test:process.py:678 Command out will be placed to ydbd.out.1
+DEBUG    ya.test:process.py:678 Command err will be placed to ydbd.err.1
+DEBUG    ya.test:process.py:610 Executing '['/home/slonn/.ya/build/build_root/3fov/00000c/ydb/apps/ydbd/ydbd', '--server=grpc://localhost:12281', 'admin', 'blobstorage', 'config', 'invoke', '--proto=Command {\n  DefineStoragePool {\n    BoxId: 1\n    StoragePoolId: 1\n    Name: "dynamic_storage_pool:1"\n    ErasureSpecies: "none"\n    VDiskKind: "Default"\n    Kind: "hdd"\n    NumGroups: 2\n    PDiskFilter {\n      Property {\n        Type: ROT\n      }\n      Property {\n        Kind: 0\n      }\n    }\n  }\n}\n']' in 'None' (waiting)
+DEBUG    ya.test:process.py:628 Command pid: 382769
+DEBUG    ya.test:process.py:259 Command (pid 382769) rc: 0
+DEBUG    ya.test:process.py:260 Command (pid 382769) elapsed time (sec): 0.17493295669555664
+DEBUG    ya.test:process.py:263 Command (pid 382769) idrss: 0
+DEBUG    ya.test:process.py:263 Command (pid 382769) inblock: 0
+DEBUG    ya.test:process.py:263 Command (pid 382769) isrss: 0
+DEBUG    ya.test:process.py:263 Command (pid 382769) ixrss: 0
+DEBUG    ya.test:process.py:263 Command (pid 382769) majflt: 0
+DEBUG    ya.test:process.py:263 Command (pid 382769) maxrss: 504800
+DEBUG    ya.test:process.py:263 Command (pid 382769) minflt: 18130
+DEBUG    ya.test:process.py:263 Command (pid 382769) msgrcv: 0
+DEBUG    ya.test:process.py:263 Command (pid 382769) msgsnd: 0
+DEBUG    ya.test:process.py:263 Command (pid 382769) nivcsw: 2
+DEBUG    ya.test:process.py:263 Command (pid 382769) nsignals: 0
+DEBUG    ya.test:process.py:263 Command (pid 382769) nswap: 0
+DEBUG    ya.test:process.py:263 Command (pid 382769) nvcsw: 99
+DEBUG    ya.test:process.py:263 Command (pid 382769) oublock: 8
+DEBUG    ya.test:process.py:263 Command (pid 382769) stime: 0.069978
+DEBUG    ya.test:process.py:263 Command (pid 382769) utime: 0.058981
+DEBUG    ya.test:process.py:263 Command (pid 382769) wtime: 0.176
+DEBUG    ya.test:process.py:275 Command (pid 382769) output:
+Status {
+  Success: true
+}
+Success: true
+ConfigTxSeqNo: 5
+
+DEBUG    ya.test:process.py:276 Command (pid 382769) errors:
+
+INFO     ydb.tests.library.harness.kikimr_runner:kikimr_runner.py:347 Cluster started and initialized
+DEBUG    ydb.connection:connection.py:295 Channel options: [('grpc.max_receive_message_length', 64000000), ('grpc.max_send_message_length', 64000000), ('grpc.primary_user_agent', 'python-library'), ('grpc.lb_policy_name', 'round_robin')]
+DEBUG    ydb.resolver.DiscoveryEndpointsResolver:resolver.py:175 Preparing initial endpoint to resolve endpoints
+DEBUG    ydb.connection:connection.py:295 Channel options: [('grpc.max_receive_message_length', 64000000), ('grpc.max_send_message_length', 64000000), ('grpc.primary_user_agent', 'python-library'), ('grpc.lb_policy_name', 'round_robin')]
+DEBUG    ydb.resolver.DiscoveryEndpointsResolver:resolver.py:185 Resolving endpoints for database /Root
+DEBUG    ydb.connection:connection.py:375 RpcState(ListEndpoints, 5d5fc9d2-3233-41d5-94da-6a1d74602232, localhost:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ListEndpoints, 5d5fc9d2-3233-41d5-94da-6a1d74602232, localhost:12281): request = { database: "/Root" }
+DEBUG    ydb.connection:connection.py:51 RpcState(ListEndpoints, 5d5fc9d2-3233-41d5-94da-6a1d74602232, localhost:12281): response = { operation { ready: true status: SUCCESS result { [type.googleapis.com/Ydb.Discovery.ListEndpointsResult] { endpoints { address: "work-machine.ru-central1.internal" port: 12281 service: "legacy" service: "tablet_service" service: "yql" service: "discovery" service: "cms" service: "locking" service: "kesus" service: "pq" service: "pqcd" service: "pqv1" service: "topic" service: "datastreams" service: "scripting" service: "clickhouse_internal" service: "rate_limiter" service: "analytics" service: "export" service: "import" service: "yq" service: "keyvalue" service: "monitoring" service: "auth" service: "query_service" location: "1" node_id: 1 } self_location: "1" } } } }
+DEBUG    ydb.resolver.DiscoveryEndpointsResolver:resolver.py:155 Resolved endpoints for database /Root: DiscoveryResult <self_location: 1, endpoints [<Endpoint work-machine.ru-central1.internal:12281, location 1, ssl: False>]>
+DEBUG    ydb.connection:connection.py:295 Channel options: [('grpc.max_receive_message_length', 64000000), ('grpc.max_send_message_length', 64000000), ('grpc.primary_user_agent', 'python-library'), ('grpc.lb_policy_name', 'round_robin')]
+INFO     ydb.connection:connection.py:498 Closing channel for endpoint localhost:12281
+DEBUG    ya.test:process.py:678 Command out will be placed to ydb.out
+DEBUG    ya.test:process.py:678 Command err will be placed to ydb.err
+DEBUG    ya.test:process.py:610 Executing '['/home/slonn/.ya/build/build_root/3fov/00000c/ydb/apps/ydb/ydb', '-e', 'grpc://localhost:12281', '-d', '/Root', 'workload', 'tpch', '-p', 'tpch/s1/', 'init', '--store=column', '--datetime']' in 'None' (waiting)
+DEBUG    ya.test:process.py:628 Command pid: 382828
+DEBUG    ya.test:process.py:259 Command (pid 382828) rc: 0
+DEBUG    ya.test:process.py:260 Command (pid 382828) elapsed time (sec): 1.2885549068450928
+DEBUG    ya.test:process.py:263 Command (pid 382828) idrss: 0
+DEBUG    ya.test:process.py:263 Command (pid 382828) inblock: 0
+DEBUG    ya.test:process.py:263 Command (pid 382828) isrss: 0
+DEBUG    ya.test:process.py:263 Command (pid 382828) ixrss: 0
+DEBUG    ya.test:process.py:263 Command (pid 382828) majflt: 0
+DEBUG    ya.test:process.py:263 Command (pid 382828) maxrss: 171772
+DEBUG    ya.test:process.py:263 Command (pid 382828) minflt: 2412
+DEBUG    ya.test:process.py:263 Command (pid 382828) msgrcv: 0
+DEBUG    ya.test:process.py:263 Command (pid 382828) msgsnd: 0
+DEBUG    ya.test:process.py:263 Command (pid 382828) nivcsw: 0
+DEBUG    ya.test:process.py:263 Command (pid 382828) nsignals: 0
+DEBUG    ya.test:process.py:263 Command (pid 382828) nswap: 0
+DEBUG    ya.test:process.py:263 Command (pid 382828) nvcsw: 148
+DEBUG    ya.test:process.py:263 Command (pid 382828) oublock: 8
+DEBUG    ya.test:process.py:263 Command (pid 382828) stime: 0.010962
+DEBUG    ya.test:process.py:263 Command (pid 382828) utime: 0.019932
+DEBUG    ya.test:process.py:263 Command (pid 382828) wtime: 1.289
+DEBUG    ya.test:process.py:275 Command (pid 382828) output:
+Init tables ...
+Init tables ...Ok
+
+DEBUG    ya.test:process.py:276 Command (pid 382828) errors:
+------------------------------ Captured log call -------------------------------
+INFO     ya.test:ya.py:434 Test call (class_name: test_workload_manager.py::TestWorkloadManager, test_name: test_resource_pool_queue_size_limit)
+DEBUG    ydb.query.pool:pool.py:99 Session pool is not large enough: 0 < 100, will create new one.
+DEBUG    ydb.connection:connection.py:375 RpcState(CreateSession, b2cc8915-9df0-4c36-a676-c56b6f163984, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(CreateSession, b2cc8915-9df0-4c36-a676-c56b6f163984, work-machine.ru-central1.internal:12281): request = {  }
+DEBUG    ydb.connection:connection.py:51 RpcState(CreateSession, b2cc8915-9df0-4c36-a676-c56b6f163984, work-machine.ru-central1.internal:12281): response = { status: SUCCESS session_id: "ydb://session/3?node_id=1&id=YmI1ZmM4MzgtOWFlMmRjZTgtYTBjMzkwNjEtYmMwODUxYTk=" node_id: 1 }
+DEBUG    ydb.connection:connection.py:375 RpcState(AttachSession, da72ea9c-756f-4a49-8023-265c4f301f73, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(AttachSession, da72ea9c-756f-4a49-8023-265c4f301f73, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YmI1ZmM4MzgtOWFlMmRjZTgtYTBjMzkwNjEtYmMwODUxYTk=" }
+DEBUG    ydb.connection:connection.py:51 RpcState(AttachSession, da72ea9c-756f-4a49-8023-265c4f301f73, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:55 New session was created for pool. Session id: ydb://session/3?node_id=1&id=YmI1ZmM4MzgtOWFlMmRjZTgtYTBjMzkwNjEtYmMwODUxYTk=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, d1877229-0fc7-4e6a-a1ce-57562674dcc2, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, d1877229-0fc7-4e6a-a1ce-57562674dcc2, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YmI1ZmM4MzgtOWFlMmRjZTgtYTBjMzkwNjEtYmMwODUxYTk=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "\n        CREATE USER testuser PASSWORD NULL\n        " } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, d1877229-0fc7-4e6a-a1ce-57562674dcc2, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YmI1ZmM4MzgtOWFlMmRjZTgtYTBjMzkwNjEtYmMwODUxYTk=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YmI1ZmM4MzgtOWFlMmRjZTgtYTBjMzkwNjEtYmMwODUxYTk=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 26ea2f1b-96bb-4aab-bf5b-b06b04f04484, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 26ea2f1b-96bb-4aab-bf5b-b06b04f04484, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YmI1ZmM4MzgtOWFlMmRjZTgtYTBjMzkwNjEtYmMwODUxYTk=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "GRANT ALL ON `/Root` TO testuser " } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 26ea2f1b-96bb-4aab-bf5b-b06b04f04484, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YmI1ZmM4MzgtOWFlMmRjZTgtYTBjMzkwNjEtYmMwODUxYTk=
+DEBUG    ydb.connection:connection.py:295 Channel options: [('grpc.max_receive_message_length', 64000000), ('grpc.max_send_message_length', 64000000), ('grpc.primary_user_agent', 'python-library'), ('grpc.lb_policy_name', 'round_robin')]
+DEBUG    ydb.resolver.DiscoveryEndpointsResolver:resolver.py:175 Preparing initial endpoint to resolve endpoints
+DEBUG    ydb.connection:connection.py:295 Channel options: [('grpc.max_receive_message_length', 64000000), ('grpc.max_send_message_length', 64000000), ('grpc.primary_user_agent', 'python-library'), ('grpc.lb_policy_name', 'round_robin')]
+DEBUG    ydb.resolver.DiscoveryEndpointsResolver:resolver.py:185 Resolving endpoints for database /Root
+DEBUG    ydb.credentials.StaticCredentials:credentials.py:113 Start refresh token from metadata
+INFO     ydb.credentials.StaticCredentials:credentials.py:115 Cached token reached refresh_in deadline, current time 1736938948.1512713, deadline 0
+DEBUG    ydb.connection:connection.py:295 Channel options: [('grpc.max_receive_message_length', 64000000), ('grpc.max_send_message_length', 64000000), ('grpc.primary_user_agent', 'python-library'), ('grpc.lb_policy_name', 'round_robin')]
+DEBUG    ydb.connection:connection.py:375 RpcState(Login, e3fbcec1-dce3-4ace-9235-ef8fa6ff0678, localhost:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(Login, e3fbcec1-dce3-4ace-9235-ef8fa6ff0678, localhost:12281): request = { operation_params { operation_timeout { seconds: 10 } cancel_after { seconds: 10 } } user: "testuser" }
+DEBUG    ydb.connection:connection.py:51 RpcState(Login, e3fbcec1-dce3-4ace-9235-ef8fa6ff0678, localhost:12281): response = { operation { ready: true status: SUCCESS result { [type.googleapis.com/Ydb.Auth.LoginResult] { token: "eyJhbGciOiJQUzI1NiIsImtpZCI6IjEifQ.eyJhdWQiOlsiXC9Sb290Il0sImV4cCI6MTczNjk4MjE0OCwiaWF0IjoxNzM2OTM4OTQ4LCJzdWIiOiJ0ZXN0dXNlciJ9.TAdrsK_iRdBzi8PH5q0u7xN8s9WR5X-4EnaqIzhw-jPR1nDaUegddX_Woxna0f558qfxD60iLdrxv38WpeemTkqbLTWjRKwMfGoPotxIOXN6heWyiq6lmBNASUGOYpOyCWGk1LWqY4d6x4fWibhumvhdpLuzPX5iBTWBgbTYZlQWp5ji0P-AHga7raQfCH2ug3qwUyJYRS3CUIPBfXgWxbPg6ZHtqhV5VQhg7mechp6jNE83CKg_BahW56NJzBDSOc4sSyW5iO6YF_peMaNw16NJp7M3HVI_Vk8Ny2bD1DcEHigfYn0J_h1Ul7drS4HpoSsgvyQKj8PEV1Ac-OxVKw" } } } }
+INFO     ydb.connection:connection.py:498 Closing channel for endpoint localhost:12281
+INFO     ydb.credentials.StaticCredentials:credentials.py:139 Token refresh successful. current_time 1736938948.1512713, refresh_in 1736939398.3561907
+DEBUG    ydb.connection:connection.py:375 RpcState(ListEndpoints, b7894cfc-bcdd-40f4-9035-9e732cebbb01, localhost:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ListEndpoints, b7894cfc-bcdd-40f4-9035-9e732cebbb01, localhost:12281): request = { database: "/Root" }
+DEBUG    ydb.connection:connection.py:51 RpcState(ListEndpoints, b7894cfc-bcdd-40f4-9035-9e732cebbb01, localhost:12281): response = { operation { ready: true status: SUCCESS result { [type.googleapis.com/Ydb.Discovery.ListEndpointsResult] { endpoints { address: "work-machine.ru-central1.internal" port: 12281 service: "legacy" service: "tablet_service" service: "yql" service: "discovery" service: "cms" service: "locking" service: "kesus" service: "pq" service: "pqcd" service: "pqv1" service: "topic" service: "datastreams" service: "scripting" service: "clickhouse_internal" service: "rate_limiter" service: "analytics" service: "export" service: "import" service: "yq" service: "keyvalue" service: "monitoring" service: "auth" service: "query_service" location: "1" node_id: 1 } self_location: "1" } } } }
+DEBUG    ydb.resolver.DiscoveryEndpointsResolver:resolver.py:155 Resolved endpoints for database /Root: DiscoveryResult <self_location: 1, endpoints [<Endpoint work-machine.ru-central1.internal:12281, location 1, ssl: False>]>
+DEBUG    ydb.connection:connection.py:295 Channel options: [('grpc.max_receive_message_length', 64000000), ('grpc.max_send_message_length', 64000000), ('grpc.primary_user_agent', 'python-library'), ('grpc.lb_policy_name', 'round_robin')]
+INFO     ydb.connection:connection.py:498 Closing channel for endpoint localhost:12281
+DEBUG    ydb.query.pool:pool.py:99 Session pool is not large enough: 0 < 100, will create new one.
+DEBUG    ydb.connection:connection.py:375 RpcState(CreateSession, 436a5f7e-d32e-4369-81ae-5488049de937, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(CreateSession, 436a5f7e-d32e-4369-81ae-5488049de937, work-machine.ru-central1.internal:12281): request = {  }
+DEBUG    ydb.connection:connection.py:51 RpcState(CreateSession, 436a5f7e-d32e-4369-81ae-5488049de937, work-machine.ru-central1.internal:12281): response = { status: SUCCESS session_id: "ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==" node_id: 1 }
+DEBUG    ydb.connection:connection.py:375 RpcState(AttachSession, f24caff7-de95-460c-83aa-80634970f598, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(AttachSession, f24caff7-de95-460c-83aa-80634970f598, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==" }
+DEBUG    ydb.connection:connection.py:51 RpcState(AttachSession, f24caff7-de95-460c-83aa-80634970f598, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:55 New session was created for pool. Session id: ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 3d28ed37-1dab-4b38-8470-584e3e9c98e6, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 3d28ed37-1dab-4b38-8470-584e3e9c98e6, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select 1" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 3d28ed37-1dab-4b38-8470-584e3e9c98e6, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YmI1ZmM4MzgtOWFlMmRjZTgtYTBjMzkwNjEtYmMwODUxYTk=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 65a8faae-d594-49a0-be67-614f98180c86, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 65a8faae-d594-49a0-be67-614f98180c86, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YmI1ZmM4MzgtOWFlMmRjZTgtYTBjMzkwNjEtYmMwODUxYTk=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "\n        CREATE RESOURCE POOL `test_pool` WITH (\n            CONCURRENT_QUERY_LIMIT=1,\n            QUEUE_SIZE=2,\n            DATABASE_LOAD_CPU_THRESHOLD=80,\n            RESOURCE_WEIGHT=100,\n            QUERY_CPU_LIMIT_PERCENT_PER_NODE=50,\n            TOTAL_CPU_LIMIT_PERCENT_PER_NODE=70\n            )\n        " } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 65a8faae-d594-49a0-be67-614f98180c86, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YmI1ZmM4MzgtOWFlMmRjZTgtYTBjMzkwNjEtYmMwODUxYTk=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YmI1ZmM4MzgtOWFlMmRjZTgtYTBjMzkwNjEtYmMwODUxYTk=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 1ef2eb1d-1d70-49d6-9bd5-e86ba40e4c99, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 1ef2eb1d-1d70-49d6-9bd5-e86ba40e4c99, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YmI1ZmM4MzgtOWFlMmRjZTgtYTBjMzkwNjEtYmMwODUxYTk=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "\n            CREATE RESOURCE POOL CLASSIFIER test_classifier\n            WITH (\n                RESOURCE_POOL = \'test_pool\',\n                MEMBER_NAME = \'testuser\'\n            )" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 1ef2eb1d-1d70-49d6-9bd5-e86ba40e4c99, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YmI1ZmM4MzgtOWFlMmRjZTgtYTBjMzkwNjEtYmMwODUxYTk=
+DEBUG    ya.test:process.py:678 Command out will be placed to ydb.out.0
+DEBUG    ya.test:process.py:678 Command err will be placed to ydb.err.0
+DEBUG    ya.test:process.py:610 Executing '['/home/slonn/.ya/build/build_root/3fov/00000c/ydb/apps/ydb/ydb', '-e', 'grpc://localhost:12281', '-d', '/Root', '--user', 'testuser', '--no-password', 'sql', '-s', 'select count(*) from `tpch/s1/lineitem`', '--stats', 'full', '--format', 'json-unicode']' in 'None' (waiting)
+DEBUG    ya.test:process.py:628 Command pid: 382983
+DEBUG    ya.test:process.py:259 Command (pid 382983) rc: 0
+DEBUG    ya.test:process.py:260 Command (pid 382983) elapsed time (sec): 10.404895544052124
+DEBUG    ya.test:process.py:263 Command (pid 382983) idrss: 0
+DEBUG    ya.test:process.py:263 Command (pid 382983) inblock: 0
+DEBUG    ya.test:process.py:263 Command (pid 382983) isrss: 0
+DEBUG    ya.test:process.py:263 Command (pid 382983) ixrss: 0
+DEBUG    ya.test:process.py:263 Command (pid 382983) majflt: 0
+DEBUG    ya.test:process.py:263 Command (pid 382983) maxrss: 171772
+DEBUG    ya.test:process.py:263 Command (pid 382983) minflt: 2285
+DEBUG    ya.test:process.py:263 Command (pid 382983) msgrcv: 0
+DEBUG    ya.test:process.py:263 Command (pid 382983) msgsnd: 0
+DEBUG    ya.test:process.py:263 Command (pid 382983) nivcsw: 0
+DEBUG    ya.test:process.py:263 Command (pid 382983) nsignals: 0
+DEBUG    ya.test:process.py:263 Command (pid 382983) nswap: 0
+DEBUG    ya.test:process.py:263 Command (pid 382983) nvcsw: 265
+DEBUG    ya.test:process.py:263 Command (pid 382983) oublock: 48
+DEBUG    ya.test:process.py:263 Command (pid 382983) stime: 0.018393
+DEBUG    ya.test:process.py:263 Command (pid 382983) utime: 0.015146999999999999
+DEBUG    ya.test:process.py:263 Command (pid 382983) wtime: 10.406
+DEBUG    ya.test:process.py:275 Command (pid 382983) output:
+{"column0":0}
+
+Statistics:
+query_phases {
+  duration_us: 10001677
+  table_access {
+    name: "/Root/tpch/s1/lineitem"
+  }
+  cpu_time_us: 9502
+}
+compilation {
+  duration_us: 28723
+  cpu_time_us: 28037
+}
+process_cpu_time_us: 82
+total_duration_us: 10318121
+total_cpu_time_us: 37621
+{
+    "Plan" : {
+        "Plans" : [
+            {
+                "PlanNodeId" : 4,
+                "Plans" : [
+                    {
+                        "PlanNodeId" : 3,
+                        "Plans" : [
+                            {
+                                "PlanNodeId" : 2,
+                                "Plans" : [
+                                    {
+                                        "Tables" : [
+                                            "tpch/s1/lineitem"
+                                        ],
+                                        "PlanNodeId" : 1,
+                                        "Operators" : [
+                                            {
+                                                "Scan" : "Parallel",
+                                                "E-Size" : "0",
+                                                "ReadRanges" : [
+                                                    "l_orderkey (-∞, +∞)",
+                                                    "l_linenumber (-∞, +∞)"
+                                                ],
+                                                "Name" : "TableFullScan",
+                                                "Inputs" : [ ],
+                                                "Path" : "/Root/tpch/s1/lineitem",
+                                                "E-Rows" : "0",
+                                                "Table" : "tpch/s1/lineitem",
+                                                "ReadColumns" : null,
+                                                "SsaProgram" : {
+                                                    "Version" : 5,
+                                                    "Command" : [
+                                                        {
+                                                            "GroupBy" : {
+                                                                "Aggregates" : [
+                                                                    {
+                                                                        "Function" : {
+                                                                            "Id" : 2
+                                                                        },
+                                                                        "Column" : {
+                                                                            "Id" : 17
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            }
+                                                        },
+                                                        {
+                                                            "Projection" : {
+                                                                "Columns" : [
+                                                                    {
+                                                                        "Id" : 17
+                                                                    }
+                                                                ]
+                                                            }
+                                                        }
+                                                    ]
+                                                },
+                                                "E-Cost" : "0"
+                                            }
+                                        ],
+                                        "Node Type" : "TableFullScan",
+                                        "Stats" : {
+                                            "UseLlvm" : "undefined",
+                                            "DurationUs" : {
+                                                "Count" : 3,
+                                                "Sum" : 30000000,
+                                                "Max" : 10000000,
+                                                "Min" : 10000000
+                                            },
+                                            "Output" : [
+                                                {
+                                                    "Pop" : { },
+                                                    "Name" : "3",
+                                                    "Push" : { }
+                                                }
+                                            ],
+                                            "MaxMemoryUsage" : {
+                                                "Count" : 3,
+                                                "Sum" : 196608,
+                                                "Max" : 65536,
+                                                "Min" : 65536
+                                            },
+                                            "Tasks" : 3,
+                                            "PhysicalStageId" : 0,
+                                            "StageDurationUs" : 10000000,
+                                            "Table" : [
+                                                {
+                                                    "Path" : "/Root/tpch/s1/lineitem"
+                                                }
+                                            ],
+                                            "BaseTimeMs" : 1736938961166,
+                                            "WaitInputTimeUs" : {
+                                                "Count" : 3,
+                                                "Sum" : 430,
+                                                "Max" : 161,
+                                                "Min" : 108
+                                            },
+                                            "CpuTimeUs" : {
+                                                "Count" : 3,
+                                                "Sum" : 324,
+                                                "Max" : 150,
+                                                "Min" : 62
+                                            }
+                                        }
+                                    }
+                                ],
+                                "Node Type" : "UnionAll",
+                                "PlanNodeType" : "Connection"
+                            }
+                        ],
+                        "Operators" : [
+                            {
+                                "Inputs" : [
+                                    {
+                                        "InternalOperatorId" : 1
+                                    }
+                                ],
+                                "Name" : "Aggregate",
+                                "Phase" : "Final"
+                            },
+                            {
+                                "Inputs" : [
+                                    {
+                                        "InternalOperatorId" : 2
+                                    }
+                                ],
+                                "Name" : "Limit",
+                                "Limit" : "1"
+                            },
+                            {
+                                "Inputs" : [
+                                    {
+                                        "ExternalPlanNodeId" : 2
+                                    }
+                                ],
+                                "Name" : "Aggregate",
+                                "Phase" : "Final"
+                            }
+                        ],
+                        "Node Type" : "Aggregate-Limit-Aggregate",
+                        "Stats" : {
+                            "UseLlvm" : "undefined",
+                            "DurationUs" : {
+                                "Count" : 1,
+                                "Sum" : 10000000,
+                                "Max" : 10000000,
+                                "Min" : 10000000
+                            },
+                            "Output" : [
+                                {
+                                    "Pop" : {
+                                        "Chunks" : {
+                                            "Count" : 1,
+                                            "Sum" : 1,
+                                            "Max" : 1,
+                                            "Min" : 1
+                                        },
+                                        "Rows" : {
+                                            "Count" : 1,
+                                            "Sum" : 1,
+                                            "Max" : 1,
+                                            "Min" : 1
+                                        },
+                                        "LastMessageMs" : {
+                                            "Count" : 1,
+                                            "Sum" : 10000,
+                                            "Max" : 10000,
+                                            "Min" : 10000
+                                        },
+                                        "FirstMessageMs" : {
+                                            "Count" : 1,
+                                            "Sum" : 10000,
+                                            "Max" : 10000,
+                                            "Min" : 10000
+                                        },
+                                        "Bytes" : {
+                                            "Count" : 1,
+                                            "Sum" : 3,
+                                            "Max" : 3,
+                                            "Min" : 3
+                                        }
+                                    },
+                                    "Name" : "RESULT",
+                                    "Push" : {
+                                        "LastMessageMs" : {
+                                            "Count" : 1,
+                                            "Sum" : 10000,
+                                            "Max" : 10000,
+                                            "Min" : 10000
+                                        },
+                                        "Rows" : {
+                                            "Count" : 1,
+                                            "Sum" : 1,
+                                            "Max" : 1,
+                                            "Min" : 1
+                                        },
+                                        "Chunks" : {
+                                            "Count" : 1,
+                                            "Sum" : 1,
+                                            "Max" : 1,
+                                            "Min" : 1
+                                        },
+                                        "ResumeMessageMs" : {
+                                            "Count" : 1,
+                                            "Sum" : 10000,
+                                            "Max" : 10000,
+                                            "Min" : 10000
+                                        },
+                                        "FirstMessageMs" : {
+                                            "Count" : 1,
+                                            "Sum" : 10000,
+                                            "Max" : 10000,
+                                            "Min" : 10000
+                                        },
+                                        "PauseMessageMs" : {
+                                            "Count" : 1,
+                                            "Sum" : 10000,
+                                            "Max" : 10000,
+                                            "Min" : 10000
+                                        },
+                                        "WaitTimeUs" : {
+                                            "Count" : 1,
+                                            "Sum" : 211,
+                                            "Max" : 211,
+                                            "Min" : 211
+                                        },
+                                        "WaitPeriods" : {
+                                            "Count" : 1,
+                                            "Sum" : 1,
+                                            "Max" : 1,
+                                            "Min" : 1
+                                        }
+                                    }
+                                }
+                            ],
+                            "MaxMemoryUsage" : {
+                                "Count" : 1,
+                                "Sum" : 65536,
+                                "Max" : 65536,
+                                "Min" : 65536
+                            },
+                            "ResultRows" : {
+                                "Count" : 1,
+                                "Sum" : 1,
+                                "Max" : 1,
+                                "Min" : 1
+                            },
+                            "Tasks" : 1,
+                            "ResultBytes" : {
+                                "Count" : 1,
+                                "Sum" : 3,
+                                "Max" : 3,
+                                "Min" : 3
+                            },
+                            "OutputRows" : {
+                                "Count" : 1,
+                                "Sum" : 1,
+                                "Max" : 1,
+                                "Min" : 1
+                            },
+                            "PhysicalStageId" : 1,
+                            "StageDurationUs" : 10000000,
+                            "BaseTimeMs" : 1736938961166,
+                            "WaitInputTimeUs" : {
+                                "Count" : 1,
+                                "Sum" : 200,
+                                "Max" : 200,
+                                "Min" : 200
+                            },
+                            "CpuTimeUs" : {
+                                "Count" : 1,
+                                "Sum" : 161,
+                                "Max" : 161,
+                                "Min" : 161
+                            },
+                            "OutputBytes" : {
+                                "Count" : 1,
+                                "Sum" : 3,
+                                "Max" : 3,
+                                "Min" : 3
+                            },
+                            "Input" : [
+                                {
+                                    "Pop" : { },
+                                    "Name" : "1",
+                                    "Push" : {
+                                        "WaitTimeUs" : {
+                                            "Count" : 1,
+                                            "Sum" : 113,
+                                            "Max" : 113,
+                                            "Min" : 113
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "Node Type" : "ResultSet",
+                "PlanNodeType" : "ResultSet"
+            }
+        ],
+        "Node Type" : "Query",
+        "Stats" : {
+            "Compilation" : {
+                "FromCache" : false,
+                "DurationUs" : 28723,
+                "CpuTimeUs" : 28037
+            },
+            "ProcessCpuTimeUs" : 82,
+            "TotalDurationUs" : 10318121,
+            "ResourcePoolId" : "test_pool",
+            "QueuedTimeUs" : 286519
+        },
+        "PlanNodeType" : "Query"
+    },
+    "meta" : {
+        "version" : "0.2",
+        "type" : "query"
+    },
+    "SimplifiedPlan" : {
+        "PlanNodeId" : 0,
+        "Plans" : [
+            {
+                "PlanNodeId" : 1,
+                "Plans" : [
+                    {
+                        "PlanNodeId" : 2,
+                        "Plans" : [
+                            {
+                                "PlanNodeId" : 3,
+                                "Plans" : [
+                                    {
+                                        "PlanNodeId" : 4,
+                                        "Plans" : [
+                                            {
+                                                "PlanNodeId" : 6,
+                                                "Operators" : [
+                                                    {
+                                                        "Scan" : "Parallel",
+                                                        "E-Size" : "0",
+                                                        "ReadRanges" : [
+                                                            "l_orderkey (-∞, +∞)",
+                                                            "l_linenumber (-∞, +∞)"
+                                                        ],
+                                                        "A-SelfCpu" : 0.15,
+                                                        "Name" : "TableFullScan",
+                                                        "Path" : "/Root/tpch/s1/lineitem",
+                                                        "E-Rows" : "0",
+                                                        "A-Cpu" : 0.15,
+                                                        "Table" : "tpch/s1/lineitem",
+                                                        "ReadColumns" : null,
+                                                        "SsaProgram" : {
+                                                            "Version" : 5,
+                                                            "Command" : [
+                                                                {
+                                                                    "GroupBy" : {
+                                                                        "Aggregates" : [
+                                                                            {
+                                                                                "Function" : {
+                                                                                    "Id" : 2
+                                                                                },
+                                                                                "Column" : {
+                                                                                    "Id" : 17
+                                                                                }
+                                                                            }
+                                                                        ]
+                                                                    }
+                                                                },
+                                                                {
+                                                                    "Projection" : {
+                                                                        "Columns" : [
+                                                                            {
+                                                                                "Id" : 17
+                                                                            }
+                                                                        ]
+                                                                    }
+                                                                }
+                                                            ]
+                                                        },
+                                                        "E-Cost" : "0"
+                                                    }
+                                                ],
+                                                "Node Type" : "TableFullScan"
+                                            }
+                                        ],
+                                        "Operators" : [
+                                            {
+                                                "Name" : "Aggregate",
+                                                "Phase" : "Final"
+                                            }
+                                        ],
+                                        "Node Type" : "Aggregate"
+                                    }
+                                ],
+                                "Operators" : [
+                                    {
+                                        "Name" : "Limit",
+                                        "Limit" : "1"
+                                    }
+                                ],
+                                "Node Type" : "Limit"
+                            }
+                        ],
+                        "Operators" : [
+                            {
+                                "A-Rows" : 1,
+                                "A-SelfCpu" : 0.161,
+                                "A-Cpu" : 0.311,
+                                "A-Size" : 3,
+                                "Name" : "Aggregate",
+                                "Phase" : "Final"
+                            }
+                        ],
+                        "Node Type" : "Aggregate"
+                    }
+                ],
+                "Node Type" : "ResultSet",
+                "PlanNodeType" : "ResultSet"
+            }
+        ],
+        "Node Type" : "Query",
+        "PlanNodeType" : "Query"
+    }
+}
+
+DEBUG    ya.test:process.py:276 Command (pid 382983) errors:
+
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 4f9166e8-9efd-40df-9fdd-87c41198f8ff, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.query.pool:pool.py:99 Session pool is not large enough: 1 < 100, will create new one.
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 4f9166e8-9efd-40df-9fdd-87c41198f8ff, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:375 RpcState(CreateSession, 7db1579a-1b38-422b-a163-9e5e22f57921, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(CreateSession, 7db1579a-1b38-422b-a163-9e5e22f57921, work-machine.ru-central1.internal:12281): request = {  }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 4f9166e8-9efd-40df-9fdd-87c41198f8ff, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.connection:connection.py:51 RpcState(CreateSession, 7db1579a-1b38-422b-a163-9e5e22f57921, work-machine.ru-central1.internal:12281): response = { status: SUCCESS session_id: "ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=" node_id: 1 }
+DEBUG    ydb.connection:connection.py:375 RpcState(AttachSession, 197fc339-e8b0-4b10-998d-7755eed2c35b, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(AttachSession, 197fc339-e8b0-4b10-998d-7755eed2c35b, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=" }
+DEBUG    ydb.connection:connection.py:51 RpcState(AttachSession, 197fc339-e8b0-4b10-998d-7755eed2c35b, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:55 New session was created for pool. Session id: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 71b3664a-3a3e-4e34-a875-90d32f25b1fa, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.query.pool:pool.py:99 Session pool is not large enough: 2 < 100, will create new one.
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 71b3664a-3a3e-4e34-a875-90d32f25b1fa, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:375 RpcState(CreateSession, ca53d96c-9c7e-4999-a420-4a03ef0b4ade, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(CreateSession, ca53d96c-9c7e-4999-a420-4a03ef0b4ade, work-machine.ru-central1.internal:12281): request = {  }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 71b3664a-3a3e-4e34-a875-90d32f25b1fa, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.connection:connection.py:51 RpcState(CreateSession, ca53d96c-9c7e-4999-a420-4a03ef0b4ade, work-machine.ru-central1.internal:12281): response = { status: SUCCESS session_id: "ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=" node_id: 1 }
+DEBUG    ydb.connection:connection.py:375 RpcState(AttachSession, db06f9b7-82cb-4ac6-9f99-ea3ae7b3918c, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(AttachSession, db06f9b7-82cb-4ac6-9f99-ea3ae7b3918c, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=" }
+DEBUG    ydb.connection:connection.py:51 RpcState(AttachSession, db06f9b7-82cb-4ac6-9f99-ea3ae7b3918c, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:55 New session was created for pool. Session id: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, d9781623-3640-4faa-b943-19fd9fa36ec1, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.query.pool:pool.py:99 Session pool is not large enough: 3 < 100, will create new one.
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, d9781623-3640-4faa-b943-19fd9fa36ec1, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:375 RpcState(CreateSession, 2d787574-68ab-42ec-9ef0-bda918a1a301, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(CreateSession, 2d787574-68ab-42ec-9ef0-bda918a1a301, work-machine.ru-central1.internal:12281): request = {  }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, d9781623-3640-4faa-b943-19fd9fa36ec1, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.connection:connection.py:51 RpcState(CreateSession, 2d787574-68ab-42ec-9ef0-bda918a1a301, work-machine.ru-central1.internal:12281): response = { status: SUCCESS session_id: "ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=" node_id: 1 }
+DEBUG    ydb.connection:connection.py:375 RpcState(AttachSession, c87ec413-5bfb-452b-9843-52613ef1b786, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(AttachSession, c87ec413-5bfb-452b-9843-52613ef1b786, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=" }
+DEBUG    ydb.connection:connection.py:51 RpcState(AttachSession, c87ec413-5bfb-452b-9843-52613ef1b786, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:55 New session was created for pool. Session id: ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, ee1d2aa4-c109-407d-9fe5-10be6aa3aec8, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, ee1d2aa4-c109-407d-9fe5-10be6aa3aec8, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.query.pool:pool.py:99 Session pool is not large enough: 4 < 100, will create new one.
+DEBUG    ydb.connection:connection.py:375 RpcState(CreateSession, 6bc8519c-5881-4d66-b83f-018f7b0adf39, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(CreateSession, 6bc8519c-5881-4d66-b83f-018f7b0adf39, work-machine.ru-central1.internal:12281): request = {  }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, ee1d2aa4-c109-407d-9fe5-10be6aa3aec8, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.connection:connection.py:51 RpcState(CreateSession, 6bc8519c-5881-4d66-b83f-018f7b0adf39, work-machine.ru-central1.internal:12281): response = { status: SUCCESS session_id: "ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=" node_id: 1 }
+DEBUG    ydb.connection:connection.py:375 RpcState(AttachSession, 2b11893b-8b92-486f-b74d-46e1daf09a8e, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(AttachSession, 2b11893b-8b92-486f-b74d-46e1daf09a8e, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=" }
+DEBUG    ydb.connection:connection.py:51 RpcState(AttachSession, 2b11893b-8b92-486f-b74d-46e1daf09a8e, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=
+DEBUG    ydb.query.pool:pool.py:55 New session was created for pool. Session id: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 8a3e2151-7e72-4156-89b4-c41e508a0b65, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 8a3e2151-7e72-4156-89b4-c41e508a0b65, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 593c78d5-aec9-4cef-ad2d-6f60e6ae8f9b, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.query.pool:pool.py:99 Session pool is not large enough: 5 < 100, will create new one.
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 593c78d5-aec9-4cef-ad2d-6f60e6ae8f9b, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 8a3e2151-7e72-4156-89b4-c41e508a0b65, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.connection:connection.py:375 RpcState(CreateSession, a191abe9-60a9-4a0a-abd6-91e48bde8cdc, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 593c78d5-aec9-4cef-ad2d-6f60e6ae8f9b, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.connection:connection.py:62 RpcState(CreateSession, a191abe9-60a9-4a0a-abd6-91e48bde8cdc, work-machine.ru-central1.internal:12281): request = {  }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.connection:connection.py:51 RpcState(CreateSession, a191abe9-60a9-4a0a-abd6-91e48bde8cdc, work-machine.ru-central1.internal:12281): response = { status: SUCCESS session_id: "ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=" node_id: 1 }
+DEBUG    ydb.connection:connection.py:375 RpcState(AttachSession, 6035e0f9-2753-4f92-abcd-cce01ea0041c, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(AttachSession, 6035e0f9-2753-4f92-abcd-cce01ea0041c, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=" }
+DEBUG    ydb.connection:connection.py:51 RpcState(AttachSession, 6035e0f9-2753-4f92-abcd-cce01ea0041c, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:55 New session was created for pool. Session id: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 4a4d74af-d61a-4a50-a04c-613abc95270d, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 4a4d74af-d61a-4a50-a04c-613abc95270d, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, e4482b76-dd91-42de-accd-0b5c844d16ac, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 4a4d74af-d61a-4a50-a04c-613abc95270d, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, e4482b76-dd91-42de-accd-0b5c844d16ac, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.query.pool:pool.py:99 Session pool is not large enough: 6 < 100, will create new one.
+DEBUG    ydb.connection:connection.py:375 RpcState(CreateSession, f582d865-c861-459f-af8a-6cbce714e786, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(CreateSession, f582d865-c861-459f-af8a-6cbce714e786, work-machine.ru-central1.internal:12281): request = {  }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, e4482b76-dd91-42de-accd-0b5c844d16ac, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.connection:connection.py:51 RpcState(CreateSession, f582d865-c861-459f-af8a-6cbce714e786, work-machine.ru-central1.internal:12281): response = { status: SUCCESS session_id: "ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=" node_id: 1 }
+DEBUG    ydb.connection:connection.py:375 RpcState(AttachSession, 93044363-b432-45d7-bdde-ee4141273fa7, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(AttachSession, 93044363-b432-45d7-bdde-ee4141273fa7, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=" }
+DEBUG    ydb.connection:connection.py:51 RpcState(AttachSession, 93044363-b432-45d7-bdde-ee4141273fa7, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:55 New session was created for pool. Session id: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 76bc2fa9-05ed-42d4-9e34-c48da349a4c9, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 76bc2fa9-05ed-42d4-9e34-c48da349a4c9, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 76bc2fa9-05ed-42d4-9e34-c48da349a4c9, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 650fcf12-6a82-4b90-aa46-240f1f10499e, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 650fcf12-6a82-4b90-aa46-240f1f10499e, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 7679743c-22dc-4ed8-9a53-9bfc07f693e5, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 7679743c-22dc-4ed8-9a53-9bfc07f693e5, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 827f32f7-b8dc-4200-97e6-68a49ccb3e9f, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 650fcf12-6a82-4b90-aa46-240f1f10499e, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:99 Session pool is not large enough: 7 < 100, will create new one.
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 827f32f7-b8dc-4200-97e6-68a49ccb3e9f, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:375 RpcState(CreateSession, 323cf1e8-7989-48fd-b97c-023509b82cfa, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(CreateSession, 323cf1e8-7989-48fd-b97c-023509b82cfa, work-machine.ru-central1.internal:12281): request = {  }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 7679743c-22dc-4ed8-9a53-9bfc07f693e5, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 827f32f7-b8dc-4200-97e6-68a49ccb3e9f, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.connection:connection.py:51 RpcState(CreateSession, 323cf1e8-7989-48fd-b97c-023509b82cfa, work-machine.ru-central1.internal:12281): response = { status: SUCCESS session_id: "ydb://session/3?node_id=1&id=ZjA3M2Y0MzEtMmE1ODhkNDUtMzhjZjY1NGMtYzdjMDIyOTE=" node_id: 1 }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=
+DEBUG    ydb.connection:connection.py:375 RpcState(AttachSession, 64265a6e-2827-49ae-9cfa-0f4a89cac9ac, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.connection:connection.py:62 RpcState(AttachSession, 64265a6e-2827-49ae-9cfa-0f4a89cac9ac, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZjA3M2Y0MzEtMmE1ODhkNDUtMzhjZjY1NGMtYzdjMDIyOTE=" }
+DEBUG    ydb.connection:connection.py:51 RpcState(AttachSession, 64265a6e-2827-49ae-9cfa-0f4a89cac9ac, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:55 New session was created for pool. Session id: ydb://session/3?node_id=1&id=ZjA3M2Y0MzEtMmE1ODhkNDUtMzhjZjY1NGMtYzdjMDIyOTE=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, c4230dbb-55f7-4402-aeb3-7bd0f601a92a, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, c4230dbb-55f7-4402-aeb3-7bd0f601a92a, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZjA3M2Y0MzEtMmE1ODhkNDUtMzhjZjY1NGMtYzdjMDIyOTE=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, c648bd80-0916-4fcb-8790-e68aef9121c7, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, c648bd80-0916-4fcb-8790-e68aef9121c7, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 71cc8be4-d7f0-4d3a-86c3-c516aa3e2efc, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 71cc8be4-d7f0-4d3a-86c3-c516aa3e2efc, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, cca8ca5b-aca6-4de6-ac19-6d607d66bedf, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, cca8ca5b-aca6-4de6-ac19-6d607d66bedf, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, b5a0cf24-4356-4e13-9539-4a06f1b651c9, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, b5a0cf24-4356-4e13-9539-4a06f1b651c9, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.query.pool:pool.py:99 Session pool is not large enough: 8 < 100, will create new one.
+DEBUG    ydb.connection:connection.py:375 RpcState(CreateSession, 11be0e65-91fb-473d-b037-ef231b4764f6, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(CreateSession, 11be0e65-91fb-473d-b037-ef231b4764f6, work-machine.ru-central1.internal:12281): request = {  }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, c4230dbb-55f7-4402-aeb3-7bd0f601a92a, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, c648bd80-0916-4fcb-8790-e68aef9121c7, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 71cc8be4-d7f0-4d3a-86c3-c516aa3e2efc, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, cca8ca5b-aca6-4de6-ac19-6d607d66bedf, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, b5a0cf24-4356-4e13-9539-4a06f1b651c9, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.connection:connection.py:51 RpcState(CreateSession, 11be0e65-91fb-473d-b037-ef231b4764f6, work-machine.ru-central1.internal:12281): response = { status: SUCCESS session_id: "ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==" node_id: 1 }
+DEBUG    ydb.connection:connection.py:375 RpcState(AttachSession, 1556b830-d1d8-4348-a3f4-5227fb7f574d, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(AttachSession, 1556b830-d1d8-4348-a3f4-5227fb7f574d, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==" }
+DEBUG    ydb.connection:connection.py:51 RpcState(AttachSession, 1556b830-d1d8-4348-a3f4-5227fb7f574d, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:55 New session was created for pool. Session id: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 0d2c73d7-f5ac-4d3f-8213-ce0a6e70fbcd, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 0d2c73d7-f5ac-4d3f-8213-ce0a6e70fbcd, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.query.pool:pool.py:99 Session pool is not large enough: 9 < 100, will create new one.
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 0d2c73d7-f5ac-4d3f-8213-ce0a6e70fbcd, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZjA3M2Y0MzEtMmE1ODhkNDUtMzhjZjY1NGMtYzdjMDIyOTE=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==
+DEBUG    ydb.connection:connection.py:375 RpcState(CreateSession, 0c2e97fc-615a-46ee-8845-4c3945352184, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(CreateSession, 0c2e97fc-615a-46ee-8845-4c3945352184, work-machine.ru-central1.internal:12281): request = {  }
+DEBUG    ydb.connection:connection.py:51 RpcState(CreateSession, 0c2e97fc-615a-46ee-8845-4c3945352184, work-machine.ru-central1.internal:12281): response = { status: SUCCESS session_id: "ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=" node_id: 1 }
+DEBUG    ydb.connection:connection.py:375 RpcState(AttachSession, cea79c04-b37c-4468-ae8a-ccafb202e186, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(AttachSession, cea79c04-b37c-4468-ae8a-ccafb202e186, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=" }
+DEBUG    ydb.connection:connection.py:51 RpcState(AttachSession, cea79c04-b37c-4468-ae8a-ccafb202e186, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:55 New session was created for pool. Session id: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 45641b45-f070-4222-b392-25b91833e4a5, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 45641b45-f070-4222-b392-25b91833e4a5, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 67f1ce2c-52f8-4f9c-a8a7-08317ad9ff1a, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 67f1ce2c-52f8-4f9c-a8a7-08317ad9ff1a, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 9a79e8f0-d14e-40d6-93a0-793f63b14c95, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 9a79e8f0-d14e-40d6-93a0-793f63b14c95, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 6177b414-0f14-4359-9ce5-9a45543ca5fe, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 6177b414-0f14-4359-9ce5-9a45543ca5fe, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 45641b45-f070-4222-b392-25b91833e4a5, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 67f1ce2c-52f8-4f9c-a8a7-08317ad9ff1a, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 9a79e8f0-d14e-40d6-93a0-793f63b14c95, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 6177b414-0f14-4359-9ce5-9a45543ca5fe, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, ec182cba-bdad-4d7c-a837-d0aef8ac3be1, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, ec182cba-bdad-4d7c-a837-d0aef8ac3be1, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, ec182cba-bdad-4d7c-a837-d0aef8ac3be1, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ZjA3M2Y0MzEtMmE1ODhkNDUtMzhjZjY1NGMtYzdjMDIyOTE=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 2ae36d08-1d71-4689-a148-df72c7d05316, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 2ae36d08-1d71-4689-a148-df72c7d05316, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZjA3M2Y0MzEtMmE1ODhkNDUtMzhjZjY1NGMtYzdjMDIyOTE=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 2ae36d08-1d71-4689-a148-df72c7d05316, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 21bff694-17c5-4c72-9c71-b874733524a5, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 21bff694-17c5-4c72-9c71-b874733524a5, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 21bff694-17c5-4c72-9c71-b874733524a5, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 5923ba8a-06f1-47ae-b2ec-90adcbc87987, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 5923ba8a-06f1-47ae-b2ec-90adcbc87987, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 5923ba8a-06f1-47ae-b2ec-90adcbc87987, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, a6c551b4-9541-441f-b225-5f75f1fdd800, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, a6c551b4-9541-441f-b225-5f75f1fdd800, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, a6c551b4-9541-441f-b225-5f75f1fdd800, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 4133016d-b4c8-4d63-940b-82be5033e01c, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 4133016d-b4c8-4d63-940b-82be5033e01c, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 4133016d-b4c8-4d63-940b-82be5033e01c, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, af6d8c38-3381-4deb-8b02-c71f502e279b, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, af6d8c38-3381-4deb-8b02-c71f502e279b, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, af6d8c38-3381-4deb-8b02-c71f502e279b, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 91a894d1-7957-45d6-b6d4-964fc0f20153, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 91a894d1-7957-45d6-b6d4-964fc0f20153, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 91a894d1-7957-45d6-b6d4-964fc0f20153, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 04b86bea-f3cd-43cb-9a04-592ac13d70bf, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 04b86bea-f3cd-43cb-9a04-592ac13d70bf, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 04b86bea-f3cd-43cb-9a04-592ac13d70bf, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 8b0278c5-ea72-4620-ba10-98b385168180, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 8b0278c5-ea72-4620-ba10-98b385168180, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 8b0278c5-ea72-4620-ba10-98b385168180, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 2d31e871-94b1-4143-b9d2-f3e038e75796, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 2d31e871-94b1-4143-b9d2-f3e038e75796, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 2d31e871-94b1-4143-b9d2-f3e038e75796, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 980fde0f-d21d-4c0c-b9dc-6ff883256c15, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 980fde0f-d21d-4c0c-b9dc-6ff883256c15, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 980fde0f-d21d-4c0c-b9dc-6ff883256c15, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, c22f0014-6406-433d-a018-ff0012fb2ab8, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, c22f0014-6406-433d-a018-ff0012fb2ab8, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, c22f0014-6406-433d-a018-ff0012fb2ab8, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 38798ae1-f76b-4695-b516-2c6598c79504, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 38798ae1-f76b-4695-b516-2c6598c79504, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 38798ae1-f76b-4695-b516-2c6598c79504, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 0aacb99e-e5d4-47fe-899f-53d085d89648, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 0aacb99e-e5d4-47fe-899f-53d085d89648, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 0aacb99e-e5d4-47fe-899f-53d085d89648, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 345e606b-46cf-41ea-9c6b-fc45bd1c133e, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 345e606b-46cf-41ea-9c6b-fc45bd1c133e, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 345e606b-46cf-41ea-9c6b-fc45bd1c133e, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 6e36eed7-473f-40a5-b303-63423d97b1a3, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 6e36eed7-473f-40a5-b303-63423d97b1a3, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 6e36eed7-473f-40a5-b303-63423d97b1a3, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, a4716fcb-8446-4432-9544-10e125bd4af7, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, a4716fcb-8446-4432-9544-10e125bd4af7, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, a4716fcb-8446-4432-9544-10e125bd4af7, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, b837e54f-2cdf-4691-9d15-cc2b7608736b, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, b837e54f-2cdf-4691-9d15-cc2b7608736b, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, b837e54f-2cdf-4691-9d15-cc2b7608736b, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, cef4498c-b5ca-40ca-9a3b-c30811141f0c, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, cef4498c-b5ca-40ca-9a3b-c30811141f0c, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, ec95d565-2425-4b54-b663-81ad6138a8a1, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, ec95d565-2425-4b54-b663-81ad6138a8a1, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, cef4498c-b5ca-40ca-9a3b-c30811141f0c, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, ec95d565-2425-4b54-b663-81ad6138a8a1, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 81e34fda-c4bb-498c-a297-4b8f54286b27, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 81e34fda-c4bb-498c-a297-4b8f54286b27, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 81e34fda-c4bb-498c-a297-4b8f54286b27, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 05dda581-33e4-42c1-bf02-4a60acb016b9, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 05dda581-33e4-42c1-bf02-4a60acb016b9, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 05dda581-33e4-42c1-bf02-4a60acb016b9, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, f794b6f5-0544-4093-bdc4-81175d8ad642, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, f794b6f5-0544-4093-bdc4-81175d8ad642, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, f794b6f5-0544-4093-bdc4-81175d8ad642, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, d33f3aa8-ba63-4b62-b41b-4eedcf537d59, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, d33f3aa8-ba63-4b62-b41b-4eedcf537d59, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, d33f3aa8-ba63-4b62-b41b-4eedcf537d59, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, cdb7118f-f109-4c41-9fa8-88d366bde7c5, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, cdb7118f-f109-4c41-9fa8-88d366bde7c5, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, cdb7118f-f109-4c41-9fa8-88d366bde7c5, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, f1db74dc-c907-4d54-bd58-d6c6e81d502f, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, f1db74dc-c907-4d54-bd58-d6c6e81d502f, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, f1db74dc-c907-4d54-bd58-d6c6e81d502f, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 1943c1df-d3e3-477a-8372-0a58e6f5425a, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 1943c1df-d3e3-477a-8372-0a58e6f5425a, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 1943c1df-d3e3-477a-8372-0a58e6f5425a, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, afb79d99-7754-4b75-ad39-dd5a31481ae5, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, afb79d99-7754-4b75-ad39-dd5a31481ae5, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, afb79d99-7754-4b75-ad39-dd5a31481ae5, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 65adef71-8b22-428f-9b70-9527e21f669a, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 65adef71-8b22-428f-9b70-9527e21f669a, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 65adef71-8b22-428f-9b70-9527e21f669a, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, f248f809-b6ad-429a-883b-616d0f1f6693, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, f248f809-b6ad-429a-883b-616d0f1f6693, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, f248f809-b6ad-429a-883b-616d0f1f6693, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 6aa2f728-861f-48c8-b153-7994626e7cd0, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 6aa2f728-861f-48c8-b153-7994626e7cd0, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 6aa2f728-861f-48c8-b153-7994626e7cd0, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 33700d94-3f3f-498c-8299-6a23377b9ee9, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 33700d94-3f3f-498c-8299-6a23377b9ee9, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 33700d94-3f3f-498c-8299-6a23377b9ee9, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, ed2e9ba4-4488-4e58-bc08-4c559ff0c250, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, ed2e9ba4-4488-4e58-bc08-4c559ff0c250, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, ed2e9ba4-4488-4e58-bc08-4c559ff0c250, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, c49c89a1-ac10-4e26-a60b-ec372fbb65c3, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, c49c89a1-ac10-4e26-a60b-ec372fbb65c3, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, c49c89a1-ac10-4e26-a60b-ec372fbb65c3, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 4eadf171-b919-4eb5-bdaf-a243c760a8e5, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 4eadf171-b919-4eb5-bdaf-a243c760a8e5, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 4eadf171-b919-4eb5-bdaf-a243c760a8e5, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, dd851e6b-b1dc-431a-9e3c-c71065213d64, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, dd851e6b-b1dc-431a-9e3c-c71065213d64, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, dd851e6b-b1dc-431a-9e3c-c71065213d64, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 1dfe0bb9-a047-4a34-ad31-475c938e4589, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 1dfe0bb9-a047-4a34-ad31-475c938e4589, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 1dfe0bb9-a047-4a34-ad31-475c938e4589, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 5e9d6903-45dc-4469-857a-7f8ca72c4112, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 5e9d6903-45dc-4469-857a-7f8ca72c4112, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 5e9d6903-45dc-4469-857a-7f8ca72c4112, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 8d441452-1487-4767-bbdd-1e878325e75a, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 8d441452-1487-4767-bbdd-1e878325e75a, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 8d441452-1487-4767-bbdd-1e878325e75a, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, ab167838-8dde-49b2-ab9d-593b2bd3f870, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, ab167838-8dde-49b2-ab9d-593b2bd3f870, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, ab167838-8dde-49b2-ab9d-593b2bd3f870, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 8268e204-612e-4867-9afb-995f821615e8, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 8268e204-612e-4867-9afb-995f821615e8, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 8268e204-612e-4867-9afb-995f821615e8, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 5cdb92c1-0029-4d8b-8cdd-56500791a80c, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 5cdb92c1-0029-4d8b-8cdd-56500791a80c, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 5cdb92c1-0029-4d8b-8cdd-56500791a80c, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 1bf369bd-0a65-4567-9cd8-c380cefed7c0, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 1bf369bd-0a65-4567-9cd8-c380cefed7c0, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 1bf369bd-0a65-4567-9cd8-c380cefed7c0, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 11ec6b8b-1be0-447c-919b-d3bf72ca9028, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 11ec6b8b-1be0-447c-919b-d3bf72ca9028, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 11ec6b8b-1be0-447c-919b-d3bf72ca9028, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 4001fb0d-1cca-4b47-aeab-069821ddf674, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 4001fb0d-1cca-4b47-aeab-069821ddf674, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 4001fb0d-1cca-4b47-aeab-069821ddf674, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, c1a8f9e4-6a76-484c-853a-5d0ff82c5685, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, c1a8f9e4-6a76-484c-853a-5d0ff82c5685, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, c1a8f9e4-6a76-484c-853a-5d0ff82c5685, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 91560dc6-458c-4216-9069-931657f6f143, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 91560dc6-458c-4216-9069-931657f6f143, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 91560dc6-458c-4216-9069-931657f6f143, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 2fea5f78-3656-4335-a1e7-95026bec05ae, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 2fea5f78-3656-4335-a1e7-95026bec05ae, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 2fea5f78-3656-4335-a1e7-95026bec05ae, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 67b6f031-ed87-4457-8b01-d6c07d3edd4b, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 67b6f031-ed87-4457-8b01-d6c07d3edd4b, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 67b6f031-ed87-4457-8b01-d6c07d3edd4b, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, fa3f1f66-9a72-485d-84e3-0fdebeece2e8, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, fa3f1f66-9a72-485d-84e3-0fdebeece2e8, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, fa3f1f66-9a72-485d-84e3-0fdebeece2e8, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 4929504b-72b3-4a2e-8a06-40c6a570bfdc, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 4929504b-72b3-4a2e-8a06-40c6a570bfdc, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 4929504b-72b3-4a2e-8a06-40c6a570bfdc, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZjA3M2Y0MzEtMmE1ODhkNDUtMzhjZjY1NGMtYzdjMDIyOTE=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 46d61e43-9968-468b-8b93-5b6ca99fd660, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 46d61e43-9968-468b-8b93-5b6ca99fd660, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 46d61e43-9968-468b-8b93-5b6ca99fd660, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 9847414d-e697-427c-bb83-1c890f8bf206, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 9847414d-e697-427c-bb83-1c890f8bf206, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 9847414d-e697-427c-bb83-1c890f8bf206, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, d34becbc-2e9c-40c3-b891-92cfcad6eb31, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, d34becbc-2e9c-40c3-b891-92cfcad6eb31, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, d34becbc-2e9c-40c3-b891-92cfcad6eb31, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 004daaec-fa4b-4334-a0ed-12225dc04bbb, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 004daaec-fa4b-4334-a0ed-12225dc04bbb, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 004daaec-fa4b-4334-a0ed-12225dc04bbb, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 40d011c6-0002-47ae-a584-99f847cb5aae, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 40d011c6-0002-47ae-a584-99f847cb5aae, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 40d011c6-0002-47ae-a584-99f847cb5aae, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, a31f13e7-ccca-445c-adde-61b33d33b4ea, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, a31f13e7-ccca-445c-adde-61b33d33b4ea, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, a31f13e7-ccca-445c-adde-61b33d33b4ea, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 4f520d06-6619-4978-b2c0-b9d9c0645d81, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 4f520d06-6619-4978-b2c0-b9d9c0645d81, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 4f520d06-6619-4978-b2c0-b9d9c0645d81, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 76f2439c-986b-4450-aae7-e294469aefb8, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 76f2439c-986b-4450-aae7-e294469aefb8, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 76f2439c-986b-4450-aae7-e294469aefb8, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ZjA3M2Y0MzEtMmE1ODhkNDUtMzhjZjY1NGMtYzdjMDIyOTE=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, c5009458-d405-4e57-81b0-9ca620b28557, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, c5009458-d405-4e57-81b0-9ca620b28557, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZjA3M2Y0MzEtMmE1ODhkNDUtMzhjZjY1NGMtYzdjMDIyOTE=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, c5009458-d405-4e57-81b0-9ca620b28557, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZjA3M2Y0MzEtMmE1ODhkNDUtMzhjZjY1NGMtYzdjMDIyOTE=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, bf14fc42-9c2b-438c-b539-905de68edf3c, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, bf14fc42-9c2b-438c-b539-905de68edf3c, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, bf14fc42-9c2b-438c-b539-905de68edf3c, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 201c0b54-86ef-4842-8c00-918df91448b9, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 201c0b54-86ef-4842-8c00-918df91448b9, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 201c0b54-86ef-4842-8c00-918df91448b9, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 55ddfb6e-5b31-4f04-a7e4-18d8b85a6760, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 55ddfb6e-5b31-4f04-a7e4-18d8b85a6760, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 55ddfb6e-5b31-4f04-a7e4-18d8b85a6760, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 74a4623d-0240-45cd-9b65-5903f0f98276, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 74a4623d-0240-45cd-9b65-5903f0f98276, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 74a4623d-0240-45cd-9b65-5903f0f98276, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 5a0c7fd2-ebc8-4e20-b08d-1b185897cabe, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 5a0c7fd2-ebc8-4e20-b08d-1b185897cabe, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 5a0c7fd2-ebc8-4e20-b08d-1b185897cabe, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 511d2604-566f-42e5-b9d0-461d0cdaf301, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 511d2604-566f-42e5-b9d0-461d0cdaf301, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 511d2604-566f-42e5-b9d0-461d0cdaf301, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ZjA3M2Y0MzEtMmE1ODhkNDUtMzhjZjY1NGMtYzdjMDIyOTE=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, a2cb3d91-5b4a-4dad-8fb5-81d1e775aa5b, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, a2cb3d91-5b4a-4dad-8fb5-81d1e775aa5b, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZjA3M2Y0MzEtMmE1ODhkNDUtMzhjZjY1NGMtYzdjMDIyOTE=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, a2cb3d91-5b4a-4dad-8fb5-81d1e775aa5b, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, e9c70cc2-f066-4a99-a79c-8d53aa93e206, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, e9c70cc2-f066-4a99-a79c-8d53aa93e206, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, e9c70cc2-f066-4a99-a79c-8d53aa93e206, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, af73e06b-c976-407a-96d0-a7b44be0e8ec, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, af73e06b-c976-407a-96d0-a7b44be0e8ec, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, af73e06b-c976-407a-96d0-a7b44be0e8ec, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 4a2d57b8-12d9-46b2-81c5-77cd6dc0f798, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 4a2d57b8-12d9-46b2-81c5-77cd6dc0f798, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 4a2d57b8-12d9-46b2-81c5-77cd6dc0f798, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 0c25398a-52a5-4ff8-b46b-17887ea5f7bf, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 0c25398a-52a5-4ff8-b46b-17887ea5f7bf, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 0c25398a-52a5-4ff8-b46b-17887ea5f7bf, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 4cd09919-fb2a-41b1-b5fb-3916fa270126, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 4cd09919-fb2a-41b1-b5fb-3916fa270126, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 4cd09919-fb2a-41b1-b5fb-3916fa270126, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 3f47758f-ee2d-400b-85f9-1c29453fee84, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 3f47758f-ee2d-400b-85f9-1c29453fee84, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 3f47758f-ee2d-400b-85f9-1c29453fee84, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 681c7cd5-36b1-4239-b039-49f2eacf5b08, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 681c7cd5-36b1-4239-b039-49f2eacf5b08, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 681c7cd5-36b1-4239-b039-49f2eacf5b08, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZjA3M2Y0MzEtMmE1ODhkNDUtMzhjZjY1NGMtYzdjMDIyOTE=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 01475036-9367-4025-b28d-7130d75e0a1b, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 01475036-9367-4025-b28d-7130d75e0a1b, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 01475036-9367-4025-b28d-7130d75e0a1b, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 04c6112a-f306-4913-91d9-becf9acda444, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 04c6112a-f306-4913-91d9-becf9acda444, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 04c6112a-f306-4913-91d9-becf9acda444, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, e80200fc-c145-4ff2-8964-45f3eda172ef, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, e80200fc-c145-4ff2-8964-45f3eda172ef, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, e80200fc-c145-4ff2-8964-45f3eda172ef, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 9063f0c0-3fa8-4c09-b3a5-d0fe42b761c8, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 9063f0c0-3fa8-4c09-b3a5-d0fe42b761c8, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 9063f0c0-3fa8-4c09-b3a5-d0fe42b761c8, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=NDZiZGYwNS0xZjFiZWY1OS1hMDU1NTQzYi1kMmZiOGNmYg==
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 612e5bf3-6b87-4ea4-83b5-ee3c2cd8e81b, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 612e5bf3-6b87-4ea4-83b5-ee3c2cd8e81b, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 612e5bf3-6b87-4ea4-83b5-ee3c2cd8e81b, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=M2Q4NTM3ZGYtYTEwYTgxYTEtYjIzOTE0ZjgtZTlmOGVhY2M=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YzQ4YzBkOTMtNzE4NDhmYTItNmVjYWQ0MzAtN2E5ODk0Yzc=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=Y2E3NTUxNGQtMTQ0YjUzYmEtNGU0ZTdjZmUtNDU5NTc4Nzg=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=MTBmNmVkYjYtZjFhMzZiODAtNTFiYjAzZmUtM2FmYTVkNTQ=
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 2eb3d676-eae4-44ac-93d3-8eb2c5a54589, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 2eb3d676-eae4-44ac-93d3-8eb2c5a54589, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 2eb3d676-eae4-44ac-93d3-8eb2c5a54589, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 6b3ca074-4d3f-4e8a-b387-19833724fba6, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 6b3ca074-4d3f-4e8a-b387-19833724fba6, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 6b3ca074-4d3f-4e8a-b387-19833724fba6, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 3a557874-0c1e-4532-9c8f-03d2b09fa7b5, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 3a557874-0c1e-4532-9c8f-03d2b09fa7b5, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 3a557874-0c1e-4532-9c8f-03d2b09fa7b5, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=YTk1YjNiMTEtZThmMzZjYTUtYTgwOTBjYzEtYzEwYTdhZmQ=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZjZiZjZkNTEtZjQ3ZmYzNjEtYjI4ZDdjYTYtMTBlMzM0ZTc=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ODQ3ODQwODItODAzNTA5NGYtYzkzMWZmNDYtNWQ4YTY3MmI=
+DEBUG    ydb.resolver.DiscoveryEndpointsResolver:resolver.py:175 Preparing initial endpoint to resolve endpoints
+DEBUG    ydb.connection:connection.py:295 Channel options: [('grpc.max_receive_message_length', 64000000), ('grpc.max_send_message_length', 64000000), ('grpc.primary_user_agent', 'python-library'), ('grpc.lb_policy_name', 'round_robin')]
+DEBUG    ydb.resolver.DiscoveryEndpointsResolver:resolver.py:185 Resolving endpoints for database /Root
+DEBUG    ydb.connection:connection.py:375 RpcState(ListEndpoints, d6c1c0de-8dd9-4a25-9f36-a85c7d27f6a0, localhost:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ListEndpoints, d6c1c0de-8dd9-4a25-9f36-a85c7d27f6a0, localhost:12281): request = { database: "/Root" }
+DEBUG    ydb.connection:connection.py:51 RpcState(ListEndpoints, d6c1c0de-8dd9-4a25-9f36-a85c7d27f6a0, localhost:12281): response = { operation { ready: true status: SUCCESS result { [type.googleapis.com/Ydb.Discovery.ListEndpointsResult] { endpoints { address: "work-machine.ru-central1.internal" port: 12281 service: "legacy" service: "tablet_service" service: "yql" service: "discovery" service: "cms" service: "locking" service: "kesus" service: "pq" service: "pqcd" service: "pqv1" service: "topic" service: "datastreams" service: "scripting" service: "clickhouse_internal" service: "rate_limiter" service: "analytics" service: "export" service: "import" service: "yq" service: "keyvalue" service: "monitoring" service: "auth" service: "query_service" location: "1" node_id: 1 } self_location: "1" } } } }
+DEBUG    ydb.resolver.DiscoveryEndpointsResolver:resolver.py:155 Resolved endpoints for database /Root: DiscoveryResult <self_location: 1, endpoints [<Endpoint work-machine.ru-central1.internal:12281, location 1, ssl: False>]>
+INFO     ydb.connection:connection.py:498 Closing channel for endpoint localhost:12281
+DEBUG    ydb.resolver.DiscoveryEndpointsResolver:resolver.py:175 Preparing initial endpoint to resolve endpoints
+DEBUG    ydb.connection:connection.py:295 Channel options: [('grpc.max_receive_message_length', 64000000), ('grpc.max_send_message_length', 64000000), ('grpc.primary_user_agent', 'python-library'), ('grpc.lb_policy_name', 'round_robin')]
+DEBUG    ydb.resolver.DiscoveryEndpointsResolver:resolver.py:185 Resolving endpoints for database /Root
+DEBUG    ydb.connection:connection.py:375 RpcState(ListEndpoints, 5d47461d-e41e-42d3-a80a-122356790204, localhost:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ListEndpoints, 5d47461d-e41e-42d3-a80a-122356790204, localhost:12281): request = { database: "/Root" }
+DEBUG    ydb.connection:connection.py:51 RpcState(ListEndpoints, 5d47461d-e41e-42d3-a80a-122356790204, localhost:12281): response = { operation { ready: true status: SUCCESS result { [type.googleapis.com/Ydb.Discovery.ListEndpointsResult] { endpoints { address: "work-machine.ru-central1.internal" port: 12281 service: "legacy" service: "tablet_service" service: "yql" service: "discovery" service: "cms" service: "locking" service: "kesus" service: "pq" service: "pqcd" service: "pqv1" service: "topic" service: "datastreams" service: "scripting" service: "clickhouse_internal" service: "rate_limiter" service: "analytics" service: "export" service: "import" service: "yq" service: "keyvalue" service: "monitoring" service: "auth" service: "query_service" location: "1" node_id: 1 } self_location: "1" } } } }
+DEBUG    ydb.resolver.DiscoveryEndpointsResolver:resolver.py:155 Resolved endpoints for database /Root: DiscoveryResult <self_location: 1, endpoints [<Endpoint work-machine.ru-central1.internal:12281, location 1, ssl: False>]>
+INFO     ydb.connection:connection.py:498 Closing channel for endpoint localhost:12281
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ZjA3M2Y0MzEtMmE1ODhkNDUtMzhjZjY1NGMtYzdjMDIyOTE=
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 8570c1fe-5332-498c-99aa-1b6765a271cf, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 8570c1fe-5332-498c-99aa-1b6765a271cf, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZjA3M2Y0MzEtMmE1ODhkNDUtMzhjZjY1NGMtYzdjMDIyOTE=" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 8570c1fe-5332-498c-99aa-1b6765a271cf, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:93 Acquired active session from queue: ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==
+DEBUG    ydb.connection:connection.py:375 RpcState(ExecuteQuery, 48bb3dc4-689f-4695-a5ef-e94e7923fcd6, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(ExecuteQuery, 48bb3dc4-689f-4695-a5ef-e94e7923fcd6, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==" exec_mode: EXEC_MODE_EXECUTE query_content { syntax: SYNTAX_YQL_V1 text: "select count(*) from `tpch/s1/lineitem`" } stats_mode: STATS_MODE_NONE }
+DEBUG    ydb.connection:connection.py:51 RpcState(ExecuteQuery, 48bb3dc4-689f-4695-a5ef-e94e7923fcd6, work-machine.ru-central1.internal:12281): response = { <_MultiThreadedRendezvous object> }
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZjA3M2Y0MzEtMmE1ODhkNDUtMzhjZjY1NGMtYzdjMDIyOTE=
+DEBUG    ydb.query.pool:pool.py:114 Session returned to queue: ydb://session/3?node_id=1&id=ZmI2NWJhYjQtY2Q3MTE3YzQtYzBmZjdlMTMtMzQwNzdlNA==
+---------------------------- Captured log teardown -----------------------------
+INFO     ya.test:ya.py:429 Test teardown
+DEBUG    ya.test:process.py:678 Command out will be placed to ydb.out.1
+DEBUG    ya.test:process.py:678 Command err will be placed to ydb.err.1
+DEBUG    ya.test:process.py:610 Executing '['/home/slonn/.ya/build/build_root/3fov/00000c/ydb/apps/ydb/ydb', '-e', 'grpc://localhost:12281', '-d', '/Root', 'scheme', 'rmdir', '-r', '-f', 'tpch/s1']' in 'None' (waiting)
+DEBUG    ya.test:process.py:628 Command pid: 383094
+DEBUG    ya.test:process.py:259 Command (pid 383094) rc: 0
+DEBUG    ya.test:process.py:260 Command (pid 383094) elapsed time (sec): 0.48935961723327637
+DEBUG    ya.test:process.py:263 Command (pid 383094) idrss: 0
+DEBUG    ya.test:process.py:263 Command (pid 383094) inblock: 0
+DEBUG    ya.test:process.py:263 Command (pid 383094) isrss: 0
+DEBUG    ya.test:process.py:263 Command (pid 383094) ixrss: 0
+DEBUG    ya.test:process.py:263 Command (pid 383094) majflt: 0
+DEBUG    ya.test:process.py:263 Command (pid 383094) maxrss: 171772
+DEBUG    ya.test:process.py:263 Command (pid 383094) minflt: 2318
+DEBUG    ya.test:process.py:263 Command (pid 383094) msgrcv: 0
+DEBUG    ya.test:process.py:263 Command (pid 383094) msgsnd: 0
+DEBUG    ya.test:process.py:263 Command (pid 383094) nivcsw: 0
+DEBUG    ya.test:process.py:263 Command (pid 383094) nsignals: 0
+DEBUG    ya.test:process.py:263 Command (pid 383094) nswap: 0
+DEBUG    ya.test:process.py:263 Command (pid 383094) nvcsw: 194
+DEBUG    ya.test:process.py:263 Command (pid 383094) oublock: 8
+DEBUG    ya.test:process.py:263 Command (pid 383094) stime: 0.013651
+DEBUG    ya.test:process.py:263 Command (pid 383094) utime: 0.019951999999999998
+DEBUG    ya.test:process.py:263 Command (pid 383094) wtime: 0.49
+DEBUG    ya.test:process.py:275 Command (pid 383094) output:
+
+DEBUG    ya.test:process.py:276 Command (pid 383094) errors:
+
+
+DEBUG    ydb.connection:connection.py:375 RpcState(DeleteSession, 43f4a704-0c83-4491-badb-3ae373536f11, work-machine.ru-central1.internal:12281): creating call state
+DEBUG    ydb.connection:connection.py:62 RpcState(DeleteSession, 43f4a704-0c83-4491-badb-3ae373536f11, work-machine.ru-central1.internal:12281): request = { session_id: "ydb://session/3?node_id=1&id=YmI1ZmM4MzgtOWFlMmRjZTgtYTBjMzkwNjEtYmMwODUxYTk=" }
+DEBUG    ydb.connection:connection.py:51 RpcState(DeleteSession, 43f4a704-0c83-4491-badb-3ae373536f11, work-machine.ru-central1.internal:12281): response = { status: SUCCESS }
+DEBUG    ydb.query.pool:pool.py:181 All session were deleted.
+INFO     ydb.connection:connection.py:498 Closing channel for endpoint localhost:12281
+INFO     ydb.connection:connection.py:498 Closing channel for endpoint work-machine.ru-central1.internal:12281
+INFO     ydb.pool.Discovery:pool.py:277 Successfully terminated discovery process
+INFO     ydb.tests.library.harness.kikimr_runner:kikimr_runner.py:201 Stopped node localhost:12281/1
+DEBUG    library.python.filelock:__init__.py:119 Ensuring FileLock released: /home/slonn/.ya/build/port_sync_dir/20749
+DEBUG    library.python.filelock:__init__.py:119 Ensuring FileLock released: /home/slonn/.ya/build/port_sync_dir/23091
+DEBUG    library.python.filelock:__init__.py:119 Ensuring FileLock released: /home/slonn/.ya/build/port_sync_dir/14203
+DEBUG    library.python.filelock:__init__.py:119 Ensuring FileLock released: /home/slonn/.ya/build/port_sync_dir/12281
+DEBUG    library.python.filelock:__init__.py:119 Ensuring FileLock released: /home/slonn/.ya/build/port_sync_dir/10679
+============================== slowest durations ===============================
+123.80s call     test_workload_manager.py::TestWorkloadManager::test_resource_pool_queue_size_limit
+22.50s teardown test_workload_manager.py::TestWorkloadManager::test_resource_pool_queue_size_limit
+3.59s setup    test_workload_manager.py::TestWorkloadManager::test_resource_pool_queue_size_limit
+=========================== short test summary info ============================
+FAILED test_workload_manager.py::TestWorkloadManager::test_resource_pool_queue_size_limit
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+================= 1 failed, 15 deselected in 150.45s (0:02:30) =================
+Exception ignored in: <function QuerySessionPool.__del__ at 0x7a369c6856d0>
+Traceback (most recent call last):
+  File "contrib/python/ydb/py3/ydb/query/pool.py", line 193, in __del__
+  File "contrib/python/ydb/py3/ydb/query/pool.py", line 177, in stop
+  File "contrib/python/ydb/py3/ydb/query/session.py", line 275, in delete
+  File "contrib/python/ydb/py3/ydb/query/session.py", line 172, in _delete_call
+  File "contrib/python/ydb/py3/ydb/tracing.py", line 70, in wrapper
+  File "contrib/python/ydb/py3/ydb/pool.py", line 443, in __call__
+  File "contrib/python/ydb/py3/ydb/connection.py", line 467, in __call__
+ydb.issues.ConnectionLost: Rpc error, reason <_InactiveRpcError of RPC that terminated with:
+	status = StatusCode.UNAVAILABLE
+	details = "connections to all backends failing; last error: UNKNOWN: ipv4:127.0.1.1:12281: Failed to connect to remote host: Connection refused"
+	debug_error_string = "UNKNOWN:connections to all backends failing; last error: UNKNOWN: ipv4:127.0.1.1:12281: Failed to connect to remote host: Connection refused {grpc_status:14, created_time:"2025-01-15T11:04:54.678824263+00:00", file_line:153, file:"/home/runner/actions_runner/_work/ydb/ydb/contrib/libs/grpc/src/core/lib/transport/error_utils.cc"}"
+>
+Number of suites skipped by name: 2, by filter *test_resource_pool_queue_size_limit*
+
+ydb/tests/sql/large <py3test> [size:large] nchunks:10 [tags: ya:fat]
+------ [0/10] chunk ran 1 test (total:151.51s - test:151.49s)
+[fail] test_workload_manager.py::TestWorkloadManager::test_resource_pool_queue_size_limit [default-linux-x86_64-relwithdebinfo] (149.89s)
+ydb/tests/sql/large/test_workload_manager.py:272: in test_resource_pool_queue_size_limit
+    assert success_count == queue_size, f"Expected {queue_size} successful queries, got {success_count}"
+E   AssertionError: Expected 2 successful queries, got 22
+E   assert 22 == 2
+Log: /home/slonn/ydb/ydb/tests/sql/large/test-results/py3test/chunk0/testing_out_stuff/test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_size_limit.log
+Logsdir: /home/slonn/ydb/ydb/tests/sql/large/test-results/py3test/chunk0/testing_out_stuff
+------ FAIL: 1 - FAIL ydb/tests/sql/large
+
+Total 1 suite:
+	1 - FAIL
+Total 1 test:
+	1 - FAIL
+Failed

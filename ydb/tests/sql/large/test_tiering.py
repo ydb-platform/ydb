@@ -10,7 +10,7 @@ import time
 class TestYdbS3TTL(TestBase, S3Base):
 
     def test_basic_tiering_operations(self):
-        # Инициализация S3 клиента и создание тестового бакета
+        # S3 client initialization and temp bucket creation
 
         s3_client = self.s3_session_client()
 
@@ -76,18 +76,18 @@ class TestYdbS3TTL(TestBase, S3Base):
                 if len(files) > 0:
                     break
 
-            # Проверяем, истекло ли максимальное время ожидания
+            # Check if we need to stop by timeout
             elapsed_time = time.time() - start_time
             if elapsed_time >= max_wait_time:
                 break
 
-            # Задержка перед следующей попыткой
+            # Wait until retry
             time.sleep(1)
         assert len(files) > 0, "No tiered files in bucket"
 
 
     def test_tiering_the_same_results(self):
-        # Инициализация S3 клиента и создание тестового бакета
+        # S3 client initialization and temp bucket creation
 
         s3_client = self.s3_session_client()
 
@@ -133,12 +133,12 @@ class TestYdbS3TTL(TestBase, S3Base):
             current_value = self.query(f"SELECT sum(value) from `{self.table_path}_test_table`")[0][0]
             assert current_value == total_value, f"Current value {current_value} is not equal to expected value {total_value}"
 
-            # Проверяем, истекло ли максимальное время ожидания
+            # Check if we need to stop by timeout
             elapsed_time = time.time() - start_time
             if elapsed_time >= max_wait_time:
                 break
 
-            # Задержка перед следующей попыткой
+            # Wait until retry
             time.sleep(1)
 
     def writer(self, worker_id, num_operations):

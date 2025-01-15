@@ -11,6 +11,7 @@ TEST_SRCS(
     test_insertinto_selectfrom.py
     test_insert_delete_duplicate_records.py
     test_tiering.py
+    test_workload_manager.py
 )
 
 SIZE(LARGE)

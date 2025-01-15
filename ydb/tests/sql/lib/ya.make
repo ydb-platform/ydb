@@ -7,6 +7,7 @@ PY_SRCS(
     test_lib.py
     test_query.py
     test_s3.py
+    test_wm.py
 )
 
 PEERDIR(

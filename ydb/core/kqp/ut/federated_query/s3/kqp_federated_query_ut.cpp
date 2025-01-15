@@ -2369,7 +2369,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         {
             const TString sql = fmt::format(R"(
                     INSERT INTO {destination}
-                        SELECT key, value FROM {source} LIMIT 1;)",
+                        SELECT key, value FROM {source};)",
                     "destination"_a = table1,
                     "source"_a = olapTable);
 
@@ -2384,7 +2384,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         {
             const TString sql = fmt::format(R"(
                     INSERT INTO {destination}
-                        SELECT key, value, "2024" AS year FROM {source} LIMIT 1;)",
+                        SELECT key, value, "2024" AS year FROM {source};)",
                     "destination"_a = table2,
                     "source"_a = olapTable);
 

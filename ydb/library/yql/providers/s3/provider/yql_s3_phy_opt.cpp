@@ -199,16 +199,18 @@ public:
             }
         }
 
-        if (!FindNode(input.Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable(TDqCnUnionAll::CallableName()); })) {
+        if (!FindNode(input.Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable(TCoDataSource::CallableName()); })) {
             YQL_CLOG(INFO, ProviderS3) << "Rewrite pure S3WriteObject `" << cluster << "`.`" << target.Path().StringValue() << "` as stage with sink.";
             return keys.empty() ?
                 Build<TDqStage>(ctx, writePos)
-                    .Inputs().Build()
+                    .Inputs()
+                        .Add(input)
+                        .Build()
                     .Program<TCoLambda>()
-                        .Args({})
+                        .Args({"in"})
                         .Body<TS3SinkOutput>()
                             .Input<TCoToFlow>()
-                                .Input(input)
+                                .Input("in")
                                 .Build()
                             .Format(target.Format())
                             .KeyColumns().Build()
@@ -237,11 +239,13 @@ public:
                             .Add<TDqCnHashShuffle>()
                                 .Output<TDqOutput>()
                                     .Stage<TDqStage>()
-                                        .Inputs().Build()
+                                        .Inputs()
+                                            .Add(input)
+                                            .Build()
                                         .Program<TCoLambda>()
-                                            .Args({})
+                                            .Args({"in"})
                                             .Body<TCoToFlow>()
-                                                .Input(input)
+                                                .Input("in")
                                                 .Build()
                                             .Build()
                                         .Settings().Build()

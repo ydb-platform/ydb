@@ -3,6 +3,9 @@ run-name: Build YDB CLI
 on:
   workflow_dispatch:
     inputs:
+      commit_sha:
+        type: string
+        default: ""
       build-linux-amd:
         type: boolean
         description: Build YDB CLI for Linux (amd64)
@@ -23,25 +26,6 @@ on:
         type: boolean
         description: Build YDB CLI for Windows (amd64)
         default: true
-      commit_sha:
-        type: string
-        default: ""
-      s3_host:
-        type: string
-        default: "storage.yandexcloud.net"
-        description: "S3 endpoint. Details: https://yandex.cloud/en/docs/storage/tools/s3cmd"
-      s3_bucket:
-        type: string
-        default: "cli-test" #"yandexcloud-ydb"
-        description: "S3 bucket. S3Uri (without hostname). Details: https://yandex.cloud/en/docs/storage/tools/s3cmd"
-      s3_dns_host_bucket:
-        type: string
-        default: "%(bucket)s.storage.yandexcloud.net"
-        description: "S3 DNS-style bucket+hostname:port template for accessing a bucket. Details: https://yandex.cloud/en/docs/storage/tools/s3cmd"
-      s3_region:
-        type: string
-        default: "ru-central1"
-        description: "S3 region. Details: https://yandex.cloud/en/docs/storage/tools/s3cmd"
 defaults:
   run:
     shell: bash

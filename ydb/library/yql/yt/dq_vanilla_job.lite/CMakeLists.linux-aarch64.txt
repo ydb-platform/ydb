@@ -35,7 +35,7 @@ target_link_libraries(dq_vanilla_job.lite PUBLIC
   providers-common-comp_nodes
   providers-dq-common
   providers-dq-runtime
-  yt-comp_nodes-dq
+  comp_nodes-dq-llvm14
   providers-yt-mkql_dq
   yt-codec-codegen
   yt-comp_nodes-llvm14

@@ -51,7 +51,7 @@ target_link_libraries(worker_node PUBLIC
   essentials-utils-failure_injector
   essentials-utils-backtrace
   essentials-utils-network
-  yt-comp_nodes-dq
+  comp_nodes-dq-llvm14
   yt-comp_nodes-llvm14
   yt-codec-codegen
   providers-yt-mkql_dq

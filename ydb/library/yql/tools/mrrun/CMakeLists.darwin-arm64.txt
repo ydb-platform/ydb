@@ -71,7 +71,7 @@ target_link_libraries(mrrun PUBLIC
   essentials-utils-failure_injector
   cpp-client-ydb_driver
   essentials-core-url_preprocessing
-  yt-comp_nodes-dq
+  comp_nodes-dq-llvm14
   yt-comp_nodes-llvm14
   yt-codec-codegen
   providers-yt-dq_task_preprocessor

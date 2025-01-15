@@ -32,7 +32,7 @@ target_link_libraries(dq_vanilla_job PUBLIC
   yt-codec-codegen
   yt-comp_nodes-llvm14
   essentials-utils-backtrace
-  yt-comp_nodes-dq
+  comp_nodes-dq-llvm14
   providers-yt-mkql_dq
   tools-dq-worker_job
   essentials-sql-pg

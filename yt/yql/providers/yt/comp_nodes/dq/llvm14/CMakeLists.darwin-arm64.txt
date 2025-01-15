@@ -12,29 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(core-kqp-federated_query)
+add_library(comp_nodes-dq-llvm14 INTERFACE)
 
 
-target_compile_options(core-kqp-federated_query PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-kqp-federated_query PUBLIC
+target_link_libraries(comp_nodes-dq-llvm14 INTERFACE
   contrib-libs-cxxsupp
   yutil
-  ydb-core-base
-  fq-libs-db_id_async_resolver_impl
-  fq-libs-grpc
-  library-db_pool-protos
-  providers-common-http_gateway
-  generic-connector-libcpp
-  comp_nodes-dq-llvm14
-  yt-gateway-native
-  yt-lib-yt_download
-)
-
-target_sources(core-kqp-federated_query PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/federated_query/kqp_federated_query_actors.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/federated_query/kqp_federated_query_helpers.cpp
+  yt-comp_nodes-dq
+  minikql-computation-llvm14
 )
 

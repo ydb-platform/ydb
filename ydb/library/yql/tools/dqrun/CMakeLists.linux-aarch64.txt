@@ -81,7 +81,7 @@ target_link_libraries(dqrun PUBLIC
   essentials-core-url_lister
   essentials-core-pg_ext
   providers-yt-actors
-  yt-comp_nodes-dq
+  comp_nodes-dq-llvm14
   providers-yt-dq_task_preprocessor
   yt-gateway-file
   yt-gateway-native

@@ -76,7 +76,7 @@ target_link_libraries(yql-yt-native PUBLIC
   yt-lib-skiff
   yt-lib-yt_download
   providers-yt-provider
-  yt-comp_nodes-dq
+  comp_nodes-dq-llvm14
   yt-comp_nodes-llvm14
   providers-yt-dq_task_preprocessor
   library-yql-yt
@@ -155,7 +155,7 @@ target_link_libraries(yql-yt-native.global PUBLIC
   yt-lib-skiff
   yt-lib-yt_download
   providers-yt-provider
-  yt-comp_nodes-dq
+  comp_nodes-dq-llvm14
   yt-comp_nodes-llvm14
   providers-yt-dq_task_preprocessor
   library-yql-yt

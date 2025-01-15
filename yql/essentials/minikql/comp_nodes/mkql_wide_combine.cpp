@@ -515,7 +515,7 @@ public:
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
 
-        auto bucketId = 0; //ChooseBucket(ViewForKeyAndState.data());
+        auto bucketId = ChooseBucket(ViewForKeyAndState.data());
         auto& bucket = SpilledBuckets[bucketId];
 
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
@@ -554,7 +554,7 @@ public:
             return value;
         }
 
-        auto& bucket = SpilledBuckets[ExtractingBucket];
+        auto& bucket = SpilledBuckets.front();
 
         MKQL_ENSURE(bucket.BucketState == TSpilledBucket::EBucketState::InMemory, "Internal logic error");
         MKQL_ENSURE(SpilledBuckets.size() > 0, "Internal logic error");
@@ -563,10 +563,8 @@ public:
         if (value) {
             CounterOutputRows_.Inc();
         } else {
-            // SpilledBuckets.front().InMemoryProcessingState->ReadMore<false>();
-            // SpilledBuckets.pop_front();
-            ++ExtractingBucket;
-            if (ExtractingBucket == SpilledBucketCount) {
+            SpilledBuckets.pop_front();
+            if (SpilledBuckets.empty()) {
                 IsEverythingExtracted = true;
             }
         }
@@ -808,9 +806,8 @@ private:
     bool RecoverState; //sub mode for ProcessSpilledData
 
     TAsyncReadOperation AsyncReadOperation = std::nullopt;
-    static constexpr size_t SpilledBucketCount = 1;
+    static constexpr size_t SpilledBucketCount = 128;
     std::deque<TSpilledBucket> SpilledBuckets;
-    ui32 ExtractingBucket = 0;
     ui32 SpillingBucketsCount = 0;
     ui32 InMemoryBucketsCount = SpilledBucketCount;
     ui64 BufferForUsedInputItemsBucketId;

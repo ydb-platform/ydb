@@ -1035,30 +1035,18 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
 
     if (response.PQGroupInfo) {
         const auto& pqDescr = response.PQGroupInfo->Description;
-        NYql::TIssue issue;
-        FillTopicDescription(Result, pqDescr, response.Self->Info, GetCdcStreamName());
-
-        switch (issue.GetCode()) {
-        case Ydb::StatusIds::INTERNAL_ERROR:
-            return RaiseError(issue.GetMessage(), Ydb::PersQueue::ErrorCode::ERROR, Ydb::StatusIds::INTERNAL_ERROR, ActorContext());
-        case Ydb::PersQueue::ErrorCode::BAD_REQUEST:
-            Request_->RaiseIssue(issue);
-            return RespondWithCode(Ydb::StatusIds::SCHEME_ERROR);
-        default:
-            break;
+        Ydb::StatusIds::StatusCode status;
+        TString error;
+        if (!FillTopicDescription(Result, pqDescr, response.Self->Info, GetCdcStreamName(), status, error)) {
+            return RaiseError(error, Ydb::PersQueue::ErrorCode::ERROR, status, ActorContext());
         }
+
         const auto &config = pqDescr.GetPQTabletConfig();
         auto consumerName = NPersQueue::ConvertNewConsumerName(Settings.Consumer, ActorContext());
         bool found = false;
         for (const auto& consumer : config.GetConsumers()) {
             if (consumerName == consumer.GetName()) {
                  found = true;
-            }
-            auto rr = Result.add_consumers();
-            Ydb::StatusIds::StatusCode status;
-            TString error;
-            if (!FillConsumer(*rr, consumer, status, error)) {
-                return RaiseError(error, Ydb::PersQueue::ErrorCode::ERROR, status, ActorContext());
             }
         }
 

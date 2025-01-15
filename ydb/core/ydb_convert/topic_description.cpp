@@ -44,8 +44,9 @@ bool FillConsumer(Ydb::Topic::Consumer& rr, const NKikimrPQ::TPQTabletConfig_TCo
     return true;
 }
 
-void FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSchemeOp::TPersQueueGroupDescription& in,
-    const NKikimrSchemeOp::TDirEntry &fromDirEntry, const TMaybe<TString>& cdcName) {
+bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSchemeOp::TPersQueueGroupDescription& in,
+    const NKikimrSchemeOp::TDirEntry &fromDirEntry, const TMaybe<TString>& cdcName,
+    Ydb::StatusIds_StatusCode& status, TString& error) {
     
     const NKikimrPQ::TPQConfig pqConfig = AppData()->PQConfig;
 
@@ -162,6 +163,13 @@ void FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
                 break;
         }
     }
+
+    for (const auto& consumer : config.GetConsumers()) {
+        if (!FillConsumer(*out.add_consumers(), consumer, status, error)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace NKikimr

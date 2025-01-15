@@ -32,7 +32,8 @@ namespace NKikimrPQ {
 namespace NKikimr {
 
 bool FillConsumer(Ydb::Topic::Consumer& rr, const NKikimrPQ::TPQTabletConfig_TConsumer& consumer, Ydb::StatusIds_StatusCode& status, TString& error);
-void FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSchemeOp::TPersQueueGroupDescription& in,
-    const NKikimrSchemeOp::TDirEntry &fromDirEntry, const TMaybe<TString>& cdcName);
+bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSchemeOp::TPersQueueGroupDescription& in,
+    const NKikimrSchemeOp::TDirEntry &fromDirEntry, const TMaybe<TString>& cdcName,
+    Ydb::StatusIds_StatusCode& status, TString& error);
 
 } // namespace NKikimr

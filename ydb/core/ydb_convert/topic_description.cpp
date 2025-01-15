@@ -10,24 +10,24 @@
 
 namespace NKikimr {
 
-bool FillConsumer(Ydb::Topic::Consumer& rr, const NKikimrPQ::TPQTabletConfig_TConsumer& consumer,
+bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TConsumer& in,
     Ydb::StatusIds_StatusCode& status, TString& error)
 {
     const NKikimrPQ::TPQConfig pqConfig = AppData()->PQConfig;
-    auto consumerName = NPersQueue::ConvertOldConsumerName(consumer.GetName(), pqConfig);
-    rr.set_name(consumerName);
-    rr.mutable_read_from()->set_seconds(consumer.GetReadFromTimestampsMs() / 1000);
-    auto version = consumer.GetVersion();
+    auto consumerName = NPersQueue::ConvertOldConsumerName(in.GetName(), pqConfig);
+    out.set_name(consumerName);
+    out.mutable_read_from()->set_seconds(in.GetReadFromTimestampsMs() / 1000);
+    auto version = in.GetVersion();
     if (version != 0)
-        (*rr.mutable_attributes())["_version"] = TStringBuilder() << version;
-    for (const auto &codec : consumer.GetCodec().GetIds()) {
-        rr.mutable_supported_codecs()->add_codecs((Ydb::Topic::Codec) (codec + 1));
+        (*out.mutable_attributes())["_version"] = TStringBuilder() << version;
+    for (const auto &codec : in.GetCodec().GetIds()) {
+        out.mutable_supported_codecs()->add_codecs((Ydb::Topic::Codec) (codec + 1));
     }
 
-    rr.set_important(consumer.GetImportant());
+    out.set_important(in.GetImportant());
     TString serviceType = "";
-    if (consumer.HasServiceType()) {
-        serviceType = consumer.GetServiceType();
+    if (in.HasServiceType()) {
+        serviceType = in.GetServiceType();
     } else {
         if (pqConfig.GetDisallowDefaultClientServiceType()) {
             error = "service type must be set for all read rules";
@@ -36,23 +36,23 @@ bool FillConsumer(Ydb::Topic::Consumer& rr, const NKikimrPQ::TPQTabletConfig_TCo
         }
         serviceType = pqConfig.GetDefaultClientServiceType().GetName();
     }
-    (*rr.mutable_attributes())["_service_type"] = serviceType;
+    (*out.mutable_attributes())["_service_type"] = serviceType;
     return true;
 }
 
-bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSchemeOp::TPersQueueGroupDescription& in,
-    const NKikimrSchemeOp::TDirEntry &fromDirEntry, const TMaybe<TString>& cdcName,
+bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSchemeOp::TPersQueueGroupDescription& inDesc,
+    const NKikimrSchemeOp::TDirEntry& inDirEntry, const TMaybe<TString>& cdcName,
     Ydb::StatusIds_StatusCode& status, TString& error) {
     
     const NKikimrPQ::TPQConfig pqConfig = AppData()->PQConfig;
 
     Ydb::Scheme::Entry *selfEntry = out.mutable_self();
-    ConvertDirectoryEntry(fromDirEntry, selfEntry, true);
+    ConvertDirectoryEntry(inDirEntry, selfEntry, true);
     if (cdcName) {
         selfEntry->set_name(*cdcName);
     }
 
-    for (auto& sourcePart: in.GetPartitions()) {
+    for (auto& sourcePart: inDesc.GetPartitions()) {
         auto destPart = out.add_partitions();
         destPart->set_partition_id(sourcePart.GetPartitionId());
         destPart->set_active(sourcePart.GetStatus() == ::NKikimrPQ::ETopicPartitionStatus::Active);
@@ -74,11 +74,11 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
         }
     }
 
-    const auto &config = in.GetPQTabletConfig();
+    const auto &config = inDesc.GetPQTabletConfig();
     if (AppData()->FeatureFlags.GetEnableTopicSplitMerge() && NPQ::SplitMergeEnabled(config)) {
         out.mutable_partitioning_settings()->set_min_active_partitions(config.GetPartitionStrategy().GetMinPartitionCount());
     } else {
-        out.mutable_partitioning_settings()->set_min_active_partitions(in.GetTotalGroupCount());
+        out.mutable_partitioning_settings()->set_min_active_partitions(inDesc.GetTotalGroupCount());
     }
 
     out.mutable_partitioning_settings()->set_max_active_partitions(config.GetPartitionStrategy().GetMaxPartitionCount());
@@ -108,9 +108,9 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
         (*out.mutable_attributes())["_allow_unauthenticated_read"] = "true";
     }
 
-    if (in.GetPartitionPerTablet() != 2) {
+    if (inDesc.GetPartitionPerTablet() != 2) {
         (*out.mutable_attributes())["_partitions_per_tablet"] =
-            TStringBuilder() << in.GetPartitionPerTablet();
+            TStringBuilder() << inDesc.GetPartitionPerTablet();
     }
     if (config.HasAbcId()) {
         (*out.mutable_attributes())["_abc_id"] = TStringBuilder() << config.GetAbcId();

@@ -1047,6 +1047,7 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
         for (const auto& consumer : config.GetConsumers()) {
             if (consumerName == consumer.GetName()) {
                 found = true;
+                break;
             }
         }
 

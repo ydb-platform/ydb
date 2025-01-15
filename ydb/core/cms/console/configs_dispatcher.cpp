@@ -891,8 +891,6 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
         }
 
         newYamlConfig.append(newname);
-        Cerr << " xxx 4 " << rec.GetDatabaseConfig();
-        Cerr << " xxx 5 " << newYamlConfig;
     }
 
     if (rec.VolatileConfigsSize() != VolatileYamlConfigs.size()) {

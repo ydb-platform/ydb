@@ -801,7 +801,6 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev
     subscription->NodeId = rec.GetOptions().GetNodeId();
     subscription->Host = rec.GetOptions().GetHost();
     subscription->Tenant = rec.GetOptions().GetTenant();
-    Cerr << " xxx 3 " << subscription->Tenant << " " << rec.GetServeYaml() << Endl;
     subscription->NodeType = rec.GetOptions().GetNodeType();
 
     subscription->ItemKinds.insert(rec.GetConfigItemKinds().begin(), rec.GetConfigItemKinds().end());
@@ -1268,11 +1267,6 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateYamlConfig::TPtr &ev, const T
 
             if (YamlConfigPerDatabase.contains(subscription->Tenant)) {
                 request->Record.SetDatabaseConfig(YamlConfigPerDatabase[subscription->Tenant]);
-            } else {
-                Cerr << " xxx search " << subscription->Tenant << Endl;
-                if (YamlConfigPerDatabase.size() > 0) {
-                    Cerr << " xxx has " << YamlConfigPerDatabase.begin()->first << Endl;
-                }
             }
 
             ctx.Send(subscription->Worker, request.Release());

@@ -36,12 +36,8 @@ std::optional<FileHandlerLockGuard> LockFile(TFileHandle & fileHandle) {
     return FileHandlerLockGuard(&fileHandle);
 }
 
-replxx::Replxx::Color ReplxxColorOf(ECandidateKind kind) {
-    const auto schema = YQLHighlight::ColorSchema::Monaco();
-    switch (kind) {
-    case ECandidateKind::Keyword:
-      return schema.keyword;
-    }
+replxx::Replxx::Color ReplxxColorOf(ECandidateKind /* kind */) {
+    return replxx::Replxx::Color::DEFAULT;
 }
 
 class TLineReader : public ILineReader

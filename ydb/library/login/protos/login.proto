@@ -23,6 +23,7 @@ message TSid {
     string Hash = 3;
     repeated string Members = 4;
     uint64 CreatedAt = 5;
+    uint64 LastSuccessfulLogin = 6; // microseconds
 }
 
 message TSecurityState {

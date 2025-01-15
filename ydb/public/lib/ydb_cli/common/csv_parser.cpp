@@ -714,7 +714,7 @@ void TPossibleTypes::MergeWith(TPossibleTypes& newTypes) {
             return;
         }
     }
-    std::unique_lock<std::shared_mutex>  WriteLock(Lock);
+    std::unique_lock<std::shared_mutex> WriteLock(Lock);
     for (size_t i = 0; i < ColumnPossibleTypes.size(); ++i) {
         auto& currentPossibleType = ColumnPossibleTypes[i];
         auto& newPossibleType = newTypesVec[i];

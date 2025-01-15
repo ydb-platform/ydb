@@ -58,7 +58,7 @@ public:
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
 
         const auto state = new LoadInst(valueType, statePtr, "load", block);
-        BranchInst::Create(init, work, IsInvalid(state, block), block);
+        BranchInst::Create(init, work, IsInvalid(state, block, context), block);
 
         block = init;
         new StoreInst(GetTrue(context), statePtr, block);
@@ -74,7 +74,7 @@ public:
 
         const auto item = GetNodeValue(Flow, ctx, block);
         result->addIncoming(item, block);
-        BranchInst::Create(done, good, IsSpecial(item, block), block);
+        BranchInst::Create(done, good, IsSpecial(item, block, context), block);
 
         block = good;
         codegenItemArg->CreateSetValue(ctx, block, item);
@@ -239,7 +239,6 @@ public:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -258,7 +257,7 @@ public:
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
 
         const auto load = new LoadInst(valueType, initArg, "load", block);
-        BranchInst::Create(work, init, IsInvalid(load, block), block);
+        BranchInst::Create(work, init, IsInvalid(load, block, context), block);
         block = init;
 
         codegenStateArg->CreateSetValue(ctx, block, initArg);
@@ -282,7 +281,7 @@ public:
         BranchInst::Create(done, good, icmp, block);
         block = good;
 
-        SafeUnRefUnboxed(valuePtr, ctx, block);
+        SafeUnRefUnboxedOne(valuePtr, ctx, block);
         GetNodeValue(valuePtr, ComputationNodes.NewItem, ctx, block);
 
         const auto newState = GetNodeValue(ComputationNodes.NewState, ctx, block);

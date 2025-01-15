@@ -96,21 +96,12 @@ TResult RequestWithRetry(
     }
 }
 
-// Retry request with given `header' and `body' using `retryPolicy'.
-// If `retryPolicy == nullptr' use default, currently `TAttemptLimitedRetryPolicy(TConfig::Get()->RetryCount)`.
-TResponseInfo RetryRequestWithPolicy(
-    IRequestRetryPolicyPtr retryPolicy,
-    const TClientContext& context,
-    THttpHeader& header,
-    TMaybe<TStringBuf> body = {},
-    const TRequestConfig& config = TRequestConfig());
-
 NHttpClient::IHttpResponsePtr RequestWithoutRetry(
     const TClientContext& context,
     TMutationId& mutationId,
     THttpHeader& header,
     TMaybe<TStringBuf> body = {},
-    const TRequestConfig& config = TRequestConfig());
+    const TRequestConfig& config = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

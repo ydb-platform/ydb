@@ -228,7 +228,7 @@ TStructuredJobTableList ApplyProtobufColumnFilters(
         CreateDefaultRequestRetryPolicy(preparer.GetContext().Config),
         preparer.GetContext(),
         tableList,
-        [&] (NRawClient::TRawBatchRequest& batch, const auto& table) {
+        [&] (NRawClient::THttpRawBatchRequest& batch, const auto& table) {
             return batch.Get(preparer.GetTransactionId(), table.RichYPath->Path_ + "/@dynamic", TGetOptions());
         });
 
@@ -2343,7 +2343,7 @@ public:
         : OperationImpl_(std::move(operationImpl))
     { }
 
-    void PrepareRequest(NRawClient::TRawBatchRequest* batchRequest) override
+    void PrepareRequest(NRawClient::THttpRawBatchRequest* batchRequest) override
     {
         auto filter = TOperationAttributeFilter()
             .Add(EOperationAttribute::State)

@@ -311,7 +311,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
         CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 0});
     }
-    
+
     Y_UNIT_TEST(AddAccess_NonExisting) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -331,7 +331,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", NACLib::TDiffACL{}.SerializeAsString(), "user1");
             TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "Owner SID user1 not found"}});
         }
-        
+
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
@@ -923,9 +923,7 @@ NHttp::THttpIncomingRequestPtr MakeLogoutRequest(const TString& cookieName, cons
 }
 
 Y_UNIT_TEST_SUITE(TWebLoginService) {
-
-    Y_UNIT_TEST(AuditLogLoginSuccess) {
-        TTestBasicRuntime runtime;
+    void AuditLogLoginTest(TTestBasicRuntime& runtime, bool isUserAdmin) {
         std::vector<std::string> lines;
         runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
         TTestEnv env(runtime);
@@ -965,6 +963,33 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1");
         UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token=");
         UNIT_ASSERT(last.find("sanitized_token={none}") == std::string::npos);
+
+        if (isUserAdmin) {
+            UNIT_ASSERT_STRING_CONTAINS(last, "account_type=admin");
+        } else {
+            UNIT_ASSERT(!last.contains("account_type=admin"));
+        }
+    }
+
+    Y_UNIT_TEST(AuditLogEmptySIDsLoginSuccess) {
+        TTestBasicRuntime runtime;
+        AuditLogLoginTest(runtime, true);
+    }
+
+    Y_UNIT_TEST(AuditLogAdminLoginSuccess) {
+        TTestBasicRuntime runtime;
+        runtime.AddAppDataInit([](ui32, NKikimr::TAppData& appData){
+            appData.AdministrationAllowedSIDs.emplace_back("user1");
+        });
+        AuditLogLoginTest(runtime, true);
+    }
+
+    Y_UNIT_TEST(AuditLogLoginSuccess) {
+        TTestBasicRuntime runtime;
+        runtime.AddAppDataInit([](ui32, NKikimr::TAppData& appData){
+            appData.AdministrationAllowedSIDs.emplace_back("user2");
+        });
+        AuditLogLoginTest(runtime, false);
     }
 
     Y_UNIT_TEST(AuditLogLoginBadPassword) {

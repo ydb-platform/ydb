@@ -1,5 +1,7 @@
 #include "helpers.h"
 
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/charset/utf8.h>
@@ -8,6 +10,8 @@
 #include <util/stream/format.h>
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
+#include <ydb/core/ymq/base/limits.h>
 
 namespace NKikimr::NSQS {
 
@@ -184,6 +188,88 @@ bool ValidateMessageBody(TStringBuf body, TString& errorDescription) {
         s += clen;
     }
     return true;
+}
+
+bool TTagValidator::ValidateString(const TString& str, const bool isKey) {
+    if (str.empty()) {
+        Error = isKey ? "Tag key must not be empty."
+                      : "Tag value must not be empty.";
+        return false;
+    }
+
+    if (isKey && !IsAsciiLower(str[0])) {
+        Error = "Tag key must start with a lowercase letter (a-z).";
+        return false;
+    }
+
+    constexpr size_t maxSize = 63;
+    if (str.size() > maxSize) {
+        Error = isKey ? "Tag key must not be longer than 63 characters."
+                      : "Tag value must not be longer than 63 characters.";
+        return false;
+    }
+
+    for (char c : str) {
+        bool ok = IsAsciiLower(c) || IsAsciiDigit(c) || c == '-' || c == '_';
+        if (!ok) {
+            Error = isKey ? "Tag key can only consist of ASCII lowercase letters, digits, dashes and underscores."
+                          : "Tag value can only consist of ASCII lowercase letters, digits, dashes and underscores.";
+            return false;
+        }
+    }
+
+    return true;
+}
+
+TString TagsToJson(NJson::TJsonMap tags) {
+    TStringStream json;
+    NJson::WriteJson(&json, &tags, /*formatOutput=*/false, /*sortkeys=*/true);
+    return json.Str();
+}
+
+TTagValidator::TTagValidator(const TMaybe<NJson::TJsonMap>& currentTags, const NJson::TJsonMap& newTags)
+    : CurrentTags(currentTags)
+    , NewTags(newTags)
+{
+    if (newTags.GetMapSafe().size() > TLimits::MaxTagCount) {
+        Error = "Too many tags added for queue";
+        return;
+    }
+
+    for (const auto& [k, v] : newTags.GetMapSafe()) {
+        if (!ValidateString(k, true) || !ValidateString(v.GetStringSafe(), false)) {
+            return;
+        }
+    }
+
+    PrepareJson();
+}
+
+bool TTagValidator::Validate() const {
+    return Error.empty();
+}
+
+void TTagValidator::PrepareJson() {
+    auto tags = CurrentTags.GetOrElse(NJson::TJsonMap());
+    auto& map = tags.GetMapSafe();
+
+    for (const auto& [k, v] : NewTags.GetMapSafe()) {
+        map.insert_or_assign(k, v);
+        if (map.size() > TLimits::MaxTagCount) {
+            Error = "Too many tags added for queue";
+            return;
+        }
+    }
+
+    Json = TagsToJson(tags);
+}
+
+TString TTagValidator::GetJson() const {
+    return Json;
+}
+
+TString TTagValidator::GetError() const {
+    return Error;
 }
 
 } // namespace NKikimr::NSQS

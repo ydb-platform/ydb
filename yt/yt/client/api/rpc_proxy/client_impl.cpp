@@ -2709,8 +2709,8 @@ TFuture<TShuffleHandlePtr> TClient::StartShuffle(
     req->set_account(account);
     req->set_partition_count(partitionCount);
     ToProto(req->mutable_parent_transaction_id(), parentTransactionId);
-    if (options.MediumName) {
-        req->set_medium_name(*options.MediumName);
+    if (options.Medium) {
+        req->set_medium(*options.Medium);
     }
     if (options.ReplicationFactor) {
         req->set_replication_factor(*options.ReplicationFactor);

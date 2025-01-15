@@ -17,7 +17,7 @@ public:
         , ValueType()
     {}
 
-    TRawTypeValue(const void* buf, ui32 bufSize, NScheme::TTypeId vtype)
+    TRawTypeValue(const void* buf, size_t bufSize, NScheme::TTypeId vtype)
         : Buffer(buf)
         , BufferSize(bufSize)
         , ValueType(vtype)

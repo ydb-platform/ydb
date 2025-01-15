@@ -26,7 +26,7 @@ public:
         , Acquired_(acquired)
     { }
 
-    void PrepareRequest(TRawBatchRequest* batchRequest) override
+    void PrepareRequest(THttpRawBatchRequest* batchRequest) override
     {
         LockState_ = batchRequest->Get(TTransactionId(), LockStateYPath_, TGetOptions());
     }

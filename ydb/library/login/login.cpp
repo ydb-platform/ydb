@@ -343,10 +343,6 @@ bool TLoginProvider::ShouldResetFailedAttemptCount(const TSidRecord& sid) const 
     if (AccountLockout.AttemptResetDuration == std::chrono::system_clock::duration::zero()) {
         return false;
     }
-    // Cerr << "+++now: " << std::chrono::system_clock::now().time_since_epoch().count() << Endl;;
-    // Cerr << "+++sid.LastFailedLoginAttempt: " << sid.LastFailedLoginAttempt.time_since_epoch().count() << Endl;
-    // Cerr << "+++AccountLockout.AttemptResetDuration: " << AccountLockout.AttemptResetDuration.count() << Endl;
-    // Cerr << "+++sum: " << (sid.LastFailedLoginAttempt + AccountLockout.AttemptResetDuration).time_since_epoch().count() << Endl;
     return sid.LastFailedLoginAttempt + AccountLockout.AttemptResetDuration < std::chrono::system_clock::now();
 }
 
@@ -365,9 +361,7 @@ TLoginProvider::TCheckLockOutResponse TLoginProvider::CheckLockOutUser(const TCh
 
     TSidRecord& sid  = itUser->second;
     if (CheckLockout(sid)) {
-        // Cerr << "+++CheckLockout: true" << Endl;
         if (ShouldUnlockAccount(sid)) {
-            // Cerr << "+++UnlockAccount" << Endl;
             UnlockAccount(&sid);
             response.Status = TCheckLockOutResponse::EStatus::RESET;
         } else {
@@ -376,7 +370,6 @@ TLoginProvider::TCheckLockOutResponse TLoginProvider::CheckLockOutUser(const TCh
         }
         return response;
     } else if (ShouldResetFailedAttemptCount(sid)) {
-        // Cerr << "+++CheckLockout: false" << Endl;
         ResetFailedLoginAttemptCount(&sid);
         response.Status = TCheckLockOutResponse::EStatus::RESET;
         return response;

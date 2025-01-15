@@ -265,14 +265,17 @@ public:
     }
 
     void AddIsUserAdmin(const TString& user, NLogin::TLoginProvider& loginProvider, TParts& additionalParts) {
-        const auto providerGroups = loginProvider.GetGroupsMembership(user);
-        const TVector<NACLib::TSID> groups(providerGroups.begin(), providerGroups.end());
-        const auto userToken = NACLib::TUserToken(user, groups);
         const auto& adminSids = AppData()->AdministrationAllowedSIDs;
-        auto hasSid = [&userToken](const TString& sid) -> bool {
-            return userToken.IsExist(sid);
-        };
-        const auto isAdmin = std::find_if(adminSids.begin(), adminSids.end(), hasSid) != adminSids.end();
+        bool isAdmin = adminSids.empty();
+        if (!isAdmin) {
+            const auto providerGroups = loginProvider.GetGroupsMembership(user);
+            const TVector<NACLib::TSID> groups(providerGroups.begin(), providerGroups.end());
+            const auto userToken = NACLib::TUserToken(user, groups);
+            auto hasSid = [&userToken](const TString& sid) -> bool {
+                return userToken.IsExist(sid);
+            };
+            isAdmin = std::find_if(adminSids.begin(), adminSids.end(), hasSid) != adminSids.end();   
+        }
 
         if (isAdmin) {
             additionalParts.emplace_back("account_type", "admin");

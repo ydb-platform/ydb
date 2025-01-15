@@ -42,7 +42,7 @@ class TestInsert(BaseTestSet):
                         f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({i}, $cnt)'
                     )
                     break
-                except:
+                except Exception:
                     pass
             time.sleep(1)
 

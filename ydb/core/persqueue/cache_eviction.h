@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/map_subrange.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -333,17 +334,9 @@ namespace NPQ {
         void DeleteBlobs(const TKvRequest& kvReq, TCacheL2Request& reqData, const TActorContext& ctx)
         {
             for (const auto& range : kvReq.DeletedBlobs) {
-                const TBlobId begin = MakeBlobId(range.Begin);
-                auto lowerBound = Cache.lower_bound(begin);
-                if ((lowerBound != Cache.end()) && (lowerBound->first == begin) && !range.IncludeBegin) {
-                    ++lowerBound;
-                }
-
-                const TBlobId end = MakeBlobId(range.End);
-                auto upperBound = Cache.upper_bound(end);
-                if ((upperBound != Cache.end()) && !range.IncludeEnd) {
-                    --upperBound;
-                }
+                auto [lowerBound, upperBound] = MapSubrange(Cache,
+                                                            MakeBlobId(range.Begin), range.IncludeBegin,
+                                                            MakeBlobId(range.End), range.IncludeEnd);
 
                 for (auto i = lowerBound; i != upperBound; ++i) {
                     const auto& [blob, value] = *i;

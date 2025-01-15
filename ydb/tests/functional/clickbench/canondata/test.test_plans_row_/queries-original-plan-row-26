@@ -59,6 +59,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/local/clickbench/plans/row/hits",
                                                         "ReadColumns": [
                                                             "EventTime",
                                                             "SearchPhrase"

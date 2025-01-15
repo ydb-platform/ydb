@@ -313,12 +313,6 @@ class DynamicConfigGenerator(object):
             pool.unit_kind = storage_unit.kind
             pool.count = storage_unit.count
 
-        overridden_configs = tenant.overridden_configs or {}
-        nbs = overridden_configs.get('nbs', {})
-        nfs = overridden_configs.get('nfs', {})
-        if nbs.get('enable', False) or nfs.get('enable', False):
-            console_request.CreateTenantRequest.Request.options.disable_tx_service = True
-
         if tenant.plan_resolution is not None:
             console_request.CreateTenantRequest.Request.options.plan_resolution = tenant.plan_resolution
 

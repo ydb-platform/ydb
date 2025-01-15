@@ -315,6 +315,8 @@ private:
 
         TString enableSpillingNodes = TableServiceConfig.GetEnableSpillingNodes();
 
+        bool enableSnapshotIsolationRW = TableServiceConfig.GetEnableSnapshotIsolationRW();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -346,7 +348,8 @@ private:
             TableServiceConfig.GetEnableAstCache() != enableAstCache ||
             TableServiceConfig.GetEnableImplicitQueryParameterTypes() != enableImplicitQueryParameterTypes ||
             TableServiceConfig.GetEnablePgConstsToParams() != enablePgConstsToParams ||
-            TableServiceConfig.GetEnablePerStatementQueryExecution() != enablePerStatementQueryExecution) {
+            TableServiceConfig.GetEnablePerStatementQueryExecution() != enablePerStatementQueryExecution ||
+            TableServiceConfig.GetEnableSnapshotIsolationRW() != enableSnapshotIsolationRW) {
 
             QueryCache->Clear();
 

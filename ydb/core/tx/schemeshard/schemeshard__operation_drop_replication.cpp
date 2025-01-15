@@ -73,7 +73,7 @@ public:
             const auto tabletId = context.SS->ShardInfos.at(shard.Idx).TabletID;
 
             auto ev = MakeHolder<NReplication::TEvController::TEvDropReplication>();
-            PathIdFromPathId(pathId, ev->Record.MutablePathId());
+            pathId.ToProto(ev->Record.MutablePathId());
             ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
             ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
             ev->Record.SetCascade(txState->TxType == TTxState::TxDropReplicationCascade);

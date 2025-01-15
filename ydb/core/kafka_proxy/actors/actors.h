@@ -47,10 +47,13 @@ struct TContext {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString ClientDC;
     bool IsServerless = false;
+    bool RequireAuthentication = false;
 
     NKikimr::NPQ::TRlContext RlContext;
 
-    bool Authenticated() { return AuthenticationStep == SUCCESS; }
+    bool Authenticated() { 
+        return !RequireAuthentication || AuthenticationStep == SUCCESS; 
+    }
 };
 
 template<std::derived_from<TApiMessage> T>
@@ -80,10 +83,6 @@ private:
     const std::shared_ptr<TApiMessage> Message;
     T* Ptr;
 };
-
-inline bool RequireAuthentication(EApiKey apiKey) {
-    return !(EApiKey::API_VERSIONS == apiKey || EApiKey::SASL_HANDSHAKE == apiKey || EApiKey::SASL_AUTHENTICATE == apiKey);
-}
 
 inline EKafkaErrors ConvertErrorCode(Ydb::StatusIds::StatusCode status) {
     switch (status) {
@@ -154,6 +153,14 @@ inline TString GetTopicNameWithoutDb(const TString& database, TString topic) {
     auto topicWithDb = NormalizePath(database, topic);
     topic = topicWithDb.substr(database.size()+1);
     return topic;
+}
+
+inline TString GetUsernameOrAnonymous(std::shared_ptr<TContext> context) {
+    return context->RequireAuthentication ? context->UserToken->GetUserSID() : "anonymous";
+}
+
+inline TString GetUserSerializedToken(std::shared_ptr<TContext> context) {
+    return context->RequireAuthentication ? context->UserToken->GetSerializedToken() : "";
 }
 
 NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message);

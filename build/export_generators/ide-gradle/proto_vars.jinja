@@ -1,2 +1,4 @@
 {%- set publish = target.publish -%}
 {%- set libraries = target.consumer|selectattr('type', 'eq', 'library') -%}
+
+{%- include "[generator]/jdk.jinja" -%}

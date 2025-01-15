@@ -10,5 +10,4 @@ SELECT
     (1, NULL) IN ((1, 2), (1, 3)), -- Nothing<Bool?>
     (2, NULL) IN ((1, 2), (1, 3)), -- Just(false)
     (1, NULL) IN ()
-;
--- Just(false)
+; -- Just(false)

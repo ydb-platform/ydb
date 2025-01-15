@@ -3,16 +3,23 @@
 
 # Option will be removed further
 use_new_style_kikimr_cfg: true
+yaml_config_enabled: true
 
+log:
+  cluster_name: "default_devslice" # Change cluster name in order to have better experience with logs searching in Monium.
+  sys_log: true
+  uaclient_config:
+    uri: "[fd53::1]:16400"
+    grpc_max_message_size: 4194304
 
 host_configs: # the list of available host configurations in the cluster.
 # NOTE: in mirror-3-dc-3-nodes configuration we have to use hosts with more than 3 physical disks.
 - drive:
-  - path: /dev/disk/by-partlabel/kikimr_nvme_01    # path of the first disk in the host configration.
+  - path: &disk_path_1 /dev/disk/by-partlabel/kikimr_nvme_01    # path of the first disk in the host configration.
     type: SSD                                      # kind of the disk: available kinds are SSD, NVME, ROT (HDD)
-  - path: /dev/disk/by-partlabel/kikimr_nvme_02
+  - path: &disk_path_2 /dev/disk/by-partlabel/kikimr_nvme_02
     type: SSD
-  - path: /dev/disk/by-partlabel/kikimr_nvme_03
+  - path: &disk_path_3 /dev/disk/by-partlabel/kikimr_nvme_03
     type: SSD
     # Add more disks if required.
     # NOTE(shmel1k@): If you host has nodeclaim-label like '_4ssd', that means, that
@@ -21,7 +28,7 @@ host_configs: # the list of available host configurations in the cluster.
     # they will be located at `/dev/disk/by-partlabel/kikimr_hdd_03-04` (enumeration starts with 03)
   host_config_id: 1
 hosts:
-- host: ydb-node-zone-a.local       # storage node DNS name
+- host: &host_1 ydb-node-zone-a.local       # storage node DNS name
   host_config_id: 1                 # numeric host configuration template identifier
   location:                   # this parameter describes where host is located.
     body: 1                         # string representing a host serial number.
@@ -31,13 +38,13 @@ hosts:
     rack: '1'                       # string representing a rack identifier where the host is located.
                                     # if cluster is deployed using block-4-2 erasure, all hosts should be distrubited
                                     # accross at least 8 racks.
-- host: ydb-node-zone-b.local
+- host: &host_2 ydb-node-zone-b.local
   host_config_id: 1
   location:
     body: 2
     data_center: 'DCB'
     rack: '2'
-- host: ydb-node-zone-c.local
+- host: &host_3 ydb-node-zone-c.local
   host_config_id: 1
   location:
     body: 3
@@ -118,51 +125,51 @@ blob_storage_config:         # configuration of static blobstorage group.
       rings:          # in mirror-3-dc must have exactly 3 rings or availability zones
       - fail_domains:  # first record: fail domains of the static group describe where each vdisk of the static group should be located.
         - vdisk_locations:
-          - node_id: ydb-node-zone-a.local
-            pdisk_category: 1 # 1 - SSD, 0 - HDD
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
+          - node_id: *host_1
+            pdisk_category: &pdisk_category 1 # 1 - SSD, 0 - HDD
+            path: *disk_path_1
             pdisk_guid: 1
         - vdisk_locations:
-          - node_id: ydb-node-zone-a.local
-            pdisk_category: 1
-            path: /dev/disk/by-partlabel/kikimr_nvme_02
+          - node_id: *host_1
+            pdisk_category: *pdisk_category
+            path: *disk_path_2
             pdisk_guid: 2
         - vdisk_locations:
-          - node_id: ydb-node-zone-a.local
-            pdisk_category: 1
-            path: /dev/disk/by-partlabel/kikimr_nvme_03
+          - node_id: *host_1
+            pdisk_category: *pdisk_category
+            path: *disk_path_3
             pdisk_guid: 3
       - fail_domains: # second ring: fail domains of the static group describe where each vdisk of the static group should be located.
         - vdisk_locations:
-          - node_id: ydb-node-zone-b.local
-            pdisk_category: 1
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
+          - node_id: *host_2
+            pdisk_category: *pdisk_category
+            path: *disk_path_1
             pdisk_guid: 4
         - vdisk_locations:
-          - node_id: ydb-node-zone-b.local
-            pdisk_category: 1
-            path: /dev/disk/by-partlabel/kikimr_nvme_02
+          - node_id: *host_2
+            pdisk_category: *pdisk_category
+            path: *disk_path_2
             pdisk_guid: 5
         - vdisk_locations:
-          - node_id: ydb-node-zone-b.local
-            pdisk_category: 1
-            path: /dev/disk/by-partlabel/kikimr_nvme_03
+          - node_id: *host_2
+            pdisk_category: *pdisk_category
+            path: *disk_path_3
             pdisk_guid: 6
       - fail_domains: # third ring: fail domains of the static group describe where each vdisk of the static group should be located.
         - vdisk_locations:
-          - node_id: ydb-node-zone-c.local
-            pdisk_category: 1
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
+          - node_id: *host_3
+            pdisk_category: *pdisk_category
+            path: *disk_path_1
             pdisk_guid: 7
         - vdisk_locations:
-          - node_id: ydb-node-zone-c.local
-            pdisk_category: 1
-            path: /dev/disk/by-partlabel/kikimr_nvme_02
+          - node_id: *host_3
+            pdisk_category: *pdisk_category
+            path: *disk_path_2
             pdisk_guid: 8
         - vdisk_locations:
-          - node_id: ydb-node-zone-c.local
-            pdisk_category: 1
-            path: /dev/disk/by-partlabel/kikimr_nvme_03
+          - node_id: *host_3
+            pdisk_category: *pdisk_category
+            path: *disk_path_3
             pdisk_guid: 9
 
 # TODO: migrate to channel_profile_config

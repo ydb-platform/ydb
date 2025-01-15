@@ -122,6 +122,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableRangeScan",
+                                                                                        "Path": "/local/clickbench/plans/row/hits",
                                                                                         "ReadColumns": [
                                                                                             "IsDownload",
                                                                                             "IsLink",

@@ -73,8 +73,13 @@ Y_UNIT_TEST(DropRole) {
 
 Y_UNIT_TEST(CreateUser) {
     TCases cases = {
-        {"use plato;create user user;","USE plato;\n\nCREATE USER user;\n"},
-        {"use plato;create user user encrypted password 'foo';","USE plato;\n\nCREATE USER user ENCRYPTED PASSWORD 'foo';\n"},
+        {"use plato;create user user;", "USE plato;\n\nCREATE USER user;\n"},
+        {"use plato;create user user encrypted password 'foo';", "USE plato;\n\nCREATE USER user ENCRYPTED PASSWORD 'foo';\n"},
+        {"use plato;CREATE USER user1;", "USE plato;\n\nCREATE USER user1;\n"},
+        {"use plato;create user user1 encrypted password '123' login;", "USE plato;\n\nCREATE USER user1 ENCRYPTED PASSWORD '123' LOGIN;\n"},
+        {"use plato;cREATE USER user1 PASSWORD '123' NOLOGIN;", "USE plato;\n\nCREATE USER user1 PASSWORD '123' NOLOGIN;\n"},
+        {"use plato;CREATE USER user1 LOGIN;", "USE plato;\n\nCREATE USER user1 LOGIN;\n"},
+        {"use plato;CREATE USER user1 NOLOGIN;", "USE plato;\n\nCREATE USER user1 NOLOGIN;\n"},
     };
 
     TSetup setup;
@@ -97,6 +102,7 @@ Y_UNIT_TEST(AlterUser) {
         {"use plato;alter user user rename to user;","USE plato;\n\nALTER USER user RENAME TO user;\n"},
         {"use plato;alter user user encrypted password 'foo';","USE plato;\n\nALTER USER user ENCRYPTED PASSWORD 'foo';\n"},
         {"use plato;alter user user with encrypted password 'foo';","USE plato;\n\nALTER USER user WITH ENCRYPTED PASSWORD 'foo';\n"},
+        {"use plato;ALTER USER user1 NOLOGIN;", "USE plato;\n\nALTER USER user1 NOLOGIN;\n"},
     };
 
     TSetup setup;
@@ -211,6 +217,8 @@ Y_UNIT_TEST(NamedNode) {
             "$a = (\n\tSELECT\n\t\t*\n\tFROM\n\t\t$t -- comment\n);\n"},
         {"-- comment\r\r\r$a=1;",
             "-- comment\r\n$a = 1;\n"},
+        {"$a=1;-- comment\n$b=2;/* comment */ /* comment */\n$c = 3;/* comment */ -- comment",
+            "$a = 1; -- comment\n$b = 2; /* comment */ /* comment */\n$c = 3; /* comment */ -- comment\n"},
     };
 
     TSetup setup;

@@ -57,7 +57,7 @@ def post_install(self):
         # see https://github.com/grpc/grpc/blob/v1.45.0/tools/bazel.rc#L103
         pb.after(
             "ADDINCL",
-            Switch({'SANITIZER_TYPE == undefined': Linkable(CXXFLAGS=["-fno-sanitize=function"])}),
+            Switch({"SANITIZER_TYPE == undefined": Linkable(CXXFLAGS=["-fno-sanitize=function"])}),
         )
 
 

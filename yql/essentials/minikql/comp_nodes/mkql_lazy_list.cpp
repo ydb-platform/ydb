@@ -46,7 +46,7 @@ public:
 
         if constexpr (IsOptional) {
             const auto test = BasicBlock::Create(context, "test", ctx.Func);
-            BranchInst::Create(done, test, IsEmpty(list, block), block);
+            BranchInst::Create(done, test, IsEmpty(list, block, context), block);
 
             block = test;
             lazy->addIncoming(list, block);

@@ -3,7 +3,7 @@
 tasks.withType<JavaCompile> {
     options.compilerArgs.add("--enable-preview")
     options.compilerArgs.add("-Xlint:preview")
-    options.release.set({{ required_jdk }})
+    options.release.set({{ jdk_version }})
 }
 
 tasks.withType<JavaExec> {
@@ -17,7 +17,7 @@ tasks.withType<Test> {
 
 tasks.withType<Javadoc> {
     val javadocOptions = options as CoreJavadocOptions
-    javadocOptions.addStringOption("source", "{{ required_jdk }}")
+    javadocOptions.addStringOption("source", "{{ jdk_version }}")
     javadocOptions.addBooleanOption("-enable-preview", true)
 }
 {% endif -%}

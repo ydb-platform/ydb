@@ -10,6 +10,7 @@ SRCS(
     oidc_client.cpp
     openid_connect.cpp
     oidc_settings.cpp
+    oidc_cleanup_page.cpp
     oidc_impersonate_start_page_nebius.cpp
     oidc_impersonate_stop_page_nebius.cpp
     oidc_protected_page_handler.cpp

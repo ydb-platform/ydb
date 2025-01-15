@@ -276,6 +276,11 @@ TTokenIterator GetNextStatementBegin(TTokenIterator begin, TTokenIterator end) {
             continue;
         }
         if (curr->Name == "SEMICOLON") {
+            auto next = SkipWS(curr + 1, end);
+            while (next != end && next->Name == "COMMENT" && curr->Line == next->Line) {
+                curr = next;
+                next = SkipWS(next + 1, end);
+            }
             ++curr;
             break;
         }

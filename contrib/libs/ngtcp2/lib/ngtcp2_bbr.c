@@ -1149,7 +1149,7 @@ static uint64_t bbr_bdp_multiple(ngtcp2_cc_bbr *bbr, uint64_t gain_h) {
     return bbr->initial_cwnd;
   }
 
-  bdp = bbr->bw * bbr->min_rtt / NGTCP2_SECONDS;
+  bdp = ngtcp2_max_uint64(bbr->bw * bbr->min_rtt / NGTCP2_SECONDS, 1);
 
   return (uint64_t)(bdp * gain_h / 100);
 }

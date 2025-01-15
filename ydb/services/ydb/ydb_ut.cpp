@@ -422,6 +422,10 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
 
         {
+            TClient client(*server.ServerSettings);
+            client.CreateUser("/Root", "qqq", "password");
+        }
+        {
             NYdbGrpc::TGRpcClientLow clientLow;
             auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Scheme::V1::SchemeService>(clientConfig);
 

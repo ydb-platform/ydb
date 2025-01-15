@@ -83,6 +83,7 @@
                                                                     "y1"
                                                                 ],
                                                                 "Node Type": "TableLookupJoin",
+                                                                "Path": "/Root/postgres_jointest/join2.test_plan/y",
                                                                 "PlanNodeId": 3,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
@@ -96,6 +97,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
+                                                                                        "Path": "/Root/postgres_jointest/join2.test_plan/x",
                                                                                         "ReadColumns": [
                                                                                             "x1",
                                                                                             "x2"

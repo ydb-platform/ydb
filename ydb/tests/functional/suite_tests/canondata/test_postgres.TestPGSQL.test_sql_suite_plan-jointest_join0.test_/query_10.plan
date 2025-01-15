@@ -106,6 +106,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
+                                                                                        "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                                         "ReadColumns": [
                                                                                             "hundred",
                                                                                             "thousand",
@@ -148,6 +149,7 @@
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
+                                                                        "Path": "/Root/postgres_jointest/join0.test_plan/int8_tbl",
                                                                         "ReadColumns": [
                                                                             "q1"
                                                                         ],

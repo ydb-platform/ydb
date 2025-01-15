@@ -3,7 +3,10 @@
 #include "raw_batch_request.h"
 
 #include <yt/cpp/mapreduce/common/fwd.h>
+
 #include <yt/cpp/mapreduce/http/context.h>
+
+#include <yt/cpp/mapreduce/interface/client.h>
 #include <yt/cpp/mapreduce/interface/client_method_options.h>
 #include <yt/cpp/mapreduce/interface/operation.h>
 
@@ -29,24 +32,6 @@ TCheckPermissionResponse ParseCheckPermissionResponse(const TNode& node);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//
-// marks `batchRequest' as executed
-void ExecuteBatch(
-    IRequestRetryPolicyPtr retryPolicy,
-    const TClientContext& context,
-    TRawBatchRequest& batchRequest,
-    const TExecuteBatchOptions& options = {});
-
-// SkyShare
-
-TNode::TListType SkyShareTable(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const std::vector<TYPath>& tablePaths,
-    const TSkyShareTableOptions& options = {});
-
-// Misc
-
 TRichYPath CanonizeYPath(
     const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,
@@ -56,6 +41,13 @@ TVector<TRichYPath> CanonizeYPaths(
     const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,
     const TVector<TRichYPath>& paths);
+
+NHttpClient::IHttpResponsePtr SkyShareTable(
+    const TClientContext& context,
+    const std::vector<TYPath>& tablePaths,
+    const TSkyShareTableOptions& options);
+
+TAuthorizationInfo WhoAmI(const TClientContext& context);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -67,13 +59,13 @@ auto BatchTransform(
     TBatchAdder batchAdder,
     const TExecuteBatchOptions& executeBatchOptions = {})
 {
-    TRawBatchRequest batch(context.Config);
+    THttpRawBatchRequest batch(context.Config);
     using TFuture = decltype(batchAdder(batch, *std::begin(src)));
     TVector<TFuture> futures;
     for (const auto& el : src) {
         futures.push_back(batchAdder(batch, el));
     }
-    ExecuteBatch(retryPolicy, context, batch, executeBatchOptions);
+    batch.ExecuteBatch(retryPolicy, context, executeBatchOptions);
     using TDst = decltype(futures[0].ExtractValueSync());
     TVector<TDst> result;
     result.reserve(std::size(src));

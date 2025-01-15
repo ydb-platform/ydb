@@ -216,8 +216,8 @@ namespace NActors {
             Harmonizer->Harmonize(hpnow);
         }
 
-        TAtomic x = AtomicGet(Semaphore);
-        TSemaphore semaphore = TSemaphore::GetSemaphore(x);
+        TAtomic semaphoreRaw = AtomicGet(Semaphore);
+        TSemaphore semaphore = TSemaphore::GetSemaphore(semaphoreRaw);
         while (!StopFlag.load(std::memory_order_acquire)) {
             if (!semaphore.OldSemaphore || workerId >= 0 && semaphore.CurrentSleepThreadCount < 0) {
                 if (workerId < 0 || !wctx.IsNeededToWaitNextActivation) {
@@ -234,7 +234,7 @@ namespace NActors {
                 }
             } else {
                 TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
-                if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(++revolvingCounter);}, Activations)) {
+                if (const ui32 activation = std::visit([&revolvingCounter](auto &queue) {return queue.Pop(++revolvingCounter);}, Activations)) {
                     if (workerId >= 0) {
                         Threads[workerId].SetWork();
                     } else {
@@ -247,8 +247,8 @@ namespace NActors {
             }
 
             SpinLockPause();
-            x = AtomicGet(Semaphore);
-            semaphore = TSemaphore::GetSemaphore(x);
+            semaphoreRaw = AtomicGet(Semaphore);
+            semaphore = TSemaphore::GetSemaphore(semaphoreRaw);
         }
 
         return nullptr;

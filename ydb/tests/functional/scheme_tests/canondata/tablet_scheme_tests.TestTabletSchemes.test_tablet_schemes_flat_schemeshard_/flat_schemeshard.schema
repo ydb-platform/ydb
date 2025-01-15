@@ -3032,6 +3032,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 17,
+                "ColumnName": "EnableChecksums",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "Id",
                 "ColumnType": "Uint64"
@@ -3116,6 +3121,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    17,
                     1,
                     2,
                     3,
@@ -6162,6 +6168,11 @@
                 "ColumnId": 11,
                 "ColumnName": "Permissions",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "Metadata",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -6178,7 +6189,8 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6581,6 +6593,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "CreatedAt",
+                "ColumnType": "Timestamp"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "SidName",
                 "ColumnType": "String"
@@ -6615,6 +6632,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,

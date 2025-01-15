@@ -26,11 +26,6 @@ struct TMutatingOptions
     NRpc::TMutationId GetOrGenerateMutationId() const;
 };
 
-struct TTimeoutOptions
-{
-    std::optional<TDuration> Timeout;
-};
-
 struct TMultiplexingBandOptions
 {
     NRpc::EMultiplexingBand MultiplexingBand = NRpc::EMultiplexingBand::Default;

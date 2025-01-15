@@ -12,6 +12,7 @@ SRCS(
     ydb_cluster.cpp
     ydb_debug.cpp
     ydb_dynamic_config.cpp
+    ydb_latency.cpp
     ydb_ping.cpp
     ydb_profile.cpp
     ydb_root_common.cpp
@@ -72,6 +73,7 @@ PEERDIR(
 )
 
 GENERATE_ENUM_SERIALIZATION(ydb_ping.h)
+GENERATE_ENUM_SERIALIZATION(ydb_latency.h)
 
 END()
 

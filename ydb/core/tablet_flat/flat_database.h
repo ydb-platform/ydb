@@ -42,7 +42,6 @@ class TDatabase {
 public:
     using TMemGlobs = TVector<NPageCollection::TMemGlob>;
     using TCookieAllocator = NPageCollection::TCookieAllocator;
-    using TCounters = TDbStats;
 
     struct TProd {
         THolder<TChange> Change;
@@ -221,7 +220,9 @@ public:
     ui64 GetTableIndexSize(ui32 table) const;
     ui64 GetTableSearchHeight(ui32 table) const;
     ui64 EstimateRowSize(ui32 table) const;
-    const TCounters& Counters() const noexcept;
+    const TDbStats& Counters() const noexcept;
+    TDbRuntimeStats RuntimeCounters() const noexcept;
+
     void UpdateApproximateFreeSharesByChannel(const THashMap<ui32, float>& approximateFreeSpaceShareByChannel);
     TString SnapshotToLog(ui32 table, TTxStamp);
 

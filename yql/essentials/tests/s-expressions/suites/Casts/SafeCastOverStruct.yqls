@@ -1,7 +1,6 @@
 (
 
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 (let res_sink (DataSink 'result))
 
 # Struct<Int32, String, Utf8> -> Struct<Uint8?, Utf8?>

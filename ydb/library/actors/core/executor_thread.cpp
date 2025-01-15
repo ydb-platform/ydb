@@ -181,6 +181,26 @@ namespace NActors {
                 SafeTypeName(actorType));
     }
 
+    ui32 TGenericExecutorThread::GetOverwrittenEventsPerMailbox() const {
+        return Ctx.OverwrittenEventsPerMailbox;
+    }
+
+    void TGenericExecutorThread::SetOverwrittenEventsPerMailbox(ui32 value) {
+        Ctx.OverwrittenEventsPerMailbox = Max(value, Ctx.EventsPerMailbox);
+    }
+
+    ui64 TGenericExecutorThread::GetOverwrittenTimePerMailboxTs() const {
+        return Ctx.OverwrittenTimePerMailboxTs;
+    }
+
+    void TGenericExecutorThread::SetOverwrittenTimePerMailboxTs(ui64 value) {
+        Ctx.OverwrittenTimePerMailboxTs = Max(value, Ctx.TimePerMailboxTs);
+    }
+
+    void TGenericExecutorThread::SubscribeToPreemption(TActorId actorId) {
+        Ctx.PreemptionSubscribed.push_back(actorId);
+    }
+
     TGenericExecutorThread::TProcessingResult TGenericExecutorThread::Execute(TMailbox* mailbox, bool isTailExecution) {
         Y_DEBUG_ABORT_UNLESS(DyingActors.empty());
 
@@ -194,7 +214,9 @@ namespace NActors {
         ui32 prevActivityType = std::numeric_limits<ui32>::max();
         TActorId recipient;
         bool firstEvent = true;
-        bool preempted = false;
+        bool preemptedByEventCount = false;
+        bool preemptedByCycles = false;
+        bool preemptedByTailSend = false;
         bool wasWorking = false;
         NHPTimer::STime hpnow = Ctx.HPStart;
         NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
@@ -202,8 +224,10 @@ namespace NActors {
         NHPTimer::STime eventStart = Ctx.HPStart;
         TlsThreadContext->ActivationStartTS.store(Ctx.HPStart, std::memory_order_release);
 
+        Ctx.OverwrittenEventsPerMailbox = Ctx.EventsPerMailbox;
+        Ctx.OverwrittenTimePerMailboxTs = Ctx.TimePerMailboxTs;
         bool drained = false;
-        for (; Ctx.ExecutedEvents < Ctx.EventsPerMailbox; ++Ctx.ExecutedEvents) {
+        for (; Ctx.ExecutedEvents < Ctx.OverwrittenEventsPerMailbox; ++Ctx.ExecutedEvents) {
             if (TAutoPtr<IEventHandle> evExt = mailbox->Pop()) {
                 recipient = evExt->GetRecipientRewrite();
                 actor = mailbox->FindActor(recipient.LocalId());
@@ -311,6 +335,7 @@ namespace NActors {
                             Ctx.WorkerId,
                             recipient.ToString(),
                             SafeTypeName(actorType));
+                    preemptedByTailSend = true;
                     break;
                 }
 
@@ -326,7 +351,7 @@ namespace NActors {
                             Ctx.WorkerId,
                             recipient.ToString(),
                             SafeTypeName(actorType));
-                    preempted = true;
+                    preemptedByCycles = true;
                     break;
                 }
 
@@ -342,7 +367,7 @@ namespace NActors {
                             Ctx.WorkerId,
                             recipient.ToString(),
                             SafeTypeName(actorType));
-                    preempted = true;
+                    preemptedByCycles = true;
                     break;
                 }
 
@@ -357,7 +382,7 @@ namespace NActors {
                             Ctx.WorkerId,
                             recipient.ToString(),
                             SafeTypeName(actorType));
-                    preempted = true;
+                    preemptedByEventCount = true;
                     break;
                 }
             } else {
@@ -376,6 +401,22 @@ namespace NActors {
                 break; // empty queue, leave
             }
         }
+        if (Ctx.PreemptionSubscribed.size()) {
+            std::unique_ptr<TEvents::TEvPreemption> event = std::make_unique<TEvents::TEvPreemption>();
+            event->ByEventCount = preemptedByEventCount;
+            event->ByCycles = preemptedByCycles;
+            event->ByTailSend = preemptedByTailSend;
+            event->EventCount = Ctx.ExecutedEvents;
+            event->Cycles = hpnow - Ctx.HPStart;
+            TAutoPtr<IEventHandle> ev = new IEventHandle(TActorId(), TActorId(), event.release());
+            for (const auto& actorId : Ctx.PreemptionSubscribed) {
+                IActor *actor = mailbox->FindActor(actorId.LocalId());
+                if (actor) {
+                    actor->Receive(ev);
+                }
+            }
+            Ctx.PreemptionSubscribed.clear();
+        }
         TlsThreadContext->ActivationStartTS.store(hpnow, std::memory_order_release);
         TlsThreadContext->ElapsingActorActivity.store(ActorSystemIndex, std::memory_order_release);
 
@@ -387,7 +428,7 @@ namespace NActors {
         } else {
             mailbox->Unlock(Ctx.Executor, hpnow, RevolvingWriteCounter);
         }
-        return {preempted, wasWorking};
+        return {preemptedByEventCount || preemptedByCycles, wasWorking};
     }
 
     TThreadId TGenericExecutorThread::GetThreadId() const {

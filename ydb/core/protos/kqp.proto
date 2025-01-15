@@ -64,6 +64,7 @@ enum EIsolationLevel {
     ISOLATION_LEVEL_READ_UNCOMMITTED = 3;
     ISOLATION_LEVEL_READ_STALE = 4;
     ISOLATION_LEVEL_SNAPSHOT_RO = 5;
+    ISOLATION_LEVEL_SNAPSHOT_RW = 6;
 };
 
 message TTopicOperationsRequest {
@@ -562,6 +563,8 @@ message TEvStartKqpTasksRequest {
     optional double PoolMaxCpuShare = 12;
     optional double QueryCpuShare = 16;
     optional double ResourceWeight = 18;
+
+    optional NKikimrDataEvents.ELockMode LockMode = 19;
 }
 
 message TEvStartKqpTasksResponse {
@@ -735,6 +738,8 @@ message TKqpTableSinkSettings {
     optional int64 Priority = 11;
     optional bool IsOlap = 12;
     repeated uint32 WriteIndexes = 13;
+    optional NKikimrDataEvents.TMvccSnapshot MvccSnapshot = 14;
+    optional NKikimrDataEvents.ELockMode LockMode = 15;
 }
 
 message TKqpStreamLookupSettings {
@@ -751,6 +756,7 @@ message TKqpStreamLookupSettings {
     optional bool KeepRowsOrder = 11;
     optional bool AllowNullKeys = 12;
     optional uint32 AllowNullKeysPrefixSize = 13;
+    optional NKikimrDataEvents.ELockMode LockMode = 14;
 }
 
 message TKqpSequencerSettings {

@@ -1,6 +1,7 @@
 #include "yql_mounts.h"
 
 #include <yql/essentials/core/yql_library_compiler.h>
+#include <yql/essentials/utils/log/profile.h>
 
 #include <library/cpp/resource/resource.h>
 
@@ -117,6 +118,7 @@ namespace NYql {
         bool optimizeLibraries,
         THolder<TExprContext> ownedCtx)
     {
+        YQL_PROFILE_FUNC(DEBUG);
         auto ctx = rawCtx ? rawCtx : ownedCtx.Get();
         Y_ENSURE(ctx);
         TUserDataTable mounts;

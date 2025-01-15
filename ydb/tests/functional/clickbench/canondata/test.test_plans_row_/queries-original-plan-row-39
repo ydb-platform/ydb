@@ -144,6 +144,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableRangeScan",
+                                                                                        "Path": "/local/clickbench/plans/row/hits",
                                                                                         "ReadColumns": [
                                                                                             "AdvEngineID",
                                                                                             "IsRefresh",

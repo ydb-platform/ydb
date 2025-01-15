@@ -42,7 +42,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     readerSettings.SetConsumerName(ReplicationConsumerName);
 
     auto& writerSettings = *record.MutableCommand()->MutableLocalTableWriter();
-    PathIdFromPathId(dstPathId, writerSettings.MutablePathId());
+    dstPathId.ToProto(writerSettings.MutablePathId());
 
     record.MutableCommand()->MutableConsistencySettings()->CopyFrom(consistencySettings);
 

@@ -26,6 +26,68 @@ using namespace NKikimr;
 using namespace NUdf;
 
 namespace {
+    enum EDigestType {
+        CRC32C, CRC64, FNV32, FNV64, MURMUR, MURMUR32, MURMUR2A, MURMUR2A32, CITY
+    };
+    const char* DigestNames[] = {
+        "Crc32c", "Crc64", "Fnv32", "Fnv64", "MurMurHash", "MurMurHash32", "MurMurHash2A", "MurMurHash2A32", "CityHash"
+    };
+
+    template<typename TResult>
+    using TDigestGenerator = TResult(const TStringRef&, TMaybe<TResult> init);
+
+    template<EDigestType DigestType, typename TResult, TDigestGenerator<TResult>* Generator>
+    class TDigestFunctionUdf: public TBoxedValue {
+    public:
+        TDigestFunctionUdf(TSourcePosition pos) : Pos_(pos) {}
+
+        static TStringRef Name() {
+            static TString name = DigestNames[DigestType];
+            return TStringRef(name);
+        }
+
+        static bool DeclareSignature(
+            const TStringRef& name,
+            TType*,
+            IFunctionTypeInfoBuilder& builder,
+            bool typesOnly)
+        {
+            if (Name() != name) {
+                return false;
+            }
+
+            auto args = builder.Args();
+            args->Add(builder.SimpleType<char *>()).Flags(ICallablePayload::TArgumentFlags::AutoMap);
+            args->Add(builder.Optional()->Item(builder.SimpleType<TResult>()).Build()).Name("Init");
+            args->Done();
+            builder.OptionalArgs(1);
+            builder.Returns(builder.SimpleType<TResult>());
+
+            if (!typesOnly) {
+                builder.Implementation(new TDigestFunctionUdf<DigestType, TResult, Generator>(GetSourcePosition(builder)));
+            }
+
+            return true;
+        }
+
+    private:
+        TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const final try {
+            TMaybe<TResult> init = Nothing();
+            if (auto val = args[1]) {
+                init = val.Get<TResult>();
+            }
+            return TUnboxedValuePod(Generator(args[0].AsStringRef(), init));
+        } catch (const std ::exception&) {
+            TStringBuilder sb;
+            sb << Pos_ << " ";
+            sb << CurrentExceptionMessage();
+            sb << Endl << "[" << TStringBuf(Name()) << "]";
+            UdfTerminate(sb.c_str());
+        }
+
+        TSourcePosition Pos_;
+    };
+
     SIMPLE_STRICT_UDF(TCrc32c, ui32(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
@@ -33,68 +95,65 @@ namespace {
         return TUnboxedValuePod(hash);
     }
 
-    SIMPLE_STRICT_UDF(TCrc64, ui64(TAutoMap<char*>)) {
-        Y_UNUSED(valueBuilder);
-        const auto& inputRef = args[0].AsStringRef();
-        ui64 hash = crc64(inputRef.Data(), inputRef.Size());
-        return TUnboxedValuePod(hash);
-    }
+    using TCrc64 = TDigestFunctionUdf<CRC64, ui64, [](auto& inputRef, auto init) {
+        return crc64(inputRef.Data(), inputRef.Size(), init.GetOrElse(CRC64INIT));
+    }>;
 
-    SIMPLE_STRICT_UDF(TFnv32, ui32(TAutoMap<char*>)) {
-        Y_UNUSED(valueBuilder);
-        const auto& inputRef = args[0].AsStringRef();
-        ui32 hash = FnvHash<ui32>(inputRef.Data(), inputRef.Size());
-        return TUnboxedValuePod(hash);
-    }
-
-    SIMPLE_STRICT_UDF(TFnv64, ui64(TAutoMap<char*>)) {
-        Y_UNUSED(valueBuilder);
-        const auto& inputRef = args[0].AsStringRef();
-        ui64 hash = FnvHash<ui64>(inputRef.Data(), inputRef.Size());
-        return TUnboxedValuePod(hash);
-    }
-
-    SIMPLE_STRICT_UDF(TMurMurHash, ui64(TAutoMap<char*>)) {
-        Y_UNUSED(valueBuilder);
-        const auto& inputRef = args[0].AsStringRef();
-        ui64 hash = MurmurHash<ui64>(inputRef.Data(), inputRef.Size());
-        return TUnboxedValuePod(hash);
-    }
-
-    SIMPLE_STRICT_UDF(TMurMurHash32, ui32(TAutoMap<char*>)) {
-        Y_UNUSED(valueBuilder);
-        const auto& inputRef = args[0].AsStringRef();
-        ui32 hash = MurmurHash<ui32>(inputRef.Data(), inputRef.Size());
-        return TUnboxedValuePod(hash);
-    }
-
-    SIMPLE_STRICT_UDF(TMurMurHash2A, ui64(TAutoMap<char*>)) {
-        Y_UNUSED(valueBuilder);
-        const auto& inputRef = args[0].AsStringRef();
-        ui64 hash = TMurmurHash2A<ui64>{}.Update(inputRef.Data(), inputRef.Size()).Value();
-        return TUnboxedValuePod(hash);
-    }
-
-    SIMPLE_STRICT_UDF(TMurMurHash2A32, ui32(TAutoMap<char*>)) {
-        Y_UNUSED(valueBuilder);
-        const auto& inputRef = args[0].AsStringRef();
-        ui32 hash = TMurmurHash2A<ui32>{}.Update(inputRef.Data(), inputRef.Size()).Value();
-        return TUnboxedValuePod(hash);
-    }
-
-    SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TCityHash, ui64(TAutoMap<char*>, TOptional<ui64>), 1) {
-        Y_UNUSED(valueBuilder);
-        const auto& inputRef = args[0].AsStringRef();
-        ui64 hash;
-        if (args[1]) {
-            hash = CityHash64WithSeed(inputRef.Data(), inputRef.Size(), args[1].Get<ui64>());
+    using TFnv32 = TDigestFunctionUdf<FNV32, ui32, [](auto& inputRef, auto init) {
+        if (init) {
+            return FnvHash<ui32>(inputRef.Data(), inputRef.Size(), *init);
         } else {
-            hash = CityHash64(inputRef.Data(), inputRef.Size());
+            return FnvHash<ui32>(inputRef.Data(), inputRef.Size());
         }
-        return TUnboxedValuePod(hash);
-    }
+    }>;
 
-    using TUi64Pair = NUdf::TTuple<ui64, ui64>;
+    using TFnv64 = TDigestFunctionUdf<FNV64, ui64, [](auto& inputRef, auto init) {
+        if (init) {
+            return FnvHash<ui64>(inputRef.Data(), inputRef.Size(), *init);
+        } else {
+            return FnvHash<ui64>(inputRef.Data(), inputRef.Size());
+        }
+    }>;
+
+    using TMurMurHash = TDigestFunctionUdf<MURMUR, ui64, [](auto& inputRef, auto init) {
+        if (init) {
+            return MurmurHash<ui64>(inputRef.Data(), inputRef.Size(), *init);
+        } else {
+            return MurmurHash<ui64>(inputRef.Data(), inputRef.Size());
+        }
+    }>;
+
+    using TMurMurHash32 = TDigestFunctionUdf<MURMUR32, ui32, [] (auto& inputRef, auto init) {
+        if (init) {
+            return MurmurHash<ui32>(inputRef.Data(), inputRef.Size(), *init);
+        } else {
+            return MurmurHash<ui32>(inputRef.Data(), inputRef.Size());
+        }
+    }>;
+
+    using TMurMurHash2A = TDigestFunctionUdf<MURMUR2A, ui64, [] (auto& inputRef, auto init) {
+        if (init) {
+            return TMurmurHash2A<ui64>{*init}.Update(inputRef.Data(), inputRef.Size()).Value();
+        } else {
+            return TMurmurHash2A<ui64>{}.Update(inputRef.Data(), inputRef.Size()).Value();
+        }
+    }>;
+
+    using TMurMurHash2A32 = TDigestFunctionUdf<MURMUR2A32, ui32, [] (auto& inputRef, auto init) {
+        if (init) {
+            return TMurmurHash2A<ui32>{*init}.Update(inputRef.Data(), inputRef.Size()).Value();
+        } else {
+            return TMurmurHash2A<ui32>{}.Update(inputRef.Data(), inputRef.Size()).Value();
+        }
+    }>;
+
+    using TCityHash = TDigestFunctionUdf<CITY, ui64, [] (auto& inputRef, auto init) {
+        if (init) {
+            return CityHash64WithSeed(inputRef.Data(), inputRef.Size(), *init);
+        } else {
+            return CityHash64(inputRef.Data(), inputRef.Size());
+        }
+    }>;
 
     class TCityHash128: public TBoxedValue {
     public:

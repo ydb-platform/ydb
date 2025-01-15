@@ -78,6 +78,12 @@ namespace NActors {
         TThreadId GetThreadId() const; // blocks, must be called after Start()
         TWorkerId GetWorkerId() const;
 
+        void SubscribeToPreemption(TActorId actorId);
+        ui32 GetOverwrittenEventsPerMailbox() const;
+        void SetOverwrittenEventsPerMailbox(ui32 value);
+        ui64 GetOverwrittenTimePerMailboxTs() const;
+        void SetOverwrittenTimePerMailboxTs(ui64 value);
+
     protected:
         TProcessingResult ProcessExecutorPool(IExecutorPool *pool);
 

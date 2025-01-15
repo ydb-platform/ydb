@@ -197,7 +197,6 @@ TTiersManager::TTierRefGuard::~TTierRefGuard() {
     if (Owner) {
         auto findTier = Owner->TierRefCount.FindPtr(TierName);
         AFL_VERIFY(findTier);
-        AFL_VERIFY(*findTier);
         --*findTier;
         if (!*findTier) {
             AFL_VERIFY(Owner->TierRefCount.erase(TierName));

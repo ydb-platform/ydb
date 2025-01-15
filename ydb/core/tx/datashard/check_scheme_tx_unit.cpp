@@ -303,7 +303,7 @@ bool TCheckSchemeTxUnit::HasPathId(TActiveTransaction *activeTx, const T &op, co
 
 template <typename T>
 TPathId TCheckSchemeTxUnit::GetPathId(const T &op) const {
-    auto pathId = PathIdFromPathId(op.GetPathId());
+    auto pathId = TPathId::FromProto(op.GetPathId());
     Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == pathId.OwnerId);
     return pathId;
 }

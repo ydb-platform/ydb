@@ -1305,6 +1305,14 @@ namespace NSQLTranslationV1 {
         TMaybe<TDeferredAtom> Password;
         bool IsPasswordEncrypted = false;
         TVector<TDeferredAtom> Roles;
+
+        enum class ETypeOfLogin {
+            Undefined,
+            Login,
+            NoLogin
+        };
+
+        ETypeOfLogin CanLogin = ETypeOfLogin::Undefined;
     };
 
     struct TSequenceParameters {

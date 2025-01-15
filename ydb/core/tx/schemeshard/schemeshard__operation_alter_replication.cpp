@@ -75,7 +75,7 @@ public:
                 context.OnComplete.WaitShardCreated(shard.Idx, OperationId);
             } else {
                 auto ev = MakeHolder<NReplication::TEvController::TEvAlterReplication>();
-                PathIdFromPathId(pathId, ev->Record.MutablePathId());
+                pathId.ToProto(ev->Record.MutablePathId());
                 ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
                 ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
                 ev->Record.MutableConfig()->CopyFrom(alterData->Description.GetConfig());
@@ -314,7 +314,7 @@ public:
         const auto& op = Transaction.GetAlterReplication();
         const auto& name = op.GetName();
         const auto pathId = op.HasPathId()
-            ? PathIdFromPathId(op.GetPathId())
+            ? TPathId::FromProto(op.GetPathId())
             : InvalidPathId;
 
         LOG_N("TAlterReplication Propose"

@@ -1,0 +1,93 @@
+--- contrib/restricted/boost/regex/ya.make	(index)
++++ contrib/restricted/boost/regex/ya.make	(working tree)
+@@ -16,7 +16,6 @@ VERSION(1.87.0)
+ ORIGINAL_SOURCE(https://github.com/boostorg/regex/archive/boost-1.87.0.tar.gz)
+ 
+ PEERDIR(
+-    contrib/libs/icu
+     contrib/restricted/boost/assert
+     contrib/restricted/boost/concept_check
+     contrib/restricted/boost/config
+@@ -40,7 +39,6 @@ NO_COMPILER_WARNINGS()
+ NO_UTIL()
+ 
+ CFLAGS(
+-    -DBOOST_HAS_ICU
+     -DBOOST_NO_CXX98_BINDERS
+ )
+ 
+--- contrib/restricted/thrift/ya.make	(index)
++++ contrib/restricted/thrift/ya.make	(working tree)
+@@ -24,7 +24,6 @@ PEERDIR(
+     contrib/libs/openssl
+     contrib/libs/zlib
+     contrib/restricted/boost/interprocess
+-    contrib/restricted/boost/locale
+     contrib/restricted/boost/math
+     contrib/restricted/boost/system
+     contrib/restricted/boost/thread
+@@ -49,7 +48,6 @@ SRCS(
+     thrift/protocol/TBase64Utils.cpp
+     thrift/protocol/TDebugProtocol.cpp
+     thrift/protocol/THeaderProtocol.cpp
+-    thrift/protocol/TJSONProtocol.cpp
+     thrift/protocol/TMultiplexedProtocol.cpp
+     thrift/protocol/TProtocol.cpp
+     thrift/server/TConnectedClient.cpp
+--- yql/essentials/parser/pg_wrapper/postgresql/src/backend/utils/adt/formatting.c	(index)
++++ yql/essentials/parser/pg_wrapper/postgresql/src/backend/utils/adt/formatting.c	(working tree)
+@@ -72,7 +72,7 @@
+ #include <wctype.h>
+ 
+ #ifdef USE_ICU
+-#include <unicode/ustring.h>
++#error #include <unicode/ustring.h>
+ #endif
+ 
+ #include "catalog/pg_collation.h"
+--- yql/essentials/parser/pg_wrapper/postgresql/src/backend/utils/adt/pg_locale.c	(index)
++++ yql/essentials/parser/pg_wrapper/postgresql/src/backend/utils/adt/pg_locale.c	(working tree)
+@@ -69,8 +69,8 @@
+ #include "utils/syscache.h"
+ 
+ #ifdef USE_ICU
+-#include <unicode/ucnv.h>
+-#include <unicode/ustring.h>
++#error #include <unicode/ucnv.h>
++#error #include <unicode/ustring.h>
+ #endif
+ 
+ #ifdef __GLIBC__
+--- yql/essentials/parser/pg_wrapper/postgresql/src/include/pg_config-linux.h	(index)
++++ yql/essentials/parser/pg_wrapper/postgresql/src/include/pg_config-linux.h	(working tree)
+@@ -707,7 +707,8 @@
+ /* #undef USE_BSD_AUTH */
+ 
+ /* Define to build with ICU support. (--with-icu) */
+-#define USE_ICU 1
++//#define USE_ICU 1
++#undef USE_ICU
+ 
+ /* Define to 1 to build with LDAP support. (--with-ldap) */
+ /* #undef USE_LDAP */
+--- yql/essentials/parser/pg_wrapper/postgresql/src/include/utils/pg_locale.h	(index)
++++ yql/essentials/parser/pg_wrapper/postgresql/src/include/utils/pg_locale.h	(working tree)
+@@ -16,7 +16,7 @@
+ #include <xlocale.h>
+ #endif
+ #ifdef USE_ICU
+-#include <unicode/ucol.h>
++#error include <unicode/ucol.h>
+ #endif
+ 
+ #ifdef USE_ICU
+--- yql/essentials/parser/pg_wrapper/ya.make	(index)
++++ yql/essentials/parser/pg_wrapper/ya.make	(working tree)
+@@ -95,7 +95,6 @@ PEERDIR(
+     yql/essentials/types/dynumber
+     yql/essentials/types/uuid
+ 
+-    contrib/libs/icu
+     contrib/libs/libc_compat
+     contrib/libs/libxml
+     contrib/libs/lz4

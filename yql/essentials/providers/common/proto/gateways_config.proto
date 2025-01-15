@@ -103,6 +103,11 @@ message TYtClusterConfig {
     repeated TAttr Settings = 100;
 }
 
+message TFileWithMd5 {
+    optional string File = 1;
+    optional string Md5 = 2;
+}
+
 message TYtGatewayConfig {
     optional uint32 GatewayThreads = 1 [default = 0]; // Number of gateway MtpQueue threads. The adaptive MtpQueue will be used for 0 value
     optional EYtLogLevel YtLogLevel = 2 [default = YL_ERROR]; // The verbosity level of YT log
@@ -117,6 +122,7 @@ message TYtGatewayConfig {
     optional uint64 YtDebugLogSize = 11 [default = 0]; // Max YT debug log size
     optional bool YtDebugLogAlwaysWrite = 12 [default = false]; // Write YT debug log always or on error only
     optional string LocalChainFile = 14; // File to dump table contet in test mode
+    repeated TFileWithMd5 MrJobSystemLibsWithMd5 = 15; // Paths to linux dynamic libraries required for running mrjob.
 
     repeated TRemoteFilePattern RemoteFilePatterns = 100;
     repeated TYtClusterConfig ClusterMapping = 101; // Accepted cluster shortcuts. All names not from this list will be rejected

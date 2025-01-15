@@ -5930,6 +5930,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr); status != IGraphTransformer::TStatus::Ok)
                 return status;
 
+            if (warn) {
+                return IGraphTransformer::TStatus::Repeat;
+            }
             const auto dictType = IsSet ?
                 ctx.Expr.MakeType<TDictExprType>(commonType, ctx.Expr.MakeType<TVoidExprType>()):
                 ctx.Expr.MakeType<TDictExprType>(commonType->Cast<TTupleExprType>()->GetItems().front(), commonType->Cast<TTupleExprType>()->GetItems().back());
@@ -5943,7 +5946,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        return warn ? IGraphTransformer::TStatus::Repeat : IGraphTransformer::TStatus::Ok;
+        return IGraphTransformer::TStatus::Ok;
     }
 
     IGraphTransformer::TStatus DictFromKeysWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {

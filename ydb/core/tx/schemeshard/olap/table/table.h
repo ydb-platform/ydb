@@ -23,7 +23,7 @@ public:
 
     TPathId GetOlapStorePathIdVerified() const {
         AFL_VERIFY(!IsStandalone());
-        return PathIdFromPathId(Description.GetColumnStorePathId());
+        return TPathId::FromProto(Description.GetColumnStorePathId());
     }
 
     std::shared_ptr<NSharding::IShardingBase> GetShardingVerified(const TOlapSchema& olapSchema) const {

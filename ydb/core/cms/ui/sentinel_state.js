@@ -15,6 +15,7 @@ var TPDiskState = [
     "OpenFileError",
     "ChunkQuotaError",
     "DeviceIoError",
+    "Stopped",
 ];
 
 TPDiskState[252] = "Missing";

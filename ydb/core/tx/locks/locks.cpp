@@ -44,7 +44,7 @@ ILocksDb::TLockRange TPointKey::ToSerializedLockRange() const {
 
 bool TPointKey::ParseSerializedLockRange(const ILocksDb::TLockRange& range) {
     if (range.Data) {
-        Key = TOwnedCellVec::Make(TSerializedCellVec(range.Data).GetCells());
+        Key = TOwnedCellVec::FromSerialized(range.Data);
     }
     return true;
 }
@@ -80,10 +80,10 @@ bool TRangeKey::ParseSerializedLockRange(const ILocksDb::TLockRange& range) {
         return false;
     }
     if (protoRange.HasFrom()) {
-        From = TOwnedCellVec::Make(TSerializedCellVec(protoRange.GetFrom()).GetCells());
+        From = TOwnedCellVec::FromSerialized(protoRange.GetFrom());
     }
     if (protoRange.HasTo()) {
-        To = TOwnedCellVec::Make(TSerializedCellVec(protoRange.GetTo()).GetCells());
+        To = TOwnedCellVec::FromSerialized(protoRange.GetTo());
     }
     InclusiveFrom = protoRange.GetFromInclusive();
     InclusiveTo = protoRange.GetToInclusive();
@@ -117,6 +117,7 @@ TLockInfo::TLockInfo(TLockLocker * locker, const ILocksDb::TLockRow& row)
     }
     if (IsShardLock()) {
         for (const auto& tableId : row.ReadTables) {
+            // Note: table could be missing after it's dropped
             if (auto* table = Locker->FindTablePtr(tableId)) {
                 if (ReadTables.insert(tableId).second) {
                     table->AddShardLock(this);
@@ -146,6 +147,7 @@ void TLockInfo::MakeShardLock() {
 
 bool TLockInfo::AddShardLock(const TPathId& pathId) {
     Y_ABORT_UNLESS(IsShardLock());
+    Y_DEBUG_ABORT_UNLESS(Locker->FindTablePtr(pathId));
     if (ReadTables.insert(pathId).second) {
         UnpersistedRanges = true;
         return true;
@@ -174,6 +176,7 @@ bool TLockInfo::AddRange(const TRangeKey& range) {
 }
 
 bool TLockInfo::AddWriteLock(const TPathId& pathId) {
+    Y_DEBUG_ABORT_UNLESS(Locker->FindTablePtr(pathId));
     if (WriteTables.insert(pathId).second) {
         UnpersistedRanges = true;
         return true;
@@ -435,16 +438,18 @@ void TLockInfo::RestorePersistentRange(const ILocksDb::TLockRange& rangeRow) {
     range.Flags = ELockRangeFlags(rangeRow.Flags);
 
     if (!!(range.Flags & ELockRangeFlags::Read)) {
-        if (ReadTables.insert(range.TableId).second) {
-            Flags |= ELockFlags::WholeShard;
-            if (auto* table = Locker->FindTablePtr(range.TableId)) {
+        // Note: table could be missing after it's dropped
+        if (auto* table = Locker->FindTablePtr(range.TableId)) {
+            if (ReadTables.insert(range.TableId).second) {
+                Flags |= ELockFlags::WholeShard;
                 table->AddShardLock(this);
             }
         }
     }
     if (!!(range.Flags & ELockRangeFlags::Write)) {
-        if (WriteTables.insert(range.TableId).second) {
-            if (auto* table = Locker->FindTablePtr(range.TableId)) {
+        // Note: table could be missing after it's dropped
+        if (auto* table = Locker->FindTablePtr(range.TableId)) {
+            if (WriteTables.insert(range.TableId).second) {
                 table->AddWriteLock(this);
             }
         }

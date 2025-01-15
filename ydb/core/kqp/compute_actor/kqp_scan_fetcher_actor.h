@@ -52,13 +52,16 @@ private:
     const NYql::NDq::TTxId TxId;
     const TMaybe<ui64> LockTxId;
     const ui32 LockNodeId;
+    const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SCAN_FETCH_ACTOR;
     }
 
     TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snapshot, const NYql::NDq::TComputeRuntimeSettings& settings,
-        std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId,
+        std::vector<NActors::TActorId>&& computeActors,
+        const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId, const TMaybe<NKikimrDataEvents::ELockMode> lockMode,
         const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
         const TShardsScanningPolicy& shardsScanningPolicy, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId);
 

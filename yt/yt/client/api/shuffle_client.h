@@ -12,7 +12,7 @@ struct TShuffleHandle
     NObjectClient::TTransactionId TransactionId;
     std::string CoordinatorAddress;
     std::string Account;
-    std::string MediumName;
+    std::string Medium;
     int PartitionCount;
     int ReplicationFactor;
 
@@ -30,7 +30,7 @@ void FormatValue(TStringBuilderBase* builder, const TShuffleHandlePtr& shuffleHa
 struct TStartShuffleOptions
     : public TTimeoutOptions
 {
-    std::optional<std::string> MediumName;
+    std::optional<std::string> Medium;
     std::optional<int> ReplicationFactor;
 };
 

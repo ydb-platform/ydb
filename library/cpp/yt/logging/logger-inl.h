@@ -307,10 +307,10 @@ inline void LogEventImpl(
     event.SourceFile = sourceLocation.File;
     event.SourceLine = sourceLocation.Line;
     event.Anchor = anchor;
-    logger.Write(std::move(event));
     if (Y_UNLIKELY(event.Level >= ELogLevel::Alert)) {
         OnCriticalLogEvent(logger, event);
     }
+    logger.Write(std::move(event));
 }
 
 } // namespace NDetail

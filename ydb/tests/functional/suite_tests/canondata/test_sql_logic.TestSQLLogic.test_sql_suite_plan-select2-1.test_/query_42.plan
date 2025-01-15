@@ -146,6 +146,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableRangeScan",
+                                                        "Path": "/Root/sqllogictest_select2-1.test_plan/t1",
                                                         "ReadColumns": [
                                                             "a",
                                                             "b",

@@ -17,8 +17,9 @@ private:
 
     TLRUCache<ui64, TPortionDataAccessor, TNoopDelete, TMetadataSizeProvider> AccessorsCache;
     using TBase = IGranuleDataAccessor;
-    virtual THashMap<ui64, TPortionDataAccessor> DoAskData(const std::vector<TPortionInfo::TConstPtr>& portions,
+    virtual void DoAskData(const std::vector<TPortionInfo::TConstPtr>& portions,
         const std::shared_ptr<IAccessorCallback>& callback, const TString& consumer) override;
+    virtual TDataCategorized DoAnalyzeData(const std::vector<TPortionInfo::TConstPtr>& portions, const TString& consumer) override;
     virtual void DoModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) override;
 
 public:

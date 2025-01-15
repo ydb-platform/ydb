@@ -91,10 +91,10 @@ public:
             NKikimrTxDataShard::TFlatSchemeTransaction tx;
             context.SS->FillSeqNo(tx, seqNo);
             auto move = tx.MutableMoveTable();
-            PathIdFromPathId(srcPath->PathId, move->MutablePathId());
+            srcPath->PathId.ToProto(move->MutablePathId());
             move->SetTableSchemaVersion(srcTable->AlterVersion+1);
 
-            PathIdFromPathId(dstPath->PathId, move->MutableDstPathId());
+            dstPath->PathId.ToProto(move->MutableDstPathId());
             move->SetDstPath(TPath::Init(dstPath->PathId, context.SS).PathString());
 
             for (const auto& child: srcPath->GetChildren()) {
@@ -114,8 +114,8 @@ public:
                 Y_ABORT_UNLESS(dstIndexPath.IsResolved());
 
                 auto remap = move->AddReMapIndexes();
-                PathIdFromPathId(srcChildPath->PathId, remap->MutableSrcPathId());
-                PathIdFromPathId(dstIndexPath->PathId, remap->MutableDstPathId());
+                srcChildPath->PathId.ToProto(remap->MutableSrcPathId());
+                dstIndexPath->PathId.ToProto(remap->MutableDstPathId());
             }
 
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);

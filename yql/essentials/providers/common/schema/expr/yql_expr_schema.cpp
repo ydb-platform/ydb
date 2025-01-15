@@ -46,7 +46,7 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
     struct TMappingOrderedStructAdaptor {
         TVector<std::pair<TStringBuf, const TTypeAnnotationNode*>> Members;
 
-        TMappingOrderedStructAdaptor(const TStructMemberMapper& mapper, const TMaybe<TColumnOrder>& columns, const TStructExprType* type)
+        TMappingOrderedStructAdaptor(const TStructMemberMapper& mapper, const TMaybe<TColumnOrder>& columns, const TStructExprType* type, bool writePhysical = true)
         {
             TMap<TStringBuf, const TTypeAnnotationNode*> members;
             for (auto& item: type->GetItems()) {
@@ -61,7 +61,7 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
                 for (auto& [column, gen_column] : *columns) {
                     auto it = members.find(gen_column);
                     if (it != members.end()) {
-                        Members.emplace_back(column, it->second);
+                        Members.emplace_back(writePhysical ? gen_column : column, it->second);
                     }
                 }
             } else {
@@ -229,9 +229,9 @@ public:
         }
     }
 
-    void SaveStructType(const TStructExprType* type, const TMaybe<TColumnOrder>& columns, const TStructMemberMapper& mapper) {
+    void SaveStructType(const TStructExprType* type, const TMaybe<TColumnOrder>& columns, const TStructMemberMapper& mapper, bool physical = true) {
         if (mapper || columns) {
-            TBase::SaveStructType(TMappingOrderedStructAdaptor(mapper, columns, type));
+            TBase::SaveStructType(TMappingOrderedStructAdaptor(mapper, columns, type, physical));
         } else {
             Save(type);
         }
@@ -240,7 +240,12 @@ public:
 
 void SaveStructTypeToYson(NYson::TYsonConsumerBase& writer, const TStructExprType* type, const TMaybe<TColumnOrder>& columns, const TStructMemberMapper& mapper, bool extendedForm) {
     TExprTypeSaver<TYqlTypeYsonSaverImpl> saver(writer, extendedForm);
-    saver.SaveStructType(type, columns, mapper);
+    saver.SaveStructType(type, columns, mapper, true);
+}
+
+void SaveStructTypeToYsonWithLogicalNames(NYson::TYsonConsumerBase& writer, const TStructExprType* type, const TMaybe<TColumnOrder>& columns, const TStructMemberMapper& mapper, bool extendedForm) {
+    TExprTypeSaver<TYqlTypeYsonSaverImpl> saver(writer, extendedForm);
+    saver.SaveStructType(type, columns, mapper, false);
 }
 
 void WriteTypeToYson(NYson::TYsonConsumerBase& writer, const TTypeAnnotationNode* type, bool extendedForm) {
@@ -315,8 +320,9 @@ struct TExprTypeLoader {
     }
     TMaybe<TType> LoadStructType(const TVector<std::pair<TString, TType>>& members, ui32 /*level*/) {
         TVector<const TItemExprType*> items;
+        TColumnOrder order;
         for (auto& member: members) {
-            items.push_back(Ctx.MakeType<TItemExprType>(member.first, member.second));
+            items.push_back(Ctx.MakeType<TItemExprType>(order.AddColumn(member.first), member.second));
         }
         auto ret = Ctx.MakeType<TStructExprType>(items);
         YQL_ENSURE(ret->Validate(TPosition(), Ctx));
@@ -430,7 +436,7 @@ void WriteResOrPullType(NYson::TYsonConsumerBase& writer, const TTypeAnnotationN
         writer.OnStringScalar("ListType");
         writer.OnListItem();
 
-        SaveStructTypeToYson(writer, type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(), columns, {}, true);
+        SaveStructTypeToYsonWithLogicalNames(writer, type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(), columns, {}, true);
 
         writer.OnEndList();
     }

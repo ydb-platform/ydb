@@ -13,9 +13,8 @@ SELECT
 
 SELECT
     CAST('2000-01-01,GMT' AS tzdate) == tzdate('2000-01-01,America/Los_Angeles')
-;
+; -- same time value
 
--- same time value
 SELECT
     RemoveTimezone(CAST('2000-01-01,GMT' AS tzdate)) == RemoveTimezone(tzdate('2000-01-01,America/Los_Angeles'))
 ;

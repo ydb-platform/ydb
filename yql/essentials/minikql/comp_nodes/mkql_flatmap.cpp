@@ -67,7 +67,7 @@ public:
 
         const auto item = GetNodeValue(Flow, ctx, block);
         result->addIncoming(item, block);
-        BranchInst::Create(exit, next, IsSpecial(item, block), block);
+        BranchInst::Create(exit, next, IsSpecial(item, block, context), block);
 
         block = next;
 
@@ -160,9 +160,9 @@ public:
         block = init;
 
         const auto item = GetNodeValue(Flow, ctx, block);
-        const auto outres = SelectInst::Create(IsFinish(item, block), ConstantInt::get(resultType, i32(EFetchResult::Finish)), ConstantInt::get(resultType, i32(EFetchResult::Yield)), "outres", block);
+        const auto outres = SelectInst::Create(IsFinish(item, block, context), ConstantInt::get(resultType, i32(EFetchResult::Finish)), ConstantInt::get(resultType, i32(EFetchResult::Yield)), "outres", block);
         result->addIncoming(outres, block);
-        BranchInst::Create(exit, next, IsSpecial(item, block), block);
+        BranchInst::Create(exit, next, IsSpecial(item, block, context), block);
 
         block = next;
 
@@ -277,7 +277,7 @@ public:
 
         const auto output = GetNodeValue(Output, ctx, block);
         result->addIncoming(output, block);
-        BranchInst::Create(next, exit, IsFinish(output, block), block);
+        BranchInst::Create(next, exit, IsFinish(output, block, context), block);
 
         block = done;
 
@@ -598,13 +598,13 @@ public:
         const auto result = PHINode::Create(item->getType(), 2, "result", exit);
 
         result->addIncoming(item, block);
-        BranchInst::Create(exit, work, IsSpecial(item, block), block);
+        BranchInst::Create(exit, work, IsSpecial(item, block, context), block);
 
         block = work;
         codegenItem->CreateSetValue(ctx, block, item);
         const auto value = GetNodeValue(NewItem, ctx, block);
         result->addIncoming(!IsMultiRowPerItem && ResultContainerOpt ? GetOptionalValue(context, value, block) : value, block);
-        BranchInst::Create(loop, exit, IsEmpty(value, block), block);
+        BranchInst::Create(loop, exit, IsEmpty(value, block, context), block);
 
         block = exit;
         return result;
@@ -630,7 +630,7 @@ public:
         block = more;
 
         const auto current = new LoadInst(valueType, currentPtr, "current", block);
-        BranchInst::Create(pull, skip, HasValue(current, block), block);
+        BranchInst::Create(pull, skip, HasValue(current, block, context), block);
 
         {
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -668,7 +668,7 @@ public:
 
             const auto list = DoGenerateGetValue(ctx, block);
             result->addIncoming(list, block);
-            BranchInst::Create(over, good, IsSpecial(list, block),  block);
+            BranchInst::Create(over, good, IsSpecial(list, block, context),  block);
 
             block = good;
             if constexpr (ResultContainerOpt) {
@@ -803,7 +803,7 @@ public:
         }
 
         result->addIncoming(!IsMultiRowPerItem && ResultContainerOpt ? GetOptionalValue(context, value, block) : value, block);
-        BranchInst::Create(loop, exit, IsEmpty(value, block), block);
+        BranchInst::Create(loop, exit, IsEmpty(value, block, context), block);
 
         block = exit;
         return result;
@@ -829,7 +829,7 @@ public:
         block = more;
 
         const auto current = new LoadInst(valueType, currentPtr, "current", block);
-        BranchInst::Create(pull, skip, HasValue(current, block), block);
+        BranchInst::Create(pull, skip, HasValue(current, block, context), block);
 
         {
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -867,7 +867,7 @@ public:
 
             const auto list = DoGenerateGetValue(ctx, block);
             result->addIncoming(list, block);
-            BranchInst::Create(over, good, IsSpecial(list, block),  block);
+            BranchInst::Create(over, good, IsSpecial(list, block, context),  block);
 
             block = good;
             if constexpr (ResultContainerOpt) {
@@ -1179,7 +1179,6 @@ protected:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -1215,11 +1214,11 @@ protected:
 
         const auto resItem = GetNodeValue(NewItem, ctx, block);
 
-        BranchInst::Create(loop, pass, IsEmpty(resItem, block), block);
+        BranchInst::Create(loop, pass, IsEmpty(resItem, block, context), block);
 
         block = pass;
 
-        SafeUnRefUnboxed(valuePtr, ctx, block);
+        SafeUnRefUnboxedOne(valuePtr, ctx, block);
         const auto getOpt = GetOptionalValue(context, resItem, block);
         new StoreInst(getOpt, valuePtr, block);
         ValueAddRef(NewItem->GetRepresentation(), valuePtr, ctx, block);
@@ -1253,7 +1252,6 @@ protected:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -1545,7 +1543,7 @@ public:
                 const auto plus = BinaryOperator::CreateAdd(idx, plusSize, "plus", block);
                 const auto load = new LoadInst(list->getType(), dst, "load", block);
                 new StoreInst(GetOptionalValue(context, load, block), dst, block);
-                const auto move = SelectInst::Create(IsExists(load, block), plus, idx, "move", block);
+                const auto move = SelectInst::Create(IsExists(load, block, context), plus, idx, "move", block);
                 idx->addIncoming(move, block);
             }
 
@@ -1572,7 +1570,8 @@ public:
                 const auto bytes = BinaryOperator::CreateShl(idx, ConstantInt::get(idx->getType(), 4), "bytes", block);
 
                 const auto fnType = FunctionType::get(Type::getVoidTy(context), {pType, pType, bytes->getType(), Type::getInt1Ty(context)}, false);
-                const auto func = ctx.Codegen.GetModule().getOrInsertFunction("llvm.memcpy.p0i8.p0i8.i64", fnType);
+                const auto memcpyName = (LLVM_VERSION_MAJOR < 16) ? "llvm.memcpy.p0i8.p0i8.i64" : "llvm.memcpy.p0.p0.i64";
+                const auto func = ctx.Codegen.GetModule().getOrInsertFunction(memcpyName, fnType);
                 CallInst::Create(func, {pdst, psrc, bytes, ConstantInt::getFalse(context)}, "", block);
             } else {
                 const auto factory = ctx.GetFactory();

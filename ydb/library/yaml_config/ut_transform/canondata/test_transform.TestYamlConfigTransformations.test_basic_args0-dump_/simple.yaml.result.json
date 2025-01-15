@@ -331,7 +331,7 @@
               "+(DS|RA):METADATA-READERS",
               "+(SR):DATA-READERS",
               "+(UR|ER):DATA-WRITERS",
-              "+(CD|CT|WA|AS|RS):DDL-ADMINS",
+              "+(CD|CT|CQ|WA|AS|RS):DDL-ADMINS",
               "+(GAR):ACCESS-ADMINS",
               "+(CDB|DDB):DATABASE-ADMINS"
             ],

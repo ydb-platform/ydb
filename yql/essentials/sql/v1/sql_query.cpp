@@ -583,7 +583,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore22: {
-            // create_user_stmt: CREATE USER role_name create_user_option?;
+            // create_user_stmt: CREATE USER role_name (create_user_option)*;
             Ctx.BodyPart();
             auto& node = core.GetAlt_sql_stmt_core22().GetRule_create_user_stmt1();
 
@@ -604,9 +604,17 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             TMaybe<TRoleParameters> roleParams;
-            if (node.HasBlock4()) {
+            const auto& options = node.GetBlock4();
+
+            {
                 roleParams.ConstructInPlace();
-                if (!RoleParameters(node.GetBlock4().GetRule_create_user_option1(), *roleParams)) {
+                std::vector<TRule_create_user_option> opts;
+                opts.reserve(options.size());
+                for (const auto& opt : options) {
+                    opts.push_back(opt.GetRule_create_user_option1());
+                }
+
+                if (!RoleParameters(opts, *roleParams)) {
                     return false;
                 }
             }
@@ -615,7 +623,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore23: {
-            // alter_user_stmt: ALTER USER role_name (WITH? create_user_option | RENAME TO role_name);
+            // alter_user_stmt: ALTER USER role_name (WITH? create_user_option+ | RENAME TO role_name);
             Ctx.BodyPart();
             auto& node = core.GetAlt_sql_stmt_core23().GetRule_alter_user_stmt1();
 
@@ -641,7 +649,15 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             switch (node.GetBlock4().Alt_case()) {
                 case TRule_alter_user_stmt_TBlock4::kAlt1: {
                     TRoleParameters roleParams;
-                    if (!RoleParameters(node.GetBlock4().GetAlt1().GetRule_create_user_option2(), roleParams)) {
+
+                    auto options = node.GetBlock4().GetAlt1().GetBlock2();
+                    std::vector<TRule_create_user_option> opts;
+                    opts.reserve(options.size());
+                    for (const auto& opt : options) {
+                        opts.push_back(opt.GetRule_create_user_option1());
+                    }
+
+                    if (!RoleParameters(opts, roleParams)) {
                         return false;
                     }
                     stmt = BuildAlterUser(pos, service, cluster, roleName, roleParams, Ctx.Scoped);

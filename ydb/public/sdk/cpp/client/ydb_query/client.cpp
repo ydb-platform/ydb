@@ -48,6 +48,9 @@ static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::Transaction
         case TTxSettings::TS_SNAPSHOT_RO:
             proto->mutable_snapshot_read_only();
             break;
+        case TTxSettings::TS_SNAPSHOT_RW:
+            proto->mutable_snapshot_read_write();
+            break;
         default:
             throw TContractViolation("Unexpected transaction mode.");
     }

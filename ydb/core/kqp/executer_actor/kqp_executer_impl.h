@@ -304,13 +304,14 @@ protected:
             batch.Payload = NYql::MakeChunkedBuffer(std::move(computeData.Payload));
 
             if (!trailingResults) {
-                TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
-                auto resultSet = protoBuilder.BuildYdbResultSet(std::move(batches), txResult.MkqlItemType, txResult.ColumnOrder, txResult.ColumnHints);
                 auto streamEv = MakeHolder<TEvKqpExecuter::TEvStreamData>();
                 streamEv->Record.SetSeqNo(computeData.Proto.GetSeqNo());
                 streamEv->Record.SetQueryResultIndex(*txResult.QueryResultIndex + StatementResultIndex);
                 streamEv->Record.SetChannelId(channel.Id);
-                streamEv->Record.MutableResultSet()->Swap(&resultSet);
+
+                TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
+                protoBuilder.BuildYdbResultSet(*streamEv->Record.MutableResultSet(), std::move(batches),
+                    txResult.MkqlItemType, txResult.ColumnOrder, txResult.ColumnHints);
 
                 LOG_D("Send TEvStreamData to " << Target << ", seqNo: " << streamEv->Record.GetSeqNo()
                     << ", nRows: " << streamEv->Record.GetResultSet().rows().size());
@@ -504,6 +505,15 @@ protected:
 
         TasksGraph.GetMeta().SetLockTxId(lockTxId);
         TasksGraph.GetMeta().SetLockNodeId(SelfId().NodeId());
+
+        switch (Request.IsolationLevel) {
+            case NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW:
+                TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+                break;
+            default:
+                TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC);
+                break;
+        }
 
         LWTRACK(KqpBaseExecuterHandleReady, ResponseEv->Orbit, TxId);
         if (IsDebugLogEnabled()) {
@@ -953,6 +963,16 @@ protected:
             if (!settings.GetInconsistentTx() && !settings.GetIsOlap()) {
                 ActorIdToProto(BufferActorId, settings.MutableBufferActorId());
             }
+            if (!settings.GetInconsistentTx()
+                    && TasksGraph.GetMeta().LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION
+                    && GetSnapshot().IsValid()) {
+                settings.MutableMvccSnapshot()->SetStep(GetSnapshot().Step);
+                settings.MutableMvccSnapshot()->SetTxId(GetSnapshot().TxId);
+            }
+            if (!settings.GetInconsistentTx() && TasksGraph.GetMeta().LockMode) {
+                settings.SetLockMode(*TasksGraph.GetMeta().LockMode);   
+            }
+
             output.SinkSettings.ConstructInPlace();
             output.SinkSettings->PackFrom(settings);
         } else {
@@ -1211,6 +1231,10 @@ protected:
             if (lockTxId) {
                 settings->SetLockTxId(*lockTxId);
                 settings->SetLockNodeId(self.NodeId());
+            }
+
+            if (TasksGraph.GetMeta().LockMode) {
+                settings->SetLockMode(*TasksGraph.GetMeta().LockMode);
             }
 
             createdTasksIds.push_back(task.Id);

@@ -55,6 +55,7 @@
                                                             {
                                                                 "Inputs": [],
                                                                 "Name": "TableFullScan",
+                                                                "Path": "/local/base_write_multi_usage_script_script/Input1",
                                                                 "ReadColumns": [
                                                                     "Amount",
                                                                     "Comment",
@@ -134,6 +135,7 @@
                                                             {
                                                                 "Inputs": [],
                                                                 "Name": "TableFullScan",
+                                                                "Path": "/local/base_write_multi_usage_script_script/Temp",
                                                                 "ReadColumns": [
                                                                     "Name",
                                                                     "Value"
@@ -226,6 +228,7 @@
                                             }
                                         ],
                                         "Name": "Upsert",
+                                        "Path": "/local/base_write_multi_usage_script_script/Temp",
                                         "Table": "base_write_multi_usage_script_script/Temp"
                                     },
                                     {
@@ -256,6 +259,7 @@
                                             }
                                         ],
                                         "Name": "Delete",
+                                        "Path": "/local/base_write_multi_usage_script_script/Input1",
                                         "Table": "base_write_multi_usage_script_script/Input1"
                                     },
                                     {
@@ -309,6 +313,7 @@
                                                             {
                                                                 "Inputs": [],
                                                                 "Name": "TableRangeScan",
+                                                                "Path": "/local/base_write_multi_usage_script_script/Input1",
                                                                 "ReadColumns": [
                                                                     "Amount"
                                                                 ],

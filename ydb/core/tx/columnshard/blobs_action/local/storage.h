@@ -53,4 +53,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NLocal

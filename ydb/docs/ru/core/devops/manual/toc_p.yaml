@@ -29,7 +29,7 @@ items:
     href: ../../maintenance/manual/dynamic-config-volatile-config.md
   - name: Изменение конфигураций через CMS
     href: ../../maintenance/manual/cms.md
-- name: Системные таблицы
+- name: Системные представления
   href: system-views.md
 - name: Обслуживание без потери доступности
   href: maintenance-without-downtime.md

@@ -731,7 +731,7 @@ TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
     if (!TableDescription.HasPathId()) {
         TableDescription.SetName(pathInfo->Name);
         TableDescription.SetId_Deprecated(pathInfo->PathId.LocalPathId);
-        PathIdFromPathId(pathInfo->PathId, TableDescription.MutablePathId());
+        pathInfo->PathId.ToProto(TableDescription.MutablePathId());
 
         for (auto& c : Columns) {
             const TColumn& column = c.second;

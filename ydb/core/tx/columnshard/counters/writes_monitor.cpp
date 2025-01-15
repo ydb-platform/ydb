@@ -15,14 +15,16 @@ void TWritesMonitor::OnStartWrite(const ui64 dataSize) {
     UpdateTabletCounters();
 }
 
-void TWritesMonitor::OnFinishWrite(const ui64 dataSize, const ui32 writesCount /*= 1*/) {
+void TWritesMonitor::OnFinishWrite(const ui64 dataSize, const ui32 writesCount /*= 1*/, const bool onDestroy /*= false*/) {
     AFL_VERIFY(writesCount <= WritesInFlightLocal);
     AFL_VERIFY(dataSize <= WritesSizeInFlightLocal);
     WritesSizeInFlightLocal -= dataSize;
     WritesInFlightLocal -= writesCount;
     AFL_VERIFY(0 <= WritesInFlight.Sub(writesCount));
     AFL_VERIFY(0 <= WritesSizeInFlight.Sub(dataSize));
-    UpdateTabletCounters();
+    if (!onDestroy) {
+        UpdateTabletCounters();
+    }
 }
 
 TString TWritesMonitor::DebugString() const {

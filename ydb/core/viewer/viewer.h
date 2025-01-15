@@ -6,6 +6,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/defs.h>
 #include <ydb/library/actors/core/event.h>
+#include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
 namespace NKikimr::NViewer {
@@ -58,8 +59,10 @@ struct TRequestSettings {
 IActor* CreateViewer(const TKikimrRunConfig& kikimrRunConfig);
 
 struct TRequestState {
-    const NMon::TEvHttpInfo* Request;
+    std::variant<std::monostate, const NMon::TEvHttpInfo*, const NHttp::TEvHttpProxy::TEvHttpIncomingRequest*> Request;
     NWilson::TTraceId TraceId;
+
+    TRequestState() = default;
 
     TRequestState(const NMon::TEvHttpInfo* request)
         : Request(request)
@@ -70,12 +73,68 @@ struct TRequestState {
         , TraceId(traceId)
     {}
 
-    const NMon::TEvHttpInfo* operator ->() const {
-        return Request;
+    TRequestState(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request)
+        : Request(request)
+    {}
+
+    TRequestState(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request, NWilson::TTraceId traceId)
+        : Request(request)
+        , TraceId(traceId)
+    {}
+
+    bool HasHeader(TStringBuf name) const {
+        if (auto* request = std::get_if<const NMon::TEvHttpInfo*>(&Request)) {
+            return (*request)->Request.GetHeaders().HasHeader(name);
+        }
+        if (auto* request = std::get_if<const NHttp::TEvHttpProxy::TEvHttpIncomingRequest*>(&Request)) {
+            return NHttp::THeaders((*request)->Request->Headers).Has(name);
+        }
+        return false;
+    }
+
+    TString GetHeader(TStringBuf name) const {
+        if (auto* request = std::get_if<const NMon::TEvHttpInfo*>(&Request)) {
+            auto header = (*request)->Request.GetHeaders().FindHeader(name);
+            return header ? header->Value() : TString();
+        }
+        if (auto* request = std::get_if<const NHttp::TEvHttpProxy::TEvHttpIncomingRequest*>(&Request)) {
+            return TString(NHttp::THeaders((*request)->Request->Headers).Get(name));
+        }
+        return {};
+    }
+
+    TString GetRemoteAddr() const {
+        if (auto* request = std::get_if<const NMon::TEvHttpInfo*>(&Request)) {
+            return (*request)->Request.GetRemoteAddr();
+        }
+        if (auto* request = std::get_if<const NHttp::TEvHttpProxy::TEvHttpIncomingRequest*>(&Request)) {
+            return (*request)->Request->Address->ToString();
+        }
+        return {};
+    }
+
+    TString GetUri() const {
+        if (auto* request = std::get_if<const NMon::TEvHttpInfo*>(&Request)) {
+            return TString((*request)->Request.GetUri());
+        }
+        if (auto* request = std::get_if<const NHttp::TEvHttpProxy::TEvHttpIncomingRequest*>(&Request)) {
+            return TString((*request)->Request->URL.Before('?'));
+        }
+        return {};
+    }
+
+    TString GetUserTokenObject() const {
+        if (auto* request = std::get_if<const NMon::TEvHttpInfo*>(&Request)) {
+            return (*request)->UserToken;
+        }
+        if (auto* request = std::get_if<const NHttp::TEvHttpProxy::TEvHttpIncomingRequest*>(&Request)) {
+            return (*request)->UserToken;
+        }
+        return {};
     }
 
     explicit operator bool() const {
-        return Request != nullptr;
+        return Request.index() != 0;
     }
 };
 
@@ -173,6 +232,7 @@ public:
         const TContentHandler& handler) = 0;
 
     virtual TString GetHTTPOK(const TRequestState& request, TString contentType = {}, TString response = {}, TInstant lastModified = {}) = 0;
+    virtual TString GetChunkedHTTPOK(const TRequestState& request, TString contentType = {}) = 0;
 
     TString GetHTTPOKJSON(const TRequestState& request, TString response = {}, TInstant lastModified = {}) {
         return GetHTTPOK(request, "application/json", response, lastModified);

@@ -47,85 +47,85 @@ public:
 
     ~TTcpClientBusProxy()
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         Connection_->Terminate(TError(NBus::EErrorCode::TransportError, "Bus terminated"));
     }
 
     const std::string& GetEndpointDescription() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->GetEndpointDescription();
     }
 
     const IAttributeDictionary& GetEndpointAttributes() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->GetEndpointAttributes();
     }
 
     const std::string& GetEndpointAddress() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->GetEndpointAddress();
     }
 
     const NNet::TNetworkAddress& GetEndpointNetworkAddress() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->GetEndpointNetworkAddress();
     }
 
     bool IsEndpointLocal() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->IsEndpointLocal();
     }
 
     bool IsEncrypted() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->IsEncrypted();
     }
 
     TBusNetworkStatistics GetNetworkStatistics() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->GetNetworkStatistics();
     }
 
     TFuture<void> GetReadyFuture() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->GetReadyFuture();
     }
 
     TFuture<void> Send(TSharedRefArray message, const TSendOptions& options) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->Send(std::move(message), options);
     }
 
     void SetTosLevel(TTosLevel tosLevel) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->SetTosLevel(tosLevel);
     }
 
     void Terminate(const TError& error) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         Connection_->Terminate(error);
     }
 
     void SubscribeTerminated(const TCallback<void(const TError&)>& callback) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         Connection_->SubscribeTerminated(callback);
     }
 
     void UnsubscribeTerminated(const TCallback<void(const TError&)>& callback) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         Connection_->UnsubscribeTerminated(callback);
     }
 
@@ -173,7 +173,7 @@ public:
 
     IBusPtr CreateBus(IMessageHandlerPtr handler, const TCreateBusOptions& options) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         auto id = TConnectionId::Create();
 

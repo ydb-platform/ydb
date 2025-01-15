@@ -607,7 +607,7 @@ std::unique_ptr<IParser> CreateParserForSkiff(
     const TSkiffFormatConfigPtr& config,
     int tableIndex)
 {
-    if (tableIndex >= static_cast<int>(skiffSchemas.size())) {
+    if (tableIndex >= std::ssize(skiffSchemas)) {
         THROW_ERROR_EXCEPTION("Skiff format config does not describe table #%v",
             tableIndex);
     }

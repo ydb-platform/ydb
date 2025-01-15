@@ -2386,7 +2386,7 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
         extraData = tableInfo->SerializeAlterExtraData();
     } else if (txState.TxType == TTxState::TxCopyTable) {
         NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
-        PathIdFromPathId(txState.CdcPathId, proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
+        txState.CdcPathId.ToProto(proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
         bool serializeRes = proto.SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
     }
@@ -2999,7 +2999,7 @@ void TSchemeShard::PersistExternalDataSourceReference(NIceDb::TNiceDb& db, TPath
     Y_ABORT_UNLESS(findSource);
     auto* ref = (*findSource)->ExternalTableReferences.AddReferences();
     ref->SetPath(referrer.PathString());
-    PathIdFromPathId(referrer->PathId, ref->MutablePathId());
+    referrer->PathId.ToProto(ref->MutablePathId());
     db.Table<Schema::ExternalDataSource>()
         .Key(pathId.OwnerId, pathId.LocalPathId)
         .Update(
@@ -3011,7 +3011,7 @@ void TSchemeShard::PersistRemoveExternalDataSourceReference(NIceDb::TNiceDb& db,
     Y_ABORT_UNLESS(findSource);
     EraseIf(*(*findSource)->ExternalTableReferences.MutableReferences(),
         [referrer](const NKikimrSchemeOp::TExternalTableReferences::TReference& reference) {
-            return PathIdFromPathId(reference.GetPathId()) == referrer;
+            return TPathId::FromProto(reference.GetPathId()) == referrer;
         });
     db.Table<Schema::ExternalDataSource>()
         .Key(pathId.OwnerId, pathId.LocalPathId)
@@ -6678,7 +6678,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
     proto->SetName(path->Name);
 
     proto->SetId_Deprecated(pathId.LocalPathId);
-    PathIdFromPathId(pathId, proto->MutablePathId());
+    pathId.ToProto(proto->MutablePathId());
 
     for (const auto& col : alterData->Columns) {
         const TTableInfo::TColumn& colInfo = col.second;

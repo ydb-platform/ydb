@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:3:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select 2 * coalesce($x, 33);
+	^
+        <tmp_path>/program.sql:<main>:3:10: Warning: At function: *
+        	select 2 * coalesce($x, 33);
+	         ^
+            <tmp_path>/program.sql:<main>:3:10: Warning: Integral type implicit bitcast: Int32 and Uint32
+            	select 2 * coalesce($x, 33);
+	         ^

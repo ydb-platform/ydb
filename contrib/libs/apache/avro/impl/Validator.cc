@@ -62,7 +62,7 @@ bool Validator::countingSetup() {
             compoundStack_.pop_back();
             proceed = false;
         } else {
-            counters_.push_back(static_cast<size_t>(count_));
+            counters_.push_back(count_);
         }
     }
 
@@ -78,7 +78,7 @@ void Validator::countingAdvance() {
             setupOperation(node->leafAt(index));
         } else {
             compoundStack_.back().pos = 0;
-            int count = --counters_.back();
+            size_t count = --counters_.back();
             if (count == 0) {
                 counters_.pop_back();
                 compoundStarted_ = true;
@@ -100,14 +100,13 @@ void Validator::unionAdvance() {
         waitingForCount_ = false;
         NodePtr node = compoundStack_.back().node;
 
-        if (count_ < static_cast<int64_t>(node->leaves())) {
+        if (count_ < node->leaves()) {
             compoundStack_.pop_back();
             setupOperation(node->leafAt(static_cast<int>(count_)));
         } else {
             throw Exception(
-                boost::format("Union selection out of range, got %1%,"
-                              " expecting 0-%2%")
-                % count_ % (node->leaves() - 1));
+                "Union selection out of range, got {}, expecting 0-{}",
+                count_, node->leaves() - 1);
         }
     }
 }
@@ -117,7 +116,7 @@ void Validator::fixedAdvance() {
     compoundStack_.pop_back();
 }
 
-int Validator::nextSizeExpected() const {
+size_t Validator::nextSizeExpected() const {
     return compoundStack_.back().node->fixedSize();
 }
 
@@ -169,11 +168,9 @@ void Validator::advance() {
     }
 }
 
-void Validator::setCount(int64_t count) {
+void Validator::setCount(size_t count) {
     if (!waitingForCount_) {
         throw Exception("Not expecting count");
-    } else if (count_ < 0) {
-        throw Exception("Count cannot be negative");
     }
     count_ = count;
 

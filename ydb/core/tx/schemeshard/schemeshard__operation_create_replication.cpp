@@ -44,6 +44,10 @@ struct TTransferStrategy : public IStrategy {
     };
 
     bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const override {
+        if (!AppData()->FeatureFlags.GetEnableTopicTransfer()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Topic transfer creation is disabled");
+            return true;
+        }
         if (!desc.GetConfig().HasTransferSpecific()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong transfer configuration");
             return true;
@@ -102,7 +106,7 @@ public:
                 context.OnComplete.WaitShardCreated(shard.Idx, OperationId);
             } else {
                 auto ev = MakeHolder<NReplication::TEvController::TEvCreateReplication>();
-                PathIdFromPathId(pathId, ev->Record.MutablePathId());
+                pathId.ToProto(ev->Record.MutablePathId());
                 ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
                 ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
                 ev->Record.MutableConfig()->CopyFrom(alterData->Description.GetConfig());

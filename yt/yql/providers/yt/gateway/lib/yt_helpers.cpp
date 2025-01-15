@@ -354,7 +354,7 @@ static bool IterateRows(NYT::ITransactionPtr tx,
 
     if (!YAMRED_DSV && exec.GetColumns()) {
         if (!specsCache.GetSpecs().Inputs[tableIndex]->OthersStructIndex) {
-            path.Columns(*exec.GetColumns());
+            path.Columns(TColumnOrder(*exec.GetColumns()).GetPhysicalNames());
         }
     }
 

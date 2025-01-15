@@ -1389,6 +1389,8 @@ class TDataShard
 
     void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvDataShard::TEvForceDataCleanup::TPtr& ev, const TActorContext& ctx);
+
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
     void DoPeriodicTasks(const TActorContext &ctx);
@@ -2144,6 +2146,8 @@ public:
         Y_ABORT_UNLESS(type != ELogThrottlerType::LAST);
         return LogThrottlers[type];
     };
+
+    void OnTableCreated(TTransactionContext& txc, const TActorContext& ctx);
 
 private:
     ///
@@ -3211,6 +3215,7 @@ protected:
             HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             HFunc(TEvIncrementalRestoreScan::TEvFinished, Handle);
+            HFunc(TEvDataShard::TEvForceDataCleanup, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());

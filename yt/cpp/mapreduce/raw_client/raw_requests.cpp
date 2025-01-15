@@ -30,55 +30,6 @@ namespace NYT::NDetail::NRawClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ExecuteBatch(
-    IRequestRetryPolicyPtr retryPolicy,
-    const TClientContext& context,
-    TRawBatchRequest& batchRequest,
-    const TExecuteBatchOptions& options)
-{
-    if (batchRequest.IsExecuted()) {
-        ythrow yexception() << "Cannot execute batch request since it is already executed";
-    }
-    Y_DEFER {
-        batchRequest.MarkExecuted();
-    };
-
-    const auto concurrency = options.Concurrency_.GetOrElse(50);
-    const auto batchPartMaxSize = options.BatchPartMaxSize_.GetOrElse(concurrency * 5);
-
-    if (!retryPolicy) {
-        retryPolicy = CreateDefaultRequestRetryPolicy(context.Config);
-    }
-
-    while (batchRequest.BatchSize()) {
-        TRawBatchRequest retryBatch(context.Config);
-
-        while (batchRequest.BatchSize()) {
-            auto parameters = TNode::CreateMap();
-            TInstant nextTry;
-            batchRequest.FillParameterList(batchPartMaxSize, &parameters["requests"], &nextTry);
-            if (nextTry) {
-                SleepUntil(nextTry);
-            }
-            parameters["concurrency"] = concurrency;
-            auto body = NodeToYsonString(parameters);
-            THttpHeader header("POST", "execute_batch");
-            header.AddMutationId();
-            NDetail::TResponseInfo result;
-            try {
-                result = RetryRequestWithPolicy(retryPolicy, context, header, body);
-            } catch (const std::exception& e) {
-                batchRequest.SetErrorResult(std::current_exception());
-                retryBatch.SetErrorResult(std::current_exception());
-                throw;
-            }
-            batchRequest.ParseResponse(std::move(result), retryPolicy.Get(), &retryBatch);
-        }
-
-        batchRequest = std::move(retryBatch);
-    }
-}
-
 TOperationAttributes ParseOperationAttributes(const TNode& node)
 {
     const auto& mapNode = node.AsMap();
@@ -314,13 +265,13 @@ TVector<TRichYPath> CanonizeYPaths(
     const TClientContext& context,
     const TVector<TRichYPath>& paths)
 {
-    TRawBatchRequest batch(context.Config);
+    THttpRawBatchRequest batch(context.Config);
     TVector<NThreading::TFuture<TRichYPath>> futures;
     futures.reserve(paths.size());
     for (int i = 0; i < static_cast<int>(paths.size()); ++i) {
         futures.push_back(batch.CanonizeYPath(paths[i]));
     }
-    ExecuteBatch(retryPolicy, context, batch, TExecuteBatchOptions{});
+    batch.ExecuteBatch(retryPolicy, context);
     TVector<TRichYPath> result;
     result.reserve(futures.size());
     for (auto& future : futures) {

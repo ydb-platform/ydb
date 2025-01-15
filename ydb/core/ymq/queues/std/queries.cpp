@@ -572,7 +572,12 @@ const char* const InternalGetQueueAttributesQuery = R"__(
 
         (let queuesRowRead (SelectRow queuesTable queuesRow queuesRowSelect))
 
-        (let tags (Coalesce (Member queuesRowRead 'Tags) (Utf8 '"{}")))
+        (let tags
+            (block '(
+                (let str (Coalesce (Member queuesRowRead 'Tags) (Utf8 '"{}")))
+                (return (If (Equal (Utf8 '"") str)
+                            (Utf8 '"{}")
+                            str)))))
 
         (return (AsList
             (SetResult 'queueExists (Exists attrsRead))
@@ -596,7 +601,12 @@ const char* const TagQueueQuery = R"__(
 
         (let queuesRead (SelectRow queuesTable queuesRow '('Tags)))
 
-        (let curTags (Coalesce (Member queuesRead 'Tags) (Utf8 '"{}")))
+        (let curTags
+            (block '(
+                (let str (Coalesce (Member queuesRead 'Tags) (Utf8 '"{}")))
+                (return (If (Equal (Utf8 '"") str)
+                            (Utf8 '"{}")
+                            str)))))
 
         (let queuesRowUpdate '(
             '('Tags tags)))

@@ -1382,7 +1382,7 @@ If a commit fails with an error, the application should log it and continue; it 
    }
    ```
 
-   The `Commit` call is fast by default, saving data into an internal buffer and returning. The real message to the server is sent in the background. To prevent losing last commits, you should call the `Reader.Close()` method before exiting the program.
+   The `Commit` call is fast by default, saving data into an internal buffer and returning control back to the caller. The real message to the server is sent in the background. To prevent losing the last commits, you should call the `Reader.Close()` method before exiting the program.
 
 - Python
 

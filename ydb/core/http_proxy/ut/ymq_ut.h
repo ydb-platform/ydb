@@ -5,6 +5,7 @@
 #include <library/cpp/scheme/scheme.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/core/ymq/actor/metering.h>
+#include <ydb/core/ymq/base/limits.h>
 
 #include <chrono>
 #include <thread>
@@ -1211,32 +1212,60 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestTagQueue, THttpProxyTestMock) {
+        using NJson::TJsonMap;
+        using NJson::TJsonArray;
         auto queues = TVector{
             CreateQueue({{"QueueName", "ExampleQueueName"}}),
-            CreateQueue({{"QueueName", "ExampleQueueName.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}}),
+            CreateQueue({{"QueueName", "ExampleQueueName.fifo"}, {"Attributes", TJsonMap{{"FifoQueue", "true"}}}}),
         };
         for (const auto& q : queues) {
             auto queueUrl = GetByPath<TString>(q, "QueueUrl");
 
-            auto setTags = NJson::TJsonMap{
-                {"key1", "value1"},
-                {"key2", "value2"},
-            };
-            TagQueue({{"QueueUrl", queueUrl}, {"Tags", setTags}});
-            auto json = ListQueueTags({{"QueueUrl", queueUrl}});
-            UNIT_ASSERT_VALUES_EQUAL(json.GetMapSafe().size(), 1);
-            UNIT_ASSERT(json["Tags"] == setTags);
+            {
+                // Check that we can update a value of an existing tag.
 
-            TagQueue({{"QueueUrl", queueUrl}, {"Tags", NJson::TJsonMap{
-                {"key3", "value3"},
-            }}});
-            json = ListQueueTags({{"QueueUrl", queueUrl}});
-            UNIT_ASSERT_VALUES_EQUAL(json.GetMapSafe().size(), 1);
-            UNIT_ASSERT((json["Tags"] == NJson::TJsonMap{
-                {"key1", "value1"},
-                {"key2", "value2"},
-                {"key3", "value3"},
-            }));
+                auto key = TString("key");
+
+                TagQueue({{"QueueUrl", queueUrl}, {"Tags", TJsonMap{{key, "x"}}}});
+                auto json = ListQueueTags({{"QueueUrl", queueUrl}});
+                UNIT_ASSERT((json["Tags"] == TJsonMap{{key, "x"}}));
+
+                TagQueue({{"QueueUrl", queueUrl}, {"Tags", TJsonMap{{key, "y"}}}});
+                json = ListQueueTags({{"QueueUrl", queueUrl}});
+                UNIT_ASSERT((json["Tags"] == TJsonMap{{key, "y"}}));
+
+                UntagQueue({{"QueueUrl", queueUrl}, {"TagKeys", TJsonArray{key}}});
+            }
+
+            {
+                // Multiple tags per query.
+
+                auto setTags = TJsonMap{
+                    {"key1", "value1"},
+                    {"key2", "value2"},
+                };
+                TagQueue({{"QueueUrl", queueUrl}, {"Tags", setTags}});
+                auto json = ListQueueTags({{"QueueUrl", queueUrl}});
+
+                UNIT_ASSERT_VALUES_EQUAL(json.GetMapSafe().size(), 1);
+                UNIT_ASSERT(json["Tags"] == setTags);
+            }
+
+            {
+                // Existing tags should not be lost after the next query.
+
+                TagQueue({{"QueueUrl", queueUrl}, {"Tags", TJsonMap{
+                    {"key3", "value3"},
+                }}});
+                auto json = ListQueueTags({{"QueueUrl", queueUrl}});
+
+                UNIT_ASSERT_VALUES_EQUAL(json.GetMapSafe().size(), 1);
+                UNIT_ASSERT((json["Tags"] == TJsonMap{
+                    {"key1", "value1"},
+                    {"key2", "value2"},
+                    {"key3", "value3"},
+                }));
+            }
         }
     }
 
@@ -1291,7 +1320,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             {
                 // Additional scope to wait for the async results before running ListQueueTags query.
                 TVector<std::future<void>> asyncResults;
-                for (size_t i = 0; i < 50; ++i) {
+                for (size_t i = 0; i < NKikimr::NSQS::TLimits::MaxTagCount; ++i) {
                     asyncResults.emplace_back(std::async(std::launch::async, [&, i]() {
                         auto key = TStringBuilder() << "k" << i;
                         for (size_t j = 0; j < 20 && !stop; ++j) {

@@ -11,6 +11,7 @@
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+#include <ydb/core/ymq/base/limits.h>
 
 namespace NKikimr::NSQS {
 
@@ -230,7 +231,7 @@ TTagValidator::TTagValidator(const TMaybe<NJson::TJsonMap>& currentTags, const N
     : CurrentTags(currentTags)
     , NewTags(newTags)
 {
-    if (newTags.GetMapSafe().size() > 50) {
+    if (newTags.GetMapSafe().size() > TLimits::MaxTagCount) {
         Error = "Too many tags added for queue";
         return;
     }
@@ -253,8 +254,8 @@ void TTagValidator::PrepareJson() {
     auto& map = tags.GetMapSafe();
 
     for (const auto& [k, v] : NewTags.GetMapSafe()) {
-        map.emplace(k, v);
-        if (map.size() > 50) {
+        map.insert_or_assign(k, v);
+        if (map.size() > TLimits::MaxTagCount) {
             Error = "Too many tags added for queue";
             return;
         }

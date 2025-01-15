@@ -51,7 +51,9 @@ struct TContext {
 
     NKikimr::NPQ::TRlContext RlContext;
 
-    bool Authenticated() { return AuthenticationStep == SUCCESS; }
+    bool Authenticated() { 
+        return !RequireAuthentication || AuthenticationStep == SUCCESS; 
+    }
 };
 
 template<std::derived_from<TApiMessage> T>

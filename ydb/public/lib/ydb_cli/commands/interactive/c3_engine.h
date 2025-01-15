@@ -34,7 +34,7 @@ namespace NYdb {
             // std::unordered_set is used to prevent copying into c3 core
             struct TConfig final {
                 std::unordered_set<TTokenId> IgnoredTokens;
-                std::unordered_set<TTokenId> PreferredRules;
+                std::unordered_set<TRuleId> PreferredRules;
             };
 
             virtual TVector<TSuggestedToken> Complete(TStringBuf queryPrefix) = 0;

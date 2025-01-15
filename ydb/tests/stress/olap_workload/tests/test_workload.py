@@ -22,7 +22,7 @@ class TestYdbWorkload(object):
         cls.cluster.stop()
 
     def test(self):
-        workload_path = yatest.common.build_path("ydb/tests/workloads/olap_workload/olap_workload")
+        workload_path = yatest.common.build_path("ydb/tests/stress/olap_workload/olap_workload")
         yatest.common.execute(
             [
                 workload_path,

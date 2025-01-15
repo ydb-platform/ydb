@@ -70,7 +70,7 @@ public:
         block = work;
         const auto item = GetNodeValue(Flow, ctx, block);
         result->addIncoming(item, block);
-        BranchInst::Create(done, good, IsSpecial(item, block), block);
+        BranchInst::Create(done, good, IsSpecial(item, block, context), block);
 
         block = good;
         codegenItem->CreateSetValue(ctx, block, item);
@@ -324,7 +324,6 @@ protected:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -390,7 +389,7 @@ protected:
 
         block = pass;
 
-        SafeUnRefUnboxed(valuePtr, ctx, block);
+        SafeUnRefUnboxedOne(valuePtr, ctx, block);
         new StoreInst(item, valuePtr, block);
         ValueAddRef(Item->GetRepresentation(), valuePtr, ctx, block);
         BranchInst::Create(done, block);

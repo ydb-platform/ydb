@@ -2,9 +2,11 @@ UNITTEST()
 
 SRCS(
     array_builder_ut.cpp
+    bit_util_ut.cpp
 )
 
 PEERDIR(
+    contrib/libs/apache/arrow
     yql/essentials/public/udf/arrow
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy

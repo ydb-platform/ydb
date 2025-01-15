@@ -149,7 +149,7 @@ public:
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
         const auto second_cond = BasicBlock::Create(context, "second_cond", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -208,7 +208,7 @@ public:
         BranchInst::Create(second_cond, work, next, block);
 
         block = second_cond;
-        
+
         const auto read_allocated_size = new LoadInst(indexType, allocatedSizePtr, "read_allocated_size", block);
         const auto read_max_allocated_size = new LoadInst(indexType, maxAllocatedSizePtr, "read_max_allocated_size", block);
         const auto next2 = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULE, read_allocated_size, read_max_allocated_size, "next2", block);
@@ -402,7 +402,7 @@ public:
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        BranchInst::Create(make, work, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, work, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -427,14 +427,14 @@ public:
         const auto result = PHINode::Create(valueType, 2U, "result", done);
         result->addIncoming(value, block);
 
-        BranchInst::Create(read, done, IsInvalid(value, block), block);
+        BranchInst::Create(read, done, IsInvalid(value, block, context), block);
 
         block = read;
 
         const auto input = GetNodeValue(Flow_, ctx, block);
         result->addIncoming(input, block);
 
-        BranchInst::Create(done, init, IsSpecial(input, block), block);
+        BranchInst::Create(done, init, IsSpecial(input, block, context), block);
 
         block = init;
 
@@ -587,7 +587,7 @@ public:
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -674,7 +674,7 @@ public:
                 const auto index = ConstantInt::get(indexType, idx);
                 const auto pointer = GetElementPtrInst::CreateInBounds(arrayType, values, {  ConstantInt::get(indexType, 0), index }, "pointer", block);
 
-                BranchInst::Create(call, init, HasValue(pointer, block), block);
+                BranchInst::Create(call, init, HasValue(pointer, block, context), block);
 
                 block = init;
 
@@ -1043,7 +1043,7 @@ public:
         const auto fill = BasicBlock::Create(context, "fill", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -1173,7 +1173,7 @@ public:
             }
             s.FillArrays();
         }
-        
+
         const auto sliceSize = s.Slice();
         for (size_t i = 0; i < width; ++i) {
             output[i] = s.Get(sliceSize, HolderFactory_, i);

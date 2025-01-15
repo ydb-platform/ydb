@@ -16,8 +16,8 @@ def create_request(args, pdisk):
     request = common.create_bsc_request(args)
     cmd = request.Command.add().StopPDisk
 
-    cmd.HostKey.NodeId = pdisk[0]
-    cmd.PDiskId = pdisk[1]
+    cmd.TargetPDiskId.NodeId = pdisk[0]
+    cmd.TargetPDiskId.PDiskId = pdisk[1]
 
     return request
 

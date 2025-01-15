@@ -1,3 +1,4 @@
+* Added `--skip-checksum-validation` option to `ydb import s3` command to skip server-side checksum validation.
 
 ## 2.18.0 ##
 

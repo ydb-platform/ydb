@@ -356,4 +356,41 @@ Y_UNIT_TEST_SUITE(Login) {
         UNIT_ASSERT_VALUES_EQUAL(TLoginProvider::SanitizeJwtToken("token_without_dot"), "");
         UNIT_ASSERT_VALUES_EQUAL(TLoginProvider::SanitizeJwtToken("token_without_signature."), "");
     }
+
+    Y_UNIT_TEST(CheckTimeOfUserCreating) {
+        TLoginProvider provider;
+        provider.Audience = "test_audience1";
+        provider.RotateKeys();
+
+        {
+            std::chrono::time_point<std::chrono::system_clock> start = std::chrono::system_clock::now();
+            TLoginProvider::TCreateUserRequest request {
+                .User = "user1",
+                .Password = "password1"
+            };
+            auto response = provider.CreateUser(request);
+            std::chrono::time_point<std::chrono::system_clock> finish = std::chrono::system_clock::now();
+            UNIT_ASSERT(!response.Error);
+            const auto& sid = provider.Sids["user1"];
+            UNIT_ASSERT(sid.CreatedAt >= start && sid.CreatedAt <= finish);
+        }
+        {
+            std::chrono::time_point<std::chrono::system_clock> start = std::chrono::system_clock::now();
+            TLoginProvider::TCreateUserRequest request {
+                .User = "user2",
+                .Password = "password2"
+            };
+            auto response = provider.CreateUser(request);
+            std::chrono::time_point<std::chrono::system_clock> finish = std::chrono::system_clock::now();
+            UNIT_ASSERT(!response.Error);
+            const auto& sid = provider.Sids["user2"];
+            UNIT_ASSERT(sid.CreatedAt >= start && sid.CreatedAt <= finish);
+        }
+
+        {
+            const auto& sid1 = provider.Sids["user1"];
+            const auto& sid2 = provider.Sids["user2"];
+            UNIT_ASSERT(sid1.CreatedAt < sid2.CreatedAt);
+        }
+    }
 }

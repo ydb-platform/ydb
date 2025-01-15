@@ -71,7 +71,7 @@ public:
         const auto result = PHINode::Create(item->getType(), 2U, "result", pass);
         result->addIncoming(item, block);
 
-        BranchInst::Create(pass, work, IsSpecial(item, block), block);
+        BranchInst::Create(pass, work, IsSpecial(item, block, context), block);
 
         block = work;
 

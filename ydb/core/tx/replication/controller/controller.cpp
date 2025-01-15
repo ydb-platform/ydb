@@ -132,6 +132,10 @@ void TController::Reset() {
     SysParams.Reset();
     Replications.clear();
     ReplicationsByPathId.clear();
+    AssignedTxIds.clear();
+    Workers.clear();
+    WorkersWithHeartbeat.clear();
+    WorkersByHeartbeat.clear();
 }
 
 void TController::Handle(TEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx) {
@@ -779,6 +783,7 @@ void TController::Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& 
         PendingTxId[adjustedVersion].insert(nodeId);
     }
 
+    TabletCounters->Simple()[COUNTER_PENDING_VERSIONS] = PendingTxId.size();
     RunTxAssignTxId(ctx);
 }
 
@@ -795,6 +800,7 @@ void TController::Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext
     const auto version = TRowVersion::FromProto(record.GetVersion());
     PendingHeartbeats[id] = version;
 
+    TabletCounters->Simple()[COUNTER_WORKERS_PENDING_HEARTBEAT] = PendingHeartbeats.size();
     RunTxHeartbeat(ctx);
 }
 

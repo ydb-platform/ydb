@@ -63,7 +63,8 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
-        if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration()) {
+        if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration() ||
+                (!IsSelfStatic && !config.GetGeneration() && !config.GetSelfManagementConfig().GetEnabled())) {
             StorageConfigYaml = StorageConfigFetchYaml = {};
             StorageConfigFetchYamlHash = 0;
             StorageConfigYamlVersion.reset();
@@ -95,16 +96,14 @@ namespace NKikimr::NStorage {
                 ProposedStorageConfig.reset();
             }
 
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenStorageConfig(*StorageConfig,
-                ProposedStorageConfig ? &ProposedStorageConfig.value() : nullptr));
+            ReportStorageConfigToNodeWarden(0);
 
             if (IsSelfStatic) {
                 PersistConfig({});
                 ApplyConfigUpdateToDynamicNodes(false);
+                ConnectToConsole();
+                SendConfigProposeRequest();
             }
-
-            ConnectToConsole();
-            SendConfigProposeRequest();
 
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
@@ -288,6 +287,20 @@ namespace NKikimr::NStorage {
             }
             processPendingEvents();
         }
+    }
+
+    void TDistributedConfigKeeper::ReportStorageConfigToNodeWarden(ui64 cookie) {
+        Y_ABORT_UNLESS(StorageConfig);
+        const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
+        const bool distconfEnabled = StorageConfig->GetSelfManagementConfig().GetEnabled();
+        const NKikimrBlobStorage::TStorageConfig *config = distconfEnabled
+            ? &StorageConfig.value()
+            : &BaseConfig;
+        const NKikimrBlobStorage::TStorageConfig *proposedConfig = ProposedStorageConfig && distconfEnabled
+            ? &ProposedStorageConfig.value()
+            : nullptr;
+        auto ev = std::make_unique<TEvNodeWardenStorageConfig>(*config, proposedConfig);
+        Send(wardenId, ev.release(), 0, cookie);
     }
 
     STFUNC(TDistributedConfigKeeper::StateFunc) {

@@ -13,15 +13,6 @@ diff --git a/contrib/libs/libunwind/src/Unwind-EHABI.cpp b/contrib/libs/libunwin
 diff --git a/contrib/libs/libunwind/src/UnwindLevel1.c b/contrib/libs/libunwind/src/UnwindLevel1.c
 --- a/contrib/libs/libunwind/src/UnwindLevel1.c
 +++ b/contrib/libs/libunwind/src/UnwindLevel1.c
-@@ -195,7 +195,7 @@
- 
-   // uc is initialized by __unw_getcontext in the parent frame. The first stack
-   // frame walked is unwind_phase2.
--  unsigned framesWalked = 1;
-+  unsigned framesWalked __attribute__((unused)) = 1;
- #ifdef _LIBUNWIND_USE_CET
-   unsigned long shadowStackTop = _get_ssp();
- #endif
 @@ -330,7 +330,7 @@
  
    // uc is initialized by __unw_getcontext in the parent frame. The first stack

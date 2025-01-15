@@ -18,6 +18,23 @@ namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class TStruct, class TValue>
+struct TTypedYsonStructField
+    : public ITypeErasedYsonStructField
+{
+    TYsonStructField<TStruct, TValue> Field;
+};
+
+template <class TStruct, class TValue>
+ITypeErasedYsonStructFieldPtr CreateTypeErasedYsonStructField(TYsonStructField<TStruct, TValue> field)
+{
+    auto erasedField = New<TTypedYsonStructField<TStruct, TValue>>();
+    erasedField->Field = field;
+    return erasedField;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NPrivate {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -722,12 +739,27 @@ TValue& TYsonFieldAccessor<TStruct, TValue>::GetValue(const TYsonStructBase* sou
     return TYsonStructRegistry::Get()->template CachedDynamicCast<TStruct>(source)->*Field_;
 }
 
+template <class TStruct, class TValue>
+bool TYsonFieldAccessor<TStruct, TValue>::HoldsField(ITypeErasedYsonStructFieldPtr erasedField) const
+{
+    if (auto typedThat = DynamicPointerCast<TTypedYsonStructField<TStruct, TValue>>(erasedField)) {
+        return typedThat->Field == Field_;
+    }
+    return false;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TStruct, class TValue>
 TUniversalYsonParameterAccessor<TStruct, TValue>::TUniversalYsonParameterAccessor(std::function<TValue&(TStruct*)> accessor)
     : Accessor_(std::move(accessor))
 { }
+
+template <class TStruct, class TValue>
+bool TUniversalYsonParameterAccessor<TStruct, TValue>::HoldsField(ITypeErasedYsonStructFieldPtr /*field*/) const
+{
+    YT_UNIMPLEMENTED();
+}
 
 template <class TStruct, class TValue>
 TValue& TUniversalYsonParameterAccessor<TStruct, TValue>::GetValue(const TYsonStructBase* source)
@@ -1028,6 +1060,19 @@ template <class TValue>
 int TYsonStructParameter<TValue>::GetFieldIndex() const
 {
     return FieldIndex_;
+}
+
+template <class TValue>
+const TValue& TYsonStructParameter<TValue>::GetValue(const TYsonStructBase* source) const
+{
+    YT_VERIFY(FieldAccessor_);
+    return FieldAccessor_->GetValue(source);
+}
+
+template <class TValue>
+bool TYsonStructParameter<TValue>::HoldsField(ITypeErasedYsonStructFieldPtr erasedField) const
+{
+    return FieldAccessor_ && FieldAccessor_->HoldsField(erasedField);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

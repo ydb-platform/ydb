@@ -5,14 +5,14 @@ A set of commonly used hash functions.
 ## List of functions
 
 * `Digest::Crc32c(String{Flags::AutoMap}) -> Uint32`
-* `Digest::Crc64(String{Flags::AutoMap}) -> Uint64`
-* `Digest::Fnv32(String{Flags::AutoMap}) -> Uint32`
-* `Digest::Fnv64(String{Flags::AutoMap}) -> Uint64`
-* `Digest::MurMurHash(String{Flags:AutoMap}) -> Uint64`
-* `Digest::MurMurHash32(String{Flags:AutoMap}) -> Uint32`
-* `Digest::MurMurHash2A(String{Flags:AutoMap}) -> Uint64`
-* `Digest::MurMurHash2A32(String{Flags:AutoMap}) -> Uint32`
-* `Digest::CityHash(String{Flags:AutoMap}, [Uint64?]) -> Uint64`: The second optional argument is seed
+* `Digest::Crc64(String{Flags::AutoMap}, [Init:Uint64?]) -> Uint64`
+* `Digest::Fnv32(String{Flags::AutoMap}, [Init:Uint32?]) -> Uint32`
+* `Digest::Fnv64(String{Flags::AutoMap}, [Init:Uint64?]) -> Uint64`
+* `Digest::MurMurHash(String{Flags:AutoMap}, [Init:Uint64?]) -> Uint64`
+* `Digest::MurMurHash32(String{Flags:AutoMap}, [Init:Uint32?]) -> Uint32`
+* `Digest::MurMurHash2A(String{Flags:AutoMap}, [Init:Uint64?]) -> Uint64`
+* `Digest::MurMurHash2A32(String{Flags:AutoMap}, [Init:Uint32?]) -> Uint32`
+* `Digest::CityHash(String{Flags:AutoMap}, [Init:Uint64?]) -> Uint64`
 * `Digest::CityHash128(String{Flags:AutoMap}) -> Tuple<Uint64,Uint64>`
 * `Digest::NumericHash(Uint64{Flags:AutoMap}) -> Uint64`
 * `Digest::Md5Hex(String{Flags:AutoMap}) -> String`
@@ -33,6 +33,8 @@ A set of commonly used hash functions.
 * `Digest::IntHash64(Uint64{Flags:AutoMap}) -> Uint64`
 * `Digest::XXH3(String{Flags:AutoMap}) -> Uint64`
 * `Digest::XXH3_128(String{Flags:AutoMap}) -> Tuple<Uint64,Uint64>`
+
+The functions for the hashes that support the initialization parameter (seed) accept its value in the optional named argument `Init`.
 
 ### Examples
 

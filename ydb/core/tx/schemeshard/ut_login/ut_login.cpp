@@ -311,7 +311,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
         CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 0});
     }
-    
+
     Y_UNIT_TEST(AddAccess_NonExisting) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -331,7 +331,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", NACLib::TDiffACL{}.SerializeAsString(), "user1");
             TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "Owner SID user1 not found"}});
         }
-        
+
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),

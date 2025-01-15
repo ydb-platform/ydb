@@ -223,6 +223,8 @@ class LoadSuiteBase:
         if os.getenv('NO_KUBER_LOGS') is None and not success:
             cls._attach_logs(start_time=result.start_time, attach_name='kikimr')
         if upload:
+            stats['with_warrnings'] = bool(result.warning_message)
+            stats['with_errors'] = bool(error_message)
             ResultsProcessor.upload_results(
                 kind='Load',
                 suite=cls.suite(),
@@ -260,7 +262,8 @@ class LoadSuiteBase:
             suite=cls.suite(),
             test='_Verification',
             timestamp=start_time,
-            is_successful=(error is None)
+            is_successful=(error is None),
+            statistics={'with_errors': bool(error), 'with_warrnings': False}
         )
         if os.getenv('NO_KUBER_LOGS') is None and error is not None:
             cls._attach_logs(start_time=max(start_time - 600, first_node_start_time), attach_name='kikimr_start')

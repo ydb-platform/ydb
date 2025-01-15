@@ -8,13 +8,6 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NHttpClient {
-    class IHttpResponse;
-    using IHttpResponsePtr = std::unique_ptr<IHttpResponse>;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 class IRawClient
     : public virtual TThrRefBase
 {
@@ -204,12 +197,6 @@ public:
         const TOperationId& operationId,
         const TGetJobTraceOptions& options = {}) = 0;
 
-    // SkyShare
-
-    virtual NHttpClient::IHttpResponsePtr SkyShareTable(
-        const std::vector<TYPath>& tablePaths,
-        const TSkyShareTableOptions& options = {}) = 0;
-
     // Files
     virtual std::unique_ptr<IInputStream> ReadFile(
         const TTransactionId& transactionId,
@@ -340,8 +327,6 @@ public:
         const TGetTablePartitionsOptions& options = {}) = 0;
 
     virtual ui64 GenerateTimestamp() = 0;
-
-    virtual TAuthorizationInfo WhoAmI() = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

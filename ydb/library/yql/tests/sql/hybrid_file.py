@@ -7,7 +7,7 @@ import yatest.common
 
 from yql_utils import replace_vals, yql_binary_path, is_xfail, get_param, \
     get_gateway_cfg_suffix, normalize_result, stable_result_file, stable_table_file, \
-    dump_table_yson, normalize_source_code_path
+    dump_table_yson, normalize_source_code_path, is_sorted_table, is_unordered_result
 
 from test_utils import get_config
 from test_file_common import run_file, run_file_no_cache
@@ -17,36 +17,9 @@ DQRUN_PATH = yql_binary_path('ydb/library/yql/tools/dqrun/dqrun')
 DATA_PATH = yatest.common.source_path('yt/yql/tests/sql/suites')
 
 
-# TODO move to yql_utils
-def is_sorted_table(table):
-    import cyson
-    assert table.attr is not None
-    for column in cyson.loads(table.attr)[b'schema']:
-        if b'sort_order' in column:
-            return True
-    return False
-
-
-# TODO move to yql_utils
-def is_unordered_result(res):
-    import cyson
-    path = res.results_file
-    assert os.path.exists(path)
-    with open(path, 'rb') as f:
-        res = f.read()
-    res = cyson.loads(res)
-    for r in res:
-        for data in r[b'Write']:
-            if b'Unordered' in data:
-                return True
-    return False
-
-
 def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if get_gateway_cfg_suffix() != '' and what != 'Results':
         pytest.skip('non-trivial gateways.conf')
-    if (suite, case) in [('result_types','containers')]:
-        pytest.skip('TODO make sorted/stable dicts')
 
     config = get_config(suite, case, cfg, data_path=DATA_PATH)
     xfail = is_xfail(config)

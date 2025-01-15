@@ -366,7 +366,10 @@ public:
         return invoker.Get() == this;
     }
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver /*waitTimeObserver*/) override
+    void SubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
+    { }
+
+    void UnsubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
     { }
 
 private:
@@ -788,13 +791,14 @@ public:
 
     }
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver)
+    void SubscribeWaitTimeObserved(const TWaitTimeObserver& callback)
     {
-        WaitTimeObserver_ = waitTimeObserver;
-        auto alreadyInitialized = IsWaitTimeObserverSet_.exchange(true);
+        WaitTimeObservers_.Subscribe(callback);
+    }
 
-        // Multiple observers are forbidden.
-        YT_VERIFY(!alreadyInitialized);
+    void UnsubscribeWaitTimeObserved(const TWaitTimeObserver& callback)
+    {
+        WaitTimeObservers_.Unsubscribe(callback);
     }
 
 private:
@@ -840,8 +844,7 @@ private:
     std::atomic<int> ThreadCount_ = 0;
     std::atomic<int> ActiveThreads_ = 0;
 
-    std::atomic<bool> IsWaitTimeObserverSet_;
-    TWaitTimeObserver WaitTimeObserver_;
+    TCallbackList<TWaitTimeObserver::TSignature> WaitTimeObservers_;
 
     TProfiler GetPoolProfiler(const TString& poolName) override
     {
@@ -1191,7 +1194,7 @@ private:
             if (action.BucketHolder) {
                 auto waitTime = CpuDurationToDuration(action.StartedAt - action.EnqueuedAt);
                 action.BucketHolder->Pool->WaitTimeCounter.Record(waitTime);
-                ReportWaitTime(waitTime);
+                WaitTimeObservers_.Fire(waitTime);
             }
 
             MaybeRunMaintenance(&threadState, action.StartedAt, /*flush*/ false);
@@ -1239,13 +1242,6 @@ private:
         NotifyAfterFetch(endInstant, newMinEnqueuedAt);
 
         return std::move(threadState.Action.Callback);
-    }
-
-    void ReportWaitTime(TDuration waitTime)
-    {
-        if (IsWaitTimeObserverSet_.load()) {
-            WaitTimeObserver_(waitTime);
-        }
     }
 
     static void MaybeRunMaintenance(TThreadState* threadState, TCpuInstant now, bool flush)
@@ -1371,9 +1367,14 @@ public:
         return TThreadPoolBase::GetThreadCount();
     }
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver) override
+    void SubscribeWaitTimeObserved(const TWaitTimeObserver& callback) override
     {
-        Queue_->RegisterWaitTimeObserver(waitTimeObserver);
+        Queue_->SubscribeWaitTimeObserved(callback);
+    }
+
+    void UnsubscribeWaitTimeObserved(const TWaitTimeObserver& callback) override
+    {
+        Queue_->UnsubscribeWaitTimeObserved(callback);
     }
 
 private:

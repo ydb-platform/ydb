@@ -22,7 +22,8 @@ message TSid {
     ESidType.SidType Type = 2;
     string Hash = 3;
     repeated string Members = 4;
-    uint64 LastSuccessfulLogin = 5; // microseconds
+    uint64 CreatedAt = 5;
+    uint64 LastSuccessfulLogin = 6; // microseconds
 }
 
 message TSecurityState {
@@ -30,4 +31,3 @@ message TSecurityState {
     repeated TSid Sids = 2;
     string Audience = 3;
 }
-

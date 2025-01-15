@@ -9,7 +9,7 @@
 #include <library/cpp/yt/memory/intrusive_ptr.h>
 #include <library/cpp/yt/memory/weak_ptr.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 

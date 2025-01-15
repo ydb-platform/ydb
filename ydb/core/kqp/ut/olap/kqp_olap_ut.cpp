@@ -2536,16 +2536,28 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             switch (blockChannelsMode) {
                 case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR:
-                    UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("return (FromFlow (NarrowMap (WideFromBlocks"), plan.QueryStats->Getquery_ast());
+                    if constexpr (!NYql::NBlockStreamIO::WideFromBlocks) {
+                        UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("return (FromFlow (NarrowMap (WideFromBlocks"), plan.QueryStats->Getquery_ast());
+                    } else {
+                        UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("return (FromFlow (NarrowMap (ToFlow (WideFromBlocks"), plan.QueryStats->Getquery_ast());
+                    }
                     break;
                 case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO:
-                    UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("(FromFlow (WideFromBlocks"), plan.QueryStats->Getquery_ast());
+                    if constexpr (!NYql::NBlockStreamIO::WideFromBlocks) {
+                        UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("(FromFlow (WideFromBlocks"), plan.QueryStats->Getquery_ast());
+                    } else {
+                        UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("(WideFromBlocks"), plan.QueryStats->Getquery_ast());
+                    }
                     UNIT_ASSERT_C(!plan.QueryStats->Getquery_ast().Contains("WideToBlocks"), plan.QueryStats->Getquery_ast());
                     UNIT_ASSERT_EQUAL_C(plan.QueryStats->Getquery_ast().find("WideFromBlocks"), plan.QueryStats->Getquery_ast().rfind("WideFromBlocks"), plan.QueryStats->Getquery_ast());
                     break;
                 case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE:
                     UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("(FromFlow (WideSortBlocks"), plan.QueryStats->Getquery_ast());
-                    UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("(FromFlow (NarrowMap (WideFromBlocks"), plan.QueryStats->Getquery_ast());
+                    if constexpr (!NYql::NBlockStreamIO::WideFromBlocks) {
+                        UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("(FromFlow (NarrowMap (WideFromBlocks"), plan.QueryStats->Getquery_ast());
+                    } else {
+                        UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("(FromFlow (NarrowMap (ToFlow (WideFromBlocks"), plan.QueryStats->Getquery_ast());
+                    }
                     break;
             }
         }
@@ -2949,7 +2961,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        Tests::NCommon::TLoggerInit(kikimr)
+            .SetComponents({ NKikimrServices::TX_COLUMNSHARD_WRITE, NKikimrServices::TX_COLUMNSHARD }, "CS")
+            .SetPriority(NActors::NLog::PRI_DEBUG)
+            .Initialize();
 
         TLocalHelper(kikimr).CreateTestOlapTables();
 

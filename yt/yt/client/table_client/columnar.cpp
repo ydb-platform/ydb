@@ -402,7 +402,7 @@ void BuildDictionaryIndexesFromDictionaryIndexesWithZeroNull(
     const auto* currentInput = beginInput;
     auto* currentOutput = dst.Begin();
     while (currentInput < endInput) {
-        // NB: null becomes FFFFFFFF.
+        // NB: Null becomes FFFFFFFF.
         *currentOutput++ = (*currentInput++) - 1;
     }
 }

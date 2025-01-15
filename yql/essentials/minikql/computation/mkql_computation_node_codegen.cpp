@@ -1411,7 +1411,7 @@ template<> Type* GetTypeFor<double>(LLVMContext &context) { return Type::getDoub
 
 void AddRefBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block) {
     auto& context = ctx.Codegen.GetContext();
-    const auto load = value->getType()->isPointerTy() ? new LoadInst(value->getType(), value, "load", block) : value;
+    const auto load = value->getType()->isPointerTy() ? new LoadInst(Type::getInt128Ty(context), value, "load", block) : value;
     const auto half = CastInst::Create(Instruction::Trunc, load, Type::getInt64Ty(context), "half", block);
     const auto counterType = Type::getInt32Ty(context);
     const auto type = StructType::get(context, {PointerType::getUnqual(StructType::get(context)), counterType, Type::getInt16Ty(context)});
@@ -1443,7 +1443,7 @@ void AddRefBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block) {
 
 void UnRefBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block) {
     auto& context = ctx.Codegen.GetContext();
-    const auto load = value->getType()->isPointerTy() ? new LoadInst(value->getType(), value, "load", block) : value;
+    const auto load = value->getType()->isPointerTy() ? new LoadInst(Type::getInt128Ty(context), value, "load", block) : value;
     const auto half = CastInst::Create(Instruction::Trunc, load, Type::getInt64Ty(context), "half", block);
     const auto counterType = Type::getInt32Ty(context);
     const auto type = StructType::get(context, {PointerType::getUnqual(StructType::get(context)), counterType, Type::getInt16Ty(context)});
@@ -1486,7 +1486,7 @@ void UnRefBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block) {
 
 void CleanupBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block) {
     auto& context = ctx.Codegen.GetContext();
-    const auto load = value->getType()->isPointerTy() ? new LoadInst(value->getType(), value, "load", block) : value;
+    const auto load = value->getType()->isPointerTy() ? new LoadInst(Type::getInt128Ty(context), value, "load", block) : value;
     const auto half = CastInst::Create(Instruction::Trunc, load, Type::getInt64Ty(context), "half", block);
     const auto counterType = Type::getInt32Ty(context);
     const auto type = StructType::get(context, {PointerType::getUnqual(StructType::get(context)), counterType, Type::getInt16Ty(context)});

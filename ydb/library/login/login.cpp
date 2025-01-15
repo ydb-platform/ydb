@@ -86,7 +86,7 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
     user.Name = request.User;
     user.Hash = Impl->GenerateHash(request.Password);
     user.CreatedAt = std::chrono::system_clock::now();
-    // user.LastFailedLoginAttempt = std::chrono::system_clock::duration::zero();
+    user.LastFailedLogin = std::chrono::system_clock::time_point();
 
     return response;
 }

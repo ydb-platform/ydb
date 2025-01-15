@@ -162,7 +162,9 @@ public:
         TString Name;
         TString Hash;
         std::unordered_set<TString> Members;
-        std::chrono::system_clock::time_point CreatedAt; // CreatedAt does not need in describe result. We will not add to security state
+        // CreatedAt, FailedLoginAttemptCount, LastFailedLogin, LastSuccessfulLogin do not need in describe result.
+        // We will not add these parameters to security state
+        std::chrono::system_clock::time_point CreatedAt;
         size_t FailedLoginAttemptCount = 0;
         std::chrono::system_clock::time_point LastFailedLogin;
         std::chrono::system_clock::time_point LastSuccessfulLogin;

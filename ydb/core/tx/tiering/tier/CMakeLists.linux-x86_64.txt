@@ -25,9 +25,11 @@ target_link_libraries(tx-tiering-tier PUBLIC
   yutil
   ydb-library-conclusion
   metadata-secret-accessor
+  restricted-aws-aws-crt-cpp
 )
 
 target_sources(tx-tiering-tier PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/tier/object.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/tier/s3_uri.cpp
 )
 

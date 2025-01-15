@@ -23,6 +23,10 @@ public:
 private:
     arrow::ipc::IpcWriteOptions Options;
 
+    static inline std::shared_ptr<arrow::util::Codec> DefaultCodec() {
+        return NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(arrow::Compression::type::ZSTD, 1));
+    }
+
     TConclusion<std::shared_ptr<arrow::util::Codec>> BuildCodec(const arrow::Compression::type& cType, const std::optional<ui32> level) const;
     static const inline TFactory::TRegistrator<TNativeSerializer> Registrator = TFactory::TRegistrator<TNativeSerializer>(GetClassNameStatic());
 protected:
@@ -63,14 +67,12 @@ protected:
     static std::shared_ptr<arrow::util::Codec> GetDefaultCodec() {
         if (!HasAppData() ||
             (!AppData()->ColumnShardConfig.HasDefaultCompression() && !AppData()->ColumnShardConfig.HasDefaultCompressionLevel())) {
-            return NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(arrow::Compression::type::ZSTD, 1));
+            return DefaultCodec();
         }
         arrow::Compression::type codec = GetDefaultCompressionType();
         if (AppData()->ColumnShardConfig.HasDefaultCompressionLevel()) {
             return NArrow::TStatusValidator::GetValid(
                 arrow::util::Codec::Create(codec, AppData()->ColumnShardConfig.GetDefaultCompressionLevel()));
-        } else if (codec == arrow::Compression::ZSTD) {
-            return NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(codec, 1));
         }
         return NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(codec));
     }

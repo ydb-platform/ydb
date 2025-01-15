@@ -80,7 +80,7 @@ private:
 
     EState State_;
     // This time is used during async close session handling which does not lock the session
-    // so we need to be able ro read this value atomicaly
+    // so we need to be able to read this value atomicaly
     std::atomic<TInstant> TimeToTouch_;
     TInstant TimeInPast_;
     // Is used to implement progressive timeout for settler keep alive call

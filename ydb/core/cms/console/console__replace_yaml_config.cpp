@@ -71,12 +71,92 @@ public:
             HandleError(result.ErrorReason.value(), ctx);
             return true;
         }
+
         try {
+            auto fillResponse = [&](auto& ev, auto errorLevel){
+                for (auto& [path, info] : result.UnknownFields) {
+                    auto *issue = ev->Record.AddIssues();
+                        issue->set_severity(errorLevel);
+                        issue->set_message(TStringBuilder{} << "Unknown key# " << info.first << " in proto# " << info.second << " found in path# " << path);
+                }
+
+                for (auto& [path, info] : result.DeprecatedFields) {
+                    auto *issue = ev->Record.AddIssues();
+                        issue->set_severity(NYql::TSeverityIds::S_WARNING);
+                        issue->set_message(TStringBuilder{} << "Deprecated key# " << info.first << " in proto# " << info.second << " found in path# " << path);
+                }
+
+                Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
+            };
+
+            bool isMainConfig = NYamlConfig::IsMainConfig(Config);
+            bool isDatabaseConfig = NYamlConfig::IsDatabaseConfig(Config);
 
             Version = result.Version;
             UpdatedConfig = result.UpdatedConfig;
             Cluster = result.Cluster;
             Modify = result.Modify;
+
+            if (!isMainConfig && !isDatabaseConfig) {
+                Error = true;
+                auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+
+                auto *issue = ev->Record.AddIssues();
+                ErrorReason = "Unknown config kind";
+                issue->set_severity(NYql::TSeverityIds::S_ERROR);
+                issue->set_message(ErrorReason);
+                ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+                Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
+                return true;
+            }
+
+            if (Database && isMainConfig) {
+                WarnDatabaseByPass = true;
+            }
+
+            if (Database && isDatabaseConfig && !AppData(ctx)->FeatureFlags.GetPerDatabaseConfigAllowed()) {
+                Error = true;
+                auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+
+                auto *issue = ev->Record.AddIssues();
+                ErrorReason = "Per database config is disabled";
+                issue->set_severity(NYql::TSeverityIds::S_ERROR);
+                issue->set_message(ErrorReason);
+                ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+                Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
+                return true;
+            }
+
+            if (Database && isDatabaseConfig) {
+                Self->YamlConfigPerDatabase[*Database] = Config;
+                // FIXME
+                Modify = true;
+                UpdatedConfig = Self->YamlConfig;
+                // TODO
+                // 1) send
+                // 1) persist
+                // 2) validate
+                // 3) support force
+                // 4) support dry-run
+                // 5) support audit
+                auto ev = MakeHolder<TEvConsole::TEvReplaceYamlConfigResponse>();
+                fillResponse(ev, NYql::TSeverityIds::S_WARNING);
+
+                return true;
+            }
+
+            if (!isMainConfig) {
+                Error = true;
+                auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+
+                auto *issue = ev->Record.AddIssues();
+                ErrorReason = "Invalid config kind";
+                issue->set_severity(NYql::TSeverityIds::S_ERROR);
+                issue->set_message(ErrorReason);
+                ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+                Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
+                return true;
+            }
 
             if (result.ValidationFinished) {
                 if (!DryRun && !result.HasForbiddenUnknown) {
@@ -94,22 +174,6 @@ public:
                         .Delete();
                 }
             }
-
-            auto fillResponse = [&](auto& ev, auto errorLevel){
-                for (auto& [path, info] : result.UnknownFields) {
-                    auto *issue = ev->Record.AddIssues();
-                        issue->set_severity(errorLevel);
-                        issue->set_message(TStringBuilder{} << "Unknown key# " << info.first << " in proto# " << info.second << " found in path# " << path);
-                }
-
-                for (auto& [path, info] : result.DeprecatedFields) {
-                    auto *issue = ev->Record.AddIssues();
-                        issue->set_severity(NYql::TSeverityIds::S_WARNING);
-                        issue->set_message(TStringBuilder{} << "Deprecated key# " << info.first << " in proto# " << info.second << " found in path# " << path);
-                }
-
-                Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
-            };
 
             if (result.HasForbiddenUnknown) {
                 Error = true;

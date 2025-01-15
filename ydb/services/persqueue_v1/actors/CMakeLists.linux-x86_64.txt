@@ -31,6 +31,7 @@ target_link_libraries(services-persqueue_v1-actors PUBLIC
   ydb-core-protos
   ydb-core-scheme
   core-tx-scheme_cache
+  ydb-core-ydb_convert
   ydb-library-aclib
   library-persqueue-topic_parser
   api-protos

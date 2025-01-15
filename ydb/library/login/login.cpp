@@ -443,7 +443,6 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
             sid->FailedLoginAttemptCount++;
             return response;
         }
-    }
 
         itUser->second.LastSuccessfulLogin = response.LoginAttemptTime;
     }

@@ -91,7 +91,7 @@ public:
             ReplyErrorAndPassAway(Ydb::StatusIds::INTERNAL_ERROR, "Failed to produce a token");
         } else {
             // success = token + no errors
-            ReplyAndPassAway(loginResult.GetToken(), loginResult.GetSanitizedToken());
+            ReplyAndPassAway(loginResult);
         }
     }
 
@@ -116,9 +116,12 @@ public:
         }
     }
 
-    void ReplyAndPassAway(const TString& resultToken, const TString& sanitizedToken) {
-        TResponse response;
+    void ReplyAndPassAway(const NKikimrScheme::TEvLoginResult& loginResult) {
+        const auto& resultToken = loginResult.GetToken();
+        const auto& sanitizedToken = loginResult.GetSanitizedToken();
+        const auto& isAdmin = loginResult.GetIsAdmin();
 
+        TResponse response;
         Ydb::Operations::Operation& operation = *response.mutable_operation();
         operation.set_ready(true);
         operation.set_status(Ydb::StatusIds::SUCCESS);
@@ -129,16 +132,7 @@ public:
             operation.mutable_result()->PackFrom(result);
         }
 
-        const auto protoRequest = GetProtoRequest();
-        const auto groups = NLogin::TLoginProvider::GetGroupsFromToken(resultToken);
-        NACLib::TUserToken userToken(protoRequest->user(), groups);
-        const auto& adminSids = AppData()->AdministrationAllowedSIDs;
-        auto hasSid = [&userToken](const TString& sid) -> bool {
-            return userToken.IsExist(sid);
-        };
-        const auto isAdmin = std::find_if(adminSids.begin(), adminSids.end(), hasSid) != adminSids.end();
-
-        AuditLogLogin(Request.Get(), PathToDatabase, *protoRequest, response, /* errorDetails */ TString(), sanitizedToken, isAdmin);
+        AuditLogLogin(Request.Get(), PathToDatabase, *GetProtoRequest(), response, /* errorDetails */ TString(), sanitizedToken, isAdmin);
 
         return CleanupAndReply(response);
     }

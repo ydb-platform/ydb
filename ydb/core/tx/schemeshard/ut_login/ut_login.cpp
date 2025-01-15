@@ -923,14 +923,7 @@ NHttp::THttpIncomingRequestPtr MakeLogoutRequest(const TString& cookieName, cons
 }
 
 Y_UNIT_TEST_SUITE(TWebLoginService) {
-    void AuditLogLoginTest(bool isUserAdmin) {
-        TTestBasicRuntime runtime;
-        if (isUserAdmin) {
-            runtime.AddAppDataInit([](ui32, NKikimr::TAppData& appData){
-                appData.AdministrationAllowedSIDs.emplace_back("user1");
-            });
-        }
-
+    void AuditLogLoginTest(TTestBasicRuntime& runtime, bool isUserAdmin) {
         std::vector<std::string> lines;
         runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
         TTestEnv env(runtime);
@@ -978,12 +971,25 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         }
     }
 
+    Y_UNIT_TEST(AuditLogEmptySIDsLoginSuccess) {
+        TTestBasicRuntime runtime;
+        AuditLogLoginTest(runtime, true);
+    }
+
     Y_UNIT_TEST(AuditLogAdminLoginSuccess) {
-        AuditLogLoginTest(true);
+        TTestBasicRuntime runtime;
+        runtime.AddAppDataInit([](ui32, NKikimr::TAppData& appData){
+            appData.AdministrationAllowedSIDs.emplace_back("user1");
+        });
+        AuditLogLoginTest(runtime, true);
     }
 
     Y_UNIT_TEST(AuditLogLoginSuccess) {
-        AuditLogLoginTest(false);
+        TTestBasicRuntime runtime;
+        runtime.AddAppDataInit([](ui32, NKikimr::TAppData& appData){
+            appData.AdministrationAllowedSIDs.emplace_back("user2");
+        });
+        AuditLogLoginTest(runtime, false);
     }
 
     Y_UNIT_TEST(AuditLogLoginBadPassword) {

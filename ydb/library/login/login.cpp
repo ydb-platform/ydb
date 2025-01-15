@@ -325,11 +325,11 @@ std::vector<TString> TLoginProvider::GetGroupsMembership(const TString& member) 
 }
 
 bool TLoginProvider::CheckLockout(const TSidRecord& sid) const {
-    return (AccountLockout.AttemptThreshold != 0 && sid.CurrentFailedLoginAttemptCount >= AccountLockout.AttemptThreshold);
+    return (AccountLockout.AttemptThreshold != 0 && sid.FailedLoginAttemptCount >= AccountLockout.AttemptThreshold);
 }
 
 void TLoginProvider::ResetFailedLoginAttemptCount(TSidRecord* sid) {
-    sid->CurrentFailedLoginAttemptCount = 0;
+    sid->FailedLoginAttemptCount = 0;
 }
 
 void TLoginProvider::UnlockAccount(TSidRecord* sid) {
@@ -337,13 +337,13 @@ void TLoginProvider::UnlockAccount(TSidRecord* sid) {
 }
 
 bool TLoginProvider::ShouldResetFailedAttemptCount(const TSidRecord& sid) const {
-    if (sid.CurrentFailedLoginAttemptCount == 0) {
+    if (sid.FailedLoginAttemptCount == 0) {
         return false;
     }
     if (AccountLockout.AttemptResetDuration == std::chrono::system_clock::duration::zero()) {
         return false;
     }
-    return sid.LastFailedLoginAttempt + AccountLockout.AttemptResetDuration < std::chrono::system_clock::now();
+    return sid.LastFailedLogin + AccountLockout.AttemptResetDuration < std::chrono::system_clock::now();
 }
 
 bool TLoginProvider::ShouldUnlockAccount(const TSidRecord& sid) const {
@@ -381,7 +381,6 @@ TLoginProvider::TCheckLockOutResponse TLoginProvider::CheckLockOutUser(const TCh
 TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserRequest& request) {
     auto now = std::chrono::system_clock::now();
     TLoginUserResponse response;
-    // response.LoginAttemptTime = std::chrono::time_point_cast<std::chrono::microseconds>(now).time_since_epoch().count();
 
     if (Keys.empty() || Keys.back().PrivateKey.empty()) {
         response.Status = TLoginUserResponse::EStatus::UNAVAILABLE_KEY;
@@ -402,12 +401,10 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
         if (!Impl->VerifyHash(request.Password, itUser->second.Hash)) {
             response.Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
             response.Error = "Invalid password";
-            sid->LastFailedLoginAttempt = std::chrono::system_clock::now();
-            sid->CurrentFailedLoginAttemptCount++;
+            sid->LastFailedLogin = now;
+            sid->FailedLoginAttemptCount++;
             return response;
         }
-
-        itUser->second.LastSuccessfulLogin = response.LoginAttemptTime;
     }
 
     const TKeyRecord& key = Keys.back();
@@ -448,8 +445,8 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
     response.Status = TLoginUserResponse::EStatus::SUCCESS;
 
     if (sid) {
-        sid->LastSuccessfulLoginAttempt = std::chrono::system_clock::now();
-        sid->CurrentFailedLoginAttemptCount = 0;
+        sid->LastSuccessfulLogin = now;
+        sid->FailedLoginAttemptCount = 0;
     }
 
     return response;
@@ -741,15 +738,14 @@ void TLoginProvider::UpdateSecurityState(const NLoginProto::TSecurityState& stat
             sid.Type = pbSid.GetType();
             sid.Name = pbSid.GetName();
             sid.Hash = pbSid.GetHash();
-            sid.LastSuccessfulLogin = pbSid.GetLastSuccessfulLogin();
             for (const auto& pbSubSid : pbSid.GetMembers()) {
                 sid.Members.emplace(pbSubSid);
                 ChildToParentIndex[pbSubSid].emplace(sid.Name);
             }
             sid.CreatedAt = std::chrono::system_clock::time_point(std::chrono::milliseconds(pbSid.GetCreatedAt()));
-            sid.CurrentFailedLoginAttemptCount = pbSid.GetCurrentFailedLoginAttemptCount();
-            sid.LastFailedLoginAttempt = std::chrono::system_clock::time_point(std::chrono::milliseconds(pbSid.GetLastFailedLoginAttempt()));
-            sid.LastSuccessfulLoginAttempt = std::chrono::system_clock::time_point(std::chrono::milliseconds(pbSid.GetLastSuccessfulLoginAttempt()));
+            sid.FailedLoginAttemptCount = pbSid.GetFailedLoginAttemptCount();
+            sid.LastFailedLogin = std::chrono::system_clock::time_point(std::chrono::milliseconds(pbSid.GetLastFailedLogin()));
+            sid.LastSuccessfulLogin = std::chrono::system_clock::time_point(std::chrono::milliseconds(pbSid.GetLastSuccessfulLogin()));
         }
     }
 }

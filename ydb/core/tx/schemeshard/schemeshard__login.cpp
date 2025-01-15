@@ -103,7 +103,7 @@ private:
         return std::find_if(adminSids.begin(), adminSids.end(), hasSid) != adminSids.end();
     }
 
-    bool LoginAttempt(NIceDb::TNiceDb& db, const TActorContext& ctx) {
+    void LoginAttempt(NIceDb::TNiceDb& db, const TActorContext& ctx) {
         const auto& loginRequest = GetLoginRequest();
         if (!loginRequest.ExternalAuth && !AppData(ctx)->AuthConfig.GetEnableLoginAuthentication()) {
             Result->Record.SetError("Login authentication is disabled");
@@ -146,7 +146,7 @@ private:
             }
             case TLoginProvider::TCheckLockOutResponse::EStatus::RESET: {
                 const auto& sid = Self->LoginProvider.Sids[loginRequest.User];
-                db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::FailedAttemptCount>(sid.CurrentFailedLoginAttemptCount);
+                db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::FailedAttemptCount>(sid.FailedLoginAttemptCount);
                 break;
             }
             case TLoginProvider::TCheckLockOutResponse::EStatus::UNLOCKED:
@@ -160,7 +160,7 @@ private:
         case TLoginProvider::TLoginUserResponse::EStatus::SUCCESS: {
             const auto& sid = Self->LoginProvider.Sids[loginRequest.User];
             db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::LastSuccessfulAttempt,
-                                                                        Schema::LoginSids::FailedAttemptCount>(ToInstant(sid.LastSuccessfulLoginAttempt).MilliSeconds(), sid.CurrentFailedLoginAttemptCount);
+                                                                        Schema::LoginSids::FailedAttemptCount>(ToInstant(sid.LastSuccessfulLogin).MilliSeconds(), sid.FailedLoginAttemptCount);
             Result->Record.SetToken(loginResponse.Token);
             Result->Record.SetSanitizedToken(loginResponse.SanitizedToken);
             Result->Record.SetIsAdmin(IsAdmin());
@@ -169,7 +169,7 @@ private:
         case TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD: {
             const auto& sid = Self->LoginProvider.Sids[loginRequest.User];
             db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::LastFailedAttempt,
-                                                                        Schema::LoginSids::FailedAttemptCount>(ToInstant(sid.LastFailedLoginAttempt).MilliSeconds(), sid.CurrentFailedLoginAttemptCount);
+                                                                        Schema::LoginSids::FailedAttemptCount>(ToInstant(sid.LastFailedLogin).MilliSeconds(), sid.FailedLoginAttemptCount);
             Result->Record.SetError(loginResponse.Error);
             break;
         }

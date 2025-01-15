@@ -78,11 +78,17 @@ struct TQueryBenchmarkDeadline {
     TString Name;
 };
 
+struct TQueryBenchmarkSettings {
+    TQueryBenchmarkDeadline Deadline;
+    TMaybe<TString> StatsFileName;
+    bool WithProgress;
+};
+
 TString FullTablePath(const TString& database, const TString& table);
 void ThrowOnError(const TStatus& status);
 bool HasCharsInString(const TString& str);
-TQueryBenchmarkResult Execute(const TString & query, NTable::TTableClient & client, const TQueryBenchmarkDeadline& deadline);
-TQueryBenchmarkResult Execute(const TString & query, NQuery::TQueryClient & client, const TQueryBenchmarkDeadline& deadline);
+TQueryBenchmarkResult Execute(const TString & query, NTable::TTableClient & client, const TQueryBenchmarkSettings& settings);
+TQueryBenchmarkResult Execute(const TString & query, NQuery::TQueryClient & client, const TQueryBenchmarkSettings& settings);
 TQueryBenchmarkResult Explain(const TString & query, NTable::TTableClient & client, const TQueryBenchmarkDeadline& deadline);
 TQueryBenchmarkResult Explain(const TString & query, NQuery::TQueryClient & client, const TQueryBenchmarkDeadline& deadline);
 NJson::TJsonValue GetQueryLabels(ui32 queryId);

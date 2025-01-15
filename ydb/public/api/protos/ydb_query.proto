@@ -176,7 +176,7 @@ message ExecuteQueryRequest {
 
     string pool_id = 10; // Workload manager pool id
 
-    bool with_progress = 11;
+    uint64 progress_stats_period_ms = 11; // 0 = disabled
 }
 
 message ResultSetMeta {

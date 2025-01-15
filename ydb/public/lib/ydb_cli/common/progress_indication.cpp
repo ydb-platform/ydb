@@ -50,6 +50,8 @@ void TProgressIndication::Render()
     }
 
     RendersCount++;
+
+    CurrentStats = TCurrentStats();
 }
 
 } // namespace NConsoleClient

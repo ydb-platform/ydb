@@ -282,9 +282,7 @@ private:
             settings,
             req->pool_id());
 
-        if (req->with_progress()) {
-            ev->SetProgressStatsPeriod(TDuration::MilliSeconds(300));
-        }
+        ev->SetProgressStatsPeriod(TDuration::MilliSeconds(req->progress_stats_period_ms()));
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0, Span_.GetTraceId())) {
             NYql::TIssues issues;

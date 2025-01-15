@@ -6,6 +6,7 @@
 #include <library/cpp/json/json_writer.h>
 #include <util/string/printf.h>
 #include <util/folder/path.h>
+#include <optional>
 
 namespace NYdb::NConsoleClient {
     TWorkloadCommandBenchmark::TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
@@ -37,6 +38,11 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
     config.Opts->AddLongOption("plan", "Query plans report file name")
         .DefaultValue("")
         .StoreResult(&PlanFileName);
+    config.Opts->AddLongOption("full-stats", "Full stats report file name")
+        .DefaultValue("")
+        .StoreResult(&FullStatsFileName);
+    config.Opts->AddLongOption("print-progress", "Print progress of query execution.")
+        .StoreTrue(&PrintProgress);
     config.Opts->AddLongOption("query-settings")
         .AppendTo(&QuerySettings).Hidden();
     config.Opts->AddLongOption("query-prefix", "Query prefix.\nEvery prefix is a line that will be added to the beginning of each query. For multiple prefixes lines use this option several times.")
@@ -355,12 +361,24 @@ bool TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkloa
             SavePlans(res, queryN, "explain");
         }
 
+        TMaybe<TString> currentStatsFileName;
+        if (FullStatsFileName) {
+            TFsPath(FullStatsFileName).Parent().MkDirs();
+            currentStatsFileName =  TStringBuilder() << FullStatsFileName << "." << queryN << ".stats";
+        }
+
         for (ui32 i = 0; i < IterationsCount && Now() < GlobalDeadline; ++i) {
             auto t1 = TInstant::Now();
             TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined", "undefined", "undefined");
+
+            TQueryBenchmarkSettings settings;
+            settings.Deadline = GetDeadline();
+            settings.WithProgress = PrintProgress;
+            settings.StatsFileName = currentStatsFileName;
+
             try {
                 if (client) {
-                    res = Execute(query, *client, GetDeadline());
+                    res = Execute(query, *client, settings);
                 } else {
                     res = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TDuration::Zero(), "", "");
                 }

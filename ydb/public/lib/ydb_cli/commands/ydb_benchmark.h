@@ -33,6 +33,8 @@ private:
     TString CsvReportFileName;
     TString MiniStatFileName;
     TString PlanFileName;
+    TString FullStatsFileName;
+    bool PrintProgress;
     TSet<ui32> QueriesToRun;
     TSet<ui32> QueriesToSkip;
     TVector<TString> QuerySettings;

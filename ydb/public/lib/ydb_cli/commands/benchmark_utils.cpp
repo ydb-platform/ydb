@@ -181,7 +181,7 @@ public:
     }
 
     template <typename TIterator>
-    bool Scan(TIterator& it) {
+    bool Scan(TIterator& it, TMaybe<TString> statsFileName = Nothing()) {
 
         TProgressIndication progressIndication(true);
         TMaybe<NQuery::TExecStats> execStats;
@@ -199,6 +199,11 @@ public:
             } else {
                 if (streamPart.HasStats()) {
                     execStats = streamPart.ExtractStats();
+
+                    if (statsFileName) {
+                        TFileOutput out(*statsFileName);
+                        out << execStats->ToString();
+                    }
 
                     const auto& protoStats = TProtoAccessor::GetProto(execStats.GetRef());
                     for (const auto& queryPhase : protoStats.query_phases()) {
@@ -276,33 +281,33 @@ TQueryBenchmarkResult ExecuteImpl(const TString& query, NTable::TTableClient& cl
     }
 }
 
-TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client, const TQueryBenchmarkDeadline& deadline) {
-    return ExecuteImpl(query, client, deadline, false);
+TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client, const TQueryBenchmarkSettings& settings) {
+    return ExecuteImpl(query, client, settings.Deadline, false);
 }
 
 TQueryBenchmarkResult Explain(const TString& query, NTable::TTableClient& client, const TQueryBenchmarkDeadline& deadline) {
     return ExecuteImpl(query, client, deadline, true);
 }
 
-TQueryBenchmarkResult ExecuteImpl(const TString& query, NQuery::TQueryClient& client, const TQueryBenchmarkDeadline& deadline, bool explainOnly) {
+TQueryBenchmarkResult ExecuteImpl(const TString& query, NQuery::TQueryClient& client, const TQueryBenchmarkSettings& benchmarkSettings, bool explainOnly) {
     NQuery::TExecuteQuerySettings settings;
     settings.StatsMode(NQuery::EStatsMode::Full);
     settings.ExecMode(explainOnly ? NQuery::EExecMode::Explain : NQuery::EExecMode::Execute);
-    settings.WithProgress(true);
-    if (auto error = SetTimeoutSettings(settings, deadline)) {
+    settings.WithProgress(benchmarkSettings.WithProgress);
+    if (auto error = SetTimeoutSettings(settings, benchmarkSettings.Deadline)) {
         return *error;
     }
     auto it = client.StreamExecuteQuery(
         query,
         NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
         settings).GetValueSync();
-    if (auto error = ResultByStatus(it, deadline.Name)) {
+    if (auto error = ResultByStatus(it, benchmarkSettings.Deadline.Name)) {
         return *error;
     }
 
     TQueryResultScanner composite;
-    composite.SetDeadlineName(deadline.Name);
-    if (!composite.Scan(it)) {
+    composite.SetDeadlineName(benchmarkSettings.Deadline.Name);
+    if (!composite.Scan(it, benchmarkSettings.StatsFileName)) {
         return TQueryBenchmarkResult::Error(
             composite.GetErrorInfo(), composite.GetQueryPlan(), composite.GetPlanAst());
     } else {
@@ -315,12 +320,14 @@ TQueryBenchmarkResult ExecuteImpl(const TString& query, NQuery::TQueryClient& cl
     }
 }
 
-TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client, const TQueryBenchmarkDeadline& deadline) {
-    return ExecuteImpl(query, client, deadline, false);
+TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client, const TQueryBenchmarkSettings& settings) {
+    return ExecuteImpl(query, client, settings, false);
 }
 
 TQueryBenchmarkResult Explain(const TString& query, NQuery::TQueryClient& client, const TQueryBenchmarkDeadline& deadline) {
-    return ExecuteImpl(query, client, deadline, true);
+    TQueryBenchmarkSettings settings;
+    settings.Deadline = deadline;
+    return ExecuteImpl(query, client, settings, true);
 }
 
 NJson::TJsonValue GetQueryLabels(ui32 queryId) {

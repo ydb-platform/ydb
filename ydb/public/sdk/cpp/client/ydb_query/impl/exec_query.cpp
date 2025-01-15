@@ -244,7 +244,7 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
     }
 
     if (settings.WithProgress_) {
-        request.set_with_progress(*settings.WithProgress_);
+        request.set_progress_stats_period_ms(500);
     }
 
     if (txControl.HasTx()) {

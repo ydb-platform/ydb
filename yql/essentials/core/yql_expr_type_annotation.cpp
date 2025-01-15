@@ -393,6 +393,25 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                 .Build();
 
             return IGraphTransformer::TStatus::Repeat;
+        } else if (IsDataTypeDecimal(from) && IsDataTypeDecimal(to)) {
+            auto* sourceDecimal = sourceType.Cast<TDataExprParamsType>();
+            auto* expectedDecimal = expectedType.Cast<TDataExprParamsType>();
+            ui8 p1 = FromString(sourceDecimal->GetParamOne()), s1 = FromString(sourceDecimal->GetParamTwo());
+            ui8 p2 = FromString(expectedDecimal->GetParamOne()), s2 = FromString(expectedDecimal->GetParamTwo());
+            if (s1 > s2) {
+                TString message = TStringBuilder() << "Implicit decimal cast would lose precision";
+                auto issue = TIssue(node->Pos(ctx), message);
+                ctx.AddError(issue);
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (p1 - s1 > p2 - s2) {
+                TString message = TStringBuilder() << "Implicit decimal cast would narrow the range";
+                auto issue = TIssue(node->Pos(ctx), message);
+                ctx.AddError(issue);
+                return IGraphTransformer::TStatus::Error;
+            }
+            allow = true;
+            useCast = true;
         }
 
         if (!allow || !isSafe) {

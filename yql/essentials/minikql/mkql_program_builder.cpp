@@ -4600,7 +4600,8 @@ TRuntimeNode TProgramBuilder::ToDecimal(TRuntimeNode data, ui8 precision, ui8 sc
         } else if (params.second < scale) {
             return Invoke("ScaleUp_" + ::ToString(scale - params.second), decimal, args);
         } else if (params.second > scale) {
-            return Invoke("ScaleDown_" + ::ToString(params.second - scale), decimal, args);
+            TRuntimeNode scaled = Invoke("ScaleDown_" + ::ToString(params.second - scale), decimal, args);
+            return Invoke("CheckBounds_" + ::ToString(precision), decimal, {{ scaled }});
         } else if (precision < params.first) {
             return Invoke("CheckBounds_" + ::ToString(precision), decimal, args);
         } else if (precision > params.first) {

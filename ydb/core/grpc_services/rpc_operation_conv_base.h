@@ -2,8 +2,7 @@
 
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 
-namespace NKikimr {
-namespace NGRpcService {
+namespace NKikimr::NGRpcService {
 
 template <typename TOperation>
 struct TOperationConv {
@@ -49,5 +48,4 @@ protected:
 
 }; // TOperationConv
 
-} // namespace NGRpcService
-} // namespace NKikimr
+}

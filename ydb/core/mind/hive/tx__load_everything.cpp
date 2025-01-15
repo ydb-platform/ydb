@@ -794,7 +794,7 @@ public:
         ctx.Send(Self->SelfId(), new TEvPrivate::TEvBootTablets());
 
         for (auto it = Self->Nodes.begin(); it != Self->Nodes.end(); ++it) {
-            Self->ScheduleUnlockTabletExecution(it->second);
+            Self->ScheduleUnlockTabletExecution(it->second, NKikimrHive::LOCK_LOST_REASON_HIVE_RESTART);
         }
     }
 };

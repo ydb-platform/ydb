@@ -721,8 +721,9 @@ namespace NKikimr {
         {
             TEvLockTabletExecutionLost() = default;
 
-            explicit TEvLockTabletExecutionLost(ui64 tabletId) {
+            explicit TEvLockTabletExecutionLost(ui64 tabletId, NKikimrHive::ELockLostReason reason) {
                 Record.SetTabletID(tabletId);
+                Record.SetReason(reason);
             }
         };
 

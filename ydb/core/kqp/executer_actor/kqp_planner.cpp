@@ -112,6 +112,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , CaFactory_(args.CaFactory_)
     , BlockTrackingMode(args.BlockTrackingMode)
     , ArrayBufferMinFillPercentage(args.ArrayBufferMinFillPercentage)
+    , VerboseMemoryLimitException(args.VerboseMemoryLimitException)
 {
     if (GUCSettings) {
         SerializedGUCSettings = GUCSettings->SerializeToString();
@@ -479,7 +480,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
 
         TxInfo = MakeIntrusive<NRm::TTxState>(
             TxId, TInstant::Now(), ResourceManager_->GetCounters(),
-            UserRequestContext->PoolId, memoryPoolPercent, Database);
+            UserRequestContext->PoolId, memoryPoolPercent, Database, VerboseMemoryLimitException);
     }
 
     if (ArrayBufferMinFillPercentage) {

@@ -236,7 +236,7 @@ private:
         TIntrusivePtr<NRm::TTxState> txInfo = MakeIntrusive<NRm::TTxState>(
             txId, TInstant::Now(), ResourceManager_->GetCounters(),
             msg.GetSchedulerGroup(), msg.GetMemoryPoolPercent(),
-            msg.GetDatabase());
+            msg.GetDatabase(), Config.GetVerboseMemoryLimitException());
 
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {

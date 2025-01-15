@@ -62,14 +62,14 @@ void AddQueryStats(NKqpProto::TKqpStatsQuery& total, NKqpProto::TKqpStatsQuery&&
     total.SetWorkerCpuTimeUs(total.GetWorkerCpuTimeUs() + stats.GetWorkerCpuTimeUs());
 }
 
-bool CheckPerRow(const TExprNode::TPtr& root, TExprContext& exprCtx) {
+bool CheckIsBatch(const TExprNode::TPtr& root, TExprContext& exprCtx) {
     ui64 writeCount = 0;
     ui64 readCount = 0;
-    bool perRow = false;
+    bool isBatch = false;
 
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
-        if (node->Content() == "per_row") {
-            perRow = true;
+        if (node->Content() == "is_batch") {
+            isBatch = true;
             return false;
         }
 
@@ -84,10 +84,10 @@ bool CheckPerRow(const TExprNode::TPtr& root, TExprContext& exprCtx) {
         return true;
     });
 
-    if (perRow && writeCount > 1 || readCount != 0) {
+    if (isBatch && writeCount > 1 || readCount != 0) {
         exprCtx.AddError(NYql::TIssue(
             exprCtx.GetPosition(NYql::NNodes::TExprBase(root).Pos()),
-            "PER ROW can't be used with multiple writes or reads."));
+            "BATCH can't be used with multiple writes or reads."));
         return false;
     }
 
@@ -1369,7 +1369,7 @@ private:
             return result;
         }
 
-        if (!CheckPerRow(queryExpr, ctx)) {
+        if (!CheckIsBatch(queryExpr, ctx)) {
             return result;
         }
 

@@ -45,8 +45,8 @@ static void CreateTestTable(auto session, const TString& name = "TestTable") {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-Y_UNIT_TEST_SUITE(KqpPerRow) {
-    Y_UNIT_TEST(UpdatePerRow) {
+Y_UNIT_TEST_SUITE(KqpBatch) {
+    Y_UNIT_TEST(Update) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         CreateTestTable(session);
 
         auto query = Q_(R"(
-            UPDATE PER ROW TestTable SET Amount = 1000 WHERE Group = 1;
+            BATCH UPDATE TestTable SET Amount = 1000 WHERE Group = 1;
         )");
 
         auto txControl = NYdb::NQuery::TTxControl::NoTx();
@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
     }
 
-    Y_UNIT_TEST(UpdatePerRowNotIdempotent_1) {
+    Y_UNIT_TEST(UpdateNotIdempotent_1) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         CreateTestTable(session);
 
         auto query = Q_(R"(
-            UPDATE PER ROW TestTable SET Age = Age * 10 WHERE Group = 1;
+            BATCH UPDATE TestTable SET Age = Age * 10 WHERE Group = 1;
         )");
 
         auto txControl = NYdb::NQuery::TTxControl::NoTx();
@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
     }
 
-    Y_UNIT_TEST(UpdatePerRowNotIdempotent_2) {
+    Y_UNIT_TEST(UpdateNotIdempotent_2) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         CreateTestTable(session);
 
         auto query = Q_(R"(
-            UPDATE PER ROW TestTable SET Age = Group * Age WHERE Group = 1;
+            BATCH UPDATE TestTable SET Age = Group * Age WHERE Group = 1;
         )");
 
         auto txControl = NYdb::NQuery::TTxControl::NoTx();
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
     }
 
-    Y_UNIT_TEST(UpdatePerRowNotIdempotent_3) {
+    Y_UNIT_TEST(UpdateNotIdempotent_3) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         CreateTestTable(session);
 
         auto query = Q_(R"(
-            UPDATE PER ROW TestTable SET Age = Amount, Amount = Age WHERE Group = 1;
+            BATCH UPDATE TestTable SET Age = Amount, Amount = Age WHERE Group = 1;
         )");
 
         auto txControl = NYdb::NQuery::TTxControl::NoTx();
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
     }
 
-    Y_UNIT_TEST(UpdatePerRowMultiTable_1) {
+    Y_UNIT_TEST(UpdateMultiTable_1) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         CreateTestTable(session);
 
         auto query = Q_(R"(
-            UPDATE PER ROW TestTable SET Amount = 1000 WHERE Age IN (SELECT Age FROM TestTable WHERE Group = 1);
+            BATCH UPDATE TestTable SET Amount = 1000 WHERE Age IN (SELECT Age FROM TestTable WHERE Group = 1);
         )");
 
         auto txControl = NYdb::NQuery::TTxControl::NoTx();
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
     }
 
-    Y_UNIT_TEST(UpdatePerRowMultiTable_2) {
+    Y_UNIT_TEST(UpdateMultiTable_2) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         CreateTestTable(session, "TestSecond");
 
         auto query = Q_(R"(
-            UPDATE PER ROW TestFirst SET Amount = 1000 WHERE Age IN (SELECT Age FROM TestSecond WHERE Group = 1);
+            BATCH UPDATE TestFirst SET Amount = 1000 WHERE Age IN (SELECT Age FROM TestSecond WHERE Group = 1);
         )");
 
         auto txControl = NYdb::NQuery::TTxControl::NoTx();
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
     }
 
-    Y_UNIT_TEST(UpdatePerRowMultiTable_3) {
+    Y_UNIT_TEST(UpdateMultiTable_3) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -158,8 +158,8 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         CreateTestTable(session, "TestSecond");
 
         auto query = Q_(R"(
-            UPDATE PER ROW TestFirst SET Amount = 1000 WHERE Age = 10;
-            UPDATE PER ROW TestSecond SET Amount = 1000 WHERE Age = 10;
+            BATCH UPDATE TestFirst SET Amount = 1000 WHERE Age = 10;
+            BATCH UPDATE TestSecond SET Amount = 1000 WHERE Age = 10;
         )");
 
         auto txControl = NYdb::NQuery::TTxControl::NoTx();
@@ -168,7 +168,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
     }
 
-    Y_UNIT_TEST(UpdatePerRowMultiStatement_1) {
+    Y_UNIT_TEST(UpdateMultiStatement_1) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         CreateTestTable(session);
 
         auto query = Q_(R"(
-            UPDATE PER ROW TestTable SET Amount = 1000 WHERE Age = 10;
+            BATCH UPDATE TestTable SET Amount = 1000 WHERE Age = 10;
             SELECT 42;
         )");
 
@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
     }
 
-    Y_UNIT_TEST(UpdatePerRowMultiStatement_2) {
+    Y_UNIT_TEST(UpdateMultiStatement_2) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         CreateTestTable(session, "TestTable");
 
         auto query = Q_(R"(
-            UPDATE PER ROW TestTable SET Amount = 1000 WHERE Age = 10;
+            BATCH UPDATE TestTable SET Amount = 1000 WHERE Age = 10;
             UPSERT INTO `/Root/TestTable` (Group, Name, Age, Amount, Comment)
                 VALUES (7u, "Mark", 74ul, 200ul, "None");
             SELECT * FROM TestTable;
@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
     }
 
-    Y_UNIT_TEST(DeletePerRow) {
+    Y_UNIT_TEST(Delete) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -214,7 +214,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         CreateTestTable(session);
 
         auto query = Q_(R"(
-            DELETE PER ROW FROM TestTable WHERE Group = 2;
+            BATCH DELETE FROM TestTable WHERE Group = 2;
         )");
 
         auto txControl = NYdb::NQuery::TTxControl::NoTx();
@@ -223,7 +223,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
     }
 
-    Y_UNIT_TEST(DeletePerRowMultiTable_1) {
+    Y_UNIT_TEST(DeleteMultiTable_1) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -231,7 +231,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         CreateTestTable(session);
 
         auto query = Q_(R"(
-            DELETE PER ROW FROM TestTable WHERE Age IN (SELECT Age FROM TestTable WHERE Group = 2);
+            BATCH DELETE FROM TestTable WHERE Age IN (SELECT Age FROM TestTable WHERE Group = 2);
         )");
 
         auto txControl = NYdb::NQuery::TTxControl::NoTx();
@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
     }
 
-    Y_UNIT_TEST(DeletePerRowMultiTable_2) {
+    Y_UNIT_TEST(DeleteMultiTable_2) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         CreateTestTable(session, "TestSecond");
 
         auto query = Q_(R"(
-            DELETE PER ROW FROM TestFirst WHERE Age IN (SELECT Age FROM TestSecond WHERE Group = 2);
+            BATCH DELETE FROM TestFirst WHERE Age IN (SELECT Age FROM TestSecond WHERE Group = 2);
         )");
 
         auto txControl = NYdb::NQuery::TTxControl::NoTx();
@@ -258,7 +258,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
     }
 
-    Y_UNIT_TEST(DeletePerRowMultiTable_3) {
+    Y_UNIT_TEST(DeleteMultiTable_3) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -267,8 +267,8 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         CreateTestTable(session, "TestSecond");
 
         auto query = Q_(R"(
-            DELETE PER ROW FROM TestFirst WHERE Age = 10;
-            DELETE PER ROW FROM TestSecond WHERE Age = 10;
+            BATCH DELETE FROM TestFirst WHERE Age = 10;
+            BATCH DELETE FROM TestSecond WHERE Age = 10;
         )");
 
         auto txControl = NYdb::NQuery::TTxControl::NoTx();
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
     }
 
-    Y_UNIT_TEST(DeletePerRowMultiStatement_1) {
+    Y_UNIT_TEST(DeleteMultiStatement_1) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -285,7 +285,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         CreateTestTable(session);
 
         auto query = Q_(R"(
-            DELETE PER ROW FROM TestTable WHERE Group = 2;
+            BATCH DELETE FROM TestTable WHERE Group = 2;
             SELECT 42;
         )");
 
@@ -295,7 +295,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
     }
 
-    Y_UNIT_TEST(DeletePerRowMultiStatement_2) {
+    Y_UNIT_TEST(DeleteMultiStatement_2) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -303,7 +303,7 @@ Y_UNIT_TEST_SUITE(KqpPerRow) {
         CreateTestTable(session);
 
         auto query = Q_(R"(
-            DELETE PER ROW FROM TestTable WHERE Group = 2;
+            BATCH DELETE FROM TestTable WHERE Group = 2;
             UPSERT INTO `/Root/TestTable` (Group, Name, Age, Amount, Comment)
                 VALUES (7u, "Mark", 74ul, 200ul, "None");
             SELECT * FROM TestTable;

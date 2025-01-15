@@ -11,7 +11,7 @@ ELSE()
 ENDIF()
 
 SRCS(
-    kqp_per_row_ut.cpp
+    kqp_batch_ut.cpp
 )
 
 PEERDIR(

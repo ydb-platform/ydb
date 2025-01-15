@@ -17,7 +17,7 @@ class TestYdbWorkload(object):
         cls.cluster.stop()
 
     def test(self):
-        workload_path = yatest.common.build_path("ydb/tests/workloads/simple_queue/simple_queue")
+        workload_path = yatest.common.build_path("ydb/tests/stress/simple_queue/simple_queue")
         store = "row"  # or "column"
         yatest.common.execute(
             [

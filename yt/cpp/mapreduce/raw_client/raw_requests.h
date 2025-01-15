@@ -9,6 +9,7 @@
 #include <yt/cpp/mapreduce/interface/client.h>
 #include <yt/cpp/mapreduce/interface/client_method_options.h>
 #include <yt/cpp/mapreduce/interface/operation.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 
 namespace NYT {
 
@@ -53,19 +54,18 @@ TAuthorizationInfo WhoAmI(const TClientContext& context);
 
 template<typename TSrc, typename TBatchAdder>
 auto BatchTransform(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
+    const IRawClientPtr& rawClient,
     const TSrc& src,
     TBatchAdder batchAdder,
     const TExecuteBatchOptions& executeBatchOptions = {})
 {
-    THttpRawBatchRequest batch(context, retryPolicy);
+    auto batch = rawClient->CreateRawBatchRequest();
     using TFuture = decltype(batchAdder(batch, *std::begin(src)));
     TVector<TFuture> futures;
     for (const auto& el : src) {
         futures.push_back(batchAdder(batch, el));
     }
-    batch.ExecuteBatch(executeBatchOptions);
+    batch->ExecuteBatch(executeBatchOptions);
     using TDst = decltype(futures[0].ExtractValueSync());
     TVector<TDst> result;
     result.reserve(std::size(src));

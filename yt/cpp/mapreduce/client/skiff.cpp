@@ -279,6 +279,7 @@ TFormat CreateSkiffFormat(const NSkiff::TSkiffSchemaPtr& schema) {
 }
 
 NSkiff::TSkiffSchemaPtr CreateSkiffSchemaIfNecessary(
+    const IRawClientPtr& rawClient,
     const TClientContext& context,
     const IClientRetryPolicyPtr& clientRetryPolicy,
     const TTransactionId& transactionId,
@@ -304,10 +305,9 @@ NSkiff::TSkiffSchemaPtr CreateSkiffSchemaIfNecessary(
     }
 
     auto nodes = NRawClient::BatchTransform(
-        clientRetryPolicy->CreatePolicyForGenericRequest(),
-        context,
+        rawClient,
         NRawClient::CanonizeYPaths(clientRetryPolicy->CreatePolicyForGenericRequest(), context, tablePaths),
-        [&] (IRawBatchRequest& batch, const TRichYPath& path) {
+        [&] (IRawBatchRequestPtr batch, const TRichYPath& path) {
             auto getOptions = TGetOptions()
                 .AttributeFilter(
                     TAttributeFilter()
@@ -315,7 +315,7 @@ NSkiff::TSkiffSchemaPtr CreateSkiffSchemaIfNecessary(
                         .AddAttribute("dynamic")
                         .AddAttribute("type")
                 );
-            return batch.Get(transactionId, path.Path_, getOptions);
+            return batch->Get(transactionId, path.Path_, getOptions);
         });
 
     TVector<NSkiff::TSkiffSchemaPtr> schemas;

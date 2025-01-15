@@ -225,11 +225,10 @@ TStructuredJobTableList ApplyProtobufColumnFilters(
     }
 
     auto isDynamic = NRawClient::BatchTransform(
-        CreateDefaultRequestRetryPolicy(preparer.GetContext().Config),
-        preparer.GetContext(),
+        preparer.GetClient()->GetRawClient(),
         tableList,
-        [&] (IRawBatchRequest& batch, const auto& table) {
-            return batch.Get(preparer.GetTransactionId(), table.RichYPath->Path_ + "/@dynamic", TGetOptions());
+        [&] (IRawBatchRequestPtr batch, const auto& table) {
+            return batch->Get(preparer.GetTransactionId(), table.RichYPath->Path_ + "/@dynamic", TGetOptions());
         });
 
     auto newTableList = tableList;
@@ -642,7 +641,7 @@ TNode BuildAutoMergeSpec(const TAutoMergeSpec& options)
     return result;
 }
 
-TNode BuildJobProfilerSpec(const TJobProfilerSpec& profilerSpec)
+[[maybe_unused]] TNode BuildJobProfilerSpec(const TJobProfilerSpec& profilerSpec)
 {
     TNode result;
     if (profilerSpec.ProfilingBinary_) {

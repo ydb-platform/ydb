@@ -121,6 +121,7 @@ namespace NDetail {
 ////////////////////////////////////////////////////////////////////////////////
 
 NSkiff::TSkiffSchemaPtr TryCreateSkiffSchema(
+    const IRawClientPtr& rawClient,
     const TClientContext& context,
     const IClientRetryPolicyPtr& clientRetryPolicy,
     const TTransactionId& transactionId,
@@ -135,6 +136,7 @@ NSkiff::TSkiffSchemaPtr TryCreateSkiffSchema(
         return nullptr;
     }
     return CreateSkiffSchemaIfNecessary(
+        rawClient,
         context,
         clientRetryPolicy,
         transactionId,
@@ -434,6 +436,7 @@ std::pair<TFormat, TMaybe<TSmallJobFile>> TFormatBuilder::CreateNodeFormat(
             tableList.emplace_back(*table.RichYPath);
         }
         skiffSchema = TryCreateSkiffSchema(
+            RawClient_,
             Context_,
             ClientRetryPolicy_,
             TransactionId_,

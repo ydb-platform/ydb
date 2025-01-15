@@ -57,7 +57,7 @@ public:
     NHPTimer::STime ScheduleTime = 0;
 
     // Tracing
-    mutable NWilson::TSpanStack SpanStack;
+    mutable NWilson::TSpan Span;
     mutable NLWTrace::TOrbit Orbit;
 public:
     TRequestBase(const TActorId &sender, TReqId reqId, TOwner owner, TOwnerRound ownerRound, ui8 priorityClass,
@@ -69,10 +69,10 @@ public:
         , PriorityClass(priorityClass)
         , OwnerGroupType(EOwnerGroupType::Dynamic)
         , CreationTime(HPNow())
-        , SpanStack(std::move(span))
+        , Span(std::move(span))
     {
-        if (auto span = SpanStack.PeekTop()) {
-            span->EnableAutoEnd();
+        if (Span) {
+            Span.EnableAutoEnd();
         }
     }
 
@@ -194,11 +194,8 @@ public:
         , Position(ev->Get()->Position)
         , SizeLimit(ev->Get()->SizeLimit)
     {
-        if (auto span = SpanStack.PeekTop()) {
-            (*span)
-                .Attribute("size_limit", static_cast<i64>(ev->Get()->SizeLimit))
-                .Attribute("pdisk_id", pdiskId);
-        }
+        Span.Attribute("size_limit", static_cast<i64>(ev->Get()->SizeLimit))
+            .Attribute("pdisk_id", pdiskId);
     }
 
     ERequestType GetType() const override {
@@ -226,12 +223,9 @@ public:
         , CompletionAction(ev->Get()->CompletionAction)
         , ReqId(ev->Get()->ReqId)
     {
-        if (auto span = SpanStack.PeekTop()) {
-            (*span)
-                .Attribute("size", ev->Get()->Size)
-                .Attribute("offset", static_cast<i64>(ev->Get()->Offset))
-                .Attribute("pdisk_id", pdiskId);
-        }
+        Span.Attribute("size", ev->Get()->Size)
+            .Attribute("offset", static_cast<i64>(ev->Get()->Offset))
+            .Attribute("pdisk_id", pdiskId);
     }
 
     ERequestType GetType() const override {
@@ -603,9 +597,9 @@ public:
     ui32 Offset;
     ui64 Size;
 
-    TChunkTrim(ui32 chunkIdx, ui32 offset, ui64 size, NWilson::TSpan span, TAtomicBase reqIdx)
+    TChunkTrim(ui32 chunkIdx, ui32 offset, ui64 size, TAtomicBase reqIdx)
         : TRequestBase(TActorId(), TReqId(TReqId::ChunkTrim, reqIdx), OwnerUnallocated,
-                TOwnerRound(0), NPriInternal::Trim, std::move(span))
+                TOwnerRound(0), NPriInternal::Trim)
         , ChunkIdx(chunkIdx)
         , Offset(offset)
         , Size(size)
@@ -860,14 +854,9 @@ public:
 //
 class TAskForCutLog : public TRequestBase {
 public:
-    TAskForCutLog(const NPDisk::TEvAskForCutLog::TPtr &ev, ui32 pdiskId, TAtomicBase reqIdx)
-        : TRequestBase(ev->Sender, TReqId(TReqId::AskForCutLog, reqIdx), ev->Get()->Owner, ev->Get()->OwnerRound, NPriInternal::Other,
-                NWilson::TSpan(TWilson::PDiskTopLevel, std::move(ev->TraceId), "PDisk.AskForCutLog")
-            )
+    TAskForCutLog(const NPDisk::TEvAskForCutLog::TPtr &ev, ui32 /*pdiskId*/, TAtomicBase reqIdx)
+        : TRequestBase(ev->Sender, TReqId(TReqId::AskForCutLog, reqIdx), ev->Get()->Owner, ev->Get()->OwnerRound, NPriInternal::Other)
     {
-        if (auto span = SpanStack.PeekTop()) {
-            span->Attribute("pdisk_id", pdiskId);
-        }
     }
 
     ERequestType GetType() const override {
@@ -911,8 +900,8 @@ class TCommitLogChunks : public TRequestBase {
 public:
     TVector<ui32> CommitedLogChunks;
 
-    TCommitLogChunks(TVector<ui32>&& commitedLogChunks, NWilson::TSpan span, TAtomicBase reqIdx)
-        : TRequestBase(TActorId(), TReqId(TReqId::CommitLogChunks, reqIdx), OwnerSystem, 0, NPriInternal::Other, std::move(span))
+    TCommitLogChunks(TVector<ui32>&& commitedLogChunks, TAtomicBase reqIdx)
+        : TRequestBase(TActorId(), TReqId(TReqId::CommitLogChunks, reqIdx), OwnerSystem, 0, NPriInternal::Other)
         , CommitedLogChunks(std::move(commitedLogChunks))
     {}
 
@@ -932,16 +921,16 @@ public:
     bool IsChunksFromLogSplice;
 
     TReleaseChunks(const TLogChunkInfo& gapStart, const TLogChunkInfo& gapEnd, TVector<TChunkIdx> chunksToRelease,
-            NWilson::TSpan span, TAtomicBase reqIdx)
-        : TRequestBase(TActorId(), TReqId(TReqId::ReleaseChunks, reqIdx), OwnerSystem, 0, NPriInternal::Other, std::move(span))
+            TAtomicBase reqIdx)
+        : TRequestBase(TActorId(), TReqId(TReqId::ReleaseChunks, reqIdx), OwnerSystem, 0, NPriInternal::Other)
         , GapStart(gapStart)
         , GapEnd(gapEnd)
         , ChunksToRelease(std::move(chunksToRelease))
         , IsChunksFromLogSplice(true)
     {}
 
-    TReleaseChunks(TVector<TChunkIdx> chunksToRelease, NWilson::TSpan span, TAtomicBase reqIdx)
-        : TRequestBase(TActorId(), TReqId(TReqId::ReleaseChunks, reqIdx), OwnerSystem, 0, NPriInternal::Other, std::move(span))
+    TReleaseChunks(TVector<TChunkIdx> chunksToRelease, TAtomicBase reqIdx)
+        : TRequestBase(TActorId(), TReqId(TReqId::ReleaseChunks, reqIdx), OwnerSystem, 0, NPriInternal::Other)
         , ChunksToRelease(std::move(chunksToRelease))
         , IsChunksFromLogSplice(false)
     {}
@@ -995,8 +984,8 @@ class TTryTrimChunk : public TRequestBase {
 public:
     ui64 TrimSize;
 
-    TTryTrimChunk(ui64 trimSize, NWilson::TSpan span, TAtomicBase reqIdx)
-        : TRequestBase(TActorId(), TReqId(TReqId::TryTrimChunk, reqIdx), OwnerSystem, 0, NPriInternal::Other, std::move(span))
+    TTryTrimChunk(ui64 trimSize, TAtomicBase reqIdx)
+        : TRequestBase(TActorId(), TReqId(TReqId::TryTrimChunk, reqIdx), OwnerSystem, 0, NPriInternal::Other)
         , TrimSize(trimSize)
     {}
 

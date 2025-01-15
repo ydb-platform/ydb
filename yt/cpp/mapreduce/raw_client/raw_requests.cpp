@@ -265,13 +265,13 @@ TVector<TRichYPath> CanonizeYPaths(
     const TClientContext& context,
     const TVector<TRichYPath>& paths)
 {
-    THttpRawBatchRequest batch(context.Config);
+    THttpRawBatchRequest batch(context, retryPolicy);
     TVector<NThreading::TFuture<TRichYPath>> futures;
     futures.reserve(paths.size());
     for (int i = 0; i < static_cast<int>(paths.size()); ++i) {
         futures.push_back(batch.CanonizeYPath(paths[i]));
     }
-    batch.ExecuteBatch(retryPolicy, context);
+    batch.ExecuteBatch();
     TVector<TRichYPath> result;
     result.reserve(futures.size());
     for (auto& future : futures) {

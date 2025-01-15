@@ -307,7 +307,7 @@ NSkiff::TSkiffSchemaPtr CreateSkiffSchemaIfNecessary(
         clientRetryPolicy->CreatePolicyForGenericRequest(),
         context,
         NRawClient::CanonizeYPaths(clientRetryPolicy->CreatePolicyForGenericRequest(), context, tablePaths),
-        [&] (THttpRawBatchRequest& batch, const TRichYPath& path) {
+        [&] (IRawBatchRequest& batch, const TRichYPath& path) {
             auto getOptions = TGetOptions()
                 .AttributeFilter(
                     TAttributeFilter()

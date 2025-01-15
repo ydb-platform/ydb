@@ -59,13 +59,13 @@ auto BatchTransform(
     TBatchAdder batchAdder,
     const TExecuteBatchOptions& executeBatchOptions = {})
 {
-    THttpRawBatchRequest batch(context.Config);
+    THttpRawBatchRequest batch(context, retryPolicy);
     using TFuture = decltype(batchAdder(batch, *std::begin(src)));
     TVector<TFuture> futures;
     for (const auto& el : src) {
         futures.push_back(batchAdder(batch, el));
     }
-    batch.ExecuteBatch(retryPolicy, context, executeBatchOptions);
+    batch.ExecuteBatch(executeBatchOptions);
     using TDst = decltype(futures[0].ExtractValueSync());
     TVector<TDst> result;
     result.reserve(std::size(src));

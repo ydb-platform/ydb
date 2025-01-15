@@ -228,7 +228,7 @@ TStructuredJobTableList ApplyProtobufColumnFilters(
         CreateDefaultRequestRetryPolicy(preparer.GetContext().Config),
         preparer.GetContext(),
         tableList,
-        [&] (NRawClient::THttpRawBatchRequest& batch, const auto& table) {
+        [&] (IRawBatchRequest& batch, const auto& table) {
             return batch.Get(preparer.GetTransactionId(), table.RichYPath->Path_ + "/@dynamic", TGetOptions());
         });
 
@@ -318,7 +318,6 @@ TSimpleOperationIo CreateSimpleOperationIo(
             inputs,
             outputs,
             preparer.GetClient()->GetRawClient(),
-            preparer.GetContext(),
             preparer.GetClientRetryPolicy(),
             preparer.GetTransactionId()),
         &inputs,
@@ -497,7 +496,6 @@ TSimpleOperationIo CreateSimpleOperationIoHelper(
             structuredInputs,
             structuredOutputs,
             preparer.GetClient()->GetRawClient(),
-            preparer.GetContext(),
             preparer.GetClientRetryPolicy(),
             preparer.GetTransactionId()),
         &structuredInputs,
@@ -1688,7 +1686,6 @@ void ExecuteMapReduce(
                 structuredInputs,
                 mapperOutput,
                 preparer->GetClient()->GetRawClient(),
-                preparer->GetContext(),
                 preparer->GetClientRetryPolicy(),
                 preparer->GetTransactionId()),
             &structuredInputs,
@@ -1758,7 +1755,6 @@ void ExecuteMapReduce(
                     inputs,
                     outputs,
                     preparer->GetClient()->GetRawClient(),
-                    preparer->GetContext(),
                     preparer->GetClientRetryPolicy(),
                     preparer->GetTransactionId()),
                 &inputs,
@@ -1824,7 +1820,6 @@ void ExecuteMapReduce(
                 structuredInputs,
                 structuredOutputs,
                 preparer->GetClient()->GetRawClient(),
-                preparer->GetContext(),
                 preparer->GetClientRetryPolicy(),
                 preparer->GetTransactionId()),
             &structuredInputs,
@@ -2343,7 +2338,7 @@ public:
         : OperationImpl_(std::move(operationImpl))
     { }
 
-    void PrepareRequest(NRawClient::THttpRawBatchRequest* batchRequest) override
+    void PrepareRequest(IRawBatchRequest* batchRequest) override
     {
         auto filter = TOperationAttributeFilter()
             .Add(EOperationAttribute::State)

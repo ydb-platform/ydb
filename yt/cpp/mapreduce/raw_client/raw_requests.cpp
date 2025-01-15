@@ -253,25 +253,26 @@ TCheckPermissionResponse ParseCheckPermissionResponse(const TNode& node)
 }
 
 TRichYPath CanonizeYPath(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
+    const IRawClientPtr& rawClient,
     const TRichYPath& path)
 {
-    return CanonizeYPaths(retryPolicy, context, {path}).front();
+    return CanonizeYPaths(rawClient, {path}).front();
 }
 
 TVector<TRichYPath> CanonizeYPaths(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
+    const IRawClientPtr& rawClient,
     const TVector<TRichYPath>& paths)
 {
-    THttpRawBatchRequest batch(context, retryPolicy);
+    auto batch = rawClient->CreateRawBatchRequest();
+
     TVector<NThreading::TFuture<TRichYPath>> futures;
     futures.reserve(paths.size());
-    for (int i = 0; i < static_cast<int>(paths.size()); ++i) {
-        futures.push_back(batch.CanonizeYPath(paths[i]));
+    for (const auto& path : paths) {
+        futures.push_back(batch->CanonizeYPath(path));
     }
-    batch.ExecuteBatch();
+
+    batch->ExecuteBatch();
+
     TVector<TRichYPath> result;
     result.reserve(futures.size());
     for (auto& future : futures) {

@@ -394,7 +394,7 @@ TJobPreparer::TJobPreparer(
 {
 
     CreateStorage();
-    auto cypressFileList = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, OperationPreparer_.GetContext(), spec.Files_);
+    auto cypressFileList = NRawClient::CanonizeYPaths(RawClient_, spec.Files_);
 
     for (const auto& file : cypressFileList) {
         UseFileInCypress(file);

@@ -122,8 +122,6 @@ namespace NDetail {
 
 NSkiff::TSkiffSchemaPtr TryCreateSkiffSchema(
     const IRawClientPtr& rawClient,
-    const TClientContext& context,
-    const IClientRetryPolicyPtr& clientRetryPolicy,
     const TTransactionId& transactionId,
     const TVector<TRichYPath>& tables,
     const TOperationOptions& options,
@@ -137,8 +135,6 @@ NSkiff::TSkiffSchemaPtr TryCreateSkiffSchema(
     }
     return CreateSkiffSchemaIfNecessary(
         rawClient,
-        context,
-        clientRetryPolicy,
         transactionId,
         nodeReaderFormat,
         tables,
@@ -214,14 +210,14 @@ TStructuredJobTableList ToStructuredJobTableList(const TVector<TStructuredTableP
     return result;
 }
 
-TStructuredJobTableList CanonizeStructuredTableList(const TClientContext& context, const TVector<TStructuredTablePath>& tableList)
+TStructuredJobTableList CanonizeStructuredTableList(const IRawClientPtr& rawClient, const TVector<TStructuredTablePath>& tableList)
 {
     TVector<TRichYPath> toCanonize;
     toCanonize.reserve(tableList.size());
     for (const auto& table : tableList) {
         toCanonize.emplace_back(table.RichYPath);
     }
-    const auto canonized = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, context, toCanonize);
+    const auto canonized = NRawClient::CanonizeYPaths(rawClient, toCanonize);
     Y_ABORT_UNLESS(canonized.size() == tableList.size());
 
     TStructuredJobTableList result;
@@ -437,8 +433,6 @@ std::pair<TFormat, TMaybe<TSmallJobFile>> TFormatBuilder::CreateNodeFormat(
         }
         skiffSchema = TryCreateSkiffSchema(
             RawClient_,
-            Context_,
-            ClientRetryPolicy_,
             TransactionId_,
             tableList,
             OperationOptions_,

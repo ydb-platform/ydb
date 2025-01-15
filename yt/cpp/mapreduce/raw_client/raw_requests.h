@@ -34,13 +34,11 @@ TCheckPermissionResponse ParseCheckPermissionResponse(const TNode& node);
 ////////////////////////////////////////////////////////////////////////////////
 
 TRichYPath CanonizeYPath(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
+    const IRawClientPtr& rawClient,
     const TRichYPath& path);
 
 TVector<TRichYPath> CanonizeYPaths(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
+    const IRawClientPtr& rawClient,
     const TVector<TRichYPath>& paths);
 
 NHttpClient::IHttpResponsePtr SkyShareTable(

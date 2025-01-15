@@ -26,9 +26,6 @@ PEERDIR(
     yql/essentials/minikql/dom
     yql/essentials/public/udf
     ydb/public/api/protos
-    ydb/public/api/grpc/draft
-    ydb/core/grpc_services/cancelation/protos
-    ydb/public/lib/operation_id/protos
 )
 
 YQL_LAST_ABI_VERSION()

@@ -1,16 +1,12 @@
 #include "topic_description.h"
+#include "ydb_convert.h"
 
-#include <ydb/library/persqueue/topic_parser_public/topic_parser.h>
-
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/utils.h>
-#include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/services/lib/actors/pq_schema_actor.h>
-#include <yql/essentials/public/issue/yql_issue.h>
-
-#include <util/string/builder.h>
+#include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 namespace NKikimr {
 

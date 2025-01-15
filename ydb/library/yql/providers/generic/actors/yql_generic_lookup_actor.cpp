@@ -235,10 +235,9 @@ namespace NYql::NDq {
             actorSystem->Send(new NActors::IEventHandle(ParentId, SelfId(), errEv.release()));
         }
 
-        void Handle(TEvRetry::TPtr) {
+        void Handle(TEvRetry::TPtr ev) {
             auto guard = Guard(*Alloc);
-            Y_ENSURE(RetriesRemaining > 0);
-            --RetriesRemaining;
+            RetriesRemaining = ev->Get()->NextRetries;
             SendRequest();
         }
 
@@ -395,14 +394,15 @@ namespace NYql::NDq {
                 new TEvError(std::move(error)));
         }
 
-        static void SendRetryOrError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NYdbGrpc::TGrpcStatus& status, const ui32 retriesRemaining) {
+        static void SendRetryOrError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NYdbGrpc::TGrpcStatus& status, ui32 retriesRemaining) {
             if (NConnector::GrpcStatusNeedsRetry(status)) {
                 if (retriesRemaining) {
                     const auto retry = RequestRetriesLimit - retriesRemaining;
-                    // XXX FIXME tune/tweak
-                    const auto delay = TDuration::MilliSeconds(1u << retry); // Exponential delay from 1ms to 1s
+                    const auto delay = TDuration::MilliSeconds(1u << retry); // Exponential delay from 1ms to ~0.5s
+                    // <<< TODO tune/tweak
                     YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry " << (retry + 1) << " of " << RequestRetriesLimit << ", scheduled in " << delay;
-                    actorSystem->Schedule(delay, new IEventHandle(selfId, selfId, new TEvRetry()));
+                    --retriesRemaining;
+                    actorSystem->Schedule(delay, new IEventHandle(selfId, selfId, new TEvRetry(retriesRemaining)));
                     return;
                 }
                 YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry count exceed limit " << RequestRetriesLimit;

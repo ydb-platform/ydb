@@ -384,6 +384,10 @@ public:
         return OwnerQuota->GetUsed(owner);
     }
 
+    ui64 GetLogChunkCount() const {
+        return GlobalQuota->GetUsed(OwnerSystem);
+    }
+
     /////////////////////////////////////////////////////
     // for used space monitoring
     i64 GetTotalUsed() const {

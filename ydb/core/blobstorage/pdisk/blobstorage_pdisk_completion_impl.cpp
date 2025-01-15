@@ -101,7 +101,7 @@ void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
 void TCompletionLogWrite::Release(TActorSystem *actorSystem) {
     for (TLogWrite *logWrite : LogWriteQueue) {
         auto res = MakeHolder<TEvLogResult>(NKikimrProto::CORRUPTED,
-            NKikimrBlobStorage::StatusIsValid, ErrorReason, PDisk->LogChunks.size());
+            NKikimrBlobStorage::StatusIsValid, ErrorReason, 0);
         logWrite->Replied = true;
         actorSystem->Send(logWrite->Sender, res.Release());
         PDisk->Mon.WriteLog.CountResponse();

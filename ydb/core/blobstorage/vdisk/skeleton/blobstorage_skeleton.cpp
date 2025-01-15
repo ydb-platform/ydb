@@ -1689,7 +1689,9 @@ namespace NKikimr {
             if (VDiskCompactionState && !results.empty()) {
                 VDiskCompactionState->Logged(ctx, results.back().Lsn);
             }
-            OverloadHandler->SetLogChunkCount(ev->Get()->LogChunkCount);
+            if (ev->Get()->Status != NKikimrProto::CORRUPTED) {
+                OverloadHandler->SetLogChunkCount(ev->Get()->LogChunkCount);
+            }
         }
 
         ////////////////////////////////////////////////////////////////////////

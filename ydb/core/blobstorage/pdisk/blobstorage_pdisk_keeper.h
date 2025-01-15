@@ -87,7 +87,7 @@ public:
         return ChunkTracker.GetOwnerUsed(owner);
     }
 
-    ui64 GetLogChunkCount() const {
+    i64 GetLogChunkCount() const {
         return ChunkTracker.GetLogChunkCount();
     }
 

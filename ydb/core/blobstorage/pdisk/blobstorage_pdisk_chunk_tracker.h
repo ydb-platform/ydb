@@ -384,7 +384,7 @@ public:
         return OwnerQuota->GetUsed(owner);
     }
 
-    ui64 GetLogChunkCount() const {
+    i64 GetLogChunkCount() const {
         return GlobalQuota->GetUsed(OwnerSystem);
     }
 

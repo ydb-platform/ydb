@@ -394,6 +394,7 @@ struct TEvLogResult : public TEventLocal<TEvLogResult, TEvBlobStorage::EvLogResu
         str << "{EvLogResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << " StatusFlags# " << StatusFlagsToString(record.StatusFlags);
+        str << " LogChunkCount# " << record.LogChunkCount;
         for (auto it = record.Results.begin(); it != record.Results.end(); ++it) {
             str << "{Lsn# " << it->Lsn << " Cookie# " << (ui64)it->Cookie << "}";
         }
@@ -407,12 +408,12 @@ struct TEvLogResult : public TEventLocal<TEvLogResult, TEvBlobStorage::EvLogResu
     NKikimrProto::EReplyStatus Status;
     TStatusFlags StatusFlags;
     TString ErrorReason;
-    ui32 LogChunkCount = 0;
+    i64 LogChunkCount = 0;
 
     TEvLogResult(NKikimrProto::EReplyStatus status,
             TStatusFlags statusFlags,
             const TString &errorReason,
-            ui32 logChunkCount)
+            i64 logChunkCount)
         : Status(status)
         , StatusFlags(statusFlags)
         , ErrorReason(errorReason)

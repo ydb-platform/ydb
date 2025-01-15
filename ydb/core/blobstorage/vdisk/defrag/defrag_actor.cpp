@@ -81,7 +81,7 @@ namespace NKikimr {
         return HugeHeapDefragmentationRequired(hugeCanBeFreedChunks, hugeTotalChunks, defragThreshold);
     }
 
-    ui32 MaxInflyghtDefragChunks(const TOutOfSpaceState& oos, ui32 maxChunksToDefrag, ui32 hugeCanBeFreedChunks) {
+    ui32 MaxInflyghtDefragChunks(ui32 maxChunksToDefrag, ui32 hugeCanBeFreedChunks) {
         return Min(maxChunksToDefrag, hugeCanBeFreedChunks - MIN_CAN_BE_FREED_CHUNKS);
     }
 
@@ -138,7 +138,7 @@ namespace NKikimr {
                     double hugeDefragFreeSpaceBorder = DCtx->VCfg->HugeDefragFreeSpaceBorderPerMille / 1000.0;
                     DCtx->DefragMonGroup.DefragThreshold() = DefragThreshold(oos, defaultPercent, hugeDefragFreeSpaceBorder);
                     if (HugeHeapDefragmentationRequired(oos, canBeFreedChunks, totalChunks, defaultPercent, hugeDefragFreeSpaceBorder)) {
-                        TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(MaxInflyghtDefragChunks(oos, DCtx->MaxChunksToDefrag, canBeFreedChunks));
+                        TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(MaxInflyghtDefragChunks(DCtx->MaxChunksToDefrag, canBeFreedChunks));
                         Y_ABORT_UNLESS(chunksToDefrag);
                         STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD03, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
                             (TotalChunks, totalChunks), (UsefulChunks, usefulChunks),

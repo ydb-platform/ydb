@@ -237,9 +237,9 @@ namespace NKikimr {
         TDuration BalancingTimeToSleepIfNothingToDo;
 
         ///////////////// DEFRAG SETTINGS /////////////////
-        TControlWrapper DefaultHugeGarbagePerMille=300;
-        TControlWrapper HugeDefragFreeSpaceBorderPerMille=260;
-        TControlWrapper MaxChunksToDefragInflight=10;
+        TControlWrapper DefaultHugeGarbagePerMille = 300;
+        TControlWrapper HugeDefragFreeSpaceBorderPerMille = 260;
+        TControlWrapper MaxChunksToDefragInflight = 10;
 
         ///////////// COST METRICS SETTINGS ////////////////
         bool UseCostTracker = true;

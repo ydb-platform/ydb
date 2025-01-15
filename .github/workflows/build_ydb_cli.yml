@@ -96,7 +96,7 @@ jobs:
     
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}
-      run: ./ya make ydb/apps/ydb -r -DUSE_SSE4=no
+      run: ./ya make ydb/apps/ydb -r -DUSE_SSE4=no --target-platform ${{ matrix.platform }}
 
     - name: Upload binary to artifact
       uses: actions/upload-artifact@v4

@@ -135,12 +135,8 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 
     opts.AddLongOption('e', "endpoint", endpointHelp)
         .RequiredArgument("[PROTOCOL://]HOST[:PORT]").StoreResult(&Address);
-    auto& db = opts.AddLongOption('d', "database", databaseHelp)
+    opts.AddLongOption('d', "database", databaseHelp)
         .RequiredArgument("PATH").StoreResult(&Database);
-    auto& cluster = opts.AddLongOption('c', "cluster", "Clear database").Optional().NoArgument().Handler0([&](){
-            ExplicitNoDatabase = true;
-        });
-    opts.MutuallyExclusiveOpt(db, cluster);
     opts.AddLongOption('v', "verbose", "Increase verbosity of operations")
         .Optional().NoArgument().Handler0([&](){
             VerbosityLevel++;
@@ -521,10 +517,6 @@ void TClientCommandRootCommon::ParseDatabase(TConfig& config) {
         return false;
     };
 
-    // Priority 0. Explicit --cluster option
-    if (ExplicitNoDatabase) {
-        return;
-    }
     // Priority 1. Explicit --database option
     if (Database && getDatabase(Database, "explicit --database option", true)) {
         return;

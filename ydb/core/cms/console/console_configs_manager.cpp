@@ -70,6 +70,14 @@ bool TConfigsManager::CheckConfig(const NKikimrConsole::TConfigsConfig &config,
 
 TConfigsManager::TValidateConfigResult TConfigsManager::ValidateConfigAndReplaceMetadata(const TString &config, bool force, bool allowUnknownFields) {
     TValidateConfigResult result;
+    bool isDatabaseConfig = NYamlConfig::IsDatabaseConfig(config);
+
+    if (isDatabaseConfig) {
+        result.HasForbiddenUnknown = false;
+        result.ValidationFinished = true;
+        return result;
+    }
+
     try {
         if (!force) {
             auto metadata = NYamlConfig::GetMetadata(config);

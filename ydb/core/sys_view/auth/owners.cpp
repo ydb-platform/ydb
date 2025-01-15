@@ -34,7 +34,7 @@ protected:
         // TODO: add rows according to request's sender user rights
 
         auto entryPath = CanonizePath(entry.Path);
-        auto entryOwner = entry.Self->Info.GetOwner();
+        auto entryOwner = entry.SecurityObject->GetOwnerSID();
 
         for (auto& column : Columns) {
             switch (column.Tag) {

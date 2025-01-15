@@ -40,11 +40,22 @@ struct ITwoLevelFairShareThreadPool
 
 DEFINE_REFCOUNTED_TYPE(ITwoLevelFairShareThreadPool)
 
+////////////////////////////////////////////////////////////////////////////////
+
+struct TNewTwoLevelFairShareThreadPoolOptions
+{
+    IPoolWeightProviderPtr PoolWeightProvider = nullptr;
+    bool VerboseLogging = false;
+    TDuration PollingPeriod = TDuration::MilliSeconds(10);
+    TDuration PoolRetentionTime = TDuration::Seconds(30);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 ITwoLevelFairShareThreadPoolPtr CreateTwoLevelFairShareThreadPool(
     int threadCount,
     const TString& threadNamePrefix,
-    IPoolWeightProviderPtr poolWeightProvider = nullptr);
+    const TNewTwoLevelFairShareThreadPoolOptions& options = {});
 
-////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency

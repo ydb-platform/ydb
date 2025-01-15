@@ -693,7 +693,7 @@ TPossibleTypes TPossibleTypes::GetCopy() {
 void TPossibleTypes::MergeWith(TPossibleTypes& newTypes) {
     auto newTypesVec = newTypes.GetColumnPossibleTypes();
     {
-        std::shared_lock<std::shared_mutex>  ReadLock(Lock);
+        std::shared_lock<std::shared_mutex> ReadLock(Lock);
         bool changed = false;
         for (size_t i = 0; i < ColumnPossibleTypes.size(); ++i) {
             auto& currentPossibleType = ColumnPossibleTypes[i];

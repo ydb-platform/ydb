@@ -685,7 +685,7 @@ TPossibleTypes::TPossibleTypes(std::vector<TPossibleType>& currentColumnTypes)
 
 // Pass this copy to a worker to parse his chunk of data with it to merge it later back into this main chunk
 TPossibleTypes TPossibleTypes::GetCopy() {
-    std::shared_lock<std::shared_mutex>  ReadLock(Lock);
+    std::shared_lock<std::shared_mutex> ReadLock(Lock);
     return TPossibleTypes(ColumnPossibleTypes);
 }
 

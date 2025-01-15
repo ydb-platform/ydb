@@ -5791,12 +5791,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), expectedStatus);
     }
 
-    void VerifyLockTabletExecutionLost(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& owner) {
+    void VerifyLockTabletExecutionLost(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& owner, NKikimrHive::ELockLostReason reason) {
         TAutoPtr<IEventHandle> handle;
         auto result = runtime.GrabEdgeEventRethrow<TEvHive::TEvLockTabletExecutionLost>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL(handle->GetRecipientRewrite(), owner);
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetTabletID(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(result->Record.GetReason()), static_cast<i32>(reason));
     }
 
     Y_UNIT_TEST(TestLockTabletExecution) {
@@ -5870,7 +5871,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         WaitForTabletIsUp(runtime, tabletId, 0);
 
         // Hive should try to notify owner on unlocking
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_NODE_DISCONNECTED);
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionRebootTimeout) {
@@ -5899,7 +5900,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         WaitForTabletIsUp(runtime, tabletId, 0);
 
         // Hive should try to notify owner on unlocking
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_HIVE_RESTART);
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionDelete) {
@@ -5935,7 +5936,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
 
         // Hive should try to notify owner on unlocking
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_TABLET_DELETED);
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionDeleteReboot) {
@@ -5976,7 +5977,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         RebootTablet(runtime, hiveTablet, runtime.AllocateEdgeActor(0));
 
         // Hive should try to notify owner on unlocking
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_TABLET_DELETED);
     }
 
     void MakeSureTabletStaysDown(TTestActorRuntime& runtime, ui64 tabletId, const TDuration& timeout) {
@@ -6086,7 +6087,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         runtime.Send(new IEventHandle(proxy, disconnecter, new TEvInterconnect::TEvDisconnect()), 0);
 
         // wait for the lost lock notification
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_NODE_DISCONNECTED);
 
         // lock reconnect should fail
         SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::ERROR, owner, 500, true);
@@ -6155,7 +6156,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         WaitForTabletIsUp(runtime, tabletId, 0);
 
         // Hive should try to notify owner on unlocking
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_UNLOCKED);
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionStealLock) {
@@ -6181,7 +6182,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner2);
 
         // Hive should notify the old owner on unlocking
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_NEW_LOCK);
     }
 
     Y_UNIT_TEST(TestExternalBoot) {

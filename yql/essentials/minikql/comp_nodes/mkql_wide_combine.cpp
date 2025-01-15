@@ -435,6 +435,9 @@ public:
                 b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 5_MB);
                 b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal);
             }
+            // BufferForKeyAndState.resize(KeyAndStateType->GetElementsCount());
+            // Tongue = BufferForKeyAndState.data();
+            // Tongue = SpilledBuckets[0].InMemoryProcessingState->Tongue;
             Tongue = ViewForKeyAndState.data();
             Mode = EOperatingMode::Spilling;
         } else {
@@ -485,6 +488,14 @@ public:
         }
     }
 
+    void MoveKeyToBucket(TSpilledBucket& bucket) {
+        for (size_t i = 0; i < KeyWidth; ++i) {
+            //jumping into unsafe world, refusing ownership
+            static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(BufferForKeyAndState[i]);
+        }
+        BufferForKeyAndState.resize(0);
+    }
+
     ETasteResult TasteIt() {
         if (GetMode() == EOperatingMode::InMemory) {
             bool isNew = InMemoryProcessingState.TasteIt();
@@ -495,25 +506,30 @@ public:
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
         if (GetMode() == EOperatingMode::ProcessSpilled) {
+            MKQL_ENSURE(false, "MISHA ERROR");
             // while restoration we process buckets one by one starting from the first in a queue
             bool isNew = SpilledBuckets.front().InMemoryProcessingState->TasteIt();
             Throat = SpilledBuckets.front().InMemoryProcessingState->Throat;
+            Tongue = SpilledBuckets.front().InMemoryProcessingState->Tongue;
             BufferForUsedInputItems.resize(0);
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
 
-        auto bucketId = ChooseBucket(ViewForKeyAndState.data());
+        auto bucketId = 0; //ChooseBucket(ViewForKeyAndState.data());
         auto& bucket = SpilledBuckets[bucketId];
 
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
-            std::copy_n(ViewForKeyAndState.data(), KeyWidth, static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Tongue));
+            std::copy_n(static_cast<NUdf::TUnboxedValue*>(ViewForKeyAndState.data()), KeyWidth, static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Tongue));
+            // MoveKeyToBucket(bucket);
 
             bool isNew = bucket.InMemoryProcessingState->TasteIt();
             Throat = bucket.InMemoryProcessingState->Throat;
+            Tongue = bucket.InMemoryProcessingState->Tongue;
             bucket.LineCount += isNew;
 
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
+        MKQL_ENSURE(false, "MISHA ERROR");
         bucket.LineCount++;
 
         // Prepare space for raw data
@@ -527,7 +543,7 @@ public:
     }
 
     NUdf::TUnboxedValuePod* Extract() {
-        NUdf::TUnboxedValue* value = nullptr;
+        NUdf::TUnboxedValuePod* value = nullptr;
         if (GetMode() == EOperatingMode::InMemory) {
             value = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract());
             if (value) {
@@ -538,16 +554,21 @@ public:
             return value;
         }
 
-        MKQL_ENSURE(SpilledBuckets.front().BucketState == TSpilledBucket::EBucketState::InMemory, "Internal logic error");
+        auto& bucket = SpilledBuckets[ExtractingBucket];
+
+        MKQL_ENSURE(bucket.BucketState == TSpilledBucket::EBucketState::InMemory, "Internal logic error");
         MKQL_ENSURE(SpilledBuckets.size() > 0, "Internal logic error");
 
-        value = static_cast<NUdf::TUnboxedValue*>(SpilledBuckets.front().InMemoryProcessingState->Extract());
+        value = bucket.InMemoryProcessingState->Extract();
         if (value) {
             CounterOutputRows_.Inc();
         } else {
             // SpilledBuckets.front().InMemoryProcessingState->ReadMore<false>();
-            SpilledBuckets.pop_front();
-            if (SpilledBuckets.empty()) IsEverythingExtracted = true;
+            // SpilledBuckets.pop_front();
+            ++ExtractingBucket;
+            if (ExtractingBucket == SpilledBucketCount) {
+                IsEverythingExtracted = true;
+            }
         }
 
         return value;
@@ -673,6 +694,7 @@ private:
     }
 
     EUpdateResult ProcessSpilledData() {
+        // return EUpdateResult::Finish;
         if (AsyncReadOperation) {
             if (!AsyncReadOperation->HasValue()) return EUpdateResult::Yield;
             if (RecoverState) {
@@ -685,6 +707,7 @@ private:
 
         auto& bucket = SpilledBuckets.front();
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) return EUpdateResult::Extract;
+        MKQL_ENSURE(false, "MISHA ERROR");
 
         //recover spilled state
         while(!bucket.SpilledState->Empty()) {
@@ -744,6 +767,7 @@ private:
                 YQL_LOG(INFO) << "switching Memory mode to ProcessSpilled";
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
+                ViewForKeyAndState.resize(0);
 
                 std::sort(SpilledBuckets.begin(), SpilledBuckets.end(), [](const TSpilledBucket& lhs, const TSpilledBucket& rhs) {
                     bool lhs_in_memory = lhs.BucketState == TSpilledBucket::EBucketState::InMemory;
@@ -784,12 +808,14 @@ private:
     bool RecoverState; //sub mode for ProcessSpilledData
 
     TAsyncReadOperation AsyncReadOperation = std::nullopt;
-    static constexpr size_t SpilledBucketCount = 128;
+    static constexpr size_t SpilledBucketCount = 1;
     std::deque<TSpilledBucket> SpilledBuckets;
+    ui32 ExtractingBucket = 0;
     ui32 SpillingBucketsCount = 0;
     ui32 InMemoryBucketsCount = SpilledBucketCount;
     ui64 BufferForUsedInputItemsBucketId;
     TUnboxedValueVector BufferForUsedInputItems;
+    TUnboxedValueVector BufferForKeyAndState;
     std::vector<NUdf::TUnboxedValuePod, TMKQLAllocator<NUdf::TUnboxedValuePod>> ViewForKeyAndState;
 
     TMemoryUsageInfo* MemInfo = nullptr;

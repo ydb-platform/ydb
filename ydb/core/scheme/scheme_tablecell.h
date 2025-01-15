@@ -585,55 +585,84 @@ static_assert(std::is_nothrow_default_constructible_v<TOwnedCellVec>, "Expected 
 // When loading from a buffer the cells will point to the buffer contents
 class TSerializedCellVec {
 public:
-    explicit TSerializedCellVec(TConstArrayRef<TCell> cells);
-
-    explicit TSerializedCellVec(const TString& buf)
-    {
-        Parse(buf);
-    }
-
     TSerializedCellVec() = default;
 
-    TSerializedCellVec(const TSerializedCellVec &other)
-        : Buf(other.Buf)
-        , Cells(other.Cells)
+    explicit TSerializedCellVec(TConstArrayRef<TCell> cells);
+
+    explicit TSerializedCellVec(TString&& buf)
+        : Buf(std::move(buf))
     {
-        Y_ABORT_UNLESS(Buf.data() == other.Buf.data(), "Buffer must be shared");
+        Y_ABORT_UNLESS(DoTryParse());
     }
 
-    TSerializedCellVec(TSerializedCellVec &&other)
+    explicit TSerializedCellVec(const TString& buf)
+        : Buf(buf)
+    {
+        Y_ABORT_UNLESS(DoTryParse());
+    }
+
+    TSerializedCellVec(TSerializedCellVec&& other)
     {
         *this = std::move(other);
     }
 
-    TSerializedCellVec &operator=(const TSerializedCellVec &other)
+    TSerializedCellVec(const TSerializedCellVec& other)
+    {
+        *this = other;
+    }
+
+    TSerializedCellVec& operator=(TSerializedCellVec&& other)
     {
         if (this == &other)
             return *this;
 
-        TSerializedCellVec tmp(other);
-        *this = std::move(tmp);
+        const char* prevPtr = other.Buf.data();
+        Buf = std::move(other.Buf);
+        if (Buf.data() != prevPtr) {
+            // Data address changed, e.g. when TString is a small std::string
+            Y_ABORT_UNLESS(DoTryParse(), "Failed to re-parse TSerializedCellVec");
+            other.Cells.clear();
+        } else {
+            // Data address unchanged, reuse parsed Cells
+            Cells = std::move(other.Cells);
+        }
         return *this;
     }
 
-    TSerializedCellVec &operator=(TSerializedCellVec &&other)
+    TSerializedCellVec& operator=(const TSerializedCellVec& other)
     {
         if (this == &other)
             return *this;
 
-        const char* otherPtr = other.Buf.data();
-        Buf = std::move(other.Buf);
-        Y_ABORT_UNLESS(Buf.data() == otherPtr, "Buffer address must not change");
-        Cells = std::move(other.Cells);
+        Buf = other.Buf;
+        if (Buf.data() != other.Buf.data()) {
+            // Data address changed, e.g. when TString is std::string
+            Y_ABORT_UNLESS(DoTryParse(), "Failed to re-parse TSerializedCellVec");
+        } else {
+            // Data address unchanged, reuse parsed Cells
+            Cells = other.Cells;
+        }
         return *this;
+    }
+
+    static bool TryParse(TString&& data, TSerializedCellVec& vec) {
+        vec.Buf = std::move(data);
+        return vec.DoTryParse();
     }
 
     static bool TryParse(const TString& data, TSerializedCellVec& vec) {
-        return vec.DoTryParse(data);
+        vec.Buf = data;
+        return vec.DoTryParse();
     }
 
-    void Parse(const TString &buf) {
-        Y_ABORT_UNLESS(DoTryParse(buf));
+    void Parse(TString&& buf) {
+        Buf = std::move(buf);
+        Y_ABORT_UNLESS(DoTryParse());
+    }
+
+    void Parse(const TString& buf) {
+        Buf = buf;
+        Y_ABORT_UNLESS(DoTryParse());
     }
 
     TConstArrayRef<TCell> GetCells() const {
@@ -654,7 +683,7 @@ public:
 
     static size_t SerializedSize(TConstArrayRef<TCell> cells);
 
-    const TString &GetBuffer() const { return Buf; }
+    const TString& GetBuffer() const { return Buf; }
 
     TString ReleaseBuffer() {
         Cells.clear();
@@ -662,7 +691,7 @@ public:
     }
 
 private:
-    bool DoTryParse(const TString& data);
+    bool DoTryParse();
 
 private:
     TString Buf;
@@ -673,14 +702,21 @@ private:
 // When loading from a buffer the cells will point to the buffer contents
 class TSerializedCellMatrix {
 public:
+    TSerializedCellMatrix() = default;
+
     explicit TSerializedCellMatrix(TConstArrayRef<TCell> cells, ui32 rowCount, ui16 colCount);
 
-    explicit TSerializedCellMatrix(const TString& buf)
+    explicit TSerializedCellMatrix(TString&& buf)
+        : Buf(std::move(buf))
     {
-        Parse(buf);
+        Y_ABORT_UNLESS(DoTryParse());
     }
 
-    TSerializedCellMatrix() = default;
+    explicit TSerializedCellMatrix(const TString& buf)
+        : Buf(buf)
+    {
+        Y_ABORT_UNLESS(DoTryParse());
+    }
 
     TSerializedCellMatrix(const TSerializedCellMatrix& other)
         : Buf(other.Buf)
@@ -696,36 +732,64 @@ public:
         *this = std::move(other);
     }
 
-    TSerializedCellMatrix& operator=(const TSerializedCellMatrix& other)
-    {
-        if (this == &other)
-            return *this;
-
-        TSerializedCellMatrix tmp(other);
-        *this = std::move(tmp);
-        return *this;
-    }
-
     TSerializedCellMatrix& operator=(TSerializedCellMatrix&& other)
     {
         if (this == &other)
             return *this;
 
-        const char* otherPtr = other.Buf.data();
+        const char* prevPtr = other.Buf.data();
         Buf = std::move(other.Buf);
-        Y_ABORT_UNLESS(Buf.data() == otherPtr, "Buffer address must not change");
-        Cells = std::move(other.Cells);
-        RowCount = std::move(other.RowCount);
-        ColCount = std::move(other.ColCount);
+        if (Buf.data() != prevPtr) {
+            // Data address changed, e.g. when TString is a small std::string
+            Y_ABORT_UNLESS(DoTryParse(), "Failed to re-parse TSerializedCellMatrix");
+            other.Cells.clear();
+        } else {
+            // Data address unchanged, reuse parsed cells
+            Cells = std::move(other.Cells);
+            RowCount = other.RowCount;
+            ColCount = other.ColCount;
+        }
+        other.RowCount = 0;
+        other.ColCount = 0;
         return *this;
     }
 
+    TSerializedCellMatrix& operator=(const TSerializedCellMatrix& other)
+    {
+        if (this == &other)
+            return *this;
+
+        Buf = other.Buf;
+        if (Buf.data() != other.Buf.data()) {
+            // Data address changed, e.g. when TString is std::string
+            Y_ABORT_UNLESS(DoTryParse(), "Failed to re-parse TSerializedCellMatrix");
+        } else {
+            // Data address unchanged, reuse parsed cells
+            Cells = other.Cells;
+            RowCount = other.RowCount;
+            ColCount = other.ColCount;
+        }
+        return *this;
+    }
+
+    static bool TryParse(TString&& data, TSerializedCellMatrix& vec) {
+        vec.Buf = std::move(data);
+        return vec.DoTryParse();
+    }
+
     static bool TryParse(const TString& data, TSerializedCellMatrix& vec) {
-        return vec.DoTryParse(data);
+        vec.Buf = data;
+        return vec.DoTryParse();
+    }
+
+    void Parse(TString&& buf) {
+        Buf = std::move(buf);
+        Y_ABORT_UNLESS(DoTryParse());
     }
 
     void Parse(const TString& buf) {
-        Y_ABORT_UNLESS(DoTryParse(buf));
+        Buf = buf;
+        Y_ABORT_UNLESS(DoTryParse());
     }
 
     TConstArrayRef<TCell> GetCells() const { return Cells; }
@@ -753,7 +817,7 @@ public:
     }
 
 private:
-    bool DoTryParse(const TString& data);
+    bool DoTryParse();
 
 private:
     TString Buf;

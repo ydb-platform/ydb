@@ -105,6 +105,7 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
 
         TAG(TH3) { out << "StorageConfig"; }
         DIV() {
+            out << "<p>Self-management enabled: " << (SelfManagementEnabled ? "yes" : "no") << "</p>";
             TString s;
             NProtoBuf::TextFormat::PrintToString(StorageConfig, &s);
             out << "<pre>" << s << "</pre>";

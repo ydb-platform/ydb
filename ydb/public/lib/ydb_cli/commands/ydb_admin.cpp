@@ -18,7 +18,9 @@ class TCommandDatabase : public TClientCommandTree {
 public:
     TCommandDatabase()
         : TClientCommandTree("database", {}, "Database-wide administration")
-    {}
+    {
+        AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>());
+    }
 };
 
 TCommandAdmin::TCommandAdmin()

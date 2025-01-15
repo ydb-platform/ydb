@@ -142,7 +142,7 @@ class WorkloadTablesCreateDrop(WorkloadBase):
         CREATING = "Creating",
         AVAILABLE = "Available",
         DELITING = "Deleting"
-    
+
     def __init__(self, client, prefix, stop, allow_nullables_in_pk):
         super().__init__(client, prefix, "create_drop", stop)
         self.allow_nullables_in_pk = allow_nullables_in_pk

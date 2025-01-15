@@ -158,7 +158,8 @@ protected:
         const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr,
         NWilson::TTraceId traceId = {},
         TIntrusivePtr<NActors::TProtoArenaHolder> arena = nullptr,
-        const TGUCSettings::TPtr& GUCSettings = nullptr)
+        const TGUCSettings::TPtr& GUCSettings = nullptr,
+        NYql::NDq::TDqTaskRunnerParameterProvider&& paramProvider = {})
         : ExecuterId(executerId)
         , TxId(txId)
         , Task(task, std::move(arena))
@@ -188,7 +189,12 @@ protected:
             ComputeActorSpan.Attribute("stageId", static_cast<int>(Task.GetStageId()));
         }
 
-        Alloc->SetGUCSettings(GUCSettings);
+        if (GUCSettings) {
+            Alloc->SetGUCSettings(GUCSettings);
+        }
+        if (paramProvider) {
+            Task.SetParamsProvider(std::move(paramProvider));
+        }
         InitMonCounters(taskCounters);
         if (ownMemoryQuota) {
             MemoryQuota = InitMemoryQuota();

@@ -225,7 +225,8 @@ public:
                 GUCSettings = std::make_shared<TGUCSettings>(args.SerializedGUCSettings);
             }
             IActor* computeActor = ::NKikimr::NKqp::CreateKqpComputeActor(args.ExecuterId, args.TxId, args.Task, AsyncIoFactory,
-                runtimeSettings, memoryLimits, std::move(args.TraceId), std::move(args.Arena), FederatedQuerySetup, GUCSettings,
+                runtimeSettings, memoryLimits, std::move(args.TraceId), std::move(args.Arena), FederatedQuerySetup,
+                GUCSettings, std::move(args.ParamProvider),
                 std::move(args.SchedulingOptions), args.BlockTrackingMode);
             return args.ShareMailbox ? TlsActivationContext->AsActorContext().RegisterWithSameMailbox(computeActor) :
                 TlsActivationContext->AsActorContext().Register(computeActor);

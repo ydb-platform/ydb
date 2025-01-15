@@ -14,9 +14,13 @@ TKqpComputeActor::TKqpComputeActor(const TActorId& executerId, ui64 txId, NDqPro
     IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+    const TGUCSettings::TPtr& GUCSettings, NYql::NDq::TDqTaskRunnerParameterProvider&& paramProvider,
     TComputeActorSchedulingOptions schedulingOptions, NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode)
-    : TBase(std::move(schedulingOptions), executerId, txId, task, std::move(asyncIoFactory), AppData()->FunctionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId), std::move(arena), GUCSettings)
+    : TBase(std::move(schedulingOptions), executerId, txId, task, std::move(asyncIoFactory),
+        AppData()->FunctionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ true,
+        /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId), std::move(arena),
+        GUCSettings, std::move(paramProvider))
     , ComputeCtx(settings.StatsMode)
     , FederatedQuerySetup(federatedQuerySetup)
     , BlockTrackingMode(mode)
@@ -285,11 +289,13 @@ IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::T
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-    const TGUCSettings::TPtr& GUCSettings, TComputeActorSchedulingOptions cpuOptions,
+    const TGUCSettings::TPtr& GUCSettings, NYql::NDq::TDqTaskRunnerParameterProvider&& paramProvider,
+    TComputeActorSchedulingOptions cpuOptions,
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode)
 {
     return new TKqpComputeActor(executerId, txId, task, std::move(asyncIoFactory),
-        settings, memoryLimits, std::move(traceId), std::move(arena), federatedQuerySetup, GUCSettings, std::move(cpuOptions), mode);
+        settings, memoryLimits, std::move(traceId), std::move(arena), federatedQuerySetup,
+        GUCSettings, std::move(paramProvider), std::move(cpuOptions), mode);
 }
 
 } // namespace NKqp

@@ -221,7 +221,8 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 
     for (ui64 taskId : requestData.TaskIds) {
         const auto& task = TasksGraph.GetTask(taskId);
-        NYql::NDqProto::TDqTask* serializedTask = ArenaSerializeTaskToProto(TasksGraph, task, /* serializeAsyncIoSettings = */ true);
+        NYql::NDqProto::TDqTask* serializedTask = ArenaSerializeTaskToProto(
+            TasksGraph, task, /* serializeAsyncIoSettings = */ true, /* localRun = */ false);
         if (ArrayBufferMinFillPercentage) {
             serializedTask->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
         }
@@ -470,7 +471,7 @@ const IKqpGateway::TKqpSnapshot& TKqpPlanner::GetSnapshot() const {
 // instead we just give ptr to proto message and after that we swap/copy it
 TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) {
     auto& task = TasksGraph.GetTask(taskId);
-    NYql::NDqProto::TDqTask* taskDesc = ArenaSerializeTaskToProto(TasksGraph, task, true);
+    NYql::NDqProto::TDqTask* taskDesc = ArenaSerializeTaskToProto(TasksGraph, task, true, true);
     NYql::NDq::TComputeRuntimeSettings settings;
     if (!TxInfo) {
         double memoryPoolPercent = 100;
@@ -487,6 +488,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         taskDesc->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
     }
 
+    auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
+
     auto startResult = CaFactory_->CreateKqpComputeActor({
         .ExecuterId = ExecuterId,
         .TxId = TxId,
@@ -499,6 +502,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId()),
         .Arena = TasksGraph.GetMeta().GetArenaIntrusivePtr(),
         .SerializedGUCSettings = SerializedGUCSettings,
+        .ParamProvider = TQueryData::GetParameterProvider(stageInfo.Meta.Tx.Params),
         .NumberOfTasks = computeTasksSize,
         .OutputChunkMaxSize = OutputChunkMaxSize,
         .MemoryPool = NRm::EKqpMemoryPool::DataQuery,
